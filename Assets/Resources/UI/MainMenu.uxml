@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="MainMenuContainer" style="flex-direction: row;">
+        <ui:Button name="PlayButton" text="Play" style="width: 100px; height: 30px; margin-right: 5px;" />
+        <ui:Button name="PlayComplexButton" text="Play Complex" style="width: 100px; height: 30px; margin-left: 5px;" />
+    </ui:VisualElement>
+</ui:UXML>
