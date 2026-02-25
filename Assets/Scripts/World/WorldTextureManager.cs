@@ -87,6 +87,20 @@ namespace Fodinae.Assets.Scripts.World
         }
 
         /// <summary>
+        /// Event handler for when textures are loaded
+        /// </summary>
+        private void OnTextureLoadedHandler(string filename, Texture2D texture)
+        {
+            // Notify any listeners that textures have been loaded
+            OnTextureLoaded?.Invoke(filename, texture);
+        }
+
+        /// <summary>
+        /// Event raised when a texture is loaded
+        /// </summary>
+        public event Action<string, Texture2D> OnTextureLoaded;
+
+        /// <summary>
         /// Get texture coordinates for a specific cell type and position.
         /// If texture is not loaded, it will be requested from the server.
         /// </summary>
@@ -173,14 +187,33 @@ namespace Fodinae.Assets.Scripts.World
             {
                 await AddTextureToAtlas(cellType, texture);
             }
+            else
+            {
+                Debug.LogWarning($"WorldTextureManager: Failed to load texture for cell type {cellType}");
+            }
         }
 
         private async UniTask AddTextureToAtlas(CellType cellType, Texture2D texture)
         {
             // Get animation frame height from server configuration
-            int frameHeight = MapManager.Instance?.GetAnimationFrameHeight(cellType) ?? 0;
-            int animationSpeed = MapManager.Instance?.GetAnimationSpeed(cellType) ?? 0;
-            bool hasAnimation = MapManager.Instance?.HasAnimation(cellType) ?? false;
+            int frameHeight = 0;
+            int animationSpeed = 0;
+            bool hasAnimation = false;
+            
+            // Safely get animation info from MapManager
+            if (MapManager.Instance != null)
+            {
+                try
+                {
+                    frameHeight = MapManager.Instance.GetAnimationFrameHeight(cellType);
+                    animationSpeed = MapManager.Instance.GetAnimationSpeed(cellType);
+                    hasAnimation = MapManager.Instance.HasAnimation(cellType);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to get animation info for cell type {cellType}: {ex.Message}");
+                }
+            }
 
             // Calculate actual cell size based on animation frames
             int actualCellSize = _cellTextureSize;
@@ -258,12 +291,6 @@ namespace Fodinae.Assets.Scripts.World
                 Horizontal = variationX == 1,
                 Vertical = variationY == 1
             };
-        }
-
-        private void OnTextureLoaded(string filename, Texture2D texture)
-        {
-            // Handle texture loading completion if needed
-            // This could be used for progress tracking or logging
         }
 
         /// <summary>

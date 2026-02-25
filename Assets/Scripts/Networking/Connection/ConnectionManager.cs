@@ -51,7 +51,7 @@ namespace Fodinae.Assets.Scripts.Networking.Connection
 
         public void Connect()
         {
-            if (Connection?.ConnectionStatus != ConnectionStatus.Disconnected)
+            if (Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected)
             {
                 return;
             }

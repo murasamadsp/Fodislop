@@ -7,6 +7,7 @@ using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Utilities;
+using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared;
 using System;
 using System.Threading.Tasks;
@@ -67,15 +68,24 @@ namespace MinesServer.Networking.Connection.Client
             switch(packet.Data)
             {
                 case ClientHelloPacket clientHello:
+                    // Send world initialization with proper cell configurations
+                    var cellConfigs = CreateTestCellConfigurations();
+                    const int testWorldWidth = 100;
+                    const int testWorldHeight = 100;
                     OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
                         "pallada",
                         "Pallada",
-                        30000,
-                        60000,
-                        new CellConfigurationPacket[] { new() },
+                        testWorldWidth,
+                        testWorldHeight,
+                        cellConfigs,
                         new byte[][] {
                             new byte[] { 37, 38, 106 }
                         })));
+                    
+                    // Send test world map data in chunks
+                    SendTestWorldMapData(testWorldWidth, testWorldHeight);
+                    
+                    // Send other initial packets
                     OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(123, 42, "Darkar25")));
                     OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
                     OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
@@ -92,16 +102,250 @@ namespace MinesServer.Networking.Connection.Client
                     break;
             }
         }
+
+        /// <summary>
+        /// Create test cell configurations for different cell types
+        /// </summary>
+        private CellConfigurationPacket[] CreateTestCellConfigurations()
+        {
+            // Create array for all possible cell types (256 max)
+            var configs = new CellConfigurationPacket[256];
+            
+            // Initialize all to default values
+            for (int i = 0; i < 256; i++)
+            {
+                configs[i] = new CellConfigurationPacket
+                {
+                    Animation = CellAnimationType.None,
+                    AnimationSpeed = 0,
+                    Color = unchecked((int)0xFF808080), // Default gray
+                    FrameOffset = 0,
+                    Properties = 0
+                };
+            }
+            
+            // Configure specific cell types we use in our test map
+            configs[(int)CellType.Empty] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF808080), // Gray
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.Road] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFFCCCCCC), // Light gray
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.Boulder1] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF000000), // Black
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.WhiteSand] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFFFFFF00), // Yellow
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.DarkWhiteSand] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFFCCCC00), // Dark yellow
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.GrayAcid] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF00FF00), // Green
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.PurpleAcid] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF800080), // Purple
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            configs[(int)CellType.Lava] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFFFF4500), // OrangeRed
+                FrameOffset = 0,
+                Properties = 0
+            };
+            
+            return configs;
+        }
+
+        /// <summary>
+        /// Send test world map data using MapRegionPackets
+        /// </summary>
+        private void SendTestWorldMapData(int testWorldWidth, int testWorldHeight)
+        {
+            // Create test map data
+            var testMap = CreateTestMapData(testWorldWidth, testWorldHeight);
+            
+            // Send the map data in chunks (e.g., 32x32 chunks)
+            const int chunkSize = 32;
+            
+            for (int y = 0; y < testWorldHeight; y += chunkSize)
+            {
+                for (int x = 0; x < testWorldWidth; x += chunkSize)
+                {
+                    int chunkWidth = Math.Min(chunkSize, testWorldWidth - x);
+                    int chunkHeight = Math.Min(chunkSize, testWorldHeight - y);
+                    
+                    // Extract chunk data
+                    var chunkData = new CellType[chunkWidth * chunkHeight];
+                    int dataIndex = 0;
+                    
+                    for (int cy = 0; cy < chunkHeight; cy++)
+                    {
+                        for (int cx = 0; cx < chunkWidth; cx++)
+                        {
+                            chunkData[dataIndex++] = testMap[x + cx, y + cy];
+                        }
+                    }
+                    
+                    // Create and send MapRegionPacket
+                    var mapRegionPacket = new MapRegionPacket
+                    {
+                        X = (ushort)x,
+                        Y = (ushort)y,
+                        Width = (byte)(chunkWidth - 1),
+                        Height = (byte)(chunkHeight - 1),
+                        Payload = chunkData
+                    };
+                    
+                    // Send as part of HBPacket
+                    var hbPacket = new HBPacket(new IHBPacket[] { mapRegionPacket });
+                    OnReceived?.Invoke(new ServerPacket(hbPacket));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Create test map data with various cell types for renderer testing
+        /// </summary>
+        private CellType[,] CreateTestMapData(int width, int height)
+        {
+            var map = new CellType[width, height];
+            
+            // Fill with default empty cells
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    map[x, y] = CellType.Empty;
+                }
+            }
+            
+            // Create test patterns to exercise different rendering scenarios
+            
+            // 1. Border around the map (Road)
+            for (int x = 0; x < width; x++)
+            {
+                map[x, 0] = CellType.Road;
+                map[x, height - 1] = CellType.Road;
+            }
+            for (int y = 0; y < height; y++)
+            {
+                map[0, y] = CellType.Road;
+                map[width - 1, y] = CellType.Road;
+            }
+            
+            // 2. Cross pattern in the center (Boulders)
+            int centerX = width / 2;
+            int centerY = height / 2;
+            for (int x = centerX - 10; x <= centerX + 10; x++)
+            {
+                if (x >= 0 && x < width)
+                {
+                    map[x, centerY] = CellType.Boulder1;
+                }
+            }
+            for (int y = centerY - 10; y <= centerY + 10; y++)
+            {
+                if (y >= 0 && y < height)
+                {
+                    map[centerX, y] = CellType.Boulder1;
+                }
+            }
+            
+            // 3. Sand areas
+            for (int x = 20; x < 40; x++)
+            {
+                for (int y = 20; y < 40; y++)
+                {
+                    map[x, y] = CellType.WhiteSand;
+                }
+            }
+            
+            // 4. Acid pools
+            for (int x = 60; x < 80; x++)
+            {
+                for (int y = 60; y < 80; y++)
+                {
+                    map[x, y] = (x + y) % 2 == 0 ? CellType.GrayAcid : CellType.PurpleAcid;
+                }
+            }
+            
+            // 5. Lava area (animated)
+            for (int x = 45; x < 55; x++)
+            {
+                for (int y = 45; y < 55; y++)
+                {
+                    map[x, y] = CellType.Lava;
+                }
+            }
+            
+            // 6. Random noise pattern
+            var random = new System.Random(12345); // Fixed seed for reproducible test data
+            for (int y = 10; y < height - 10; y += 3)
+            {
+                for (int x = 10; x < width - 10; x += 3)
+                {
+                    if (random.Next(100) < 30) // 30% chance
+                    {
+                        map[x, y] = CellType.Boulder1;
+                    }
+                }
+            }
+            
+            return map;
+        }
         private async UniTaskVoid HandleAssetRequest(RuntimeAssetRequestPacket runtimeAssets)
         {
             foreach (var assetEntry in runtimeAssets.Assets)
             {
-                await Task.Delay(3000);
                 // Switch to the main thread to use Unity's API
                 await UniTask.SwitchToMainThread();
 
-                var w = 5;
-                var h = 5;
+                var w = 32;
+                var h = 32;
                 var texture = new Texture2D(w, h);
                 for (int x = 0; x < w; x++)
                     for (int y = 0; y < h; y++)

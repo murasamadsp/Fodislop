@@ -14,6 +14,10 @@ namespace Fodinae.Assets.Scripts.Networking
         void Start()
         {
             ConnectionManager.Instance.OnPacketReceived += OnPacketReceived;
+            
+            // Subscribe to MapManager events to ensure proper initialization
+            MapManager.Instance.OnWorldInitialized += OnWorldInitialized;
+            MapManager.Instance.OnWorldDataLoaded += OnWorldDataLoaded;
         }
 
         void OnDestroy()
@@ -21,6 +25,13 @@ namespace Fodinae.Assets.Scripts.Networking
             if (ConnectionManager.Instance != null)
             {
                 ConnectionManager.Instance.OnPacketReceived -= OnPacketReceived;
+            }
+            
+            // Unsubscribe from MapManager events
+            if (MapManager.Instance != null)
+            {
+                MapManager.Instance.OnWorldInitialized -= OnWorldInitialized;
+                MapManager.Instance.OnWorldDataLoaded -= OnWorldDataLoaded;
             }
         }
 
@@ -32,13 +43,21 @@ namespace Fodinae.Assets.Scripts.Networking
             }
             else if (packet.Payload is HBPacket hbPacket)
             {
+                bool hasMapData = false;
                 foreach (var p in hbPacket.Payload)
                 {
                     if (p is MapRegionPacket mapRegionPacket)
                     {
-                        var layer = MapStorage.Instance.cellLayer;
-                        if (layer == null) return;
+                        hasMapData = true;
+                        
+                        // Ensure MapStorage is initialized before trying to access cellLayer
+                        if (MapStorage.Instance.cellLayer == null)
+                        {
+                            Debug.LogError("MapStorage.cellLayer is null, cannot process map region data");
+                            return;
+                        }
 
+                        var layer = MapStorage.Instance.cellLayer;
                         int index = 0;
                         for (int y = 0; y <= mapRegionPacket.Height; y++)
                         {
@@ -49,8 +68,24 @@ namespace Fodinae.Assets.Scripts.Networking
                         }
                     }
                 }
+                
+                // Trigger world data loaded event if we received map data
+                if (hasMapData)
+                {
+                    MapManager.Instance.OnWorldDataLoaded?.Invoke();
+                }
             }
             // Add other packet handlers here
+        }
+
+        private void OnWorldInitialized()
+        {
+            Debug.Log("PacketHandler: World initialized event received");
+        }
+
+        private void OnWorldDataLoaded()
+        {
+            Debug.Log("PacketHandler: World data loaded event received");
         }
     }
 }

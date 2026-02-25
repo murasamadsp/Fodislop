@@ -1,5 +1,6 @@
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
+using System;
 using UnityEngine;
 
 namespace Fodinae.Assets.Scripts.Game.Managers
@@ -24,11 +25,15 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             }
         }
 
+        public event Action OnWorldInitialized;
+        public Action OnWorldDataLoaded;
+
         private CellConfigurationPacket[] cellConfigurations;
         private string worldCodeName;
         private string worldDisplayName;
         private ushort width;
         private ushort height;
+        private bool _isWorldInitialized = false;
 
         void Awake()
         {
@@ -41,16 +46,43 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             DontDestroyOnLoad(gameObject);
         }
 
-        public void LoadWorldInit(WorldInitPacket packet)
+    public void LoadWorldInit(WorldInitPacket packet)
+    {
+        worldCodeName = packet.CodeName;
+        worldDisplayName = packet.DisplayName;
+        width = packet.Width;
+        height = packet.Height;
+        cellConfigurations = packet.Cells;
+        Debug.Log($"World initialized: {packet.DisplayName} ({packet.CodeName}) [{width}x{height}]");
+        
+        // Initialize MapStorage with the world data
+        MapStorage.Instance.InitWorld(packet.CodeName, width, height);
+        
+        // Verify that MapStorage was properly initialized
+        if (!MapStorage.Instance.IsReady)
         {
-            worldCodeName = packet.CodeName;
-            worldDisplayName = packet.DisplayName;
-            width = packet.Width;
-            height = packet.Height;
-            cellConfigurations = packet.Cells;
-            Debug.Log($"World initialized: {packet.DisplayName} ({packet.CodeName}) [{width}x{height}]");
-            MapStorage.Instance.InitWorld(packet.CodeName, width, height);
+            Debug.LogError($"MapStorage failed to initialize cell layer for world {packet.CodeName}");
+            Debug.LogError($"MapStorage state: IsInitialized={MapStorage.Instance.IsInitialized()}, cellLayer={(MapStorage.Instance.cellLayer != null ? "not null" : "null")}");
         }
+        else
+        {
+            Debug.Log($"MapStorage initialized successfully for world '{packet.CodeName}' with layer size: {MapStorage.Instance.cellLayer.WidthChunks}x{MapStorage.Instance.cellLayer.HeightChunks}");
+        }
+        
+        _isWorldInitialized = true;
+        OnWorldInitialized?.Invoke();
+        
+        // Only trigger OnWorldDataLoaded if MapStorage is actually ready
+        if (MapStorage.Instance.IsReady)
+        {
+            OnWorldDataLoaded?.Invoke();
+            Debug.Log("MapManager: World data loaded event triggered successfully");
+        }
+        else
+        {
+            Debug.LogWarning("MapManager: World data loaded event skipped - MapStorage not ready");
+        }
+    }
 
         public CellConfigurationPacket GetCellConfig(CellType cellType)
         {
