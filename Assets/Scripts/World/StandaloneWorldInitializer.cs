@@ -261,5 +261,26 @@ namespace Fodinae.Assets.Scripts.World
                 Debug.LogError("StandaloneWorldInitializer: MapManager not available to trigger OnWorldDataLoaded");
             }
         }
+
+        /// <summary>
+        /// Handle OnWorldDataLoaded event from MapManager
+        /// This ensures proper coordination with WorldBackgroundRenderer
+        /// </summary>
+        private void OnWorldDataLoaded()
+        {
+            Debug.Log("StandaloneWorldInitializer: World data loaded, notifying renderer");
+            
+            // Notify renderer that world is ready
+            var renderer = FindObjectOfType<WorldBackgroundRenderer>();
+            if (renderer != null)
+            {
+                renderer.ForceInitialization();
+                Debug.Log("StandaloneWorldInitializer: Notified WorldBackgroundRenderer of world readiness");
+            }
+            else
+            {
+                Debug.LogWarning("StandaloneWorldInitializer: WorldBackgroundRenderer not found for notification");
+            }
+        }
     }
 }

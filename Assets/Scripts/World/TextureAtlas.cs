@@ -31,7 +31,7 @@ namespace Fodinae.Assets.Scripts.World
             Padding = padding;
 
             _atlasTexture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            _atlasTexture.filterMode = FilterMode.Point; // Changed to Point for pixel art
+            _atlasTexture.filterMode = FilterMode.Point;
             _atlasTexture.wrapMode = TextureWrapMode.Clamp;
             _atlasPixels = new Color32[size * size];
 
@@ -55,7 +55,6 @@ namespace Fodinae.Assets.Scripts.World
                 _freeRectangles.Clear();
                 _freeRectangles.Add(new Rectangle(0, 0, Size, Size));
 
-                // Clear atlas texture
                 for (int i = 0; i < _atlasPixels.Length; i++)
                 {
                     _atlasPixels[i] = new Color32(0, 0, 0, 0);
@@ -81,12 +80,63 @@ namespace Fodinae.Assets.Scripts.World
             return GetCoordinate(cellType, CellVariation.None);
         }
 
+        public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY, CellVariation variation)
+        {
+            if (!_cells.TryGetValue(cellType, out var cell))
+            {
+                return AtlasCoordinate.Empty;
+            }
+
+            // The cell's sub-atlas is packed at cell.Rectangle.X, cell.Rectangle.Y
+            int subAtlasX = cell.Rectangle.X;
+            int subAtlasY = cell.Rectangle.Y;
+            int subAtlasWidth = cell.Rectangle.Width;
+            int subAtlasHeight = cell.Rectangle.Height;
+
+            // Use 16x16 as the tile size for terrain rendering
+            const int terrainTileSize = 16;
+
+            // How many 16x16 tiles fit in the SUB-ATLAS width and height
+            int tilesPerRow = subAtlasWidth / terrainTileSize;
+            int tilesPerColumn = subAtlasHeight / terrainTileSize;
+
+            if (tilesPerRow <= 0) tilesPerRow = 1;
+            if (tilesPerColumn <= 0) tilesPerColumn = 1;
+
+            // Calculate wrapped position within the SUB-ATLAS
+            int wrappedX = ((globalX % tilesPerRow) + tilesPerRow) % tilesPerRow;
+            int wrappedY = ((globalY % tilesPerColumn) + tilesPerColumn) % tilesPerColumn;
+
+            // Calculate the absolute atlas position by adding the sub-atlas base position
+            int atlasX = subAtlasX + (wrappedX * terrainTileSize);
+            int atlasY = subAtlasY + (wrappedY * terrainTileSize);
+
+            // Apply variation offset if needed (using 8-pixel offsets inside the 16x16 tile)
+            int variationX = variation.Horizontal ? terrainTileSize / 2 : 0;
+            int variationY = variation.Vertical ? terrainTileSize / 2 : 0;
+
+            return new AtlasCoordinate(
+                atlasX + variationX,
+                atlasY + variationY,
+                terrainTileSize,  // We only want to render one 16x16 tile
+                terrainTileSize,
+                Size,             // Full atlas width
+                Size              // Full atlas height
+            );
+        }
+
+        public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY)
+        {
+            return GetWrappedCoordinate(cellType, globalX, globalY, CellVariation.None);
+        }
+
         public bool TryAddTexture(CellType cellType, Texture2D texture, out AtlasCoordinate coordinate)
         {
             coordinate = AtlasCoordinate.Empty;
 
             lock (_lock)
             {
+                // Pack the ENTIRE texture size. Do not restrict to 16x16.
                 var bestFit = FindBestFit(texture.width, texture.height);
                 if (bestFit == null) return false;
 
@@ -118,7 +168,6 @@ namespace Fodinae.Assets.Scripts.World
 
         public async UniTask UpdateAtlasTexture()
         {
-            // Ensure we start on Main Thread
             await UniTask.SwitchToMainThread();
 
             if (!_isDirty) return;
@@ -157,8 +206,6 @@ namespace Fodinae.Assets.Scripts.World
             {
                 var batch = textures.Skip(i).Take(batchSize).ToList();
 
-                // 1. READ ON MAIN THREAD
-                // We extract the raw pixel data here because Texture2D.GetPixels32() is Main Thread Only
                 var pixelDataList = new List<(Color32[] pixels, int width, int height, Rectangle rect)>();
 
                 foreach (var (tex, rect) in batch)
@@ -169,8 +216,6 @@ namespace Fodinae.Assets.Scripts.World
                     }
                 }
 
-                // 2. PROCESS ON BACKGROUND THREAD
-                // Now we switch threads to do the heavy array copying
                 await UniTask.SwitchToThreadPool();
 
                 foreach (var data in pixelDataList)
@@ -178,7 +223,6 @@ namespace Fodinae.Assets.Scripts.World
                     CopyPixelsToAtlasArray(data.pixels, data.width, data.height, data.rect);
                 }
 
-                // 3. BACK TO MAIN THREAD
                 await UniTask.SwitchToMainThread();
             }
 
@@ -188,6 +232,7 @@ namespace Fodinae.Assets.Scripts.World
 
         private void CopyPixelsToAtlasArray(Color32[] sourcePixels, int width, int height, Rectangle destination)
         {
+            // Copy the ENTIRE texture size
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -215,7 +260,6 @@ namespace Fodinae.Assets.Scripts.World
                     return cachedTexture;
                 }
             }
-            // Fallback to placeholder if not found or manager not available
             return CreatePlaceholderTexture(cellType);
         }
 
@@ -248,7 +292,6 @@ namespace Fodinae.Assets.Scripts.World
             };
         }
 
-        // Helper structs/methods
         private Rectangle? FindBestFit(int width, int height)
         {
             Rectangle? bestFit = null;

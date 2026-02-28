@@ -42,10 +42,10 @@ namespace Fodinae.Assets.Scripts.World
         private MeshFilter _meshFilter;
         private MeshRenderer _meshRenderer;
         private Mesh _mesh;
-        
-        private readonly ConcurrentDictionary<Vector2Int, ChunkMesh> _chunkMeshes = new();
-        private readonly List<Material> _atlasMaterials = new();
-        private readonly HashSet<Vector2Int> _visibleChunks = new();
+
+        public readonly ConcurrentDictionary<Vector2Int, ChunkMesh> _chunkMeshes = new();
+        public readonly List<Material> _atlasMaterials = new();
+        public readonly HashSet<Vector2Int> _visibleChunks = new();
         
         private Camera _mainCamera;
         private Vector2Int _lastCameraChunk = Vector2Int.zero;
@@ -268,11 +268,18 @@ namespace Fodinae.Assets.Scripts.World
         {
             if (vertexStartIndex + 3 >= chunkMesh.UVs.Count) return;
 
+            // Calculate proper UV coordinates for the individual tile within the atlas
+            // The AtlasCoordinate gives us the position and size of the tile within the atlas
+            float u1 = (float)coord.AtlasX / coord.AtlasWidth;
+            float v1 = (float)coord.AtlasY / coord.AtlasHeight;
+            float u2 = (float)(coord.AtlasX + coord.Width) / coord.AtlasWidth;
+            float v2 = (float)(coord.AtlasY + coord.Height) / coord.AtlasHeight;
+
             // Update UV coordinates for the quad
-            chunkMesh.UVs[vertexStartIndex] = new Vector2(coord.U1, coord.V1);     // Bottom-left
-            chunkMesh.UVs[vertexStartIndex + 1] = new Vector2(coord.U2, coord.V1); // Bottom-right
-            chunkMesh.UVs[vertexStartIndex + 2] = new Vector2(coord.U2, coord.V2); // Top-right
-            chunkMesh.UVs[vertexStartIndex + 3] = new Vector2(coord.U1, coord.V2); // Top-left
+            chunkMesh.UVs[vertexStartIndex] = new Vector2(u1, v1);     // Bottom-left
+            chunkMesh.UVs[vertexStartIndex + 1] = new Vector2(u2, v1); // Bottom-right
+            chunkMesh.UVs[vertexStartIndex + 2] = new Vector2(u2, v2); // Top-right
+            chunkMesh.UVs[vertexStartIndex + 3] = new Vector2(u1, v2); // Top-left
         }
 
         private void UpdateMesh()
@@ -356,13 +363,18 @@ namespace Fodinae.Assets.Scripts.World
                 var mainAtlas = atlases.First();
                 var atlasTexture = await mainAtlas.GetAtlasTexture();
 
-                if (_meshRenderer.material == null || _meshRenderer.material.shader.name != "Universal Render Pipeline/Unlit")
+                if (atlasTexture != null)
                 {
-                    // Use Unlit shader for terrain cells to avoid lighting issues
-                    _meshRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-                }
+                    if (_meshRenderer.material == null || _meshRenderer.material.shader.name != "Universal Render Pipeline/Unlit")
+                    {
+                        // Use Unlit shader for terrain cells to avoid lighting issues
+                        _meshRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                    }
 
-                _meshRenderer.material.SetTexture("_BaseMap", atlasTexture);
+                    _meshRenderer.material.SetTexture("_BaseMap", atlasTexture);
+                    _meshRenderer.material.mainTextureScale = Vector2.one;
+                    _meshRenderer.material.mainTextureOffset = Vector2.zero;
+                }
             }
         }
 
@@ -386,7 +398,7 @@ namespace Fodinae.Assets.Scripts.World
         }
 
         [System.Serializable]
-        private class CellInfo
+        public class CellInfo
         {
             public Vector2Int LocalPosition;
             public Vector2Int WorldPosition;
@@ -395,7 +407,7 @@ namespace Fodinae.Assets.Scripts.World
         }
 
         [System.Serializable]
-        private class ChunkMesh
+        public class ChunkMesh
         {
             public Vector2Int ChunkPosition;
             public List<Vector3> Vertices;

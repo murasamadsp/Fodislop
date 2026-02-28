@@ -45,6 +45,12 @@ namespace Fodinae.Assets.Scripts.World
                     
                     var transformComp = _backgroundRenderer.GetComponent<Transform>();
                     if (transformComp != null) transformComp.position = new Vector3(0, 0, 0); // FIX: Z=0
+                    
+                    // Add verification script for debugging
+                    backgroundGO.AddComponent<TerrainRenderingVerification>();
+                    
+                    // Add visibility test script for detailed debugging
+                    backgroundGO.AddComponent<TerrainVisibilityTest>();
                 }
 
                 if (_backgroundParent != null)
@@ -72,6 +78,7 @@ namespace Fodinae.Assets.Scripts.World
                 var pos = transform.position;
                 pos.z = 0f;
                 transform.position = pos;
+                Debug.Log("WorldBackgroundSetup: Fixed Z position to 0 for visibility");
             }
 
             if (renderer.sharedMaterial != null && 
@@ -79,6 +86,7 @@ namespace Fodinae.Assets.Scripts.World
                 renderer.sharedMaterial.shader.name != "Unlit/Texture")
             {
                 renderer.sharedMaterial.shader = Shader.Find("Universal Render Pipeline/Unlit");
+                Debug.Log("WorldBackgroundSetup: Updated shader to Universal Render Pipeline/Unlit");
             }
         }
 

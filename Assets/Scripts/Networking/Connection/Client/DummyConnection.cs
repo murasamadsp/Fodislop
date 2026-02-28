@@ -134,7 +134,7 @@ namespace MinesServer.Networking.Connection.Client
                 Animation = CellAnimationType.None,
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFF808080), // Gray
-                FrameOffset = 0,
+                FrameOffset = 22,
                 Properties = 0
             };
 
@@ -346,21 +346,19 @@ namespace MinesServer.Networking.Connection.Client
         {
             foreach (var assetEntry in runtimeAssets.Assets)
             {
-                // Switch to the main thread to use Unity's API
-                await UniTask.SwitchToMainThread();
+                // Use TextureStorageManager to get texture data
+                // This will load from local storage if available, or generate random texture as fallback
+                var pngData = await Fodinae.Assets.Scripts.Networking.Connection.Client.TextureStorageManager.Instance.GetTextureData(assetEntry.Filename);
 
-                var w = 32;
-                var h = 32;
-                var texture = new Texture2D(w, h);
-                for (int x = 0; x < w; x++)
-                    for (int y = 0; y < h; y++)
-                        texture.SetPixel(x, y, new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value));
-                texture.Apply();
-                var png = ImageConversion.EncodeToPNG(texture);
-                UnityEngine.Object.Destroy(texture);
-
-                var response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), png);
-                OnReceived?.Invoke(new ServerPacket(response));
+                if (pngData != null)
+                {
+                    var response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), pngData);
+                    OnReceived?.Invoke(new ServerPacket(response));
+                }
+                else
+                {
+                    Debug.LogError($"[DummyConnection] Failed to get texture data for: {assetEntry.Filename}");
+                }
             }
         }
     }

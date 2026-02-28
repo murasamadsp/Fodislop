@@ -11,10 +11,6 @@ using Fodinae.Assets.Scripts.Game.Managers;
 
 namespace Fodinae.Assets.Scripts.World
 {
-    /// <summary>
-    /// Manages texture loading, caching, and atlas management for world cells.
-    /// Integrates with WorldLayer to provide texture coordinates for terrain rendering.
-    /// </summary>
     public class WorldTextureManager : MonoBehaviour
     {
         private static WorldTextureManager _instance;
@@ -36,20 +32,15 @@ namespace Fodinae.Assets.Scripts.World
         }
 
         [Header("Atlas Configuration")]
-        [Tooltip("Initial atlas size in pixels")]
-        [SerializeField] private int _initialAtlasSize = 512;
-        [Tooltip("Maximum atlas size in pixels")]
+        [SerializeField] private int _initialAtlasSize = 4096; // Increased to easily fit multiple 512x352 atlases
         [SerializeField] private int _maxAtlasSize = 4096;
-        [Tooltip("Texture padding between cells in atlas")]
         [SerializeField] private int _texturePadding = 2;
 
         [Header("Performance")]
-        [Tooltip("Texture size for world cells")]
-        [SerializeField] private int _cellTextureSize = 32;
-        [Tooltip("Enable texture compression")]
+        [SerializeField] private int _cellTextureSize = 16;
         [SerializeField] private bool _enableCompression = true;
 
-        private TextureAtlas _currentAtlas;
+        public TextureAtlas _currentAtlas;
         private CellTextureCache _textureCache;
         private readonly ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = new();
         private readonly List<TextureAtlas> _atlases = new();
@@ -72,8 +63,7 @@ namespace Fodinae.Assets.Scripts.World
             _textureCache = new CellTextureCache();
             _currentAtlas = new TextureAtlas(_initialAtlasSize, _cellTextureSize, _texturePadding);
             _atlases.Add(_currentAtlas);
-            
-            // Register for asset loading completion
+
             ClientAssetLoader.Instance.OnTextureLoaded += OnTextureLoaded;
         }
 
@@ -86,28 +76,13 @@ namespace Fodinae.Assets.Scripts.World
             }
         }
 
-        /// <summary>
-        /// Event handler for when textures are loaded
-        /// </summary>
         private void OnTextureLoadedHandler(string filename, Texture2D texture)
         {
-            // Notify any listeners that textures have been loaded
             OnTextureLoaded?.Invoke(filename, texture);
         }
 
-        /// <summary>
-        /// Event raised when a texture is loaded
-        /// </summary>
         public event Action<string, Texture2D> OnTextureLoaded;
 
-        /// <summary>
-        /// Get texture coordinates for a specific cell type and position.
-        /// If texture is not loaded, it will be requested from the server.
-        /// </summary>
-        /// <param name="cellType">The type of cell</param>
-        /// <param name="globalX">Global X position for variation calculation</param>
-        /// <param name="globalY">Global Y position for variation calculation</param>
-        /// <returns>Atlas coordinates and texture info</returns>
         public async UniTask<AtlasCoordinate> GetCellTextureCoordinate(CellType cellType, int globalX, int globalY)
         {
             if (cellType == CellType.Unloaded || cellType == CellType.Pregener)
@@ -115,25 +90,22 @@ namespace Fodinae.Assets.Scripts.World
                 return AtlasCoordinate.Empty;
             }
 
-            // Check if we already have this texture in cache
             if (_textureCache.TryGetTexture(cellType, out var textureInfo))
             {
                 var variation = CalculateVariation(textureInfo, globalX, globalY);
-                return _currentAtlas.GetCoordinate(cellType, variation);
+                return _currentAtlas.GetWrappedCoordinate(cellType, globalX, globalY, variation);
             }
 
-            // Check if we're already requesting this texture
             if (_pendingRequests.TryGetValue(cellType, out var request))
             {
                 await request.Task;
                 if (_textureCache.TryGetTexture(cellType, out textureInfo))
                 {
                     var variation = CalculateVariation(textureInfo, globalX, globalY);
-                    return _currentAtlas.GetCoordinate(cellType, variation);
+                    return _currentAtlas.GetWrappedCoordinate(cellType, globalX, globalY, variation);
                 }
             }
 
-            // Request the texture
             request = new TextureRequest(cellType);
             _pendingRequests.TryAdd(cellType, request);
 
@@ -141,29 +113,26 @@ namespace Fodinae.Assets.Scripts.World
             {
                 await LoadTexture(cellType);
                 request.SetResult(true);
-                
-                // After successful load, try to get the texture again
+
                 if (_textureCache.TryGetTexture(cellType, out textureInfo))
                 {
                     var variation = CalculateVariation(textureInfo, globalX, globalY);
-                    return _currentAtlas.GetCoordinate(cellType, variation);
+                    return _currentAtlas.GetWrappedCoordinate(cellType, globalX, globalY, variation);
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"Failed to load texture for cell type {cellType}: {ex.Message}");
                 request.SetResult(false);
-                
-                // Create a fallback texture for this cell type
+
                 CreateFallbackTexture(cellType);
-                
-                // Try to get the fallback texture
+
                 if (_textureCache.TryGetTexture(cellType, out textureInfo))
                 {
                     var variation = CalculateVariation(textureInfo, globalX, globalY);
-                    return _currentAtlas.GetCoordinate(cellType, variation);
+                    return _currentAtlas.GetWrappedCoordinate(cellType, globalX, globalY, variation);
                 }
-                
+
                 return AtlasCoordinate.Empty;
             }
             finally
@@ -185,84 +154,46 @@ namespace Fodinae.Assets.Scripts.World
                 return;
             }
 
-            var tcs = new UniTaskCompletionSource<Texture2D>();
-            ClientAssetLoader.Instance.LoadAndApplyTexture(
-                (texture) => tcs.TrySetResult(texture),
-                filename,
-                default
-            );
+            var texture = await ClientAssetLoader.Instance.GetTextureAsync(filename);
 
-            var texture = await tcs.Task;
             if (texture != null)
             {
                 await AddTextureToAtlas(cellType, texture);
+            }
+            else
+            {
+                throw new Exception($"Failed to load texture for {cellType}");
             }
         }
 
         private async UniTask AddTextureToAtlas(CellType cellType, Texture2D texture)
         {
             await UniTask.SwitchToMainThread();
-            // Get animation frame height from server configuration
-            int frameHeight = 0;
-            int animationSpeed = 0;
-            bool hasAnimation = false;
-            
-            // Safely get animation info from MapManager
-            if (MapManager.Instance != null)
-            {
-                try
-                {
-                    frameHeight = MapManager.Instance.GetAnimationFrameHeight(cellType);
-                    animationSpeed = MapManager.Instance.GetAnimationSpeed(cellType);
-                    hasAnimation = MapManager.Instance.HasAnimation(cellType);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to get animation info for cell type {cellType}: {ex.Message}");
-                }
-            }
 
-            // Calculate actual cell size based on animation frames
-            int actualCellSize = _cellTextureSize;
-            if (hasAnimation && frameHeight > 0)
-            {
-                // If texture height is greater than frame height, it contains multiple frames
-                if (texture.height > frameHeight)
-                {
-                    actualCellSize = frameHeight;
-                }
-            }
+            // IMPORTANT: DO NOT resize the texture! 
+            // It could be a large sub-atlas for Torus wrapping (e.g., 512x352).
+            // Passing the full texture ensures it's packed correctly.
 
-            // Ensure texture is the correct size for the first frame
-            if (texture.width != actualCellSize || texture.height < actualCellSize)
-            {
-                texture = ResizeTexture(texture, actualCellSize, actualCellSize);
-            }
-
-            // Create texture info
             var textureInfo = new CellTextureInfo
             {
                 CellType = cellType,
                 BaseTexture = texture,
-                HasVariations = true, // Assume variations exist for now
-                VariationCount = 4,   // Default 2x2 variations
-                AnimationFrames = hasAnimation && frameHeight > 0 ? texture.height / frameHeight : 1,
-                FramesPerRow = 1,     // Default for single frame textures
-                FrameSize = actualCellSize
+                HasVariations = false, // DISABLED FAILSAFE: Prevents sampling out of bounds into transparent padding!
+                VariationCount = 1,
+                AnimationFrames = 1,
+                FramesPerRow = 1,
+                FrameSize = 16
             };
 
-            // Try to add to current atlas
             if (!_currentAtlas.TryAddTexture(cellType, texture, out var coordinate))
             {
-                // Atlas is full, create a new one
                 var newSize = Mathf.Min(_currentAtlas.Size * 2, _maxAtlasSize);
                 if (newSize > _currentAtlas.Size)
                 {
-                    var newAtlas = new TextureAtlas(newSize, actualCellSize, _texturePadding);
+                    var newAtlas = new TextureAtlas(newSize, 16, _texturePadding);
                     _atlases.Add(newAtlas);
                     _currentAtlas = newAtlas;
-                    
-                    // Add to new atlas
+
                     if (!_currentAtlas.TryAddTexture(cellType, texture, out coordinate))
                     {
                         Debug.LogError($"Failed to add texture to new atlas of size {newSize}");
@@ -276,10 +207,8 @@ namespace Fodinae.Assets.Scripts.World
                 }
             }
 
-            // Cache the texture info
             _textureCache.AddTexture(cellType, textureInfo);
 
-            // Update atlas texture
             await _currentAtlas.UpdateAtlasTexture();
             OnTextureLoaded?.Invoke($"/cells/{(int)cellType}.png", texture);
         }
@@ -289,11 +218,9 @@ namespace Fodinae.Assets.Scripts.World
             if (!textureInfo.HasVariations)
                 return CellVariation.None;
 
-            // Calculate variation based on global position (donut topology)
-            // This creates seamless variations across the world
-            int variationX = (globalX % 2 + 2) % 2; // 0 or 1
-            int variationY = (globalY % 2 + 2) % 2; // 0 or 1
-            
+            int variationX = (globalX % 2 + 2) % 2;
+            int variationY = (globalY % 2 + 2) % 2;
+
             return new CellVariation
             {
                 Horizontal = variationX == 1,
@@ -301,34 +228,11 @@ namespace Fodinae.Assets.Scripts.World
             };
         }
 
-        /// <summary>
-        /// Resize a texture to the specified dimensions
-        /// </summary>
-        private Texture2D ResizeTexture(Texture2D source, int targetWidth, int targetHeight)
-        {
-            RenderTexture rt = RenderTexture.GetTemporary(targetWidth, targetHeight);
-            Graphics.Blit(source, rt);
-            RenderTexture previous = RenderTexture.active;
-            RenderTexture.active = rt;
-            Texture2D result = new Texture2D(targetWidth, targetHeight);
-            result.ReadPixels(new Rect(0, 0, targetWidth, targetHeight), 0, 0);
-            result.Apply();
-            RenderTexture.active = previous;
-            RenderTexture.ReleaseTemporary(rt);
-            return result;
-        }
-
-        /// <summary>
-        /// Get all active atlases for rendering
-        /// </summary>
         public List<TextureAtlas> GetAllAtlases()
         {
             return _atlases;
         }
 
-        /// <summary>
-        /// Clear all cached textures and atlases (for cleanup)
-        /// </summary>
         public void Clear()
         {
             _textureCache.Clear();
@@ -341,28 +245,22 @@ namespace Fodinae.Assets.Scripts.World
             _atlases.Add(_currentAtlas);
         }
 
-        /// <summary>
-        /// Create a fallback texture for a cell type when server texture loading fails
-        /// </summary>
-        /// <param name="cellType">The cell type to create a fallback for</param>
         private void CreateFallbackTexture(CellType cellType)
         {
             try
             {
-                // Create a colored fallback texture based on cell type
-                var fallbackTexture = new Texture2D(_cellTextureSize, _cellTextureSize);
+                var fallbackTexture = new Texture2D(16, 16);
                 var color = GetFallbackColor(cellType);
-                var pixels = new Color[_cellTextureSize * _cellTextureSize];
-                
+                var pixels = new Color[16 * 16];
+
                 for (int i = 0; i < pixels.Length; i++)
                 {
                     pixels[i] = color;
                 }
-                
+
                 fallbackTexture.SetPixels(pixels);
                 fallbackTexture.Apply();
-                
-                // Create texture info for the fallback
+
                 var textureInfo = new CellTextureInfo
                 {
                     CellType = cellType,
@@ -371,18 +269,12 @@ namespace Fodinae.Assets.Scripts.World
                     VariationCount = 1,
                     AnimationFrames = 1,
                     FramesPerRow = 1,
-                    FrameSize = _cellTextureSize
+                    FrameSize = 16
                 };
 
-                // Add to atlas
                 if (_currentAtlas.TryAddTexture(cellType, fallbackTexture, out var coordinate))
                 {
                     _textureCache.AddTexture(cellType, textureInfo);
-                    Debug.LogWarning($"Created fallback texture for cell type {cellType}");
-                }
-                else
-                {
-                    Debug.LogError($"Failed to add fallback texture to atlas for cell type {cellType}");
                 }
             }
             catch (Exception ex)
@@ -391,41 +283,25 @@ namespace Fodinae.Assets.Scripts.World
             }
         }
 
-        /// <summary>
-        /// Get a fallback color for a cell type
-        /// </summary>
-        /// <param name="cellType">The cell type</param>
-        /// <returns>A color representing the cell type</returns>
         private Color GetFallbackColor(CellType cellType)
         {
-            // Use MapManager colors if available, otherwise use defaults
             if (MapManager.Instance != null)
             {
                 var serverColor = MapManager.Instance.GetCellMinimapColor(cellType);
                 if (serverColor.a > 0) return serverColor;
             }
 
-            // Default colors based on cell type
             return cellType switch
             {
-                CellType.Empty => new Color(0.2f, 0.2f, 0.2f), // Dark gray
-                CellType.Road => new Color(0.8f, 0.8f, 0.8f), // Light gray
-                CellType.Boulder1 => Color.black, // Black
-                CellType.WhiteSand => new Color(1f, 0.92f, 0.8f), // Sand color
-                CellType.GrayAcid => new Color(0f, 1f, 0f), // Green
-                _ => Color.magenta // Magenta for unknown types
+                CellType.Empty => new Color(0.2f, 0.2f, 0.2f),
+                CellType.Road => new Color(0.8f, 0.8f, 0.8f),
+                CellType.Boulder1 => Color.black,
+                CellType.WhiteSand => new Color(1f, 0.92f, 0.8f),
+                CellType.GrayAcid => new Color(0f, 1f, 0f),
+                _ => Color.magenta
             };
         }
 
-        /// <summary>
-        /// Get texture cache statistics
-        /// </summary>
-        /// <returns>Cache statistics string</returns>
-        /// <summary>
-        /// Get a cached texture for a cell type
-        /// </summary>
-        /// <param name="cellType">The cell type</param>
-        /// <returns>The cached texture or null if not found</returns>
         public Texture2D GetCachedTexture(CellType cellType)
         {
             return _textureCache.GetCachedTexture(cellType);
@@ -437,9 +313,6 @@ namespace Fodinae.Assets.Scripts.World
         }
     }
 
-    /// <summary>
-    /// Represents a texture request in progress
-    /// </summary>
     internal class TextureRequest
     {
         public CellType CellType { get; }

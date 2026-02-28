@@ -95,49 +95,17 @@ namespace Fodinae.Assets.Scripts
 
         public async UniTaskVoid LoadAndApplyTexture(Action<Texture2D> applyTextureAction, string filename, CancellationToken cancellationToken)
         {
-            // 1. Immediately apply the placeholder texture
             applyTextureAction(_placeholderTexture);
-
-            // 2. Check the cache first.
-            string etag = null;
-            if (HasAsset(filename))
-            {
-                var cachedAsset = GetAsset(filename);
-                if (cachedAsset != null)
-                {
-                    var texture = await LoadTextureAsync(cachedAsset, cancellationToken);
-                    if (texture != null)
-                    {
-                        applyTextureAction(texture);
-                    }
-                }
-                etag = GetETag(filename);
-            }
-
-            // 3. Request the asset from the server
-            byte[] imageBytes = await GetAssetBytesFromServer(filename, etag, cancellationToken);
+            var texture = await GetTextureAsync(filename, cancellationToken);
 
             if (cancellationToken.IsCancellationRequested) return;
 
-            Texture2D loadedTexture = null;
-            if (imageBytes != null && imageBytes.Length > 0)
+            if (texture != null)
             {
-                // 4. Load the texture from the received bytes
-                loadedTexture = await LoadTextureAsync(imageBytes, cancellationToken);
-            }
-
-            if (cancellationToken.IsCancellationRequested) return;
-
-            // 5. Apply the final texture, or an error texture if loading failed.
-            if (loadedTexture != null)
-            {
-                applyTextureAction(loadedTexture);
-                OnTextureLoaded?.Invoke(filename, loadedTexture);
+                applyTextureAction(texture);
             }
             else
             {
-                // If the texture failed to load, but we have a cached version, we might want to use it.
-                // For now, we just show the error texture.
                 if (!HasAsset(filename))
                 {
                     Debug.LogError($"Failed to load texture for '{filename}'. Applying error texture.");
@@ -145,11 +113,64 @@ namespace Fodinae.Assets.Scripts
                 }
             }
         }
-        
+
+        public async UniTask<Texture2D> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
+        {
+            string etag = null;
+            if (HasAsset(filename))
+            {
+                etag = GetETag(filename);
+            }
+
+            // Timeout after 5 seconds to prevent hanging
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+
+            byte[] imageBytes = null;
+            try
+            {
+                imageBytes = await GetAssetBytesFromServer(filename, etag, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.LogWarning($"[ClientAssetLoader] Timeout or cancelled while requesting texture: {filename}");
+            }
+
+            if (cancellationToken.IsCancellationRequested) return null;
+
+            if (imageBytes != null && imageBytes.Length > 0)
+            {
+                var loadedTexture = await LoadTextureAsync(imageBytes, cancellationToken);
+                if (loadedTexture != null)
+                {
+                    OnTextureLoaded?.Invoke(filename, loadedTexture);
+                    return loadedTexture;
+                }
+            }
+            else if (HasAsset(filename))
+            {
+                // Fallback to cache if network failed or server returned Not Modified
+                var cachedAsset = GetAsset(filename);
+                if (cachedAsset != null)
+                {
+                    var loadedTexture = await LoadTextureAsync(cachedAsset, cancellationToken);
+                    if (loadedTexture != null)
+                    {
+                        return loadedTexture;
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private async UniTask<byte[]> GetAssetBytesFromServer(string filename, string etag, CancellationToken cancellationToken)
         {
             var tcs = new TaskCompletionSource<byte[]>();
-            cancellationToken.Register(() => tcs.TrySetCanceled());
+            using var registration = cancellationToken.Register(() => {
+                tcs.TrySetCanceled();
+                _pendingRequests.TryRemove(filename, out _);
+            });
 
             if (!_pendingRequests.TryAdd(filename, tcs))
             {
@@ -159,12 +180,20 @@ namespace Fodinae.Assets.Scripts
                 }
                 return null;
             }
-            
+
             var assetEntry = new RuntimeAssetEntryPacket(filename, etag ?? "");
             var assetRequest = new RuntimeAssetRequestPacket(new List<RuntimeAssetEntryPacket> { assetEntry });
             ConnectionManager.Instance.Connection.SendAsync(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
 
-            return await tcs.Task;
+            try
+            {
+                return await tcs.Task;
+            }
+            catch
+            {
+                _pendingRequests.TryRemove(filename, out _);
+                throw;
+            }
         }
 
         private async UniTask<Texture2D> LoadTextureAsync(byte[] imageData, CancellationToken cancellationToken)
@@ -174,6 +203,7 @@ namespace Fodinae.Assets.Scripts
             if (texture.LoadImage(imageData))
             {
                 texture.name = $"Runtime_{DateTime.Now.Ticks}";
+                texture.filterMode = FilterMode.Point;
                 return texture;
             }
             Destroy(texture);

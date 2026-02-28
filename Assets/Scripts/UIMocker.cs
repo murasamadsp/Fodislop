@@ -192,6 +192,18 @@ public class UIMocker : MonoBehaviour
             Width = 32,
             Height = 32
         };
+        var selected = new ImagePacket()
+        {
+            URI = "/ui/selected.png",
+            Width = 32,
+            Height = 32
+        };
+        var deselected = new ImagePacket()
+        {
+            URI = "/ui/deselected.png",
+            Width = 32,
+            Height = 32
+        };
         var rootElement = new DockPanelPacket
         {
             Style = new GUIStylePacket
@@ -316,20 +328,20 @@ public class UIMocker : MonoBehaviour
                                 new SelectablePacket
                                 {
                                      Name = "radio",
-                                     Checked = @checked,
-                                     Unchecked = @unchecked
+                                     Checked = selected,
+                                     Unchecked = deselected
                                 },
                                 new SelectablePacket
                                 {
                                      Name = "radio",
-                                     Checked = @checked,
-                                     Unchecked = @unchecked
+                                     Checked = selected,
+                                     Unchecked = deselected
                                 },
                                 new SelectablePacket
                                 {
                                      Name = "radio",
-                                     Checked = @checked,
-                                     Unchecked = @unchecked
+                                     Checked = selected,
+                                     Unchecked = deselected
                                 },
                              }
                         }

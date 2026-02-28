@@ -117,46 +117,11 @@ namespace Fodinae.Assets.Scripts.Networking
                 MapManager.Instance.LoadWorldInit(worldInitPacket);
                 Debug.Log("[PacketHandler] MapManager.LoadWorldInit completed successfully");
                 
-                // CRITICAL: Verify MapStorage is ready and trigger OnWorldDataLoaded if successful
-                if (MapStorage.Instance != null && MapStorage.Instance.IsReady)
-                {
-                    Debug.Log("[PacketHandler] MapStorage is ready, triggering OnWorldDataLoaded event");
-                    MapManager.Instance.OnWorldDataLoaded?.Invoke();
-                    Debug.Log("[PacketHandler] OnWorldDataLoaded event triggered successfully");
-                }
-                else
-                {
-                    Debug.LogError("[PacketHandler] CRITICAL: MapStorage not ready after WorldInit processing");
-                    Debug.LogError($"[PacketHandler] MapStorage state: IsReady={MapStorage.Instance?.IsReady ?? false}, IsInitialized={MapStorage.Instance?.IsInitialized() ?? false}");
-                    Debug.LogError($"[PacketHandler] MapStorage cellLayer: {(MapStorage.Instance?.cellLayer != null ? "not null" : "NULL - this is the problem!")}");
-                    
-                    // Try emergency MapStorage initialization
-                    Debug.LogWarning("[PacketHandler] Attempting emergency MapStorage initialization...");
-                    try
-                    {
-                        if (MapStorage.Instance != null)
-                        {
-                            MapStorage.Instance.Dispose();
-                        }
-                        MapStorage.Instance.InitWorld(worldInitPacket.CodeName, worldInitPacket.Width, worldInitPacket.Height);
-                        
-                        if (MapStorage.Instance.IsReady)
-                        {
-                            Debug.Log("[PacketHandler] Emergency MapStorage initialization successful!");
-                            MapManager.Instance.OnWorldDataLoaded?.Invoke();
-                            Debug.Log("[PacketHandler] OnWorldDataLoaded event triggered after emergency initialization");
-                        }
-                        else
-                        {
-                            Debug.LogError("[PacketHandler] Emergency MapStorage initialization FAILED");
-                            Debug.LogError("[PacketHandler] Terrain rendering will remain in 'WaitingForWorldInit' state");
-                        }
-                    }
-                    catch (System.Exception emergencyEx)
-                    {
-                        Debug.LogError($"[PacketHandler] Emergency MapStorage initialization threw exception: {emergencyEx.Message}");
-                    }
-                }
+                // CRITICAL: DO NOT trigger OnWorldDataLoaded here yet
+                // We need to wait for MapStorage to be properly initialized
+                // The MapManager should trigger this event when MapStorage is ready
+                
+                Debug.Log("[PacketHandler] WorldInit processing complete - waiting for MapStorage to be ready");
             }
             catch (System.Exception ex)
             {
