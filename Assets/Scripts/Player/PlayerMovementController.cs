@@ -12,7 +12,10 @@ namespace Fodinae.Assets.Scripts.Player
     {
         [Header("Movement Settings")]
         [SerializeField] private float _moveSpeed = 15f;
+        [SerializeField] private float _rotationSpeed = 1080f;
         
+        private float _targetAngle = 0f;
+
         [Header("Input Dependencies")]
         [Tooltip("Optional: Drag the Move action from the Input Action asset here. If empty, falls back to direct keyboard polling.")]
         [SerializeField] private InputActionReference _moveActionReference;
@@ -33,6 +36,20 @@ namespace Fodinae.Assets.Scripts.Player
             {
                 _moveActionReference.action.Disable();
             }
+        }
+
+        private void Awake()
+        {
+            var rb = GetComponent<Rigidbody2D>();
+            if (rb != null)
+            {
+                rb.freezeRotation = true;
+            }
+        }
+
+        private void Start()
+        {
+            _targetAngle = transform.eulerAngles.z;
         }
 
         private void Update()
@@ -74,11 +91,39 @@ namespace Fodinae.Assets.Scripts.Player
             if (_moveInput != Vector2.zero)
             {
                 // Move the transform directly for testing
-                // Later for actual player physics mechanics, this could be updated to:
-                // _rigidbody2D.velocity = _moveInput * _moveSpeed;
-                
                 Vector3 movement = new Vector3(_moveInput.x, _moveInput.y, 0f) * (_moveSpeed * Time.deltaTime);
                 transform.position += movement;
+
+                // Determine cardinal direction (0: Right, 90: Up, 180: Left, 270: Down)
+                if (Mathf.Abs(_moveInput.x) > Mathf.Abs(_moveInput.y))
+                {
+                    _targetAngle = _moveInput.x > 0 ? 0f : 180f; // Right or Left
+                }
+                else
+                {
+                    _targetAngle = _moveInput.y > 0 ? 90f : 270f; // Up or Down
+                }
+            }
+
+            // Smoothly rotate towards the target angle
+            float currentAngle = transform.eulerAngles.z;
+            if (!Mathf.Approximately(currentAngle, _targetAngle))
+            {
+                float newAngle = Mathf.MoveTowardsAngle(currentAngle, _targetAngle, _rotationSpeed * Time.deltaTime);
+                transform.rotation = Quaternion.Euler(0, 0, newAngle);
+            }
+
+            // Align to grid if not moving (or always align to nearest center for simplicity now)
+            // But user asked "make the player align to the terrain grid"
+            // If we want it to snap, we could do it here.
+            // However, smooth movement usually doesn't snap every frame unless it's tile-based.
+            // Let's at least make sure it stays on the grid logically or snaps when close to zero input.
+            if (_moveInput == Vector2.zero)
+            {
+                Vector3 pos = transform.position;
+                pos.x = Mathf.Floor(pos.x) + 0.5f;
+                pos.y = Mathf.Floor(pos.y) + 0.5f;
+                transform.position = pos;
             }
         }
 

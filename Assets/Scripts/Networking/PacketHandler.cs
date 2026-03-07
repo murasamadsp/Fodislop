@@ -1,4 +1,5 @@
 using Fodinae.Assets.Scripts.Game.Managers;
+using Fodinae.Assets.Scripts.Game;
 using Fodinae.Assets.Scripts.Networking.Connection;
 using MinesServer.Networking.Server;
 using MinesServer.Networking.Server.Packets;
@@ -99,6 +100,10 @@ namespace Fodinae.Assets.Scripts.Networking
             {
                 HandleHBPacket(hbPacket);
             }
+            else if (packet.Payload is RobotInfoPacket robotInfoPacket)
+            {
+                HandleRobotInfoPacket(robotInfoPacket);
+            }
             else if (packet.Payload is OpenWindowPacket openWindowPacket)
             {
                 HandleOpenWindowPacket(openWindowPacket);
@@ -170,6 +175,12 @@ namespace Fodinae.Assets.Scripts.Networking
             }
         }
 
+        private void HandleRobotInfoPacket(RobotInfoPacket packet)
+        {
+            Debug.Log($"[PacketHandler] Handling RobotInfoPacket for BotId: {packet.BotId}, Name: {packet.Name}");
+            RobotManager.Instance.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.Name, packet.Skin, packet.Tail);
+        }
+
         private void HandleHBPacket(HBPacket hbPacket)
         {
             bool hasMapData = false;
@@ -177,7 +188,12 @@ namespace Fodinae.Assets.Scripts.Networking
             
             foreach (var p in hbPacket.Payload)
             {
-                if (p is MapRegionPacket mapRegionPacket)
+                if (p is RobotPositionPacket robotPositionPacket)
+                {
+                    Debug.Log($"[PacketHandler] Processing RobotPositionPacket for BotId: {robotPositionPacket.BotId}");
+                    RobotManager.Instance.UpdateRobotPosition(robotPositionPacket.BotId, robotPositionPacket.X, robotPositionPacket.Y, robotPositionPacket.Rotation);
+                }
+                else if (p is MapRegionPacket mapRegionPacket)
                 {
                     _mapRegionPacketsReceived++;
                     hasMapData = true;
