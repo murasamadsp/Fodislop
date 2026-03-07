@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using Fodinae.Assets.Scripts.Game;
 
 namespace Fodinae.Assets.Scripts.Game.Managers
 {
@@ -35,6 +36,12 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             }
             _instance = this;
             DontDestroyOnLoad(gameObject);
+        }
+
+        public void RegisterRobot(Robot robot)
+        {
+            if (robot == null) return;
+            _robots[robot.BotId] = robot;
         }
 
         public Robot GetOrCreateRobot(ushort botId)

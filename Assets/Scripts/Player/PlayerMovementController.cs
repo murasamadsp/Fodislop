@@ -12,6 +12,7 @@ namespace Fodinae.Assets.Scripts.Player
     {
         [Header("Movement Settings")]
         [SerializeField] private float _moveSpeed = 15f;
+        [SerializeField] private float _rotationSpeed = 720f;
         
         [Header("Input Dependencies")]
         [Tooltip("Optional: Drag the Move action from the Input Action asset here. If empty, falls back to direct keyboard polling.")]
@@ -79,8 +80,8 @@ namespace Fodinae.Assets.Scripts.Player
 
                 // Rotate in the direction of movement
                 float angle = Mathf.Atan2(_moveInput.y, _moveInput.x) * Mathf.Rad2Deg;
-                // Adjust for sprite orientation (assuming 0 is Right)
-                transform.rotation = Quaternion.Euler(0, 0, angle);
+                Quaternion targetRotation = Quaternion.Euler(0, 0, angle);
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, _rotationSpeed * Time.deltaTime);
             }
 
             // Align to grid if not moving (or always align to nearest center for simplicity now)
@@ -91,8 +92,8 @@ namespace Fodinae.Assets.Scripts.Player
             if (_moveInput == Vector2.zero)
             {
                 Vector3 pos = transform.position;
-                pos.x = Mathf.Round(pos.x - 0.5f) + 0.5f;
-                pos.y = Mathf.Round(pos.y - 0.5f) + 0.5f;
+                pos.x = Mathf.Floor(pos.x) + 0.5f;
+                pos.y = Mathf.Floor(pos.y) + 0.5f;
                 transform.position = pos;
             }
         }

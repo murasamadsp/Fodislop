@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fodinae.Assets.Scripts;
+using Fodinae.Assets.Scripts.Game.Managers;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -13,9 +14,11 @@ namespace Fodinae.Assets.Scripts.Game
         [SerializeField] private string _nickname;
         [SerializeField] private string _skinPath;
         [SerializeField] private string _tailPath;
+        [SerializeField] private float _rotationSpeed = 720f;
 
         private bool _isMetadataLoaded = false;
         private CancellationTokenSource _cts;
+        private Quaternion _targetRotation = Quaternion.identity;
 
         public ushort BotId => _botId;
         public int PlayerId => _playerId;
@@ -35,11 +38,38 @@ namespace Fodinae.Assets.Scripts.Game
             {
                 LoadSkin();
             }
+            _targetRotation = transform.rotation;
+
+            // Register this robot if it's the player (or has a pre-set botId)
+            if (gameObject.CompareTag("Player"))
+            {
+                // Note: The player's botId might be set later, but for now we register with its current botId
+                RobotManager.Instance.RegisterRobot(this);
+            }
+        }
+
+        private void Update()
+        {
+            if (transform.rotation != _targetRotation)
+            {
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, _targetRotation, _rotationSpeed * Time.deltaTime);
+            }
         }
 
         public void Initialize(ushort botId)
         {
-            _botId = botId;
+            // If we are updating the botId (e.g. for the player)
+            if (_botId != botId && _botId != 0)
+            {
+                // Re-register with the manager under the new ID
+                _botId = botId;
+                RobotManager.Instance.RegisterRobot(this);
+            }
+            else
+            {
+                _botId = botId;
+            }
+
             _isMetadataLoaded = false;
             // Set to a "loading" or default state if needed
             // Maybe dim the sprite or show a placeholder
@@ -82,7 +112,7 @@ namespace Fodinae.Assets.Scripts.Game
                 3 => 270f,
                 _ => 0f
             };
-            transform.rotation = Quaternion.Euler(0, 0, angle);
+            _targetRotation = Quaternion.Euler(0, 0, angle);
         }
 
         private void LoadSkin()
