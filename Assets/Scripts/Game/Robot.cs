@@ -25,6 +25,12 @@ namespace Fodinae.Assets.Scripts.Game
         public string Nickname => _nickname;
         public bool IsMetadataLoaded => _isMetadataLoaded;
 
+        public float TargetAngle
+        {
+            get => _targetAngle;
+            set => _targetAngle = value;
+        }
+
         private void Awake()
         {
             if (_spriteRenderer == null)
