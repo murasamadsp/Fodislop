@@ -1,3 +1,4 @@
+using Fodinae.Assets.Scripts.Game;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
