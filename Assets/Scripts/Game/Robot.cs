@@ -28,6 +28,7 @@ namespace Fodinae.Assets.Scripts.Game
         public int PlayerId => _playerId;
         public string Nickname => _nickname;
         public bool IsMetadataLoaded => _isMetadataLoaded;
+        public bool IsLocalPlayer => gameObject.CompareTag("Player");
 
         public float TargetAngle
         {
@@ -100,17 +101,8 @@ namespace Fodinae.Assets.Scripts.Game
 
         public void Initialize(ushort botId)
         {
-            // If we are updating the botId (e.g. for the player)
-            if (_botId != botId && _botId != 0)
-            {
-                // Re-register with the manager under the new ID
-                _botId = botId;
-                RobotManager.Instance.RegisterRobot(this);
-            }
-            else
-            {
-                _botId = botId;
-            }
+            _botId = botId;
+            RobotManager.Instance.RegisterRobot(this);
 
             _isMetadataLoaded = false;
             // Set to a "loading" or default state if needed
