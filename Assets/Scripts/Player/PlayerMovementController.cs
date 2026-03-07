@@ -1,4 +1,3 @@
-using Fodinae.Assets.Scripts.Game;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -111,10 +110,12 @@ namespace Fodinae.Assets.Scripts.Player
             // Let's at least make sure it stays on the grid logically or snaps when close to zero input.
             if (_moveInput == Vector2.zero)
             {
-                Vector3 pos = transform.position;
-                pos.x = Mathf.Floor(pos.x) + 0.5f;
-                pos.y = Mathf.Floor(pos.y) + 0.5f;
-                transform.position = pos;
+                Vector3 targetPos = transform.position;
+                targetPos.x = Mathf.Floor(targetPos.x) + 0.5f;
+                targetPos.y = Mathf.Floor(targetPos.y) + 0.5f;
+
+                // Smoothly slide to the center of the cell
+                transform.position = Vector3.MoveTowards(transform.position, targetPos, _moveSpeed * Time.deltaTime);
             }
         }
 

@@ -98,10 +98,10 @@ namespace MinesServer.Networking.Connection.Client
                     SendTestWorldMapData(testWorldWidth, testWorldHeight);
 
                     // Send other initial packets
+                    OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(123, 42, "Darkar25")));
 
                     // Send mock robot position first (loading state)
                     ushort mockBotId = 456;
-                    OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(123, mockBotId, "Darkar25")));
                     var robotPos = new RobotPositionPacket(mockBotId, 50, 50, 0);
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
 
