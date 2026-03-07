@@ -14,6 +14,8 @@ namespace Fodinae.Assets.Scripts.Player
         [SerializeField] private float _moveSpeed = 15f;
         [SerializeField] private float _rotationSpeed = 720f;
         
+        private Quaternion _targetRotation = Quaternion.identity;
+
         [Header("Input Dependencies")]
         [Tooltip("Optional: Drag the Move action from the Input Action asset here. If empty, falls back to direct keyboard polling.")]
         [SerializeField] private InputActionReference _moveActionReference;
@@ -34,6 +36,11 @@ namespace Fodinae.Assets.Scripts.Player
             {
                 _moveActionReference.action.Disable();
             }
+        }
+
+        private void Start()
+        {
+            _targetRotation = transform.rotation;
         }
 
         private void Update()
@@ -78,10 +85,23 @@ namespace Fodinae.Assets.Scripts.Player
                 Vector3 movement = new Vector3(_moveInput.x, _moveInput.y, 0f) * (_moveSpeed * Time.deltaTime);
                 transform.position += movement;
 
-                // Rotate in the direction of movement
-                float angle = Mathf.Atan2(_moveInput.y, _moveInput.x) * Mathf.Rad2Deg;
-                Quaternion targetRotation = Quaternion.Euler(0, 0, angle);
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, _rotationSpeed * Time.deltaTime);
+                // Determine cardinal direction (0: Right, 90: Up, 180: Left, 270: Down)
+                float angle;
+                if (Mathf.Abs(_moveInput.x) > Mathf.Abs(_moveInput.y))
+                {
+                    angle = _moveInput.x > 0 ? 0f : 180f; // Right or Left
+                }
+                else
+                {
+                    angle = _moveInput.y > 0 ? 90f : 270f; // Up or Down
+                }
+                _targetRotation = Quaternion.Euler(0, 0, angle);
+            }
+
+            // Smoothly rotate towards the target rotation
+            if (transform.rotation != _targetRotation)
+            {
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, _targetRotation, _rotationSpeed * Time.deltaTime);
             }
 
             // Align to grid if not moving (or always align to nearest center for simplicity now)
