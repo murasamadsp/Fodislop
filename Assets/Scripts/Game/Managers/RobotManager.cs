@@ -26,6 +26,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
 
         [SerializeField] private GameObject _robotPrefab;
         private Dictionary<ushort, Robot> _robots = new();
+        public ushort LocalPlayerBotId { get; set; }
 
         private void Awake()
         {
@@ -49,6 +50,22 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             if (_robots.TryGetValue(botId, out var robot))
             {
                 return robot;
+            }
+
+            // If this is the local player, try to find the existing robot in the scene
+            if (botId != 0 && botId == LocalPlayerBotId)
+            {
+                var playerObj = GameObject.FindGameObjectWithTag("Player");
+                if (playerObj != null)
+                {
+                    robot = playerObj.GetComponent<Robot>();
+                    if (robot != null)
+                    {
+                        robot.Initialize(botId);
+                        _robots[botId] = robot;
+                        return robot;
+                    }
+                }
             }
 
             GameObject robotGo;
