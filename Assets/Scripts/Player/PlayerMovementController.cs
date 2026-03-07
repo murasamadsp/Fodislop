@@ -12,9 +12,8 @@ namespace Fodinae.Assets.Scripts.Player
     {
         [Header("Movement Settings")]
         [SerializeField] private float _moveSpeed = 15f;
-        [SerializeField] private float _rotationSpeed = 1080f;
         
-        private float _targetAngle = 0f;
+        private Robot _robot;
 
         [Header("Input Dependencies")]
         [Tooltip("Optional: Drag the Move action from the Input Action asset here. If empty, falls back to direct keyboard polling.")]
@@ -45,11 +44,7 @@ namespace Fodinae.Assets.Scripts.Player
             {
                 rb.freezeRotation = true;
             }
-        }
-
-        private void Start()
-        {
-            _targetAngle = transform.eulerAngles.z;
+            _robot = GetComponent<Robot>();
         }
 
         private void Update()
@@ -95,22 +90,17 @@ namespace Fodinae.Assets.Scripts.Player
                 transform.position += movement;
 
                 // Determine cardinal direction (0: Right, 90: Up, 180: Left, 270: Down)
-                if (Mathf.Abs(_moveInput.x) > Mathf.Abs(_moveInput.y))
+                if (_robot != null)
                 {
-                    _targetAngle = _moveInput.x > 0 ? 0f : 180f; // Right or Left
+                    if (Mathf.Abs(_moveInput.x) > Mathf.Abs(_moveInput.y))
+                    {
+                        _robot.TargetAngle = _moveInput.x > 0 ? 0f : 180f; // Right or Left
+                    }
+                    else
+                    {
+                        _robot.TargetAngle = _moveInput.y > 0 ? 90f : 270f; // Up or Down
+                    }
                 }
-                else
-                {
-                    _targetAngle = _moveInput.y > 0 ? 90f : 270f; // Up or Down
-                }
-            }
-
-            // Smoothly rotate towards the target angle
-            float currentAngle = transform.eulerAngles.z;
-            if (!Mathf.Approximately(currentAngle, _targetAngle))
-            {
-                float newAngle = Mathf.MoveTowardsAngle(currentAngle, _targetAngle, _rotationSpeed * Time.deltaTime);
-                transform.rotation = Quaternion.Euler(0, 0, newAngle);
             }
 
             // Align to grid if not moving (or always align to nearest center for simplicity now)
