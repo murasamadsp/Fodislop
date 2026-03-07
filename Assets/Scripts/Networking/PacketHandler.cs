@@ -230,7 +230,7 @@ namespace Fodinae.Assets.Scripts.Networking
                             var controller = player.GetComponent<PlayerMovementController>();
                             if (controller != null)
                             {
-                                controller.UpdateServerPosition(new Vector3(robotPositionPacket.X + 0.5f, robotPositionPacket.Y + 0.5f, 0));
+                                controller.UpdateServerPosition(new Vector2Int(robotPositionPacket.X, robotPositionPacket.Y));
                             }
                         }
                     }
