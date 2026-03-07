@@ -74,7 +74,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 7482667652216325698, guid: 1d4242688301341438998f8f3420807c, type: 3}
+  m_Sprite: {fileID: 5272401415994956661, guid: d0790dbacbe8cfe48be914eecc1a2ab2, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -116,7 +116,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 100000}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 89e2f09f5375f0545815f4c6a50f1929, type: 3}
+  m_Script: {fileID: 11500000, guid: e55a1800031c9374ba92fb984b2216f6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Assets.Scripts.Player.PlayerMovementController
   _moveSpeed: 15
@@ -130,7 +130,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 100000}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 89e2f09f5375f0545815f4c6a50f1929, type: 3}
+  m_Script: {fileID: 11500000, guid: 61a3010210b760c489e321dcd1eafc27, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Assets.Scripts.Player.CameraFollow
   _target: {fileID: 0}
