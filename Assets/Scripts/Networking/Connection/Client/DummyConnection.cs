@@ -108,6 +108,10 @@ namespace MinesServer.Networking.Connection.Client
                     // Send robot metadata after a delay to show loading state
                     HandleRobotInfoMock(mockBotId).Forget();
 
+                    // Start circular robot
+                    ushort circularBotId = 789;
+                    RunCircularRobot(circularBotId).Forget();
+
                     OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
                     OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
                     OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
@@ -333,7 +337,7 @@ namespace MinesServer.Networking.Connection.Client
                     AnimationSpeed = 0,
                     Color = unchecked((int)0xFF808080), // Default gray
                     FrameOffset = 0,
-                    Properties = 0
+                    Properties = CellConfigProperties.None
                 };
             }
 
@@ -344,7 +348,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFF808080), // Gray
                 FrameOffset = 22,
-                Properties = 0
+                Properties = CellConfigProperties.Passable
             };
 
             configs[(int)CellType.Road] = new CellConfigurationPacket
@@ -353,7 +357,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFFCCCCCC), // Light gray
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.Passable
             };
 
             configs[(int)CellType.Boulder1] = new CellConfigurationPacket
@@ -362,7 +366,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFF000000), // Black
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.None
             };
 
             configs[(int)CellType.WhiteSand] = new CellConfigurationPacket
@@ -371,7 +375,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFFFFFF00), // Yellow
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.Passable
             };
 
             configs[(int)CellType.DarkWhiteSand] = new CellConfigurationPacket
@@ -380,7 +384,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFFCCCC00), // Dark yellow
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.Passable
             };
 
             configs[(int)CellType.GrayAcid] = new CellConfigurationPacket
@@ -389,7 +393,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFF00FF00), // Green
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.None
             };
 
             configs[(int)CellType.PurpleAcid] = new CellConfigurationPacket
@@ -398,7 +402,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFF800080), // Purple
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.None
             };
 
             configs[(int)CellType.Lava] = new CellConfigurationPacket
@@ -407,7 +411,7 @@ namespace MinesServer.Networking.Connection.Client
                 AnimationSpeed = 0,
                 Color = unchecked((int)0xFFFF4500), // OrangeRed
                 FrameOffset = 0,
-                Properties = 0
+                Properties = CellConfigProperties.None
             };
 
             return configs;
@@ -555,6 +559,32 @@ namespace MinesServer.Networking.Connection.Client
         {
             await UniTask.Delay(2000); // 2 second delay to see "loading" state
             OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 999, "skin/bee.png", "", "BeeBot")));
+        }
+
+        private async UniTaskVoid RunCircularRobot(ushort botId)
+        {
+            // Initial position
+            int centerX = 55;
+            int centerY = 55;
+            float angle = 0;
+            float radius = 3.0f;
+
+            // Send initial info
+            OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(1000, botId, "CircularBot")));
+            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 1000, "skin/bee.png", "", "CircularBot")));
+
+            while (_status == ConnectionStatus.Connected)
+            {
+                int x = centerX + Mathf.RoundToInt(Mathf.Cos(angle) * radius);
+                int y = centerY + Mathf.RoundToInt(Mathf.Sin(angle) * radius);
+                byte rotation = (byte)((Mathf.Atan2(Mathf.Sin(angle), Mathf.Cos(angle)) * Mathf.Rad2Deg + 360) % 360 / 90);
+
+                var robotPos = new RobotPositionPacket(botId, (ushort)x, (ushort)y, rotation);
+                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
+
+                angle += 0.5f;
+                await UniTask.Delay(500);
+            }
         }
 
         private async UniTaskVoid HandleAssetRequest(RuntimeAssetRequestPacket runtimeAssets)
