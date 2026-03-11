@@ -53,7 +53,7 @@ namespace Fodinae.Assets.Scripts.Game
             if (_spriteRenderer == null)
                 _spriteRenderer = GetComponent<SpriteRenderer>();
 
-            transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+            transform.localScale = Vector3.one;
 
             var rb = GetComponent<Rigidbody2D>();
             if (rb != null)
@@ -137,13 +137,13 @@ namespace Fodinae.Assets.Scripts.Game
 
         public void SetRotation(byte rotation)
         {
-            // 0: Right (0), 1: Up (90), 2: Left (180), 3: Down (270)
+            // 0: Down (270), 1: Left (180), 2: Up (90), 3: Right (0)
             TargetAngle = rotation switch
             {
-                0 => 0f,
-                1 => 90f,
-                2 => 180f,
-                3 => 270f,
+                0 => 270f,
+                1 => 180f,
+                2 => 90f,
+                3 => 0f,
                 _ => 0f
             };
         }
@@ -165,7 +165,8 @@ namespace Fodinae.Assets.Scripts.Game
 
             if (_spriteRenderer != null)
             {
-                var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 16f);
+                // Create sprite with center pivot and PPU matching texture width to occupy exactly 1x1 units
+                var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), texture.width);
                 _spriteRenderer.sprite = sprite;
             }
         }
