@@ -278,7 +278,7 @@ namespace Fodinae.Assets.Scripts.World
                     int wy = mesh.ChunkPosition.y * _chunkSize + y;
 
                     CellType cell = CellType.Unloaded;
-                    try { cell = MapStorage.Instance.GetCell(wx, wy); } catch { }
+                    try { cell = MapStorage.Instance.GetCell(wx, MapManager.Instance.WorldHeight - 1 - wy); } catch { }
 
                     if (cell == CellType.Unloaded)
                     {
