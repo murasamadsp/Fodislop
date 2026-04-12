@@ -152,6 +152,7 @@ namespace Fodinae.Assets.Scripts.Player
 
                     if (direction != Vector2Int.zero)
                     {
+                        // Map direction to Data Direction
                         Direction packetDirection = direction.x switch
                         {
                             1 => Direction.Right,
@@ -159,36 +160,53 @@ namespace Fodinae.Assets.Scripts.Player
                             _ => direction.y > 0 ? Direction.Up : Direction.Down
                         };
 
-                        ushort currentX = (ushort)Mathf.FloorToInt(transform.position.x);
-                        ushort currentY = (ushort)Mathf.FloorToInt(transform.position.y);
+                        ushort currentX = (ushort)Mathf.Clamp(Mathf.FloorToInt(transform.position.x), 0, ushort.MaxValue);
+                        ushort currentY = (ushort)Mathf.Clamp(Mathf.FloorToInt(transform.position.y), 0, ushort.MaxValue);
 
                         if (_lastSentDirection != packetDirection)
                         {
                             ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentY, new RotatePacket(packetDirection)));
                             _lastSentDirection = packetDirection;
                         }
+                        
+                        // Y axis in Unity increases upwards. 
+                        // Data Y usually increases downwards (0 at top).
+                        // If the user says Y increases when going up, this is inverted relative to standard screen space.
+                        // We will keep Y change relative to Unity transform (positive is up) and clamp against map dimensions.
+                        int targetX = currentX + direction.x;
+                        int targetY = currentY + direction.y; // Match Unity's movement
 
-                        // Check if the target cell is passable
-                        Vector2Int targetPos = new Vector2Int(
-                            Mathf.FloorToInt(transform.position.x + direction.x),
-                            Mathf.FloorToInt(transform.position.y + direction.y)
-                        );
+                        // Fetch world bounds from MapStorage
+                        var layer = MapStorage.Instance.cellLayer;
+                        if (layer == null) return;
+                        
+                        int mapWidth = layer.WidthChunks * layer.ChunkSize;
+                        int mapHeight = layer.HeightChunks * layer.ChunkSize;
 
-                        var cellType = MapStorage.Instance.GetCell(targetPos.x, targetPos.y);
+                        // Strict boundary enforcement using clamping
+                        if (targetX < 0 || targetX >= mapWidth || targetY < 0 || targetY >= mapHeight)
+                        {
+                            return; 
+                        }
+
+
+                        ushort targetDataX = (ushort)targetX;
+                        ushort targetDataY = (ushort)targetY;
+
+                        var cellType = MapStorage.Instance.GetCell(targetDataX, targetDataY);
                         var cellConfig = MapManager.Instance.GetCellConfig(cellType);
 
-                        // Use official enum for passable property check
                         bool isPassable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
 
                         if (isPassable)
                         {
+                            // Movement animation in Unity (Y is positive going up)
                             _robot.TargetPosition = transform.position + new Vector3(direction.x, direction.y, 0f);
                             _isMoving = true;
-                            ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentY, new MovePacket((ushort)targetPos.x, (ushort)targetPos.y)));
+                            ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentY, new MovePacket(targetDataX, targetDataY)));
                         }
 
-                        // Always update orientation even if blocked
-                        // Determine cardinal direction (0: Right, 90: Up, 180: Left, 270: Down)
+
                         if (direction.x != 0)
                             _robot.TargetAngle = direction.x > 0 ? 0f : 180f;
                         else

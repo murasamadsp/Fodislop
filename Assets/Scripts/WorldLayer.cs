@@ -367,6 +367,8 @@ public class WorldLayer<T> : IDisposable
         int lx = x % _chunkSize;
         int ly = y % _chunkSize;
 
+        // Given Y increases downwards, cy=0 is the top chunk row.
+        // ChunkIndex = cy (row) + cx (col) * _heightChunks (total chunks in a column).
         chunkIndex = cy + cx * _heightChunks;
         localIndex = ly + lx * _chunkSize;
         return true;
