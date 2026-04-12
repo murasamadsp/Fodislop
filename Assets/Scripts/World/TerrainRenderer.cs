@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using MinesServer.Data;
 using Fodinae.Assets.Scripts.World;
+using Fodinae.Assets.Scripts.Game.Managers;
 
 namespace Fodinae.Assets.Scripts.World
 {
