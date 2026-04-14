@@ -111,7 +111,7 @@ namespace Fodinae.Assets.Scripts.World
 
         private void Update()
         {
-            if (!_isInitialized) return;
+            if (!_isInitialized || _mainCamera == null) return;
 
             if (!_worldInitialized) InitializeWorldLayer();
 
@@ -204,18 +204,33 @@ namespace Fodinae.Assets.Scripts.World
         {
             if (_worldLayer == null || _mainCamera == null) return;
 
-            var camPos = _mainCamera.transform.position;
-            int cx = Mathf.FloorToInt(camPos.x / (_chunkSize * _cellSize));
-            int cy = Mathf.FloorToInt(camPos.y / (_chunkSize * _cellSize));
+            var cameraPos = _mainCamera.transform.position;
+            int cx = Mathf.FloorToInt(cameraPos.x / (_chunkSize * _cellSize));
+            int cy = Mathf.FloorToInt(cameraPos.y / (_chunkSize * _cellSize));
             var currentChunk = new Vector2Int(cx, cy);
 
             if (currentChunk == _lastCameraChunk) return;
             _lastCameraChunk = currentChunk;
 
             var newVisible = new HashSet<Vector2Int>();
-            for (int y = cy - _renderDistance; y <= cy + _renderDistance; y++)
+
+            // Frustum-based chunk calculation
+            float camHeight = _mainCamera.orthographicSize * 2f;
+            float camWidth = camHeight * _mainCamera.aspect;
+
+            float minCamX = cameraPos.x - camWidth / 2f;
+            float maxCamX = cameraPos.x + camWidth / 2f;
+            float minCamY = cameraPos.y - camHeight / 2f;
+            float maxCamY = cameraPos.y + camHeight / 2f;
+
+            int minX = Mathf.FloorToInt(minCamX / (_chunkSize * _cellSize)) - 1;
+            int maxX = Mathf.FloorToInt(maxCamX / (_chunkSize * _cellSize)) + 1;
+            int minY = Mathf.FloorToInt(minCamY / (_chunkSize * _cellSize)) - 1;
+            int maxY = Mathf.FloorToInt(maxCamY / (_chunkSize * _cellSize)) + 1;
+
+            for (int y = minY; y <= maxY; y++)
             {
-                for (int x = cx - _renderDistance; x <= cx + _renderDistance; x++)
+                for (int x = minX; x <= maxX; x++)
                 {
                     newVisible.Add(new Vector2Int(x, y));
                 }
@@ -320,7 +335,7 @@ namespace Fodinae.Assets.Scripts.World
                     CellType cell = CellType.Unloaded;
                     try { cell = MapStorage.Instance.GetCell(wx, MapManager.Instance.WorldHeight - 1 - wy); } catch { }
 
-                    if (cell == CellType.Unloaded)
+                    if (cell == CellType.Unloaded || cell == CellType.Pregener)
                     {
                         continue;
                     }
