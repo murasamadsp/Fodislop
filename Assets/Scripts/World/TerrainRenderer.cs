@@ -105,7 +105,7 @@ namespace Fodinae.Assets.Scripts.World
 
         private async void UpdateVisibleChunks()
         {
-            if (_worldLayer == null) return;
+            if (_worldLayer == null || _mainCamera == null) return;
 
             var cameraPos = _mainCamera.transform.position;
             var cameraChunkX = Mathf.FloorToInt(cameraPos.x / (_chunkSize * _cellSize));
@@ -117,11 +117,19 @@ namespace Fodinae.Assets.Scripts.World
 
             var newVisibleChunks = new HashSet<Vector2Int>();
 
-            // Calculate visible chunk range
-            int minX = cameraChunk.x - _renderDistance;
-            int maxX = cameraChunk.x + _renderDistance;
-            int minY = cameraChunk.y - _renderDistance;
-            int maxY = cameraChunk.y + _renderDistance;
+            // Frustum-based chunk calculation
+            float camHeight = _mainCamera.orthographicSize * 2f;
+            float camWidth = camHeight * _mainCamera.aspect;
+
+            float minCamX = cameraPos.x - camWidth / 2f;
+            float maxCamX = cameraPos.x + camWidth / 2f;
+            float minCamY = cameraPos.y - camHeight / 2f;
+            float maxCamY = cameraPos.y + camHeight / 2f;
+
+            int minX = Mathf.FloorToInt(minCamX / (_chunkSize * _cellSize)) - 1;
+            int maxX = Mathf.FloorToInt(maxCamX / (_chunkSize * _cellSize)) + 1;
+            int minY = Mathf.FloorToInt(minCamY / (_chunkSize * _cellSize)) - 1;
+            int maxY = Mathf.FloorToInt(maxCamY / (_chunkSize * _cellSize)) + 1;
 
             // Generate visible chunks
             for (int y = minY; y <= maxY; y++)
