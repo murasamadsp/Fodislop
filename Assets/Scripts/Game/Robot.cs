@@ -20,11 +20,15 @@ namespace Fodinae.Assets.Scripts.Game
         [SerializeField] private float _rotationSpeed = 1080f;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
+        private const float BASE_SMOOTH_TIME = 0.1f;
+        private const float REFERENCE_MOVE_SPEED = 15f;
 
         private bool _isMetadataLoaded = false;
         private CancellationTokenSource _cts;
         private float _targetAngle = 0f;
         private Vector3 _targetPosition;
+        private Vector3 _currentVelocity;
+        private float _currentAngularVelocity;
         [SerializeField] private float _moveSpeed = 15f;
         private float _tremor = 0f;
 
@@ -124,26 +128,21 @@ namespace Fodinae.Assets.Scripts.Game
         {
             Vector3 position = transform.position;
             float renderDistance = Vector2.Distance(position, _targetPosition);
-            float num = 0.9f - renderDistance * 0.01f;
-            if (num < 0.5f)
-            {
-                num = 0.5f;
-            }
+            float smoothTime = BASE_SMOOTH_TIME * (REFERENCE_MOVE_SPEED / Mathf.Max(1f, _moveSpeed));
 
             if (renderDistance > 28f)
             {
                 position = _targetPosition;
+                _currentVelocity = Vector3.zero;
             }
             else
             {
-                float num2 = 1f - num;
-                position.x = num * position.x + num2 * _targetPosition.x;
-                position.y = num * position.y + num2 * _targetPosition.y;
+                position = Vector3.SmoothDamp(position, _targetPosition, ref _currentVelocity, smoothTime);
             }
 
             if (_tremor > 0.01f)
             {
-                _tremor *= 0.8f;
+                _tremor *= Mathf.Pow(0.8f, Time.deltaTime / 0.016f);
                 position.x += _tremor * (Random.value - 0.5f);
                 position.y += _tremor * (Random.value - 0.5f);
             }
@@ -152,19 +151,7 @@ namespace Fodinae.Assets.Scripts.Game
             float currentAngle = transform.eulerAngles.z;
             float targetAngle = _targetAngle;
 
-            if (currentAngle - targetAngle > 180f)
-            {
-                targetAngle += 360f;
-            }
-            if (currentAngle - targetAngle < -180f)
-            {
-                targetAngle -= 360f;
-            }
-
-            float num4 = 12f * Time.unscaledDeltaTime;
-            if (num4 > 1f) num4 = 1f;
-
-            float nowRotationAngle = (1f - num4) * currentAngle + num4 * targetAngle;
+            float nowRotationAngle = Mathf.SmoothDampAngle(currentAngle, targetAngle, ref _currentAngularVelocity, smoothTime);
 
             if (_skinPath != "1")
             {
