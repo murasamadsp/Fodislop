@@ -32,6 +32,7 @@ namespace Fodinae.Assets.Scripts.Player
 
         private Vector2 _moveInput;
         private bool _isMoving = false;
+        private float _lastMoveTime;
         private Direction? _lastSentDirection;
 
         private void OnEnable()
@@ -77,13 +78,13 @@ namespace Fodinae.Assets.Scripts.Player
             {
                 _robot.TargetPosition = targetGridPos;
             }
+            ClientPosition = new Vector2Int(Mathf.FloorToInt(transform.position.x), Mathf.FloorToInt(transform.position.y));
         }
 
         private void Update()
         {
             ReadInput();
             ApplyMovement();
-            ClientPosition = new Vector2Int(Mathf.FloorToInt(transform.position.x), Mathf.FloorToInt(transform.position.y));
         }
 
         public void Initialize(uint botId)
@@ -94,6 +95,8 @@ namespace Fodinae.Assets.Scripts.Player
         public void UpdateServerPosition(Vector2Int position)
         {
             ServerPosition = position;
+            // Reconcile ClientPosition with ServerPosition (converted to Unity grid coordinates)
+            ClientPosition = new Vector2Int(position.x, MapManager.Instance.WorldHeight - 1 - position.y);
         }
 
         private void ReadInput()
@@ -128,97 +131,95 @@ namespace Fodinae.Assets.Scripts.Player
         {
             if (_robot == null) return;
 
-            if (_isMoving)
+            if (_moveInput != Vector2.zero)
             {
-                if (Vector3.Distance(transform.position, _robot.TargetPosition) < 0.001f)
+                Vector2Int direction = Vector2Int.zero;
+                if (Mathf.Abs(_moveInput.x) > Mathf.Abs(_moveInput.y))
                 {
-                    _isMoving = false;
+                    direction.x = _moveInput.x > 0 ? 1 : -1;
                 }
-            }
-
-            if (!_isMoving)
-            {
-                if (_moveInput != Vector2.zero)
+                else
                 {
-                    Vector2Int direction = Vector2Int.zero;
-                    if (Mathf.Abs(_moveInput.x) > Mathf.Abs(_moveInput.y))
+                    direction.y = _moveInput.y > 0 ? 1 : -1;
+                }
+
+                if (direction != Vector2Int.zero)
+                {
+                    // Map direction to Data Direction
+                    Direction packetDirection = direction.x switch
                     {
-                        direction.x = _moveInput.x > 0 ? 1 : -1;
+                        1 => Direction.Right,
+                        -1 => Direction.Left,
+                        _ => direction.y > 0 ? Direction.Up : Direction.Down
+                    };
+
+                    int currentUnityX = ClientPosition.x;
+                    int currentUnityY = ClientPosition.y;
+
+                    ushort currentX = (ushort)Mathf.Clamp(currentUnityX, 0, ushort.MaxValue);
+                    ushort currentServerY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - currentUnityY, 0, ushort.MaxValue);
+
+                    var currentCellType = MapStorage.Instance.GetCell(currentX, currentServerY);
+                    float cooldown = MapManager.Instance.GetMoveCooldown(currentCellType);
+                    if (Time.time - _lastMoveTime < cooldown)
+                    {
+                        return;
                     }
+
+                    if (_lastSentDirection != packetDirection)
+                    {
+                        ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentServerY, new RotatePacket(packetDirection)));
+                        _lastSentDirection = packetDirection;
+                        _lastMoveTime = Time.time;
+                    }
+
+                    if (direction.x != 0)
+                        _robot.TargetAngle = direction.x > 0 ? 0f : 180f;
                     else
+                        _robot.TargetAngle = direction.y > 0 ? 90f : 270f;
+
+                    bool isShiftPressed = Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
+                    if (isShiftPressed)
                     {
-                        direction.y = _moveInput.y > 0 ? 1 : -1;
+                        return;
                     }
 
-                    if (direction != Vector2Int.zero)
+                    // Y axis in Unity increases upwards. 
+                    // Data Y usually increases downwards (0 at top).
+                    // If the user says Y increases when going up, this is inverted relative to standard screen space.
+                    // We will keep Y change relative to Unity transform (positive is up) and clamp against map dimensions.
+                    int targetUnityX = currentUnityX + direction.x;
+                    int targetUnityY = currentUnityY + direction.y; // Match Unity's movement
+
+                    // Fetch world bounds from MapStorage
+                    var layer = MapStorage.Instance.cellLayer;
+                    if (layer == null) return;
+
+                    int mapWidth = MapManager.Instance.WorldWidth;
+                    int mapHeight = MapManager.Instance.WorldHeight;
+
+                    // Strict boundary enforcement using clamping
+                    if (targetUnityX < 0 || targetUnityX >= mapWidth || targetUnityY < 0 || targetUnityY >= mapHeight)
                     {
-                        // Map direction to Data Direction
-                        Direction packetDirection = direction.x switch
-                        {
-                            1 => Direction.Right,
-                            -1 => Direction.Left,
-                            _ => direction.y > 0 ? Direction.Up : Direction.Down
-                        };
+                        return;
+                    }
 
-                        int currentUnityX = Mathf.FloorToInt(transform.position.x);
-                        int currentUnityY = Mathf.FloorToInt(transform.position.y);
+                    ushort targetServerX = (ushort)targetUnityX;
+                    ushort targetServerY = (ushort)(MapManager.Instance.WorldHeight - 1 - targetUnityY);
 
-                        ushort currentX = (ushort)Mathf.Clamp(currentUnityX, 0, ushort.MaxValue);
-                        ushort currentServerY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - currentUnityY, 0, ushort.MaxValue);
+                    var cellType = MapStorage.Instance.GetCell(targetServerX, targetServerY);
+                    var cellConfig = MapManager.Instance.GetCellConfig(cellType);
 
-                        if (_lastSentDirection != packetDirection)
-                        {
-                            ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentServerY, new RotatePacket(packetDirection)));
-                            _lastSentDirection = packetDirection;
-                        }
+                    bool isPassable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
 
-                        if (direction.x != 0)
-                            _robot.TargetAngle = direction.x > 0 ? 0f : 180f;
-                        else
-                            _robot.TargetAngle = direction.y > 0 ? 90f : 270f;
-
-                        bool isShiftPressed = Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
-                        if (isShiftPressed)
-                        {
-                            return;
-                        }
-                        
-                        // Y axis in Unity increases upwards. 
-                        // Data Y usually increases downwards (0 at top).
-                        // If the user says Y increases when going up, this is inverted relative to standard screen space.
-                        // We will keep Y change relative to Unity transform (positive is up) and clamp against map dimensions.
-                        int targetUnityX = currentUnityX + direction.x;
-                        int targetUnityY = currentUnityY + direction.y; // Match Unity's movement
-
-                        // Fetch world bounds from MapStorage
-                        var layer = MapStorage.Instance.cellLayer;
-                        if (layer == null) return;
-                        
-                        int mapWidth = MapManager.Instance.WorldWidth;
-                        int mapHeight = MapManager.Instance.WorldHeight;
-
-                        // Strict boundary enforcement using clamping
-                        if (targetUnityX < 0 || targetUnityX >= mapWidth || targetUnityY < 0 || targetUnityY >= mapHeight)
-                        {
-                            return; 
-                        }
-
-                        ushort targetServerX = (ushort)targetUnityX;
-                        ushort targetServerY = (ushort)(MapManager.Instance.WorldHeight - 1 - targetUnityY);
-
-                        var cellType = MapStorage.Instance.GetCell(targetServerX, targetServerY);
-                        var cellConfig = MapManager.Instance.GetCellConfig(cellType);
-
-                        bool isPassable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
-
-                        if (isPassable)
-                        {
-                            // Movement animation in Unity (Y is positive going up)
-                            // Use absolute grid coordinates to ensure alignment
-                            _robot.TargetPosition = new Vector3(targetUnityX + 0.5f, targetUnityY + 0.5f, transform.position.z);
-                            _isMoving = true;
-                            ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentServerY, new MovePacket(targetServerX, targetServerY)));
-                        }
+                    if (isPassable)
+                    {
+                        // Movement animation in Unity (Y is positive going up)
+                        // Use absolute grid coordinates to ensure alignment
+                        _robot.TargetPosition = new Vector3(targetUnityX + 0.5f, targetUnityY + 0.5f, transform.position.z);
+                        ClientPosition = new Vector2Int(targetUnityX, targetUnityY);
+                        _lastMoveTime = Time.time;
+                        ConnectionManager.Instance.SendPacket(new ActionClientPacket(currentX, currentServerY, new MovePacket(targetServerX, targetServerY)));
                     }
                 }
             }
