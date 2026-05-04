@@ -74,9 +74,15 @@ namespace Fodinae.Assets.Scripts.Game
                 if (_clanSprite != null) Destroy(_clanSprite);
                 // Robot uses clanTexture.width as PPU and 0.8 scale.
                 // Let's match robot's logic for consistency.
-                _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0.5f, 0.5f), clanTexture.width);
+                // Use left-aligned pivot (0, 0.5) to position relative to the edge.
+                _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
                 _clanRenderer.sprite = _clanSprite;
                 _clanRenderer.transform.localScale = Vector3.one * 0.8f;
+
+                // Position to the right and slightly below the center
+                float packWidth = packTexture != null ? packTexture.width : 32;
+                float xOffset = (packWidth / 64f) + 0.1f; // Right edge + 0.1 gap
+                _clanRenderer.transform.localPosition = new Vector3(xOffset, -0.5f, 0);
             }
             else if (_clanRenderer != null)
             {
