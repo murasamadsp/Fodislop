@@ -23,6 +23,7 @@ namespace Fodinae.Assets.Scripts.World
         private readonly List<Rectangle> _usedRectangles = new();
 
         private bool _isDirty = false;
+        public bool IsDirty => _isDirty;
         private readonly object _lock = new object();
 
         public TextureAtlas(int size, int cellSize, int padding)
