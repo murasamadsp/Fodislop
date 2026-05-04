@@ -36,6 +36,11 @@ namespace Fodinae.Assets.Scripts.Game
         [SerializeField] private float _moveSpeed = 15f;
         private float _tremor = 0f;
 
+        private Tentacle[] _tentacles;
+        private GameObject _tailContainer;
+        private Sprite _skinSprite;
+        private Sprite _clanSprite;
+
         public uint BotId => _botId;
         public int PlayerId => _playerId;
         public byte ClanId => _clanId;
@@ -83,6 +88,10 @@ namespace Fodinae.Assets.Scripts.Game
 
         private void InitializeVisualElements()
         {
+            _tailContainer = new GameObject("TailContainer");
+            _tailContainer.transform.SetParent(transform);
+            _tailContainer.transform.localPosition = Vector3.zero;
+
             var textGo = new GameObject("Nickname");
             textGo.transform.SetParent(transform);
             _nicknameText = textGo.AddComponent<TextMesh>();
@@ -146,6 +155,14 @@ namespace Fodinae.Assets.Scripts.Game
                 _smoothAngle = _targetAngle;
                 _currentVelocity = Vector3.zero;
                 _currentAngularVelocity = 0f;
+
+                if (_tentacles != null)
+                {
+                    foreach (var tentacle in _tentacles)
+                    {
+                        tentacle.Snap(_smoothPosition);
+                    }
+                }
             }
             else
             {
@@ -177,6 +194,9 @@ namespace Fodinae.Assets.Scripts.Game
             }
 
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
+
+            float movementFactor = Mathf.Clamp01(_currentVelocity.magnitude / 5f);
+            UpdateTentacles(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime);
 
             UpdateLabelsPosition();
 
@@ -210,6 +230,38 @@ namespace Fodinae.Assets.Scripts.Game
             Debug.DrawLine(topRight, bottomRight, color);
             Debug.DrawLine(bottomRight, bottomLeft, color);
             Debug.DrawLine(bottomLeft, topLeft, color);
+        }
+
+        private void CreateTentacles(Texture2D tailTexture)
+        {
+            ClearTentacles();
+            _tentacles = new Tentacle[4];
+            float[] offsets = { -45f, -15f, 15f, 45f };
+            for (int i = 0; i < 4; i++)
+            {
+                _tentacles[i] = new Tentacle(_tailContainer, tailTexture, offsets[i], -1, i, 4);
+            }
+        }
+
+        private void ClearTentacles()
+        {
+            if (_tentacles != null)
+            {
+                foreach (var tentacle in _tentacles)
+                {
+                    tentacle?.Destroy();
+                }
+                _tentacles = null;
+            }
+        }
+
+        private void UpdateTentacles(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
+        {
+            if (_tentacles == null) return;
+            foreach (var tentacle in _tentacles)
+            {
+                tentacle.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
+            }
         }
 
         private void UpdateLabelsPosition()
@@ -310,14 +362,25 @@ namespace Fodinae.Assets.Scripts.Game
 
             if (skinTexture != null && _spriteRenderer != null)
             {
-                var sprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
-                _spriteRenderer.sprite = sprite;
+                if (_skinSprite != null) Object.Destroy(_skinSprite);
+                _skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
+                _spriteRenderer.sprite = _skinSprite;
+            }
+
+            if (tailTexture != null)
+            {
+                CreateTentacles(tailTexture);
+            }
+            else
+            {
+                ClearTentacles();
             }
 
             if (clanTexture != null && _clanRenderer != null)
             {
-                var sprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
-                _clanRenderer.sprite = sprite;
+                if (_clanSprite != null) Object.Destroy(_clanSprite);
+                _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
+                _clanRenderer.sprite = _clanSprite;
             }
         }
 
@@ -325,6 +388,108 @@ namespace Fodinae.Assets.Scripts.Game
         {
             _cts?.Cancel();
             _cts?.Dispose();
+
+            if (_skinSprite != null) Object.Destroy(_skinSprite);
+            if (_clanSprite != null) Object.Destroy(_clanSprite);
+            ClearTentacles();
+        }
+
+        private class Tentacle
+        {
+            private readonly LineRenderer _line;
+            private readonly Material _material;
+            private readonly Vector3[] _positions;
+            private readonly Vector3[] _velocities;
+            private readonly float _wiggleOffset;
+            private const int POINT_COUNT = 5; // root + 4 segments
+            private const float SMOOTH_TIME = 0.08f;
+            private const float MAX_SEGMENT_DIST = 0.2f;
+
+            public Tentacle(GameObject container, Texture2D texture, float wiggleOffset, int sortingOrder, int sliceIndex, int totalSlices)
+            {
+                _wiggleOffset = wiggleOffset;
+                _positions = new Vector3[POINT_COUNT];
+                _velocities = new Vector3[POINT_COUNT];
+
+                var go = new GameObject($"Tentacle_{wiggleOffset}");
+                go.transform.SetParent(container.transform);
+                _line = go.AddComponent<LineRenderer>();
+
+                _material = new Material(Shader.Find("Sprites/Default"));
+                _material.mainTexture = texture;
+
+                // Apply texture slicing
+                float sliceHeight = 1.0f / totalSlices;
+                _material.mainTextureScale = new Vector2(1, sliceHeight);
+                _material.mainTextureOffset = new Vector2(0, sliceIndex * sliceHeight);
+
+                _line.material = _material;
+
+                _line.startWidth = 0.15f;
+                _line.endWidth = 0.02f;
+                _line.positionCount = POINT_COUNT;
+                _line.sortingOrder = sortingOrder;
+                _line.textureMode = LineTextureMode.Stretch;
+
+                // Set initial positions
+                for (int i = 0; i < POINT_COUNT; i++)
+                {
+                    _positions[i] = container.transform.position;
+                    _line.SetPosition(i, _positions[i]);
+                }
+            }
+
+            public void Snap(Vector3 position)
+            {
+                for (int i = 0; i < POINT_COUNT; i++)
+                {
+                    _positions[i] = position;
+                    _velocities[i] = Vector3.zero;
+                    _line.SetPosition(i, position);
+                }
+            }
+
+            public void Update(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
+            {
+                _positions[0] = rootPosition;
+                _line.SetPosition(0, _positions[0]);
+
+                Vector3 lastPos = rootPosition;
+                float angleRad = rotationAngle * Mathf.Deg2Rad;
+                Vector3 baseOffset = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0) * -0.2f * movementFactor;
+                float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
+                baseOffset += new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0) * 0.15f * movementFactor;
+
+                Vector3 targetPos = rootPosition + baseOffset;
+
+                for (int i = 1; i < POINT_COUNT; i++)
+                {
+                    // Spring movement
+                    _positions[i] = Vector3.SmoothDamp(_positions[i], targetPos, ref _velocities[i], SMOOTH_TIME, 50f, deltaTime);
+
+                    // Wiggle logic
+                    float wiggle = Mathf.Sin(Time.time * 15f + i * 1.5f + _wiggleOffset) * 0.1f * movementFactor;
+                    Vector3 direction = (_positions[i] - lastPos).normalized;
+                    if (direction == Vector3.zero)
+                    {
+                        // Default to pointing backwards from the robot's rotation
+                        direction = new Vector3(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0);
+                    }
+                    Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0);
+
+                    _line.SetPosition(i, _positions[i] + perpendicular * wiggle);
+
+                    // Set target for next segment (moving further along the chain)
+                    lastPos = _positions[i];
+                    targetPos = _positions[i] + direction * MAX_SEGMENT_DIST * movementFactor;
+                }
+            }
+
+            public void Destroy()
+            {
+                if (_line != null) Object.Destroy(_line.gameObject);
+                if (_material != null) Object.Destroy(_material);
+            }
         }
     }
 }
