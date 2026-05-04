@@ -40,22 +40,18 @@ namespace Fodinae.Assets.Scripts.Game.Managers
 
         private void Start()
         {
-            if (MapManager.Instance != null)
-            {
-                MapManager.Instance.OnWorldInitialized += ClearAllPacks;
-            }
+            // Subscribe to WorldInitialized is problematic because it might trigger after packets are processed.
+            // However, MapManager.LoadWorldInit calls MapStorage.InitWorld which is the best time to clear packs.
         }
 
         private void OnDestroy()
         {
-            if (MapManager.Instance != null)
-            {
-                MapManager.Instance.OnWorldInitialized -= ClearAllPacks;
-            }
         }
 
         public void AddOrUpdatePack(ushort x, ushort y, PackType packType, byte variant, byte linkedClan)
         {
+            if (MapManager.Instance == null) return;
+
             var pos = new Vector2Int(x, y);
             if (_packs.TryGetValue(pos, out var pack))
             {
