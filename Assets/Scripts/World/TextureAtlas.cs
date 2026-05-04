@@ -16,6 +16,7 @@ namespace Fodinae.Assets.Scripts.World
         public int Padding { get; }
 
         private Texture2D _atlasTexture;
+        public Texture2D Texture => _atlasTexture;
         private Color32[] _atlasPixels;
         private readonly ConcurrentDictionary<CellType, AtlasCell> _cells = new();
         private readonly List<Rectangle> _freeRectangles = new();
