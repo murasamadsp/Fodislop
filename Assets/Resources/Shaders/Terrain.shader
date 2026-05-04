@@ -8,8 +8,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
     {
         Tags
         {
-            "RenderType" = "Transparent"
-            "Queue" = "Transparent"
+            "RenderType" = "Opaque"
+            "Queue" = "Geometry"
             "RenderPipeline" = "UniversalPipeline"
         }
 
@@ -18,8 +18,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
 
-            Blend SrcAlpha OneMinusSrcAlpha
-            ZWrite Off
+            Blend Off
+            ZWrite On
             Cull Off
 
             HLSLPROGRAM
@@ -33,8 +33,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 positionOS   : POSITION;
                 float2 uv           : TEXCOORD0; // Quad-relative UV [0,1]
                 float4 subAtlasRect : TEXCOORD1; // [minU, minV, sizeU, sizeV] for current frame
-                float2 tileSizeUV   : TEXCOORD2; // [tileU, tileV]
-                float2 worldPosAttr : TEXCOORD3; // [serverX, serverY]
+                float4 tileSizeUV   : TEXCOORD2; // [tileU, tileV, unused, unused]
+                float4 worldPosAttr : TEXCOORD3; // [serverX, serverY, unused, unused]
             };
 
             struct Varyings
@@ -55,8 +55,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = input.uv;
                 output.subAtlasRect = input.subAtlasRect;
-                output.tileSizeUV = input.tileSizeUV;
-                output.worldPos = input.worldPosAttr;
+                output.tileSizeUV = input.tileSizeUV.xy;
+                output.worldPos = input.worldPosAttr.xy;
                 return output;
             }
 
@@ -66,27 +66,33 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float2 subAtlasSizeUV = input.subAtlasRect.zw;
                 float2 tileSizeUV = input.tileSizeUV;
 
+                // Debug: return red if no texture or weird dimensions
+                if (subAtlasSizeUV.x <= 0 || tileSizeUV.x <= 0)
+                    return half4(1, 0, 0, 1);
+
                 // Calculate number of tiles in the sub-atlas (frame)
-                // Use round and max to avoid precision issues and division by zero
                 float2 tilesCount = round(subAtlasSizeUV / tileSizeUV);
                 tilesCount = max(tilesCount, 1.0);
 
-                // Use integer coordinates for wrapping to match CPU logic
+                // Server-side coordinates
                 int globalX = (int)floor(input.worldPos.x + 0.001);
                 int globalY = (int)floor(input.worldPos.y + 0.001);
 
                 // Wrapping logic matching TextureAtlas.cs
                 int wrappedX = ((globalX % (int)tilesCount.x) + (int)tilesCount.x) % (int)tilesCount.x;
-
-                // TextureAtlas.cs: int wrappedY = (tilesPerColumn - 1) - (((globalY % tilesPerColumn) + tilesPerColumn) % tilesPerColumn);
                 int wrappedY = ((int)tilesCount.y - 1) - (((globalY % (int)tilesCount.y) + (int)tilesCount.y) % (int)tilesCount.y);
 
                 float2 tileOffsetUV = float2(wrappedX, wrappedY) * tileSizeUV;
 
                 // Sample atlas: base + offset + relative_uv_within_tile
+                // Added 0.0001 epsilon to uv to avoid edge bleeding from the wrong tile
                 float2 finalUV = baseUV + tileOffsetUV + input.uv * tileSizeUV;
 
-                return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV);
+                half4 color = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV);
+
+                // If the color is transparent, we might want to discard or use a fallback
+                // but since it's opaque now, let's just return it.
+                return color;
             }
             ENDHLSL
         }

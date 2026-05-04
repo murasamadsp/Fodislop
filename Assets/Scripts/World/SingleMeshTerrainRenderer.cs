@@ -21,11 +21,10 @@ namespace Fodinae.Assets.Scripts.World
         private Mesh _mesh;
 
         private List<Vector3> _vertices = new();
-        private List<int> _indices = new();
         private List<Vector2> _uvs = new(); // Quad-relative UVs [0,1]
         private List<Vector4> _subAtlasRects = new(); // [Umin, Vmin, WidthUV, HeightUV]
-        private List<Vector2> _tileSizeUVs = new(); // [TileWidthUV, TileHeightUV]
-        private List<Vector2> _worldPositions = new(); // [ServerX, ServerY]
+        private List<Vector4> _tileSizeUVs = new(); // [TileWidthUV, TileHeightUV, 0, 0]
+        private List<Vector4> _worldPositions = new(); // [ServerX, ServerY, 0, 0]
 
         private Vector2Int _lastMinVisible = new Vector2Int(-1, -1);
         private Vector2Int _lastMaxVisible = new Vector2Int(-1, -1);
@@ -45,14 +44,27 @@ namespace Fodinae.Assets.Scripts.World
             _mesh.indexFormat = IndexFormat.UInt32;
             _meshFilter.mesh = _mesh;
 
+            InitializeShader();
+        }
+
+        private void InitializeShader()
+        {
             if (_terrainShader == null)
             {
                 _terrainShader = Shader.Find("Universal Render Pipeline/Custom/Terrain");
                 if (_terrainShader == null)
                 {
-                    Debug.LogWarning("Shader 'Universal Render Pipeline/Custom/Terrain' not found by name, attempting to load from Resources...");
                     _terrainShader = Resources.Load<Shader>("Shaders/Terrain");
                 }
+            }
+
+            if (_terrainShader == null)
+            {
+                Debug.LogError("SingleMeshTerrainRenderer: Terrain shader NOT FOUND! Rendering will fail.");
+            }
+            else
+            {
+                Debug.Log($"SingleMeshTerrainRenderer: Using shader '{_terrainShader.name}'");
             }
         }
 
@@ -76,15 +88,13 @@ namespace Fodinae.Assets.Scripts.World
             int minY = Mathf.FloorToInt((camPos.y - height / 2) / _cellSize) - _bufferCells;
             int maxY = Mathf.FloorToInt((camPos.y + height / 2) / _cellSize) + _bufferCells;
 
-            // Clamp to world bounds
             minX = Mathf.Max(0, minX);
             maxX = Mathf.Min(MapManager.Instance.WorldWidth - 1, maxX);
             minY = Mathf.Max(0, minY);
             maxY = Mathf.Min(MapManager.Instance.WorldHeight - 1, maxY);
 
-            // Optimization: only rebuild if visible range changed or some time has passed (for animations)
             bool rangeChanged = minX != _lastMinVisible.x || minY != _lastMinVisible.y || maxX != _lastMaxVisible.x || maxY != _lastMaxVisible.y;
-            bool timeToUpdateAnimations = Time.time - _lastRebuildTime > 0.05f; // ~20fps for animations
+            bool timeToUpdateAnimations = Time.time - _lastRebuildTime > 0.05f;
 
             if (rangeChanged || timeToUpdateAnimations)
             {
@@ -111,7 +121,6 @@ namespace Fodinae.Assets.Scripts.World
                 _subMeshIndices = new List<int>[atlases.Count];
                 for (int i = 0; i < atlases.Count; i++) _subMeshIndices[i] = new List<int>();
 
-                // Cleanup old materials
                 if (_materials != null)
                 {
                     foreach (var mat in _materials)
@@ -139,18 +148,12 @@ namespace Fodinae.Assets.Scripts.World
             {
                 for (int x = minX; x <= maxX; x++)
                 {
-                    // Convert Unity Y to Server Y
                     int serverY = MapManager.Instance.WorldHeight - 1 - y;
                     CellType cellType = MapStorage.Instance.GetCell(x, serverY);
 
                     if (cellType == CellType.Unloaded || cellType == CellType.Pregener)
                         continue;
 
-                    // Get current frame coordinate
-                    AtlasCoordinate coord = WorldTextureManager.Instance.GetCellTextureCoordinateSync(cellType, x, serverY);
-                    if (coord == AtlasCoordinate.Empty) continue;
-
-                    // Find which atlas it belongs to
                     int atlasIndex = -1;
                     for (int i = 0; i < atlases.Count; i++)
                     {
@@ -163,70 +166,43 @@ namespace Fodinae.Assets.Scripts.World
 
                     if (atlasIndex == -1) continue;
 
-                    // Update material texture if needed
-                    // (Assuming atlas texture might have changed/loaded)
-                    // We can optimize this by only doing it when atlases are marked dirty
                     var atlasTex = atlases[atlasIndex].Texture;
+                    if (atlasTex == null) continue;
+
                     if (_materials[atlasIndex].GetTexture("_BaseMap") != atlasTex)
                     {
                         _materials[atlasIndex].SetTexture("_BaseMap", atlasTex);
                     }
 
-                    // Vertices
                     _vertices.Add(new Vector3(x * _cellSize, y * _cellSize, 0));
                     _vertices.Add(new Vector3((x + 1) * _cellSize, y * _cellSize, 0));
                     _vertices.Add(new Vector3((x + 1) * _cellSize, (y + 1) * _cellSize, 0));
                     _vertices.Add(new Vector3(x * _cellSize, (y + 1) * _cellSize, 0));
 
-                    // Quad UVs
                     _uvs.Add(new Vector2(0, 0));
                     _uvs.Add(new Vector2(1, 0));
                     _uvs.Add(new Vector2(1, 1));
                     _uvs.Add(new Vector2(0, 1));
 
-                    // Sub-atlas rect: [Umin, Vmin, WidthUV, HeightUV]
-                    // This rect is for the ENTIRE sub-atlas (including variants and frames)
-                    // Wait, the shader expects the current frame's rect to do variant selection within it.
-                    // If we have animations, the coord returned by GetCellTextureCoordinateSync is already for the current frame.
-                    // We need to pass the current frame's rect.
-
-                    // In TextureAtlas.cs, GetWrappedCoordinate returns a 32x32 tile's coordinate.
-                    // But we want the shader to do the variant wrapping.
-                    // So we should give it the base rectangle of the sub-atlas (or the current animation frame).
-
-                    // Actually, if we want the shader to do variant selection, we need to know the frame's bounds.
-                    // Let's re-examine AtlasCoordinate.
-                    // U1, V1, U2, V2 give the rect.
-
-                    // The coordinate returned by Sync is already wrapped for positional variant too!
-                    // Wait, the user said: "The shader should be responsible for the positional variant selection since it has the necessary information to do so"
-                    // And "i guess the animation frame selection would be the CPU responsibility still"
-
-                    // So I should provide the RECT of the current animation frame.
-                    // I need a way to get the animation frame rect WITHOUT positional wrapping.
-
                     Vector4 frameRect = GetAnimationFrameRect(cellType, atlasIndex);
-                    float tileSize = 32f; // Default
-                    // Note: We can't easily access WorldTextureManager's private _cellTextureSize,
-                    // but we can assume it's 32 or try to get it from Atlas if it was public.
-                    // For now keeping it 32 as per standard in this codebase.
-                    Vector2 tileUV = new Vector2(tileSize / atlases[atlasIndex].Size, tileSize / atlases[atlasIndex].Size);
+                    float tileSize = 32f;
+                    float uSize = tileSize / atlases[atlasIndex].Size;
+                    float vSize = tileSize / atlases[atlasIndex].Size;
 
                     for (int i = 0; i < 4; i++)
                     {
                         _subAtlasRects.Add(frameRect);
-                        _tileSizeUVs.Add(tileUV);
-                        _worldPositions.Add(new Vector2(x, serverY));
+                        _tileSizeUVs.Add(new Vector4(uSize, vSize, 0, 0));
+                        _worldPositions.Add(new Vector4(x, serverY, 0, 0));
                     }
 
-                    // Indices for sub-mesh (Clockwise)
-                    _subMeshIndices[atlasIndex].Add(vertexCount + 0); // BL
-                    _subMeshIndices[atlasIndex].Add(vertexCount + 3); // TL
-                    _subMeshIndices[atlasIndex].Add(vertexCount + 2); // TR
+                    _subMeshIndices[atlasIndex].Add(vertexCount + 0);
+                    _subMeshIndices[atlasIndex].Add(vertexCount + 3);
+                    _subMeshIndices[atlasIndex].Add(vertexCount + 2);
 
-                    _subMeshIndices[atlasIndex].Add(vertexCount + 2); // TR
-                    _subMeshIndices[atlasIndex].Add(vertexCount + 1); // BR
-                    _subMeshIndices[atlasIndex].Add(vertexCount + 0); // BL
+                    _subMeshIndices[atlasIndex].Add(vertexCount + 2);
+                    _subMeshIndices[atlasIndex].Add(vertexCount + 1);
+                    _subMeshIndices[atlasIndex].Add(vertexCount + 0);
 
                     vertexCount += 4;
                 }
@@ -275,7 +251,6 @@ namespace Fodinae.Assets.Scripts.World
             var atlases = WorldTextureManager.Instance.GetAllAtlases();
             var atlas = atlases[atlasIndex];
 
-            // Get base coordinate for the cell (the whole sub-atlas)
             AtlasCoordinate baseCoord = atlas.GetCoordinate(cellType);
 
             int frameIndex = 0;
@@ -293,9 +268,8 @@ namespace Fodinae.Assets.Scripts.World
                 }
             }
 
-            // Calculate UVs for the current frame
             float uMin = (float)baseCoord.AtlasX / atlas.Size;
-            float vMin = (float)(baseCoord.AtlasY + frameIndex * frameHeight) / atlas.Size;
+            float vMin = (float)(baseCoord.AtlasY + frameIndex * (frameHeight > 0 ? frameHeight : 0)) / atlas.Size;
             float uSize = (float)baseCoord.Width / atlas.Size;
             float vSize = (float)(frameHeight > 0 ? frameHeight : baseCoord.Height) / atlas.Size;
 
