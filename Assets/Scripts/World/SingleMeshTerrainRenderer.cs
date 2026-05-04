@@ -16,6 +16,8 @@ namespace Fodinae.Assets.Scripts.World
         [SerializeField] private float _cellSize = 1.0f;
         [SerializeField] private int _bufferCells = 2;
         [SerializeField] private Shader _terrainShader;
+        [SerializeField] private string _sortingLayerName = "Default";
+        [SerializeField] private int _sortingOrder = -1000;
 
         private MeshFilter _meshFilter;
         private MeshRenderer _meshRenderer;
@@ -49,7 +51,9 @@ namespace Fodinae.Assets.Scripts.World
             InitializeShader();
 
             _meshRenderer.enabled = true;
-            _meshRenderer.sortingOrder = -1000;
+            _meshRenderer.sortingLayerName = _sortingLayerName;
+            _meshRenderer.sortingOrder = _sortingOrder;
+            gameObject.layer = 0; // Default layer
 
             if (WorldTextureManager.Instance != null)
             {
@@ -171,7 +175,6 @@ namespace Fodinae.Assets.Scripts.World
                             pendingLoads.Add(cellType);
                             WorldTextureManager.Instance.GetCellTextureCoordinate(cellType, x, serverY).Forget();
                         }
-                        continue;
                     }
 
                     int atlasIndex = -1;
@@ -251,11 +254,12 @@ namespace Fodinae.Assets.Scripts.World
             }
 
             _mesh.RecalculateBounds();
+            _mesh.UploadMeshData(false);
             _meshRenderer.sharedMaterials = _materials;
 
             if (vertexCount > 0)
             {
-                Debug.Log($"SingleMeshTerrainRenderer: Built mesh with {vertexCount} vertices and {atlases.Count} sub-meshes.");
+                Debug.Log($"SingleMeshTerrainRenderer: Built mesh with {vertexCount} vertices and {atlases.Count} sub-meshes. Bounds: {_mesh.bounds}");
             }
         }
 
