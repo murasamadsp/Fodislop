@@ -65,7 +65,7 @@ namespace Fodinae.Assets.Scripts.Game
             {
                 if (_packSprite != null) Destroy(_packSprite);
                 // 32 pixels per unit as requested
-                _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), 32);
+                _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), 16);
                 _spriteRenderer.sprite = _packSprite;
             }
 
@@ -80,8 +80,8 @@ namespace Fodinae.Assets.Scripts.Game
                 _clanRenderer.transform.localScale = Vector3.one * 0.8f;
 
                 // Position to the right and slightly below the center
-                float packWidth = packTexture != null ? packTexture.width : 32;
-                float xOffset = (packWidth / 64f) + 0.1f; // Right edge + 0.1 gap
+                float packWidth = packTexture != null ? packTexture.width : 16;
+                float xOffset = (packWidth / 32f) + 0.1f; // Right edge + 0.1 gap
                 _clanRenderer.transform.localPosition = new Vector3(xOffset, -0.5f, 0);
             }
             else if (_clanRenderer != null)

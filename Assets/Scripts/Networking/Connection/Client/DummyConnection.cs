@@ -152,7 +152,7 @@ namespace MinesServer.Networking.Connection.Client
                     // Send test packs
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
                         new PackPacket(27, 50, PackType.Teleport, 0, 0),
-                        new PackPacket(25, 48, PackType.Market, 1, 1)
+                        new PackPacket(25, 48, PackType.Market, 0, 1)
                     })));
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
