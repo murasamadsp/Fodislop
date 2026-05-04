@@ -239,7 +239,7 @@ namespace Fodinae.Assets.Scripts.Game
             float[] offsets = { -45f, -15f, 15f, 45f };
             for (int i = 0; i < 4; i++)
             {
-                _tentacles[i] = new Tentacle(_tailContainer, tailTexture, offsets[i], -1);
+                _tentacles[i] = new Tentacle(_tailContainer, tailTexture, offsets[i], -1, i, 4);
             }
         }
 
@@ -405,7 +405,7 @@ namespace Fodinae.Assets.Scripts.Game
             private const float SMOOTH_TIME = 0.08f;
             private const float MAX_SEGMENT_DIST = 0.2f;
 
-            public Tentacle(GameObject container, Texture2D texture, float wiggleOffset, int sortingOrder)
+            public Tentacle(GameObject container, Texture2D texture, float wiggleOffset, int sortingOrder, int sliceIndex, int totalSlices)
             {
                 _wiggleOffset = wiggleOffset;
                 _positions = new Vector3[POINT_COUNT];
@@ -417,6 +417,12 @@ namespace Fodinae.Assets.Scripts.Game
 
                 _material = new Material(Shader.Find("Sprites/Default"));
                 _material.mainTexture = texture;
+
+                // Apply texture slicing
+                float sliceHeight = 1.0f / totalSlices;
+                _material.mainTextureScale = new Vector2(1, sliceHeight);
+                _material.mainTextureOffset = new Vector2(0, sliceIndex * sliceHeight);
+
                 _line.material = _material;
 
                 _line.startWidth = 0.15f;
@@ -464,14 +470,18 @@ namespace Fodinae.Assets.Scripts.Game
                     // Wiggle logic
                     float wiggle = Mathf.Sin(Time.time * 15f + i * 1.5f + _wiggleOffset) * 0.1f * movementFactor;
                     Vector3 direction = (_positions[i] - lastPos).normalized;
-                    if (direction == Vector3.zero) direction = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
+                    if (direction == Vector3.zero)
+                    {
+                        // Default to pointing backwards from the robot's rotation
+                        direction = new Vector3(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0);
+                    }
                     Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0);
 
                     _line.SetPosition(i, _positions[i] + perpendicular * wiggle);
 
-                    // Set target for next segment
+                    // Set target for next segment (moving further along the chain)
                     lastPos = _positions[i];
-                    targetPos = _positions[i] - direction * MAX_SEGMENT_DIST * movementFactor;
+                    targetPos = _positions[i] + direction * MAX_SEGMENT_DIST * movementFactor;
                 }
             }
 
