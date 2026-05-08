@@ -525,7 +525,7 @@ namespace Fodinae.Assets.Scripts.World
             _uvs.AddRange(quadUVs);
 
             Vector4 frameRect = GetAnimationFrameRect(cellType, atlasIndex);
-            float tileSize = 32f;
+            float tileSize = RenderingConstants.CELL_SIZE;
             float atlasSize = atlases[atlasIndex].Size;
             float uvTileSize = tileSize / atlasSize;
 
