@@ -2,6 +2,8 @@ using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using System.Collections.Generic;
+using MinesServer.Networking.Server;
+using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Fodinae.Assets.Scripts.Networking.Tests
 {
@@ -27,7 +29,7 @@ namespace Fodinae.Assets.Scripts.Networking.Tests
 
             Debug.Log("[NetworkServiceTest] Simulating HBPacket with RobotPositionPacket...");
             var robotPos = new RobotPositionPacket(1, 10, 10, 0);
-            var hb = new HBPacket(new[] { robotPos });
+            var hb = new HBPacket(new IHBPacket[] { robotPos });
             SimulatePacket(hb);
 
             // Verify
