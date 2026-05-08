@@ -9,6 +9,7 @@ using UnityEngine;
 using Fodinae.Assets.Scripts.Networking.Connection;
 using Fodinae.Assets.Scripts.Player;
 using Fodinae.Assets.Scripts.Game.Managers;
+using MinesServer.Networking.Client;
 
 namespace Fodinae.Assets.Scripts.Networking
 {

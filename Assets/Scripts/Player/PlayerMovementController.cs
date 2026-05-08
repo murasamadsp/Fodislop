@@ -8,6 +8,7 @@ using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System;
+using Fodinae.Assets.Scripts.Networking;
 
 namespace Fodinae.Assets.Scripts.Player
 {
