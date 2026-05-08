@@ -454,6 +454,30 @@ namespace MinesServer.Networking.Connection.Client
                 Distortion = CellDistortionType.Cause,
                 Properties = CellConfigProperties.None
             };
+            configs[(int)CellType.BuildingDoor] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF8B4513),
+                FrameOffset = 0,
+                Properties = CellConfigProperties.None
+            };
+            configs[(int)CellType.BuildingCorner] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF555555),
+                FrameOffset = 0,
+                Properties = CellConfigProperties.None
+            };
+            configs[(int)CellType.BuildingWall] = new CellConfigurationPacket
+            {
+                Animation = CellAnimationType.None,
+                AnimationSpeed = 0,
+                Color = unchecked((int)0xFF666666),
+                FrameOffset = 0,
+                Properties = CellConfigProperties.None
+            };
 
             return configs;
         }
@@ -554,6 +578,20 @@ namespace MinesServer.Networking.Connection.Client
                     map[x, y] = CellType.Lava;
                 }
             }
+            // Add tiling test region
+            int tilingX = 30;
+            int tilingY = 30;
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0)
+                        map[tilingX + dx, tilingY + dy] = CellType.BuildingDoor;
+                    else
+                        map[tilingX + dx, tilingY + dy] = CellType.BuildingCorner;
+                }
+            }
+
             var random = new System.Random(12345);
             for (int y = 10; y < height - 10; y += 3)
             {
