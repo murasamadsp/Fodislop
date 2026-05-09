@@ -210,13 +210,13 @@ namespace MinesServer.Networking.Connection.Client
                     if (i == 4)
                     {
                         // The center cell remains static
-                        grid[i] = CellType.BuildingWall;
+                        grid[i] = CellType.BuildingDoor;
                         continue;
                     }
 
                     // Check if the N-th bit is set in our counter
                     bool isNeighborPresent = ((counter >> bit) & 1) == 1;
-                    grid[i] = isNeighborPresent ? CellType.BuildingWall : CellType.Empty;
+                    grid[i] = isNeighborPresent ? CellType.BuildingDoor : CellType.Empty;
                     bit++;
                 }
 
