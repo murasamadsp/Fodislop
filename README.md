@@ -1,10 +1,6 @@
 # Fodinae
 
-2D-клиент для [Fodinae](https://github.com/MinesReborn) — тайловая игра с процедурным миром, сетевым мультиплеером и динамическим рендерингом террейна. TODO: получше описание.
-
-## Скриншоты
-
-> TODO: Добавить скриншоты геймплея.
+2D-клиент для [Fodinae](https://github.com/MinesReborn) — реворк клиента MMORPG Сергея Мячина. Проект сфокусирован на производительном тайловом рендеринге и современной сетевой архитектуре.
 
 ## Требования
 
@@ -14,44 +10,41 @@
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/MinesReborn/fodinae-audio-rt-engine.git
+git clone https://github.com/MinesReborn/Fodislop.git
 ```
 
 1. Откройте проект через **Unity Hub** → `Open` → выберите папку проекта.
-2. Unity автоматически подтянет пакеты из `Packages/manifest.json` (включая `darkar25.fodinae.*`).
+2. Unity автоматически подтянет внешние зависимости.
 3. Откройте сцену `Assets/Scenes/SampleScene.unity`.
-4. Нажмите **Play**. Если сервер недоступен, `StandaloneWorldInitializer` создаст тестовый мир.
+4. Нажмите **Play**. При отсутствии сервера включится автономный тестовый режим.
 
 ## Архитектура
 
-Подробное описание архитектуры, структуры проекта и стандартов разработки — в [`AGENTS.md`](AGENTS.md).
+Подробные инструкции для разработчиков и описание внутренних систем — в файле [**`AGENTS.md`**](AGENTS.md).
 
-### Ключевые системы
+### Ключевые фичи
 
-| Система | Описание |
-|---|---|
-| `SingleMeshTerrainRenderer` | Рендеринг видимого террейна в один меш (7 UV-каналов) |
-| `WorldLayer<T>` | Дисковый стриминг чанков 32×32 с LRU-кэшем и RLE-сжатием |
-| `WorldTextureManager` | Загрузка тайл-текстур из файловой системы, упаковка в атласы |
-| `NetworkService` | Подписка на серверные пакеты (`Subscribe<T>`) |
-| `PacketUIBuilder` | Динамическая сборка UI из серверных пакетов |
+- **Custom Terrain Rendering**: Эффективный рендеринг террейна в один меш с использованием 7 UV-каналов.
+- **Chunk Streaming**: Дисковое кэширование и стриминг мира с RLE-сжатием.
+- **Packet-driven UI**: Динамическая сборка интерфейса на базе серверных пакетов через UI Toolkit.
+- **Modern Networking**: Асинхронная обработка пакетов на базе `UniTask`.
+
+## Roadmap / TODO
+
+- [ ] Формирование детального технического бэклога.
+- [ ] Определение ключевых этапов разработки (Milestones).
+- [ ] Анализ и приоритизация будущих функциональных модулей.
 
 ## Зависимости
 
-### Unity-пакеты (Git)
+- **Core**: `darkar25.fodinae.*` (data, networking) — сетевой стек.
+- **Compression**: SharpCompress, ZstdSharp, LZ4.
+- **Async**: UniTask.
+- **Other**: NetCoreServer, WebP decoder.
 
-- [`darkar25.fodinae.data`](https://github.com/MinesReborn/MinesServerNetworking) — типы данных
-- [`darkar25.fodinae.networking`](https://github.com/MinesReborn/MinesServerNetworking) — сетевой протокол
-- [`com.netpyoung.webp`](https://github.com/netpyoung/unity.webp) — декодирование WebP
+## Contributing
 
-### Vendored плагины (`Assets/Plugins/`)
-
-- SharpCompress, ZstdSharp, K4os.Compression.LZ4, NetCoreServer, Genumerics
-- [UniTask](https://github.com/Cysharp/UniTask) (полный пакет)
-
-## Контрибуция
-
-См. [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Правила оформления PR и стандарты кода — в [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Лицензия
 
