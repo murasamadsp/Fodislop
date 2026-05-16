@@ -170,6 +170,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                         Debug.LogError($"[MapStorage] CRITICAL: WorldLayer cell access failed: {cellTestEx.Message}");
                         Debug.LogError("[MapStorage] WorldLayer appears to be created but not functional");
                         _isInitialized = false;
+                        cellLayer?.Dispose();
                         cellLayer = null;
                         return;
                     }
@@ -216,6 +217,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                     }
                     
                     _isInitialized = false;
+                    cellLayer?.Dispose();
                     cellLayer = null;
                     return;
                 }
@@ -265,6 +267,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 // Try fallback mechanisms
                 TryCreateFallbackWorld(worldCodeName, width, height);
                 _isInitialized = false;
+                cellLayer?.Dispose();
                 cellLayer = null;
             }
             catch (System.ArgumentException argEx)
@@ -272,10 +275,11 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 Debug.LogError($"[MapStorage] CRITICAL: Invalid arguments for WorldLayer creation: {argEx.Message}");
                 Debug.LogError($"[MapStorage] World: {worldCodeName}, Width: {width}, Height: {height}, WidthChunks: {(width + 32 - 1) / 32}, HeightChunks: {(height + 32 - 1) / 32}");
                 Debug.LogError("[MapStorage] CRITICAL: Invalid arguments prevent terrain rendering");
-                
+
                 // Try with different parameters
                 TryCreateWithDifferentChunkSize(worldCodeName, width, height);
                 _isInitialized = false;
+                cellLayer?.Dispose();
                 cellLayer = null;
             }
             catch (System.OutOfMemoryException memEx)
@@ -284,10 +288,11 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 Debug.LogError($"[MapStorage] Requested memory for {width}x{height} world may be too large");
                 Debug.LogError($"[MapStorage] Available memory: {System.GC.GetTotalMemory(false)} bytes");
                 Debug.LogError("[MapStorage] CRITICAL: Memory issues prevent terrain rendering");
-                
+
                 // Try creating a smaller world
                 TryCreateSmallerTestWorld(worldCodeName);
                 _isInitialized = false;
+                cellLayer?.Dispose();
                 cellLayer = null;
             }
             catch (System.UnauthorizedAccessException authEx)
@@ -295,10 +300,11 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 Debug.LogError($"[MapStorage] CRITICAL: Access denied while creating WorldLayer for '{worldCodeName}': {authEx.Message}");
                 Debug.LogError($"[MapStorage] Check file permissions for path: {path}");
                 Debug.LogError("[MapStorage] CRITICAL: Permission issues prevent terrain rendering");
-                
+
                 // Try different location
                 TryCreateFallbackWorld(worldCodeName, width, height);
                 _isInitialized = false;
+                cellLayer?.Dispose();
                 cellLayer = null;
             }
             catch (System.Security.SecurityException secEx)
@@ -306,10 +312,11 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 Debug.LogError($"[MapStorage] CRITICAL: Security exception while creating WorldLayer for '{worldCodeName}': {secEx.Message}");
                 Debug.LogError("[MapStorage] Check application permissions for file access");
                 Debug.LogError("[MapStorage] CRITICAL: Security restrictions prevent terrain rendering");
-                
+
                 // Try emergency fallback
                 TryEmergencyFallback(worldCodeName, width, height);
                 _isInitialized = false;
+                cellLayer?.Dispose();
                 cellLayer = null;
             }
             catch (System.Exception ex)
@@ -317,19 +324,20 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 Debug.LogError($"[MapStorage] CRITICAL: Unexpected error while initializing world '{worldCodeName}': {ex.Message}");
                 Debug.LogError($"[MapStorage] Exception type: {ex.GetType().Name}");
                 Debug.LogError($"[MapStorage] Stack trace: {ex.StackTrace}");
-                
+
                 // Try to provide more context about the failure
                 if (ex.InnerException != null)
                 {
                     Debug.LogError($"[MapStorage] Inner exception: {ex.InnerException.Message}");
                     Debug.LogError($"[MapStorage] Inner exception type: {ex.InnerException.GetType().Name}");
                 }
-                
+
                 Debug.LogError("[MapStorage] CRITICAL: Unknown error prevents terrain rendering");
-                
+
                 // Try emergency fallback
                 TryEmergencyFallback(worldCodeName, width, height);
                 _isInitialized = false;
+                cellLayer?.Dispose();
                 cellLayer = null;
             }
         }
