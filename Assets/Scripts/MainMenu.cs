@@ -11,6 +11,7 @@ using UnityEngine.UIElements;
 [RequireComponent(typeof(UIDocument))]
 public class MainMenu : MonoBehaviour
 {
+    [SerializeField] private Texture2D _loaderTexture;
     private UIDocument _doc;
     private VisualElement _mainMenuContainer;
     private VisualElement _loaderContainer;
@@ -35,6 +36,20 @@ public class MainMenu : MonoBehaviour
         if (playButton != null)
             playButton.clicked += OnPlayButtonClicked;
         root.Add(mainMenu);
+
+        // The loader is a full-screen, absolutely-positioned background overlay
+        // that stays visible until the player presses PLAY (see HideLoader).
+        // The menu must therefore sit *above* the loader and the loader must
+        // not intercept pointer events, otherwise the PLAY button is occluded
+        // and unclickable.
+        mainMenu.style.position = Position.Absolute;
+        mainMenu.style.left = 0;
+        mainMenu.style.top = 0;
+        mainMenu.style.right = 0;
+        mainMenu.style.bottom = 0;
+        mainMenu.BringToFront();
+        if (_loaderContainer != null)
+            _loaderContainer.pickingMode = PickingMode.Ignore;
     }
 
     private void ShowLoader()
@@ -54,7 +69,7 @@ public class MainMenu : MonoBehaviour
         _loaderContainer.style.justifyContent = Justify.Center;
 
         var image = new UnityEngine.UIElements.Image();
-        Texture2D loaderTexture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Textures/loader_new.png");
+        Texture2D loaderTexture = _loaderTexture;
         if (loaderTexture == null)
         {
             loaderTexture = CreateSimpleLoaderTexture();

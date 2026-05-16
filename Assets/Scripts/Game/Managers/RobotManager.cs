@@ -7,6 +7,14 @@ namespace Fodinae.Assets.Scripts.Game.Managers
     public class RobotManager : MonoBehaviour
     {
         private static RobotManager _instance;
+
+        /// <summary>
+        /// The existing manager or null — never creates one. Use this from
+        /// OnDestroy / teardown paths so we don't resurrect the manager
+        /// during shutdown ("spawn new GameObjects from OnDestroy").
+        /// </summary>
+        public static RobotManager InstanceIfExists => _instance;
+
         public static RobotManager Instance
         {
             get
@@ -110,6 +118,20 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             if (_robots.TryGetValue(botId, out var robot))
             {
                 Destroy(robot.gameObject);
+                _robots.Remove(botId);
+            }
+        }
+
+        /// <summary>
+        /// Removes a robot's registry entry only if the stored instance is
+        /// still <paramref name="instance"/>. Safe to call from the robot's
+        /// own OnDestroy: it will not evict a newer robot that re-registered
+        /// under the same botId, and it does not Destroy anything.
+        /// </summary>
+        public void UnregisterRobot(uint botId, Robot instance)
+        {
+            if (_robots.TryGetValue(botId, out var robot) && robot == instance)
+            {
                 _robots.Remove(botId);
             }
         }

@@ -345,6 +345,7 @@ namespace Fodinae.Assets.Scripts.Game
         private void LoadMetadataAssets()
         {
             _cts?.Cancel();
+            _cts?.Dispose();
             _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
             LoadMetadataAssetsAsync(_cts.Token).Forget();
@@ -404,6 +405,8 @@ namespace Fodinae.Assets.Scripts.Game
         {
             _cts?.Cancel();
             _cts?.Dispose();
+
+            RobotManager.InstanceIfExists?.UnregisterRobot(_botId, this);
 
             if (_skinSprite != null) Object.Destroy(_skinSprite);
             if (_clanSprite != null) Object.Destroy(_clanSprite);
