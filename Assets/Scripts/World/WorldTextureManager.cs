@@ -134,6 +134,11 @@ namespace Fodinae.Assets.Scripts.World
 
         public event Action<string, Texture2D> OnTextureLoaded;
 
+        public void RequestTexture(CellType cellType)
+        {
+            GetCellTextureCoordinate(cellType, 0, 0).Forget();
+        }
+
         public bool HasAnimations(CellType cellType)
         {
             if (_textureCache.TryGetTexture(cellType, out var textureInfo))
