@@ -211,6 +211,13 @@ namespace Fodinae.Assets.Scripts.Networking
                 return;
             }
 
+            int expectedPayloadLength = (mapRegionPacket.Width + 1) * (mapRegionPacket.Height + 1);
+            if (mapRegionPacket.Payload == null || mapRegionPacket.Payload.Length != expectedPayloadLength)
+            {
+                Debug.LogError($"[PacketHandler] MapRegionPacket has malformed payload: expected {expectedPayloadLength} cells, got {mapRegionPacket.Payload?.Length.ToString() ?? "null"}. Discarding.");
+                return;
+            }
+
             try
             {
                 int index = 0;
@@ -248,6 +255,7 @@ namespace Fodinae.Assets.Scripts.Networking
         private void HandleHBPacket(HBPacket hbPacket)
         {
             _packetCount++;
+            if (hbPacket.Payload == null) return;
             bool hasMapData = hbPacket.Payload.Any(p => p is MapRegionPacket);
 
             // Only trigger world data loaded event if we received at least one MapRegion packet in this heartbeat
