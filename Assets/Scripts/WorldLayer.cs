@@ -71,23 +71,48 @@ public class WorldLayer<T> : IDisposable
     {
         bool exists = File.Exists(_filePath);
         _fileStream = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);
-        if (exists)
+
+        bool valid = false;
+        long offsetTableBytes = (long)_chunkOffsets.Length * sizeof(long);
+        if (exists && _fileStream.Length >= HEADER_SIZE)
         {
-            using var reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, true);
-            if (_fileStream.Length >= HEADER_SIZE)
+            try
             {
+                using var reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, true);
                 _fileStream.Seek(0, SeekOrigin.Begin);
                 int w = reader.ReadInt32();
                 int h = reader.ReadInt32();
                 int s = reader.ReadInt32();
                 int r = reader.ReadInt32();
-                var bytesToRead = _chunkOffsets.Length * sizeof(long);
-                var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
-                _fileStream.Read(byteSpan);
+
+                // A cached .mapb laid out for a different world/size MUST NOT
+                // be read into our differently-sized offset table — doing so
+                // silently corrupts _chunkOffsets ("works on a fresh cache,
+                // broken on a stale one"). Treat any header/size mismatch or
+                // truncated/short offset table as an incompatible cache and
+                // rebuild it from scratch instead of running on garbage.
+                if (w == _widthChunks && h == _heightChunks && s == _chunkSize &&
+                    _fileStream.Length >= HEADER_SIZE + offsetTableBytes)
+                {
+                    var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
+                    ReadExactly(_fileStream, byteSpan);
+                    valid = true;
+                }
+            }
+            catch (Exception)
+            {
+                valid = false; // corrupt cache -> rebuild below
             }
         }
-        else
+
+        if (!valid)
         {
+            // Fresh, incompatible or corrupt cache: rewrite a clean header
+            // and an empty (-1) offset table. _chunkOffsets is already
+            // -1-filled by the constructor.
+            Array.Fill(_chunkOffsets, -1);
+            _fileStream.SetLength(0);
+            _fileStream.Seek(0, SeekOrigin.Begin);
             using var writer = new BinaryWriter(_fileStream, System.Text.Encoding.UTF8, true);
             writer.Write(_widthChunks);
             writer.Write(_heightChunks);
@@ -96,6 +121,20 @@ public class WorldLayer<T> : IDisposable
             var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
             _fileStream.Write(byteSpan);
             _fileStream.Flush();
+        }
+    }
+
+    // Stream.Read may return fewer bytes than requested; loop until the
+    // span is filled or the stream ends (BCL Stream.ReadExactly is not
+    // available on the .NET Standard 2.1 profile Unity builds against).
+    private static void ReadExactly(Stream stream, Span<byte> buffer)
+    {
+        int total = 0;
+        while (total < buffer.Length)
+        {
+            int n = stream.Read(buffer.Slice(total));
+            if (n <= 0) throw new EndOfStreamException();
+            total += n;
         }
     }
 
@@ -262,8 +301,11 @@ public class WorldLayer<T> : IDisposable
             {
                 ushort count = reader.ReadUInt16();
                 T value = ReadT(reader);
-                chunk.AsSpan(ptr, count).Fill(value);
-                ptr += count;
+                if (count == 0) break; // corrupt run length -> stop, don't spin
+                int fill = Math.Min(count, _chunkArea - ptr);
+                chunk.AsSpan(ptr, fill).Fill(value);
+                ptr += fill;
+                if (fill < count) break; // run overflows chunk -> corrupt, stop
             }
         }
         catch (EndOfStreamException) { /* Handle corruption gracefully */ }
@@ -362,8 +404,8 @@ public class WorldLayer<T> : IDisposable
 
     public void Dispose()
     {
-        Flush();
-        _fileStream?.Dispose();
+        try { Flush(); } catch (Exception) { /* best-effort */ }
+        try { _fileStream?.Dispose(); } catch (Exception) { /* best-effort */ }
         _initializedFiles.Remove(_filePath);
     }
 }

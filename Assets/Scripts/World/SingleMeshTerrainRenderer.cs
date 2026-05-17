@@ -14,6 +14,7 @@ namespace Fodinae.Assets.Scripts.World
     {
         [Header("Configuration")]
         [SerializeField] private float _cellSize = 1.0f;
+        [SerializeField] private int _bufferCells = 2;
         [SerializeField] private Shader _terrainShader;
         [SerializeField] private Color _shimmerHighlightColor = Color.white;
         [SerializeField] private string _sortingLayerName = "Default";
@@ -34,6 +35,11 @@ namespace Fodinae.Assets.Scripts.World
         private Vector4[] _worldPositions;
         private Vector4[] _animationData;
         private Vector4[] _packedReliefShadowLocalUV; // xy: shadowRelief, zw: localUV
+
+        private Vector2Int _lastMinVisible = new Vector2Int(-1, -1);
+        private Vector2Int _lastMaxVisible = new Vector2Int(-1, -1);
+        private float _lastRebuildTime = 0;
+        private bool _needsRebuild = false;
 
         private Material[] _materials = Array.Empty<Material>();
         private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
@@ -163,7 +169,7 @@ namespace Fodinae.Assets.Scripts.World
             _needsRefresh = true;
         }
 
-        private void InitializeShader()
+        private void OnTextureLoaded(string filename, Texture2D texture)
         {
             if (_terrainShader == null)
             {
@@ -534,5 +540,6 @@ namespace Fodinae.Assets.Scripts.World
         {
             if (_materials != null) foreach (var mat in _materials) if (mat != null) { if (Application.isPlaying) Destroy(mat); else DestroyImmediate(mat); }
         }
+
     }
 }
