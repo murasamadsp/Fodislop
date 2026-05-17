@@ -23,7 +23,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
 
-            Blend Off
+            Blend SrcAlpha OneMinusSrcAlpha
             ZWrite On
             Cull Off
 
@@ -135,6 +135,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
+                if (input.subAtlasRect.z < 0.0001)
+                {
+                    return half4(0, 0, 0, 0);
+                }
+
                 if (input.animData.w > 0.5)
                 {
                     if (input.color.a < 0.05) discard;
@@ -284,7 +289,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Name "Universal2D"
             Tags { "LightMode" = "Universal2D" }
 
-            Blend Off
+            Blend SrcAlpha OneMinusSrcAlpha
             ZWrite On
             Cull Off
 
@@ -396,6 +401,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
+                if (input.subAtlasRect.z < 0.0001)
+                {
+                    return half4(0, 0, 0, 0);
+                }
+
                 if (input.animData.w > 0.5)
                 {
                     if (input.color.a < 0.05) discard;
