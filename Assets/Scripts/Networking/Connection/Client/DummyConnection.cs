@@ -64,8 +64,13 @@ namespace MinesServer.Networking.Connection.Client
             await UniTask.Delay(100);
             _status = ConnectionStatus.Connected;
             OnConnected?.Invoke();
+
             var minimapObj = new GameObject("MinimapRoot");
             minimapObj.AddComponent<MinimapPlaceholder>();
+
+            var inventoryObj = new GameObject("InventoryRoot");
+            inventoryObj.AddComponent<InventoryUI>();
+
             CreateFPSCounter();
         }
 
