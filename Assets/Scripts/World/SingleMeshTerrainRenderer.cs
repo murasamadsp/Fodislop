@@ -304,7 +304,12 @@ namespace Fodinae.Assets.Scripts.World
 
                     CellType type;
                     if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
-                        type = (CellType)0;   // текстура из 0.gif за границами мира
+                    {
+                        if (gridX < 0 || gridX >= worldWidth || unityY < 0)
+                            type = (CellType)0;   // бока/низ — порода из 0.gif
+                        else
+                            type = CellType.Unloaded;  // верх — рисуется SurfaceRenderer
+                    }
                     else
                     {
                         int serverY = worldHeight - 1 - unityY;
@@ -456,6 +461,7 @@ namespace Fodinae.Assets.Scripts.World
 
         private void FillQuadData(int x, int y, int gridX, int unityY, bool isBackground, ref int vIdx, List<TextureAtlas> atlases)
         {
+            if (unityY >= MapManager.Instance.WorldHeight) { vIdx += 4; return; }
             int cx = x + 1, cy = y + 1;
             int serverY = (MapManager.Instance.WorldHeight - 1 - unityY) % MapManager.Instance.WorldHeight;
             if (serverY < 0) serverY += MapManager.Instance.WorldHeight;
