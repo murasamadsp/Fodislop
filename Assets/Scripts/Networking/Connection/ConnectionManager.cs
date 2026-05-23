@@ -17,14 +17,17 @@ namespace Fodinae.Assets.Scripts.Networking.Connection
     public class ConnectionManager : MonoBehaviour
     {
         private static ConnectionManager _instance;
+        private static bool _isQuitting = false;
+
         public static ConnectionManager Instance
         {
             get
             {
+                if (_isQuitting) return null;
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<ConnectionManager>();
-                    if (_instance == null)
+                    _instance = FindFirstObjectByType<ConnectionManager>();
+                    if (_instance == null && !_isQuitting)
                     {
                         var go = new GameObject("[ConnectionManager]");
                         _instance = go.AddComponent<ConnectionManager>();
@@ -48,6 +51,12 @@ namespace Fodinae.Assets.Scripts.Networking.Connection
             _instance = this;
             DontDestroyOnLoad(gameObject);
             gameObject.AddComponent<PacketHandler>();
+            _isQuitting = false;
+        }
+
+        void OnApplicationQuit()
+        {
+            _isQuitting = true;
         }
 
         public void Connect()

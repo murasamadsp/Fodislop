@@ -28,7 +28,7 @@ namespace Fodinae.Assets.Scripts
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<ClientAssetLoader>();
+                    _instance = FindFirstObjectByType<ClientAssetLoader>();
                     if (_instance == null)
                     {
                         var go = new GameObject("[ClientAssetLoader]");

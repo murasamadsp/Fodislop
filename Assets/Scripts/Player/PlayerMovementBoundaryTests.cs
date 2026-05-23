@@ -1,6 +1,6 @@
+using Fodinae.Assets.Scripts.Player;
 using NUnit.Framework;
 using UnityEngine;
-using Fodinae.Assets.Scripts.Player;
 
 namespace Fodinae.Tests.Player
 {

@@ -22,7 +22,7 @@ namespace Fodinae.Assets.Scripts.Networking.Connection.Client
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<TextureStorageManager>();
+                    _instance = FindFirstObjectByType<TextureStorageManager>();
                     if (_instance == null)
                     {
                         var go = new GameObject("[TextureStorageManager]");

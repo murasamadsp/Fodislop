@@ -22,12 +22,12 @@ namespace Fodinae.UI.Builders
             var cts = new CancellationTokenSource();
             element.RegisterCallback<DetachFromPanelEvent>(_ => cts.Cancel());
 
-            LoadImage(element, imagePacket.URI, cts.Token).Forget();
+            LoadImage(element, imagePacket.URI, cts.Token);
             
             return element;
         }
 
-        private async UniTaskVoid LoadImage(VisualElement element, string uri, CancellationToken token)
+        private void LoadImage(VisualElement element, string uri, CancellationToken token)
         {
             Fodinae.Assets.Scripts.ClientAssetLoader.Instance.LoadAndApplyTexture((texture) =>
             {
@@ -35,7 +35,7 @@ namespace Fodinae.UI.Builders
                 {
                     element.style.backgroundImage = new StyleBackground(texture); // Set StyleBackground directly
                 }
-            }, uri, token);
+            }, uri, token).Forget();
         }
     }
 }

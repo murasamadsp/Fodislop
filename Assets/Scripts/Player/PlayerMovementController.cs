@@ -34,7 +34,6 @@ namespace Fodinae.Assets.Scripts.Player
         [SerializeField] private InputActionReference _moveActionReference;
 
         private Vector2 _moveInput;
-        private bool _isMoving = false;
         private float _lastMoveTime;
         private Direction? _lastSentDirection;
 
@@ -243,5 +242,25 @@ namespace Fodinae.Assets.Scripts.Player
         {
             _moveInput = input;
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            // Draw current grid cell
+            Gizmos.color = Color.cyan;
+            Vector3 gridPos = new Vector3(ClientPosition.x + 0.5f, ClientPosition.y + 0.5f, transform.position.z);
+            Gizmos.DrawWireCube(gridPos, new Vector3(1f, 1f, 0.1f));
+
+            if (Application.isPlaying && _robot != null)
+            {
+                // Draw path to target
+                Gizmos.color = Color.green;
+                Gizmos.DrawLine(transform.position, _robot.TargetPosition);
+                Gizmos.DrawWireSphere(_robot.TargetPosition, 0.2f);
+                
+                Utils.FodislopGizmos.DrawLabel(gridPos + Vector3.down * 0.7f, $"Grid: {ClientPosition.x}, {ClientPosition.y}", Color.cyan);
+            }
+        }
+#endif
     }
 }

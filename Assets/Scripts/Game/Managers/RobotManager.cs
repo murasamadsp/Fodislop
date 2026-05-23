@@ -21,7 +21,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<RobotManager>();
+                    _instance = FindFirstObjectByType<RobotManager>();
                     if (_instance == null)
                     {
                         var go = new GameObject("[RobotManager]");

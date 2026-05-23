@@ -14,7 +14,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<PackManager>();
+                    _instance = FindFirstObjectByType<PackManager>();
                     if (_instance == null)
                     {
                         var go = new GameObject("[PackManager]");

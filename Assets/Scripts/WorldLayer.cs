@@ -25,6 +25,12 @@ public class WorldLayer<T> : IDisposable
     public int HeightChunks => _heightChunks;
     public int MaxChunksInMemory => _maxChunksInMemory;
 
+    // --- Debug Access ---
+    public IEnumerable<int> GetLoadedChunkIndices() => _loadedChunks.Keys;
+    public long[] GetChunkOffsets() => _chunkOffsets;
+    public int GetLoadedCount() => _loadedChunks.Count;
+    public int GetDirtyCount() => _dirtyChunks.Count;
+
     // --- State ---
     private readonly string _filePath;
     private FileStream _fileStream;

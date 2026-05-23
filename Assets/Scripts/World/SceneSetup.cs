@@ -20,6 +20,7 @@ namespace Fodinae.Assets.Scripts.World
                 Destroy(gameObject);
                 return;
             }
+
             _instance = this;
             DontDestroyOnLoad(gameObject);
 
@@ -30,15 +31,15 @@ namespace Fodinae.Assets.Scripts.World
         private void SetupWorldBackground()
         {
             // Find or create the background setup component
-            _backgroundSetup = FindObjectOfType<WorldBackgroundSetup>();
-            
+            _backgroundSetup = FindFirstObjectByType<WorldBackgroundSetup>();
+
             if (_backgroundSetup == null)
             {
                 // Create a new GameObject for background setup
                 var setupGO = new GameObject("WorldBackgroundSetup");
                 _backgroundSetup = setupGO.AddComponent<WorldBackgroundSetup>();
                 DontDestroyOnLoad(setupGO);
-                
+
                 Debug.Log("WorldBackgroundSetup automatically created");
             }
             else

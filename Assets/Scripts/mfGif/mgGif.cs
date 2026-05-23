@@ -1,10 +1,10 @@
-﻿#define mgGIF_UNSAFE
+#define mgGIF_UNSAFE
 
-using UnityEngine;
 using System;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Runtime.InteropServices; // unsafe
+using System.Text;
+using UnityEngine;
 
 namespace MG.GIF
 {

@@ -40,7 +40,7 @@ namespace Fodinae.Assets.Scripts.Networking
                 return;
             }
 
-            _uiDocument = FindObjectOfType<UIDocument>();
+            _uiDocument = FindFirstObjectByType<UIDocument>();
             if (_uiDocument == null)
             {
                 Debug.LogWarning("[PacketHandler] UIDocument not found - window packets will not be displayed");
@@ -70,7 +70,7 @@ namespace Fodinae.Assets.Scripts.Networking
         {
             if (!_isInitialized) return;
 
-            var ns = FindObjectOfType<NetworkService>();
+            var ns = NetworkService.InstanceIfExists;
             if (ns != null)
             {
                 ns.Unsubscribe<WorldInitPacket>(HandleWorldInitPacket);
@@ -85,7 +85,7 @@ namespace Fodinae.Assets.Scripts.Networking
                 ns.Unsubscribe<RemovePackPacket>(HandleRemovePackPacket);
             }
 
-            var mm = FindObjectOfType<MapManager>();
+            var mm = MapManager.InstanceIfExists;
             if (mm != null)
             {
                 mm.OnWorldInitialized -= OnWorldInitialized;
@@ -102,7 +102,7 @@ namespace Fodinae.Assets.Scripts.Networking
             
             if (_uiDocument == null)
             {
-                _uiDocument = FindObjectOfType<UIDocument>();
+                _uiDocument = FindFirstObjectByType<UIDocument>();
                 if (_uiDocument == null)
                 {
                     Debug.LogError("[PacketHandler] Cannot open window: UIDocument not found");

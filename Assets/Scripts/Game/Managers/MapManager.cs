@@ -11,14 +11,17 @@ namespace Fodinae.Assets.Scripts.Game.Managers
     public class MapManager : MonoBehaviour
     {
         private static MapManager _instance;
+        private static bool _isQuitting = false;
+        public static MapManager InstanceIfExists => _instance;
         public static MapManager Instance
         {
             get
             {
+                if (_isQuitting) return null;
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<MapManager>();
-                    if (_instance == null)
+                    _instance = FindFirstObjectByType<MapManager>();
+                    if (_instance == null && !_isQuitting)
                     {
                         var go = new GameObject("[MapManager]");
                         _instance = go.AddComponent<MapManager>();
@@ -52,6 +55,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             }
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            _isQuitting = false;
         }
 
         void OnDestroy()
@@ -64,6 +68,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
 
         void OnApplicationQuit()
         {
+            _isQuitting = true;
             MapStorage.Instance?.Dispose();
         }
 
@@ -352,5 +357,89 @@ namespace Fodinae.Assets.Scripts.Game.Managers
         public string WorldDisplayName => worldDisplayName;
         public ushort WorldWidth => width;
         public ushort WorldHeight => height;
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (!_isWorldInitialized || width == 0 || height == 0) return;
+
+            // 1. Draw World Boundaries (Always visible but thin)
+            Gizmos.color = new Color(1, 1, 1, 0.5f);
+            Vector3 worldCenter = new Vector3(width * 0.5f, height * 0.5f, 0);
+            Vector3 worldSize = new Vector3(width, height, 0.1f);
+            Gizmos.DrawWireCube(worldCenter, worldSize);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            if (!_isWorldInitialized || width == 0 || height == 0) return;
+
+            Vector3 worldCenter = new Vector3(width * 0.5f, height * 0.5f, 0);
+
+            // 2. Draw Grid Origin
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawSphere(Vector3.zero, 0.5f);
+            Utils.FodislopGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
+
+            // 3. Chunk Visualization (Only when selected)
+            if (MapStorage.Instance.IsReady && MapStorage.Instance.cellLayer != null)
+            {
+                var layer = MapStorage.Instance.cellLayer;
+                int chunkSize = layer.ChunkSize;
+                int hChunks = layer.HeightChunks;
+                var loaded = layer.GetLoadedChunkIndices();
+
+                foreach (int index in loaded)
+                {
+                    int cx = index / hChunks;
+                    int cy = index % hChunks;
+                    
+                    float unityY = height - (cy + 1) * chunkSize;
+                    Vector3 chunkPos = new Vector3(cx * chunkSize + chunkSize * 0.5f, unityY + chunkSize * 0.5f, 0);
+                    
+                    Utils.FodislopGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f), 
+                        new Color(0, 1, 0, 0.02f), new Color(0, 1, 0, 0.1f));
+                }
+
+                // Draw status label
+                Vector3 labelPos = worldCenter + Vector3.down * (height * 0.5f + 2f);
+                string stats = $"Chunks: {layer.GetLoadedCount()}/{layer.MaxChunksInMemory} loaded | {layer.GetDirtyCount()} dirty";
+                Utils.FodislopGizmos.DrawLabel(labelPos, stats, Color.green);
+
+                // 4. Collision/Passability Debug (Only when selected)
+                Camera cam = Camera.main;
+                if (cam != null && Application.isPlaying)
+                {
+                    Vector3 camPos = cam.transform.position;
+                    int range = 10;
+                    int startX = Mathf.FloorToInt(camPos.x) - range;
+                    int startY = Mathf.FloorToInt(camPos.y) - range;
+
+                    for (int x = startX; x < startX + range * 2; x++)
+                    {
+                        for (int y = startY; y < startY + range * 2; y++)
+                        {
+                            if (x < 0 || x >= width || y < 0 || y >= height) continue;
+                            
+                            ushort serverX = (ushort)x;
+                            ushort serverY = (ushort)(height - 1 - y);
+                            var cellType = MapStorage.Instance.GetCell(serverX, serverY);
+                            var config = GetCellConfig(cellType);
+                            
+                            if (config.Properties != 0)
+                            {
+                                bool isPassable = ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
+                                if (!isPassable)
+                                {
+                                    Gizmos.color = new Color(1, 0, 0, 0.15f);
+                                    Gizmos.DrawCube(new Vector3(x + 0.5f, y + 0.5f, 0), new Vector3(0.9f, 0.9f, 0.1f));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+#endif
     }
 }
