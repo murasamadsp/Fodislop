@@ -35,7 +35,7 @@ namespace Fodinae.Scripts.World
         public AtlasCoordinate BaseCoordinate;
     }
 
-    public class TextureAtlas
+    public class TextureAtlas : IDisposable
     {
         public int Size { get; }
         public int CellSize { get; }
@@ -76,6 +76,22 @@ namespace Fodinae.Scripts.World
             _atlasTexture.Apply();
 
             _freeRectangles.Add(new Rectangle(0, 0, size, size));
+        }
+
+        public void Dispose()
+        {
+            if (_atlasTexture != null)
+            {
+                if (Application.isPlaying)
+                {
+                    UnityEngine.Object.Destroy(_atlasTexture);
+                }
+                else
+                {
+                    UnityEngine.Object.DestroyImmediate(_atlasTexture);
+                }
+                _atlasTexture = null;
+            }
         }
 
         public void Clear()
