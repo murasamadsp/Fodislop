@@ -254,17 +254,21 @@ namespace Fodinae.Scripts.UI
                 {
                     int worldX = minX + texX;
 
-                    // Оборачиваем координаты по X, чтобы миникарта была бесконечной по горизонтали
-                    int wrappedX = Fodinae.Scripts.Utils.CoordinateUtils.WrapWorldX(worldX, worldWidth);
-
-                    try
+                    if (worldX >= 0 && worldX < worldWidth)
                     {
-                        CellType cellType = mapStorage.GetCell(wrappedX, serverY);
-                        pixelColors[index++] = cachedColors[cellType];
+                        try
+                        {
+                            CellType cellType = mapStorage.GetCell(worldX, serverY);
+                            pixelColors[index++] = cachedColors[cellType];
+                        }
+                        catch
+                        {
+                            pixelColors[index++] = new Color32(32, 32, 32, 255);
+                        }
                     }
-                    catch
+                    else
                     {
-                        pixelColors[index++] = new Color32(32, 32, 32, 255);
+                        pixelColors[index++] = Color.black;
                     }
                 }
             }
