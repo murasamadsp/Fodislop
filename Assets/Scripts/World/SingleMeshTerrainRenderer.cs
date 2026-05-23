@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
+using Fodinae.Assets.Scripts.Game.Managers;
+using MinesServer.Data;
+using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 using UnityEngine.Rendering;
-using MinesServer.Data;
-using Fodinae.Assets.Scripts.Game.Managers;
-using Cysharp.Threading.Tasks;
-using MinesServer.Networking.Server.Packets.Connection;
 
 namespace Fodinae.Assets.Scripts.World
 {
@@ -15,7 +15,6 @@ namespace Fodinae.Assets.Scripts.World
     {
         [Header("Configuration")]
         [SerializeField] private float _cellSize = 1.0f;
-        [SerializeField] private int _bufferCells = 2;
         [SerializeField] private Shader _terrainShader;
         [SerializeField] private Color _shimmerHighlightColor = Color.white;
         [SerializeField] private string _sortingLayerName = "Default";
@@ -39,8 +38,6 @@ namespace Fodinae.Assets.Scripts.World
 
         private Vector2Int _lastMinVisible = new Vector2Int(-1, -1);
         private Vector2Int _lastMaxVisible = new Vector2Int(-1, -1);
-        private float _lastRebuildTime = 0;
-        private bool _needsRebuild = false;
 
         private Material[] _materials = Array.Empty<Material>();
         private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
@@ -223,6 +220,51 @@ namespace Fodinae.Assets.Scripts.World
                 _needsRefresh = false;
             }
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (!Application.isPlaying || _mainCamera == null) return;
+
+            // Only draw a small indicator for the mesh origin by default
+            Gizmos.color = new Color(1, 0, 0, 0.5f);
+            Vector3 originPos = new Vector3(_lastGridPos.x * _cellSize, _lastGridPos.y * _cellSize, 0);
+            Gizmos.DrawSphere(originPos, 0.1f);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            if (!Application.isPlaying || _mainCamera == null) return;
+
+            // 1. Draw Mesh Viewport (The actual geometry following the camera)
+            Vector3 center = new Vector3(_lastGridPos.x * _cellSize + (_meshWidth * _cellSize * 0.5f), 
+                                        _lastGridPos.y * _cellSize + (_meshHeight * _cellSize * 0.5f), 0);
+            
+            Vector3 viewportSize = new Vector3(_meshWidth * _cellSize, _meshHeight * _cellSize, 0);
+            
+            // Draw semi-transparent blue area for the rendered mesh
+            Utils.FodislopGizmos.DrawSolidRect(center, (Vector2)viewportSize, 
+                new Color(0, 0.5f, 1f, 0.03f), new Color(0, 0.5f, 1f, 0.3f));
+            
+            // 2. Draw Camera Viewport (Inner area)
+            float camH = _mainCamera.orthographicSize * 2;
+            float camW = camH * _mainCamera.aspect;
+            Vector3 camCenter = _mainCamera.transform.position;
+            camCenter.z = 0;
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(camCenter, new Vector3(camW, camH, 0));
+
+            // 3. Draw Padding Info
+            Utils.FodislopGizmos.DrawLabel(center + Vector3.up * (viewportSize.y * 0.5f + 1f), 
+                $"Mesh: {_meshWidth}x{_meshHeight} | Padding: {_viewportPadding}", Color.cyan);
+            
+            // 4. Mesh Origin Detailed
+            Gizmos.color = Color.red;
+            Vector3 originPos = new Vector3(_lastGridPos.x * _cellSize, _lastGridPos.y * _cellSize, 0);
+            Gizmos.DrawSphere(originPos, 0.2f);
+            Utils.FodislopGizmos.DrawLabel(originPos, $"Origin ({_lastGridPos.x}, {_lastGridPos.y})", Color.red);
+        }
+#endif
 
         private void EnsureBuffersCapacity()
         {

@@ -26,7 +26,7 @@ namespace Fodinae.Assets.Scripts.World
 
         private void SetupBackgroundRenderer()
         {
-            _backgroundRenderer = FindObjectOfType<SingleMeshTerrainRenderer>();
+            _backgroundRenderer = FindFirstObjectByType<SingleMeshTerrainRenderer>();
             
             if (_backgroundRenderer == null)
             {

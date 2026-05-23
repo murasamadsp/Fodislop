@@ -14,14 +14,17 @@ namespace Fodinae.Assets.Scripts.World
     public class WorldTextureManager : MonoBehaviour
     {
         private static WorldTextureManager _instance;
+        private static bool _isQuitting = false;
+
         public static WorldTextureManager Instance
         {
             get
             {
+                if (_isQuitting) return null;
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<WorldTextureManager>();
-                    if (_instance == null)
+                    _instance = FindFirstObjectByType<WorldTextureManager>();
+                    if (_instance == null && !_isQuitting)
                     {
                         var go = new GameObject("[WorldTextureManager]");
                         _instance = go.AddComponent<WorldTextureManager>();
@@ -38,7 +41,6 @@ namespace Fodinae.Assets.Scripts.World
 
         [Header("Performance")]
         [SerializeField] private int _cellTextureSize = RenderingConstants.CELL_SIZE;
-        [SerializeField] private bool _enableCompression = true;
 
         public TextureAtlas _currentAtlas;
         private CellTextureCache _textureCache;
@@ -59,8 +61,14 @@ namespace Fodinae.Assets.Scripts.World
             }
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            _isQuitting = false;
 
             Initialize();
+        }
+
+        private void OnApplicationQuit()
+        {
+            _isQuitting = true;
         }
 
         private void Initialize()

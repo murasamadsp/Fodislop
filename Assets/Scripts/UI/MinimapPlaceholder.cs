@@ -44,7 +44,7 @@ namespace Fodinae.Assets.Scripts.UI
             yield return new WaitUntil(() => MapManager.Instance != null && MapManager.Instance._isWorldInitialized);
             yield return new WaitUntil(() => MapStorage.Instance != null && MapStorage.Instance.IsReady);
 
-            _player = FindObjectOfType<PlayerMovementController>();
+            _player = FindFirstObjectByType<PlayerMovementController>();
             if (_player == null)
                 yield break;
             _player.OnPlayerMoved += OnPlayerMoved;
@@ -60,7 +60,7 @@ namespace Fodinae.Assets.Scripts.UI
             _minimapTexture.filterMode = FilterMode.Point;
             _minimapTexture.wrapMode = TextureWrapMode.Clamp;
 
-            Canvas canvas = FindObjectOfType<Canvas>();
+            Canvas canvas = FindFirstObjectByType<Canvas>();
             if (canvas == null)
             {
                 GameObject canvasObj = new GameObject("Canvas");

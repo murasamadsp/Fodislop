@@ -199,37 +199,6 @@ namespace Fodinae.Assets.Scripts.Game
             UpdateTentacles(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime);
 
             UpdateLabelsPosition();
-
-            if (RobotManager.ShowDebugVisuals)
-            {
-                DrawDebugVisuals();
-            }
-        }
-
-        private void DrawDebugVisuals()
-        {
-            // Server Position: Red (size 1.0)
-            DrawDebugBox(_serverPosition, 1.0f, Color.red);
-
-            // Client/Target Position: Blue (size 0.9)
-            DrawDebugBox(_targetPosition, 0.9f, Color.blue);
-
-            // Visual Position: Cyan (size 0.8)
-            DrawDebugBox(transform.position, 0.8f, Color.cyan);
-        }
-
-        private void DrawDebugBox(Vector3 center, float size, Color color)
-        {
-            float halfSize = size * 0.5f;
-            Vector3 topLeft = center + new Vector3(-halfSize, halfSize, 0);
-            Vector3 topRight = center + new Vector3(halfSize, halfSize, 0);
-            Vector3 bottomLeft = center + new Vector3(-halfSize, -halfSize, 0);
-            Vector3 bottomRight = center + new Vector3(halfSize, -halfSize, 0);
-
-            Debug.DrawLine(topLeft, topRight, color);
-            Debug.DrawLine(topRight, bottomRight, color);
-            Debug.DrawLine(bottomRight, bottomLeft, color);
-            Debug.DrawLine(bottomLeft, topLeft, color);
         }
 
         private void CreateTentacles(Texture2D tailTexture)
@@ -400,6 +369,43 @@ namespace Fodinae.Assets.Scripts.Game
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
             _clanRenderer.sprite = _clanSprite;
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmos()
+        {
+            if (!Application.isPlaying || !RobotManager.ShowDebugVisuals) return;
+
+            // Server Position: Red Square
+            Utils.FodislopGizmos.DrawBounds(_serverPosition, Vector2.one * 1.0f, Color.red);
+            
+            // Client/Target Position: Blue Square
+            Utils.FodislopGizmos.DrawBounds(_targetPosition, Vector2.one * 0.9f, Color.blue);
+
+            // Visual Position: Cyan Square
+            Utils.FodislopGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
+
+            // Draw Rotation Arrow
+            float angleRad = (transform.eulerAngles.z + VISUAL_ROTATION_OFFSET) * Mathf.Deg2Rad;
+            Vector3 direction = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
+            Utils.FodislopGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
+
+            // Metadata Status
+            string status = $"ID: {_botId}\n{(IsLocalPlayer ? "LOCAL PLAYER" : "REMOTE ROBOT")}\n" +
+                            $"Meta: {(_isMetadataLoaded ? "OK" : "PENDING")}\n" +
+                            $"Speed: {_moveSpeed:F1}";
+            Utils.FodislopGizmos.DrawLabel(transform.position + Vector3.up * 1.5f, status, _isMetadataLoaded ? Color.green : Color.orange);
+            
+            if (!IsLocalPlayer)
+            {
+                // Draw line to server position if it's lagging
+                float lag = Vector3.Distance(_serverPosition, transform.position);
+                if (lag > 0.5f)
+                {
+                    Utils.FodislopGizmos.DrawDottedLine(transform.position, _serverPosition, Color.red, 4f);
+                }
+            }
+        }
+#endif
 
         private void OnDestroy()
         {

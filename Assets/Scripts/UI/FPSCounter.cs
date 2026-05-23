@@ -18,7 +18,7 @@ public class FPSCounter : MonoBehaviour
 
     private void Awake()
     {
-        Canvas canvas = FindObjectOfType<Canvas>();
+        Canvas canvas = FindFirstObjectByType<Canvas>();
         if (canvas == null)
         {
             GameObject canvasGO = new GameObject("FPSCanvas");

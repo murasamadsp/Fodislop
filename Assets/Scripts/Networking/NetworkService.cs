@@ -19,14 +19,17 @@ namespace Fodinae.Assets.Scripts.Networking
     public class NetworkService : MonoBehaviour
     {
         private static NetworkService _instance;
+        private static bool _isQuitting = false;
+        public static NetworkService InstanceIfExists => _instance;
         public static NetworkService Instance
         {
             get
             {
+                if (_isQuitting) return null;
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<NetworkService>();
-                    if (_instance == null)
+                    _instance = FindFirstObjectByType<NetworkService>();
+                    if (_instance == null && !_isQuitting)
                     {
                         var go = new GameObject("[NetworkService]");
                         _instance = go.AddComponent<NetworkService>();
@@ -53,6 +56,12 @@ namespace Fodinae.Assets.Scripts.Networking
             }
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            _isQuitting = false;
+        }
+
+        void OnApplicationQuit()
+        {
+            _isQuitting = true;
         }
 
         void OnEnable()
@@ -68,8 +77,8 @@ namespace Fodinae.Assets.Scripts.Networking
         void OnDisable()
         {
             if (_instance != this) return;
-            // Use FindObjectOfType instead of .Instance to avoid instantiating singletons during app teardown
-            var cm = FindObjectOfType<ConnectionManager>();
+            // Use FindFirstObjectByType instead of .Instance to avoid instantiating singletons during app teardown
+            var cm = FindFirstObjectByType<ConnectionManager>();
             if (cm != null)
             {
                 cm.OnPacketReceived -= OnPacketReceived;

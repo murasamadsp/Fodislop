@@ -23,6 +23,11 @@ namespace Fodinae.Assets.Scripts.Player
         private PlayerInput _playerInput;
         private InputAction _scrollAction;
 
+        private void Awake()
+        {
+            _camera = GetComponent<Camera>();
+        }
+
         private void Start()
         {
             _originalZ = transform.position.z;
@@ -33,11 +38,12 @@ namespace Fodinae.Assets.Scripts.Player
                 enabled = false;
                 return;
             }
+
             _targetZoom = _camera.orthographicSize;
             _currentZoom = _targetZoom;
             if (_target == null)
             {
-                var player = FindObjectOfType<PlayerMovementController>();
+                var player = FindFirstObjectByType<PlayerMovementController>();
                 if (player != null)
                     _target = player.transform;
                 else
@@ -106,7 +112,7 @@ namespace Fodinae.Assets.Scripts.Player
         {
             if (_target == null)
             {
-                var player = FindObjectOfType<PlayerMovementController>();
+                var player = FindFirstObjectByType<PlayerMovementController>();
                 if (player != null)
                     _target = player.transform;
                 return;
@@ -132,5 +138,31 @@ namespace Fodinae.Assets.Scripts.Player
         {
             Start();
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            if (_target != null)
+            {
+                // Draw line to target
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawLine(transform.position, _target.position);
+                
+                // Draw target marker
+                Gizmos.DrawWireSphere(_target.position, 0.5f);
+                
+                Utils.FodislopGizmos.DrawLabel(_target.position + Vector3.up * 0.7f, "Camera Target", Color.yellow);
+            }
+
+            // Draw current viewport visualization
+            if (_camera != null && _camera.orthographic)
+            {
+                float height = _camera.orthographicSize * 2;
+                float width = height * _camera.aspect;
+                Gizmos.color = new Color(0, 1, 0, 0.3f);
+                Gizmos.DrawWireCube(transform.position, new Vector3(width, height, 0));
+            }
+        }
+#endif
     }
 }

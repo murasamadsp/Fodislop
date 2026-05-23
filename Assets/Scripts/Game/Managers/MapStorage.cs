@@ -52,7 +52,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             try
             {
                 // Use configurable chunk size (default 32) - should match WorldLayer default
-                const int chunkSize = 32;
+                int chunkSize = 32;
                 int widthChunks = (width + chunkSize - 1) / chunkSize;
                 int heightChunks = (height + chunkSize - 1) / chunkSize;
                 

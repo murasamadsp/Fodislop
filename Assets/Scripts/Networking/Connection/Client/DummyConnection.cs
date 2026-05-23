@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
+using Fodinae.Assets.Scripts.UI;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -19,10 +23,6 @@ using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Fodinae.Assets.Scripts.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -121,13 +121,13 @@ namespace MinesServer.Networking.Connection.Client
                     Debug.Log($"  - Move to ({move.X}, {move.Y})");
                     x = move.X;
                     y = move.Y;
-                    UpdatePosition();
+                    UpdatePosition().Forget();
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
                     Debug.Log($"  - Rotate to {rotate.Direction}");
                     rot = rotate.Direction;
-                    UpdatePosition();
+                    UpdatePosition().Forget();
                 }
             }
 

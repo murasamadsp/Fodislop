@@ -269,7 +269,7 @@ namespace Fodinae.Assets.Scripts.World
             Debug.Log("StandaloneWorldInitializer: World data loaded, notifying renderer");
 
             // Notify renderer that world is ready
-            var renderer = FindObjectOfType<SingleMeshTerrainRenderer>();
+            var renderer = FindFirstObjectByType<SingleMeshTerrainRenderer>();
             if (renderer != null)
             {
                 Debug.Log("StandaloneWorldInitializer: Notified WorldBackgroundRenderer of world readiness");
