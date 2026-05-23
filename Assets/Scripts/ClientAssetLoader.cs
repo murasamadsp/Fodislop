@@ -91,7 +91,10 @@ namespace Fodinae.Scripts
             _errorTexture.Apply();
             _errorTexture.name = "Error_Texture";
 
-            ConnectionManager.Instance.OnPacketReceived += OnPacketReceived;
+            if (ConnectionManager.Instance != null)
+            {
+                ConnectionManager.Instance.OnPacketReceived += OnPacketReceived;
+            }
 
             _loopCts = new CancellationTokenSource();
             ProcessBatchLoop(_loopCts.Token).Forget();
@@ -108,7 +111,10 @@ namespace Fodinae.Scripts
             {
                 _loopCts?.Cancel();
                 _loopCts?.Dispose();
-                ConnectionManager.Instance.OnPacketReceived -= OnPacketReceived;
+                if (ConnectionManager.Instance != null)
+                {
+                    ConnectionManager.Instance.OnPacketReceived -= OnPacketReceived;
+                }
             }
         }
 
@@ -143,11 +149,12 @@ namespace Fodinae.Scripts
 
                 if (batch.Count > 0)
                 {
-                    if (ConnectionManager.Instance?.Connection != null &&
-                        ConnectionManager.Instance.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected)
+                    var cm = ConnectionManager.Instance;
+                    if (cm?.Connection != null &&
+                        cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected)
                     {
                         var assetRequest = new RuntimeAssetRequestPacket(batch);
-                        ConnectionManager.Instance.Connection.SendAsync(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
+                        cm.Connection.SendAsync(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
                     }
                     else
                     {
@@ -285,18 +292,23 @@ namespace Fodinae.Scripts
 
             // FIX: Gracefully handle offline/standalone mode!
             // If there's no connection, immediately fetch from local Texture Storage Manager instead of crashing.
-            if (ConnectionManager.Instance == null || ConnectionManager.Instance.Connection == null ||
-                ConnectionManager.Instance.Connection.ConnectionStatus != MinesServer.Networking.Shared.ConnectionStatus.Connected)
+            var cm = ConnectionManager.Instance;
+            if (cm == null || cm.Connection == null ||
+                cm.Connection.ConnectionStatus != MinesServer.Networking.Shared.ConnectionStatus.Connected)
             {
                 try
                 {
                     // Directly attempt to load from local storage
-                    var localData = await Fodinae.Scripts.Networking.Connection.Client.TextureStorageManager.Instance.GetTextureData(filename);
-                    if (localData != null)
+                    var tsm = Fodinae.Scripts.Networking.Connection.Client.TextureStorageManager.Instance;
+                    if (tsm != null)
                     {
-                        tcs.TrySetResult(localData);
-                        _pendingRequests.TryRemove(filename, out _);
-                        return localData;
+                        var localData = await tsm.GetTextureData(filename);
+                        if (localData != null)
+                        {
+                            tcs.TrySetResult(localData);
+                            _pendingRequests.TryRemove(filename, out _);
+                            return localData;
+                        }
                     }
                 }
                 catch (Exception ex)

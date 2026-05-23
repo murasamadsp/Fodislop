@@ -99,7 +99,11 @@ namespace Fodinae.Scripts.Player
             Vector2Int oldPos = ClientPosition;
             ServerPosition = position;
             // Reconcile ClientPosition with ServerPosition (converted to Unity grid coordinates)
-            ClientPosition = new Vector2Int(position.x, MapManager.Instance.WorldHeight - 1 - position.y);
+            var mm = MapManager.Instance;
+            if (mm != null)
+            {
+                ClientPosition = new Vector2Int(position.x, mm.WorldHeight - 1 - position.y);
+            }
             OnPlayerMoved?.Invoke(oldPos, ClientPosition);
         }
 
@@ -135,6 +139,10 @@ namespace Fodinae.Scripts.Player
         {
             if (_robot == null) return;
 
+            var mm = MapManager.Instance;
+            var ns = NetworkService.Instance;
+            if (mm == null || ns == null) return;
+
             if (_moveInput != Vector2.zero)
             {
                 Vector2Int direction = Vector2Int.zero;
@@ -161,10 +169,10 @@ namespace Fodinae.Scripts.Player
                     int currentUnityY = ClientPosition.y;
 
                     ushort currentX = (ushort)Mathf.Clamp(currentUnityX, 0, ushort.MaxValue);
-                    ushort currentServerY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - currentUnityY, 0, ushort.MaxValue);
+                    ushort currentServerY = (ushort)Mathf.Clamp(mm.WorldHeight - 1 - currentUnityY, 0, ushort.MaxValue);
 
                     var currentCellType = MapStorage.Instance.GetCell(currentX, currentServerY);
-                    float cooldown = MapManager.Instance.GetMoveCooldown(currentCellType);
+                    float cooldown = mm.GetMoveCooldown(currentCellType);
                     if (cooldown > 0)
                     {
                         _robot.MoveSpeed = 1f / cooldown;
@@ -176,7 +184,7 @@ namespace Fodinae.Scripts.Player
 
                     if (_lastSentDirection != packetDirection)
                     {
-                        NetworkService.Instance.SendAction(new RotatePacket(packetDirection));
+                        ns.SendAction(new RotatePacket(packetDirection));
                         _lastSentDirection = packetDirection;
                         _lastMoveTime = Time.time;
                     }
@@ -203,8 +211,8 @@ namespace Fodinae.Scripts.Player
                     var layer = MapStorage.Instance.CellLayer;
                     if (layer == null) return;
 
-                    int mapWidth = MapManager.Instance.WorldWidth;
-                    int mapHeight = MapManager.Instance.WorldHeight;
+                    int mapWidth = mm.WorldWidth;
+                    int mapHeight = mm.WorldHeight;
 
                     // Strict boundary enforcement using clamping
                     if (targetUnityX < 0 || targetUnityX >= mapWidth || targetUnityY < 0 || targetUnityY >= mapHeight)
@@ -213,10 +221,10 @@ namespace Fodinae.Scripts.Player
                     }
 
                     ushort targetServerX = (ushort)targetUnityX;
-                    ushort targetServerY = (ushort)(MapManager.Instance.WorldHeight - 1 - targetUnityY);
+                    ushort targetServerY = (ushort)(mm.WorldHeight - 1 - targetUnityY);
 
                     var cellType = MapStorage.Instance.GetCell(targetServerX, targetServerY);
-                    var cellConfig = MapManager.Instance.GetCellConfig(cellType);
+                    var cellConfig = mm.GetCellConfig(cellType);
 
                     bool isPassable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
 
@@ -229,7 +237,7 @@ namespace Fodinae.Scripts.Player
                         ClientPosition = new Vector2Int(targetUnityX, targetUnityY);
                         OnPlayerMoved?.Invoke(oldPos, ClientPosition);
                         _lastMoveTime = Time.time;
-                        NetworkService.Instance.SendAction(new MovePacket(targetServerX, targetServerY));
+                        ns.SendAction(new MovePacket(targetServerX, targetServerY));
                     }
                 }
             }

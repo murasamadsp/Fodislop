@@ -132,7 +132,7 @@ namespace Fodinae.Scripts.Game
 
             if (gameObject.CompareTag("Player"))
             {
-                RobotManager.Instance.RegisterRobot(this);
+                RobotManager.Instance?.RegisterRobot(this);
             }
         }
 
@@ -251,7 +251,7 @@ namespace Fodinae.Scripts.Game
         public void Initialize(uint botId)
         {
             _botId = botId;
-            RobotManager.Instance.RegisterRobot(this);
+            RobotManager.Instance?.RegisterRobot(this);
 
             _isMetadataLoaded = false;
             if (_spriteRenderer != null)
@@ -287,7 +287,11 @@ namespace Fodinae.Scripts.Game
 
         public void SetPosition(ushort x, ushort y)
         {
-            _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, MapManager.Instance.WorldHeight);
+            var mm = MapManager.Instance;
+            if (mm != null)
+            {
+                _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, mm.WorldHeight);
+            }
 
             // Only update target position from server for remote robots.
             // Local player manages its own target position via PlayerMovementController.
@@ -330,7 +334,9 @@ namespace Fodinae.Scripts.Game
         private async UniTaskVoid LoadSkinAsync(CancellationToken token)
         {
             if (string.IsNullOrEmpty(_skinPath)) return;
-            var skinTexture = await ClientAssetLoader.Instance.GetTextureAsync(_skinPath, token);
+            var loader = ClientAssetLoader.Instance;
+            if (loader == null) return;
+            var skinTexture = await loader.GetTextureAsync(_skinPath, token);
             if (token.IsCancellationRequested || skinTexture == null || _spriteRenderer == null) return;
 
             if (_skinSprite != null) Object.Destroy(_skinSprite);
@@ -345,7 +351,9 @@ namespace Fodinae.Scripts.Game
                 ClearTentacles();
                 return;
             }
-            var tailTexture = await ClientAssetLoader.Instance.GetTextureAsync(_tailPath, token);
+            var loader = ClientAssetLoader.Instance;
+            if (loader == null) return;
+            var tailTexture = await loader.GetTextureAsync(_tailPath, token);
             if (token.IsCancellationRequested) return;
 
             if (tailTexture != null)
@@ -361,7 +369,9 @@ namespace Fodinae.Scripts.Game
         private async UniTaskVoid LoadClanAsync(CancellationToken token)
         {
             if (_clanId == 0) return;
-            var clanTexture = await ClientAssetLoader.Instance.GetTextureAsync($"/clan/{_clanId}", token);
+            var loader = ClientAssetLoader.Instance;
+            if (loader == null) return;
+            var clanTexture = await loader.GetTextureAsync($"/clan/{_clanId}", token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null) return;
 
             if (_clanSprite != null) Object.Destroy(_clanSprite);

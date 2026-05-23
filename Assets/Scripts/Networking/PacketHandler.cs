@@ -48,19 +48,26 @@ namespace Fodinae.Scripts.Networking
 
             // Subscribe to events via NetworkService
             var ns = NetworkService.Instance;
-            ns.Subscribe<WorldInitPacket>(HandleWorldInitPacket);
-            ns.Subscribe<HBPacket>(HandleHBPacket);
-            ns.Subscribe<RobotInfoPacket>(HandleRobotInfoPacket);
-            ns.Subscribe<PlayerInfoPacket>(HandlePlayerInfoPacket);
-            ns.Subscribe<MovementSpeedPacket>(HandleMovementSpeedPacket);
-            ns.Subscribe<OpenWindowPacket>(HandleOpenWindowPacket);
-            ns.Subscribe<RobotPositionPacket>(HandleRobotPositionPacket);
-            ns.Subscribe<MapRegionPacket>(HandleMapRegionPacket);
-            ns.Subscribe<PackPacket>(HandlePackPacket);
-            ns.Subscribe<RemovePackPacket>(HandleRemovePackPacket);
+            if (ns != null)
+            {
+                ns.Subscribe<WorldInitPacket>(HandleWorldInitPacket);
+                ns.Subscribe<HBPacket>(HandleHBPacket);
+                ns.Subscribe<RobotInfoPacket>(HandleRobotInfoPacket);
+                ns.Subscribe<PlayerInfoPacket>(HandlePlayerInfoPacket);
+                ns.Subscribe<MovementSpeedPacket>(HandleMovementSpeedPacket);
+                ns.Subscribe<OpenWindowPacket>(HandleOpenWindowPacket);
+                ns.Subscribe<RobotPositionPacket>(HandleRobotPositionPacket);
+                ns.Subscribe<MapRegionPacket>(HandleMapRegionPacket);
+                ns.Subscribe<PackPacket>(HandlePackPacket);
+                ns.Subscribe<RemovePackPacket>(HandleRemovePackPacket);
+            }
 
-            MapManager.Instance.OnWorldInitialized += OnWorldInitialized;
-            MapManager.Instance.OnWorldDataLoaded += OnWorldDataLoaded;
+            var mm = MapManager.Instance;
+            if (mm != null)
+            {
+                mm.OnWorldInitialized += OnWorldInitialized;
+                mm.OnWorldDataLoaded += OnWorldDataLoaded;
+            }
             
             _isInitialized = true;
             Debug.Log("[PacketHandler] Initialization complete - ready to receive packets");
@@ -133,7 +140,7 @@ namespace Fodinae.Scripts.Networking
             try
             {
                 // Call MapManager.LoadWorldInit immediately
-                MapManager.Instance.LoadWorldInit(worldInitPacket);
+                MapManager.Instance?.LoadWorldInit(worldInitPacket);
             }
             catch (System.Exception ex)
             {
@@ -145,14 +152,15 @@ namespace Fodinae.Scripts.Networking
         {
             _packetCount++;
             Debug.Log($"[PacketHandler] Handling RobotInfoPacket for BotId: {packet.BotId}, Name: {packet.Name}");
-            RobotManager.Instance.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
+            RobotManager.Instance?.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
         }
 
         private void HandlePlayerInfoPacket(PlayerInfoPacket packet)
         {
             _packetCount++;
             Debug.Log($"[PacketHandler] Handling PlayerInfoPacket for BotId: {packet.BotId}, PlayerId: {packet.PlayerId}, Name: {packet.Nickname}");
-            RobotManager.Instance.LocalPlayerBotId = packet.BotId;
+            var rm = RobotManager.Instance;
+            if (rm != null) rm.LocalPlayerBotId = packet.BotId;
 
             var playerObj = GameObject.FindGameObjectWithTag("Player");
             if (playerObj != null)
@@ -175,25 +183,29 @@ namespace Fodinae.Scripts.Networking
         {
             _packetCount++;
             Debug.Log($"[PacketHandler] Handling MovementSpeedPacket with {packet.CooldownMap.Count} entries");
-            MapManager.Instance.UpdateMovementSpeeds(packet);
+            MapManager.Instance?.UpdateMovementSpeeds(packet);
         }
 
         private void HandleRobotPositionPacket(RobotPositionPacket robotPositionPacket)
         {
             _packetCount++;
             Debug.Log($"[PacketHandler] Processing RobotPositionPacket for BotId: {robotPositionPacket.BotId}");
-            RobotManager.Instance.UpdateRobotPosition(robotPositionPacket.BotId, robotPositionPacket.X, robotPositionPacket.Y, robotPositionPacket.Rotation);
-
-            // If this is the local player, update the server position in the movement controller
-            if (robotPositionPacket.BotId != 0 && robotPositionPacket.BotId == RobotManager.Instance.LocalPlayerBotId)
+            var rm = RobotManager.Instance;
+            if (rm != null)
             {
-                var player = GameObject.FindGameObjectWithTag("Player");
-                if (player != null)
+                rm.UpdateRobotPosition(robotPositionPacket.BotId, robotPositionPacket.X, robotPositionPacket.Y, robotPositionPacket.Rotation);
+
+                // If this is the local player, update the server position in the movement controller
+                if (robotPositionPacket.BotId != 0 && robotPositionPacket.BotId == rm.LocalPlayerBotId)
                 {
-                    var controller = player.GetComponent<PlayerMovementController>();
-                    if (controller != null)
+                    var player = GameObject.FindGameObjectWithTag("Player");
+                    if (player != null)
                     {
-                        controller.UpdateServerPosition(new Vector2Int(robotPositionPacket.X, robotPositionPacket.Y));
+                        var controller = player.GetComponent<PlayerMovementController>();
+                        if (controller != null)
+                        {
+                            controller.UpdateServerPosition(new Vector2Int(robotPositionPacket.X, robotPositionPacket.Y));
+                        }
                     }
                 }
             }
@@ -242,14 +254,14 @@ namespace Fodinae.Scripts.Networking
         {
             _packetCount++;
             Debug.Log($"[PacketHandler] Processing PackPacket: X={packPacket.X}, Y={packPacket.Y}, Type={packPacket.PackCode}");
-            PackManager.Instance.AddOrUpdatePack(packPacket.X, packPacket.Y, packPacket.PackCode, packPacket.Variant, packPacket.LinkedClan);
+            PackManager.Instance?.AddOrUpdatePack(packPacket.X, packPacket.Y, packPacket.PackCode, packPacket.Variant, packPacket.LinkedClan);
         }
 
         private void HandleRemovePackPacket(RemovePackPacket removePackPacket)
         {
             _packetCount++;
             Debug.Log($"[PacketHandler] Processing RemovePackPacket: X={removePackPacket.X}, Y={removePackPacket.Y}");
-            PackManager.Instance.RemovePack(removePackPacket.X, removePackPacket.Y);
+            PackManager.Instance?.RemovePack(removePackPacket.X, removePackPacket.Y);
         }
 
         private void HandleHBPacket(HBPacket hbPacket)
@@ -262,7 +274,7 @@ namespace Fodinae.Scripts.Networking
             if (hasMapData)
             {
                 Debug.Log("[PacketHandler] Map data received in HBPacket, triggering OnWorldDataLoaded event");
-                MapManager.Instance.OnWorldDataLoaded?.Invoke();
+                MapManager.Instance?.OnWorldDataLoaded?.Invoke();
             }
         }
 
