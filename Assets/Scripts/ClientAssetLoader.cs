@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets;
 using Fodinae.Scripts.Networking.Connection;
+using Fodinae.Scripts.World;
 
 namespace Fodinae.Scripts
 {
@@ -322,13 +323,13 @@ namespace Fodinae.Scripts
         {
             await UniTask.SwitchToMainThread(cancellationToken);
 
-            var type = Fodinae.Scripts.World.AnimationContainerDecoder.DetectType(imageData);
-            if (type == Fodinae.Scripts.World.AnimationContainerDecoder.ContainerType.GIF ||
-                type == Fodinae.Scripts.World.AnimationContainerDecoder.ContainerType.WebP)
+            var type = AnimationContainerDecoder.DetectType(imageData);
+            if (type == AnimationContainerDecoder.ContainerType.GIF ||
+                type == AnimationContainerDecoder.ContainerType.WebP)
             {
-                var decoded = type == Fodinae.Scripts.World.AnimationContainerDecoder.ContainerType.GIF
-                    ? Fodinae.Scripts.World.AnimationContainerDecoder.DecodeGif(imageData)
-                    : Fodinae.Scripts.World.AnimationContainerDecoder.DecodeWebP(imageData);
+                var decoded = type == AnimationContainerDecoder.ContainerType.GIF
+                    ? AnimationContainerDecoder.DecodeGif(imageData)
+                    : AnimationContainerDecoder.DecodeWebP(imageData);
 
                 if (decoded.Atlas != null)
                 {

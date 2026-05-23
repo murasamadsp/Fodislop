@@ -1,4 +1,5 @@
-using Fodinae.Scripts;
+using Fodinae.Scripts.UI;
+using Fodinae.Scripts.UI.Builders;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
