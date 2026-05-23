@@ -122,7 +122,7 @@ namespace Fodinae.Assets.Scripts.World
             InitializeShader();
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
-            _mainCamera = Camera.main;
+            _mainCamera = MapManager.Instance.MainCamera;
 
             _mesh = new Mesh();
             _mesh.name = "TerrainMesh";
@@ -181,7 +181,7 @@ namespace Fodinae.Assets.Scripts.World
         private void LateUpdate()
         {
             if (MapManager.Instance == null || MapStorage.Instance == null || !MapStorage.Instance.IsReady) return;
-            if (_mainCamera == null) _mainCamera = Camera.main;
+            if (_mainCamera == null) _mainCamera = MapManager.Instance.MainCamera;
             if (_mainCamera == null) return;
 
             int targetWidth = Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) + _viewportPadding * 2;

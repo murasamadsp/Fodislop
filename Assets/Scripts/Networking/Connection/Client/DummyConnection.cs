@@ -40,10 +40,10 @@ namespace MinesServer.Networking.Connection.Client
         public event Action OnDisconnecting;
         public event Action OnConnecting;
 
-        private const ushort mockBotId = 456;
-        private ushort x = 0;
-        private ushort y = 0;
-        private Direction rot = Direction.Up;
+        private const ushort _mockBotId = 456;
+        private ushort _x = 0;
+        private ushort _y = 0;
+        private Direction _rot = Direction.Up;
 
         private FPSCounter _fpsCounter;
 
@@ -99,7 +99,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private async UniTaskVoid UpdatePosition() {
             await UniTask.Delay(200);
-            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(mockBotId, x, y, (byte)rot) })));
+            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
         }
 
         public void Dispose()
@@ -119,14 +119,14 @@ namespace MinesServer.Networking.Connection.Client
                 if (actionPacket.Payload is MovePacket move)
                 {
                     Debug.Log($"  - Move to ({move.X}, {move.Y})");
-                    x = move.X;
-                    y = move.Y;
+                    _x = move.X;
+                    _y = move.Y;
                     UpdatePosition().Forget();
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
                     Debug.Log($"  - Rotate to {rotate.Direction}");
-                    rot = rotate.Direction;
+                    _rot = rotate.Direction;
                     UpdatePosition().Forget();
                 }
             }
@@ -147,10 +147,10 @@ namespace MinesServer.Networking.Connection.Client
                             new byte[] { 37, 38, 106 }
                         })));
                     SendTestWorldMapData(testWorldWidth, testWorldHeight);
-                    OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, mockBotId, "Darkar25")));
-                    var robotPos = new RobotPositionPacket(mockBotId, 25, 50, 0);
+                    OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
+                    var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-                    HandleRobotInfoMock(mockBotId).Forget();
+                    HandleRobotInfoMock(_mockBotId).Forget();
                     ushort circularBotId = 789;
                     RunCircularRobot(circularBotId).Forget();
                     RunTilingTestLoop().Forget();

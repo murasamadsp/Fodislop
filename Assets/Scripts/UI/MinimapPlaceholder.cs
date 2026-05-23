@@ -11,7 +11,7 @@ namespace Fodinae.Assets.Scripts.UI
 {
     public class MinimapPlaceholder : MonoBehaviour
     {
-        private Text coordinatesText;
+        private Text _coordinatesText;
         private Texture2D _minimapTexture;
         private RawImage _minimapImage;
         private bool _minimapReady = false;
@@ -124,9 +124,9 @@ namespace Fodinae.Assets.Scripts.UI
 
         private void UpdateCoordinatesText(int x, int y)
         {
-            if (coordinatesText != null)
+            if (_coordinatesText != null)
             {
-                coordinatesText.text = $"{x}:{y}";
+                _coordinatesText.text = $"{x}:{y}";
             }
         }
 
@@ -165,18 +165,18 @@ namespace Fodinae.Assets.Scripts.UI
             {
                 GameObject textObj = new GameObject("PlayerCoordinates");
                 textObj.transform.SetParent(canvas.transform, false);
-                coordinatesText = textObj.AddComponent<Text>();
-                coordinatesText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-                if (coordinatesText.font == null)
+                _coordinatesText = textObj.AddComponent<Text>();
+                _coordinatesText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                if (_coordinatesText.font == null)
                 {
-                    coordinatesText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+                    _coordinatesText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
                 }
-                coordinatesText.fontSize = 20;
-                coordinatesText.color = Color.white;
-                coordinatesText.alignment = TextAnchor.MiddleCenter;
-                coordinatesText.text = "0:0";
-                coordinatesText.fontStyle = FontStyle.Bold;
-                coordinatesText.raycastTarget = false;
+                _coordinatesText.fontSize = 20;
+                _coordinatesText.color = Color.white;
+                _coordinatesText.alignment = TextAnchor.MiddleCenter;
+                _coordinatesText.text = "0:0";
+                _coordinatesText.fontStyle = FontStyle.Bold;
+                _coordinatesText.raycastTarget = false;
                 Shadow shadow = textObj.AddComponent<Shadow>();
                 shadow.effectColor = Color.black;
                 shadow.effectDistance = new Vector2(2, -2);
@@ -194,7 +194,7 @@ namespace Fodinae.Assets.Scripts.UI
                 textRect.anchoredPosition = new Vector2(textX, textY);
                 textRect.sizeDelta = new Vector2(200, 30);
                 textObj.transform.SetAsLastSibling();
-                coordinatesText.enabled = true;
+                _coordinatesText.enabled = true;
                 textObj.SetActive(true);
             }
             catch (System.Exception e)

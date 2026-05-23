@@ -20,7 +20,11 @@ namespace Fodinae.UI.Builders
             element.style.height = imagePacket.Height;
             
             var cts = new CancellationTokenSource();
-            element.RegisterCallback<DetachFromPanelEvent>(_ => cts.Cancel());
+            element.RegisterCallback<DetachFromPanelEvent>(_ => 
+            {
+                cts.Cancel();
+                cts.Dispose();
+            });
 
             LoadImage(element, imagePacket.URI, cts.Token);
             

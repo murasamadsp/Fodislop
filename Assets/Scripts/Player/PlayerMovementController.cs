@@ -200,7 +200,7 @@ namespace Fodinae.Assets.Scripts.Player
                     int targetUnityY = currentUnityY + direction.y; // Match Unity's movement
 
                     // Fetch world bounds from MapStorage
-                    var layer = MapStorage.Instance.cellLayer;
+                    var layer = MapStorage.Instance.CellLayer;
                     if (layer == null) return;
 
                     int mapWidth = MapManager.Instance.WorldWidth;

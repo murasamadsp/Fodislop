@@ -205,9 +205,9 @@ namespace Fodinae.Assets.Scripts.Networking
             _mapRegionPacketsReceived++;
             Debug.Log($"[PacketHandler] Processing MapRegionPacket #{_mapRegionPacketsReceived}: X={mapRegionPacket.X}, Y={mapRegionPacket.Y}, Size={mapRegionPacket.Width+1}x{mapRegionPacket.Height+1}");
 
-            if (MapStorage.Instance == null || MapStorage.Instance.cellLayer == null)
+            if (MapStorage.Instance == null || MapStorage.Instance.CellLayer == null)
             {
-                Debug.LogError("[PacketHandler] MapStorage or cellLayer not available for MapRegion processing");
+                Debug.LogError("[PacketHandler] MapStorage or CellLayer not available for MapRegion processing");
                 return;
             }
 

@@ -9,8 +9,8 @@ using UnityEngine.UI;
 /// </summary>
 public class FPSCounter : MonoBehaviour
 {
-    private const int SampleSize = 30; // number of frames to average
-    private readonly float[] _frameTimes = new float[SampleSize];
+    private const int _sampleSize = 30; // number of frames to average
+    private readonly float[] _frameTimes = new float[_sampleSize];
     private int _frameIndex;
     private float _accumulatedTime;
 
@@ -58,13 +58,13 @@ public class FPSCounter : MonoBehaviour
     private void Update()
     {
         _frameTimes[_frameIndex] = Time.unscaledDeltaTime;
-        _frameIndex = (_frameIndex + 1) % SampleSize;
+        _frameIndex = (_frameIndex + 1) % _sampleSize;
         _accumulatedTime = 0f;
-        for (int i = 0; i < SampleSize; i++)
+        for (int i = 0; i < _sampleSize; i++)
         {
             _accumulatedTime += _frameTimes[i];
         }
-        float avgDelta = _accumulatedTime / SampleSize;
+        float avgDelta = _accumulatedTime / _sampleSize;
         float fps = avgDelta > 0f ? 1f / avgDelta : 0f;
         _fpsText.text = $"FPS: {fps:F1}";
     }
