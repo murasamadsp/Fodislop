@@ -361,16 +361,14 @@ namespace Fodinae.Scripts
                 return false;
             }
 
-            // Using standard integer division for positive coords is fine
             int cx = x / _chunkSize;
             int cy = y / _chunkSize;
             int lx = x % _chunkSize;
             int ly = y % _chunkSize;
 
-            // Row-major indexing for chunks: index = cx + cy * widthInChunks
-            // Row-major indexing within chunk: index = lx + ly * chunkSize
-            chunkIndex = cx + cy * _widthChunks;
-            localIndex = lx + ly * _chunkSize;
+            // Column-major indexing (Original project standard)
+            chunkIndex = cy + cx * _heightChunks;
+            localIndex = ly + lx * _chunkSize;
             return true;
         }
 

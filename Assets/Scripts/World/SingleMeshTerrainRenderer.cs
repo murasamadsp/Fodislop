@@ -343,18 +343,32 @@ namespace Fodinae.Scripts.World
             if (worldWidth <= 0 || worldHeight <= 0) return;
 
             var atlases = WorldTextureManager.Instance.GetAllAtlases();
-            var mapStorage = MapStorage.Instance;
+            var layer = MapStorage.Instance.CellLayer;
+            if (layer == null) return;
 
-            for (int y = 0; y < _cacheHeight; y++) {
-                int unityY = _cacheMinY + y;
-                int serverY = (worldHeight - 1 - unityY) % worldHeight;
-                if (serverY < 0) serverY += worldHeight;
+            int lastChunkIndex = -1;
+            CellType[] currentChunk = null;
 
-                for (int x = 0; x < _cacheWidth; x++) {
-                    int gridX = _cacheMinX + x;
-                    int worldX = (gridX % worldWidth + worldWidth) % worldWidth;
+            for (int x = 0; x < _cacheWidth; x++) {
+                int gridX = _cacheMinX + x;
+                int worldX = (gridX % worldWidth + worldWidth) % worldWidth;
+                
+                for (int y = 0; y < _cacheHeight; y++) {
+                    int unityY = _cacheMinY + y;
+                    int serverY = (worldHeight - 1 - unityY) % worldHeight;
+                    if (serverY < 0) serverY += worldHeight;
                     
-                    CellType type = mapStorage.GetCell(worldX, serverY);
+                    if (!layer.GetChunkIndexAndLocal(worldX, serverY, out int chunkIndex, out int localIndex)) {
+                        _cellCache[x, y] = default;
+                        continue;
+                    }
+
+                    if (chunkIndex != lastChunkIndex) {
+                        currentChunk = layer.GetChunk(chunkIndex, false, false);
+                        lastChunkIndex = chunkIndex;
+                    }
+
+                    CellType type = currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
                     var meta = GetMetadata(type, atlases);
                     
                     _cellCache[x, y] = new CachedCellData {
