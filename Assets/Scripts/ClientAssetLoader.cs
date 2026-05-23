@@ -114,9 +114,10 @@ namespace Fodinae.Scripts
             {
                 _loopCts?.Cancel();
                 _loopCts?.Dispose();
-                if (ConnectionManager.Instance != null)
+                var cm = ConnectionManager.InstanceIfExists;
+                if (cm != null)
                 {
-                    ConnectionManager.Instance.OnPacketReceived -= OnPacketReceived;
+                    cm.OnPacketReceived -= OnPacketReceived;
                 }
             }
         }

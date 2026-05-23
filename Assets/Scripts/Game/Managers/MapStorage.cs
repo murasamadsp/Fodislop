@@ -12,6 +12,8 @@ namespace Fodinae.Scripts.Game.Managers
         private bool _isInitialized = false;
         private string _worldCodeName;
 
+        public static MapStorage InstanceIfExists => _instance;
+
         public static MapStorage Instance
         {
             get

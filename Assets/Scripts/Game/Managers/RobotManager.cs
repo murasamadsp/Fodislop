@@ -129,6 +129,29 @@ namespace Fodinae.Scripts.Game.Managers
             }
         }
 
+        public void ClearAllRobots()
+        {
+            var keysToRemove = new List<uint>();
+            foreach (var kvp in _robots)
+            {
+                if (kvp.Key == LocalPlayerBotId || (kvp.Value != null && kvp.Value.gameObject.CompareTag("Player")))
+                {
+                    continue;
+                }
+                
+                if (kvp.Value != null)
+                {
+                    Destroy(kvp.Value.gameObject);
+                }
+                keysToRemove.Add(kvp.Key);
+            }
+            
+            foreach (var key in keysToRemove)
+            {
+                _robots.Remove(key);
+            }
+        }
+
         /// <summary>
         /// Removes a robot's registry entry only if the stored instance is
         /// still <paramref name="instance"/>. Safe to call from the robot's

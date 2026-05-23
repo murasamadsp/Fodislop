@@ -129,14 +129,14 @@ namespace Fodinae.Scripts.Game.Managers
         {
             if (_instance == this)
             {
-                MapStorage.Instance?.Dispose();
+                MapStorage.InstanceIfExists?.Dispose();
             }
         }
 
         protected virtual void OnApplicationQuit()
         {
             _isQuitting = true;
-            MapStorage.Instance?.Dispose();
+            MapStorage.InstanceIfExists?.Dispose();
         }
 
         public void LoadWorldInit(WorldInitPacket packet)
@@ -145,6 +145,7 @@ namespace Fodinae.Scripts.Game.Managers
 
             // Clear all packs when a new world is initialized
             PackManager.Instance?.ClearAllPacks();
+            RobotManager.InstanceIfExists?.ClearAllRobots();
 
             // Validate packet data
             if (packet == null)

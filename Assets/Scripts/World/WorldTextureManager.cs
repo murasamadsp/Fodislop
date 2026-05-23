@@ -183,6 +183,16 @@ namespace Fodinae.Scripts.World
                 {
                     ClientAssetLoader.InstanceIfExists.OnTextureLoaded -= OnTextureLoadedHandler;
                 }
+                
+                _textureCache?.Clear();
+                if (_atlases != null)
+                {
+                    foreach (var atlas in _atlases)
+                    {
+                        atlas?.Dispose();
+                    }
+                    _atlases.Clear();
+                }
             }
         }
 
