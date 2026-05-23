@@ -35,9 +35,12 @@ namespace Fodinae.Scripts.Networking
                         _instance = go.AddComponent<NetworkService>();
 
                         // System Grouping
-                        var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
-                        UnityEngine.Object.DontDestroyOnLoad(parent);
-                        go.transform.SetParent(parent.transform);
+                        if (Application.isPlaying)
+                        {
+                            var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
+                            UnityEngine.Object.DontDestroyOnLoad(parent);
+                            go.transform.SetParent(parent.transform);
+                        }
                     }
                 }
                 return _instance;
@@ -60,12 +63,15 @@ namespace Fodinae.Scripts.Networking
                 return;
             }
             _instance = this;
-            DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying)
+            {
+                DontDestroyOnLoad(gameObject);
 
-            // Ensure parented if created in scene
-            var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
-            UnityEngine.Object.DontDestroyOnLoad(parent);
-            transform.SetParent(parent.transform);
+                // Ensure parented if created in scene
+                var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
+                UnityEngine.Object.DontDestroyOnLoad(parent);
+                transform.SetParent(parent.transform);
+            }
 
             _isQuitting = false;
         }
