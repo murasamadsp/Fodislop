@@ -22,7 +22,10 @@ namespace Fodinae.Scripts.World
             }
 
             _instance = this;
-            DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
 
             // Set up the world background renderer
             SetupWorldBackground();
@@ -38,7 +41,11 @@ namespace Fodinae.Scripts.World
                 // Create a new GameObject for background setup
                 var setupGO = new GameObject("WorldBackgroundSetup");
                 _backgroundSetup = setupGO.AddComponent<WorldBackgroundSetup>();
-                DontDestroyOnLoad(setupGO);
+                
+                if (Application.isPlaying)
+                {
+                    DontDestroyOnLoad(setupGO);
+                }
 
                 Debug.Log("WorldBackgroundSetup automatically created");
             }
