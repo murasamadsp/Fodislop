@@ -19,11 +19,12 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             }
         }
 
-        public WorldLayer<CellType> cellLayer;
-        public bool _isInitialized = false;
-        public string _worldCodeName;
+        private WorldLayer<CellType> _cellLayer;
+        private bool _isInitialized = false;
+        private string _worldCodeName;
 
-        public bool IsReady => _isInitialized && cellLayer != null;
+        public WorldLayer<CellType> CellLayer => _cellLayer;
+        public bool IsReady => _isInitialized && _cellLayer != null;
 
         public void InitWorld(string worldCodeName, int width, int height)
         {
@@ -98,42 +99,20 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                     catch (System.Exception dirEx)
                     {
                         Debug.LogError($"MapStorage.InitWorld: Cannot create directory '{directory}': {dirEx.Message}");
-                        Debug.LogError($"This is CRITICAL - terrain rendering will fail without proper directory access");
-                        
-                        // Try fallback directory
-                        string fallbackDir = Path.Combine(Application.persistentDataPath, "fallback");
-                        try
-                        {
-                            Directory.CreateDirectory(fallbackDir);
-                            path = Path.Combine(fallbackDir, $"{worldCodeName}_cells.mapb");
-                            Debug.LogWarning($"MapStorage.InitWorld: Using fallback directory: {path}");
-                        }
-                        catch
-                        {
-                            Debug.LogError("MapStorage.InitWorld: Fallback directory creation also failed");
-                            _isInitialized = false;
-                            return;
-                        }
                     }
                 }
 
-                // Check if file already exists and handle appropriately
-                if (File.Exists(path))
-                {
-                    Debug.Log($"MapStorage.InitWorld: Existing world file found at {path}, will be used");
-                }
-
-                // CRITICAL: Enhanced WorldLayer creation with comprehensive error handling
+                // Create the WorldLayer
                 try
                 {
                     Debug.Log($"[MapStorage] Creating WorldLayer with parameters: path={path}, widthChunks={widthChunks}, heightChunks={heightChunks}, chunkSize={chunkSize}");
                     
                     // CRITICAL FIX: Ensure proper parameter order and validation
                     // WorldLayer constructor expects: path, widthChunks, heightChunks, chunkSize
-                    cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                    _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
                     
                     // CRITICAL: Verify the WorldLayer was created successfully
-                    if (cellLayer == null)
+                    if (_cellLayer == null)
                     {
                         Debug.LogError($"[MapStorage] CRITICAL: WorldLayer creation failed - returned null");
                         Debug.LogError($"[MapStorage] This is a fundamental failure - terrain rendering cannot work");
@@ -142,27 +121,18 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                     }
                     
                     Debug.Log($"[MapStorage] WorldLayer created successfully");
-                    Debug.Log($"[MapStorage] WorldLayer verification: WidthChunks={cellLayer.WidthChunks}, HeightChunks={cellLayer.HeightChunks}, ChunkSize={cellLayer.ChunkSize}");
+                    Debug.Log($"[MapStorage] WorldLayer verification: WidthChunks={_cellLayer.WidthChunks}, HeightChunks={_cellLayer.HeightChunks}, ChunkSize={_cellLayer.ChunkSize}");
                     
                     // Additional verification - CRITICAL CHECK
-                    if (cellLayer.WidthChunks != widthChunks || cellLayer.HeightChunks != heightChunks)
+                    if (_cellLayer.WidthChunks != widthChunks || _cellLayer.HeightChunks != heightChunks)
                     {
-                        Debug.LogWarning($"[MapStorage] WorldLayer dimensions don't match expected: expected {widthChunks}x{heightChunks}, got {cellLayer.WidthChunks}x{cellLayer.HeightChunks}");
-                    }
-                    
-                    // CRITICAL: Verify cellLayer is not null and has valid data
-                    if (cellLayer == null)
-                    {
-                        Debug.LogError("[MapStorage] CRITICAL: cellLayer is null after WorldLayer creation");
-                        Debug.LogError("[MapStorage] This will cause terrain rendering to fail completely");
-                        _isInitialized = false;
-                        return;
+                        Debug.LogWarning($"[MapStorage] WorldLayer dimensions don't match expected: expected {widthChunks}x{heightChunks}, got {_cellLayer.WidthChunks}x{_cellLayer.HeightChunks}");
                     }
                     
                     // Test basic cell access to verify WorldLayer is functional
                     try
                     {
-                        var testCell = cellLayer[0, 0];
+                        var testCell = _cellLayer[0, 0];
                         Debug.Log($"[MapStorage] WorldLayer basic cell access test passed: {testCell}");
                     }
                     catch (System.Exception cellTestEx)
@@ -170,105 +140,85 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                         Debug.LogError($"[MapStorage] CRITICAL: WorldLayer cell access failed: {cellTestEx.Message}");
                         Debug.LogError("[MapStorage] WorldLayer appears to be created but not functional");
                         _isInitialized = false;
-                        cellLayer?.Dispose();
-                        cellLayer = null;
+                        _cellLayer?.Dispose();
+                        _cellLayer = null;
                         return;
                     }
                     
                 }
                 catch (System.Exception worldLayerEx)
                 {
-                    Debug.LogError($"[MapStorage] CRITICAL: WorldLayer constructor failed for '{worldCodeName}': {worldLayerEx.Message}");
-                    Debug.LogError($"[MapStorage] WorldLayer constructor parameters: path={path}, widthChunks={widthChunks}, heightChunks={heightChunks}, chunkSize={chunkSize}");
-                    Debug.LogError($"[MapStorage] WorldLayer exception type: {worldLayerEx.GetType().Name}");
+                    Debug.LogError($"[MapStorage] CRITICAL: Exception while creating WorldLayer: {worldLayerEx.Message}");
+                    Debug.LogError($"[MapStorage] Exception type: {worldLayerEx.GetType().Name}");
+                    Debug.LogError($"[MapStorage] Stack trace: {worldLayerEx.StackTrace}");
                     
-                    // Provide specific guidance based on exception type
+                    // Attempt to identify specific issue
                     if (worldLayerEx is System.IO.IOException)
                     {
-                        Debug.LogError("[MapStorage] This is likely a file I/O issue. Check disk space and file permissions.");
-                        Debug.LogError("[MapStorage] CRITICAL: Without proper file access, terrain rendering will fail completely");
-                        
-                        // Try creating a test world in memory as fallback
+                        Debug.LogError("[MapStorage] This is likely an I/O issue (disk full, permission, file in use)");
+                        // Try fallback path if permission error
                         TryCreateFallbackWorld(worldCodeName, width, height);
-                    }
-                    else if (worldLayerEx is System.ArgumentException)
-                    {
-                        Debug.LogError("[MapStorage] This is likely an invalid parameter issue. Check world dimensions and chunk size.");
-                        Debug.LogError("[MapStorage] CRITICAL: Invalid parameters prevent WorldLayer creation, stopping terrain rendering");
-                        
-                        // Try with different chunk size
-                        TryCreateWithDifferentChunkSize(worldCodeName, width, height);
-                    }
-                    else if (worldLayerEx is System.OutOfMemoryException)
-                    {
-                        Debug.LogError("[MapStorage] This is a memory issue. The world may be too large for available memory.");
-                        Debug.LogError("[MapStorage] CRITICAL: Insufficient memory prevents terrain rendering");
-                        
-                        // Try creating a smaller test world
-                        TryCreateSmallerTestWorld(worldCodeName);
                     }
                     else
                     {
-                        Debug.LogError($"[MapStorage] Unexpected WorldLayer creation error: {worldLayerEx.GetType().Name}");
-                        Debug.LogError("[MapStorage] CRITICAL: Unknown error prevents terrain rendering");
-                        
                         // Try emergency fallback
                         TryEmergencyFallback(worldCodeName, width, height);
                     }
                     
                     _isInitialized = false;
-                    cellLayer?.Dispose();
-                    cellLayer = null;
+                    _cellLayer?.Dispose();
+                    _cellLayer = null;
                     return;
                 }
                 
                 _isInitialized = true;
                 
-                Debug.Log($"[MapStorage] SUCCESS: MapStorage initialized successfully for world '{worldCodeName}' with dimensions {width}x{height} ({widthChunks}x{heightChunks} chunks)");
-                Debug.Log($"[MapStorage] WorldLayer created with path: {path}, chunkSize: {chunkSize}");
+                // Set StandaloneMode in MapManager if we are inStandaloneMode
+                if (MapManager.Instance != null && MapManager.Instance.IsStandaloneMode)
+                {
+                    Debug.Log("[MapStorage] Standalone mode detected, MapStorage ready");
+                }
                 
                 // Final verification that everything is ready - CRITICAL CHECK
                 if (IsReady)
                 {
                     Debug.Log($"[MapStorage] VERIFICATION: MapStorage is fully ready for terrain rendering");
-                    Debug.Log($"[MapStorage] Ready state: IsReady={IsReady}, IsInitialized={IsInitialized()}, cellLayer={(cellLayer != null ? "not null" : "NULL")}");
+                    Debug.Log($"[MapStorage] Ready state: IsReady={IsReady}, IsInitialized={IsInitialized()}, _cellLayer={(_cellLayer != null ? "not null" : "NULL")}");
                     
-                    // CRITICAL: Log detailed cellLayer information for debugging
-                    if (cellLayer != null)
+                    // CRITICAL: Log detailed _cellLayer information for debugging
+                    if (_cellLayer != null)
                     {
-                        Debug.Log($"[MapStorage] cellLayer details: WidthChunks={cellLayer.WidthChunks}, HeightChunks={cellLayer.HeightChunks}, ChunkSize={cellLayer.ChunkSize}");
+                        Debug.Log($"[MapStorage] _cellLayer details: WidthChunks={_cellLayer.WidthChunks}, HeightChunks={_cellLayer.HeightChunks}, ChunkSize={_cellLayer.ChunkSize}");
                     }
                 }
                 else
                 {
                     Debug.LogError($"[MapStorage] CRITICAL: MapStorage initialization completed but not ready for terrain rendering");
                     Debug.LogError($"[MapStorage] This indicates a fundamental problem - terrain rendering will fail");
-                    Debug.LogError($"[MapStorage] Ready state: IsReady={IsReady}, IsInitialized={IsInitialized()}, cellLayer={(cellLayer != null ? "not null" : "NULL")}");
+                    Debug.LogError($"[MapStorage] Ready state: IsReady={IsReady}, IsInitialized={IsInitialized()}, _cellLayer={(_cellLayer != null ? "not null" : "NULL")}");
                     
                     // CRITICAL: If we got here, something is wrong with our initialization
-                    if (cellLayer == null)
+                    if (_cellLayer == null)
                     {
-                        Debug.LogError("[MapStorage] CRITICAL: cellLayer is NULL - WorldLayer creation failed");
+                        Debug.LogError("[MapStorage] CRITICAL: _cellLayer is NULL - WorldLayer creation failed");
                     }
                     else
                     {
-                        Debug.LogError("[MapStorage] CRITICAL: cellLayer exists but IsReady is false");
-                        Debug.LogError($"[MapStorage] cellLayer state: WidthChunks={cellLayer.WidthChunks}, HeightChunks={cellLayer.HeightChunks}");
+                        Debug.LogError("[MapStorage] CRITICAL: _cellLayer exists but IsReady is false");
+                        Debug.LogError($"[MapStorage] _cellLayer state: WidthChunks={_cellLayer.WidthChunks}, HeightChunks={_cellLayer.HeightChunks}");
                     }
                 }
             }
             catch (System.IO.IOException ioEx)
             {
-                Debug.LogError($"[MapStorage] CRITICAL: File I/O error while creating WorldLayer for '{worldCodeName}': {ioEx.Message}");
-                Debug.LogError($"[MapStorage] File path: {path}");
-                Debug.LogError($"[MapStorage] IOException details: {ioEx.GetType().Name} - {ioEx.Message}");
+                Debug.LogError($"[MapStorage] CRITICAL: File I/O error during world initialization: {ioEx.Message}");
                 Debug.LogError("[MapStorage] CRITICAL: File I/O errors prevent terrain rendering");
                 
                 // Try fallback mechanisms
                 TryCreateFallbackWorld(worldCodeName, width, height);
                 _isInitialized = false;
-                cellLayer?.Dispose();
-                cellLayer = null;
+                _cellLayer?.Dispose();
+                _cellLayer = null;
             }
             catch (System.ArgumentException argEx)
             {
@@ -279,21 +229,20 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 // Try with different parameters
                 TryCreateWithDifferentChunkSize(worldCodeName, width, height);
                 _isInitialized = false;
-                cellLayer?.Dispose();
-                cellLayer = null;
+                _cellLayer?.Dispose();
+                _cellLayer = null;
             }
             catch (System.OutOfMemoryException memEx)
             {
                 Debug.LogError($"[MapStorage] CRITICAL: Out of memory while creating WorldLayer for '{worldCodeName}': {memEx.Message}");
                 Debug.LogError($"[MapStorage] Requested memory for {width}x{height} world may be too large");
-                Debug.LogError($"[MapStorage] Available memory: {System.GC.GetTotalMemory(false)} bytes");
                 Debug.LogError("[MapStorage] CRITICAL: Memory issues prevent terrain rendering");
 
                 // Try creating a smaller world
                 TryCreateSmallerTestWorld(worldCodeName);
                 _isInitialized = false;
-                cellLayer?.Dispose();
-                cellLayer = null;
+                _cellLayer?.Dispose();
+                _cellLayer = null;
             }
             catch (System.UnauthorizedAccessException authEx)
             {
@@ -304,62 +253,36 @@ namespace Fodinae.Assets.Scripts.Game.Managers
                 // Try different location
                 TryCreateFallbackWorld(worldCodeName, width, height);
                 _isInitialized = false;
-                cellLayer?.Dispose();
-                cellLayer = null;
-            }
-            catch (System.Security.SecurityException secEx)
-            {
-                Debug.LogError($"[MapStorage] CRITICAL: Security exception while creating WorldLayer for '{worldCodeName}': {secEx.Message}");
-                Debug.LogError("[MapStorage] Check application permissions for file access");
-                Debug.LogError("[MapStorage] CRITICAL: Security restrictions prevent terrain rendering");
-
-                // Try emergency fallback
-                TryEmergencyFallback(worldCodeName, width, height);
-                _isInitialized = false;
-                cellLayer?.Dispose();
-                cellLayer = null;
+                _cellLayer?.Dispose();
+                _cellLayer = null;
             }
             catch (System.Exception ex)
             {
                 Debug.LogError($"[MapStorage] CRITICAL: Unexpected error while initializing world '{worldCodeName}': {ex.Message}");
                 Debug.LogError($"[MapStorage] Exception type: {ex.GetType().Name}");
                 Debug.LogError($"[MapStorage] Stack trace: {ex.StackTrace}");
-
-                // Try to provide more context about the failure
-                if (ex.InnerException != null)
-                {
-                    Debug.LogError($"[MapStorage] Inner exception: {ex.InnerException.Message}");
-                    Debug.LogError($"[MapStorage] Inner exception type: {ex.InnerException.GetType().Name}");
-                }
-
                 Debug.LogError("[MapStorage] CRITICAL: Unknown error prevents terrain rendering");
 
                 // Try emergency fallback
                 TryEmergencyFallback(worldCodeName, width, height);
                 _isInitialized = false;
-                cellLayer?.Dispose();
-                cellLayer = null;
+                _cellLayer?.Dispose();
+                _cellLayer = null;
             }
         }
 
-        /// <summary>
-        /// Try creating a fallback world when primary initialization fails
-        /// </summary>
         private void TryCreateFallbackWorld(string worldCodeName, int width, int height)
         {
-            Debug.LogWarning($"[MapStorage] Attempting fallback world creation for '{worldCodeName}'");
-            
             try
             {
-                // Try creating in a different location
-                string fallbackPath = Path.Combine(Application.temporaryCachePath, $"{worldCodeName}_fallback_cells.mapb");
-                Debug.LogWarning($"[MapStorage] Using fallback path: {fallbackPath}");
+                string fallbackPath = $"{Application.temporaryCachePath}/{worldCodeName}_cells_fallback.mapb";
+                Debug.LogWarning($"[MapStorage] Attempting to create fallback world at: {fallbackPath}");
                 
                 const int chunkSize = 32;
                 int widthChunks = (width + chunkSize - 1) / chunkSize;
                 int heightChunks = (height + chunkSize - 1) / chunkSize;
                 
-                cellLayer = new WorldLayer<CellType>(fallbackPath, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(fallbackPath, widthChunks, heightChunks, chunkSize);
                 _isInitialized = true;
                 
                 Debug.Log($"[MapStorage] Fallback world created successfully at {fallbackPath}");
@@ -370,85 +293,69 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             }
         }
 
-        /// <summary>
-        /// Try creating world with different chunk size when primary fails
-        /// </summary>
         private void TryCreateWithDifferentChunkSize(string worldCodeName, int width, int height)
         {
-            Debug.LogWarning($"[MapStorage] Attempting world creation with different chunk size for '{worldCodeName}'");
-            
-            int[] chunkSizes = { 16, 64, 128 };
-            
-            foreach (int chunkSize in chunkSizes)
-            {
-                try
-                {
-                    string path = $"{Application.persistentDataPath}/{worldCodeName}_cells.mapb";
-                    int widthChunks = (width + chunkSize - 1) / chunkSize;
-                    int heightChunks = (height + chunkSize - 1) / chunkSize;
-                    
-                    cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
-                    _isInitialized = true;
-                    
-                    Debug.Log($"[MapStorage] World created successfully with chunk size {chunkSize}");
-                    return;
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.LogWarning($"[MapStorage] Chunk size {chunkSize} failed: {ex.Message}");
-                }
-            }
-            
-            Debug.LogError("[MapStorage] All chunk size attempts failed");
-        }
-
-        /// <summary>
-        /// Try creating a smaller test world when memory issues occur
-        /// </summary>
-        private void TryCreateSmallerTestWorld(string worldCodeName)
-        {
-            Debug.LogWarning($"[MapStorage] Creating smaller test world for '{worldCodeName}' due to memory issues");
-            
             try
             {
-                string path = $"{Application.persistentDataPath}/{worldCodeName}_test_cells.mapb";
+                // Try with smaller chunk size
+                const int chunkSize = 16;
+                Debug.LogWarning($"[MapStorage] Attempting to create world with chunk size {chunkSize}");
+                
+                string path = $"{Application.persistentDataPath}/{worldCodeName}_cells.mapb";
+                int widthChunks = (width + chunkSize - 1) / chunkSize;
+                int heightChunks = (height + chunkSize - 1) / chunkSize;
+                
+                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                _isInitialized = true;
+                
+                Debug.Log($"[MapStorage] World created successfully with chunk size {chunkSize}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[MapStorage] Creation with different chunk size failed: {ex.Message}");
+            }
+        }
+
+        private void TryCreateSmallerTestWorld(string worldCodeName)
+        {
+            try
+            {
                 const int testWidth = 64;
                 const int testHeight = 64;
+                string path = $"{Application.temporaryCachePath}/small_test_world.mapb";
+                Debug.LogWarning($"[MapStorage] Attempting to create small test world (64x64) at: {path}");
+                
                 const int chunkSize = 32;
                 
                 int widthChunks = testWidth / chunkSize;
                 int heightChunks = testHeight / chunkSize;
                 
-                cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
                 _isInitialized = true;
                 
                 Debug.Log($"[MapStorage] Smaller test world created: {testWidth}x{testHeight}");
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[MapStorage] Smaller test world creation failed: {ex.Message}");
+                Debug.LogError($"[MapStorage] Small test world creation failed: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// Emergency fallback that creates a minimal in-memory world
-        /// </summary>
         private void TryEmergencyFallback(string worldCodeName, int width, int height)
         {
-            Debug.LogError($"[MapStorage] Attempting emergency fallback for '{worldCodeName}'");
-            
             try
             {
-                // Create a minimal test world that should always work
-                string path = $"{Application.persistentDataPath}/emergency_test_cells.mapb";
+                // Create a minimal world in memory if possible, or just a very small file
                 const int testWidth = 32;
                 const int testHeight = 32;
+                string path = $"{Application.temporaryCachePath}/emergency_fallback.mapb";
+                
                 const int chunkSize = 32;
                 
                 int widthChunks = testWidth / chunkSize;
                 int heightChunks = testHeight / chunkSize;
                 
-                cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
                 _isInitialized = true;
                 _worldCodeName = "emergency_test";
                 
@@ -458,26 +365,28 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             catch (System.Exception ex)
             {
                 Debug.LogError($"[MapStorage] Emergency fallback failed: {ex.Message}");
-                Debug.LogError("[MapStorage] Terrain rendering system is completely broken");
             }
         }
 
+        public bool IsInitialized() => _isInitialized;
+        public string GetWorldCodeName() => _worldCodeName;
+
         /// <summary>
-        /// Safely get cell type from the world layer with proper null checks
+        /// Get a cell at the specified coordinates
         /// </summary>
         /// <param name="x">World X coordinate</param>
         /// <param name="y">World Y coordinate</param>
         /// <returns>CellType or CellType.Unloaded if not ready</returns>
         public CellType GetCell(int x, int y)
         {
-            if (!_isInitialized || cellLayer == null)
+            if (!_isInitialized || _cellLayer == null)
             {
                 return CellType.Unloaded;
             }
 
             try
             {
-                return cellLayer[x, y];
+                return _cellLayer[x, y];
             }
             catch (System.Exception ex)
             {
@@ -487,14 +396,14 @@ namespace Fodinae.Assets.Scripts.Game.Managers
         }
 
         /// <summary>
-        /// Set cell type in the world layer with proper null checks
+        /// Set a cell at the specified coordinates
         /// </summary>
         /// <param name="x">World X coordinate</param>
         /// <param name="y">World Y coordinate</param>
         /// <param name="cellType">Cell type to set</param>
         public void SetCell(int x, int y, CellType cellType)
         {
-            if (!_isInitialized || cellLayer == null)
+            if (!_isInitialized || _cellLayer == null)
             {
                 Debug.LogWarning($"Cannot set cell at ({x}, {y}) - MapStorage not initialized");
                 return;
@@ -502,7 +411,7 @@ namespace Fodinae.Assets.Scripts.Game.Managers
 
             try
             {
-                cellLayer[x, y] = cellType;
+                _cellLayer[x, y] = cellType;
             }
             catch (System.Exception ex)
             {
@@ -510,25 +419,12 @@ namespace Fodinae.Assets.Scripts.Game.Managers
             }
         }
 
-        /// <summary>
-        /// Get world information safely
-        /// </summary>
-        public string GetWorldCodeName() => _worldCodeName;
-        public bool IsInitialized() => _isInitialized;
-
-        private MapStorage() 
-        {
-            // Initialize in uninitialized state
-            _isInitialized = false;
-            _worldCodeName = string.Empty;
-        }
-
         public void Dispose()
         {
             try
             {
-                cellLayer?.Dispose();
-                cellLayer = null;
+                _cellLayer?.Dispose();
+                _cellLayer = null;
                 _isInitialized = false;
                 _worldCodeName = string.Empty;
                 Debug.Log("MapStorage disposed successfully");

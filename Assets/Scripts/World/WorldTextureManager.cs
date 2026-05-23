@@ -522,11 +522,11 @@ namespace Fodinae.Assets.Scripts.World
         private CellType GetCellTypeAt(int x, int y)
         {
             // Пытаемся получить реальный тип клетки из MapStorage
-            if (MapStorage.Instance != null && MapStorage.Instance.cellLayer != null)
+            if (MapStorage.Instance != null && MapStorage.Instance.CellLayer != null)
             {
                 try
                 {
-                    return MapStorage.Instance.cellLayer[x, y];
+                    return MapStorage.Instance.CellLayer[x, y];
                 }
                 catch (Exception ex)
                 {
