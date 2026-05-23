@@ -124,7 +124,7 @@ namespace Fodinae.Scripts.World
             InitializeShader();
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
-            _mainCamera = MapManager.Instance.MainCamera;
+            _mainCamera = MapManager.Instance?.MainCamera;
 
             _mesh = new Mesh();
             _mesh.name = "TerrainMesh";
@@ -312,18 +312,23 @@ namespace Fodinae.Scripts.World
         private CellMetadata GetMetadata(CellType type, List<TextureAtlas> atlases)
         {
             if (_metadataCache.TryGetValue(type, out var meta)) return meta;
-            var config = MapManager.Instance.GetCellConfig(type);
+            
+            var mm = MapManager.Instance;
+            var wtm = WorldTextureManager.Instance;
+            if (mm == null || wtm == null) return default;
+
+            var config = mm.GetCellConfig(type);
             int atlasIndex = 0;
             for (int i = 0; i < atlases.Count; i++) if (atlases[i].ContainsCell(type)) { atlasIndex = i; break; }
-            Vector4 atlasRect = WorldTextureManager.Instance.GetCellFrameRect(type);
-            int frameCount = WorldTextureManager.Instance.GetAnimationFrameCount(type);
-            int frameSize = WorldTextureManager.Instance.GetFrameSize(type);
+            Vector4 atlasRect = wtm.GetCellFrameRect(type);
+            int frameCount = wtm.GetAnimationFrameCount(type);
+            int frameSize = wtm.GetFrameSize(type);
 
             meta = new CellMetadata {
                 Properties = config.Properties, ReliefGroup = config.ReliefGroup, Distortion = config.Distortion,
-                HasTileGroup = MapManager.Instance.TryGetTileGroup(type, out int gid), TileGroupId = gid,
-                MinimapColor = MapManager.Instance.GetCellMinimapColor(type), Animation = config.Animation,
-                AnimationSpeed = WorldTextureManager.Instance.GetAnimationSpeedForCell(type),
+                HasTileGroup = mm.TryGetTileGroup(type, out int gid), TileGroupId = gid,
+                MinimapColor = mm.GetCellMinimapColor(type), Animation = config.Animation,
+                AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
                 AtlasRect = atlasRect, AtlasIndex = atlasIndex,
                 UVTileSize = atlases.Count > atlasIndex ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size : 0,
                 AnimationFrameCount = frameCount,
@@ -336,6 +341,7 @@ namespace Fodinae.Scripts.World
 
         private void PopulateCellCache(int minX, int minY)
         {
+            if (MapManager.Instance == null || WorldTextureManager.Instance == null) return;
             _cacheMinX = minX - 1; _cacheMinY = minY - 1;
             int worldWidth = MapManager.Instance.WorldWidth;
             int worldHeight = MapManager.Instance.WorldHeight;
@@ -436,6 +442,16 @@ namespace Fodinae.Scripts.World
 
         private void UpdateVertexAttributes(int minX, int minY)
         {
+            if (WorldTextureManager.Instance == null || MapManager.Instance == null) return;
+            if (_mesh == null) {
+                _mesh = new Mesh();
+                _mesh.name = "TerrainMesh";
+                _mesh.MarkDynamic();
+                _mesh.indexFormat = IndexFormat.UInt32;
+                if (_meshFilter != null) _meshFilter.mesh = _mesh;
+            }
+            if (_vertices == null) InitializeMeshBuffers(_meshWidth, _meshHeight);
+
             var atlases = WorldTextureManager.Instance.GetAllAtlases();
             if (atlases.Count == 0) return;
 

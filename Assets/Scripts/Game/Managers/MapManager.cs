@@ -125,7 +125,7 @@ namespace Fodinae.Scripts.Game.Managers
             Debug.Log($"[MapManager] LoadWorldInit called: {packet.DisplayName} ({packet.CodeName}) [{packet.Width}x{packet.Height}]");
             
             // Clear all packs when a new world is initialized
-            PackManager.Instance.ClearAllPacks();
+            PackManager.Instance?.ClearAllPacks();
 
             // Validate packet data
             if (packet == null)
@@ -391,8 +391,8 @@ namespace Fodinae.Scripts.Game.Managers
 
                 foreach (int index in loaded)
                 {
-                    int cy = index % hChunks;
-                    int cx = index / hChunks;
+                    int cy = index % layer.HeightChunks;
+                    int cx = index / layer.HeightChunks;
                     
                     float unityY = CoordinateUtils.ServerToUnityY(cy * chunkSize, WorldHeight) - chunkSize * 0.5f;
                     Vector3 chunkPos = new Vector3(cx * chunkSize + chunkSize * 0.5f, unityY, 0);
