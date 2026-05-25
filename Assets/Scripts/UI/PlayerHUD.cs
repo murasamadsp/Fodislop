@@ -1,3 +1,4 @@
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -10,6 +11,9 @@ namespace Fodinae.Assets.Scripts.UI
         private const int LABEL_FONT_SIZE = 14;
         private const int TITLE_FONT_SIZE = 14;
         private const int HP_BAR_HEIGHT = 14;
+        private const int BTN_SIZE = 50;
+        private const int BONUS_PANEL_WIDTH = 200;
+        private const int GAP = 6;
 
         private Color _panelBgColor = new Color(0.08f, 0.08f, 0.08f, 0.85f);
         private Color _panelBorderColor = new Color(0.35f, 0.35f, 0.35f, 1f);
@@ -19,9 +23,13 @@ namespace Fodinae.Assets.Scripts.UI
         private Color _hpBarLowColor = new Color(0.9f, 0.2f, 0.2f, 1f);
         private Color _textColor = Color.white;
         private Color _accentColor = new Color(0.7f, 0.65f, 0.5f, 1f);
+        private Color _accentHoverColor = new Color(0.8f, 0.75f, 0.6f, 1f);
 
         private UIDocument _doc;
         private VisualElement _panel;
+        private Button _bonusButton;
+        private VisualElement _bonusPanel;
+        private bool _isBonusOpen;
 
         private Label _nicknameLabel;
         private Label _levelLabel;
@@ -30,9 +38,14 @@ namespace Fodinae.Assets.Scripts.UI
         private Label _moneyLabel;
         private Label _credsLabel;
         private Label _geologyLabel;
+        private Label _basketPercentLabel;
+        private Label[] _basketCrystalLabels = new Label[6];
 
-        void Start()
+        private Texture2D[] _crystalTextures = new Texture2D[6];
+
+        async void Start()
         {
+            await LoadCrystalTextures();
             InitializeHUD();
         }
 
@@ -40,6 +53,16 @@ namespace Fodinae.Assets.Scripts.UI
         {
             if (PlayerStatsModel.Instance != null)
                 PlayerStatsModel.Instance.OnStatsChanged -= RefreshAll;
+        }
+
+        private async UniTask LoadCrystalTextures()
+        {
+            var files = new[] { "g", "b", "r", "v", "w", "c" };
+            for (int i = 0; i < 6; i++)
+            {
+                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystalls/" + files[i]);
+                _crystalTextures[i] = tex;
+            }
         }
 
         private void InitializeHUD()
@@ -52,6 +75,8 @@ namespace Fodinae.Assets.Scripts.UI
             }
 
             CreatePanel(_doc.rootVisualElement);
+            CreateBonusButton(_doc.rootVisualElement);
+            CreateBonusPanel(_doc.rootVisualElement);
 
             PlayerStatsModel.Instance.OnStatsChanged += RefreshAll;
             RefreshAll();
@@ -80,7 +105,6 @@ namespace Fodinae.Assets.Scripts.UI
             _panel.style.borderRightColor = _panelBorderColor;
             _panel.style.flexDirection = FlexDirection.Column;
 
-            // Nickname + Level row
             var topRow = new VisualElement();
             topRow.style.flexDirection = FlexDirection.Row;
             topRow.style.marginBottom = 4;
@@ -100,21 +124,18 @@ namespace Fodinae.Assets.Scripts.UI
 
             _panel.Add(topRow);
 
-            // Separator
             var separator = new VisualElement();
             separator.style.height = 1;
             separator.style.backgroundColor = _separatorColor;
             separator.style.marginBottom = 4;
             _panel.Add(separator);
 
-            // HP label
             _hpLabel = new Label("Прочность: 0/0");
             _hpLabel.style.fontSize = LABEL_FONT_SIZE;
             _hpLabel.style.color = _textColor;
             _hpLabel.style.marginBottom = 2;
             _panel.Add(_hpLabel);
 
-            // HP bar
             var hpContainer = new VisualElement();
             hpContainer.style.height = HP_BAR_HEIGHT;
             hpContainer.style.backgroundColor = _hpBarBgColor;
@@ -136,7 +157,6 @@ namespace Fodinae.Assets.Scripts.UI
 
             _panel.Add(hpContainer);
 
-            // Money
             _moneyLabel = new Label("$ 0");
             _moneyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _moneyLabel.style.fontSize = LABEL_FONT_SIZE;
@@ -145,7 +165,6 @@ namespace Fodinae.Assets.Scripts.UI
             _moneyLabel.style.marginBottom = 0;
             _panel.Add(_moneyLabel);
 
-            // Creds
             _credsLabel = new Label("C 0");
             _credsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _credsLabel.style.fontSize = LABEL_FONT_SIZE;
@@ -154,7 +173,6 @@ namespace Fodinae.Assets.Scripts.UI
             _credsLabel.style.marginBottom = 0;
             _panel.Add(_credsLabel);
 
-            // Geology
             _geologyLabel = new Label("Геология: 0/0");
             _geologyLabel.style.fontSize = LABEL_FONT_SIZE;
             _geologyLabel.style.color = _textColor;
@@ -162,7 +180,152 @@ namespace Fodinae.Assets.Scripts.UI
             _geologyLabel.style.marginBottom = 0;
             _panel.Add(_geologyLabel);
 
+            // Basket separator
+            var basketSep = new VisualElement();
+            basketSep.style.height = 1;
+            basketSep.style.backgroundColor = _separatorColor;
+            basketSep.style.marginTop = 4;
+            basketSep.style.marginBottom = 4;
+            _panel.Add(basketSep);
+
+            // Basket percent
+            _basketPercentLabel = new Label("Груз: 0%");
+            _basketPercentLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _basketPercentLabel.style.fontSize = LABEL_FONT_SIZE;
+            _basketPercentLabel.style.color = _accentColor;
+            _basketPercentLabel.style.marginBottom = 2;
+            _panel.Add(_basketPercentLabel);
+
+            // 3 rows × 2 crystals
+            for (int i = 0; i < 6; i++)
+            {
+                var rowContainer = new VisualElement();
+                rowContainer.style.flexDirection = FlexDirection.Row;
+                rowContainer.style.marginBottom = 1;
+
+                var dot = new Image();
+                dot.style.width = 14;
+                dot.style.height = 14;
+                dot.style.marginRight = 6;
+                dot.style.alignSelf = Align.Center;
+                if (_crystalTextures[i] != null)
+                    dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
+                rowContainer.Add(dot);
+
+                _basketCrystalLabels[i] = new Label("0/0");
+                _basketCrystalLabels[i].style.fontSize = 11;
+                _basketCrystalLabels[i].style.color = _textColor;
+                rowContainer.Add(_basketCrystalLabels[i]);
+
+                _panel.Add(rowContainer);
+            }
+
             root.Add(_panel);
+        }
+
+        private void CreateBonusButton(VisualElement root)
+        {
+            _bonusButton = new Button(ToggleBonusPanel);
+            _bonusButton.text = "Бонусы";
+            _bonusButton.style.position = Position.Absolute;
+            _bonusButton.style.left = 10 + PANEL_WIDTH + GAP;
+            _bonusButton.style.top = 10;
+            _bonusButton.style.width = 90;
+            _bonusButton.style.height = BTN_SIZE;
+            _bonusButton.style.backgroundColor = _accentColor;
+            _bonusButton.style.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            _bonusButton.style.fontSize = TITLE_FONT_SIZE;
+            _bonusButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _bonusButton.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _bonusButton.style.borderTopWidth = 2;
+            _bonusButton.style.borderBottomWidth = 2;
+            _bonusButton.style.borderLeftWidth = 2;
+            _bonusButton.style.borderRightWidth = 2;
+            _bonusButton.style.borderTopColor = _panelBorderColor;
+            _bonusButton.style.borderBottomColor = _panelBorderColor;
+            _bonusButton.style.borderLeftColor = _panelBorderColor;
+            _bonusButton.style.borderRightColor = _panelBorderColor;
+            _bonusButton.style.paddingTop = 0;
+            _bonusButton.style.paddingBottom = 0;
+            _bonusButton.style.paddingLeft = 0;
+            _bonusButton.style.paddingRight = 0;
+
+            _bonusButton.RegisterCallback<MouseEnterEvent>(_ =>
+                _bonusButton.style.backgroundColor = _accentHoverColor);
+            _bonusButton.RegisterCallback<MouseLeaveEvent>(_ =>
+                _bonusButton.style.backgroundColor = _accentColor);
+
+            root.Add(_bonusButton);
+        }
+
+        private void CreateBonusPanel(VisualElement root)
+        {
+            _bonusPanel = new VisualElement();
+            _bonusPanel.style.position = Position.Absolute;
+            _bonusPanel.style.left = 10 + PANEL_WIDTH + GAP + 90 + GAP;
+            _bonusPanel.style.top = 10;
+            _bonusPanel.style.width = BONUS_PANEL_WIDTH;
+            _bonusPanel.style.backgroundColor = _panelBgColor;
+            _bonusPanel.style.borderTopWidth = 2;
+            _bonusPanel.style.borderBottomWidth = 2;
+            _bonusPanel.style.borderLeftWidth = 2;
+            _bonusPanel.style.borderRightWidth = 2;
+            _bonusPanel.style.borderTopColor = _panelBorderColor;
+            _bonusPanel.style.borderBottomColor = _panelBorderColor;
+            _bonusPanel.style.borderLeftColor = _panelBorderColor;
+            _bonusPanel.style.borderRightColor = _panelBorderColor;
+            _bonusPanel.style.paddingTop = 10;
+            _bonusPanel.style.paddingBottom = 10;
+            _bonusPanel.style.paddingLeft = 10;
+            _bonusPanel.style.paddingRight = 10;
+            _bonusPanel.style.flexDirection = FlexDirection.Column;
+
+            var titleRow = new VisualElement();
+            titleRow.style.flexDirection = FlexDirection.Row;
+            titleRow.style.marginBottom = 10;
+
+            var title = new Label("Бонусы");
+            title.style.fontSize = 14;
+            title.style.unityFontStyleAndWeight = FontStyle.Bold;
+            title.style.color = _accentColor;
+            title.style.flexGrow = 1;
+            titleRow.Add(title);
+
+            var closeBtn = new Button(ToggleBonusPanel);
+            closeBtn.text = "×";
+            closeBtn.style.width = 24;
+            closeBtn.style.height = 24;
+            closeBtn.style.backgroundColor = Color.clear;
+            closeBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            closeBtn.style.fontSize = 18;
+            closeBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            closeBtn.style.borderTopWidth = 0;
+            closeBtn.style.borderBottomWidth = 0;
+            closeBtn.style.borderLeftWidth = 0;
+            closeBtn.style.borderRightWidth = 0;
+            closeBtn.style.paddingTop = 0;
+            closeBtn.style.paddingBottom = 0;
+            closeBtn.style.paddingLeft = 0;
+            closeBtn.style.paddingRight = 0;
+            titleRow.Add(closeBtn);
+
+            _bonusPanel.Add(titleRow);
+
+            var emptyLabel = new Label("Нет активных бонусов");
+            emptyLabel.style.color = Color.gray;
+            emptyLabel.style.fontSize = 12;
+            emptyLabel.style.marginTop = 0;
+            _bonusPanel.Add(emptyLabel);
+
+            _bonusPanel.style.display = DisplayStyle.None;
+            root.Add(_bonusPanel);
+        }
+
+        private void ToggleBonusPanel()
+        {
+            _isBonusOpen = !_isBonusOpen;
+            _bonusPanel.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            _bonusButton.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
         }
 
         private void RefreshAll()
@@ -185,6 +348,19 @@ namespace Fodinae.Assets.Scripts.UI
             _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText)
                 ? "Геология: 0/0"
                 : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+
+            _basketPercentLabel.text = $"Груз: {stats.BasketMaxPercent}%";
+            for (int i = 0; i < 6; i++)
+            {
+                _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
+            }
+        }
+
+        private static string FormatCompact(long val)
+        {
+            if (val >= 1_000_000) return $"{(val / 1_000_000f):F1}M";
+            if (val >= 10_000) return $"{val / 1_000}K";
+            return val.ToString("N0");
         }
     }
 }
