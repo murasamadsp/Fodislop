@@ -46,6 +46,9 @@ namespace Fodinae.Assets.Scripts.UI
         public int GeologyCurrent { get; private set; }
         public int GeologyMax { get; private set; }
         public string GeologyText { get; private set; }
+        public uint BasketCapacity { get; private set; }
+        public long[] BasketContents { get; private set; } = new long[6];
+        public int BasketMaxPercent { get; private set; }
 
         public event Action OnStatsChanged;
         public event Action OnHealthChanged;
@@ -53,6 +56,7 @@ namespace Fodinae.Assets.Scripts.UI
         public event Action OnGeologyChanged;
         public event Action OnLevelChanged;
         public event Action OnNicknameChanged;
+        public event Action OnBasketChanged;
 
         public void SetNickname(string nickname)
         {
@@ -89,6 +93,21 @@ namespace Fodinae.Assets.Scripts.UI
             GeologyMax = max;
             GeologyText = text;
             OnGeologyChanged?.Invoke();
+            OnStatsChanged?.Invoke();
+        }
+
+        public void SetBasket(uint capacity, long[] contents)
+        {
+            BasketCapacity = capacity;
+            BasketContents = contents ?? new long[6];
+            int maxPct = 0;
+            for (int i = 0; i < 6; i++)
+            {
+                int pct = capacity > 0 ? (int)(BasketContents[i] * 100 / capacity) : 0;
+                if (pct > maxPct) maxPct = pct;
+            }
+            BasketMaxPercent = Mathf.Clamp(maxPct, 0, 100);
+            OnBasketChanged?.Invoke();
             OnStatsChanged?.Invoke();
         }
     }

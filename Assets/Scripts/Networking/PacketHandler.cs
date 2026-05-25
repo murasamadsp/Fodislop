@@ -65,6 +65,7 @@ namespace Fodinae.Assets.Scripts.Networking
             ns.Subscribe<HealthPacket>(HandleHealthPacket);
             ns.Subscribe<CurrencyPacket>(HandleCurrencyPacket);
             ns.Subscribe<GeologyPacket>(HandleGeologyPacket);
+            ns.Subscribe<BasketPacket>(HandleBasketPacket);
 
             MapManager.Instance.OnWorldInitialized += OnWorldInitialized;
             MapManager.Instance.OnWorldDataLoaded += OnWorldDataLoaded;
@@ -95,6 +96,7 @@ namespace Fodinae.Assets.Scripts.Networking
                 ns.Unsubscribe<HealthPacket>(HandleHealthPacket);
                 ns.Unsubscribe<CurrencyPacket>(HandleCurrencyPacket);
                 ns.Unsubscribe<GeologyPacket>(HandleGeologyPacket);
+                ns.Unsubscribe<BasketPacket>(HandleBasketPacket);
             }
 
             var mm = FindObjectOfType<MapManager>();
@@ -301,6 +303,12 @@ namespace Fodinae.Assets.Scripts.Networking
         {
             _packetCount++;
             PlayerStatsModel.Instance.SetGeology(packet.Current, packet.Max, packet.Cell, packet.Text);
+        }
+
+        private void HandleBasketPacket(BasketPacket packet)
+        {
+            _packetCount++;
+            PlayerStatsModel.Instance.SetBasket(packet.Capacity, packet.Contents);
         }
 
         private void OnWorldInitialized()

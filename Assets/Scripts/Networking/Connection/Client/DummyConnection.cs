@@ -1,5 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
+using Fodinae.Assets.Scripts.Audio;
+using Fodinae.Assets.Scripts.UI;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -19,10 +24,6 @@ using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Fodinae.Assets.Scripts.UI;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -74,6 +75,12 @@ namespace MinesServer.Networking.Connection.Client
             var hudObj = new GameObject("PlayerHUD");
             hudObj.AddComponent<PlayerStatsModel>();
             hudObj.AddComponent<PlayerHUD>();
+
+            var pauseObj = new GameObject("PauseMenu");
+            pauseObj.AddComponent<PauseMenu>();
+
+            var audioObj = new GameObject("AudioManager");
+            audioObj.AddComponent<AudioManager>();
 
             CreateFPSCounter();
         }
@@ -167,7 +174,7 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
                     OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
-                    OnReceived?.Invoke(new ServerPacket(new BasketPacket(123, new[] { 1L, 2L, 3L, 4L, 5L, 6L })));
+                    OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, new[] { 50000L, 40000L, 0L, 0L, 0L, 0L })));
                     OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
                     OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
                     OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
