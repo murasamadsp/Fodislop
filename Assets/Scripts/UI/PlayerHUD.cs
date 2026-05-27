@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -39,9 +42,9 @@ namespace Fodinae.Assets.Scripts.UI
         private Label _credsLabel;
         private Label _geologyLabel;
         private Label _basketPercentLabel;
-        private Label[] _basketCrystalLabels = new Label[6];
-
-        private Texture2D[] _crystalTextures = new Texture2D[6];
+        private readonly List<Texture2D> _crystalTextures = new();
+        private readonly List<Label> _basketCrystalLabels = new();
+        private VisualElement _basketContainer;
 
         async void Start()
         {
@@ -57,11 +60,13 @@ namespace Fodinae.Assets.Scripts.UI
 
         private async UniTask LoadCrystalTextures()
         {
-            var files = new[] { "g", "b", "r", "v", "w", "c" };
-            for (int i = 0; i < 6; i++)
+            _crystalTextures.Clear();
+            foreach (CrystalType ct in Enum.GetValues(typeof(CrystalType)))
             {
-                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystalls/" + files[i]);
-                _crystalTextures[i] = tex;
+                if (ct == CrystalType.Unknown) continue;
+                string name = ct.ToString().ToLowerInvariant();
+                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystalls/" + name);
+                _crystalTextures.Add(tex);
             }
         }
 
@@ -77,7 +82,7 @@ namespace Fodinae.Assets.Scripts.UI
             CreatePanel(_doc.rootVisualElement);
             CreateBonusButton(_doc.rootVisualElement);
             CreateBonusPanel(_doc.rootVisualElement);
-
+            RebuildCrystalRows();
             PlayerStatsModel.Instance.OnStatsChanged += RefreshAll;
             RefreshAll();
         }
@@ -196,29 +201,11 @@ namespace Fodinae.Assets.Scripts.UI
             _basketPercentLabel.style.marginBottom = 2;
             _panel.Add(_basketPercentLabel);
 
-            // 3 rows × 2 crystals
-            for (int i = 0; i < 6; i++)
-            {
-                var rowContainer = new VisualElement();
-                rowContainer.style.flexDirection = FlexDirection.Row;
-                rowContainer.style.marginBottom = 1;
-
-                var dot = new Image();
-                dot.style.width = 14;
-                dot.style.height = 14;
-                dot.style.marginRight = 6;
-                dot.style.alignSelf = Align.Center;
-                if (_crystalTextures[i] != null)
-                    dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
-                rowContainer.Add(dot);
-
-                _basketCrystalLabels[i] = new Label("0/0");
-                _basketCrystalLabels[i].style.fontSize = 11;
-                _basketCrystalLabels[i].style.color = _textColor;
-                rowContainer.Add(_basketCrystalLabels[i]);
-
-                _panel.Add(rowContainer);
-            }
+            //crystals
+            _basketContainer = new VisualElement();
+            _basketContainer.name = "BasketCrystals";
+            _basketContainer.style.flexDirection = FlexDirection.Column;
+            _panel.Add(_basketContainer);
 
             root.Add(_panel);
         }
@@ -350,9 +337,39 @@ namespace Fodinae.Assets.Scripts.UI
                 : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
 
             _basketPercentLabel.text = $"Груз: {stats.BasketMaxPercent}%";
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
             {
                 _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
+            }
+        }
+
+        private void RebuildCrystalRows()
+        {
+            _basketContainer.Clear();
+            _basketCrystalLabels.Clear();
+
+            for (int i = 0; i < _crystalTextures.Count; i++)
+            {
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.marginBottom = 1;
+
+                var dot = new Image();
+                dot.style.width = 14;
+                dot.style.height = 14;
+                dot.style.marginRight = 6;
+                dot.style.alignSelf = Align.Center;
+                if (_crystalTextures[i] != null)
+                    dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
+                row.Add(dot);
+
+                var label = new Label("0/0");
+                label.style.fontSize = 11;
+                label.style.color = _textColor;
+                row.Add(label);
+
+                _basketCrystalLabels.Add(label);
+                _basketContainer.Add(row);
             }
         }
 

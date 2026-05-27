@@ -10,7 +10,7 @@ namespace Fodinae.Assets.Scripts.UI
     public class WorldMapRenderer : MonoBehaviour
     {
         [Header("Rendering")]
-        [SerializeField] private float _renderInterval = 1f;
+        [SerializeField] private float _renderInterval = 0.033f;
         [SerializeField] private float _dragSpeed = 0.5f;
 
         private int _texWidth, _texHeight;
@@ -34,6 +34,9 @@ namespace Fodinae.Assets.Scripts.UI
         private float _lastRenderTime;
         private bool _initialRenderDone;
         private bool _followPlayer = true;
+
+        private float _playerBlinkTimer;
+        private bool _playerBlinkState = true;
 
         void Start()
         {
@@ -78,6 +81,13 @@ namespace Fodinae.Assets.Scripts.UI
             HandleDrag();
             HandleFollowPlayer();
             HandleQueuedRender();
+
+            _playerBlinkTimer += Time.deltaTime;
+            if (_playerBlinkTimer >= 0.5f)
+            {
+                _playerBlinkTimer = 0f;
+                _playerBlinkState = !_playerBlinkState;
+            }
         }
 
         public void Show()
@@ -87,6 +97,8 @@ namespace Fodinae.Assets.Scripts.UI
             _lastRenderTime = -1f;
             _initialRenderDone = false;
             _followPlayer = true;
+            _playerBlinkState = true;
+            _playerBlinkTimer = 0f;
         }
 
         public void Hide()
@@ -205,54 +217,96 @@ namespace Fodinae.Assets.Scripts.UI
         {
             int worldW = _manager.WorldWidth;
             int worldH = _manager.WorldHeight;
-            int halfTexW = _texWidth / 2;
-            int halfTexH = _texHeight / 2;
+            float cp = _cellsPerPixel;
+            float cx = _viewCenterX;
+            float cy = _viewCenterY;
+            int texW = _texWidth;
+            int texH = _texHeight;
 
-            float left = _viewCenterX - halfTexW * _cellsPerPixel;
+            Color32 defaultCol = _defaultColor;
+            for (int i = 0; i < _pixelBuffer.Length; i++)
+                _pixelBuffer[i] = defaultCol;
 
-            for (int py = 0; py < _texHeight; py++)
+            float leftWorld = cx - texW * 0.5f * cp;
+            float rightWorld = cx + texW * 0.5f * cp;
+            float bottomWorld = cy - texH * 0.5f * cp;
+            float topWorld = cy + texH * 0.5f * cp;
+
+            int minCellX = Mathf.Max(0, Mathf.FloorToInt(leftWorld));
+            int maxCellX = Mathf.Min(worldW - 1, Mathf.CeilToInt(rightWorld));
+            int minCellY = Mathf.Max(0, Mathf.FloorToInt(bottomWorld));
+            int maxCellY = Mathf.Min(worldH - 1, Mathf.CeilToInt(topWorld));
+
+            for (int cellY = minCellY; cellY <= maxCellY; cellY++)
             {
-                float worldY = _viewCenterY - (halfTexH - py) * _cellsPerPixel;
-                int cellY = Mathf.RoundToInt(worldY);
-                int rowStart = py * _texWidth;
+                float worldY_top = cellY;
+                float worldY_bottom = cellY + 1f;
 
-                if (cellY < 0 || cellY >= worldH)
-                {
-                    System.Array.Fill(_pixelBuffer, _defaultColor, rowStart, _texWidth);
-                    continue;
-                }
+                float pixelY_top = (worldY_top - cy) / cp + texH * 0.5f;
+                float pixelY_bottom = (worldY_bottom - cy) / cp + texH * 0.5f;
+
+                int pixY_start = Mathf.Clamp(Mathf.RoundToInt(pixelY_top), 0, texH - 1);
+                int pixY_end = Mathf.Clamp(Mathf.RoundToInt(pixelY_bottom), 0, texH - 1);
+                if (pixY_start >= texH || pixY_end < 0) continue;
 
                 int serverY = worldH - 1 - cellY;
 
-                for (int px = 0; px < _texWidth; px++)
+                for (int cellX = minCellX; cellX <= maxCellX; cellX++)
                 {
-                    int cellX = Mathf.RoundToInt(left + px * _cellsPerPixel);
-                    if (cellX >= 0 && cellX < worldW)
+                    float worldX_left = cellX;
+                    float worldX_right = cellX + 1f;
+
+                    float pixelX_left = (worldX_left - cx) / cp + texW * 0.5f;
+                    float pixelX_right = (worldX_right - cx) / cp + texW * 0.5f;
+
+                    int pixX_start = Mathf.Clamp(Mathf.RoundToInt(pixelX_left), 0, texW - 1);
+                    int pixX_end = Mathf.Clamp(Mathf.RoundToInt(pixelX_right), 0, texW - 1);
+                    if (pixX_start >= texW || pixX_end < 0) continue;
+
+                    CellType type = _storage.GetCell(cellX, serverY);
+                    Color32 color = _cellColorTable[(byte)type];
+
+                    for (int py = pixY_start; py <= pixY_end; py++)
                     {
-                        CellType type = _storage.GetCell(cellX, serverY);
-                        _pixelBuffer[rowStart + px] = _cellColorTable[(byte)type];
-                    }
-                    else
-                    {
-                        _pixelBuffer[rowStart + px] = _defaultColor;
+                        int rowStart = py * texW;
+                        for (int px = pixX_start; px <= pixX_end; px++)
+                        {
+                            _pixelBuffer[rowStart + px] = color;
+                        }
                     }
                 }
             }
 
-            if (_player != null)
+            if (_player != null && _playerBlinkState)
             {
-                int mx = Mathf.RoundToInt((_player.ClientPosition.x - _viewCenterX) / _cellsPerPixel + halfTexW);
-                int my = Mathf.RoundToInt((_player.ClientPosition.y - _viewCenterY) / _cellsPerPixel + halfTexH);
-                var red = new Color32(255, 0, 0, 255);
-                for (int dy = -1; dy <= 1; dy++)
+                Vector2Int playerPos = _player.ClientPosition;
+
+                if (playerPos.x >= minCellX && playerPos.x <= maxCellX && playerPos.y >= minCellY && playerPos.y <= maxCellY)
                 {
-                    for (int dx = -1; dx <= 1; dx++)
+                    float worldX_left = playerPos.x;
+                    float worldX_right = playerPos.x + 1f;
+                    float worldY_top = playerPos.y;
+                    float worldY_bottom = playerPos.y + 1f;
+
+                    float pixelX_left = (worldX_left - cx) / cp + texW * 0.5f;
+                    float pixelX_right = (worldX_right - cx) / cp + texW * 0.5f;
+                    float pixelY_top = (worldY_top - cy) / cp + texH * 0.5f;
+                    float pixelY_bottom = (worldY_bottom - cy) / cp + texH * 0.5f;
+
+                    int pixX_start = Mathf.Clamp(Mathf.RoundToInt(pixelX_left), 0, texW - 1);
+                    int pixX_end = Mathf.Clamp(Mathf.RoundToInt(pixelX_right), 0, texW - 1);
+                    int pixY_start = Mathf.Clamp(Mathf.RoundToInt(pixelY_top), 0, texH - 1);
+                    int pixY_end = Mathf.Clamp(Mathf.RoundToInt(pixelY_bottom), 0, texH - 1);
+
+                    Color32 playerColor = new Color32(255, 0, 0, 255);
+
+                    for (int py = pixY_start; py <= pixY_end; py++)
                     {
-                        if (dx != 0 && dy != 0) continue;
-                        int px = mx + dx;
-                        int py = my + dy;
-                        if (px >= 0 && px < _texWidth && py >= 0 && py < _texHeight)
-                            _pixelBuffer[py * _texWidth + px] = red;
+                        int rowStart = py * texW;
+                        for (int px = pixX_start; px <= pixX_end; px++)
+                        {
+                            _pixelBuffer[rowStart + px] = playerColor;
+                        }
                     }
                 }
             }

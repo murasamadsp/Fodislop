@@ -676,7 +676,7 @@ namespace MinesServer.Networking.Connection.Client
                 labelGO.transform.position = new Vector3(unityX, unityY, 0);
 
                 var tm = labelGO.AddComponent<TextMesh>();
-                tm.text = _allCellTypes[i].ToString();
+                tm.text = $"{_allCellTypes[i]} ({(int)_allCellTypes[i]})";
                 tm.fontSize = 20;
                 tm.characterSize = 0.5f;
                 tm.color = new Color(1f, 1f, 1f, 0.9f);
