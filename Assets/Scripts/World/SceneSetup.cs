@@ -1,3 +1,4 @@
+using Fodinae.Assets.Scripts.UI;
 using UnityEngine;
 
 namespace Fodinae.Assets.Scripts.World
@@ -14,7 +15,6 @@ namespace Fodinae.Assets.Scripts.World
 
         void Awake()
         {
-            // Ensure this is a singleton
             if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
@@ -23,8 +23,28 @@ namespace Fodinae.Assets.Scripts.World
             _instance = this;
             DontDestroyOnLoad(gameObject);
 
-            // Set up the world background renderer
             SetupWorldBackground();
+            SetupSurfaceRenderer();
+            SetupWorldMapController();
+        }
+
+        private void SetupSurfaceRenderer()
+        {
+            var existing = FindObjectOfType<SurfaceRenderer>();
+            if (existing != null) return;
+
+            var surfaceGO = new GameObject("SurfaceRenderer");
+            surfaceGO.transform.SetParent(transform);
+            surfaceGO.AddComponent<SurfaceRenderer>();
+        }
+        private void SetupWorldMapController()
+        {
+            var existing = FindObjectOfType<WorldMapController>();
+            if (existing != null) return;
+
+            var controllerGO = new GameObject("WorldMapController");
+            controllerGO.transform.SetParent(transform);
+            controllerGO.AddComponent<WorldMapController>();
         }
 
         private void SetupWorldBackground()
