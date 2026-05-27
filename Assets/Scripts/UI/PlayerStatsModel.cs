@@ -47,7 +47,7 @@ namespace Fodinae.Assets.Scripts.UI
         public int GeologyMax { get; private set; }
         public string GeologyText { get; private set; }
         public uint BasketCapacity { get; private set; }
-        public long[] BasketContents { get; private set; } = new long[6];
+        public long[] BasketContents { get; private set; } = Array.Empty<long>();
         public int BasketMaxPercent { get; private set; }
 
         public event Action OnStatsChanged;
@@ -99,9 +99,9 @@ namespace Fodinae.Assets.Scripts.UI
         public void SetBasket(uint capacity, long[] contents)
         {
             BasketCapacity = capacity;
-            BasketContents = contents ?? new long[6];
+            BasketContents = contents ?? Array.Empty<long>();
             int maxPct = 0;
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < BasketContents.Length; i++)
             {
                 int pct = capacity > 0 ? (int)(BasketContents[i] * 100 / capacity) : 0;
                 if (pct > maxPct) maxPct = pct;
