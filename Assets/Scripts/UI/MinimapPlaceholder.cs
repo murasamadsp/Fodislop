@@ -126,7 +126,7 @@ namespace Fodinae.Assets.Scripts.UI
         {
             if (coordinatesText != null)
             {
-                coordinatesText.text = $"{x}:{y}";
+                coordinatesText.text = $"{x}:{_worldHeight - 1 - y}";
             }
         }
 
@@ -208,20 +208,14 @@ namespace Fodinae.Assets.Scripts.UI
         /// </summary>
         private void UpdateMinimapTextureFast(int playerX, int playerY)
         {
-            // Обновляем границы только при значительном смещении
-            if (!_boundsCached || Mathf.Abs(_cachedMinX - (playerX - MINIMAP_WIDTH / 2)) > 8 ||
-                Mathf.Abs(_cachedMinY - (playerY - MINIMAP_HEIGHT / 2)) > 8)
-            {
-                _cachedMinX = playerX - MINIMAP_WIDTH / 2;
-                _cachedMinY = playerY - MINIMAP_HEIGHT / 2;
-                _boundsCached = true;
-            }
+            _cachedMinX = playerX - MINIMAP_WIDTH / 2;
+            _cachedMinY = playerY - MINIMAP_HEIGHT / 2;
+            _boundsCached = true;
 
             int minX = _cachedMinX;
             int minY = _cachedMinY;
             int index = 0;
 
-            // Используем локальные переменные для скорости
             int textureSize = TEXTURE_SIZE;
             int worldWidth = _worldWidth;
             int worldHeight = _worldHeight;
@@ -232,11 +226,11 @@ namespace Fodinae.Assets.Scripts.UI
             for (int texY = 0; texY < textureSize; texY++)
             {
                 int worldY = minY + texY;
+                int serverY = worldHeight - 1 - worldY;
                 bool yValid = worldY >= 0 && worldY < worldHeight;
 
                 if (!yValid)
                 {
-                    // Заполняем строку чёрным цветом (быстро)
                     for (int texX = 0; texX < textureSize; texX++)
                     {
                         pixelColors[index++] = Color.black;
@@ -252,7 +246,7 @@ namespace Fodinae.Assets.Scripts.UI
                     {
                         try
                         {
-                            CellType cellType = mapStorage.GetCell(worldX, worldY);
+                            CellType cellType = mapStorage.GetCell(worldX, serverY);
                             pixelColors[index++] = cachedColors[cellType];
                         }
                         catch
@@ -267,10 +261,8 @@ namespace Fodinae.Assets.Scripts.UI
                 }
             }
 
-            // Пакетное обновление текстуры
             _minimapTexture.SetPixels32(_pixelColors);
 
-            // Рисуем маркер (быстро, только несколько пикселей)
             int centerX = textureSize / 2;
             int centerY = textureSize / 2;
 
@@ -281,7 +273,6 @@ namespace Fodinae.Assets.Scripts.UI
             }
             _minimapTexture.SetPixel(centerX, centerY, Color.red);
 
-            // Применяем изменения (false = без обновления мипмапов)
             _minimapTexture.Apply(false);
         }
 
