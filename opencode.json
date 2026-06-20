@@ -6,7 +6,7 @@
       "enabled": true,
       "command": [
         "node",
-        "Library/PackageCache/com.gamelovers.mcp-unity@cce8b57de9cb/Server~/build/index.js"
+        "Packages/com.gamelovers.mcp-unity/Server~/build/index.js"
       ],
 	  "timeout": 30000,
       "environment": {}
