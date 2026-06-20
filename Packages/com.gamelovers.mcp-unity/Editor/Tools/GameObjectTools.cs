@@ -19,14 +19,14 @@ namespace McpUnity.Tools
         /// <param name="gameObject">Output GameObject if found</param>
         /// <param name="identifierInfo">Description of how the object was identified</param>
         /// <returns>Error JObject if not found, null if successful</returns>
-        public static JObject FindGameObject(int? instanceId, string objectPath, out GameObject gameObject, out string identifierInfo)
+        public static JObject FindGameObject(ulong? instanceId, string objectPath, out GameObject gameObject, out string identifierInfo)
         {
             gameObject = null;
             identifierInfo = "";
 
             if (instanceId.HasValue)
             {
-                gameObject = EditorUtility.InstanceIDToObject(instanceId.Value) as GameObject;
+                gameObject = EditorUtility.EntityIdToObject(EntityId.FromULong(instanceId.Value)) as GameObject;
                 identifierInfo = $"instance ID {instanceId.Value}";
             }
             else if (!string.IsNullOrEmpty(objectPath))
@@ -126,11 +126,11 @@ namespace McpUnity.Tools
 
         public override JObject Execute(JObject parameters)
         {
-            int? instanceId = parameters["instanceId"]?.ToObject<int?>();
+            ulong? instanceId = parameters["instanceId"]?.ToObject<ulong?>();
             string objectPath = parameters["objectPath"]?.ToObject<string>();
             string newName = parameters["newName"]?.ToObject<string>();
             string newParentPath = parameters["newParent"]?.ToObject<string>();
-            int? newParentId = parameters["newParentId"]?.ToObject<int?>();
+            ulong? newParentId = parameters["newParentId"]?.ToObject<ulong?>();
             int count = parameters["count"]?.ToObject<int?>() ?? 1;
 
             // Validate count
@@ -150,7 +150,7 @@ namespace McpUnity.Tools
             GameObject newParent = null;
             if (newParentId.HasValue)
             {
-                newParent = EditorUtility.InstanceIDToObject(newParentId.Value) as GameObject;
+                newParent = EditorUtility.EntityIdToObject(EntityId.FromULong(newParentId.Value)) as GameObject;
                 if (newParent == null)
                 {
                     return McpUnitySocketHandler.CreateErrorResponse(
@@ -200,7 +200,7 @@ namespace McpUnity.Tools
 
                 duplicatedObjects.Add(new JObject
                 {
-                    ["instanceId"] = duplicate.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(duplicate.GetEntityId()),
                     ["name"] = duplicate.name,
                     ["path"] = GameObjectToolUtils.GetGameObjectPath(duplicate)
                 });
@@ -234,7 +234,7 @@ namespace McpUnity.Tools
 
         public override JObject Execute(JObject parameters)
         {
-            int? instanceId = parameters["instanceId"]?.ToObject<int?>();
+            ulong? instanceId = parameters["instanceId"]?.ToObject<ulong?>();
             string objectPath = parameters["objectPath"]?.ToObject<string>();
             bool includeChildren = parameters["includeChildren"]?.ToObject<bool?>() ?? true;
 
@@ -293,10 +293,10 @@ namespace McpUnity.Tools
 
         public override JObject Execute(JObject parameters)
         {
-            int? instanceId = parameters["instanceId"]?.ToObject<int?>();
+            ulong? instanceId = parameters["instanceId"]?.ToObject<ulong?>();
             string objectPath = parameters["objectPath"]?.ToObject<string>();
             string newParentPath = parameters["newParent"]?.ToObject<string>();
-            int? newParentId = parameters["newParentId"]?.ToObject<int?>();
+            ulong? newParentId = parameters["newParentId"]?.ToObject<ulong?>();
             bool worldPositionStays = parameters["worldPositionStays"]?.ToObject<bool?>() ?? true;
 
             // Find target GameObject
@@ -317,7 +317,7 @@ namespace McpUnity.Tools
             }
             else if (newParentId.HasValue)
             {
-                GameObject newParent = EditorUtility.InstanceIDToObject(newParentId.Value) as GameObject;
+                GameObject newParent = EditorUtility.EntityIdToObject(EntityId.FromULong(newParentId.Value)) as GameObject;
                 if (newParent == null)
                 {
                     return McpUnitySocketHandler.CreateErrorResponse(
@@ -373,7 +373,7 @@ namespace McpUnity.Tools
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = $"GameObject '{targetObject.name}' is already at the root level.",
-                    ["instanceId"] = targetObject.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(targetObject.GetEntityId()),
                     ["name"] = targetObject.name,
                     ["path"] = oldPath,
                     ["changed"] = false
@@ -387,7 +387,7 @@ namespace McpUnity.Tools
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = $"GameObject '{targetObject.name}' is already a child of the specified parent.",
-                    ["instanceId"] = targetObject.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(targetObject.GetEntityId()),
                     ["name"] = targetObject.name,
                     ["path"] = oldPath,
                     ["changed"] = false
@@ -418,7 +418,7 @@ namespace McpUnity.Tools
                 ["success"] = true,
                 ["type"] = "text",
                 ["message"] = $"Successfully reparented GameObject '{targetObject.name}' to {parentDescription}.",
-                ["instanceId"] = targetObject.GetInstanceID(),
+                ["instanceId"] = EntityId.ToULong(targetObject.GetEntityId()),
                 ["name"] = targetObject.name,
                 ["oldPath"] = oldPath,
                 ["newPath"] = newPath,

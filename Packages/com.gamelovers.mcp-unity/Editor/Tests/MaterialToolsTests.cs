@@ -537,7 +537,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(testObj.GetEntityId()),
                     ["materialPath"] = "Assets/NonExistent/Material.mat"
                 };
 
@@ -573,7 +573,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(testObj.GetEntityId()),
                     ["materialPath"] = _testMaterialPath,
                     ["slot"] = 0
                 };
@@ -611,7 +611,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(testObj.GetEntityId()),
                     ["materialPath"] = _testMaterialPath,
                     ["slot"] = 99 // Invalid slot for a cube with 1 material
                 };
@@ -646,7 +646,7 @@ namespace McpUnity.Tests
                 AssignMaterialTool tool = new AssignMaterialTool();
                 JObject parameters = new JObject
                 {
-                    ["instanceId"] = testObj.GetInstanceID(),
+                    ["instanceId"] = EntityId.ToULong(testObj.GetEntityId()),
                     ["materialPath"] = _testMaterialPath
                 };
 

@@ -26,7 +26,7 @@ namespace McpUnity.Tools
         public override JObject Execute(JObject parameters)
         {
             // Extract parameters
-            int? instanceId = parameters["instanceId"]?.ToObject<int?>();
+            ulong? instanceId = parameters["instanceId"]?.ToObject<ulong?>();
             string objectPath = parameters["objectPath"]?.ToObject<string>();
             string componentName = parameters["componentName"]?.ToObject<string>();
             JObject componentData = parameters["componentData"] as JObject;
@@ -54,7 +54,7 @@ namespace McpUnity.Tools
             
             if (instanceId.HasValue)
             {
-                gameObject = EditorUtility.InstanceIDToObject(instanceId.Value) as GameObject;
+                gameObject = EditorUtility.EntityIdToObject(EntityId.FromULong(instanceId.Value)) as GameObject;
                 identifier = $"ID {instanceId.Value}";
             }
             else

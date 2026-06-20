@@ -50,10 +50,10 @@ namespace McpUnity.Tools
             GameObject gameObject = null;
 
             // Try to parse as an instance ID first
-            if (int.TryParse(idOrName, out int instanceId))
+            if (ulong.TryParse(idOrName, out ulong instanceId))
             {
                 // Unity Instance IDs are typically negative, but we'll accept any integer
-                UnityEngine.Object unityObject = EditorUtility.InstanceIDToObject(instanceId);
+                UnityEngine.Object unityObject = EditorUtility.EntityIdToObject(EntityId.FromULong(instanceId));
                 gameObject = unityObject as GameObject;
             }
             else
@@ -85,7 +85,7 @@ namespace McpUnity.Tools
                 ["success"] = true,
                 ["message"] = $"Retrieved GameObject data for '{gameObject.name}'",
                 ["gameObject"] = gameObjectData,
-                ["instanceId"] = gameObject.GetInstanceID()
+                ["instanceId"] = EntityId.ToULong(gameObject.GetEntityId())
             };
         }
     }
