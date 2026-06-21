@@ -1,4 +1,4 @@
-using Fodinae.Assets.Scripts.UI;
+using Fodinae.Scripts.UI;
 using UnityEngine;
 
 namespace Fodinae.Scripts.World

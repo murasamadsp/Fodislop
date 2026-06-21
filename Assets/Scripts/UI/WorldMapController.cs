@@ -1,10 +1,10 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using Fodinae.Assets.Scripts.Game.Managers;
-using Fodinae.Assets.Scripts.Player;
-using Fodinae.Assets.Scripts.World;
+using Fodinae.Scripts.Game.Managers;
+using Fodinae.Scripts.Player;
+using Fodinae.Scripts.World;
 
-namespace Fodinae.Assets.Scripts.UI
+namespace Fodinae.Scripts.UI
 {
     public class WorldMapController : MonoBehaviour
     {
@@ -55,6 +55,7 @@ namespace Fodinae.Assets.Scripts.UI
 
         private void ToggleMapMode()
         {
+            if (!enabled) return;
             if (MapStorage.Instance == null || !MapStorage.Instance.IsReady) return;
 
             if (_isInMapMode) ExitMapMode();

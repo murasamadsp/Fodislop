@@ -142,6 +142,7 @@ namespace Fodinae.Scripts.Player
                 Debug.LogError("CameraFollow: Cannot set zoom - camera is null!");
         }
         public float GetCurrentZoom() => _currentZoom;
+        public void SetScrollEnabled(bool enabled) => _scrollEnabled = enabled;
         public void Reinitialize()
         {
             Start();

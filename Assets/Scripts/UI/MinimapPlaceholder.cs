@@ -247,7 +247,7 @@ namespace Fodinae.Scripts.UI
                     continue;
                 }
 
-                int serverY = Fodinae.Scripts.Utils.CoordinateUtils.UnityToServerY(worldY, worldHeight);
+                serverY = Fodinae.Scripts.Utils.CoordinateUtils.UnityToServerY(worldY, worldHeight);
 
                 for (int texX = 0; texX < textureSize; texX++)
                 {
