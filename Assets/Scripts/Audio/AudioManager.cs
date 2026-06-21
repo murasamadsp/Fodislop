@@ -1,13 +1,17 @@
+using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
+using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Assets.Scripts.Audio
+namespace Fodinae.Scripts.Audio
 {
     public class AudioManager : MonoBehaviour
     {
         public static AudioManager Instance { get; private set; }
 
         private AudioSource _ambientSource;
-        private AudioSource _sfxSource;
+        private readonly List<SoundEffectInstance> _activeInstances = new();
+        private readonly List<SoundEffectInstance> _pendingRemove = new();
 
         private float _ambientVolume = 0.5f;
         private float _sfxVolume = 1f;
@@ -18,7 +22,8 @@ namespace Fodinae.Assets.Scripts.Audio
             set
             {
                 _ambientVolume = Mathf.Clamp01(value);
-                _ambientSource.volume = _ambientVolume;
+                if (_ambientSource != null)
+                    _ambientSource.volume = _ambientVolume;
                 PlayerPrefs.SetFloat("Audio_Ambient", _ambientVolume);
                 PlayerPrefs.Save();
             }
@@ -30,7 +35,6 @@ namespace Fodinae.Assets.Scripts.Audio
             set
             {
                 _sfxVolume = Mathf.Clamp01(value);
-                _sfxSource.volume = _sfxVolume;
                 PlayerPrefs.SetFloat("Audio_Sfx", _sfxVolume);
                 PlayerPrefs.Save();
             }
@@ -45,41 +49,66 @@ namespace Fodinae.Assets.Scripts.Audio
             _ambientSource.loop = true;
             _ambientSource.playOnAwake = false;
 
-            _sfxSource = gameObject.AddComponent<AudioSource>();
-            _sfxSource.loop = true;
-            _sfxSource.playOnAwake = false;
-
             _ambientVolume = PlayerPrefs.GetFloat("Audio_Ambient", 0.5f);
             _sfxVolume = PlayerPrefs.GetFloat("Audio_Sfx", 1f);
 
-            LoadAndPlay();
+            LoadAmbientAsync().Forget();
         }
 
-        private void LoadAndPlay()
+        private async UniTaskVoid LoadAmbientAsync()
         {
-            var ambientClip = Resources.Load<AudioClip>("Audio/evil_huge");
-            if (ambientClip != null)
+            try
             {
-                _ambientSource.clip = ambientClip;
-                _ambientSource.volume = _ambientVolume;
-                _ambientSource.Play();
-            }
-            else
-            {
-                Debug.LogWarning("[AudioManager] Audio/evil_huge не найден в Resources");
-            }
+                var audioBytes = await ClientAssetLoader.Instance.GetAssetBytesAsync(
+                    "audio/evil_huge",
+                    timeoutSeconds: 30
+                );
 
-            var sfxClip = Resources.Load<AudioClip>("Audio/mining");
-            if (sfxClip != null)
-            {
-                _sfxSource.clip = sfxClip;
-                _sfxSource.volume = _sfxVolume;
-                _sfxSource.Play();
+                if (audioBytes == null || audioBytes.Length == 0)
+                {
+                    Debug.LogWarning("[AudioManager] Failed to load ambient audio from server");
+                    return;
+                }
+
+                var clip = WavUtility.ToAudioClip(audioBytes, "Ambient_evil_huge");
+                if (clip != null)
+                {
+                    _ambientSource.clip = clip;
+                    _ambientSource.volume = _ambientVolume;
+                    _ambientSource.Play();
+                }
             }
-            else
+            catch (System.Exception ex)
             {
-                Debug.LogWarning("[AudioManager] Audio/mining не найден в Resources");
+                Debug.LogWarning($"[AudioManager] Failed to load ambient: {ex.Message}");
             }
+        }
+
+        public void PlaySfx(SFX type)
+        {
+            var filename = $"audio/{type.ToString().ToLowerInvariant()}";
+            var instance = new SoundEffectInstance(type, filename, _sfxVolume);
+            _activeInstances.Add(instance);
+        }
+
+        void Update()
+        {
+            for (int i = _activeInstances.Count - 1; i >= 0; i--)
+            {
+                var instance = _activeInstances[i];
+                instance.Update();
+                if (instance.IsDisposed)
+                {
+                    _activeInstances.RemoveAt(i);
+                }
+            }
+        }
+
+        void OnDestroy()
+        {
+            foreach (var instance in _activeInstances)
+                instance.Dispose();
+            _activeInstances.Clear();
         }
     }
 }

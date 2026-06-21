@@ -10,6 +10,7 @@ using MinesServer.Networking.Connection;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Shared;
+using Unity.VisualScripting.Antlr3.Runtime;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Networking.Connection
@@ -48,7 +49,7 @@ namespace Fodinae.Scripts.Networking.Connection
         }
 
         public IServerConnection Connection { get; private set; }
-
+        private bool _useOldClient;
         public event Action<ServerPacket> OnPacketReceived;
 
         private readonly System.Collections.Concurrent.ConcurrentQueue<ServerPacket> _packetQueue = new();
@@ -98,13 +99,11 @@ namespace Fodinae.Scripts.Networking.Connection
             _isQuitting = true;
         }
 
-        public void Connect()
+        public void Connect(bool oldClient = false)
         {
             if (Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected)
-            {
                 return;
-            }
-
+            _useOldClient = oldClient;
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;
             Connection.OnConnected += OnConnected;
@@ -114,7 +113,8 @@ namespace Fodinae.Scripts.Networking.Connection
         private void OnConnected()
         {
             // Send ClientHelloPacket
-            NetworkService.Instance.Send(new ClientHelloPacket(0, "Windows", 10, "fingerprint", "token"));
+            int version = _useOldClient ? 0 : 1;
+            NetworkService.Instance.Send(new ClientHelloPacket(version, "Windows", 10, "fingerprint", "token"));
 
             NetworkService.Instance.Send(new OpenHelpClickPacket());
         }

@@ -1,12 +1,16 @@
+using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Assets.Scripts.UI
+namespace Fodinae.Scripts.UI
 {
     public class ItemData
     {
         public string Name { get; set; }
         public Color IconColor { get; set; }
         public int Quantity { get; set; }
+        public string Description { get; set; }
+        public ItemType ItemType { get; set; }
+        public Texture2D Icon { get; set; }
 
         public ItemData(string name, Color iconColor, int quantity)
         {
