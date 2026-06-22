@@ -592,7 +592,7 @@ namespace Fodinae.Scripts.Networking
                     if (model.GetSlot(i) != null) continue;
 
                     var item = new ItemData(
-                        ItemRegistry.GetName(kvp.Key),
+                        kvp.Key.ToString(),
                         Color.gray,
                         (int)kvp.Value);
                     item.ItemType = kvp.Key;
@@ -606,7 +606,16 @@ namespace Fodinae.Scripts.Networking
         private void HandleServerSelectItem(MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket packet)
         {
             _packetCount++;
-            Debug.Log($"[PacketHandler] Server selected item: {packet.Item} ({packet.Name})");
+            var model = InventoryModel.Instance;
+            int slot = model.SelectedSlot;
+            if (slot < 0) return;
+
+            var item = model.GetSlot(slot);
+            if (item == null) return;
+
+            item.Name = packet.Name;
+            item.Description = packet.Description;
+            model.SetSlot(slot, item);
         }
 
         private void HandleServerDeselect(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket packet)

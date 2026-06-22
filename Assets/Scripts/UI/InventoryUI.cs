@@ -39,7 +39,8 @@ namespace Fodinae.Scripts.UI
 
         // Selection
         private int _lastSelectedSlot = -1;
-        private VisualElement _tooltip;
+        private VisualElement _tooltipWrapper;
+        private VisualElement _tooltipBg;
         private Label _tooltipName;
         private Label _tooltipDesc;
 
@@ -123,34 +124,41 @@ namespace Fodinae.Scripts.UI
                 {
                     _tooltipName.text = item.Name;
                     _tooltipDesc.text = item.Description ?? "";
-                    _tooltip.style.display = DisplayStyle.Flex;
+                    _tooltipWrapper.style.display = DisplayStyle.Flex;
                     return;
                 }
             }
-            _tooltip.style.display = DisplayStyle.None;
+            _tooltipWrapper.style.display = DisplayStyle.None;
         }
 
         private void CreateTooltip(VisualElement root)
         {
-            _tooltip = new VisualElement();
-            _tooltip.style.position = Position.Absolute;
-            _tooltip.style.left = Length.Percent(50);
-            _tooltip.style.translate = new Translate(new Length(-50, LengthUnit.Percent), Length.Auto());
-            _tooltip.style.top = 48;
-            _tooltip.style.height = 36;
-            _tooltip.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.9f);
-            _tooltip.style.borderTopWidth = 2;
-            _tooltip.style.borderBottomWidth = 2;
-            _tooltip.style.borderLeftWidth = 2;
-            _tooltip.style.borderRightWidth = 2;
-            _tooltip.style.borderTopColor = _panelBorderColor;
-            _tooltip.style.borderBottomColor = _panelBorderColor;
-            _tooltip.style.borderLeftColor = _panelBorderColor;
-            _tooltip.style.borderRightColor = _panelBorderColor;
-            _tooltip.style.flexDirection = FlexDirection.Row;
-            _tooltip.style.alignItems = Align.Center;
-            _tooltip.style.justifyContent = Justify.Center;
-            _tooltip.style.display = DisplayStyle.None;
+            _tooltipWrapper = new VisualElement();
+            _tooltipWrapper.style.position = Position.Absolute;
+            _tooltipWrapper.style.left = 0;
+            _tooltipWrapper.style.right = 0;
+            _tooltipWrapper.style.top = 48;
+            _tooltipWrapper.style.height = 36;
+            _tooltipWrapper.style.flexDirection = FlexDirection.Row;
+            _tooltipWrapper.style.justifyContent = Justify.Center;
+            _tooltipWrapper.style.display = DisplayStyle.None;
+
+            _tooltipBg = new VisualElement();
+            _tooltipBg.style.flexDirection = FlexDirection.Row;
+            _tooltipBg.style.alignItems = Align.Center;
+            _tooltipBg.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.9f);
+            _tooltipBg.style.borderTopWidth = 2;
+            _tooltipBg.style.borderBottomWidth = 2;
+            _tooltipBg.style.borderLeftWidth = 2;
+            _tooltipBg.style.borderRightWidth = 2;
+            _tooltipBg.style.borderTopColor = _panelBorderColor;
+            _tooltipBg.style.borderBottomColor = _panelBorderColor;
+            _tooltipBg.style.borderLeftColor = _panelBorderColor;
+            _tooltipBg.style.borderRightColor = _panelBorderColor;
+            _tooltipBg.style.paddingLeft = 8;
+            _tooltipBg.style.paddingRight = 8;
+            _tooltipBg.style.paddingTop = 4;
+            _tooltipBg.style.paddingBottom = 4;
 
             _tooltipName = new Label();
             _tooltipName.style.fontSize = 14;
@@ -162,9 +170,10 @@ namespace Fodinae.Scripts.UI
             _tooltipDesc.style.fontSize = 12;
             _tooltipDesc.style.color = Color.white;
 
-            _tooltip.Add(_tooltipName);
-            _tooltip.Add(_tooltipDesc);
-            root.Add(_tooltip);
+            _tooltipBg.Add(_tooltipName);
+            _tooltipBg.Add(_tooltipDesc);
+            _tooltipWrapper.Add(_tooltipBg);
+            root.Add(_tooltipWrapper);
         }
 
         private void BuildUI()

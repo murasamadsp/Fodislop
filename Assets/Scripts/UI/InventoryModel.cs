@@ -35,6 +35,8 @@ namespace Fodinae.Scripts.UI
         {
             _slots[index] = item;
             OnSlotChanged?.Invoke(index);
+            if (index == _selectedSlot)
+                OnSlotSelected?.Invoke(index);
         }
 
         public bool CanStack(ItemData a, ItemData b)
