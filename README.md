@@ -10,7 +10,7 @@
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/MinesReborn/Fodislop.git
+git clone https://github.com/MinesReborn/Fodinae.git
 ```
 
 1. Откройте проект через **Unity Hub** → `Open` → выберите папку проекта.
@@ -22,18 +22,24 @@ git clone https://github.com/MinesReborn/Fodislop.git
 
 Подробные инструкции для разработчиков и описание внутренних систем — в файле [**`AGENTS.md`**](AGENTS.md).
 
-## Roadmap / TODO
+## Состояние проекта
 
-- [ ] Формирование детального технического бэклога.
-- [ ] Определение ключевых этапов разработки (Milestones).
-- [ ] Анализ и приоритизация будущих функциональных модулей.
-- [ ] **Git LFS (оценить, не срочно)**: `.gitattributes` уже настроен
-      — EOL-нормализация и Unity YAMLMerge для `.unity/.prefab/.asset`
-      работают; мелкие тайлы осознанно НЕ под LFS. Открытый вопрос —
-      только крупные бинарники (будущие большие
-      текстуры/аудио/видео): если начнут расти, перевести их в LFS.
-      Миграция уже закоммиченных бинарников (`git lfs migrate`,
-      переписывает историю) — только по согласованию с командой.
+Проект находится в активной разработке. Реализованы базовые системы:
+
+- ✅ Тайловый рендеринг мира (один меш на весь террейн, UV-каналы)
+- ✅ Сетевое взаимодействие через MinesServerNetworking
+- ✅ Динамическая сборка UI из серверных пакетов
+- ✅ Аудиосистема (фоновый звук, SFX)
+- ✅ Инвентарь, HUD, экипировка
+- ✅ Внутриигровой чат (глобальный, локальный, всплывающие сообщения)
+- ✅ Миникарта и полноэкранная карта мира
+- ✅ Меню паузы с настройками
+- ✅ Эффекты (DigEffect — копка)
+- ✅ Автономный тестовый режим без сервера
+
+### Git LFS
+
+`.gitattributes` настроен — EOL-нормализация и Unity YAMLMerge для `.unity/.prefab/.asset` работают; мелкие тайлы осознанно НЕ под LFS. Открытый вопрос — только крупные бинарники (будущие большие текстуры/аудио/видео): если начнут расти, перевести их в LFS. Миграция уже закоммиченных бинарников (`git lfs migrate`, переписывает историю) — только по согласованию с командой.
 
 ## Зависимости
 
@@ -41,12 +47,16 @@ git clone https://github.com/MinesReborn/Fodislop.git
 
 - [`darkar25.fodinae.data`](https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Data/) — типы данных
 - [`darkar25.fodinae.networking`](https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Networking/) — сетевой протокол
+- [`darkar25.fodinae.connection`](https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Connection/) — управление подключением
 - [`com.netpyoung.webp`](https://github.com/netpyoung/unity.webp.git?path=unity_project/Assets/unity.webp) — декодирование WebP
 
 ### Vendored плагины (`Assets/Plugins/`)
 
-- SharpCompress, ZstdSharp, K4os.Compression.LZ4, NetCoreServer, Genumerics
-- [UniTask](https://github.com/Cysharp/UniTask) (полный пакет)
+- **Сжатие/кодинг**: SharpCompress, ZstdSharp, K4os.Compression.LZ4
+- **Сеть**: NetCoreServer
+- **Математика**: Genumerics, ExtendedNumerics.BigDecimal
+- **UI/шаблоны**: SmartFormat, NCalc, Parlot, ZString
+- **Асинхронность**: [UniTask](https://github.com/Cysharp/UniTask) (полный пакет)
 
 ## Contributing
 
