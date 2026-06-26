@@ -1,12 +1,14 @@
 using System.Collections.Generic;
+using Fodinae.Scripts.Audio;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Game.Managers
 {
     /// <summary>
-    /// Singleton manager for server-driven SFX visual effects.
-    /// Receives SFXPackets and spawns SFXEffectInstance objects
+    /// Singleton manager for server-driven SFX audio+visual effects.
+    /// Receives SFXPackets, acquires a <see cref="SFXPool.PooledSlot"/>
+    /// from <see cref="SFXPool"/>, and spawns <see cref="SFXEffectInstance"/> objects
     /// that load and play visual+audio assets at world positions.
     /// Follows the same singleton pattern as RobotManager and PackManager.
     /// </summary>
@@ -50,11 +52,19 @@ namespace Fodinae.Scripts.Game.Managers
         }
 
         /// <summary>
-        /// Spawn a new visual effect from an incoming SFXPacket.
+        /// Spawn a new combined audio+visual effect from an incoming SFXPacket.
+        /// Acquires a pooled slot from <see cref="SFXPool"/> and creates an
+        /// <see cref="SFXEffectInstance"/> that manages its lifecycle.
         /// </summary>
         public void PlayEffect(SFXPacket packet)
         {
-            var effect = new SFXEffectInstance(packet);
+            var slot = SFXPool.Instance?.Acquire(packet.EffectType);
+            if (slot == null)
+            {
+                return;
+            }
+
+            var effect = new SFXEffectInstance(packet, slot);
             _activeEffects.Add(effect);
         }
 

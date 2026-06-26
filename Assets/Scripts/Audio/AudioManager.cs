@@ -11,7 +11,6 @@ namespace Fodinae.Scripts.Audio
 
         private AudioSource _ambientSource;
         private readonly List<SoundEffectInstance> _activeInstances = new();
-        private readonly List<SoundEffectInstance> _pendingRemove = new();
 
         private float _ambientVolume = 0.5f;
         private float _sfxVolume = 1f;
@@ -84,8 +83,21 @@ namespace Fodinae.Scripts.Audio
             }
         }
 
+        /// <summary>
+        /// Play an SFX sound effect.  Delegates to <see cref="SFXPool"/>
+        /// when available, otherwise falls back to a direct
+        /// <see cref="SoundEffectInstance"/>.
+        /// </summary>
         public void PlaySfx(SFX type)
         {
+            var pool = SFXPool.Instance;
+            if (pool != null)
+            {
+                pool.Play(type, _sfxVolume);
+                return;
+            }
+
+            // Fallback: direct instantiation (pool not ready / quitting).
             var filename = $"audio/{type.ToString().ToLowerInvariant()}";
             var instance = new SoundEffectInstance(type, filename, _sfxVolume);
             _activeInstances.Add(instance);

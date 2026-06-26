@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Fodinae.Scripts.Audio;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Utils;
 using Fodinae.Scripts.Effekseer;
@@ -16,8 +17,10 @@ namespace Fodinae.Scripts.Game
     /// <summary>
     /// Manages a single server-driven SFX visual+audio effect.
     /// Created by SFXEffectManager in response to an SFXPacket.
-    /// Loads visual assets from the server asset pipeline,
-    /// plays them at the world position, and auto-disposes on completion.
+    /// Acquires a <see cref="SFXPool.PooledSlot"/> from <see cref="SFXPool"/>,
+    /// loads visual assets from the server asset pipeline,
+    /// plays them at the world position, and returns the slot to the pool
+    /// when both audio and visual have completed.
     /// </summary>
     public sealed class SFXEffectInstance : IDisposable
     {
@@ -27,6 +30,8 @@ namespace Fodinae.Scripts.Game
         private readonly ushort _targetBotId;
         private readonly IReadOnlyList<StringPairPacket> _parameters;
 
+        // Pooled slot providing GameObject, AudioSource, and SpriteRenderer
+        private SFXPool.PooledSlot _slot;
         private GameObject _gameObject;
         private SpriteRenderer _spriteRenderer;
         private AudioSource _audioSource;
@@ -57,6 +62,9 @@ namespace Fodinae.Scripts.Game
         // Lifecycle
         private float _lifeTimer;
         private float _maxLifetime = 5f;
+        private bool _visualCompleted;
+        private bool _audioCompleted;
+        private bool _slotReleased;
         private bool _isDisposed;
 
         // Cached world position computed from server coords — captured before parenting
@@ -66,20 +74,30 @@ namespace Fodinae.Scripts.Game
         private EffekseerHandle _effekseerHandle;
         private bool _hasEffekseerEffect;
 
-        public SFXEffectInstance(SFXPacket packet)
+        public SFXEffectInstance(SFXPacket packet, SFXPool.PooledSlot slot)
         {
             _effectType = packet.EffectType;
             _sourceX = packet.X;
             _sourceY = packet.Y;
             _targetBotId = packet.TargetBotId;
             _parameters = packet.Parameters;
+            _slot = slot;
+
+            _gameObject = slot.GameObject;
+            _spriteRenderer = slot.SpriteRenderer;
+            _audioSource = slot.AudioSource;
 
             ParseParameters();
-            CreateGameObject();
+            SetupSlotPosition();
+            PlayAudio();
             LoadVisualAsync().Forget();
         }
 
-        public bool IsDisposed => _isDisposed;
+        /// <summary>
+        /// True when both audio and visual have completed and the pooled slot
+        /// has been returned. The manager removes this instance when true.
+        /// </summary>
+        public bool IsDisposed => _slotReleased;
 
         private void ParseParameters()
         {
@@ -139,13 +157,16 @@ namespace Fodinae.Scripts.Game
             }
         }
 
-        private void CreateGameObject()
+        /// <summary>
+        /// Position the pooled GameObject using the same logic as the
+        /// original CreateGameObject — source bot priority, server coords,
+        /// target-bot facing rotation.
+        /// </summary>
+        private void SetupSlotPosition()
         {
             var worldHeight = MapManager.Instance?.WorldHeight ?? 128;
 
-            // Source position: sourceBot > packet X/Y
             Vector3 pos;
-            string objLabel;
 
             if (_hasSourceBot)
             {
@@ -158,16 +179,12 @@ namespace Fodinae.Scripts.Game
                 {
                     pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, worldHeight);
                 }
-
-                objLabel = $"SFX_{_effectType}_srcBot{_sourceBotId}";
             }
             else
             {
                 pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, worldHeight);
-                objLabel = $"SFX_{_effectType}_{_sourceX}_{_sourceY}";
             }
 
-            _gameObject = new GameObject(objLabel);
             _gameObject.transform.position = pos;
             _intendedWorldPosition = pos;
 
@@ -187,9 +204,23 @@ namespace Fodinae.Scripts.Game
                 }
             }
 
-            _spriteRenderer = _gameObject.AddComponent<SpriteRenderer>();
             _spriteRenderer.sortingOrder = -500;
             _spriteRenderer.color = _primaryColor;
+            _spriteRenderer.sprite = null;
+        }
+
+        /// <summary>
+        /// Start audio playback through the pooled slot's AudioSource.
+        /// The pool pre-sets the clip if it was loaded; otherwise audio is skipped.
+        /// </summary>
+        private void PlayAudio()
+        {
+            if (_audioSource != null && _audioSource.clip != null)
+            {
+                _audioSource.volume = AudioManager.Instance?.SfxVolume ?? 1f;
+                _audioSource.time = 0f;
+                _audioSource.Play();
+            }
         }
 
         private async UniTaskVoid LoadVisualAsync()
@@ -200,7 +231,7 @@ namespace Fodinae.Scripts.Game
                 var loader = ClientAssetLoader.Instance;
                 if (loader == null)
                 {
-                    Dispose();
+                    MarkVisualCompleted();
                     return;
                 }
 
@@ -239,13 +270,13 @@ namespace Fodinae.Scripts.Game
                 else
                 {
                     Debug.LogWarning($"[SFXEffectInstance] No visual data for {filename}");
-                    Dispose();
+                    MarkVisualCompleted();
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[SFXEffectInstance] Failed to load visual for {_effectType}: {ex.Message}");
-                Dispose();
+                MarkVisualCompleted();
             }
         }
 
@@ -266,7 +297,7 @@ namespace Fodinae.Scripts.Game
                 if (effectAsset == null)
                 {
                     Debug.LogWarning("[SFXEffectInstance] RuntimeEffekseerLoader.LoadEffectAsync returned null");
-                    Dispose();
+                    MarkVisualCompleted();
                     return false;
                 }
 
@@ -305,9 +336,9 @@ namespace Fodinae.Scripts.Game
                   $"localPos={_gameObject.transform.localPosition}, " +
                   $"parent={_gameObject.transform.parent?.name ?? "none"}");
 
-                // Remove SpriteRenderer since Effekseer renders independently
-                UnityEngine.Object.Destroy(_spriteRenderer);
-                _spriteRenderer = null;
+                // Disable SpriteRenderer since Effekseer renders independently;
+                // don't destroy it because it belongs to the pooled slot.
+                _spriteRenderer.enabled = false;
 
                 // Effekseer effects have their own lifetime; set generous fallback
                 _maxLifetime = 10f;
@@ -316,22 +347,24 @@ namespace Fodinae.Scripts.Game
             catch (Exception ex)
             {
                 Debug.LogWarning($"[SFXEffectInstance] Failed to load Effekseer effect: {ex.Message}");
-                Dispose();
+                MarkVisualCompleted();
                 return false;
             }
         }
 
         public void Update()
         {
-            if (_isDisposed)
+            if (_slotReleased)
             {
                 return;
             }
 
             _lifeTimer += Time.deltaTime;
 
+            // ── Visual update ────────────────────────────────────────────────
+
             // Advance sprite animation frame if applicable
-            if (_isAnimated && _animationFrames != null && _animationFrames.Length > 0)
+            if (!_visualCompleted && _isAnimated && _animationFrames != null && _animationFrames.Length > 0)
             {
                 _frameTimer += Time.deltaTime;
                 while (_frameTimer >= _frameDuration && _currentFrame < _animationFrames.Length)
@@ -343,6 +376,11 @@ namespace Fodinae.Scripts.Game
                 if (_currentFrame < _animationFrames.Length)
                 {
                     _spriteRenderer.sprite = _animationFrames[_currentFrame];
+                }
+                else
+                {
+                    // Animation finished
+                    _visualCompleted = true;
                 }
             }
 
@@ -372,50 +410,115 @@ namespace Fodinae.Scripts.Game
                 // Check if Effekseer effect has finished
                 if (!_effekseerHandle.exists)
                 {
-                    _isDisposed = true;
-                    CleanupGameObject();
-                    return;
+                    _visualCompleted = true;
                 }
             }
 
-            // Enforce max lifetime as a safety net
-            if (_lifeTimer >= _maxLifetime)
+            // Check visual completion via max lifetime (for static sprites, timed effects)
+            if (!_hasEffekseerEffect && !_isAnimated && _lifeTimer >= _maxLifetime)
             {
-                Dispose();
+                _visualCompleted = true;
+            }
+
+            // ── Audio completion check ───────────────────────────────────────
+            if (!_audioCompleted && _audioSource != null && _audioSource.clip != null)
+            {
+                if (!_audioSource.isPlaying && _lifeTimer > 0.1f)
+                {
+                    _audioCompleted = true;
+                }
+                else if (_lifeTimer >= _audioSource.clip.length + 0.1f)
+                {
+                    _audioCompleted = true;
+                }
+            }
+            else if (!_audioCompleted && (_audioSource == null || _audioSource.clip == null))
+            {
+                // No audio asset — mark completed immediately
+                _audioCompleted = true;
+            }
+
+            // ── Release slot when both complete ──────────────────────────────
+            if (_visualCompleted && _audioCompleted)
+            {
+                ReleaseSlot();
+                return;
+            }
+
+            // Safety net: force-release after generous timeout
+            if (_lifeTimer >= Mathf.Max(_maxLifetime + 5f, 30f))
+            {
+                ReleaseSlot();
             }
         }
 
-        public void Dispose()
+        /// <summary>
+        /// Mark the visual component as completed (e.g. on load failure).
+        /// Does NOT release the slot — waits for audio to finish too.
+        /// </summary>
+        private void MarkVisualCompleted()
         {
-            if (_isDisposed)
+            if (_visualCompleted)
             {
                 return;
             }
 
-            _isDisposed = true;
+            _visualCompleted = true;
+
+            if (_hasEffekseerEffect)
+            {
+                _effekseerHandle.Stop();
+            }
+        }
+
+        /// <summary>
+        /// Return the pooled slot to <see cref="SFXPool"/>.
+        /// After this call the instance is fully disposed and the manager
+        /// will remove it.
+        /// </summary>
+        private void ReleaseSlot()
+        {
+            if (_slotReleased)
+            {
+                return;
+            }
+
+            _slotReleased = true;
 
             if (_hasEffekseerEffect)
             {
                 _effekseerHandle.Stop();
             }
 
-            CleanupGameObject();
+            // Stop audio and return slot to pool
+            if (_slot != null)
+            {
+                SFXPool.Instance?.Release(_slot);
+                _slot = null;
+            }
+
+            _gameObject = null;
+            _spriteRenderer = null;
+            _audioSource = null;
         }
 
-        private void CleanupGameObject()
+        /// <summary>
+        /// Force-dispose the effect immediately. Marks visual as complete
+        /// and releases the slot regardless of audio state.
+        /// Called by <see cref="SFXEffectManager.ClearAllEffects"/>.
+        /// </summary>
+        public void Dispose()
         {
-            if (_gameObject != null)
+            if (_slotReleased)
             {
-                if (_audioSource != null)
-                {
-                    _audioSource.Stop();
-                }
-
-                UnityEngine.Object.Destroy(_gameObject);
-                _gameObject = null;
-                _spriteRenderer = null;
-                _audioSource = null;
+                return;
             }
+
+            MarkVisualCompleted();
+
+            // Don't wait for audio — force release
+            _audioCompleted = true;
+            ReleaseSlot();
         }
     }
 }
