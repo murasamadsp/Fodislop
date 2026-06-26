@@ -624,7 +624,6 @@ namespace Fodinae.Scripts.Networking
         private void HandleSFXPacket(SFXPacket packet)
         {
             _packetCount++;
-            AudioManager.Instance?.PlaySfx(packet.EffectType);
             SFXEffectManager.Instance?.PlayEffect(packet);
         }
 
