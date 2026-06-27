@@ -63,6 +63,7 @@ namespace Fodinae.Scripts.Player
             if (rb != null)
             {
                 rb.freezeRotation = true;
+                rb.simulated = false;
             }
             _robot = GetComponent<Robot>();
             if (_robot != null)
