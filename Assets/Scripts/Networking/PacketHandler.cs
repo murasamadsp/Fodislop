@@ -29,6 +29,10 @@ namespace Fodinae.Scripts.Networking
 {
     public class PacketHandler : MonoBehaviour
     {
+        public static PacketHandler Instance { get; private set; }
+
+        public static bool IsTeleportWindowOpen => Instance != null && Instance._openWindows.Any(w => w.tag == "teleport");
+
         private bool _isInitialized = false;
         private int _packetCount = 0;
         private int _worldInitPacketsReceived = 0;
@@ -61,6 +65,7 @@ namespace Fodinae.Scripts.Networking
 
         protected virtual void Awake()
         {
+            Instance = this;
             Debug.Log("[PacketHandler] Starting initialization...");
 
             // Verify Dependencies
@@ -122,6 +127,7 @@ namespace Fodinae.Scripts.Networking
                 ns.Subscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(HandleServerSelectItem);
                 ns.Subscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(HandleServerDeselect);
                 ns.Subscribe<DailyBonusStatePacket>(HandleDailyBonusStatePacket);
+                ns.Subscribe<TeleportPacket>(HandleTeleportPacket);
             }
 
             var mm = MapManager.Instance;
@@ -179,6 +185,7 @@ namespace Fodinae.Scripts.Networking
                 ns.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(HandleServerSelectItem);
                 ns.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(HandleServerDeselect);
                 ns.Unsubscribe<DailyBonusStatePacket>(HandleDailyBonusStatePacket);
+                ns.Unsubscribe<TeleportPacket>(HandleTeleportPacket);
             }
 
             // Close any open windows and dispose bindings
@@ -505,6 +512,24 @@ namespace Fodinae.Scripts.Networking
         {
             Debug.Log($"[PacketHandler] DailyBonusStatePacket: {packet.Enabled}");
             PlayerStatsModel.Instance.SetDailyBonusAvailable(packet.Enabled);
+        }
+
+        private void HandleTeleportPacket(TeleportPacket packet)
+        {
+            _packetCount++;
+            Debug.Log($"[PacketHandler] TeleportPacket: X={packet.X}, Y={packet.Y}, Smooth={packet.SmoothTransition}");
+
+            var player = FindObjectOfType<PlayerMovementController>();
+            if (player == null) return;
+
+            var mm = MapManager.Instance;
+            if (mm == null) return;
+
+            int unityX = packet.X;
+            int unityY = mm.WorldHeight - 1 - packet.Y;
+
+            player.transform.position = new Vector3(unityX + 0.5f, unityY + 0.5f, 0);
+            player.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
         }
 
         private void HandleSkillProgressPacket(SkillProgressPacket packet)
