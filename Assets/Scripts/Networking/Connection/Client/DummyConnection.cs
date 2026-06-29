@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
@@ -61,6 +62,9 @@ namespace MinesServer.Networking.Connection.Client
         private ItemType _pendingBonusItem;
         private int _pendingBonusAmount;
         private FPSCounter _fpsCounter;
+        private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
+        private List<(ushort X, ushort Y)> _teleportDestinations = new();
+        private bool _teleportWindowOpen;
 
         private static readonly CellType[] _allCellTypes = new CellType[]
         {
@@ -181,10 +185,13 @@ namespace MinesServer.Networking.Connection.Client
                 Debug.Log($"[DummyConnection] Received ActionClientPacket: X={actionPacket.X}, Y={actionPacket.Y}, Payload={actionPacket.Payload.GetType().Name}");
                 if (actionPacket.Payload is MovePacket move)
                 {
+                    if (_teleportWindowOpen) return;
+
                     Debug.Log($"  - Move to ({move.X}, {move.Y})");
                     _x = move.X;
                     _y = move.Y;
                     UpdatePosition().Forget();
+                    CheckTeleportEntry();
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
@@ -338,6 +345,9 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
 
                     // Send test packs
+                    _teleportPositions.Clear();
+                    _teleportPositions.Add((27, 50));
+                    _teleportPositions.Add((227, 50));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
                         new PackPacket(27, 50, PackType.Teleport, 0, 1),
                         new PackPacket(227, 50, PackType.Teleport, 0, 1),
@@ -473,6 +483,8 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     new PackPacket(frontX, frontY, packType, 0, 0)
                 })));
+                if (packType == PackType.Teleport)
+                    _teleportPositions.Add((frontX, frontY));
                 ConsumeItem(_selectedItemType, 1);
             }
             else if (_selectedItemType == ItemType.Rem)
@@ -527,6 +539,20 @@ namespace MinesServer.Networking.Connection.Client
             {
                 HandleDailyBonusClaim();
             }
+            else if (packet.WindowTag == "teleport")
+            {
+                if (!_teleportWindowOpen) return;
+
+                if (packet.ElementIndex == 0)
+                {
+                    _teleportWindowOpen = false;
+                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                }
+                else
+                {
+                    HandleTeleportClick(packet.ElementIndex - 1);
+                }
+            }
         }
 
         private void HandleDailyBonusClaim()
@@ -543,6 +569,180 @@ namespace MinesServer.Networking.Connection.Client
                 new Dictionary<ItemType, long> { { rewardItem, newQty } })));
 
             _bonusClaimed = true;
+        }
+
+        private void CheckTeleportEntry()
+        {
+            if (!_teleportPositions.Contains((_x, _y)))
+                return;
+
+            SendTeleportWindow();
+        }
+
+        private void SendTeleportWindow()
+        {
+            _teleportDestinations = _teleportPositions
+                .Where(tp => tp.X != _x || tp.Y != _y)
+                .ToList();
+
+            if (_teleportDestinations.Count == 0)
+            {
+                SendTeleportWindowNoDestinations();
+                return;
+            }
+
+            var rows = new IGUIComponentPacket[_teleportDestinations.Count];
+            for (int i = 0; i < _teleportDestinations.Count; i++)
+            {
+                var (destX, destY) = _teleportDestinations[i];
+                rows[i] = new TextPacket
+                {
+                    Text = $"<color=white>Телепорт на ({destX,5}, {destY,5})</color>   <color=#B2A680>[ТП]</color>",
+                    OnClickContext = ".",
+                    Style = new GUIStylePacket
+                    {
+                        Background = System.Drawing.Color.FromArgb(242, 26, 26, 26),
+                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                        BorderWidth = 2,
+                        Padding = new Margins(8, 12, 8, 12),
+                        Margin = new Margins(0, 0, 4, 0)
+                    }
+                };
+            }
+
+            var scrollViewer = new ScrollViewerPacket
+            {
+                VerticalScrollBar = ScrollbarVisibility.Auto,
+                HorizontalScrollBar = ScrollbarVisibility.Auto,
+                Children = rows
+            };
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(2, 8, 2, 8)
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    new DockPanelPacket
+                    {
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Top")
+                        },
+                        Style = new GUIStylePacket
+                        {
+                            Margin = new Margins(0, 0, 10, 0),
+                            Padding = new Margins(0, 0, 0, 0)
+                        },
+                        Children = new List<IGUIComponentPacket>
+                        {
+                    new TextPacket
+                    {
+                        Text = "<color=#B2A680>Телепорты</color>",
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Left")
+                    },
+                        },
+                            new TextPacket
+                            {
+                    Text = "<color=#B3B3B3>×</color>",
+                    OnClickContext = "teleport_close",
+                    AttachedProperties = new StringPairPacket[]
+                    {
+                        new("DockPanel.Dock", "Right")
+                    },
+                            }
+                        }
+                    },
+                    scrollViewer
+                }
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
+            _teleportWindowOpen = true;
+            Debug.Log($"[DummyConnection] Teleport window opened with {_teleportDestinations.Count} destinations");
+        }
+
+        private void SendTeleportWindowNoDestinations()
+        {
+            var text = new TextPacket
+            {
+                Text = "<color=gray>Нет доступных телепортов</color>"
+            };
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(0, 0, 0, 0)
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    new DockPanelPacket
+                    {
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Top")
+                        },
+                        Style = new GUIStylePacket
+                        {
+                            Margin = new Margins(0, 0, 0, 0),
+                            Padding = new Margins(0, 0, 0, 0)
+                        },
+                        Children = new List<IGUIComponentPacket>
+                        {
+                    new TextPacket
+                    {
+                        Text = "<color=#B2A680>Телепорты</color>",
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Left")
+                    },
+                        },
+                            new TextPacket
+                            {
+                    Text = "<color=#B3B3B3>×</color>",
+                    OnClickContext = "teleport_close",
+                    AttachedProperties = new StringPairPacket[]
+                    {
+                        new("DockPanel.Dock", "Right")
+                    },
+                            }
+                        }
+                    },
+                    text
+                }
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
+            _teleportWindowOpen = true;
+            Debug.Log("[DummyConnection] Teleport window opened with no destinations");
+        }
+
+        private void HandleTeleportClick(int index)
+        {
+            if (index < 0 || index >= _teleportDestinations.Count)
+                return;
+
+            var (destX, destY) = _teleportDestinations[index];
+            Debug.Log($"[DummyConnection] Teleporting to ({destX}, {destY})");
+
+            _x = destX;
+            _y = destY;
+
+            _teleportWindowOpen = false;
+            OnReceived?.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
+            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+            UpdatePosition().Forget();
         }
 
         private static ItemType PickRandomBonusItem()
