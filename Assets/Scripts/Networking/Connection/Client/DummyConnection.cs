@@ -68,6 +68,7 @@ namespace MinesServer.Networking.Connection.Client
         private bool _teleportWindowOpen;
         private readonly Dictionary<string, long> _activeBuffs = new();
         private bool _buffLoopStarted;
+        private bool _modalWindowOpen;
 
         private static readonly CellType[] _allCellTypes = new CellType[]
         {
@@ -183,12 +184,55 @@ namespace MinesServer.Networking.Connection.Client
 
         public void SendAsync(ClientPacket packet)
         {
+            if (_modalWindowOpen)
+            {
+                if (packet.Data is ElementClickPacket ecp && ecp.WindowTag == "modal")
+                {
+                    _modalWindowOpen = false;
+                    Debug.Log("[DummyConnection] Modal acknowledged by client");
+                    return;
+                }
+                Debug.Log($"[DummyConnection] Blocked while modal open: {packet.Data.GetType().Name}");
+                return;
+            }
+
             if (packet.Data is ActionClientPacket actionPacket)
             {
                 Debug.Log($"[DummyConnection] Received ActionClientPacket: X={actionPacket.X}, Y={actionPacket.Y}, Payload={actionPacket.Payload.GetType().Name}");
                 if (actionPacket.Payload is MovePacket move)
                 {
                     if (_teleportWindowOpen) return;
+
+                    int dx = Math.Abs(move.X - _x);
+                    int dy = Math.Abs(move.Y - _y);
+                    bool isAdjacent = (dx == 1 && dy == 0) || (dx == 0 && dy == 1);
+
+                    if (!isAdjacent)
+                    {
+                        Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not adjacent to ({_x},{_y})");
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
+                            new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot)
+                        })));
+                        return;
+                    }
+
+                    if (MapStorage.Instance?.CellLayer != null && MapStorage.Instance.IsReady)
+                    {
+                        var cellType = MapStorage.Instance.GetCell(move.X, move.Y);
+                        var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
+                        if (cellConfig.HasValue)
+                        {
+                            bool isPassable = ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
+                            if (!isPassable)
+                            {
+                                Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not passable ({cellType})");
+                                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
+                                    new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot)
+                                })));
+                                return;
+                            }
+                        }
+                    }
 
                     Debug.Log($"  - Move to ({move.X}, {move.Y})");
                     _x = move.X;
@@ -609,6 +653,16 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     HandleTeleportClick(packet.ElementIndex - 1);
                 }
+            }
+            else if (packet.WindowTag == "test_modal")
+            {
+                _modalWindowOpen = true;
+                OnReceived?.Invoke(new ServerPacket(new ModalWindowPacket(
+                    "Тестовое окно",
+                    "Это модальное окно вызывается из HUD.\n\nНажмите OK чтобы продолжить.",
+                    "OK",
+                    "")));
+                Debug.Log("[DummyConnection] Modal window sent to client");
             }
         }
 
