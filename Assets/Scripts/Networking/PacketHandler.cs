@@ -33,12 +33,14 @@ namespace Fodinae.Scripts.Networking
         public static PacketHandler Instance { get; private set; }
 
         public static bool IsTeleportWindowOpen => Instance != null && Instance._openWindows.Any(w => w.tag == "teleport");
+        public static bool IsModalOpen => Instance?._modalWindowHandler?.IsShowing ?? false;
 
         private bool _isInitialized = false;
         private int _packetCount = 0;
         private int _worldInitPacketsReceived = 0;
         private int _mapRegionPacketsReceived = 0;
         private UIDocument _uiDocument;
+        private ModalWindowHandler _modalWindowHandler;
         private readonly List<(string tag, VisualElement root, WindowBinding binding, List<VisualElement> clickableElements)> _openWindows = new();
 
         public void HandleWorldInitPacket(WorldInitPacket worldInitPacket)
@@ -87,6 +89,10 @@ namespace Fodinae.Scripts.Networking
             {
                 Debug.LogWarning("[PacketHandler] UIDocument not found - window packets will not be displayed");
             }
+            else
+            {
+                _modalWindowHandler = new ModalWindowHandler(_uiDocument);
+            }
 
             // Subscribe to events via NetworkService
             var ns = NetworkService.Instance;
@@ -132,6 +138,7 @@ namespace Fodinae.Scripts.Networking
                 ns.Subscribe<AddStatusLinePacket>(HandleAddStatusLine);
                 ns.Subscribe<ClearStatusLinePacket>(HandleClearStatusLine);
                 ns.Subscribe<ClearStatusPacket>(HandleClearStatus);
+                ns.Subscribe<ModalWindowPacket>(HandleModalWindowPacket);
             }
 
             var mm = MapManager.Instance;
@@ -193,9 +200,11 @@ namespace Fodinae.Scripts.Networking
                 ns.Unsubscribe<AddStatusLinePacket>(HandleAddStatusLine);
                 ns.Unsubscribe<ClearStatusLinePacket>(HandleClearStatusLine);
                 ns.Unsubscribe<ClearStatusPacket>(HandleClearStatus);
+                ns.Unsubscribe<ModalWindowPacket>(HandleModalWindowPacket);
             }
 
-            // Close any open windows and dispose bindings
+            // Close modal and any open windows
+            _modalWindowHandler?.Hide();
             foreach (var (_, root, binding, _) in _openWindows)
             {
                 binding.Dispose();
@@ -324,9 +333,10 @@ namespace Fodinae.Scripts.Networking
             _packetCount++;
             Debug.Log("[PacketHandler] Handling CloseWindowPacket");
 
+            _modalWindowHandler?.Hide();
+
             if (_openWindows.Count == 0) return;
 
-            // Close the most recently opened window (no window tag in CloseWindowPacket)
             var (_, root, binding, _) = _openWindows[^1];
             binding.Dispose();
             _uiDocument.rootVisualElement.Remove(root);
@@ -686,6 +696,20 @@ namespace Fodinae.Scripts.Networking
             if (packet.Text.Count > 1)
                 long.TryParse(packet.Text[1], out expiry);
             PlayerStatsModel.Instance.AddStatusLine(packet.Tag, packet.Text.ToArray(), unityColor, packet.BlinkRate, expiry);
+        }
+
+        private void HandleModalWindowPacket(ModalWindowPacket packet)
+        {
+            _packetCount++;
+            Debug.Log("[PacketHandler] Handling ModalWindowPacket");
+
+            if (_modalWindowHandler == null)
+            {
+                Debug.LogError("[PacketHandler] ModalWindowHandler not initialized");
+                return;
+            }
+
+            _modalWindowHandler.Show(packet);
         }
 
         private void HandleClearStatusLine(ClearStatusLinePacket packet)

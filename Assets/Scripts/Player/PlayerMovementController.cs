@@ -209,7 +209,7 @@ namespace Fodinae.Scripts.Player
                 return;
             }
 
-            if (PacketHandler.IsTeleportWindowOpen) return;
+            if (PacketHandler.IsTeleportWindowOpen || PacketHandler.IsModalOpen) return;
 
             if (Time.time - _lastDigTime < ServerConfig.Instance.DigCooldown) return;
 

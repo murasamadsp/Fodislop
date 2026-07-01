@@ -975,6 +975,7 @@ namespace Fodinae.Scripts.UI
             CreateMyBuildingsButton(root, () => _buildingsPopup.style.display = DisplayStyle.Flex);
             CreateFaqButton(root, () => _faqPopup.style.display = DisplayStyle.Flex);
             CreateProgrammatorButton(root, () => _programmatorPopup.style.display = DisplayStyle.Flex);
+            CreateModalTestButton(root);
         }
 
         private VisualElement CreatePopup(string title)
@@ -1228,6 +1229,44 @@ namespace Fodinae.Scripts.UI
             btn.style.top = 10;
             btn.style.right = 10;
             btn.style.width = 100;
+            btn.style.height = 28;
+            btn.style.fontSize = 12;
+            btn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            btn.style.color = _textColor;
+            btn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            btn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f);
+            btn.style.borderTopWidth = 2;
+            btn.style.borderBottomWidth = 2;
+            btn.style.borderLeftWidth = 2;
+            btn.style.borderRightWidth = 2;
+            btn.style.borderTopColor = _panelBorderColor;
+            btn.style.borderBottomColor = _panelBorderColor;
+            btn.style.borderLeftColor = _panelBorderColor;
+            btn.style.borderRightColor = _panelBorderColor;
+            btn.style.paddingTop = 0;
+            btn.style.paddingBottom = 0;
+            btn.style.paddingLeft = 0;
+            btn.style.paddingRight = 0;
+
+            btn.RegisterCallback<MouseEnterEvent>(_ =>
+                btn.style.backgroundColor = new Color(0.2f, 0.2f, 0.3f, 0.85f));
+            btn.RegisterCallback<MouseLeaveEvent>(_ =>
+                btn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f));
+
+            root.Add(btn);
+        }
+
+        private void CreateModalTestButton(VisualElement root)
+        {
+            var btn = new Button(() =>
+            {
+                NetworkService.Instance.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
+            });
+            btn.text = "Тест модального окна";
+            btn.style.position = Position.Absolute;
+            btn.style.top = 10;
+            btn.style.right = 10 + (100 + 6) * 3;
+            btn.style.width = 160;
             btn.style.height = 28;
             btn.style.fontSize = 12;
             btn.style.unityFontStyleAndWeight = FontStyle.Bold;
