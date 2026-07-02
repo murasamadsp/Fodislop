@@ -381,7 +381,7 @@ namespace Fodinae.Scripts.World
                     Atlas = atlas,
                     FrameCount = fts.Count,
                     FrameHeight = this._sh,
-                    FPS = total > 0 ? 1000f / (total / fts.Count) : 10f,
+                    FPS = total > 0 ? 100f / (total / fts.Count) : 10f,
                 };
             }
 
