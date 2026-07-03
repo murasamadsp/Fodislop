@@ -67,11 +67,20 @@ namespace Fodinae.Scripts.UI
         private VisualElement _currentSkillRow;
         private int _skillCountInRow = 0;
         private Button _chatButton;
+        private VisualElement _statusPanel;
+        private readonly Dictionary<string, VisualElement> _statusLineElements = new();
 
         private VisualElement _respawnPopup;
         private VisualElement _buildingsPopup;
         private VisualElement _faqPopup;
         private VisualElement _programmatorPopup;
+
+        private Button _missionButton;
+        private VisualElement _missionPanel;
+        private Label _missionTitleLabel;
+        private Label _missionDescLabel;
+        private VisualElement _missionProgressFill;
+        private Label _missionProgressLabel;
 
         async void Start()
         {
@@ -87,6 +96,10 @@ namespace Fodinae.Scripts.UI
                 PlayerStatsModel.Instance.OnSkillProgress -= OnSkillProgress;
             if (PlayerStatsModel.Instance != null)
                 PlayerStatsModel.Instance.OnDailyBonusChanged -= UpdateDailyBonusPanel;
+            if (PlayerStatsModel.Instance != null)
+                PlayerStatsModel.Instance.OnStatusLinesChanged -= RebuildStatusPanel;
+            if (PlayerStatsModel.Instance != null)
+                PlayerStatsModel.Instance.OnMissionChanged -= UpdateMissionPanel;
             if (GlobalChatUI.Instance != null)
                 GlobalChatUI.Instance.Hide();
         }
@@ -119,9 +132,15 @@ namespace Fodinae.Scripts.UI
             CreateAutoDigToggle(_doc.rootVisualElement);
             CreateChatButton(_doc.rootVisualElement);
             CreateButtonsAndPopups(_doc.rootVisualElement);
+            CreateStatusPanel(_doc.rootVisualElement);
             CreateSkillContainer(_doc.rootVisualElement);
+            CreateMissionPanel(_doc.rootVisualElement);
             if (PlayerStatsModel.Instance != null)
+            {
                 PlayerStatsModel.Instance.OnSkillProgress += OnSkillProgress;
+                PlayerStatsModel.Instance.OnStatusLinesChanged += RebuildStatusPanel;
+                PlayerStatsModel.Instance.OnMissionChanged += UpdateMissionPanel;
+            }
             var player = FindObjectOfType<PlayerMovementController>();
             if (player != null)
                 player.OnAutoDigChanged += UpdateAutoDigButton;
@@ -407,6 +426,24 @@ namespace Fodinae.Scripts.UI
             _bonusButton.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
             if (_isBonusOpen)
                 UpdateDailyBonusPanel();
+            UpdateStatusPanelPosition();
+        }
+
+        private void UpdateStatusPanelPosition()
+        {
+            if (_statusPanel == null) return;
+            if (_isBonusOpen && _bonusPanel != null)
+            {
+                _bonusPanel.schedule.Execute(() =>
+                {
+                    if (!_isBonusOpen) return;
+                    _statusPanel.style.top = 10 + GAP + _bonusPanel.resolvedStyle.height;
+                }).StartingIn(16);
+            }
+            else
+            {
+                _statusPanel.style.top = 10 + BTN_SIZE + GAP;
+            }
         }
 
         private void UpdateDailyBonusPanel()
@@ -427,6 +464,130 @@ namespace Fodinae.Scripts.UI
                 _bonusStatusLabel.style.color = Color.gray;
                 _bonusClaimButton.style.display = DisplayStyle.None;
             }
+
+            UpdateStatusPanelPosition();
+        }
+
+        private void CreateStatusPanel(VisualElement root)
+        {
+            _statusPanel = new VisualElement();
+            _statusPanel.name = "StatusPanel";
+            _statusPanel.style.position = Position.Absolute;
+            _statusPanel.style.left = 10 + PANEL_WIDTH + GAP;
+            _statusPanel.style.top = 10 + BTN_SIZE + GAP;
+            _statusPanel.style.width = 220;
+            _statusPanel.style.paddingTop = PADDING;
+            _statusPanel.style.paddingBottom = PADDING;
+            _statusPanel.style.paddingLeft = PADDING;
+            _statusPanel.style.paddingRight = PADDING;
+            _statusPanel.style.backgroundColor = _panelBgColor;
+            _statusPanel.style.borderTopWidth = 2;
+            _statusPanel.style.borderBottomWidth = 2;
+            _statusPanel.style.borderLeftWidth = 2;
+            _statusPanel.style.borderRightWidth = 2;
+            _statusPanel.style.borderTopColor = _panelBorderColor;
+            _statusPanel.style.borderBottomColor = _panelBorderColor;
+            _statusPanel.style.borderLeftColor = _panelBorderColor;
+            _statusPanel.style.borderRightColor = _panelBorderColor;
+            _statusPanel.style.flexDirection = FlexDirection.Column;
+            _statusPanel.style.display = DisplayStyle.None;
+            root.Add(_statusPanel);
+        }
+
+        private void RebuildStatusPanel()
+        {
+            if (_statusPanel == null) return;
+            var stats = PlayerStatsModel.Instance;
+            if (stats == null) return;
+
+            var currentLines = stats.StatusLines;
+            if (currentLines.Count == 0)
+            {
+                _statusPanel.style.display = DisplayStyle.None;
+                _statusLineElements.Clear();
+                _statusPanel.Clear();
+                return;
+            }
+            _statusPanel.style.display = DisplayStyle.Flex;
+            var toRemove = new List<string>();
+            foreach (var kvp in _statusLineElements)
+            {
+                if (!currentLines.ContainsKey(kvp.Key))
+                    toRemove.Add(kvp.Key);
+            }
+            foreach (var key in toRemove)
+            {
+                _statusPanel.Remove(_statusLineElements[key]);
+                _statusLineElements.Remove(key);
+            }
+
+            foreach (var kvp in currentLines)
+            {
+                if (_statusLineElements.TryGetValue(kvp.Key, out var existing))
+                {
+                    var label = existing as Label;
+                    if (label != null)
+                        UpdateStatusLabel(label, kvp.Value);
+                    label.style.color = kvp.Value.Color;
+                }
+                else
+                {
+                    var row = new Label();
+                    row.style.fontSize = LABEL_FONT_SIZE;
+                    row.style.color = kvp.Value.Color;
+                    row.style.marginBottom = 2;
+                    row.style.whiteSpace = WhiteSpace.Normal;
+                    UpdateStatusLabel(row, kvp.Value);
+                    _statusPanel.Add(row);
+
+                    if (kvp.Value.Expiry > 0)
+                    {
+                        row.schedule.Execute(() =>
+                        {
+                            if (_statusPanel == null || !_statusLineElements.ContainsKey(kvp.Key))
+                                return;
+                            var entry = stats.StatusLines.GetValueOrDefault(kvp.Key);
+                            if (entry.Text == null)
+                                return;
+                            UpdateStatusLabel(row, entry);
+                        }).Every(1000);
+                    }
+
+                    _statusLineElements[kvp.Key] = row;
+                }
+            }
+        }
+
+        private static void UpdateStatusLabel(Label label, StatusLineEntry entry)
+        {
+            if (entry.Text == null || entry.Text.Length == 0)
+            {
+                label.text = "";
+                return;
+            }
+
+            var name = entry.Text[0];
+            if (entry.Expiry > 0)
+            {
+                var remaining = Math.Max(0, entry.Expiry - DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                label.text = $"{name}: {FormatTime(remaining)}";
+            }
+            else if (entry.Text.Length > 1)
+            {
+                label.text = $"{name}: {entry.Text[1]}";
+            }
+            else
+            {
+                label.text = name;
+            }
+        }
+
+        private static string FormatTime(long seconds)
+        {
+            var ts = TimeSpan.FromSeconds(seconds);
+            if (ts.TotalHours >= 1)
+                return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+            return $"{ts.Minutes:D2}:{ts.Seconds:D2}";
         }
 
         private void ClaimDailyBonus()
@@ -825,6 +986,9 @@ namespace Fodinae.Scripts.UI
             CreateMyBuildingsButton(root, () => _buildingsPopup.style.display = DisplayStyle.Flex);
             CreateFaqButton(root, () => _faqPopup.style.display = DisplayStyle.Flex);
             CreateProgrammatorButton(root, () => _programmatorPopup.style.display = DisplayStyle.Flex);
+            CreateModalTestButton(root);
+            CreateClanButtons(root);
+            CreateMissionButton(root);
         }
 
         private VisualElement CreatePopup(string title)
@@ -1103,6 +1267,251 @@ namespace Fodinae.Scripts.UI
                 btn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f));
 
             root.Add(btn);
+        }
+
+        private void CreateModalTestButton(VisualElement root)
+        {
+            var btn = new Button(() =>
+            {
+                NetworkService.Instance.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
+            });
+            btn.text = "Тест модального окна";
+            btn.style.position = Position.Absolute;
+            btn.style.top = 10;
+            btn.style.right = 10 + (100 + 6) * 3;
+            btn.style.width = 160;
+            btn.style.height = 28;
+            btn.style.fontSize = 12;
+            btn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            btn.style.color = _textColor;
+            btn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            btn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f);
+            btn.style.borderTopWidth = 2;
+            btn.style.borderBottomWidth = 2;
+            btn.style.borderLeftWidth = 2;
+            btn.style.borderRightWidth = 2;
+            btn.style.borderTopColor = _panelBorderColor;
+            btn.style.borderBottomColor = _panelBorderColor;
+            btn.style.borderLeftColor = _panelBorderColor;
+            btn.style.borderRightColor = _panelBorderColor;
+            btn.style.paddingTop = 0;
+            btn.style.paddingBottom = 0;
+            btn.style.paddingLeft = 0;
+            btn.style.paddingRight = 0;
+
+            btn.RegisterCallback<MouseEnterEvent>(_ =>
+                btn.style.backgroundColor = new Color(0.2f, 0.2f, 0.3f, 0.85f));
+            btn.RegisterCallback<MouseLeaveEvent>(_ =>
+                btn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f));
+
+            root.Add(btn);
+        }
+
+        private void CreateClanButtons(VisualElement root)
+        {
+            var joinBtn = new Button(() =>
+            {
+                NetworkService.Instance.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
+            });
+            joinBtn.text = "Вступить в клан";
+            joinBtn.style.position = Position.Absolute;
+            joinBtn.style.top = 10;
+            joinBtn.style.right = 10 + (100 + 6) * 3 + 160 + 6;
+            joinBtn.style.width = 140;
+            joinBtn.style.height = 28;
+            joinBtn.style.fontSize = 12;
+            joinBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            joinBtn.style.color = _textColor;
+            joinBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            joinBtn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f);
+            joinBtn.style.borderTopWidth = 2;
+            joinBtn.style.borderBottomWidth = 2;
+            joinBtn.style.borderLeftWidth = 2;
+            joinBtn.style.borderRightWidth = 2;
+            joinBtn.style.borderTopColor = _panelBorderColor;
+            joinBtn.style.borderBottomColor = _panelBorderColor;
+            joinBtn.style.borderLeftColor = _panelBorderColor;
+            joinBtn.style.borderRightColor = _panelBorderColor;
+            joinBtn.style.paddingTop = 0;
+            joinBtn.style.paddingBottom = 0;
+            joinBtn.style.paddingLeft = 0;
+            joinBtn.style.paddingRight = 0;
+
+            joinBtn.RegisterCallback<MouseEnterEvent>(_ =>
+                joinBtn.style.backgroundColor = new Color(0.2f, 0.2f, 0.3f, 0.85f));
+            joinBtn.RegisterCallback<MouseLeaveEvent>(_ =>
+                joinBtn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f));
+
+            root.Add(joinBtn);
+
+            var leaveBtn = new Button(() =>
+            {
+                NetworkService.Instance.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
+            });
+            leaveBtn.text = "Выйти из клана";
+            leaveBtn.style.position = Position.Absolute;
+            leaveBtn.style.top = 10 + 28 + 6;
+            leaveBtn.style.right = 10 + (100 + 6) * 3 + 160 + 6;
+            leaveBtn.style.width = 140;
+            leaveBtn.style.height = 28;
+            leaveBtn.style.fontSize = 12;
+            leaveBtn.style.unityFontStyleAndWeight = FontStyle.Bold;
+            leaveBtn.style.color = _textColor;
+            leaveBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            leaveBtn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f);
+            leaveBtn.style.borderTopWidth = 2;
+            leaveBtn.style.borderBottomWidth = 2;
+            leaveBtn.style.borderLeftWidth = 2;
+            leaveBtn.style.borderRightWidth = 2;
+            leaveBtn.style.borderTopColor = _panelBorderColor;
+            leaveBtn.style.borderBottomColor = _panelBorderColor;
+            leaveBtn.style.borderLeftColor = _panelBorderColor;
+            leaveBtn.style.borderRightColor = _panelBorderColor;
+            leaveBtn.style.paddingTop = 0;
+            leaveBtn.style.paddingBottom = 0;
+            leaveBtn.style.paddingLeft = 0;
+            leaveBtn.style.paddingRight = 0;
+
+            leaveBtn.RegisterCallback<MouseEnterEvent>(_ =>
+                leaveBtn.style.backgroundColor = new Color(0.2f, 0.2f, 0.3f, 0.85f));
+            leaveBtn.RegisterCallback<MouseLeaveEvent>(_ =>
+                leaveBtn.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f));
+
+            root.Add(leaveBtn);
+        }
+
+        private void CreateMissionButton(VisualElement root)
+        {
+            _missionButton = new Button(() =>
+            {
+                NetworkService.Instance.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
+            });
+            _missionButton.text = "Миссии";
+            _missionButton.style.position = Position.Absolute;
+            _missionButton.style.top = 10 + 28 + 6 + 28 + 6;
+            _missionButton.style.right = 10 + (100 + 6) * 3 + 160 + 6;
+            _missionButton.style.width = 140;
+            _missionButton.style.height = 28;
+            _missionButton.style.fontSize = 12;
+            _missionButton.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _missionButton.style.color = _textColor;
+            _missionButton.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _missionButton.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f);
+            _missionButton.style.borderTopWidth = 2;
+            _missionButton.style.borderBottomWidth = 2;
+            _missionButton.style.borderLeftWidth = 2;
+            _missionButton.style.borderRightWidth = 2;
+            _missionButton.style.borderTopColor = _panelBorderColor;
+            _missionButton.style.borderBottomColor = _panelBorderColor;
+            _missionButton.style.borderLeftColor = _panelBorderColor;
+            _missionButton.style.borderRightColor = _panelBorderColor;
+            _missionButton.style.paddingTop = 0;
+            _missionButton.style.paddingBottom = 0;
+            _missionButton.style.paddingLeft = 0;
+            _missionButton.style.paddingRight = 0;
+
+            _missionButton.RegisterCallback<MouseEnterEvent>(_ =>
+                _missionButton.style.backgroundColor = new Color(0.2f, 0.2f, 0.3f, 0.85f));
+            _missionButton.RegisterCallback<MouseLeaveEvent>(_ =>
+                _missionButton.style.backgroundColor = new Color(0.1f, 0.1f, 0.15f, 0.85f));
+
+            root.Add(_missionButton);
+        }
+
+        private void CreateMissionPanel(VisualElement root)
+        {
+            _missionPanel = new VisualElement();
+            _missionPanel.name = "MissionPanel";
+            _missionPanel.style.position = Position.Absolute;
+            _missionPanel.style.top = 50;
+            _missionPanel.style.left = new Length(50, LengthUnit.Percent);
+            _missionPanel.style.translate = new Translate(new Length(-50, LengthUnit.Percent), 0);
+            _missionPanel.style.minWidth = 300;
+            _missionPanel.style.backgroundColor = _panelBgColor;
+            _missionPanel.style.borderTopWidth = 2;
+            _missionPanel.style.borderBottomWidth = 2;
+            _missionPanel.style.borderLeftWidth = 2;
+            _missionPanel.style.borderRightWidth = 2;
+            _missionPanel.style.borderTopColor = _panelBorderColor;
+            _missionPanel.style.borderBottomColor = _panelBorderColor;
+            _missionPanel.style.borderLeftColor = _panelBorderColor;
+            _missionPanel.style.borderRightColor = _panelBorderColor;
+            _missionPanel.style.paddingTop = PADDING;
+            _missionPanel.style.paddingBottom = PADDING;
+            _missionPanel.style.paddingLeft = PADDING;
+            _missionPanel.style.paddingRight = PADDING;
+            _missionPanel.style.flexDirection = FlexDirection.Column;
+            _missionPanel.style.display = DisplayStyle.None;
+
+            _missionTitleLabel = new Label("---");
+            _missionTitleLabel.style.fontSize = TITLE_FONT_SIZE;
+            _missionTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _missionTitleLabel.style.color = _accentColor;
+            _missionTitleLabel.style.marginBottom = 4;
+            _missionPanel.Add(_missionTitleLabel);
+
+            _missionDescLabel = new Label("");
+            _missionDescLabel.style.fontSize = LABEL_FONT_SIZE;
+            _missionDescLabel.style.color = _textColor;
+            _missionDescLabel.style.whiteSpace = WhiteSpace.Normal;
+            _missionDescLabel.style.marginBottom = 8;
+            _missionPanel.Add(_missionDescLabel);
+
+            var progressRow = new VisualElement();
+            progressRow.style.flexDirection = FlexDirection.Row;
+            progressRow.style.alignItems = Align.Center;
+            progressRow.style.marginBottom = 4;
+
+            _missionProgressLabel = new Label("0/0");
+            _missionProgressLabel.style.fontSize = LABEL_FONT_SIZE;
+            _missionProgressLabel.style.color = _textColor;
+            _missionProgressLabel.style.marginRight = 8;
+            _missionProgressLabel.style.minWidth = 50;
+            progressRow.Add(_missionProgressLabel);
+
+            var barBg = new VisualElement();
+            barBg.style.flexGrow = 1;
+            barBg.style.height = 16;
+            barBg.style.backgroundColor = _hpBarBgColor;
+            barBg.style.borderTopLeftRadius = 3;
+            barBg.style.borderTopRightRadius = 3;
+            barBg.style.borderBottomLeftRadius = 3;
+            barBg.style.borderBottomRightRadius = 3;
+
+            _missionProgressFill = new VisualElement();
+            _missionProgressFill.style.height = 16;
+            _missionProgressFill.style.width = 0;
+            _missionProgressFill.style.borderTopLeftRadius = 3;
+            _missionProgressFill.style.borderTopRightRadius = 3;
+            _missionProgressFill.style.borderBottomLeftRadius = 3;
+            _missionProgressFill.style.borderBottomRightRadius = 3;
+            _missionProgressFill.style.backgroundColor = new Color(0.7f, 0.7f, 0.2f, 1f);
+            barBg.Add(_missionProgressFill);
+
+            progressRow.Add(barBg);
+            _missionPanel.Add(progressRow);
+
+            root.Add(_missionPanel);
+        }
+
+        private void UpdateMissionPanel()
+        {
+            var stats = PlayerStatsModel.Instance;
+            if (stats == null) return;
+
+            if (!stats.IsMissionActive)
+            {
+                _missionPanel.style.display = DisplayStyle.None;
+                return;
+            }
+
+            _missionPanel.style.display = DisplayStyle.Flex;
+            _missionTitleLabel.text = stats.MissionTitle ?? "Миссия";
+            _missionDescLabel.text = stats.MissionDescription ?? "";
+
+            float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
+            _missionProgressFill.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
+            _missionProgressLabel.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
         }
 
         private VisualElement CreateProgrammatorPopup()
