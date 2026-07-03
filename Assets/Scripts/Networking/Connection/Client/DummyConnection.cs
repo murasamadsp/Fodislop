@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
@@ -24,6 +25,8 @@ using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using MinesServer.Networking.Server.Packets.Information;
+using MinesServer.Networking.Server.Packets.Information.StatusPanel;
+using MinesServer.Networking.Server.Packets.Mission;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
@@ -61,6 +64,35 @@ namespace MinesServer.Networking.Connection.Client
         private ItemType _pendingBonusItem;
         private int _pendingBonusAmount;
         private FPSCounter _fpsCounter;
+        private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
+        private List<(ushort X, ushort Y)> _teleportDestinations = new();
+        private bool _teleportWindowOpen;
+        private readonly Dictionary<string, long> _activeBuffs = new();
+        private bool _buffLoopStarted;
+        private const int _maxDepth = 200;
+        private bool _depthWarningActive;
+        private int _health = 500;
+
+        private struct MissionDef
+        {
+            public int Id;
+            public string Title;
+            public string Description;
+            public long Target;
+            public ItemType RewardItem;
+            public long RewardAmount;
+        }
+
+        private static readonly MissionDef[] _missions = new[]
+        {
+            new MissionDef { Id = 0, Title = "Копатель-ученик", Description = "Сломайте 50 блоков", Target = 50, RewardItem = ItemType.Cred, RewardAmount = 25 },
+            new MissionDef { Id = 1, Title = "Опытный копатель", Description = "Сломайте 200 блоков", Target = 200, RewardItem = ItemType.Cred, RewardAmount = 100 },
+            new MissionDef { Id = 2, Title = "Мастер-копатель", Description = "Сломайте 500 блоков", Target = 500, RewardItem = ItemType.Cred, RewardAmount = 300 },
+        };
+
+        private int _activeMissionId = -1;
+        private long _missionProgress;
+        private readonly bool[] _missionCompleted = new bool[_missions.Length];
 
         private static readonly CellType[] _allCellTypes = new CellType[]
         {
@@ -181,10 +213,44 @@ namespace MinesServer.Networking.Connection.Client
                 Debug.Log($"[DummyConnection] Received ActionClientPacket: X={actionPacket.X}, Y={actionPacket.Y}, Payload={actionPacket.Payload.GetType().Name}");
                 if (actionPacket.Payload is MovePacket move)
                 {
+                    if (_teleportWindowOpen) return;
+
+                    int dx = Math.Abs(move.X - _x);
+                    int dy = Math.Abs(move.Y - _y);
+                    bool isAdjacent = (dx == 1 && dy == 0) || (dx == 0 && dy == 1);
+
+                    if (!isAdjacent)
+                    {
+                        Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not adjacent to ({_x},{_y})");
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
+                            new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot)
+                        })));
+                        return;
+                    }
+
+                    if (MapStorage.Instance?.CellLayer != null && MapStorage.Instance.IsReady)
+                    {
+                        var cellType = MapStorage.Instance.GetCell(move.X, move.Y);
+                        var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
+                        if (cellConfig.HasValue)
+                        {
+                            bool isPassable = ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
+                            if (!isPassable)
+                            {
+                                Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not passable ({cellType})");
+                                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
+                                    new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot)
+                                })));
+                                return;
+                            }
+                        }
+                    }
+
                     Debug.Log($"  - Move to ({move.X}, {move.Y})");
                     _x = move.X;
                     _y = move.Y;
                     UpdatePosition().Forget();
+                    CheckTeleportEntry();
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
@@ -247,6 +313,14 @@ namespace MinesServer.Networking.Connection.Client
                         })));
                         Debug.Log($"[DummyConnection] Cell ({cellX}, {cellY}) broken → Empty");
                     }
+
+                    if (_activeMissionId >= 0)
+                    {
+                        _missionProgress++;
+                        OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(_missionProgress, _missions[_activeMissionId].Target)));
+                        if (_missionProgress >= _missions[_activeMissionId].Target)
+                            CompleteMission();
+                    }
                 }
 
                 else if (actionPacket.Payload is SuicidePacket)
@@ -301,12 +375,15 @@ namespace MinesServer.Networking.Connection.Client
                     HandleRobotInfoMock(_mockBotId).Forget();
                     RunCircularBots(10).Forget();
                     //RunTilingTestLoop().Forget();
+                    _x = 25;
+                    _y = 50;
                     OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
                     OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
                     OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
                     _bonusCountdown = 10;
                     _bonusClaimed = false;
                     OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
+                    _health = 250;
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
                     OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, new[] { 0L, 0L, 0L, 0L, 0L, 0L })));
                     OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
@@ -316,6 +393,20 @@ namespace MinesServer.Networking.Connection.Client
                     SendChatMock().Forget();
 
                     OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
+                    OnReceived?.Invoke(new ServerPacket(new ClearStatusPacket()));
+                    foreach (var kvp in _activeBuffs)
+                    {
+                        var (color, name) = kvp.Key switch
+                        {
+                            "xp3" => (System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3"),
+                            "freeup" => (System.Drawing.Color.Cyan, "Freeup"),
+                            "x4" => (System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4"),
+                            "battery" => (System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор"),
+                            _ => (System.Drawing.Color.White, kvp.Key)
+                        };
+                        OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, color, kvp.Key, new[] { name, kvp.Value.ToString() })));
+                    }
+                    StartBuffLoop();
                     SendPingMock().Forget();
                     SendDailyBonusMock().Forget();
 
@@ -324,10 +415,12 @@ namespace MinesServer.Networking.Connection.Client
                         [CellType.Empty] = 20,
                         [CellType.Road] = 100
                     })));
+                    OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
                     var inventoryData = new Dictionary<ItemType, long>();
                     foreach (var type in ItemRegistry.AllTypes)
                         inventoryData[type] = 1;
+                    inventoryData[ItemType.Battery] = 2;
                     _inventory.Clear();
                     foreach (var kvp in inventoryData)
                         _inventory[kvp.Key] = kvp.Value;
@@ -338,6 +431,9 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
 
                     // Send test packs
+                    _teleportPositions.Clear();
+                    _teleportPositions.Add((27, 50));
+                    _teleportPositions.Add((227, 50));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
                         new PackPacket(27, 50, PackType.Teleport, 0, 1),
                         new PackPacket(227, 50, PackType.Teleport, 0, 1),
@@ -473,11 +569,54 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     new PackPacket(frontX, frontY, packType, 0, 0)
                 })));
+                if (packType == PackType.Teleport)
+                    _teleportPositions.Add((frontX, frontY));
                 ConsumeItem(_selectedItemType, 1);
             }
             else if (_selectedItemType == ItemType.Rem)
             {
+                _health = 500;
                 OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
+                ConsumeItem(_selectedItemType, 1);
+            }
+            else if (_selectedItemType == ItemType.UpgradeBooster)
+            {
+                StartBuffLoop();
+                var tag = "xp3";
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 86400;
+                _activeBuffs[tag] = expiry;
+                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(0, 200, 0), tag, new[] { "Прокачка x3", expiry.ToString() })));
+                ConsumeItem(_selectedItemType, 1);
+            }
+            else if (_selectedItemType == ItemType.FreeUp)
+            {
+                StartBuffLoop();
+                var tag = "freeup";
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
+                _activeBuffs[tag] = expiry;
+                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.Cyan, tag, new[] { "Freeup", expiry.ToString() })));
+                ConsumeItem(_selectedItemType, 1);
+            }
+            else if (_selectedItemType == ItemType.MineBooster)
+            {
+                StartBuffLoop();
+                var tag = "x4";
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
+                _activeBuffs[tag] = expiry;
+                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(255, 165, 0), tag, new[] { "Добыча x4", expiry.ToString() })));
+                ConsumeItem(_selectedItemType, 1);
+            }
+            else if (_selectedItemType == ItemType.Battery)
+            {
+                StartBuffLoop();
+                var tag = "battery";
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 3600;
+                _activeBuffs[tag] = expiry;
+                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(65, 105, 225), tag, new[] { "Аккумулятор", expiry.ToString() })));
                 ConsumeItem(_selectedItemType, 1);
             }
             else
@@ -527,6 +666,221 @@ namespace MinesServer.Networking.Connection.Client
             {
                 HandleDailyBonusClaim();
             }
+            else if (packet.WindowTag == "teleport")
+            {
+                if (!_teleportWindowOpen) return;
+
+                if (packet.ElementIndex == 0)
+                {
+                    _teleportWindowOpen = false;
+                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                }
+                else
+                {
+                    HandleTeleportClick(packet.ElementIndex - 1);
+                }
+            }
+            else if (packet.WindowTag == "test_modal")
+            {
+                OnReceived?.Invoke(new ServerPacket(new ModalWindowPacket(
+                    "Тестовое окно",
+                    "Это модальное окно вызывается из HUD.\n\nНажмите OK чтобы продолжить.",
+                    "OK",
+                    "")));
+                Debug.Log("[DummyConnection] Modal window sent to client");
+            }
+            else if (packet.WindowTag == "join_clan")
+            {
+                OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(1)));
+                Debug.Log("[DummyConnection] ShowClanPacket sent (clanId=1)");
+            }
+            else if (packet.WindowTag == "leave_clan")
+            {
+                OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
+                Debug.Log("[DummyConnection] HideClanPacket sent");
+            }
+            else if (packet.WindowTag == "open_missions")
+            {
+                SendMissionWindow();
+            }
+            else if (packet.WindowTag == "missions")
+            {
+                if (packet.ElementIndex == 0)
+                {
+                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                }
+                else if (packet.ElementIndex <= _missions.Length)
+                {
+                    StartMission(packet.ElementIndex - 1);
+                }
+                else
+                {
+                    CancelMission();
+                }
+            }
+        }
+
+        private void SendMissionWindow()
+        {
+            var rows = new List<IGUIComponentPacket>();
+            for (int i = 0; i < _missions.Length; i++)
+            {
+                var m = _missions[i];
+                string status = _activeMissionId == m.Id
+                    ? $"<color=yellow>Активно: {_missionProgress}/{m.Target}</color>"
+                    : _missionCompleted[m.Id]
+                        ? "<color=lime>✓ Выполнено</color>"
+                        : "<color=#B2A680>Выбрать</color>";
+                rows.Add(new TextPacket
+                {
+                    Text = $"<color=white>{m.Title}</color>\n<color=#B2A680>{m.Description}</color>  {status}",
+                    OnClickContext = ".",
+                    Style = new GUIStylePacket
+                    {
+                        Background = System.Drawing.Color.FromArgb(242, 26, 26, 26),
+                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                        BorderWidth = 2,
+                        Padding = new Margins(8, 12, 8, 12),
+                        Margin = new Margins(0, 0, 4, 0)
+                    }
+                });
+            }
+
+            var scrollViewer = new ScrollViewerPacket
+            {
+                VerticalScrollBar = ScrollbarVisibility.Auto,
+                HorizontalScrollBar = ScrollbarVisibility.Auto,
+                Children = rows.ToArray()
+            };
+
+            var rootChildren = new List<IGUIComponentPacket>
+            {
+                new DockPanelPacket
+                {
+                    AttachedProperties = new StringPairPacket[]
+                    {
+                        new("DockPanel.Dock", "Top")
+                    },
+                    Style = new GUIStylePacket
+                    {
+                        Margin = new Margins(0, 0, 10, 0),
+                        Padding = new Margins(0, 0, 0, 0)
+                    },
+                    Children = new List<IGUIComponentPacket>
+                    {
+                        new TextPacket
+                        {
+                            Text = "<color=#B2A680>Миссии</color>",
+                            AttachedProperties = new StringPairPacket[]
+                            {
+                                new("DockPanel.Dock", "Left")
+                            },
+                        },
+                        new TextPacket
+                        {
+                            Text = "<color=#B3B3B3>×</color>",
+                            OnClickContext = "missions_close",
+                            AttachedProperties = new StringPairPacket[]
+                            {
+                                new("DockPanel.Dock", "Right")
+                            },
+                        }
+                    }
+                },
+                scrollViewer
+            };
+
+            if (_activeMissionId >= 0)
+            {
+                rootChildren.Add(new TextPacket
+                {
+                    Text = "<color=#B08050>Отменить миссию</color>",
+                    OnClickContext = "mission_cancel",
+                    AttachedProperties = new StringPairPacket[]
+                    {
+                        new("DockPanel.Dock", "Bottom")
+                    },
+                    Style = new GUIStylePacket
+                    {
+                        Margin = new Margins(0, 0, 10, 0),
+                        Padding = new Margins(6, 6, 6, 6),
+                        Background = System.Drawing.Color.FromArgb(242, 30, 20, 20),
+                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                        BorderWidth = 2,
+                    }
+                });
+            }
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(2, 8, 2, 8)
+                },
+                Children = rootChildren
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
+            Debug.Log("[DummyConnection] Mission selection window opened");
+        }
+
+        private void StartMission(int missionId)
+        {
+            if (missionId < 0 || missionId >= _missions.Length)
+                return;
+
+            if (_missionCompleted[missionId])
+                return;
+
+            var m = _missions[missionId];
+            _activeMissionId = missionId;
+            _missionProgress = 0;
+            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket("", 0, 0, m.Title, m.Description)));
+            OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(0, m.Target)));
+            Debug.Log($"[DummyConnection] Started mission: {m.Title}");
+        }
+
+        private void CancelMission()
+        {
+            if (_activeMissionId < 0)
+            {
+                OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                return;
+            }
+            _activeMissionId = -1;
+            _missionProgress = 0;
+            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket("", 0, 0, "", "")));
+            Debug.Log("[DummyConnection] Mission cancelled");
+        }
+
+        private void CompleteMission()
+        {
+            if (_activeMissionId < 0)
+                return;
+
+            var m = _missions[_activeMissionId];
+            Debug.Log($"[DummyConnection] Mission complete: {m.Title}");
+
+            _inventory.TryGetValue(m.RewardItem, out long current);
+            _inventory[m.RewardItem] = current + m.RewardAmount;
+            OnReceived?.Invoke(new ServerPacket(new InventoryPacket(
+                new Dictionary<ItemType, long> { { m.RewardItem, current + m.RewardAmount } })));
+
+            _missionCompleted[_activeMissionId] = true;
+            _activeMissionId = -1;
+            _missionProgress = 0;
+
+            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket("", 0, 0, "", "")));
+            OnReceived?.Invoke(new ServerPacket(new ModalWindowPacket(
+                "Миссия выполнена!",
+                $"Вы завершили миссию \"{m.Title}\"!\n\nНаграда: {m.RewardAmount} кредитов.",
+                "OK",
+                "")));
         }
 
         private void HandleDailyBonusClaim()
@@ -543,6 +897,239 @@ namespace MinesServer.Networking.Connection.Client
                 new Dictionary<ItemType, long> { { rewardItem, newQty } })));
 
             _bonusClaimed = true;
+        }
+
+        private void StartBuffLoop()
+        {
+            if (_buffLoopStarted) return;
+            _buffLoopStarted = true;
+            CheckBuffsLoop().Forget();
+        }
+
+        private async UniTaskVoid CheckBuffsLoop()
+        {
+            while (_status == ConnectionStatus.Connected)
+            {
+                await UniTask.Delay(1000);
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var expired = _activeBuffs.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList();
+                foreach (var tag in expired)
+                {
+                    _activeBuffs.Remove(tag);
+                    OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket(tag)));
+                    Debug.Log($"[DummyConnection] Buff expired: {tag}");
+                }
+
+                // Depth warning check
+                if (_y > _maxDepth)
+                {
+                    if (!_depthWarningActive)
+                    {
+                        _depthWarningActive = true;
+                        OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
+                            0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
+                        Debug.Log("[DummyConnection] Depth warning activated");
+                    }
+                }
+                else
+                {
+                    if (_depthWarningActive)
+                    {
+                        _depthWarningActive = false;
+                        OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
+                        Debug.Log("[DummyConnection] Depth warning cleared");
+                    }
+                }
+
+                // Depth damage
+                if (_y > _maxDepth)
+                {
+                    int blocksBelow = _y - _maxDepth;
+                    int damage = ((blocksBelow - 1) / 10 + 1) * 10;
+                    _health = Math.Max(0, _health - damage);
+                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
+                    Debug.Log($"[DummyConnection] Depth damage: {damage} (HP: {_health}/500)");
+                    if (_health <= 0)
+                    {
+                        Debug.Log("[DummyConnection] Player died from depth damage");
+                        Disconnect();
+                    }
+                }
+            }
+        }
+
+        private void CheckTeleportEntry()
+        {
+            if (!_teleportPositions.Contains((_x, _y)))
+                return;
+
+            SendTeleportWindow();
+        }
+
+        private void SendTeleportWindow()
+        {
+            _teleportDestinations = _teleportPositions
+                .Where(tp => tp.X != _x || tp.Y != _y)
+                .ToList();
+
+            if (_teleportDestinations.Count == 0)
+            {
+                SendTeleportWindowNoDestinations();
+                return;
+            }
+
+            var rows = new IGUIComponentPacket[_teleportDestinations.Count];
+            for (int i = 0; i < _teleportDestinations.Count; i++)
+            {
+                var (destX, destY) = _teleportDestinations[i];
+                rows[i] = new TextPacket
+                {
+                    Text = $"<color=white>Телепорт на ({destX,5}, {destY,5})</color>   <color=#B2A680>[ТП]</color>",
+                    OnClickContext = ".",
+                    Style = new GUIStylePacket
+                    {
+                        Background = System.Drawing.Color.FromArgb(242, 26, 26, 26),
+                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                        BorderWidth = 2,
+                        Padding = new Margins(8, 12, 8, 12),
+                        Margin = new Margins(0, 0, 4, 0)
+                    }
+                };
+            }
+
+            var scrollViewer = new ScrollViewerPacket
+            {
+                VerticalScrollBar = ScrollbarVisibility.Auto,
+                HorizontalScrollBar = ScrollbarVisibility.Auto,
+                Children = rows
+            };
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(2, 8, 2, 8)
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    new DockPanelPacket
+                    {
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Top")
+                        },
+                        Style = new GUIStylePacket
+                        {
+                            Margin = new Margins(0, 0, 10, 0),
+                            Padding = new Margins(0, 0, 0, 0)
+                        },
+                        Children = new List<IGUIComponentPacket>
+                        {
+                    new TextPacket
+                    {
+                        Text = "<color=#B2A680>Телепорты</color>",
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Left")
+                    },
+                        },
+                            new TextPacket
+                            {
+                    Text = "<color=#B3B3B3>×</color>",
+                    OnClickContext = "teleport_close",
+                    AttachedProperties = new StringPairPacket[]
+                    {
+                        new("DockPanel.Dock", "Right")
+                    },
+                            }
+                        }
+                    },
+                    scrollViewer
+                }
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
+            _teleportWindowOpen = true;
+            Debug.Log($"[DummyConnection] Teleport window opened with {_teleportDestinations.Count} destinations");
+        }
+
+        private void SendTeleportWindowNoDestinations()
+        {
+            var text = new TextPacket
+            {
+                Text = "<color=gray>Нет доступных телепортов</color>"
+            };
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(0, 0, 0, 0)
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    new DockPanelPacket
+                    {
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Top")
+                        },
+                        Style = new GUIStylePacket
+                        {
+                            Margin = new Margins(0, 0, 0, 0),
+                            Padding = new Margins(0, 0, 0, 0)
+                        },
+                        Children = new List<IGUIComponentPacket>
+                        {
+                    new TextPacket
+                    {
+                        Text = "<color=#B2A680>Телепорты</color>",
+                        AttachedProperties = new StringPairPacket[]
+                        {
+                            new("DockPanel.Dock", "Left")
+                    },
+                        },
+                            new TextPacket
+                            {
+                    Text = "<color=#B3B3B3>×</color>",
+                    OnClickContext = "teleport_close",
+                    AttachedProperties = new StringPairPacket[]
+                    {
+                        new("DockPanel.Dock", "Right")
+                    },
+                            }
+                        }
+                    },
+                    text
+                }
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
+            _teleportWindowOpen = true;
+            Debug.Log("[DummyConnection] Teleport window opened with no destinations");
+        }
+
+        private void HandleTeleportClick(int index)
+        {
+            if (index < 0 || index >= _teleportDestinations.Count)
+                return;
+
+            var (destX, destY) = _teleportDestinations[index];
+            Debug.Log($"[DummyConnection] Teleporting to ({destX}, {destY})");
+
+            _x = destX;
+            _y = destY;
+
+            _teleportWindowOpen = false;
+            OnReceived?.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
+            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+            UpdatePosition().Forget();
         }
 
         private static ItemType PickRandomBonusItem()
