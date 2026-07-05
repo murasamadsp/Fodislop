@@ -66,6 +66,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _FallbackColor;
                 float4 _DebugColor;
                 float _DebugMode;
+                float _SimpleGraphics;
             CBUFFER_END
 
             float3 RgbToHsv(float3 c)
@@ -194,6 +195,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
                 finalUV.y += animOffsetUV;
 
+                int animTypeEarly = (int)(input.animData.x + 0.5);
+                if (animTypeEarly == 4)
+                {
+                    float speed = input.animData.y;
+                    if (speed <= 0) speed = 5;
+                    float scrollUV = fmod(_Time.y * speed * tileSizeUV.y * 0.05, subAtlasSizeUV.y);
+                    finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
+                }
+
                 half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV);
 
                 if (texColor.a < 0.05)
@@ -206,38 +216,41 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float speed = input.animData.y;
                 float offset = input.animData.z;
 
-                float textureType = input.packedData.x;
-                float reliefMaskVal = input.packedData.y;
-
-                if (textureType > 0.5)
+                if (_SimpleGraphics < 0.5)
                 {
-                    float val = 15.0 - reliefMaskVal;
-                    float4 bits = frac(val * float4(0.5, 0.25, 0.125, 0.0625));
-                    bool4 isCliff = bits >= 0.5;
+                    float textureType = input.packedData.x;
+                    float reliefMaskVal = input.packedData.y;
 
-                    float u = input.packedData.z;
-                    float v = input.packedData.w;
-                    float uvMinus = u - v;
-                    float uvPlus = u + v;
-
-                    bool isTop    = (uvPlus > 0.0) && (uvMinus < 0.0);
-                    bool isLeft   = (uvPlus < 0.0) && (uvMinus < 0.0);
-                    bool isBottom = (uvMinus > 0.0) && (uvPlus < 0.0);
-                    bool isRight  = (uvPlus > 0.0) && (uvMinus > 0.0);
-
-                    bool activeCliff = (isTop && isCliff.x) || (isLeft && isCliff.y) || (isBottom && isCliff.z) || (isRight && isCliff.w);
-
-                    if (activeCliff)
+                    if (textureType > 0.5)
                     {
-                        float maxUV2 = max(u * u, v * v);
-                        float grad = 1.0 - maxUV2;
-                        finalRgb *= (grad * grad * grad); // Cubed gradient
+                        float val = 15.0 - reliefMaskVal;
+                        float4 bits = frac(val * float4(0.5, 0.25, 0.125, 0.0625));
+                        bool4 isCliff = bits >= 0.5;
+
+                        float u = input.packedData.z;
+                        float v = input.packedData.w;
+                        float uvMinus = u - v;
+                        float uvPlus = u + v;
+
+                        bool isTop    = (uvPlus > 0.0) && (uvMinus < 0.0);
+                        bool isLeft   = (uvPlus < 0.0) && (uvMinus < 0.0);
+                        bool isBottom = (uvMinus > 0.0) && (uvPlus < 0.0);
+                        bool isRight  = (uvPlus > 0.0) && (uvMinus > 0.0);
+
+                        bool activeCliff = (isTop && isCliff.x) || (isLeft && isCliff.y) || (isBottom && isCliff.z) || (isRight && isCliff.w);
+
+                        if (activeCliff)
+                        {
+                            float maxUV2 = max(u * u, v * v);
+                            float grad = 1.0 - maxUV2;
+                            finalRgb *= (grad * grad * grad);
+                        }
                     }
-                }
-                else // Shadow (Type 0)
-                {
-                    float shadowVal = input.packedData.y;
-                    finalRgb *= (1.0 - shadowVal * shadowVal); // Quadratic falloff
+                    else
+                    {
+                        float shadowVal = input.packedData.y;
+                        finalRgb *= (1.0 - shadowVal * shadowVal);
+                    }
                 }
 
                 if (animType == 1) // Blinking
@@ -326,6 +339,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _FallbackColor;
                 float4 _DebugColor;
                 float _DebugMode;
+                float _SimpleGraphics;
             CBUFFER_END
 
             float3 RgbToHsv(float3 c)
@@ -454,6 +468,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
                 finalUV.y += animOffsetUV;
 
+                int animTypeEarly = (int)(input.animData.x + 0.5);
+                if (animTypeEarly == 4)
+                {
+                    float speed = input.animData.y;
+                    if (speed <= 0) speed = 5;
+                    float scrollUV = fmod(_Time.y * speed * tileSizeUV.y * 0.05, subAtlasSizeUV.y);
+                    finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
+                }
+
                 half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV);
 
                 if (texColor.a < 0.05)
@@ -466,38 +489,41 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float speed = input.animData.y;
                 float offset = input.animData.z;
 
-                float textureType = input.packedData.x;
-                float reliefMaskVal = input.packedData.y;
-
-                if (textureType > 0.5)
+                if (_SimpleGraphics < 0.5)
                 {
-                    float val = 15.0 - reliefMaskVal;
-                    float4 bits = frac(val * float4(0.5, 0.25, 0.125, 0.0625));
-                    bool4 isCliff = bits >= 0.5;
+                    float textureType = input.packedData.x;
+                    float reliefMaskVal = input.packedData.y;
 
-                    float u = input.packedData.z;
-                    float v = input.packedData.w;
-                    float uvMinus = u - v;
-                    float uvPlus = u + v;
-
-                    bool isTop    = (uvPlus > 0.0) && (uvMinus < 0.0);
-                    bool isLeft   = (uvPlus < 0.0) && (uvMinus < 0.0);
-                    bool isBottom = (uvMinus > 0.0) && (uvPlus < 0.0);
-                    bool isRight  = (uvPlus > 0.0) && (uvMinus > 0.0);
-
-                    bool activeCliff = (isTop && isCliff.x) || (isLeft && isCliff.y) || (isBottom && isCliff.z) || (isRight && isCliff.w);
-
-                    if (activeCliff)
+                    if (textureType > 0.5)
                     {
-                        float maxUV2 = max(u * u, v * v);
-                        float grad = 1.0 - maxUV2;
-                        finalRgb *= (grad * grad * grad); // Cubed gradient
+                        float val = 15.0 - reliefMaskVal;
+                        float4 bits = frac(val * float4(0.5, 0.25, 0.125, 0.0625));
+                        bool4 isCliff = bits >= 0.5;
+
+                        float u = input.packedData.z;
+                        float v = input.packedData.w;
+                        float uvMinus = u - v;
+                        float uvPlus = u + v;
+
+                        bool isTop    = (uvPlus > 0.0) && (uvMinus < 0.0);
+                        bool isLeft   = (uvPlus < 0.0) && (uvMinus < 0.0);
+                        bool isBottom = (uvMinus > 0.0) && (uvPlus < 0.0);
+                        bool isRight  = (uvPlus > 0.0) && (uvMinus > 0.0);
+
+                        bool activeCliff = (isTop && isCliff.x) || (isLeft && isCliff.y) || (isBottom && isCliff.z) || (isRight && isCliff.w);
+
+                        if (activeCliff)
+                        {
+                            float maxUV2 = max(u * u, v * v);
+                            float grad = 1.0 - maxUV2;
+                            finalRgb *= (grad * grad * grad);
+                        }
                     }
-                }
-                else // Shadow (Type 0)
-                {
-                    float shadowVal = input.packedData.y;
-                    finalRgb *= (1.0 - shadowVal * shadowVal); // Quadratic falloff
+                    else
+                    {
+                        float shadowVal = input.packedData.y;
+                        finalRgb *= (1.0 - shadowVal * shadowVal);
+                    }
                 }
 
                 if (animType == 1) // Blinking

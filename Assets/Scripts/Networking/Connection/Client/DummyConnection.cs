@@ -1501,11 +1501,11 @@ namespace MinesServer.Networking.Connection.Client
             };
             configs[(int)CellType.Lava] = new CellConfigurationPacket
             {
-                Animation = CellAnimationType.Rainbow,
-                AnimationSpeed = 50,
+                Animation = (CellAnimationType)4,
+                AnimationSpeed = 10,
                 Color = unchecked((int)0xFFFF4500),
-                FrameOffset = 1,
-                Distortion = CellDistortionType.Cause,
+                FrameOffset = 0,
+                Distortion = (CellDistortionType)0,
                 Properties = CellConfigProperties.None | CellConfigProperties.DropsShadow
             };
             configs[(int)CellType.BuildingDoor] = new CellConfigurationPacket
