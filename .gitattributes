@@ -52,3 +52,5 @@
 
 # Assembly definitions — JSON, но генерируются Unity
 *.asmdef text
+Assets/Plugins/FMOD/**/*.bundle text eol=lf
+Assets/Plugins/FMOD/**/Info.plist text eol=lf

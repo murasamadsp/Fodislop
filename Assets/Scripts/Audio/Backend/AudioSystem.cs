@@ -34,7 +34,12 @@ namespace Fodinae.Scripts.Audio.Backend
         {
             CreateBuses();
             RegisterDefaults();
+
+#if FMOD
+            _backend = new FmodAudioBackend();
+#else
             _backend = new UnityAudioBackend();
+#endif
             _backend.Initialize(this);
         }
 
