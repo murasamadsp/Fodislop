@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Cysharp.Threading.Tasks;
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
@@ -24,6 +25,7 @@ namespace Fodinae.Scripts.Game.Managers
                 if (_instance == null)
                 {
                     _instance = new MapStorage();
+                    ServiceLocator.Register<IWorldDataStorage>(_instance);
                 }
 
                 return _instance;

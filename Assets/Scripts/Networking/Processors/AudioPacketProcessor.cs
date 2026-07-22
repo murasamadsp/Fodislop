@@ -7,7 +7,7 @@ namespace Fodinae.Scripts.Networking.Processors
     /// Decoupled SOLID Processor for Server Audio & SFX Event Packets.
     /// Dispatches server sound triggers to ServerAudioEventManager for FMOD & Effekseer playback.
     /// </summary>
-    public class SFXPacketProcessor : IPacketProcessor<SFXPacket>
+    public class AudioPacketProcessor : IPacketProcessor<SFXPacket>
     {
         public void Process(SFXPacket packet)
         {

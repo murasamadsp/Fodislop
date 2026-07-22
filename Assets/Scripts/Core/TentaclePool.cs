@@ -14,6 +14,11 @@ namespace Fodinae.Scripts.Core
             {
                 if (_parent == null)
                 {
+                    if (!Application.isPlaying)
+                    {
+                        return null;
+                    }
+
                     var go = new GameObject("[TentaclePool]");
                     go.SetActive(false);
                     _parent = go.transform;
@@ -36,7 +41,11 @@ namespace Fodinae.Scripts.Core
             }
 
             var go = new GameObject("Tentacle");
-            go.transform.SetParent(Parent);
+            if (Parent != null)
+            {
+                go.transform.SetParent(Parent);
+            }
+
             var lr = go.AddComponent<LineRenderer>();
             lr.positionCount = 5;
             lr.textureMode = LineTextureMode.Stretch;
@@ -50,8 +59,22 @@ namespace Fodinae.Scripts.Core
                 return;
             }
 
+            if (!Application.isPlaying || _parent == null)
+            {
+                if (Application.isPlaying)
+                {
+                    Object.Destroy(line.gameObject);
+                }
+                else
+                {
+                    Object.DestroyImmediate(line.gameObject);
+                }
+
+                return;
+            }
+
             line.gameObject.SetActive(false);
-            line.transform.SetParent(Parent);
+            line.transform.SetParent(_parent);
             _pool.Enqueue(line);
         }
 

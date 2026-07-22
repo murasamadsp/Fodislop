@@ -10,7 +10,7 @@ namespace Fodinae.Scripts.Networking.Processors
 {
     public class ClanProcessor : IPacketProcessor<ShowClanPacket>, IPacketProcessor<HideClanPacket>
     {
-        private static IPlayerStats Stats => ServiceLocator.Resolve<IPlayerStats>();
+        private static IPlayerStats Stats => ServiceLocator.Resolve<IPlayerStats>() ?? PlayerStatsModel.Instance;
 
         public void Process(ShowClanPacket packet)
         {

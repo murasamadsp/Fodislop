@@ -164,6 +164,11 @@ namespace Fodinae.Scripts.Audio.Backend
 
         public AudioPlaybackHandle CreateVoice(string eventName, AudioLayer layer, Vector3? worldPosition, GameObject targetGameObject = null)
         {
+            if (string.IsNullOrEmpty(eventName))
+            {
+                return null;
+            }
+
             string fmodPath = eventName.StartsWith("event:/", StringComparison.OrdinalIgnoreCase) || eventName.StartsWith("snapshot:/", StringComparison.OrdinalIgnoreCase)
                 ? eventName
                 : $"event:/{eventName}";
@@ -203,7 +208,6 @@ namespace Fodinae.Scripts.Audio.Backend
             instance.setPitch(layer.Pitch);
             instance.start();
 
-            // Владельцем release() является AudioPlaybackHandle.Stop() — не вызываем release() здесь.
             return new AudioPlaybackHandle(instance, layer.Bus);
         }
 

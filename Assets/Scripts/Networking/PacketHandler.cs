@@ -38,7 +38,7 @@ namespace Fodinae.Scripts.Networking
         private static readonly WorldInitProcessor WorldInit = new();
         private static readonly RobotInfoProcessor RobotInfo = new();
         private static readonly MapRegionProcessor MapRegion = new();
-        private static readonly SFXPacketProcessor SFXProcessor = new();
+        private static readonly AudioPacketProcessor SFXProcessor = new();
         private static readonly PlayerInfoProcessor PlayerInfo = new();
         private static readonly PlayerStatsProcessor PlayerStats = new();
         private static readonly PlayerStateProcessor PlayerState = new();

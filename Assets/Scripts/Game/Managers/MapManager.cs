@@ -56,6 +56,7 @@ namespace Fodinae.Scripts.Game.Managers
 
         protected override void OnAwake()
         {
+            ServiceLocator.Register<IMapDataProvider>(this);
 #if UNITY_EDITOR
             if (!Application.isPlaying && !IsWorldInitialized)
             {

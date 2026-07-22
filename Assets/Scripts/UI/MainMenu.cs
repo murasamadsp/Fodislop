@@ -194,7 +194,7 @@ namespace Fodinae.Scripts
         private void OnOldClientButtonClicked()
         {
             Debug.Log("[MainMenu] Old client button clicked");
-            RobotManager.ShowDebugVisuals = true;
+            RobotManager.ShowDebugVisuals = false;
             HideLoader();
             HideMenu();
             ConnectionManager.Instance.Connect(oldClient: true);
