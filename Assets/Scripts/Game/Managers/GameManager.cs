@@ -25,6 +25,7 @@ namespace Fodinae.Scripts.Game.Managers
     public sealed class GameManager : SingletonMonoBehaviour<GameManager>
     {
         public GameState CurrentState { get; private set; } = GameState.Offline;
+        public bool IsUIAuthorized { get; private set; }
 
         public event Action<GameState> OnGameStateChanged;
         public event Action OnWorldLoaded;
@@ -45,6 +46,18 @@ namespace Fodinae.Scripts.Game.Managers
         {
             Debug.Log("[GameManager] World load completed, notifying listeners.");
             OnWorldLoaded?.Invoke();
+        }
+
+        public void AuthorizeUI()
+        {
+            IsUIAuthorized = true;
+            Debug.Log("[GameManager] UI authorized");
+        }
+
+        public void DeauthorizeUI()
+        {
+            IsUIAuthorized = false;
+            Debug.Log("[GameManager] UI deauthorized");
         }
     }
 }

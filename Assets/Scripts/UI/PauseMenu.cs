@@ -323,10 +323,14 @@ namespace Fodinae.Scripts.UI
                 var topTag = PacketHandler.TopWindowTag;
                 if (topTag != null)
                 {
-                    NetworkService.Send(new ElementClickPacket(topTag, 0, System.Array.Empty<StringPairPacket>()));
-                }
+                    if (topTag == "auth")
+                    {
+                        return;
+                    }
 
-                return;
+                    NetworkService.Send(new ElementClickPacket(topTag, 0, System.Array.Empty<StringPairPacket>()));
+                    return;
+                }
             }
 
             if (_settingsPage.style.display == DisplayStyle.Flex)

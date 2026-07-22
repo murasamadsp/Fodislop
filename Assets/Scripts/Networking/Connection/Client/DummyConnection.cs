@@ -8,6 +8,7 @@ using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae.Scripts.Audio;
 using Fodinae.Scripts.Game.Managers;
+using Fodinae.Scripts.Networking.Auth;
 using Fodinae.Scripts.UI;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
@@ -53,6 +54,10 @@ namespace MinesServer.Networking.Connection.Client
 
         public static bool IgnoreCollision = false;
 
+        private readonly HashSet<string> _validTokens = new();
+        private const string _knownToken = "myToken3";
+        private bool _awaitingAuth;
+
         private const ushort _mockBotId = 456;
         private ushort _x = 0;
         private ushort _y = 0;
@@ -65,6 +70,7 @@ namespace MinesServer.Networking.Connection.Client
         private ItemType _pendingBonusItem;
         private int _pendingBonusAmount;
         private FPSCounter _fpsCounter;
+        private GameObject _uiRoot;
         private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
         private List<(ushort X, ushort Y)> _teleportDestinations = new();
         private bool _teleportWindowOpen;
@@ -146,26 +152,41 @@ namespace MinesServer.Networking.Connection.Client
             await UniTask.Yield();
             CreateFPSCounter();
 
-            _status = ConnectionStatus.Connected;
-            OnConnected?.Invoke();
+            _uiRoot = new GameObject("UIRoot");
+            _uiRoot.SetActive(false);
 
             var minimapObj = new GameObject("MinimapRoot");
             minimapObj.AddComponent<MinimapController>();
+            minimapObj.transform.SetParent(_uiRoot.transform);
 
             var inventoryObj = new GameObject("InventoryRoot");
             inventoryObj.AddComponent<InventoryUI>();
+            inventoryObj.transform.SetParent(_uiRoot.transform);
 
             var hudObj = new GameObject("PlayerHUD");
             hudObj.AddComponent<PlayerStatsModel>();
             hudObj.AddComponent<PlayerHUD>();
+            hudObj.transform.SetParent(_uiRoot.transform);
 
             var pauseObj = new GameObject("PauseMenu");
             pauseObj.AddComponent<PauseMenu>();
+            pauseObj.transform.SetParent(_uiRoot.transform);
 
             var chatObj = new GameObject("ChatSystem");
             chatObj.AddComponent<LocalChatPopup>();
             chatObj.AddComponent<GlobalChatUI>();
             chatObj.AddComponent<FloatingChatManager>();
+            chatObj.transform.SetParent(_uiRoot.transform);
+
+            string savedToken = AuthTokenManager.LoadToken();
+            string savedKnownToken = PlayerPrefs.GetString("AuthKnownToken", "");
+            if (!string.IsNullOrEmpty(savedToken) && savedKnownToken == _knownToken)
+            {
+                _validTokens.Add(savedToken);
+            }
+
+            _status = ConnectionStatus.Connected;
+            OnConnected?.Invoke();
         }
 
         private void CreateFPSCounter()
@@ -192,10 +213,22 @@ namespace MinesServer.Networking.Connection.Client
             await UniTask.Delay(100);
             _status = ConnectionStatus.Disconnected;
             OnDisconnected?.Invoke();
+            var gm = GameManager.InstanceIfExists;
+            if (gm != null)
+            {
+                gm.DeauthorizeUI();
+            }
+
             if (_fpsCounter != null)
             {
                 UnityEngine.Object.Destroy(_fpsCounter.gameObject);
                 _fpsCounter = null;
+            }
+
+            if (_uiRoot != null)
+            {
+                UnityEngine.Object.Destroy(_uiRoot);
+                _uiRoot = null;
             }
         }
 
@@ -211,6 +244,12 @@ namespace MinesServer.Networking.Connection.Client
             {
                 UnityEngine.Object.Destroy(_fpsCounter.gameObject);
                 _fpsCounter = null;
+            }
+
+            if (_uiRoot != null)
+            {
+                UnityEngine.Object.Destroy(_uiRoot);
+                _uiRoot = null;
             }
         }
 
@@ -359,6 +398,16 @@ namespace MinesServer.Networking.Connection.Client
             switch (packet.Data)
             {
                 case ClientHelloPacket clientHello:
+                    string receivedToken = clientHello.AuthToken;
+                    bool isTokenValid = !string.IsNullOrEmpty(receivedToken) && (_validTokens.Contains(receivedToken) || receivedToken == _knownToken);
+
+                    if (!isTokenValid)
+                    {
+                        SendAuthWindow();
+                        return;
+                    }
+
+                    _awaitingAuth = false;
 
                     if (clientHello.ClientVersion < 1)
                     {
@@ -368,126 +417,18 @@ namespace MinesServer.Networking.Connection.Client
                         return;
                     }
 
-                    var cellConfigs = CreateTestCellConfigurations();
-                    int worldWidth;
-                    int worldHeight;
-                    bool skipMapDataGeneration = false;
-
-                    if (UsePrebakedMap)
+                    var gm = GameManager.Instance;
+                    if (gm != null)
                     {
-                        string prebakedPath = $"{Application.persistentDataPath}/{PrebakedWorldCodeName}_cells.mapb";
-                        (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(prebakedPath);
-                        if (worldWidth > 0 && worldHeight > 0)
-                        {
-                            skipMapDataGeneration = true;
-                            Debug.Log($"[DummyConnection] Using prebaked map: {worldWidth}x{worldHeight}");
-                        }
-                        else
-                        {
-                            worldWidth = 500;
-                            worldHeight = 500;
-                            Debug.LogWarning("[DummyConnection] Prebaked map not found or invalid, falling back to generation");
-                        }
-                    }
-                    else
-                    {
-                        worldWidth = 500;
-                        worldHeight = 500;
+                        gm.AuthorizeUI();
                     }
 
-                    OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
-                        "pallada",
-                        "Pallada",
-                        (ushort)worldWidth,
-                        (ushort)worldHeight,
-                        cellConfigs,
-                        new byte[][]
-                        {
-                            new byte[] { 37, 38, 106 },
-                        })));
-
-                    if (!skipMapDataGeneration)
+                    if (_uiRoot != null)
                     {
-                        SendTestWorldMapData(worldWidth, worldHeight);
+                        _uiRoot.SetActive(true);
                     }
 
-                    OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
-                    var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-                    HandleRobotInfoMock(_mockBotId).Forget();
-                    RunCircularBots(10).Forget();
-                    _x = 25;
-                    _y = 50;
-                    OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
-                    OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
-                    OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
-                    _bonusCountdown = 10;
-                    _bonusClaimed = false;
-                    OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
-                    _health = 250;
-                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
-                    OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, new[] { 0L, 0L, 0L, 0L, 0L, 0L })));
-                    OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
-                    OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
-
-                    SendSkillProgressMock().Forget();
-                    SendChatMock().Forget();
-
-                    OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
-                    OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
-                    foreach (var kvp in _activeBuffs)
-                    {
-                        var (color, name) = kvp.Key switch
-                        {
-                            "xp3" => (System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3"),
-                            "freeup" => (System.Drawing.Color.Cyan, "Freeup"),
-                            "x4" => (System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4"),
-                            "battery" => (System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор"),
-                            _ => (System.Drawing.Color.White, kvp.Key),
-                        };
-                        OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, color, kvp.Key, new[] { name, kvp.Value.ToString() })));
-                    }
-
-                    StartBuffLoop();
-                    SendPingMock().Forget();
-                    SendDailyBonusMock().Forget();
-
-                    OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
-                    {
-                        [CellType.Empty] = 20,
-                        [CellType.Road] = 100,
-                    })));
-                    OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
-
-                    var inventoryData = new Dictionary<ItemType, long>();
-                    foreach (var type in ItemRegistry.AllTypes)
-                    {
-                        inventoryData[type] = 1;
-                    }
-
-                    inventoryData[ItemType.Battery] = 2;
-                    _inventory.Clear();
-                    foreach (var kvp in inventoryData)
-                    {
-                        _inventory[kvp.Key] = kvp.Value;
-                    }
-
-                    OnReceived?.Invoke(new ServerPacket(new InventoryPacket(inventoryData)));
-
-                    var placeholderMsg = new ChatMessagePacket(0, 0, 0, 0,
-                    System.Drawing.Color.White, string.Empty, System.Drawing.Color.White, string.Empty);
-                    OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
-
-                    // Send test packs
-                    _teleportPositions.Clear();
-                    _teleportPositions.Add((27, 50));
-                    _teleportPositions.Add((227, 50));
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                    {
-                        new PackPacket(27, 50, PackType.Teleport, 0, 1),
-                        new PackPacket(227, 50, PackType.Teleport, 0, 1),
-                        new PackPacket(25, 48, PackType.Market, 0, 0),
-                    })));
+                    InitWorld();
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
                     HandleAssetRequest(runtimeAssets).Forget();
@@ -774,6 +715,225 @@ namespace MinesServer.Networking.Connection.Client
                     CancelMission();
                 }
             }
+            else if (packet.WindowTag == "auth")
+            {
+                if (!_awaitingAuth)
+                {
+                    return;
+                }
+
+                _awaitingAuth = false;
+                OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+
+                string newToken = Guid.NewGuid().ToString("N");
+                _validTokens.Add(newToken);
+                PlayerPrefs.SetString("AuthKnownToken", _knownToken);
+                PlayerPrefs.Save();
+                OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(newToken)));
+
+                var gm = GameManager.Instance;
+                if (gm != null)
+                {
+                    gm.AuthorizeUI();
+                }
+
+                if (_uiRoot != null)
+                {
+                    _uiRoot.SetActive(true);
+                }
+
+                InitWorld();
+            }
+        }
+
+        private void SendAuthWindow()
+        {
+            _awaitingAuth = true;
+
+            var titleText = new TextPacket
+            {
+                Text = "<color=#B2A680>Авторизация</color>",
+                AttachedProperties = new StringPairPacket[]
+                {
+                    new("DockPanel.Dock", "Top"),
+                },
+            };
+
+            var descriptionText = new TextPacket
+            {
+                Text = "<color=white>Нажмите «Авторизоваться» чтобы начать игру</color>",
+                Style = new GUIStylePacket
+                {
+                    Margin = new Margins(0, 0, 20, 0),
+                },
+                // Кнопка и текст теперь жестко привязаны к сетке сверху вниз
+                AttachedProperties = new StringPairPacket[]
+                 {
+            new("DockPanel.Dock", "Top"),
+                 },
+            };
+
+            var authButton = new TextPacket
+            {
+                Text = "<color=white>Авторизоваться</color>",
+                OnClickContext = ".",
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 40, 167, 69),
+                    Border = System.Drawing.Color.FromArgb(255, 60, 200, 100),
+                    BorderWidth = 2,
+                    Padding = new Margins(10, 10, 6, 6),
+                    Margin = new Margins(0, 0, 0, 0),
+                },
+                // Кнопка встанет строго под описанием внутри темного окна
+                AttachedProperties = new StringPairPacket[]
+                {
+            new("DockPanel.Dock", "Top"),
+                },
+            };
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(10, 10, 10, 10),
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    titleText,
+                    descriptionText,
+                    authButton,
+                },
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("auth", 300, 160, root)));
+            Debug.Log("[DummyConnection] Auth window opened");
+        }
+
+        private void InitWorld()
+        {
+            var cellConfigs = CreateTestCellConfigurations();
+            int worldWidth;
+            int worldHeight;
+            bool skipMapDataGeneration = false;
+
+            if (UsePrebakedMap)
+            {
+                string prebakedPath = $"{Application.persistentDataPath}/{PrebakedWorldCodeName}_cells.mapb";
+                (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(prebakedPath);
+                if (worldWidth > 0 && worldHeight > 0)
+                {
+                    skipMapDataGeneration = true;
+                    Debug.Log($"[DummyConnection] Using prebaked map: {worldWidth}x{worldHeight}");
+                }
+                else
+                {
+                    worldWidth = 500;
+                    worldHeight = 500;
+                    Debug.LogWarning("[DummyConnection] Prebaked map not found or invalid, falling back to generation");
+                }
+            }
+            else
+            {
+                worldWidth = 500;
+                worldHeight = 500;
+            }
+
+            OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
+                "pallada",
+                "Pallada",
+                (ushort)worldWidth,
+                (ushort)worldHeight,
+                cellConfigs,
+                new byte[][]
+                {
+                    new byte[] { 37, 38, 106 },
+                })));
+
+            if (!skipMapDataGeneration)
+            {
+                SendTestWorldMapData(worldWidth, worldHeight);
+            }
+
+            OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
+            var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
+            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
+            HandleRobotInfoMock(_mockBotId).Forget();
+            RunCircularBots(10).Forget();
+            _x = 25;
+            _y = 50;
+            OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
+            OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
+            OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
+            _bonusCountdown = 10;
+            _bonusClaimed = false;
+            OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
+            _health = 250;
+            OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
+            OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, new[] { 0L, 0L, 0L, 0L, 0L, 0L })));
+            OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
+            OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
+
+            SendSkillProgressMock().Forget();
+            SendChatMock().Forget();
+
+            OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
+            OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
+            foreach (var kvp in _activeBuffs)
+            {
+                var (color, name) = kvp.Key switch
+                {
+                    "xp3" => (System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3"),
+                    "freeup" => (System.Drawing.Color.Cyan, "Freeup"),
+                    "x4" => (System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4"),
+                    "battery" => (System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор"),
+                    _ => (System.Drawing.Color.White, kvp.Key),
+                };
+                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, color, kvp.Key, new[] { name, kvp.Value.ToString() })));
+            }
+
+            StartBuffLoop();
+            SendPingMock().Forget();
+            SendDailyBonusMock().Forget();
+
+            OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
+            {
+                [CellType.Empty] = 20,
+                [CellType.Road] = 100,
+            })));
+            OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
+
+            var inventoryData = new Dictionary<ItemType, long>();
+            foreach (var type in ItemRegistry.AllTypes)
+            {
+                inventoryData[type] = 1;
+            }
+
+            inventoryData[ItemType.Battery] = 2;
+            _inventory.Clear();
+            foreach (var kvp in inventoryData)
+            {
+                _inventory[kvp.Key] = kvp.Value;
+            }
+
+            OnReceived?.Invoke(new ServerPacket(new InventoryPacket(inventoryData)));
+
+            var placeholderMsg = new ChatMessagePacket(0, 0, 0, 0,
+            System.Drawing.Color.White, string.Empty, System.Drawing.Color.White, string.Empty);
+            OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
+
+            // Send test packs
+            _teleportPositions.Clear();
+            _teleportPositions.Add((27, 50));
+            _teleportPositions.Add((227, 50));
+            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+            {
+                new PackPacket(27, 50, PackType.Teleport, 0, 1),
+                new PackPacket(227, 50, PackType.Teleport, 0, 1),
+                new PackPacket(25, 48, PackType.Market, 0, 0),
+            })));
         }
 
         private void SendMissionWindow()
