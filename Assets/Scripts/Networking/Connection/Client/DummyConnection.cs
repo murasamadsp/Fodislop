@@ -245,7 +245,7 @@ namespace MinesServer.Networking.Connection.Client
                         var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
-                            bool isPassable = ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
+                            bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
                             if (!isPassable && !IgnoreCollision)
                             {
                                 Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not passable ({cellType})");

@@ -13,7 +13,7 @@ namespace Fodinae.Scripts.Networking.Processors
 {
     public class PlayerInfoProcessor : IPacketProcessor<PlayerInfoPacket>, IPacketProcessor<MovementSpeedPacket>, IPacketProcessor<TeleportPacket>
     {
-        private static IMapDataProvider Map => ServiceLocator.Resolve<IMapDataProvider>();
+        private static IMapDataProvider Map => ServiceLocator.Resolve<IMapDataProvider>() ?? MapManager.Instance;
         private static IPlayerStats Stats => ServiceLocator.Resolve<IPlayerStats>() ?? PlayerStatsModel.Instance;
 
         public void Process(PlayerInfoPacket packet)

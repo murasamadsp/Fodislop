@@ -351,7 +351,7 @@ namespace Fodinae.Scripts.Player
                     var cellType = MapStorage.Instance.GetCell(targetServerX, targetServerY);
                     var cellConfig = mm.GetCellConfig(cellType);
 
-                    bool isPassable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
+                    bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
 
                     if (isPassable || _ignoreCollision)
                     {

@@ -272,6 +272,11 @@ namespace Fodinae.Scripts.World
 
         private void OnTextureLoaded(string filename, Texture2D texture)
         {
+            if (!filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             InitializeShader();
             _metadataCache.Clear();
             _needsRefresh = true;
@@ -347,7 +352,6 @@ namespace Fodinae.Scripts.World
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
-                _needsRefresh = false;
             }
 
             // (Note: _WorldOffset uniform removed — UV3 now carries worldPos directly)
@@ -773,6 +777,12 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
+            if (atlases.Count == 0)
+            {
+                Debug.LogWarning("[Terrain] No atlases available — skipping rebuild");
+                return;
+            }
+
             bool materialsChanged = false;
 
             // Skip material/submesh validity checks when atlas count hasn't changed
@@ -781,8 +791,9 @@ namespace Fodinae.Scripts.World
             {
                 _lastAtlasCount = atlases.Count;
 
-                // Atlas count changed — invalidate cache since atlas indices may have shifted.
+                // Atlas count changed — invalidate caches since atlas indices may have shifted.
                 _atlasIndexCache.Clear();
+                _metadataCache.Clear();
 
                 CleanupMaterials();
                 _subMeshIndices = new List<int>[atlases.Count];
@@ -818,14 +829,10 @@ namespace Fodinae.Scripts.World
             wtm.FlushDirtyAtlases();
 
             // Decide: incremental scroll or full rebuild.
-            // Full rebuild is needed on first frame, when textures reload, or when the camera
-            // jumped by more than half the viewport.
-            // _cacheMinX/Y is set to (minX - 1, minY - 1) by PopulateCellCache (padding offset),
-            // so compute scroll delta in cache-coordinate space.
-            // Only allow incremental scroll if the cell cache has been fully populated at least once.
-            // _cacheMinX starts as int.MinValue and gets set to a real cache coordinate by PopulateCellCache
-            // (called from FullRebuild). On the very first frame, before any FullRebuild, _cacheMinX is still
-            // int.MinValue, so canScroll is false and a FullRebuild is forced — populating the cache correctly.
+            // Full rebuild is needed on first frame, when textures reload (_needsRefresh),
+            // or when the camera jumped by more than half the viewport.
+            // IncrementalUpdate is used for small camera movements — it scrolls existing
+            // vertex data in-place, avoiding expensive _mesh.Clear().
             bool canScroll = _cacheMinX != int.MinValue && !_needsRefresh;
             int dx = 0, dy = 0;
             if (canScroll)
@@ -845,6 +852,10 @@ namespace Fodinae.Scripts.World
             {
                 FullRebuild(minX, minY, atlases);
             }
+
+            // _needsRefresh is cleared inside FullRebuild/IncrementalUpdate after success.
+            // If either fails via exception, _needsRefresh stays true and triggers a retry
+            // next frame. Do NOT set it here.
 
             // Material reassignment (only when changed).
             bool needReassignMaterials = materialsChanged;
@@ -880,10 +891,19 @@ namespace Fodinae.Scripts.World
         /// </summary>
         private void FullRebuild(int minX, int minY, List<TextureAtlas> atlases)
         {
-            PopulateCellCache(minX, minY);
-            PrecalculateData();
-            _backgroundFloodFill.ComputeFull(this);
-            BuildMeshData(minX, minY, atlases, clearMesh: true);
+            try
+            {
+                PopulateCellCache(minX, minY);
+                PrecalculateData();
+                _backgroundFloodFill.ComputeFull(this);
+                BuildMeshData(minX, minY, atlases, clearMesh: true);
+                _needsRefresh = false;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[Terrain] FullRebuild failed (will retry): {ex.Message}\n{ex.StackTrace}");
+                _needsRefresh = true;
+            }
         }
 
         /// <summary>
@@ -894,16 +914,25 @@ namespace Fodinae.Scripts.World
         /// </summary>
         private void IncrementalUpdate(int minX, int minY, int dx, int dy, List<TextureAtlas> atlases)
         {
-            // Scroll cell cache by (dx, dy) in-place, filling new edge cells from WorldLayer.
-            ScrollCellCache(dx, dy, atlases);
+            try
+            {
+                // Scroll cell cache by (dx, dy) in-place, filling new edge cells from WorldLayer.
+                ScrollCellCache(dx, dy, atlases);
 
-            // Incrementally recompute derived data: scroll existing buffers, then
-            // only recompute the |dx|/|dy|-cell border on each exposed edge.
-            // Interior cells were scrolled together — their neighborhood relationships
-            // are preserved, so their tiling, relief, and background values are still valid.
-            IncrementalPrecalculateData(dx, dy);
-            _backgroundFloodFill.ComputeIncremental(dx, dy, this);
-            BuildMeshDataIncremental(minX, minY, dx, dy, atlases);
+                // Incrementally recompute derived data: scroll existing buffers, then
+                // only recompute the |dx|/|dy|-cell border on each exposed edge.
+                // Interior cells were scrolled together — their neighborhood relationships
+                // are preserved, so their tiling, relief, and background values are still valid.
+                IncrementalPrecalculateData(dx, dy);
+                _backgroundFloodFill.ComputeIncremental(dx, dy, this);
+                BuildMeshDataIncremental(minX, minY, dx, dy, atlases);
+                _needsRefresh = false;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[Terrain] IncrementalUpdate failed (will retry): {ex.Message}\n{ex.StackTrace}");
+                _needsRefresh = true;
+            }
         }
 
         /// <summary>
@@ -1578,15 +1607,9 @@ namespace Fodinae.Scripts.World
                 _mesh.Clear();
             }
 
-            // subMeshCount must be set before vertex buffer setup to avoid resetting vertex data.
             _mesh.subMeshCount = atlases.Count;
-
-            // Single interleaved vertex buffer upload replaces 7 separate SetVertices/SetUVs/SetColors calls.
             _mesh.SetVertexBufferParams(_vertexBuffer.Length, VertexLayout);
             _mesh.SetVertexBufferData(_vertexBuffer, 0, 0, _vertexBuffer.Length, 0, UPLOAD_FLAGS);
-
-            // SetVertexBufferData does NOT recalculate bounds (unlike SetVertices).
-            // Without this explicit call, the mesh has zero bounds and is frustum-culled.
             _mesh.RecalculateBounds();
             var wtm = WorldTextureManager.Instance;
             for (int i = 0; i < atlases.Count; i++)
@@ -1601,16 +1624,10 @@ namespace Fodinae.Scripts.World
                     _materials[i].SetTexture("_BaseMap", atlasTex);
                     _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
                     _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
-
-                    // _LooseRockRoundRadius removed — rounding now uses UNION formulation
                 }
 
                 _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
             }
-
-            // Note: UploadMeshData(false) was intentionally removed.
-            // SetVertices/SetUVs/SetIndices already mark the mesh for GPU upload;
-            // an explicit UploadMeshData call would force a redundant GPU sync point.
         }
 
         /// <summary>
@@ -1627,7 +1644,8 @@ namespace Fodinae.Scripts.World
             int worldWidth = mm.WorldWidth;
             int worldHeight = mm.WorldHeight;
 
-            // Step 1: Scroll vertex buffer in-place (also fixes UV3.xy via uv3Offset).
+            // Step 1: Scroll vertex buffer in-place. UV3 contains absolute grid
+            // coordinates, so copied vertices keep their original values.
             ScrollVertexBuffer(dx, dy);
 
             // Step 2: Only fill border cells (those entering the viewport).
@@ -1726,7 +1744,6 @@ namespace Fodinae.Scripts.World
             const int stride = 8;
             int rowStride = mh * stride;
             Vector3 posOffset = new Vector3(-dx * _cellSize, -dy * _cellSize, 0);
-            Vector4 uv3Offset = new Vector4(-dx, dy, 0, 0);
 
             if (dx > 0)
             {
@@ -1744,7 +1761,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1759,7 +1775,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1774,7 +1789,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1797,7 +1811,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1812,7 +1825,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1827,7 +1839,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1849,7 +1860,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -1864,7 +1874,6 @@ namespace Fodinae.Scripts.World
                             {
                                 TerrainVertex vert = _vertexBuffer[src + v];
                                 vert.Position += posOffset;
-                                vert.UV3 += uv3Offset;
                                 _vertexBuffer[dst + v] = vert;
                             }
                         }
@@ -2196,6 +2205,10 @@ namespace Fodinae.Scripts.World
             CachedCellData localFallback = default;
             ref CachedCellData data = ref (isSameCell ? ref _cellCache[cx, cy] : ref GetNeighborCacheEntry(cellType, cx, cy, atlases, ref localFallback));
             int atlasIndex = data.AtlasIndex;
+            if (atlasIndex < 0 || atlasIndex >= _subMeshIndices.Length)
+            {
+                atlasIndex = 0;
+            }
 
             float zOffset = isBackground ? 0.1f : 0.0f;
             float lx = x * _cellSize;
@@ -2254,7 +2267,7 @@ namespace Fodinae.Scripts.World
 
             Vector4 atlasRect = data.AtlasRect;
             bool useFallback = _useColorLod || atlasRect.z < 0.0001f;
-            Color color = useFallback ? data.MinimapColor : _shimmerHighlightColor;
+            Color color = useFallback ? data.MinimapColor : Color.white;
             float animOffset = 0f;
             if (!useFallback && data.Animation == CellAnimationType.Blinking)
             {

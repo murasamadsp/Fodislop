@@ -127,7 +127,6 @@ namespace Fodinae.Scripts.World
                 Array.Clear(_atlasPixels, 0, _atlasPixels.Length);
                 _atlasTexture.SetPixels32(_atlasPixels);
                 _atlasTexture.Apply();
-                _atlasPixels = null;
 
                 _isDirty = false;
             }
@@ -287,7 +286,6 @@ namespace Fodinae.Scripts.World
 
             _atlasTexture.SetPixels32(_atlasPixels);
             _atlasTexture.Apply();
-            _atlasPixels = null;
             _isDirty = false;
         }
 
@@ -371,7 +369,6 @@ namespace Fodinae.Scripts.World
 
             _atlasTexture.SetPixels32(_atlasPixels);
             _atlasTexture.Apply();
-            _atlasPixels = null;
         }
 
         private void CopyPixelsToAtlasArray(Color32[] sourcePixels, int width, int height, Rectangle destination)

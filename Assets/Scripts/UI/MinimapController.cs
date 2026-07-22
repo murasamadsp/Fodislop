@@ -99,6 +99,11 @@ namespace Fodinae.Scripts.UI
             if (_player != null)
             {
                 _player.OnPlayerMoved += OnPlayerMoved;
+                if (_ready)
+                {
+                    UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                    RefreshTexture(_player.Position.x, _player.Position.y);
+                }
             }
         }
 
@@ -164,19 +169,23 @@ namespace Fodinae.Scripts.UI
             _chunkSize = _cellLayer.ChunkSize;
             _heightChunks = _cellLayer.HeightChunks;
             _ready = true;
+            SetVisible(_isVisible);
         }
 
         private void CreateUI()
         {
-            Canvas canvas = FindAnyObjectByType<Canvas>();
-            if (canvas == null)
-            {
-                GameObject canvasObj = new("Canvas");
-                canvas = canvasObj.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvasObj.AddComponent<CanvasScaler>();
-                canvasObj.AddComponent<GraphicRaycaster>();
-            }
+            // UI Toolkit renders independently from uGUI. A dedicated overlay canvas
+            // prevents a full-screen UIDocument from covering the minimap.
+            GameObject canvasObj = new("MinimapCanvas");
+            canvasObj.transform.SetParent(transform, false);
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.overrideSorting = true;
+
+            // Draw above the world, but below the UI Toolkit HUD and its modal panels.
+            canvas.sortingOrder = -1;
+            canvasObj.AddComponent<CanvasScaler>();
+            canvasObj.AddComponent<GraphicRaycaster>();
 
             // Minimap image
             _minimapObj = new GameObject("Minimap");
@@ -221,8 +230,23 @@ namespace Fodinae.Scripts.UI
             textRt.sizeDelta = new Vector2(200, 30);
             _textObj.transform.SetAsLastSibling();
 
-            _isVisible = PlayerPrefs.GetInt(_togglePrefKey, 1) == 1;
-            SetVisible(_isVisible);
+            // The minimap is a permanent in-game HUD element. It becomes visible
+            // only once a world has been initialized.
+            _isVisible = true;
+            SetVisible(false);
+        }
+
+        protected void OnEnable()
+        {
+            if (_ready)
+            {
+                SetVisible(_isVisible);
+            }
+        }
+
+        protected void OnDisable()
+        {
+            SetVisible(false);
         }
 
         private void OnPlayerMoved(Vector2Int oldPos, Vector2Int newPos)

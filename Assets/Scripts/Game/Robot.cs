@@ -145,8 +145,10 @@ namespace Fodinae.Scripts.Game
             var textGo = new GameObject("Nickname");
             textGo.transform.SetParent(transform);
             _nicknameText = textGo.AddComponent<TextMeshPro>();
-            _nicknameText.alignment = TextAlignmentOptions.MidlineLeft;
+            _nicknameText.alignment = TextAlignmentOptions.Center;
             _nicknameText.fontSize = 6.4f;
+            _nicknameText.textWrappingMode = TextWrappingModes.NoWrap;
+            _nicknameText.overflowMode = TextOverflowModes.Overflow;
             _nicknameText.color = Color.white;
 
             var textRenderer = textGo.GetComponent<MeshRenderer>();
@@ -287,7 +289,7 @@ namespace Fodinae.Scripts.Game
         {
             if (_nicknameText != null)
             {
-                _nicknameText.transform.SetPositionAndRotation(transform.position + new Vector3(0.6f, 0.5f, 0), Quaternion.identity);
+                _nicknameText.transform.SetPositionAndRotation(transform.position + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             }
 
             if (_clanRenderer != null)

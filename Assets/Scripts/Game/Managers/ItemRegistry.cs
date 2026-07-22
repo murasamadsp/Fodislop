@@ -38,7 +38,7 @@ namespace Fodinae.Scripts.Game.Managers
             {
                 if (_missingIconWarned.Add(type))
                 {
-                    Debug.LogWarning($"{TAG} Icon texture not found on disk for item type '{type}' (searched {camelName}.png)");
+                    Debug.Log($"{TAG} No local icon for item type '{type}' (searched {camelName}.png), will use server texture if available");
                 }
 
                 return null;
