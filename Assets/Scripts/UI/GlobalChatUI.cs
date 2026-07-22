@@ -32,7 +32,7 @@ namespace Fodinae.Scripts.UI
         private VisualElement _internalInput;
         private Button _sendButton;
         private bool _isOpen = false;
-        private const int MAXMESSAGES = 20;
+        private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker _blinker;
         private CancellationTokenSource _idleCts;
 
@@ -253,7 +253,6 @@ namespace Fodinae.Scripts.UI
                 text = text.Substring(0, ServerConfig.Instance.MaxGlobalChatLength);
             }
 
-            var ns = Networking.NetworkService.Instance;
             Networking.NetworkService.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
 
             _inputField.value = string.Empty;
@@ -334,7 +333,7 @@ namespace Fodinae.Scripts.UI
 
             _scrollView.Add(label);
 
-            while (_scrollView.childCount > MAXMESSAGES)
+            while (_scrollView.childCount > MAX_MESSAGES)
             {
                 _scrollView.RemoveAt(0);
             }

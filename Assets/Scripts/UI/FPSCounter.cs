@@ -11,8 +11,8 @@ namespace Fodinae.Scripts.UI
     /// </summary>
     public class FPSCounter : MonoBehaviour
     {
-        private const int SampleSize = 30;
-        private readonly float[] _frameTimes = new float[SampleSize];
+        private const int SAMPLE_SIZE = 30;
+        private readonly float[] _frameTimes = new float[SAMPLE_SIZE];
         private int _frameIndex;
         private float _runningSum;
 
@@ -61,8 +61,8 @@ namespace Fodinae.Scripts.UI
             _runningSum -= _frameTimes[_frameIndex];
             _frameTimes[_frameIndex] = Time.unscaledDeltaTime;
             _runningSum += _frameTimes[_frameIndex];
-            _frameIndex = (_frameIndex + 1) % SampleSize;
-            float avg = _runningSum / SampleSize;
+            _frameIndex = (_frameIndex + 1) % SAMPLE_SIZE;
+            float avg = _runningSum / SAMPLE_SIZE;
             float fps = avg > 0f ? 1f / avg : 0f;
             _fpsText.text = $"FPS: {fps:F1}  Ping: {_pingMs}ms  Online: {_onlinePlayers}  Prg: {_onlineProgrammator}";
         }

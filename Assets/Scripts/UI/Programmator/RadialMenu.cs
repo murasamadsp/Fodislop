@@ -62,14 +62,14 @@ namespace Fodinae.Scripts.UI.Programmator
             _itemContainer.pickingMode = PickingMode.Position;
             _root.Add(_itemContainer);
 
-            const float centerX = 90f;
-            const float centerY = 90f;
+            const float CENTER_X = 90f;
+            const float CENTER_Y = 90f;
 
             for (int i = 0; i < _count; i++)
             {
                 float angle = ((float)i / _count * Mathf.PI * 2f) - (Mathf.PI / 2f);
-                float x = centerX + (_radius * Mathf.Cos(angle)) - (_itemSize / 2f);
-                float y = centerY + (_radius * Mathf.Sin(angle)) - (_itemSize / 2f);
+                float x = CENTER_X + (_radius * Mathf.Cos(angle)) - (_itemSize / 2f);
+                float y = CENTER_Y + (_radius * Mathf.Sin(angle)) - (_itemSize / 2f);
 
                 int itemIdx = i;
                 var item = new VisualElement();

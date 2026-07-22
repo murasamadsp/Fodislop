@@ -4,6 +4,11 @@ using UnityEngine;
 
 namespace Fodinae.Scripts.Game.Managers
 {
+    /// <summary>
+    /// Высокоуровневые состояния игрового сеанса.
+    /// Расширяют сетевой статус <see cref="MinesServer.Networking.Shared.ConnectionStatus"/>,
+    /// разделяя состояния оффлайн режима, подключения, геймплея и дисконнекта.
+    /// </summary>
     public enum GameState
     {
         Offline,

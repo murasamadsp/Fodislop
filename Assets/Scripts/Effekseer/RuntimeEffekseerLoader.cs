@@ -68,7 +68,7 @@ namespace Fodinae.Scripts.Effekseer
                 return null;
             }
 
-            var loader = clientAssetLoader != null ? clientAssetLoader : ClientAssetLoader.Instance;
+            var loader = clientAssetLoader ?? ClientAssetLoader.Instance;
             if (loader == null)
             {
                 Debug.LogError("[RuntimeEffekseerLoader] No ClientAssetLoader available");
@@ -93,7 +93,7 @@ namespace Fodinae.Scripts.Effekseer
             foreach (var rawPath in resourcePath.TexturePathList)
             {
                 // Apply optional path remapping
-                var serverPath = texturePathMapper != null ? texturePathMapper(rawPath) : rawPath;
+                var serverPath = texturePathMapper?.Invoke(rawPath) ?? rawPath;
                 if (serverPath == null)
                 {
                     Debug.LogWarning($"[RuntimeEffekseerLoader] Texture '{rawPath}' skipped by mapper");

@@ -25,13 +25,13 @@ namespace Fodinae.Scripts.World
 
         [Header("Performance")]
         [SerializeField]
-        private int _cellTextureSize = RenderingConstants.CellSize;
+        private int _cellTextureSize = RenderingConstants.CELL_SIZE;
 
         [System.NonSerialized]
         public TextureAtlas _currentAtlas;
         private CellTextureCache _textureCache;
         private Texture2D _flowMapTexture;
-        public const CellType FlowMapCellType = (CellType)254;
+        public const CellType FLOW_MAP_CELL_TYPE = (CellType)254;
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests;
         private List<TextureAtlas> _atlases;
 
@@ -123,7 +123,7 @@ namespace Fodinae.Scripts.World
 
             var textureInfo = new CellTextureInfo
             {
-                CellType = FlowMapCellType,
+                CellType = FLOW_MAP_CELL_TYPE,
                 BaseTexture = _flowMapTexture,
                 HasVariations = false,
                 VariationCount = 1,
@@ -131,7 +131,7 @@ namespace Fodinae.Scripts.World
                 FramesPerRow = 1,
                 FrameSize = 12,
             };
-            _textureCache.AddTexture(FlowMapCellType, textureInfo);
+            _textureCache.AddTexture(FLOW_MAP_CELL_TYPE, textureInfo);
         }
 
         private void EnsureFlowMapInAtlas(TextureAtlas atlas)
@@ -141,10 +141,10 @@ namespace Fodinae.Scripts.World
                 GenerateFlowMap();
             }
 
-            if (!atlas.ContainsCell(FlowMapCellType))
+            if (!atlas.ContainsCell(FLOW_MAP_CELL_TYPE))
             {
-                atlas.TryAddTexture(FlowMapCellType, _flowMapTexture, out _);
-                atlas.CopyTextureToAtlas(FlowMapCellType, _flowMapTexture);
+                atlas.TryAddTexture(FLOW_MAP_CELL_TYPE, _flowMapTexture, out _);
+                atlas.CopyTextureToAtlas(FLOW_MAP_CELL_TYPE, _flowMapTexture);
             }
         }
 
@@ -175,7 +175,7 @@ namespace Fodinae.Scripts.World
         public AtlasCoordinate GetFlowMapCoordinate(TextureAtlas atlas)
         {
             EnsureInitialized();
-            return atlas.GetCoordinate(FlowMapCellType);
+            return atlas.GetCoordinate(FLOW_MAP_CELL_TYPE);
         }
 
         public AtlasCoordinate GetCellTextureCoordinateSync(CellType cellType, int globalX, int globalY)

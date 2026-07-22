@@ -11,7 +11,7 @@ namespace Fodinae.Scripts
     public class WorldLayer<T> : IDisposable
         where T : unmanaged
     {
-        private const int HeaderSize = 16; // 4 ints
+        private const int HEADER_SIZE = 16; // 4 ints
 
         private readonly int _chunkSize;
         private readonly int _chunkArea;
@@ -33,16 +33,16 @@ namespace Fodinae.Scripts
 
         private FileStream _fileStream;
 
-        public WorldLayer(string filePath, int widthChunks, int heightChunks, int chunkSize = 32, int maxRamChunks = 1000)
+        public WorldLayer(string filePath, int WIDTH_CHUNKS, int HEIGHT_CHUNKS, int CHUNK_SIZE = 32, int maxRamChunks = 1000)
         {
             _filePath = filePath;
-            _widthChunks = widthChunks;
-            _heightChunks = heightChunks;
-            _chunkSize = chunkSize;
-            _chunkArea = chunkSize * chunkSize;
+            _widthChunks = WIDTH_CHUNKS;
+            _heightChunks = HEIGHT_CHUNKS;
+            _chunkSize = CHUNK_SIZE;
+            _chunkArea = CHUNK_SIZE * CHUNK_SIZE;
             _maxChunksInMemory = maxRamChunks;
 
-            int totalChunks = widthChunks * heightChunks;
+            int totalChunks = WIDTH_CHUNKS * HEIGHT_CHUNKS;
             _chunkOffsets = new long[totalChunks];
             Array.Fill(_chunkOffsets, -1);
 
@@ -286,7 +286,7 @@ namespace Fodinae.Scripts
 
             bool valid = false;
             long offsetTableBytes = (long)_chunkOffsets.Length * sizeof(long);
-            if (_fileStream.Length >= HeaderSize)
+            if (_fileStream.Length >= HEADER_SIZE)
             {
                 try
                 {
@@ -298,7 +298,7 @@ namespace Fodinae.Scripts
                     reader.ReadInt32(); // Reserved
 
                     if (w == _widthChunks && h == _heightChunks && s == _chunkSize &&
-                        _fileStream.Length >= HeaderSize + offsetTableBytes)
+                        _fileStream.Length >= HEADER_SIZE + offsetTableBytes)
                     {
                         var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
                         ReadExactly(_fileStream, byteSpan);
@@ -427,7 +427,7 @@ namespace Fodinae.Scripts
 
                 _chunkOffsets[index] = newOffset;
 
-                long tablePos = HeaderSize + (index * sizeof(long));
+                long tablePos = HEADER_SIZE + (index * sizeof(long));
                 _fileStream.Seek(tablePos, SeekOrigin.Begin);
                 writer.Write(newOffset);
             }
@@ -486,7 +486,7 @@ namespace Fodinae.Scripts
 
         private void SaveOffsetTable()
         {
-            _fileStream.Seek(HeaderSize, SeekOrigin.Begin);
+            _fileStream.Seek(HEADER_SIZE, SeekOrigin.Begin);
             var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
             _fileStream.Write(byteSpan);
         }

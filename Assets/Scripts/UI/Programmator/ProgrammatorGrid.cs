@@ -14,7 +14,7 @@ namespace Fodinae.Scripts.UI.Programmator
         private bool _isOpen;
         private bool _radialShown;
         private const float CELLSIZE = 30f;
-        private const float CELLGAP = 2f;
+        private const float CELL_GAP = 2f;
 
         protected void Start()
         {
@@ -104,12 +104,12 @@ namespace Fodinae.Scripts.UI.Programmator
 
             var gridScroll = new ScrollView();
             gridScroll.style.flexGrow = 1;
-            gridScroll.style.maxHeight = ProgrammatorData.ROWS * (CELLSIZE + (CELLGAP * 2));
+            gridScroll.style.maxHeight = ProgrammatorData.ROWS * (CELLSIZE + (CELL_GAP * 2));
 
             _gridContainer = new VisualElement();
             _gridContainer.style.flexDirection = FlexDirection.Row;
             _gridContainer.style.flexWrap = Wrap.Wrap;
-            _gridContainer.style.width = ProgrammatorData.COLS * (CELLSIZE + (CELLGAP * 2));
+            _gridContainer.style.width = ProgrammatorData.COLS * (CELLSIZE + (CELL_GAP * 2));
 
             _cells = new VisualElement[ProgrammatorData.ROWS, ProgrammatorData.COLS];
 
@@ -130,10 +130,10 @@ namespace Fodinae.Scripts.UI.Programmator
                     cell.style.borderBottomColor = new Color(0.25f, 0.25f, 0.25f, 1f);
                     cell.style.borderLeftColor = new Color(0.25f, 0.25f, 0.25f, 1f);
                     cell.style.borderRightColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                    cell.style.marginLeft = CELLGAP;
-                    cell.style.marginRight = CELLGAP;
-                    cell.style.marginTop = CELLGAP;
-                    cell.style.marginBottom = CELLGAP;
+                    cell.style.marginLeft = CELL_GAP;
+                    cell.style.marginRight = CELL_GAP;
+                    cell.style.marginTop = CELL_GAP;
+                    cell.style.marginBottom = CELL_GAP;
 
                     cell.RegisterCallback<PointerEnterEvent>(_ =>
                     {
@@ -185,7 +185,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void UpdateCell(int row, int col)
         {
-            int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLSPERPAGE)
+            int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                       + (row * ProgrammatorData.COLS) + col;
             int id = ProgrammatorData.Codes[idx];
             var cell = _cells[row, col];
@@ -218,7 +218,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
             int row = ProgrammatorData.HoveredCell / ProgrammatorData.COLS;
             int col = ProgrammatorData.HoveredCell % ProgrammatorData.COLS;
-            int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLSPERPAGE)
+            int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                       + (row * ProgrammatorData.COLS) + col;
             ProgrammatorData.Codes[idx] = selectedId;
             UpdateCell(row, col);

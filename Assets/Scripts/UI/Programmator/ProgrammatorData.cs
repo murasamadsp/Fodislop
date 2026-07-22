@@ -5,12 +5,12 @@ namespace Fodinae.Scripts.UI.Programmator
         public const int COLS = 16;
         public const int ROWS = 12;
         public const int PAGES = 16;
-        public const int CELLSPERPAGE = COLS * ROWS;
-        public const int TOTALCELLS = PAGES * CELLSPERPAGE;
+        public const int CELLS_PER_PAGE = COLS * ROWS;
+        public const int TOTAL_CELLS = PAGES * CELLS_PER_PAGE;
 
-        public static int[] Codes = new int[TOTALCELLS];
-        public static int[] Nums = new int[TOTALCELLS];
-        public static string[] Labels = new string[TOTALCELLS];
+        public static int[] Codes = new int[TOTAL_CELLS];
+        public static int[] Nums = new int[TOTAL_CELLS];
+        public static string[] Labels = new string[TOTAL_CELLS];
 
         public static int CurrentPage;
         public static int HoveredCell = -1;

@@ -17,6 +17,12 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
+
+    <!-- Правила длины файлов (>1000 строк) и методов (Sonar-правила S104, S138) -->
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="9.16.0.82469">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!--

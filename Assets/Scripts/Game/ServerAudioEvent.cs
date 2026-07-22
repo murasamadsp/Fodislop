@@ -133,7 +133,7 @@ namespace Fodinae.Scripts.Game
             {
                 if (_hasSourceBot)
                 {
-                    var sourceBot = RobotManager.InstanceIfExists != null ? RobotManager.InstanceIfExists.GetOrCreateRobot(_sourceBotId) : null;
+                    var sourceBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_sourceBotId);
                     if (sourceBot != null)
                     {
                         _effekseerHandle.SetLocation(sourceBot.transform.position);
@@ -142,7 +142,7 @@ namespace Fodinae.Scripts.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = RobotManager.InstanceIfExists != null ? RobotManager.InstanceIfExists.GetOrCreateRobot(_targetBotId) : null;
+                    var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -376,7 +376,7 @@ namespace Fodinae.Scripts.Game
                             texture,
                             new Rect(0, 0, texture.width, texture.height),
                             new Vector2(0.5f, 0.5f),
-                            RenderingConstants.PixelsPerUnit);
+                            RenderingConstants.PIXELS_PER_UNIT);
                     }
 
                     _maxLifetime = 1f;
