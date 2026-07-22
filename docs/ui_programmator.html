@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Toolkit и Программатор — Fodinae Client Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/main.js" defer></script>
+</head>
+
+<body>
+
+    <header>
+        <div class="header-title-group">
+            <div class="logo-badge">F</div>
+            <div>
+                <h1>UI Toolkit и Система Программатора</h1>
+                <p class="subtitle">Спецификация пакетных GUI-билдеров, связывания данных и графа команд</p>
+            </div>
+        </div>
+        <nav>
+            <a href="index.html">Обзор архитектуры</a>
+            <a href="rendering.html">Рендеринг (SingleMesh)</a>
+            <a href="networking.html">Сетевой протокол</a>
+            <a href="audio.html">Аудио (FMOD)</a>
+            <a href="assets_loading.html">Загрузка ассетов</a>
+            <a href="ui_programmator.html">UI & Программатор</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Пакетный UI -->
+        <section>
+            <h2>Динамическая сборка UI из серверных пакетов</h2>
+            <p>При получении пакета <code>OpenWindowPacket</code> интерфейс строится динамически из дерева компонентов в
+                <a href="../Assets/Scripts/UI/Builders/PacketUIBuilderFactory.cs"
+                    class="class-ref">PacketUIBuilderFactory</a>:</p>
+            <ul>
+                <li><code>CanvasPacketBuilder</code> / <code>PanelPacketBuilder</code> — базовые корневые контейнеры.
+                </li>
+                <li><code>DockPanelPacketBuilder</code> — верстка с докингом компонентов (`DockPanel.Dock` -> `Left`,
+                    `Top`, `Right`, `Bottom` через <a href="../Assets/Scripts/UI/Dock.cs"
+                        class="class-ref">Dock.cs</a>).</li>
+                <li><code>TextPacketBuilder</code>, <code>ButtonPacketBuilder</code>, <code>SliderPacketBuilder</code>,
+                    <code>ScrollViewerPacketBuilder</code> — визуальные элементы UI Toolkit.</li>
+            </ul>
+        </section>
+
+        <!-- Data Binding (SmartFormat) -->
+        <section>
+            <h2>Привязка данных WindowBinding (SmartFormat)</h2>
+            <p>Класс <a href="../Assets/Scripts/UI/Binding/WindowBinding.cs" class="class-ref">WindowBinding</a>
+                реализует авто-связывание данных окон:</p>
+            <ul>
+                <li>Сканирует дерево <code>VisualElement</code> на наличие полей ввода (источников) и текстовых полей с
+                    шаблонами `SmartFormat`.</li>
+                <li>При изменении значений во входе автоматически пересчитывает форматированные выражения и обновляет
+                    связанный интерфейс.</li>
+            </ul>
+        </section>
+
+        <!-- Программатор роботов -->
+        <section>
+            <h2>Система Программатора (Programmator)</h2>
+            <p>Программатор предоставляет визуальный граф команд для алгоритмов робота:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Класс</th>
+                        <th>Файл</th>
+                        <th>Назначение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>ProgrammatorGrid</code></td>
+                        <td><a href="../Assets/Scripts/UI/Programmator/ProgrammatorGrid.cs"
+                                class="class-ref">ProgrammatorGrid.cs</a></td>
+                        <td>Визуальная сетка ячеек для размещения алгоритмических команд.</td>
+                    </tr>
+                    <tr>
+                        <td><code>ProgrammatorData</code></td>
+                        <td><a href="../Assets/Scripts/UI/Programmator/ProgrammatorData.cs"
+                                class="class-ref">ProgrammatorData.cs</a></td>
+                        <td>Структура данных алгоритма, сериализуемая для отправки на сервер.</td>
+                    </tr>
+                    <tr>
+                        <td><code>RadialMenu</code></td>
+                        <td><a href="../Assets/Scripts/UI/Programmator/RadialMenu.cs"
+                                class="class-ref">RadialMenu.cs</a></td>
+                        <td>Круговое меню быстрого выбора инструкций робота.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+</body>
+
+</html>

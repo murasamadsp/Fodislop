@@ -10,6 +10,15 @@
 - **Интерфейс**: UI Toolkit.
 - **Асинхронность**: `UniTask` (vendored в `Assets/Plugins/UniTask/`).
 
+### 1.1 Архитектурная концепция клиенто-серверного взаимодействия
+
+Архитектура Fodinae построена на четком разделении тяжелого рендеринга и легкого сетевого состояния:
+
+1. **Примитивы рендеринга на клиенте**: Клиент содержит готовые системы отрисовки и воспроизведения (тайловый мир `SingleMeshTerrainRenderer`, сущности роботов `RobotManager`, предметы на земле `PackManager`, эффекты `SFXEffectManager`).
+2. **Легковесный сетевой поток данных**: Сервер передает клиенту только чистые координаты и идентификаторы состояний (где стоят роботы, какие предметные паки лежат, какие ячейки попадают в радиус прорисовки, какие звуки вызваны).
+3. **Ленивая однократная загрузка тяжелых ассетов (On-Demand Fetching)**: При первом появлении ранее неизвестного объекта (новый блок, скин робота, иконка пака, аудио-банк) клиент запрашивает бинарные ассеты (текстуры, спрайты, `.bank`) с CDN/сервера один раз.
+4. **Кэширование и локальный рендер**: Все полученные ассеты сохраняются в стойком дисковом кэше `PersistentAssetCache` (с ETag/MD5 валидацией) и ОЗУ (`CellTextureCache`, `AssetCache`). В дальнейшем клиент выполняет тяжелый рендеринг исключительно из локального кэша без повторных сетевых запросов.
+
 ## 2. Структура проекта
 
 ```text
@@ -24,42 +33,57 @@ Assets/
     System.*, IsExternalInit                         # Системные заглушки
   Scenes/              # SampleScene.unity, TextureStorageTestScene.unity
   Scripts/
-    # Корневые скрипты (утилиты и инфраструктура)
-    ClientAssetLoader.cs          # Загрузка ассетов с сервера/локально
-    PersistentAssetCache.cs       # Стойкий кэш ассетов (ETag, MD5)
-    ETagCalculator.cs             # MD5-хэш для ETag-валидации
-    DynamicImage.cs               # Компонент Image, загружающий спрайты с сервера
-    Dock.cs                       # Enum Dock (Left, Top, Right, Bottom)
-    GameConstants.cs              # Константы мира и UI
-    MainMenu.cs                   # Главное меню
-    PacketUIBuilder.cs            # Сборка UI из серверных пакетов
-    TileMaskConverter.cs          # Битмаски авто-тайлинга
-    UILine.cs                     # Кастомный VisualElement для линий
-    WorldLayer.cs                 # Дисковый стриминг чанков (RLE + LRU кэш)
+    # Ассет-пайплайн
+    AssetPipeline/
+      ClientAssetLoader.cs        # Загрузка ассетов с сервера/локально
+      PersistentAssetCache.cs     # Стойкий кэш ассетов (ETag, MD5)
+      ETagCalculator.cs           # MD5-хэш для ETag-валидации
+      DynamicImage.cs             # Компонент Image, загружающий спрайты с сервера
+      AssetCache.cs               # RAM-кэш декодированных ассетов
+      AnimatedSpriteData.cs       # Данные анимированного спрайта
 
     # Аудио
     Audio/
-      AudioManager.cs             # Синглтон: фоновый звук, SFX, громкость
-      SoundEffectInstance.cs      # Один звуковой эффект (тайл, копка и т.д.)
-      WavUtility.cs               # Чтение/конвертация WAV
+      Backend/
+        AudioSystem.cs            # Синглтон-контроллер (Play, PlayAttached, PlaySnapshot, SetGlobalParameter, SetBusVolume)
+        FmodAudioBackend.cs       # Низкоуровневый FMOD API: loadBankFile, AttachInstanceToGameObject, шины, снэпшоты
+      Core/
+        AudioLayer.cs             # Параметры звука: шина (SFXDefault/UIDefault/etc), volume, pitch, IsSpatial
+        AudioPlaybackHandle.cs    # Обёртка над FMOD.Studio.EventInstance (Stop, SetPosition, SetVolume, SetParameter)
+      Spatial/
+        AudioSpatial.cs           # Компонент: нативная привязка 3D-звука к трансформу
+        AudioZone.cs              # Триггерная зона: запускает FMOD Snapshots и выставляет Global Parameters
+        WorldAudioController.cs   # Управление фоновым аудио мира
 
-    # Эффекты
-    Effects/
-      DigEffect.cs                # Визуальный эффект копки (спрайт-анимация)
+    # Системная инфраструктура
+    Core/
+      SingletonMonoBehaviour.cs   # Базовый класс синглтонов MonoBehaviour
+      GameConstants.cs            # Игровые константы
+
+    # Эффекты (Effekseer)
+    Effekseer/
+      RuntimeEffekseerLoader.cs   # Загрузчик эффектов Effekseer в рантайме
 
     # Игровые сущности и менеджеры
     Game/
-      Pack.cs                     # Игровой предмет
+      Pack.cs                     # Игровой предмет (пак на земле)
       Robot.cs                    # Робот (NPC/игрок в мире)
-      SFXEffectInstance.cs        # Экземпляр SFX-эффекта от сервера
+      RobotHeadlight.cs           # Фары/освещение робота
+      ServerAudioEvent.cs         # Серверный аудио-эффект (SFXPacket → FMOD + VFX)
+      VFXPool.cs                  # Пул визуальных эффектов
       Managers/
+        GameManager.cs            # Точка входа: инициализация сцены и подсистем
         MapManager.cs             # Жизненный цикл мира (WorldInit, MapRegion), конфиги ячеек
         MapStorage.cs             # Хранилище карты (чанки 32×32), кэш в .mapb
         RobotManager.cs           # Управление роботами (спавн, движение, деспавн)
         PackManager.cs            # Управление предметами на земле
-        SFXEffectManager.cs       # Серверные SFX-эффекты (SFXPacket → спавн)
+        ServerAudioEventManager.cs # Принимает SFXPacket → запускает FMOD + VFX
         ItemRegistry.cs           # Реестр предметов: имена, иконки
         ServerConfig.cs           # Конфигурация с сервера (digCooldown и т.д.)
+
+    # GIF-декодер
+    MgGifDecoder/
+      MgGifDecoder.cs             # GIF-декодер (MG.GIF)
 
     # Сеть
     Networking/
@@ -73,27 +97,34 @@ Assets/
 
     # Игрок
     Player/
-      PlayerMovementController.cs # Ввод (New Input System), клиентская валидация по Passable
+      PlayerMovementController.cs   # Ввод (New Input System), клиентская валидация по Passable
       PlayerInteractionController.cs # Обработка кликов и клавиш (копка, использование)
-      CameraFollow.cs             # Следование камеры за игроком
+      CameraFollow.cs               # Следование камеры за игроком
 
     # UI
     UI/
-      Builders/                   # PacketUIBuilderFactory + типовые билдеры
+      Builders/
         PacketUIBuilderFactory.cs # Фабрика UI-билдеров пакетов
         PacketUIBuilderBase.cs    # Базовый класс билдера
+        PacketUIBuilder.cs        # Базовый интерфейс билдера
         CanvasPacketBuilder.cs, PanelPacketBuilder.cs, GridPacketBuilder.cs,
         TextPacketBuilder.cs, TextBoxPacketBuilder.cs, ImagePacketBuilder.cs,
-        ButtonPacketBuilder.cs (SelectablePacketBuilder),
-        SliderPacketBuilder.cs, IntDropdownPacketBuilder.cs,
-        StringDropdownPacketBuilder.cs, ScrollViewerPacketBuilder.cs,
-        LinePacketBuilder.cs, DockPanelPacketBuilder.cs
+        SelectablePacketBuilder.cs, SliderPacketBuilder.cs,
+        IntDropdownPacketBuilder.cs, StringDropdownPacketBuilder.cs,
+        ScrollViewerPacketBuilder.cs, LinePacketBuilder.cs, DockPanelPacketBuilder.cs
       Controls/
         Selectable.cs             # Кастомный Selectable (UI Toolkit)
         RegexTextField.cs         # Текстовое поле с валидацией по regex
+        UILine.cs                 # Кастомный VisualElement для линий
+        ChatInputBlinker.cs       # Анимация курсора в поле чата
       Binding/
         WindowBinding.cs          # SmartFormat-привязка данных для окон GUI
         LogiCalcFormatter.cs      # Форматтер вычислений для SmartFormat
+      Programmator/
+        ProgrammatorData.cs          # Данные программатора
+        ProgrammatorGrid.cs          # Сетка программатора
+        ProgrammatorTextureRegistry.cs # Реестр текстур программатора
+        RadialMenu.cs                # Радиальное меню программатора
       ChatInput.cs                # Управление фокусом чата (блокировка управления)
       ClickContextResolver.cs     # Разрешение clickContext-путей в VisualElement
       FloatingChatBubble.cs       # Всплывающее сообщение над персонажем
@@ -104,7 +135,9 @@ Assets/
       InventoryUI.cs              # Окно инвентаря (сетка 9×6 + хотбар)
       ItemData.cs                 # Данные предмета (тип, количество)
       LocalChatPopup.cs           # Popup локального чата
-      MinimapPlaceholder.cs       # Заглушка миникарты
+      MainMenu.cs                 # Главное меню
+      MinimapController.cs        # Контроллер миникарты
+      ModalWindowHandler.cs       # Обработчик модальных окон
       PauseMenu.cs                # Меню паузы (настройки, выход)
       PlayerHUD.cs                # HUD: HP, энергия, баффы, кнопки
       PlayerStatsModel.cs         # Модель статистики игрока
@@ -112,14 +145,11 @@ Assets/
       WorldMapController.cs       # Полноэкранная карта мира (управление)
       WorldMapRenderer.cs         # Рендеринг карты мира (текстура из MapStorage)
 
-    # Утилиты
-    Utils/
-      CoordinateUtils.cs          # Конвертация координат сервер↔Unity (инверсия Y)
-      FodislopGizmos.cs           # Визуальные Gizmos для отладки
-
     # Мир и рендеринг
     World/
       SingleMeshTerrainRenderer.cs  # Один меш на весь террейн, 7 UV-каналов
+      CoordinateUtils.cs            # Прямая конвертация координат 1:1 (сервер↔Unity)
+      FodinaeGizmos.cs              # Визуальные Gizmos отладки мира
       WorldTextureManager.cs        # Загрузка тайлов в TextureAtlas
       TextureAtlas.cs               # Упаковка текстур в атлас
       SurfaceRenderer.cs            # Transit + Perspective поверхности (доп. меши)
@@ -127,19 +157,17 @@ Assets/
       AtlasCoordinate.cs            # Координаты ячейки в текстурном атласе
       AnimationContainerDecoder.cs  # Декодинг PNG/GIF/WebP в спрайты
       WorldBackgroundSetup.cs       # Настройка фона сцены
+      WorldLayer.cs                 # Дисковый стриминг чанков (RLE + LRU кэш)
+      TileMaskConverter.cs          # Битмаски авто-тайлинга
       SceneSetup.cs                 # Инициализация сцены при старте
       StandaloneWorldInitializer.cs # Тестовый мир без сервера
       RenderingConstants.cs         # Константы рендеринга
       Extensions/
         WorldLayerTextureExtensions.cs # Расширения WorldLayer для текстур
 
-    # GIF-декодер
-    mfGif/
-      mgGif.cs                    # GIF-декодер (MG.GIF)
-
   Settings/            # URP и Renderer2D конфиги
-  Textures/            # cells/, skin/, clan/, pack/, ui/, items/, audio/,
-                       #   Crystalls/, vfx/, tail/, exported/ — тайлы, UI, экипировка
+  Textures/            # Cells/, Clan/, Crystals/, Exported/, Items/,
+                       #   Pack/, Skin/, Tail/, UI/, VFX/ — тайлы, UI, экипировка
   UI Toolkit/          # PanelSettings.asset, темы (.tss)
 ```
 
@@ -164,41 +192,90 @@ Assets/
 - **CellTextureCache**: ConcurrentDictionary-кэш текстур ячеек для быстрой загрузки из файловой системы. Хранит `Texture2D` по `CellType`.
 - **AtlasCoordinate**: Структура координат ячейки в текстурном атласе.
 - **AnimationContainerDecoder**: Декодирование PNG/GIF/WebP-файлов в массивы спрайтов для анимированных тайлов и эффектов.
-- **Инверсия Y**: Сервер: Y↓ (0 = верх). Unity: Y↑. Формула: `unityY = WorldHeight - 1 - serverY`. Централизована в `CoordinateUtils`.
+- **Координаты**: Левый верхний угол карты — это серверные координаты `(0, 0)`. Ось X растет вправо, ось Y растет вниз (вглубь шахты). Все пространственные конвертации централизованы в утилите `CoordinateUtils`.
 
 ### 3.3 Игрок и Управление
 
-- **PlayerMovementController**: Ввод через New Input System. Клиентская валидация по `Passable` + серверная через `MovePacket`.
+- **PlayerMovementController**: Ввод через New Input System. Единственный источник истины позиционирования игрока — свойство `Position` (`Vector2Int` в серверных координатах Top-Left `0:0`). Устаревшие псевдонимы `ClientPosition` и `ServerPosition` полностью устранены. Клиентская валидация по `Passable` + серверная через `MovePacket`.
 - **PlayerInteractionController**: Обработка кликов и клавиш (копка, использование предметов). Отправляет `DigRequestPacket`, `ItemUsePacket` и т.д.
 - **CameraFollow**: Следование камеры за игроком.
 
-### 3.4 Аудио (Audio)
+### 3.4 Аудио-домен (Audio)
 
-- **AudioManager**: Синглтон. Управление фоновой музыкой (`AudioSource`), SFX-эффектами. Громкость сохраняется в `PlayerPrefs`.
-- **SoundEffectInstance**: Один SFX-экземпляр (тайл, копка). Загружает WAV из файловой системы, воспроизводит через `PlayOneshot`.
-- **WavUtility**: Чтение WAV-файлов в `AudioClip` (поддержка разных форматов, копирование памяти только при необходимости).
+Аудио-домен построен полностью идиоматично под **FMOD Studio C++ Engine**.
 
-### 3.5 Эффекты (Effects)
+**Архитектура:**
+```
+Audio/
+  Core/                         # Ядро и типы
+    AudioBusType.cs             # Enum шин: Master, SFX, Music, Voice, Ambience, UI
+    AudioLayer.cs               # Параметры звука: шина (SFXDefault/UIDefault/etc), volume, pitch, IsSpatial
+    AudioPlaybackHandle.cs      # Прямая обёртка над FMOD.Studio.EventInstance (Stop, SetPosition, SetVolume, SetParameter)
+  Backend/                      # FMOD Studio Бэкенд
+    FmodAudioBackend.cs         # Низкоуровневый FMOD API: loadBankFile, AttachInstanceToGameObject, Snapshots, Global Parameters
+    AudioSystem.cs              # Синглтон (SingletonMonoBehaviour): API Play, PlayAttached, PlaySnapshot, SetGlobalParameter, SetBusVolume
+  Spatial/
+    AudioSpatial.cs             # Компонент на GameObject: нативная привязка 3D-звука к трансформу (AttachInstanceToGameObject)
+    AudioZone.cs                # Триггерная зона: запускает FMOD Snapshots (snapshot:/...) и выставляет Global Parameters
+```
 
-- **DigEffect**: Визуальный эффект копки. Спрайт-анимация (загружается из `Resources/fx`), позиционируется в мире, уничтожается после проигрывания.
-- **SFXEffectManager** (см. 3.1): Принимает `SFXPacket` от сервера, спавнит `SFXEffectInstance` — визуальный + аудио-эффект в координатах мира.
+**FMOD интеграция (MMO & Zero-RAM Waste):**
+1. Банки `.bank` скачиваются с игрового CDN через `ClientAssetLoader.GetAssetPathAsync` (ETag-кеширование на диск)
+2. Загрузка в FMOD выполняется через `loadBankFile` с дискового пути (без напрасного дублирования банков в RAM)
+3. **Нативное 3D-позиционирование**: `FMODUnity.RuntimeManager.AttachInstanceToGameObject()` транслирует координаты и повороты объектов на C++ стороне FMOD без C#-поллинга в кадрах.
+4. Динамические фиче-банки подгружаются на лету через `AudioSystem.Instance.EnsureBankLoadedAsync("Zone_Name.bank")` и выгружаются через `UnloadBank()`
+5. **FMOD Snapshots**: `AudioZone` активирует нативные Snapshots микшера (настройки акустики/фильтров), не затирая пользовательские настройки громкости.
+6. FMOD проект: `FodinaeAudio/FodinaeAudio.fspro` (в корне репозитория)
+7. 6 шин FMOD мапятся на `AudioBusType` (bus:/, bus:/sfx, bus:/music, bus:/voice, bus:/ambience, bus:/ui).
 
-### 3.6 Ассеты и кэширование (Asset Loading)
+**Примеры использования:**
+```csharp
+// Проигрывание звука UI (2D)
+AudioSystem.Instance.Play2D("ui_click");
+
+// Проигрывание 3D-звука с нативной привязкой к GameObject
+AudioSystem.Instance.PlayAttached("robot_engine", gameObject);
+
+// Запуск FMOD Snapshot (например пещера)
+var snapshot = AudioSystem.Instance.PlaySnapshot("snapshot:/Cave_Ambient");
+
+// Установка глобального параметра FMOD (глубина)
+AudioSystem.Instance.SetGlobalParameter("Depth", 450f);
+
+// Настройка громкости шины SFX
+AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
+```
+
+- **ServerAudioEventManager**: Принимает `SFXPacket` от сервера, запускает 3D-звук в FMOD через `AudioSystem.Instance.PlayAt()` и создаёт `ServerAudioEvent` для рендеринга спрайтов/Effekseer.
+
+### 3.5 Ассеты и кэширование (Asset Loading)
 
 - **ClientAssetLoader**: Загрузка ассетов с сервера (GET-запросы) или локально из файловой системы.
 - **PersistentAssetCache**: Стойкий кэш в `persistentDataPath`. Хранит ETag + MD5 для валидации, пропускает повторную загрузку неизменных файлов.
+- **AssetCache**: Вспомогательный кэш ассетов в оперативной памяти (RAM).
 - **ETagCalculator**: MD5-хэш данных для ETag-заголовка.
 - **DynamicImage**: `MonoBehaviour` с `UnityEngine.UI.Image`, загружающий спрайт с сервера по URL. Работает через `ClientAssetLoader` + `PersistentAssetCache`.
+- **Пайплайн загрузки ассетов (Локальный CDN)**:
+  1. Запрос ассета (`GetTextureAsync`, `GetAudioAsync` и т.д.) поступает в RAM-кэш `AssetCache`. При промахе опрашивается дисковый кэш `PersistentAssetCache`.
+  2. Если ассет есть локально на диске, отправляется HTTP-запрос с ETag. При ответе `304 Not Modified` ассет считывается с диска. Если файл обновился или отсутствует, скачивается новый поток байт.
+  3. Параллельные запросы к одному файлу объединяются (coalescing) через `TaskCompletionSource`, предотвращая дублирование сетевого трафика.
 
-### 3.7 UI-системы
+### 3.6 UI-системы
 
 - **Пакетный UI** (см. 3.1): Динамическая сборка окон из `OpenWindowPacket` — фабрика `PacketUIBuilderFactory` и несколько типовых билдеров (Canvas, Panel, Grid, Text, Slider, Dropdown, ScrollView, Line, DockPanel...).
 - **Binding**: `WindowBinding` привязывает данные через `SmartFormat`. Сканирует VisualElement-дерево, ищет именованные поля ввода (источники) и Label с SmartFormat-шаблонами (потребители), пересчитывает при любом изменении.
+- **PauseMenu**: Меню паузы с настройкой всех 6 шин громкости FMOD (`Master`, `SFX`, `Music`, `Voice`, `Ambience`, `UI`), масштабом UI, графикой и выбором разрешения. Автоматически выставляет `PauseMenu.IsMenuOpen`, блокируя ввод движения и кликов (`PacketHandler.IsInputBlocked`).
 - **Инвентарь**: `InventoryUI` (сетка 9×6 + хотбар 9 ячеек), `InventoryModel` (данные), `ItemData` (тип/количество).
-- **HUD**: `PlayerHUD` — HP, баффы, программотор, панель бонусов.
+- **HUD**: `PlayerHUD` — HP, энергия, баффы, кнопки (включая авто-копку и программатор).
 - **Карта**: `WorldMapController` (управление, переключение режима), `WorldMapRenderer` (рендеринг текстуры из `MapStorage`).
 - **Чат**: `GlobalChatUI` (история + ввод), `LocalChatPopup`, `FloatingChatManager`/`FloatingChatBubble` (всплывающие сообщения над персонажами), `ChatInput` (блокировка управления при фокусе).
-- **Прочее**: `PauseMenu` (пауза, настройки громкости/полноэкранного режима, выход), `FPSCounter`, `MinimapPlaceholder`, `StyleApplicator`, `ClickContextResolver`.
+- **Прочее**: `PauseMenu` (пауза, настройки громкости/полноэкранного режима, выход), `FPSCounter`, `MinimapController`, `ModalWindowHandler`, `StyleApplicator`, `ClickContextResolver`.
+
+### 3.7 Программатор (Programmator)
+
+- **ProgrammatorGrid**: Графическая сетка для визуального программирования алгоритмов поведения робота.
+- **ProgrammatorData**: Модель данных и структура алгоритма робота.
+- **RadialMenu**: Радиальное круговое меню выбора команд для быстрого размещения на сетке программатора.
 
 ## 4. Стандарты разработки
 
@@ -213,6 +290,24 @@ Assets/
 - **Синглтоны**: Паттерн `Instance` + `DontDestroyOnLoad` для менеджеров.
 - **События**: `Action` для связи между компонентами (`OnWorldInitialized`, `OnWorldDataLoaded`).
 - **UniTask**: Для асинхронных операций (загрузка текстур, сетевые запросы).
+
+### Стандарты именования (Casing Standards)
+
+В проекте строго соблюдаются следующие разграничения регистра (Casing):
+
+1. **Unity Файлы и C# Код (`PascalCase`)**:
+   - Классы, структуры, интерфейсы, перечисления: `WorldTextureManager`, `CellType`.
+   - Публичные методы, свойства, события: `GetCellTextureCoordinate()`, `ActiveVoiceCount`.
+   - Константы: `MaxLifetime`.
+   - Директории Unity внутри `Assets/`: `Assets/Scripts/`, `Assets/Textures/Cells/`, `Assets/Audio/`.
+   - Файлы ассетов: `SampleScene.unity`, `PlayerHUD.uxml`, `PanelSettings.asset`.
+   - Приватные/защищенные поля: `_camelCase` (`private float _volume;`).
+   - Параметры и локальные переменные: `camelCase` (`int x, int y`).
+
+2. **Сетевые ресурсы, CDN и FMOD (`lowercase` / `snake_case`)**:
+   - Имена FMOD событий: `event:/sfx_bz`, `event:/dig_rock`.
+   - Сетевые тэги окон и контексты: `"teleport"`, `"open_missions"`, `"join_clan"`.
+   - CDN URL-пути: `/cells/1.png`, `/clan/4.png` (Linux CDN серверы регистрозависимы, поэтому сетевые URL строчные).
 
 ### Документация (`docs/`)
 
@@ -261,9 +356,13 @@ WorldLayer.cs(88,5): warning CA1031: ...
 
 **Правило**: все предупреждения с префиксами `SA`, `CA`, `RCS`, `UNT` — нарушения линтера. Исправляй их до финального ответа пользователю.
 
+### Запрет обхода Git Hooks
+
+- **СТРОГО ЗАПРЕЩЕНО** использовать `--no-verify`, пропускать хуки проверки или насильно отменять их при коммитах.
+- Если пре-коммит хук или сборка зависает или завершается ошибкой, необходимо дождаться завершения, разобраться с причиной (песочница, линтеры, `dotnet build` ошибки) и исправить проблему, а не обходить хуки.
+
 ### Настройка
 
 - `Directory.Build.props` — подключает анализаторы через NuGet во все `.csproj`
 - `.stylecop.json` — отключает нерелевантные для Unity правила (XML-доки, file headers)
 - `.editorconfig` — severity для каждого правила (`none` / `warning` / `error`)
-

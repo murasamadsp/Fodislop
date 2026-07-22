@@ -4,192 +4,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Архитектура рендеринга — Fodinae</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box
-        }
-
-        body {
-            font: 16px/1.6 system-ui, sans-serif;
-            color: #e0e0e0;
-            background: #1a1a2e;
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 2rem 1.5rem
-        }
-
-        h1 {
-            font-size: 1.8rem;
-            color: #fff;
-            margin-bottom: .5rem
-        }
-
-        h2 {
-            font-size: 1.3rem;
-            color: #a8b2d1;
-            margin: 2rem 0 .5rem;
-            border-bottom: 1px solid #2a2a4a;
-            padding-bottom: .3rem
-        }
-
-        h3 {
-            font-size: 1.1rem;
-            color: #ccd6f6;
-            margin: 1.2rem 0 .4rem
-        }
-
-        p,
-        li {
-            margin-bottom: .5rem
-        }
-
-        ul,
-        ol {
-            padding-left: 1.5rem
-        }
-
-        code {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: .9em;
-            background: #16213e;
-            padding: .15em .4em;
-            border-radius: 3px;
-            color: #64ffda
-        }
-
-        pre {
-            background: #16213e;
-            padding: 1rem;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 1rem 0
-        }
-
-        pre code {
-            padding: 0;
-            background: none
-        }
-
-        a {
-            color: #64ffda;
-            text-decoration: none
-        }
-
-        a:hover {
-            text-decoration: underline
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1rem 0
-        }
-
-        th,
-        td {
-            text-align: left;
-            padding: .5rem .8rem;
-            border-bottom: 1px solid #2a2a4a
-        }
-
-        th {
-            color: #a8b2d1;
-            font-weight: 600
-        }
-
-        .note {
-            background: #1b2838;
-            border-left: 3px solid #64ffda;
-            padding: .8rem 1rem;
-            margin: 1rem 0;
-            border-radius: 0 4px 4px 0
-        }
-
-        .warn {
-            border-left-color: #f0a500
-        }
-
-        nav {
-            margin-bottom: 2rem;
-            font-size: .85rem;
-            color: #8892b0
-        }
-
-        nav a {
-            margin-right: 1rem
-        }
-    </style>
+    <title>Рендеринг тайлового мира — Fodinae Client Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/main.js" defer></script>
 </head>
 
 <body>
 
-    <nav><a href="index.html">← Документация</a></nav>
+    <header>
+        <div class="header-title-group">
+            <div class="logo-badge">F</div>
+            <div>
+                <h1>Подсистема рендеринга тайлов</h1>
+                <p class="subtitle">Спецификация процедурного генератора SingleMesh и поверхностей SurfaceRenderer</p>
+            </div>
+        </div>
+        <nav>
+            <a href="index.html">Обзор архитектуры</a>
+            <a href="rendering.html">Рендеринг (SingleMesh)</a>
+            <a href="networking.html">Сетевой протокол</a>
+            <a href="audio.html">Аудио (FMOD)</a>
+            <a href="assets_loading.html">Загрузка ассетов</a>
+            <a href="ui_programmator.html">UI & Программатор</a>
+        </nav>
+    </header>
 
-    <h1>Архитектура рендеринга</h1>
-    <p>Как Fodinae отрисовывает тайловый мир в один draw call.</p>
+    <main>
+        <!-- SingleMeshTerrainRenderer -->
+        <section>
+            <h2>SingleMeshTerrainRenderer</h2>
+            <p>Процедурный рендерер <a href="../Assets/Scripts/World/SingleMeshTerrainRenderer.cs"
+                    class="class-ref">SingleMeshTerrainRenderer</a> динамически строит один меш на весь видимый экран
+                тайлов, сводя количество вызовов отрисовки (Draw Calls) к 1.</p>
+            <ul>
+                <li><strong>Sorting Order</strong>: <code>-1000</code>. Рендерится первее всех игровых сущностей.</li>
+                <li><strong>Материал</strong>: Единый атласированный 2D URP материал. Все текстуры тайлов упаковываются
+                    в <code>TextureAtlas</code>.</li>
+                <li><strong>Буферизация</strong>: Пересчёт меша производится при перемещении камеры за пределы порога
+                    или при чанковых изменениях <code>MapStorage</code>.</li>
+            </ul>
+        </section>
 
-    <h2>Обзор</h2>
-    <p><code>SingleMeshTerrainRenderer</code> строит один <code>Mesh</code> из всех видимых тайлов каждый кадр. Камера
-        определяет границы видимости, рендерер запрашивает данные из <code>MapStorage</code> и собирает геометрию.</p>
+        <!-- 7 UV Каналов -->
+        <section>
+            <h2>Структура 7 UV-каналов меша</h2>
+            <p>Для каждого квада тайла вершины содержат 7 специализированных UV-каналов:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Канал</th>
+                        <th>Данные</th>
+                        <th>Назначение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>uv0</code></td>
+                        <td>Vector2 (U, V)</td>
+                        <td>Базовые координаты квада в текстурном атласе (TextureAtlas)</td>
+                    </tr>
+                    <tr>
+                        <td><code>uv1</code></td>
+                        <td>Vector2 (MaskBitmask, Variant)</td>
+                        <td>Битмаска авто-тайлинга <code>TileMaskConverter</code> для примыкания соседей</td>
+                    </tr>
+                    <tr>
+                        <td><code>uv2</code></td>
+                        <td>Vector2 (AnimFrame, AnimSpeed)</td>
+                        <td>Индекс текущего кадра анимации и скорость для анимированных тайлов</td>
+                    </tr>
+                    <tr>
+                        <td><code>uv3</code></td>
+                        <td>Vector2 (ShadowMask, AmbientOcclusion)</td>
+                        <td>Маска затенения и эмбиент-окклюзия углов тайла</td>
+                    </tr>
+                    <tr>
+                        <td><code>uv4</code></td>
+                        <td>Vector2 (ReliefDepth, LightIntensity)</td>
+                        <td>Глубина рельефа и уровень освещённости блока</td>
+                    </tr>
+                    <tr>
+                        <td><code>uv5</code></td>
+                        <td>Vector2 (OverlayU, OverlayV)</td>
+                        <td>Текстурные координаты накладываемого слоя (трещины, разрушения)</td>
+                    </tr>
+                    <tr>
+                        <td><code>uv6</code></td>
+                        <td>Vector2 (CustomFlags, BiomeId)</td>
+                        <td>Флаги биологического биома и пользовательских эффектов</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
 
-    <h2>UV-каналы</h2>
-    <table>
-        <tr>
-            <th>Канал</th>
-            <th>Назначение</th>
-        </tr>
-        <tr>
-            <td><code>UV0</code></td>
-            <td>Координаты в атласе текстур</td>
-        </tr>
-        <tr>
-            <td><code>UV1</code></td>
-            <td>Sub-atlas rect (позиция фрейма)</td>
-        </tr>
-        <tr>
-            <td><code>UV2</code></td>
-            <td>Размер тайла в UV-пространстве</td>
-        </tr>
-        <tr>
-            <td><code>UV3</code></td>
-            <td>Мировые координаты + тайлинг-дескриптор</td>
-        </tr>
-        <tr>
-            <td><code>UV4</code></td>
-            <td>Анимация: тип, скорость, оффсет</td>
-        </tr>
-        <tr>
-            <td><code>UV5</code></td>
-            <td>Тени и рельеф</td>
-        </tr>
-        <tr>
-            <td><code>UV6</code></td>
-            <td>Локальные UV для шейдерных эффектов</td>
-        </tr>
-    </table>
+        <!-- SurfaceRenderer -->
+        <section>
+            <h2>SurfaceRenderer (Transit & Perspective)</h2>
+            <p>Для отрисовки поверхностей и перспективы используется <a
+                    href="../Assets/Scripts/World/SurfaceRenderer.cs" class="class-ref">SurfaceRenderer</a>:</p>
+            <ul>
+                <li><strong>Transit</strong> — накладывает плавные градиентные переходы между слоями блоков на разных
+                    глубинах.</li>
+                <li><strong>Perspective</strong> — достраивает перспективные боковые грани для создания эффекта объёма
+                    2.5D при перемещении камеры.</li>
+            </ul>
+        </section>
 
-    <h2>Инверсия Y</h2>
-    <div class="note warn">
-        Сервер: Y растёт <strong>вниз</strong> (0 = верхняя строка).<br>
-        Unity: Y растёт <strong>вверх</strong>.
-    </div>
-    <pre><code>int serverY = MapManager.Instance.WorldHeight - 1 - unityY;</code></pre>
-
-    <h2>Поток данных</h2>
-    <ol>
-        <li><code>PacketHandler</code> получает <code>MapRegionPacket</code></li>
-        <li>Данные записываются в <code>MapStorage.cellLayer</code> (через <code>WorldLayer&lt;T&gt;</code>)</li>
-        <li><code>LateUpdate</code> рендерера проверяет <code>MapStorage.IsReady</code></li>
-        <li>Строится меш из видимых тайлов + фон через <code>ComputeBackgroundMap</code></li>
-        <li>Меш загружается на GPU с <code>IndexFormat.UInt32</code></li>
-    </ol>
-
-    <h2>Сортировка</h2>
-    <p>Террейн рисуется на <code>Sorting Order = -1000</code>, чтобы находиться под спрайтами роботов и UI-элементами.
-    </p>
+        <!-- Проекция Карт -->
+        <section>
+            <h2>Проекция Y-координат на карты (Minimap / WorldMap)</h2>
+            <p>При рендеринге текстур в <a href="../Assets/Scripts/UI/MinimapController.cs"
+                    class="class-ref">MinimapController</a> и <a href="../Assets/Scripts/UI/WorldMapRenderer.cs"
+                    class="class-ref">WorldMapRenderer</a> применяется точное сопоставление координат:</p>
+            <ul>
+                <li>Серверные координаты: `serverY = 0` (поверхность мира, верх). `serverY` растёт вниз.</li>
+                <li>Текстурные пиксели `Texture2D`: `py = 0` (низ экрана), `py = texH - 1` (верх экрана).</li>
+                <li>Формула проекции: <code>float pixelY = ((cy - cellY) / cp) + (texH * 0.5f);</code> — обеспечивает
+                    правильную ориентацию севера/юга на экранах без вертикального переворота.</li>
+            </ul>
+        </section>
+    </main>
 
 </body>
 

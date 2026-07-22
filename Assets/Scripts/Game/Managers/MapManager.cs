@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Utils;
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.World;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -10,48 +10,10 @@ using UnityEngine;
 namespace Fodinae.Scripts.Game.Managers
 {
     [ExecuteAlways]
-    public class MapManager : MonoBehaviour
+    public class MapManager : SingletonMonoBehaviour<MapManager>
     {
-        private static MapManager _instance;
-        private static bool _isQuitting = false;
         private Camera _mainCamera;
 
-        public static MapManager InstanceIfExists => _instance;
-        public static MapManager Instance
-        {
-            get
-            {
-                if (_isQuitting)
-                {
-                    return null;
-                }
-
-                if (_instance == null)
-                {
-                    _instance = FindFirstObjectByType<MapManager>();
-                    if (_instance == null && !_isQuitting)
-                    {
-                        var go = new GameObject("[MapManager]");
-                        _instance = go.AddComponent<MapManager>();
-
-                        // System Grouping
-                        if (Application.isPlaying)
-                        {
-                            var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
-                            DontDestroyOnLoad(parent);
-                            go.transform.SetParent(parent.transform);
-                        }
-                    }
-                }
-
-                return _instance;
-            }
-        }
-
-        /// <summary>
-        /// Cached reference to the Main Camera.
-        /// Faster than using Camera.main which performs a lookup.
-        /// </summary>
         public Camera MainCamera
         {
             get
@@ -76,7 +38,7 @@ namespace Fodinae.Scripts.Game.Managers
             FrameOffset = 0,
             Properties = CellConfigProperties.None,
             Distortion = (CellDistortionType)0,
-            ReliefGroup = 0
+            ReliefGroup = 0,
         };
 
         private CellConfigurationPacket[] _cellConfigurations;
@@ -89,34 +51,13 @@ namespace Fodinae.Scripts.Game.Managers
 
         public bool IsWorldInitialized { get; private set; } = false;
 
-        // Add public property for standalone mode support
         public bool IsStandaloneMode { get; set; } = false;
 
-        protected virtual void Awake()
+        protected override void OnAwake()
         {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            _instance = this;
-            if (Application.isPlaying)
-            {
-                DontDestroyOnLoad(gameObject);
-
-                // Ensure parented if created in scene
-                var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
-                DontDestroyOnLoad(parent);
-                transform.SetParent(parent.transform);
-            }
-
-            _isQuitting = false;
-
 #if UNITY_EDITOR
             if (!Application.isPlaying && !IsWorldInitialized)
             {
-                // Basic initialization for Editor preview
                 _width = 128;
                 _height = 128;
                 _worldCodeName = "EditorPreview";
@@ -125,16 +66,12 @@ namespace Fodinae.Scripts.Game.Managers
 #endif
         }
 
-        protected virtual void OnDestroy()
+        protected override void OnDestroyed()
         {
-            if (_instance == this)
-            {
-                _isQuitting = true;
-                MapStorage.InstanceIfExists?.Dispose();
-            }
+            MapStorage.InstanceIfExists?.Dispose();
         }
 
-        protected virtual void OnApplicationQuit()
+        protected override void OnApplicationQuitting()
         {
             MapStorage.Instance?.Dispose();
         }
@@ -143,12 +80,10 @@ namespace Fodinae.Scripts.Game.Managers
         {
             Debug.Log($"[MapManager] LoadWorldInit called: {packet.DisplayName} ({packet.CodeName}) [{packet.Width}x{packet.Height}]");
 
-            // Clear all packs when a new world is initialized
             PackManager.Instance?.ClearAllPacks();
             RobotManager.InstanceIfExists?.ClearAllRobots();
-            SFXEffectManager.InstanceIfExists?.ClearAllEffects();
+            ServerAudioEventManager.InstanceIfExists?.ClearAllEffects();
 
-            // Validate packet data
             if (packet == null)
             {
                 Debug.LogError("[MapManager] LoadWorldInit called with null packet");
@@ -167,7 +102,6 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            // Store world information
             _worldCodeName = packet.CodeName;
             _worldDisplayName = packet.DisplayName;
             _width = packet.Width;
@@ -192,16 +126,12 @@ namespace Fodinae.Scripts.Game.Managers
             }
 
             Debug.Log($"[MapManager] World initialized: {packet.DisplayName} ({packet.CodeName}) [{_width}x{_height}]");
-
-            // CRITICAL: IMMEDIATE MapStorage initialization - this is essential for terrain rendering
             Debug.Log($"[MapManager] IMMEDIATELY initializing MapStorage with world '{packet.CodeName}' dimensions {_width}x{_height}");
 
             try
             {
-                // Ensure MapStorage is properly initialized
                 MapStorage.Instance.InitWorld(packet.CodeName, _width, _height);
 
-                // CRITICAL: Verify that MapStorage was properly initialized
                 if (!MapStorage.Instance.IsReady)
                 {
                     Debug.LogError($"[MapManager] CRITICAL: MapStorage failed to initialize for world {packet.CodeName}");
@@ -209,7 +139,6 @@ namespace Fodinae.Scripts.Game.Managers
                     Debug.LogError($"[MapManager] MapStorage CellLayer: {(MapStorage.Instance.CellLayer != null ? "not null" : "NULL - this is the problem!")}");
                     Debug.LogError($"[MapManager] MapStorage world name: {MapStorage.Instance.GetWorldCodeName()}");
 
-                    // Try emergency initialization with more detailed error handling
                     Debug.LogWarning("[MapManager] Attempting emergency MapStorage initialization...");
                     try
                     {
@@ -225,7 +154,6 @@ namespace Fodinae.Scripts.Game.Managers
                             Debug.LogError("[MapManager] Emergency MapStorage initialization FAILED - terrain rendering will not work");
                             Debug.LogError("[MapManager] This is a CRITICAL failure - terrain rendering system cannot function");
 
-                            // Try creating a test world as last resort
                             Debug.LogWarning("[MapManager] Creating test world as fallback...");
                             MapStorage.Instance.Dispose();
                             MapStorage.Instance.InitWorld("fallback_test_world", 64, 64);
@@ -262,7 +190,6 @@ namespace Fodinae.Scripts.Game.Managers
                 Debug.LogError($"[MapManager] Exception type: {ex.GetType().Name}");
                 Debug.LogError($"[MapManager] Stack trace: {ex.StackTrace}");
 
-                // Provide specific guidance based on exception type
                 if (ex is System.IO.IOException)
                 {
                     Debug.LogError("[MapManager] This is likely a file I/O issue. Check disk space and file permissions.");
@@ -281,7 +208,6 @@ namespace Fodinae.Scripts.Game.Managers
             Debug.Log($"[MapManager] Triggering OnWorldInitialized event");
             OnWorldInitialized?.Invoke();
 
-            // CRITICAL: Only trigger OnWorldDataLoaded if MapStorage is actually ready
             if (MapStorage.Instance.IsReady)
             {
                 Debug.Log($"[MapManager] MapStorage is ready, triggering OnWorldDataLoaded event");
@@ -328,7 +254,7 @@ namespace Fodinae.Scripts.Game.Managers
             return 0f;
         }
 
-public CellConfigurationPacket GetCellConfig(CellType cellType)
+        public CellConfigurationPacket GetCellConfig(CellType cellType)
         {
             if (_cellConfigurations == null || (int)cellType < 0 || (int)cellType >= _cellConfigurations.Length)
             {
@@ -338,7 +264,7 @@ public CellConfigurationPacket GetCellConfig(CellType cellType)
             return _cellConfigurations[(int)cellType];
         }
 
-        public bool IsLooseRockType(CellType type)
+        public static bool IsLooseRockType(CellType type)
         {
             return type == CellType.BlackBoulder1 || type == CellType.BlackBoulder2 || type == CellType.BlackBoulder3 ||
                    type == CellType.MetalBoulder1 || type == CellType.MetalBoulder2 || type == CellType.MetalBoulder3 ||
@@ -352,7 +278,7 @@ public CellConfigurationPacket GetCellConfig(CellType cellType)
                    type == CellType.GrayAcid || type == CellType.PurpleAcid;
         }
 
-        public bool IsRoundableLoose(CellType type)
+        public static bool IsRoundableLoose(CellType type)
         {
             return type == CellType.WhiteSand || type == CellType.DarkWhiteSand ||
                    type == CellType.RustySand || type == CellType.DarkRustySand ||
@@ -389,7 +315,7 @@ public CellConfigurationPacket GetCellConfig(CellType cellType)
         public int GetAnimationFrameHeight(CellType cellType)
         {
             var config = GetCellConfig(cellType);
-            return (int)config.FrameOffset * RenderingConstants.CellSize;
+            return (int)config.FrameOffset * RenderingConstants.CELL_SIZE;
         }
 
         public byte GetAnimationSpeed(CellType cellType)
@@ -440,12 +366,12 @@ public CellConfigurationPacket GetCellConfig(CellType cellType)
 
             Gizmos.color = Color.magenta;
             Gizmos.DrawSphere(Vector3.zero, 0.5f);
-            Utils.FodislopGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
+            Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
 
             if (MapStorage.Instance.IsReady && MapStorage.Instance.CellLayer != null)
             {
                 var layer = MapStorage.Instance.CellLayer;
-                int chunkSize = layer.ChunkSize;
+                int CHUNK_SIZE = layer.ChunkSize;
                 var loaded = layer.GetLoadedChunkIndices();
 
                 foreach (int index in loaded)
@@ -453,28 +379,28 @@ public CellConfigurationPacket GetCellConfig(CellType cellType)
                     int cy = index % layer.HeightChunks;
                     int cx = index / layer.HeightChunks;
 
-                    float unityY = CoordinateUtils.ServerToUnityY(cy * chunkSize, WorldHeight) - chunkSize * 0.5f;
-                    Vector3 chunkPos = new Vector3(cx * chunkSize + chunkSize * 0.5f, unityY, 0);
+                    float unityY = (cy * CHUNK_SIZE) + (CHUNK_SIZE * 0.5f);
+                    Vector3 chunkPos = new Vector3((cx * CHUNK_SIZE) + (CHUNK_SIZE * 0.5f), unityY, 0);
 
-                    Utils.FodislopGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f),
+                    Fodinae.Scripts.World.FodinaeGizmos.DrawSolidRect(chunkPos, new Vector2(CHUNK_SIZE - 0.2f, CHUNK_SIZE - 0.2f),
                         new Color(0, 1, 0, 0.02f), new Color(0, 1, 0, 0.1f));
                 }
 
-                Vector3 labelPos = worldCenter + Vector3.down * (WorldHeight * 0.5f + 2f);
+                Vector3 labelPos = worldCenter + (Vector3.down * ((WorldHeight * 0.5f) + 2f));
                 string stats = $"Chunks: {layer.GetLoadedCount()}/{layer.MaxChunksInMemory} loaded | {layer.GetDirtyCount()} dirty";
-                Utils.FodislopGizmos.DrawLabel(labelPos, stats, Color.green);
+                Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(labelPos, stats, Color.green);
 
                 Camera cam = MainCamera;
                 if (cam != null && Application.isPlaying)
                 {
                     Vector3 camPos = cam.transform.position;
-                    int range = GameConstants.Debug.COLLISION_DEBUG_RANGE;
+                    const int range = GameConstants.Debug.COLLISION_DEBUG_RANGE;
                     int startX = Mathf.FloorToInt(camPos.x) - range;
                     int startY = Mathf.FloorToInt(camPos.y) - range;
 
-                    for (int x = startX; x < startX + range * 2; x++)
+                    for (int x = startX; x < startX + (range * 2); x++)
                     {
-                        for (int y = startY; y < startY + range * 2; y++)
+                        for (int y = startY; y < startY + (range * 2); y++)
                         {
                             int worldX = x;
                             int worldY = CoordinateUtils.UnityToServerY(y, WorldHeight);

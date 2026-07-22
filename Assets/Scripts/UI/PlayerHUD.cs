@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Player;
+using Fodinae.Scripts.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -10,11 +11,10 @@ using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.UIElements;
-using Fodinae.Scripts.UI.Programmator;
 
 namespace Fodinae.Scripts.UI
 {
-    public class PlayerHUD : MonoBehaviour
+    public partial class PlayerHUD : MonoBehaviour
     {
         private const int PANEL_WIDTH = 240;
         private const int PADDING = 12;
@@ -83,43 +83,53 @@ namespace Fodinae.Scripts.UI
         private VisualElement _missionProgressFill;
         private Label _missionProgressLabel;
 
-        async void Start()
+        protected void Start()
         {
-            await LoadCrystalTextures();
+            StartAsync(this.destroyCancellationToken).Forget();
+        }
+
+        private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
+        {
+            await LoadCrystalTextures(cancellationToken);
             InitializeHUD();
         }
 
-        void OnDestroy()
+        protected void OnDestroy()
         {
             if (PlayerStatsModel.Instance != null)
+            {
                 PlayerStatsModel.Instance.OnStatsChanged -= RefreshAll;
-            if (PlayerStatsModel.Instance != null)
                 PlayerStatsModel.Instance.OnSkillProgress -= OnSkillProgress;
-            if (PlayerStatsModel.Instance != null)
                 PlayerStatsModel.Instance.OnDailyBonusChanged -= UpdateDailyBonusPanel;
-            if (PlayerStatsModel.Instance != null)
                 PlayerStatsModel.Instance.OnStatusLinesChanged -= RebuildStatusPanel;
-            if (PlayerStatsModel.Instance != null)
                 PlayerStatsModel.Instance.OnMissionChanged -= UpdateMissionPanel;
+            }
+
             if (GlobalChatUI.Instance != null)
+            {
                 GlobalChatUI.Instance.Hide();
+            }
         }
 
-        private async UniTask LoadCrystalTextures()
+        private async UniTask LoadCrystalTextures(System.Threading.CancellationToken cancellationToken)
         {
             _crystalTextures.Clear();
             foreach (CrystalType ct in Enum.GetValues(typeof(CrystalType)))
             {
-                if (ct == CrystalType.Unknown) continue;
+                if (ct == CrystalType.Unknown)
+                {
+                    continue;
+                }
+
                 string name = ct.ToString().ToLowerInvariant();
-                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystalls/" + name);
+                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystals/" + name, cancellationToken);
                 _crystalTextures.Add(tex);
             }
         }
 
         private void InitializeHUD()
         {
-            _doc = FindObjectOfType<UIDocument>();
+            _doc = FindAnyObjectByType<UIDocument>();
             if (_doc == null)
             {
                 Debug.LogError("[PlayerHUD] UIDocument не найден на сцене");
@@ -143,15 +153,22 @@ namespace Fodinae.Scripts.UI
                 PlayerStatsModel.Instance.OnStatusLinesChanged += RebuildStatusPanel;
                 PlayerStatsModel.Instance.OnMissionChanged += UpdateMissionPanel;
             }
-            var player = FindObjectOfType<PlayerMovementController>();
+
+            var player = FindAnyObjectByType<PlayerMovementController>();
             if (player != null)
+            {
                 player.OnAutoDigChanged += UpdateAutoDigButton;
+            }
 
             if (player != null)
+            {
                 player.OnAggressionChanged += UpdateAggressionButton;
+            }
 
             if (PlayerStatsModel.Instance != null)
+            {
                 PlayerStatsModel.Instance.OnDailyBonusChanged += UpdateDailyBonusPanel;
+            }
 
             RebuildCrystalRows();
             PlayerStatsModel.Instance.OnStatsChanged += RefreshAll;
@@ -160,16 +177,20 @@ namespace Fodinae.Scripts.UI
             var root = _doc.rootVisualElement;
 
             // Блокируем навигацию стрелками/Tab
-            root.RegisterCallback<NavigationMoveEvent>(evt =>
+            root.RegisterCallback<NavigationMoveEvent>(
+                evt =>
             {
                 evt.StopPropagation();
             }, TrickleDown.TrickleDown);
 
             // Блокируем ENTER/Space на кнопках (кроме чата)
-            root.RegisterCallback<NavigationSubmitEvent>(evt =>
+            root.RegisterCallback<NavigationSubmitEvent>(
+                evt =>
             {
                 if (!ChatInput.IsFocused)
+                {
                     evt.StopPropagation();
+                }
             }, TrickleDown.TrickleDown);
         }
 
@@ -427,18 +448,29 @@ namespace Fodinae.Scripts.UI
             _bonusPanel.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
             _bonusButton.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
             if (_isBonusOpen)
+            {
                 UpdateDailyBonusPanel();
+            }
+
             UpdateStatusPanelPosition();
         }
 
         private void UpdateStatusPanelPosition()
         {
-            if (_statusPanel == null) return;
+            if (_statusPanel == null)
+            {
+                return;
+            }
+
             if (_isBonusOpen && _bonusPanel != null)
             {
                 _bonusPanel.schedule.Execute(() =>
                 {
-                    if (!_isBonusOpen) return;
+                    if (!_isBonusOpen)
+                    {
+                        return;
+                    }
+
                     _statusPanel.style.top = 10 + GAP + _bonusPanel.resolvedStyle.height;
                 }).StartingIn(16);
             }
@@ -450,9 +482,16 @@ namespace Fodinae.Scripts.UI
 
         private void UpdateDailyBonusPanel()
         {
-            if (_bonusStatusLabel == null) return;
+            if (_bonusStatusLabel == null)
+            {
+                return;
+            }
+
             var stats = PlayerStatsModel.Instance;
-            if (stats == null) return;
+            if (stats == null)
+            {
+                return;
+            }
 
             if (stats.DailyBonusAvailable)
             {
@@ -498,9 +537,16 @@ namespace Fodinae.Scripts.UI
 
         private void RebuildStatusPanel()
         {
-            if (_statusPanel == null) return;
+            if (_statusPanel == null)
+            {
+                return;
+            }
+
             var stats = PlayerStatsModel.Instance;
-            if (stats == null) return;
+            if (stats == null)
+            {
+                return;
+            }
 
             var currentLines = stats.StatusLines;
             if (currentLines.Count == 0)
@@ -510,13 +556,17 @@ namespace Fodinae.Scripts.UI
                 _statusPanel.Clear();
                 return;
             }
+
             _statusPanel.style.display = DisplayStyle.Flex;
             var toRemove = new List<string>();
             foreach (var kvp in _statusLineElements)
             {
                 if (!currentLines.ContainsKey(kvp.Key))
+                {
                     toRemove.Add(kvp.Key);
+                }
             }
+
             foreach (var key in toRemove)
             {
                 _statusPanel.Remove(_statusLineElements[key]);
@@ -529,7 +579,10 @@ namespace Fodinae.Scripts.UI
                 {
                     var label = existing as Label;
                     if (label != null)
+                    {
                         UpdateStatusLabel(label, kvp.Value);
+                    }
+
                     label.style.color = kvp.Value.Color;
                 }
                 else
@@ -547,10 +600,16 @@ namespace Fodinae.Scripts.UI
                         row.schedule.Execute(() =>
                         {
                             if (_statusPanel == null || !_statusLineElements.ContainsKey(kvp.Key))
+                            {
                                 return;
+                            }
+
                             var entry = stats.StatusLines.GetValueOrDefault(kvp.Key);
                             if (entry.Text == null)
+                            {
                                 return;
+                            }
+
                             UpdateStatusLabel(row, entry);
                         }).Every(1000);
                     }
@@ -564,7 +623,7 @@ namespace Fodinae.Scripts.UI
         {
             if (entry.Text == null || entry.Text.Length == 0)
             {
-                label.text = "";
+                label.text = string.Empty;
                 return;
             }
 
@@ -588,20 +647,23 @@ namespace Fodinae.Scripts.UI
         {
             var ts = TimeSpan.FromSeconds(seconds);
             if (ts.TotalHours >= 1)
+            {
                 return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+            }
+
             return $"{ts.Minutes:D2}:{ts.Seconds:D2}";
         }
 
         private void ClaimDailyBonus()
         {
             Debug.Log("[PlayerHUD] ClaimDailyBonus: sending claim request");
-            NetworkService.Instance.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
+            NetworkService.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
         }
 
         private void CreateAutoDigToggle(VisualElement root)
         {
             _autoDigButton = new Button(ToggleAutoDig);
-            _autoDigButton.text = "";
+            _autoDigButton.text = string.Empty;
             _autoDigButton.style.position = Position.Absolute;
             _autoDigButton.style.left = 10;
             _autoDigButton.style.bottom = 281;
@@ -635,7 +697,7 @@ namespace Fodinae.Scripts.UI
         private void CreateAggressionToggle(VisualElement root)
         {
             _aggressionButton = new Button(ToggleAggression);
-            _aggressionButton.text = "";
+            _aggressionButton.text = string.Empty;
             _aggressionButton.style.position = Position.Absolute;
             _aggressionButton.style.left = 10;
             _aggressionButton.style.bottom = 314;
@@ -681,7 +743,9 @@ namespace Fodinae.Scripts.UI
         private void EnsureSkillRow()
         {
             if (_currentSkillRow != null && _skillCountInRow < SKILL_GRID_COLS)
+            {
                 return;
+            }
 
             _currentSkillRow = new VisualElement();
             _currentSkillRow.style.flexDirection = FlexDirection.Row;
@@ -725,11 +789,15 @@ namespace Fodinae.Scripts.UI
             iconImage.style.width = 24;
             iconImage.style.height = 24;
 
-            var tex = Resources.Load<Texture2D>($"skills/{skill}");
+            var tex = Resources.Load<Texture2D>($"Skills/{skill}");
             if (tex != null)
+            {
                 iconImage.image = tex;
+            }
             else
+            {
                 iconImage.style.backgroundColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
+            }
 
             iconColumn.Add(iconImage);
             cell.Add(iconColumn);
@@ -758,7 +826,7 @@ namespace Fodinae.Scripts.UI
         private void CreateCollisionToggle(VisualElement root)
         {
             _collisionButton = new Button(ToggleCollision);
-            _collisionButton.text = "";
+            _collisionButton.text = string.Empty;
             _collisionButton.style.position = Position.Absolute;
             _collisionButton.style.left = 10;
             _collisionButton.style.bottom = 182;
@@ -791,14 +859,20 @@ namespace Fodinae.Scripts.UI
 
         private void ToggleAutoDig()
         {
-            var player = FindObjectOfType<PlayerMovementController>();
+            var player = FindAnyObjectByType<PlayerMovementController>();
             if (player != null)
+            {
                 player.AutoDig = !player.AutoDig;
+            }
         }
 
         private void UpdateAutoDigButton(bool enabled)
         {
-            if (_autoDigLabel == null) return;
+            if (_autoDigLabel == null)
+            {
+                return;
+            }
+
             _autoDigLabel.text = enabled ? "Копать ✓" : "Копать ✗";
             _autoDigLabel.style.color = enabled
                 ? new Color(0.3f, 0.9f, 0.3f, 1f)
@@ -810,14 +884,20 @@ namespace Fodinae.Scripts.UI
 
         private void ToggleAggression()
         {
-            var player = FindObjectOfType<PlayerMovementController>();
+            var player = FindAnyObjectByType<PlayerMovementController>();
             if (player != null)
+            {
                 player.ToggleAggression();
+            }
         }
 
         private void UpdateAggressionButton(bool enabled)
         {
-            if (_aggressionLabel == null) return;
+            if (_aggressionLabel == null)
+            {
+                return;
+            }
+
             _aggressionLabel.text = enabled ? "Агрессия ✓" : "Агрессия ✗";
             _aggressionLabel.style.color = enabled
                 ? new Color(0.3f, 0.9f, 0.3f, 1f)
@@ -829,15 +909,22 @@ namespace Fodinae.Scripts.UI
 
         private void ToggleCollision()
         {
-            var player = FindObjectOfType<PlayerMovementController>();
+            var player = FindAnyObjectByType<PlayerMovementController>();
             if (player != null)
+            {
                 player.IgnoreCollision = !player.IgnoreCollision;
+            }
+
             UpdateCollisionButton(player != null && player.IgnoreCollision);
         }
 
         private void UpdateCollisionButton(bool enabled)
         {
-            if (_collisionLabel == null) return;
+            if (_collisionLabel == null)
+            {
+                return;
+            }
+
             _collisionLabel.text = enabled ? "Стены ✓" : "Стены ✗";
             _collisionLabel.style.color = enabled
                 ? new Color(0.3f, 0.9f, 0.3f, 1f)
@@ -850,7 +937,10 @@ namespace Fodinae.Scripts.UI
         private void RefreshAll()
         {
             var stats = PlayerStatsModel.Instance;
-            if (stats == null) return;
+            if (stats == null)
+            {
+                return;
+            }
 
             _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
             _levelLabel.text = $"Ур: {stats.Level:N0}";
@@ -891,7 +981,10 @@ namespace Fodinae.Scripts.UI
                 dot.style.marginRight = 6;
                 dot.style.alignSelf = Align.Center;
                 if (_crystalTextures[i] != null)
+                {
                     dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
+                }
+
                 row.Add(dot);
 
                 var label = new Label("0/0");
@@ -906,8 +999,16 @@ namespace Fodinae.Scripts.UI
 
         private static string FormatCompact(long val)
         {
-            if (val >= 1_000_000) return $"{(val / 1_000_000f):F1}M";
-            if (val >= 10_000) return $"{val / 1_000}K";
+            if (val >= 1_000_000)
+            {
+                return $"{val / 1_000_000f:F1}M";
+            }
+
+            if (val >= 10_000)
+            {
+                return $"{val / 1_000}K";
+            }
+
             return val.ToString("N0");
         }
 
@@ -924,7 +1025,7 @@ namespace Fodinae.Scripts.UI
 
             icon.barFill.style.backgroundColor = Color.Lerp(Color.green, Color.red, Mathf.Clamp01(progress));
 
-            icon.arrow.text = progress >= 1f ? "up" : "";
+            icon.arrow.text = progress >= 1f ? "up" : string.Empty;
 
             if (progress >= 1f)
             {
@@ -961,6 +1062,7 @@ namespace Fodinae.Scripts.UI
                 existing.Pause();
                 _bounceSchedules.Remove(skill);
             }
+
             arrow.style.translate = new Translate(0, 0);
         }
 
@@ -1225,7 +1327,7 @@ namespace Fodinae.Scripts.UI
             btn.text = "Респавн";
             btn.style.position = Position.Absolute;
             btn.style.top = 10;
-            btn.style.right = 10 + (100 + 6) * 2;
+            btn.style.right = 10 + ((100 + 6) * 2);
             btn.style.width = 100;
             btn.style.height = 28;
             btn.style.fontSize = 12;
@@ -1328,12 +1430,12 @@ namespace Fodinae.Scripts.UI
         {
             var btn = new Button(() =>
             {
-                NetworkService.Instance.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
             });
             btn.text = "Тест модального окна";
             btn.style.position = Position.Absolute;
             btn.style.top = 10;
-            btn.style.right = 10 + (100 + 6) * 3;
+            btn.style.right = 10 + ((100 + 6) * 3);
             btn.style.width = 160;
             btn.style.height = 28;
             btn.style.fontSize = 12;
@@ -1366,12 +1468,12 @@ namespace Fodinae.Scripts.UI
         {
             var joinBtn = new Button(() =>
             {
-                NetworkService.Instance.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
             });
             joinBtn.text = "Вступить в клан";
             joinBtn.style.position = Position.Absolute;
             joinBtn.style.top = 10;
-            joinBtn.style.right = 10 + (100 + 6) * 3 + 160 + 6;
+            joinBtn.style.right = 10 + ((100 + 6) * 3) + 160 + 6;
             joinBtn.style.width = 140;
             joinBtn.style.height = 28;
             joinBtn.style.fontSize = 12;
@@ -1401,12 +1503,12 @@ namespace Fodinae.Scripts.UI
 
             var leaveBtn = new Button(() =>
             {
-                NetworkService.Instance.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
             });
             leaveBtn.text = "Выйти из клана";
             leaveBtn.style.position = Position.Absolute;
             leaveBtn.style.top = 10 + 28 + 6;
-            leaveBtn.style.right = 10 + (100 + 6) * 3 + 160 + 6;
+            leaveBtn.style.right = 10 + ((100 + 6) * 3) + 160 + 6;
             leaveBtn.style.width = 140;
             leaveBtn.style.height = 28;
             leaveBtn.style.fontSize = 12;
@@ -1439,12 +1541,12 @@ namespace Fodinae.Scripts.UI
         {
             _missionButton = new Button(() =>
             {
-                NetworkService.Instance.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
             });
             _missionButton.text = "Миссии";
             _missionButton.style.position = Position.Absolute;
             _missionButton.style.top = 10 + 28 + 6 + 28 + 6;
-            _missionButton.style.right = 10 + (100 + 6) * 3 + 160 + 6;
+            _missionButton.style.right = 10 + ((100 + 6) * 3) + 160 + 6;
             _missionButton.style.width = 140;
             _missionButton.style.height = 28;
             _missionButton.style.fontSize = 12;
@@ -1505,7 +1607,7 @@ namespace Fodinae.Scripts.UI
             _missionTitleLabel.style.marginBottom = 4;
             _missionPanel.Add(_missionTitleLabel);
 
-            _missionDescLabel = new Label("");
+            _missionDescLabel = new Label(string.Empty);
             _missionDescLabel.style.fontSize = LABEL_FONT_SIZE;
             _missionDescLabel.style.color = _textColor;
             _missionDescLabel.style.whiteSpace = WhiteSpace.Normal;
@@ -1552,7 +1654,10 @@ namespace Fodinae.Scripts.UI
         private void UpdateMissionPanel()
         {
             var stats = PlayerStatsModel.Instance;
-            if (stats == null) return;
+            if (stats == null)
+            {
+                return;
+            }
 
             if (!stats.IsMissionActive)
             {
@@ -1562,7 +1667,7 @@ namespace Fodinae.Scripts.UI
 
             _missionPanel.style.display = DisplayStyle.Flex;
             _missionTitleLabel.text = stats.MissionTitle ?? "Миссия";
-            _missionDescLabel.text = stats.MissionDescription ?? "";
+            _missionDescLabel.text = stats.MissionDescription ?? string.Empty;
 
             float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
             _missionProgressFill.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);

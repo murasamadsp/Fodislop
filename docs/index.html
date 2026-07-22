@@ -4,124 +4,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Документация — Fodinae</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box
-        }
-
-        body {
-            font: 16px/1.6 system-ui, sans-serif;
-            color: #e0e0e0;
-            background: #1a1a2e;
-            max-width: 720px;
-            margin: 0 auto;
-            padding: 2rem 1.5rem
-        }
-
-        h1 {
-            font-size: 1.8rem;
-            color: #fff;
-            margin-bottom: .5rem
-        }
-
-        h2 {
-            font-size: 1.3rem;
-            color: #a8b2d1;
-            margin: 2rem 0 .5rem;
-            border-bottom: 1px solid #2a2a4a;
-            padding-bottom: .3rem
-        }
-
-        h3 {
-            font-size: 1.1rem;
-            color: #ccd6f6;
-            margin: 1.2rem 0 .4rem
-        }
-
-        p,
-        li {
-            margin-bottom: .5rem
-        }
-
-        ul,
-        ol {
-            padding-left: 1.5rem;
-            list-style: none
-        }
-
-        li {
-            margin-bottom: .7rem
-        }
-
-        code {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: .9em;
-            background: #16213e;
-            padding: .15em .4em;
-            border-radius: 3px;
-            color: #64ffda
-        }
-
-        a {
-            color: #64ffda;
-            text-decoration: none
-        }
-
-        a:hover {
-            text-decoration: underline
-        }
-
-        .doc-title {
-            font-weight: 600;
-            font-size: 1.02rem
-        }
-
-        .doc-desc {
-            color: #8892b0;
-            font-size: .9rem
-        }
-
-        .note {
-            background: #1b2838;
-            border-left: 3px solid #64ffda;
-            padding: .8rem 1rem;
-            margin: 1rem 0;
-            border-radius: 0 4px 4px 0;
-            font-size: .9rem
-        }
-
-        .tag {
-            font-size: .72rem;
-            color: #1a1a2e;
-            background: #64ffda;
-            padding: .1em .5em;
-            border-radius: 3px;
-            margin-left: .5rem;
-            vertical-align: middle
-        }
-
-        .tag.draft {
-            background: #f0a500
-        }
-    </style>
+    <title>Архитектура Fodinae Client — Документация</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/main.js" defer></script>
 </head>
 
 <body>
 
-    <h1>Документация Fodinae</h1>
-    <p>Технические справки по системам клиента. Каждый документ автономен — открывается в браузере без зависимостей.</p>
+    <header>
+        <div class="header-title-group">
+            <div class="logo-badge">F</div>
+            <div>
+                <h1>Fodinae Client Architecture</h1>
+                <p class="subtitle">Техническая спецификация клиентских систем Unity (URP 2D)</p>
+            </div>
+        </div>
+        <nav>
+            <a href="index.html">Обзор архитектуры</a>
+            <a href="rendering.html">Рендеринг (SingleMesh)</a>
+            <a href="networking.html">Сетевой протокол</a>
+            <a href="audio.html">Аудио (FMOD)</a>
+            <a href="assets_loading.html">Загрузка ассетов</a>
+            <a href="ui_programmator.html">UI & Программатор</a>
+        </nav>
+    </header>
 
-    <h2>Мир и рендеринг</h2>
-    <ul>
-        <li>
-            <a class="doc-title" href="rendering.html">Архитектура рендеринга</a>
-            <div class="doc-desc">Как тайловый мир рисуется в один draw call: UV-каналы, инверсия Y, поток данных,
-                сортировка.</div>
-        </li>
-    </ul>
+    <main>
+        <!-- Архитектурный принцип -->
+        <section>
+            <h2>Архитектурный принцип клиенто-серверного взаимодействия</h2>
+            <p>Клиент и сервер Fodinae работают по принципу четкого разделения тяжелой визуализации и легкого сетевого
+                состояния:</p>
+            <ul>
+                <li><strong>Примитивы рендера на клиенте</strong>: В клиенте зафиксированы исполнительные компоненты
+                    отображения (тайлы мира, сущности роботов, предметов на земле, визуальных и звуковых эффектов).</li>
+                <li><strong>Легковесный сетевой поток</strong>: Сервер передает клиенту только чистые координаты и
+                    идентификаторы состояний (где находятся роботы, где стоят паки предметов, какие ячейки попадают в
+                    радиус видимости, какие звуки вызваны вокруг).</li>
+                <li><strong>Однократный запрос ассетов (On-Demand)</strong>: Когда на экране впервые появляется
+                    неизвестный клиенту объект (новый тип блока, скин робота, иконка пака, аудио-банк), клиент
+                    запрашивает тяжелые ассеты (текстуры, спрайты, FMOD `.bank`) с сервера/CDN ровно один раз.</li>
+                <li><strong>Автономный рендер из кэша</strong>: Все полученные ассеты сохраняются в дисковом кэше
+                    <code>PersistentAssetCache</code> (с ETag/MD5 валидацией) и ОЗУ. При последующих появлениях
+                    аналогичных объектов клиент строит тяжелый рендеринг строго из локального кэша, не обращаясь
+                    повторно к серверу.</li>
+            </ul>
+        </section>
+
+        <!-- Системный стек -->
+        <section>
+            <h2>Технологический стек</h2>
+            <p>Клиент Fodinae построен на базe Unity 6 (6000.2.10f1) с использованием 2D Universal Render Pipeline
+                (URP). Основные системные зависимости:</p>
+            <ul>
+                <li><strong>Рендеринг</strong>: 2D Render Pipeline (`com.unity.render-pipelines.universal` 17.2.0),
+                    процедурный меш <code>SingleMeshTerrainRenderer</code>.</li>
+                <li><strong>Аудио</strong>: FMOD Studio C++ Engine via Native Wrapper, диск-стриминг `.bank` через
+                    <code>loadBankFile</code>.</li>
+                <li><strong>Сеть</strong>: TCP сокеты через сетевой стек <code>MinesServer.Networking</code> (пакеты
+                    <code>darkar25.fodinae.*</code>).</li>
+                <li><strong>Асинхронность</strong>: <code>UniTask</code> (Cysharp) без выделений GC на генераторах
+                    сопрограмм.</li>
+                <li><strong>Интерфейс</strong>: UI Toolkit (`UIDocument`, UXML, TSS темы) + пакетная сборка окон
+                    <code>PacketUIBuilderFactory</code>.</li>
+            </ul>
+        </section>
+
+        <!-- Структура подсистем -->
+        <section>
+            <h2>Обзор основных подсистем</h2>
+            <div class="grid-2">
+                <div class="card-item">
+                    <h3>Рендеринг тайлового мира</h3>
+                    <p>Единый процедурный меш <code>SingleMeshTerrainRenderer</code> на весь видимый мир с 7
+                        UV-каналами. Снижает число Draw Calls до 1 при Sorting Order = -1000.</p>
+                    <a href="rendering.html" class="class-ref">Подробнее о рендеринге →</a>
+                </div>
+                <div class="card-item">
+                    <h3>Сетевой обмен данными</h3>
+                    <p>Асинхронный TCP-сервис <code>NetworkService</code> и <code>PacketHandler</code>. Подписка через
+                        <code>Subscribe&lt;T&gt;</code> и обработка 1:1 серверных координат.</p>
+                    <a href="networking.html" class="class-ref">Подробнее о сети →</a>
+                </div>
+                <div class="card-item">
+                    <h3>Аудиоподсистема FMOD</h3>
+                    <p>Управление 6 шинами FMOD Studio, нативное 3D-позиционирование
+                        <code>AttachInstanceToGameObject</code> и акустические FMOD Snapshots.</p>
+                    <a href="audio.html" class="class-ref">Подробнее об аудио →</a>
+                </div>
+                <div class="card-item">
+                    <h3>Кэширование и CDN ассетов</h3>
+                    <p>Загрузчик <code>ClientAssetLoader</code> с HTTP ETag/MD5 валидацией, кэшированием на
+                        `persistentDataPath` и дедупликацией параллельных запросов.</p>
+                    <a href="assets_loading.html" class="class-ref">Подробнее о загрузке →</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Система координат -->
+        <section>
+            <h2>Система координат и позиционирования</h2>
+            <p>В проекте строго соблюдается единая система пространственных координат:</p>
+            <ul>
+                <li><strong>Серверные координаты</strong>: Точка `(0, 0)` находится в левом верхнем углу (поверхность
+                    мира). Ось X растёт вправо, ось Y растёт вниз (вглубь шахты).</li>
+                <li><strong>Конвертация</strong>: Все пространственные преобразования централизованы в <a
+                        href="../Assets/Scripts/World/CoordinateUtils.cs" class="class-ref">CoordinateUtils</a>.</li>
+                <li><strong>Единственный источник истины</strong>: Позиция игрока хранится в свойстве
+                    <code>PlayerMovementController.Position</code> (`Vector2Int` серверных координат).</li>
+            </ul>
+        </section>
+    </main>
 
 </body>
 

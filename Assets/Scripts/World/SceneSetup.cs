@@ -14,7 +14,7 @@ namespace Fodinae.Scripts.World
         private WorldBackgroundSetup _backgroundSetup;
 
         /// <summary>
-        /// Get the background setup instance
+        /// Get the background setup instance.
         /// </summary>
         public static WorldBackgroundSetup GetBackgroundSetup()
         {
@@ -22,14 +22,14 @@ namespace Fodinae.Scripts.World
         }
 
         /// <summary>
-        /// Get the background renderer instance
+        /// Get the background renderer instance.
         /// </summary>
         public static SingleMeshTerrainRenderer GetBackgroundRenderer()
         {
             return _instance?._backgroundSetup?.GetBackgroundRenderer();
         }
 
-        private void Awake()
+        protected void Awake()
         {
             if (_instance != null && _instance != this)
             {
@@ -46,21 +46,42 @@ namespace Fodinae.Scripts.World
             SetupWorldBackground();
             SetupSurfaceRenderer();
             SetupWorldMapController();
+            SetupWorldAudioController();
+        }
+
+        private void SetupWorldAudioController()
+        {
+            var existing = FindAnyObjectByType<Audio.Spatial.WorldAudioController>();
+            if (existing != null)
+            {
+                return;
+            }
+
+            var audioGO = new GameObject("WorldAudioController");
+            audioGO.transform.SetParent(transform);
+            audioGO.AddComponent<Audio.Spatial.WorldAudioController>();
         }
 
         private void SetupSurfaceRenderer()
         {
-            var existing = FindObjectOfType<SurfaceRenderer>();
-            if (existing != null) return;
+            var existing = FindAnyObjectByType<SurfaceRenderer>();
+            if (existing != null)
+            {
+                return;
+            }
 
             var surfaceGO = new GameObject("SurfaceRenderer");
             surfaceGO.transform.SetParent(transform);
             surfaceGO.AddComponent<SurfaceRenderer>();
         }
+
         private void SetupWorldMapController()
         {
-            var existing = FindObjectOfType<WorldMapController>();
-            if (existing != null) return;
+            var existing = FindAnyObjectByType<WorldMapController>();
+            if (existing != null)
+            {
+                return;
+            }
 
             var controllerGO = new GameObject("WorldMapController");
             controllerGO.transform.SetParent(transform);
@@ -70,7 +91,7 @@ namespace Fodinae.Scripts.World
         private void SetupWorldBackground()
         {
             // Find or create the background setup component
-            _backgroundSetup = FindFirstObjectByType<WorldBackgroundSetup>();
+            _backgroundSetup = FindAnyObjectByType<WorldBackgroundSetup>();
 
             if (_backgroundSetup == null)
             {
@@ -83,11 +104,11 @@ namespace Fodinae.Scripts.World
                     DontDestroyOnLoad(setupGO);
                 }
 
-                Debug.Log("WorldBackgroundSetup automatically created");
+                Debug.Log("[SceneSetup] WorldBackgroundSetup automatically created");
             }
             else
             {
-                Debug.Log("WorldBackgroundSetup already exists in scene");
+                Debug.Log("[SceneSetup] WorldBackgroundSetup already exists in scene");
             }
         }
     }

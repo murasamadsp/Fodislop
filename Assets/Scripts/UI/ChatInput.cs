@@ -11,28 +11,44 @@ namespace Fodinae.Scripts.UI
         {
             IsFocused = true;
 
-            var pc = Object.FindObjectOfType<PlayerMovementController>();
-            if (pc != null) pc.enabled = false;
+            if (PlayerMovementController.LocalPlayer != null)
+            {
+                PlayerMovementController.LocalPlayer.enabled = false;
+            }
 
-            var wm = Object.FindObjectOfType<WorldMapController>();
-            if (wm != null) wm.enabled = false;
+            var worldMap = Object.FindAnyObjectByType<WorldMapController>();
+            if (worldMap != null)
+            {
+                worldMap.enabled = false;
+            }
 
-            var pm = Object.FindObjectOfType<PauseMenu>();
-            if (pm != null) pm.enabled = false;
+            var pauseMenu = Object.FindAnyObjectByType<PauseMenu>();
+            if (pauseMenu != null)
+            {
+                pauseMenu.enabled = false;
+            }
         }
 
         public static void OnBlur()
         {
             IsFocused = false;
 
-            var pc = Object.FindObjectOfType<PlayerMovementController>();
-            if (pc != null) pc.enabled = true;
+            if (PlayerMovementController.LocalPlayer != null)
+            {
+                PlayerMovementController.LocalPlayer.enabled = true;
+            }
 
-            var wm = Object.FindObjectOfType<WorldMapController>();
-            if (wm != null) wm.enabled = true;
+            var worldMap = Object.FindAnyObjectByType<WorldMapController>();
+            if (worldMap != null)
+            {
+                worldMap.enabled = true;
+            }
 
-            var pm = Object.FindObjectOfType<PauseMenu>();
-            if (pm != null) pm.enabled = true;
+            var pauseMenu = Object.FindAnyObjectByType<PauseMenu>();
+            if (pauseMenu != null)
+            {
+                pauseMenu.enabled = true;
+            }
         }
     }
 }

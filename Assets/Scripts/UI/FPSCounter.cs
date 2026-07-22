@@ -11,18 +11,19 @@ namespace Fodinae.Scripts.UI
     /// </summary>
     public class FPSCounter : MonoBehaviour
     {
-        private const int SampleSize = 30;
-        private readonly float[] _frameTimes = new float[SampleSize];
+        private const int SAMPLE_SIZE = 30;
+        private readonly float[] _frameTimes = new float[SAMPLE_SIZE];
         private int _frameIndex;
+        private float _runningSum;
 
         private Text _fpsText;
         private int _pingMs;
         private int _onlinePlayers;
         private int _onlineProgrammator;
 
-        private void Awake()
+        protected void Awake()
         {
-            Canvas canvas = FindFirstObjectByType<Canvas>();
+            Canvas canvas = FindAnyObjectByType<Canvas>();
             if (canvas == null)
             {
                 GameObject canvasGO = new GameObject("FPSCanvas");
@@ -38,7 +39,9 @@ namespace Fodinae.Scripts.UI
 
             _fpsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (_fpsText.font == null)
+            {
                 _fpsText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+            }
 
             _fpsText.fontSize = 14;
             _fpsText.alignment = TextAnchor.UpperCenter;
@@ -53,19 +56,22 @@ namespace Fodinae.Scripts.UI
             rt.anchoredPosition = new Vector2(0, -10);
         }
 
-        private void Update()
+        protected void Update()
         {
+            _runningSum -= _frameTimes[_frameIndex];
             _frameTimes[_frameIndex] = Time.unscaledDeltaTime;
-            _frameIndex = (_frameIndex + 1) % SampleSize;
-            float sum = 0f;
-            for (int i = 0; i < SampleSize; i++)
-                sum += _frameTimes[i];
-            float avg = sum / SampleSize;
+            _runningSum += _frameTimes[_frameIndex];
+            _frameIndex = (_frameIndex + 1) % SAMPLE_SIZE;
+            float avg = _runningSum / SAMPLE_SIZE;
             float fps = avg > 0f ? 1f / avg : 0f;
             _fpsText.text = $"FPS: {fps:F1}  Ping: {_pingMs}ms  Online: {_onlinePlayers}  Prg: {_onlineProgrammator}";
         }
 
         public void SetPing(int ms) => _pingMs = ms;
-        public void SetOnline(int players, int programmator) { _onlinePlayers = players; _onlineProgrammator = programmator; }
+        public void SetOnline(int players, int programmator)
+        {
+            _onlinePlayers = players;
+            _onlineProgrammator = programmator;
+        }
     }
 }

@@ -1,54 +1,22 @@
 using System.Collections.Generic;
 using Fodinae.Scripts.Game;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.World;
 using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Game.Managers
 {
-    public class PackManager : MonoBehaviour
+    public class PackManager : SingletonMonoBehaviour<PackManager>
     {
-        private static PackManager _instance;
-        private static bool _isQuitting = false;
-
+        private const string TAG = "[PackManager]";
         private Dictionary<Vector2Int, Pack> _packs = new();
-
-        public static PackManager InstanceIfExists => _instance;
-
-        public static PackManager Instance
-        {
-            get
-            {
-                if (_isQuitting)
-                {
-                    return null;
-                }
-
-                if (_instance == null)
-                {
-                    _instance = FindFirstObjectByType<PackManager>();
-                    if (_instance == null && !_isQuitting)
-                    {
-                        var go = new GameObject("[PackManager]");
-                        _instance = go.AddComponent<PackManager>();
-
-                        // System Grouping
-                        if (Application.isPlaying)
-                        {
-                            var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
-                            UnityEngine.Object.DontDestroyOnLoad(parent);
-                            go.transform.SetParent(parent.transform);
-                        }
-                    }
-                }
-
-                return _instance;
-            }
-        }
 
         public void AddOrUpdatePack(ushort x, ushort y, PackType packType, byte variant, byte linkedClan)
         {
             if (MapManager.Instance == null)
             {
+                Debug.LogWarning($"{TAG} MapManager not ready, skipping pack at ({x},{y})");
                 return;
             }
 
@@ -61,12 +29,7 @@ namespace Fodinae.Scripts.Game.Managers
 
             var go = new GameObject($"Pack_{x}_{y}");
             go.transform.SetParent(transform);
-
-            // Centered at the target cell.
-            // Formula for UnityY: (MapManager.Instance.WorldHeight - 1 - y) + 0.5f
-            float unityY = (MapManager.Instance.WorldHeight - 1 - y) + 0.5f;
-            go.transform.position = new Vector3(x + 0.5f, unityY, 0);
-
+            go.transform.position = CoordinateUtils.ServerToUnityPos(x, y);
             pack = go.AddComponent<Pack>();
             pack.Initialize(packType, variant, linkedClan);
             _packs[pos] = pack;
@@ -80,10 +43,15 @@ namespace Fodinae.Scripts.Game.Managers
                 Destroy(pack.gameObject);
                 _packs.Remove(pos);
             }
+            else
+            {
+                Debug.LogWarning($"{TAG} RemovePack: no pack at ({x},{y})");
+            }
         }
 
         public void ClearAllPacks()
         {
+            int count = _packs.Count;
             foreach (var pack in _packs.Values)
             {
                 if (pack != null)
@@ -93,43 +61,7 @@ namespace Fodinae.Scripts.Game.Managers
             }
 
             _packs.Clear();
-        }
-
-        protected virtual void Awake()
-        {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            _instance = this;
-            if (Application.isPlaying)
-            {
-                DontDestroyOnLoad(gameObject);
-
-                // Ensure parented if created in scene
-                var parent = GameObject.Find("[Systems]") ?? new GameObject("[Systems]");
-                UnityEngine.Object.DontDestroyOnLoad(parent);
-                transform.SetParent(parent.transform);
-            }
-
-            _isQuitting = false;
-        }
-
-        protected virtual void Start()
-        {
-            // Subscribe to WorldInitialized is problematic because it might trigger after packets are processed.
-            // However, MapManager.LoadWorldInit calls MapStorage.InitWorld which is the best time to clear packs.
-        }
-
-        protected virtual void OnDestroy()
-        {
-        }
-
-        protected virtual void OnApplicationQuit()
-        {
-            _isQuitting = true;
+            Debug.Log($"{TAG} Cleared {count} packs");
         }
     }
 }
