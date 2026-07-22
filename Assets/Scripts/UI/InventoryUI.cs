@@ -12,7 +12,7 @@ namespace Fodinae.Scripts.UI
         private const int HOTBAR_COLS = 9;
         private const int INVENTORY_ROWS = 6;
         private const int INVENTORY_COLS = 9;
-        private const int CELL_SIZE = 50;
+        private const int CELLSIZE = 50;
         private const int CELL_GAP = 10;
         private const int ICON_SIZE = 36;
 
@@ -45,31 +45,68 @@ namespace Fodinae.Scripts.UI
         private Label _tooltipName;
         private Label _tooltipDesc;
 
-        void Start()
+        protected void Start()
         {
             InitializeInventory();
         }
 
-        void Update()
+        protected void Update()
         {
-            if (Keyboard.current == null) return;
-            if (PacketHandler.IsInputBlocked) return;
+            if (Keyboard.current == null)
+            {
+                return;
+            }
 
-            if (Keyboard.current.digit1Key.wasPressedThisFrame) _model.SelectSlot(0);
-            else if (Keyboard.current.digit2Key.wasPressedThisFrame) _model.SelectSlot(1);
-            else if (Keyboard.current.digit3Key.wasPressedThisFrame) _model.SelectSlot(2);
-            else if (Keyboard.current.digit4Key.wasPressedThisFrame) _model.SelectSlot(3);
-            else if (Keyboard.current.digit5Key.wasPressedThisFrame) _model.SelectSlot(4);
-            else if (Keyboard.current.digit6Key.wasPressedThisFrame) _model.SelectSlot(5);
-            else if (Keyboard.current.digit7Key.wasPressedThisFrame) _model.SelectSlot(6);
-            else if (Keyboard.current.digit8Key.wasPressedThisFrame) _model.SelectSlot(7);
-            else if (Keyboard.current.digit9Key.wasPressedThisFrame) _model.SelectSlot(8);
-            else if (Keyboard.current.enterKey.wasPressedThisFrame) _model.UseSelectedItem();
+            if (PacketHandler.IsInputBlocked)
+            {
+                return;
+            }
+
+            if (Keyboard.current.digit1Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(0);
+            }
+            else if (Keyboard.current.digit2Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(1);
+            }
+            else if (Keyboard.current.digit3Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(2);
+            }
+            else if (Keyboard.current.digit4Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(3);
+            }
+            else if (Keyboard.current.digit5Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(4);
+            }
+            else if (Keyboard.current.digit6Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(5);
+            }
+            else if (Keyboard.current.digit7Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(6);
+            }
+            else if (Keyboard.current.digit8Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(7);
+            }
+            else if (Keyboard.current.digit9Key.wasPressedThisFrame)
+            {
+                _model.SelectSlot(8);
+            }
+            else if (Keyboard.current.enterKey.wasPressedThisFrame)
+            {
+                _model.UseSelectedItem();
+            }
         }
 
         private void InitializeInventory()
         {
-            _doc = FindObjectOfType<UIDocument>();
+            _doc = FindAnyObjectByType<UIDocument>();
             if (_doc == null)
             {
                 Debug.LogError("[InventoryUI] UIDocument not found on scene");
@@ -126,11 +163,12 @@ namespace Fodinae.Scripts.UI
                 if (item != null)
                 {
                     _tooltipName.text = item.Name;
-                    _tooltipDesc.text = item.Description ?? "";
+                    _tooltipDesc.text = item.Description ?? string.Empty;
                     _tooltipWrapper.style.display = DisplayStyle.Flex;
                     return;
                 }
             }
+
             _tooltipWrapper.style.display = DisplayStyle.None;
         }
 
@@ -208,7 +246,7 @@ namespace Fodinae.Scripts.UI
 
             root.RegisterCallback<GeometryChangedEvent>(evt =>
             {
-                int w = HOTBAR_COLS * CELL_SIZE + (HOTBAR_COLS - 1) * CELL_GAP + CELL_SIZE + CELL_GAP;
+                const int w = (HOTBAR_COLS * CELLSIZE) + ((HOTBAR_COLS - 1) * CELL_GAP) + CELLSIZE + CELL_GAP;
                 _hotbarContainer.style.left = (root.resolvedStyle.width - w) / 2;
             });
         }
@@ -282,7 +320,7 @@ namespace Fodinae.Scripts.UI
             titleLabel.style.alignSelf = Align.FlexStart;
             panelBg.Add(titleLabel);
 
-            var inventoryGrid = CreateGrid(9, InventoryModel.TOTAL_SLOTS - 1, "Inv");
+            var inventoryGrid = CreateGrid(9, InventoryModel.TOTALSLOTS - 1, "Inv");
             panelBg.Add(inventoryGrid);
 
             var separator = new VisualElement();
@@ -290,7 +328,7 @@ namespace Fodinae.Scripts.UI
             separator.style.backgroundColor = _panelBorderColor;
             separator.style.marginTop = 15;
             separator.style.marginBottom = 15;
-            separator.style.width = INVENTORY_COLS * CELL_SIZE + (INVENTORY_COLS - 1) * CELL_GAP;
+            separator.style.width = (INVENTORY_COLS * CELLSIZE) + ((INVENTORY_COLS - 1) * CELL_GAP);
             panelBg.Add(separator);
 
             var hotbarInPanel = CreateGrid(0, 8, "PanelHotbar");
@@ -333,8 +371,8 @@ namespace Fodinae.Scripts.UI
             var cell = new VisualElement();
             cell.name = name;
             cell.userData = slotIndex;
-            cell.style.width = CELL_SIZE;
-            cell.style.height = CELL_SIZE;
+            cell.style.width = CELLSIZE;
+            cell.style.height = CELLSIZE;
             cell.style.justifyContent = Justify.Center;
             cell.style.alignItems = Align.Center;
             cell.style.marginRight = CELL_GAP;
@@ -371,7 +409,7 @@ namespace Fodinae.Scripts.UI
             qtyLabel.style.textShadow = new TextShadow
             {
                 color = Color.black,
-                offset = new Vector2(1, -1)
+                offset = new Vector2(1, -1),
             };
             qtyLabel.pickingMode = PickingMode.Ignore;
             cell.Add(qtyLabel);
@@ -380,23 +418,33 @@ namespace Fodinae.Scripts.UI
             cell.RegisterCallback<MouseEnterEvent>(_ =>
             {
                 if (_dragFromSlot < 0)
+                {
                     cell.style.backgroundColor = _cellHighlightColor;
+                }
             });
             cell.RegisterCallback<MouseLeaveEvent>(_ =>
             {
                 if (_dragFromSlot < 0)
+                {
                     cell.style.backgroundColor = _cellBgColor;
+                }
             });
 
             // Выбор по клику
             cell.RegisterCallback<MouseDownEvent>(evt =>
             {
-                if (evt.button != 0) return;
+                if (evt.button != 0)
+                {
+                    return;
+                }
 
                 _model.SelectSlot(slotIndex);
                 var item = _model.GetSlot(slotIndex);
 
-                if (item == null) return;
+                if (item == null)
+                {
+                    return;
+                }
 
                 _dragFromSlot = slotIndex;
                 _draggedItem = item;
@@ -419,6 +467,7 @@ namespace Fodinae.Scripts.UI
                 {
                     _floatingItem.style.backgroundColor = Color.gray;
                 }
+
                 _floatingItem.style.opacity = 0.8f;
                 _floatingItem.pickingMode = PickingMode.Ignore;
 
@@ -432,7 +481,10 @@ namespace Fodinae.Scripts.UI
             });
 
             if (!_slotElements.ContainsKey(slotIndex))
+            {
                 _slotElements[slotIndex] = new List<VisualElement>();
+            }
+
             _slotElements[slotIndex].Add(cell);
 
             RefreshSlot(slotIndex);
@@ -442,13 +494,17 @@ namespace Fodinae.Scripts.UI
         private void OnDragMove(MouseMoveEvent evt)
         {
             if (_floatingItem != null)
+            {
                 UpdateFloatingPosition(evt.mousePosition);
+            }
         }
 
         private void OnDragDrop(MouseUpEvent evt)
         {
             if (_dragFromSlot < 0 || _floatingItem == null)
+            {
                 return;
+            }
 
             var root = _doc.rootVisualElement;
             root.UnregisterCallback<MouseMoveEvent>(OnDragMove);
@@ -457,10 +513,14 @@ namespace Fodinae.Scripts.UI
             var target = FindSlotUnderMouse(evt.mousePosition);
             if (target >= 0 && target != _dragFromSlot)
             {
-                if (_model.CanStack(_draggedItem, _model.GetSlot(target)))
+                if (InventoryModel.CanStack(_draggedItem, _model.GetSlot(target)))
+                {
                     _model.TryStackSlots(_dragFromSlot, target);
+                }
                 else
+                {
                     _model.SwapSlots(_dragFromSlot, target);
+                }
             }
 
             root.Remove(_floatingItem);
@@ -476,21 +536,28 @@ namespace Fodinae.Scripts.UI
                 foreach (var cell in kvp.Value)
                 {
                     if (cell.worldBound.Contains(mousePos))
+                    {
                         return kvp.Key;
+                    }
                 }
             }
+
             return -1;
         }
 
         private void UpdateFloatingPosition(Vector2 mousePos)
         {
-            _floatingItem.style.left = mousePos.x - ICON_SIZE / 2;
-            _floatingItem.style.top = mousePos.y - ICON_SIZE / 2;
+            _floatingItem.style.left = mousePos.x - (ICON_SIZE / 2);
+            _floatingItem.style.top = mousePos.y - (ICON_SIZE / 2);
         }
 
         private void RefreshSlot(int slotIndex)
         {
-            if (!_slotElements.ContainsKey(slotIndex)) return;
+            if (!_slotElements.ContainsKey(slotIndex))
+            {
+                return;
+            }
+
             var item = _model.GetSlot(slotIndex);
 
             foreach (var cell in _slotElements[slotIndex])
@@ -511,12 +578,13 @@ namespace Fodinae.Scripts.UI
                         icon.style.backgroundImage = null;
                         icon.style.backgroundColor = item.IconColor;
                     }
-                    qty.text = item.Quantity > 1 ? item.Quantity.ToString() : "";
+
+                    qty.text = item.Quantity > 1 ? item.Quantity.ToString() : string.Empty;
                 }
                 else
                 {
                     icon.style.display = DisplayStyle.None;
-                    qty.text = "";
+                    qty.text = string.Empty;
                 }
             }
         }
@@ -525,8 +593,8 @@ namespace Fodinae.Scripts.UI
         {
             var btn = new Button();
             btn.name = "InventoryButton";
-            btn.style.width = CELL_SIZE;
-            btn.style.height = CELL_SIZE;
+            btn.style.width = CELLSIZE;
+            btn.style.height = CELLSIZE;
             btn.style.marginBottom = CELL_GAP;
             btn.style.backgroundColor = _inventoryButtonColor;
             btn.style.borderTopWidth = 2;
@@ -537,7 +605,7 @@ namespace Fodinae.Scripts.UI
             btn.style.borderBottomColor = _cellBorderColor;
             btn.style.borderLeftColor = _cellBorderColor;
             btn.style.borderRightColor = _cellBorderColor;
-            btn.text = "";
+            btn.text = string.Empty;
             btn.style.paddingTop = 0;
             btn.style.paddingBottom = 0;
             btn.style.paddingLeft = 0;
@@ -546,12 +614,16 @@ namespace Fodinae.Scripts.UI
             btn.RegisterCallback<MouseEnterEvent>(_ =>
             {
                 if (btn.enabledSelf)
+                {
                     btn.style.backgroundColor = _inventoryButtonHoverColor;
+                }
             });
             btn.RegisterCallback<MouseLeaveEvent>(_ =>
             {
                 if (btn.enabledSelf)
+                {
                     btn.style.backgroundColor = _inventoryButtonColor;
+                }
             });
 
             btn.clicked += ToggleInventory;

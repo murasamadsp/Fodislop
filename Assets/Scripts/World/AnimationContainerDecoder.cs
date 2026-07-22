@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using Fodinae.Scripts.Utils;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.World;
 using MG.GIF;
 using unity.libwebp;
 using unity.libwebp.Interop;
@@ -54,6 +55,15 @@ namespace Fodinae.Scripts.World
                 return Array.Empty<Sprite>();
             }
 
+            if (!atlas.isReadable)
+            {
+                var readable = new Texture2D(atlas.width, atlas.height, TextureFormat.RGBA32, false);
+                readable.filterMode = FilterMode.Point;
+                Graphics.CopyTexture(atlas, readable);
+                readable.Apply();
+                atlas = readable;
+            }
+
             Sprite[] frames = new Sprite[frameCount];
             int framesPerRow = atlas.width / width;
 
@@ -85,7 +95,7 @@ namespace Fodinae.Scripts.World
                 frameTex.SetPixels32(pixels);
                 frameTex.Apply();
 
-                frames[i] = Sprite.Create(frameTex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), RenderingConstants.PixelsPerUnit);
+                frames[i] = Sprite.Create(frameTex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
             }
 
             return frames;
@@ -123,7 +133,7 @@ namespace Fodinae.Scripts.World
                 while (pos <= data.Length - 8)
                 {
                     string chunkId = System.Text.Encoding.ASCII.GetString(data, pos, 4);
-                    uint chunkSize = BitConverter.ToUInt32(data, pos + 4);
+                    uint CHUNK_SIZE = BitConverter.ToUInt32(data, pos + 4);
                     pos += 8;
 
                     if (chunkId == "VP8X")
@@ -134,7 +144,7 @@ namespace Fodinae.Scripts.World
                     else if (chunkId == "ANMF")
                     {
                         int duration = data[pos + 12] | (data[pos + 13] << 8) | (data[pos + 14] << 16);
-                        int payloadSize = (int)chunkSize - 16;
+                        int payloadSize = (int)CHUNK_SIZE - 16;
                         int payloadPos = pos + 16;
 
                         byte[] frameFile = new byte[payloadSize + 12];
@@ -156,7 +166,7 @@ namespace Fodinae.Scripts.World
                         }
                     }
 
-                    pos += (int)((chunkSize + 1) & ~1);
+                    pos += (int)((CHUNK_SIZE + 1) & ~1);
                 }
 
                 if (frameTextures.Count == 0)
@@ -164,11 +174,27 @@ namespace Fodinae.Scripts.World
                     Texture2D tex = Texture2DExt.CreateTexture2DFromWebP(data, lMipmaps: false, lLinear: true, out WebP.Error error);
                     if (error == WebP.Error.Success && tex != null)
                     {
+                        if (tex.isReadable)
+                        {
+                            return new DecodedAnimation
+                            {
+                                Atlas = tex,
+                                FrameCount = 1,
+                                FrameHeight = tex.height,
+                                FPS = 0,
+                            };
+                        }
+
+                        var readable = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false);
+                        readable.filterMode = FilterMode.Point;
+                        Graphics.CopyTexture(tex, readable);
+                        readable.Apply();
+                        UnityEngine.Object.Destroy(tex);
                         return new DecodedAnimation
                         {
-                            Atlas = tex,
+                            Atlas = readable,
                             FrameCount = 1,
-                            FrameHeight = tex.height,
+                            FrameHeight = readable.height,
                             FPS = 0,
                         };
                     }

@@ -2,8 +2,10 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-public class ExportSprites : EditorWindow
+namespace Fodinae.Editor
 {
+    public class ExportSprites : EditorWindow
+    {
     [MenuItem("Tools/Export Sprites to PNG")]
     private static void ExportSelectedSpriteToPNG()
     {
@@ -36,8 +38,7 @@ public class ExportSprites : EditorWindow
                 {
                     var pixels = sprite.texture.GetPixels(
                         (int)sprite.rect.x, (int)sprite.rect.y,
-                        (int)sprite.rect.width, (int)sprite.rect.height
-                    );
+                        (int)sprite.rect.width, (int)sprite.rect.height);
                     tex.SetPixels(pixels);
                 }
                 else
@@ -45,16 +46,14 @@ public class ExportSprites : EditorWindow
                     // Fallback: copy through RenderTexture for non-readable textures
                     var rt = RenderTexture.GetTemporary(
                         sprite.texture.width, sprite.texture.height, 0,
-                        RenderTextureFormat.Default, RenderTextureReadWrite.sRGB
-                    );
+                        RenderTextureFormat.Default, RenderTextureReadWrite.sRGB);
                     Graphics.Blit(sprite.texture, rt);
 
                     var prevRT = RenderTexture.active;
                     RenderTexture.active = rt;
                     tex.ReadPixels(
                         new Rect(sprite.rect.x, sprite.rect.y, sprite.rect.width, sprite.rect.height),
-                        0, 0
-                    );
+                        0, 0);
                     RenderTexture.active = prevRT;
                     RenderTexture.ReleaseTemporary(rt);
                 }
@@ -71,4 +70,5 @@ public class ExportSprites : EditorWindow
 
         Debug.Log($"Exported {exportedCount} sprite(s) to {outputDir}");
     }
+}
 }

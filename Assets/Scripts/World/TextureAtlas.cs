@@ -10,7 +10,7 @@ using UnityEngine;
 namespace Fodinae.Scripts.World
 {
     /// <summary>
-    /// Represents a rectangle in the texture atlas
+    /// Represents a rectangle in the texture atlas.
     /// </summary>
     public struct Rectangle
     {
@@ -38,7 +38,7 @@ namespace Fodinae.Scripts.World
     public class TextureAtlas : IDisposable
     {
         public int Size { get; }
-        public int CellSize { get; }
+        public int CELL_SIZE { get; }
         public int Padding { get; }
 
         private Texture2D _atlasTexture;
@@ -59,7 +59,7 @@ namespace Fodinae.Scripts.World
         public TextureAtlas(int size, int cellSize, int padding)
         {
             Size = size;
-            CellSize = cellSize;
+            CELL_SIZE = cellSize;
             Padding = padding;
 
             _atlasTexture = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -90,6 +90,7 @@ namespace Fodinae.Scripts.World
                 {
                     UnityEngine.Object.DestroyImmediate(_atlasTexture);
                 }
+
                 _atlasTexture = null;
             }
         }
@@ -149,14 +150,14 @@ namespace Fodinae.Scripts.World
             int subAtlasHeight = cell.Rectangle.Height;
 
             // Use the central constant for tile size
-            int terrainTileSize = RenderingConstants.CellSize;
+            const int TERRAIN_TILE_SIZE = RenderingConstants.CELL_SIZE;
 
             // How many tiles fit in the SUB-ATLAS width and height
-            int tilesPerRow = subAtlasWidth / terrainTileSize;
+            int tilesPerRow = subAtlasWidth / TERRAIN_TILE_SIZE;
 
             // If frameHeightPixels is provided, it defines the wrapping boundary for animations
             int effectiveSubAtlasHeight = frameHeightPixels > 0 ? frameHeightPixels : subAtlasHeight;
-            int tilesPerColumn = effectiveSubAtlasHeight / terrainTileSize;
+            int tilesPerColumn = effectiveSubAtlasHeight / TERRAIN_TILE_SIZE;
 
             if (tilesPerRow <= 0)
             {
@@ -175,16 +176,16 @@ namespace Fodinae.Scripts.World
             int wrappedY = (tilesPerColumn - 1) - (((globalY % tilesPerColumn) + tilesPerColumn) % tilesPerColumn);
 
             // Calculate the absolute atlas position by adding the sub-atlas base position
-            int atlasX = subAtlasX + (wrappedX * terrainTileSize);
+            int atlasX = subAtlasX + (wrappedX * TERRAIN_TILE_SIZE);
 
             // Add frame offset: subAtlasY + wrapped cell offset + current frame offset
-            int atlasY = subAtlasY + (wrappedY * terrainTileSize) + (frameIndex * (frameHeightPixels > 0 ? frameHeightPixels : 0));
+            int atlasY = subAtlasY + (wrappedY * TERRAIN_TILE_SIZE) + (frameIndex * (frameHeightPixels > 0 ? frameHeightPixels : 0));
 
             return new AtlasCoordinate(
                 atlasX,
                 atlasY,
-                terrainTileSize,  // We only want to render one tile
-                terrainTileSize,
+                TERRAIN_TILE_SIZE,  // We only want to render one tile
+                TERRAIN_TILE_SIZE,
                 Size,             // Full atlas width
                 Size);            // Full atlas height
         }
@@ -218,7 +219,7 @@ namespace Fodinae.Scripts.World
                         texture.width,
                         texture.height,
                         Size,
-                        Size)
+                        Size),
                 };
 
                 // When adding to _usedRectangles and splitting, we must include the Padding
@@ -321,11 +322,11 @@ namespace Fodinae.Scripts.World
 
         private async UniTask CopyTexturesToAtlas(List<(Texture2D texture, Rectangle rect)> textures)
         {
-            const int batchSize = 10;
+            const int BATCH_SIZE = 10;
 
-            for (int i = 0; i < textures.Count; i += batchSize)
+            for (int i = 0; i < textures.Count; i += BATCH_SIZE)
             {
-                var batch = textures.Skip(i).Take(batchSize).ToList();
+                var batch = textures.Skip(i).Take(BATCH_SIZE).ToList();
 
                 var pixelDataList = new List<(Color32[] pixels, int width, int height, Rectangle rect)>();
 
@@ -387,9 +388,9 @@ namespace Fodinae.Scripts.World
 
         private Texture2D CreatePlaceholderTexture(CellType cellType)
         {
-            var texture = new Texture2D(CellSize, CellSize);
+            var texture = new Texture2D(CELL_SIZE, CELL_SIZE);
             var color = GetCellColor(cellType);
-            var pixels = new Color[CellSize * CellSize];
+            var pixels = new Color[CELL_SIZE * CELL_SIZE];
             for (int i = 0; i < pixels.Length; i++)
             {
                 pixels[i] = color;
@@ -418,7 +419,7 @@ namespace Fodinae.Scripts.World
                 CellType.Boulder1 => Color.black,
                 CellType.WhiteSand => new Color(1f, 0.92f, 0.8f),
                 CellType.GrayAcid => new Color(0f, 1f, 0f),
-                _ => Color.magenta
+                _ => Color.magenta,
             };
         }
 

@@ -27,6 +27,7 @@ using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Information.StatusPanel;
+using MinesServer.Networking.Server.Packets.Inventory;
 using MinesServer.Networking.Server.Packets.Mission;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.Utilities;
@@ -35,9 +36,6 @@ using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.UI;
-using MinesServer.Networking.Server.Packets.Inventory;
-
-
 
 namespace MinesServer.Networking.Connection.Client
 {
@@ -126,13 +124,15 @@ namespace MinesServer.Networking.Connection.Client
             CellType.Green, CellType.Red, CellType.Blue, CellType.Violet, CellType.White, CellType.Cyan,
             CellType.HeavyRock, CellType.NiggerRock, CellType.LivingBlackRock,
             CellType.AliveBlue, CellType.RedRock, CellType.AcidRock, CellType.HypnoRock,
-            CellType.GoldenRock, CellType.DeepRock, CellType.GRock
+            CellType.GoldenRock, CellType.DeepRock, CellType.GRock,
         };
 
         public void Connect()
         {
             if (_status != ConnectionStatus.Disconnected)
+            {
                 return;
+            }
 
             _status = ConnectionStatus.Connecting;
             OnConnecting?.Invoke();
@@ -143,8 +143,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private async UniTaskVoid ConnectAsync()
         {
-            await UniTask.Delay(100);
-
+            await UniTask.Yield();
             CreateFPSCounter();
 
             _status = ConnectionStatus.Connected;
@@ -163,9 +162,6 @@ namespace MinesServer.Networking.Connection.Client
             var pauseObj = new GameObject("PauseMenu");
             pauseObj.AddComponent<PauseMenu>();
 
-            var audioObj = new GameObject("AudioManager");
-            audioObj.AddComponent<AudioManager>();
-
             var chatObj = new GameObject("ChatSystem");
             chatObj.AddComponent<LocalChatPopup>();
             chatObj.AddComponent<GlobalChatUI>();
@@ -182,7 +178,10 @@ namespace MinesServer.Networking.Connection.Client
         public void Disconnect()
         {
             if (_status != ConnectionStatus.Connected)
+            {
                 return;
+            }
+
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
             DisconnectAsync().Forget();
@@ -200,7 +199,8 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid UpdatePosition() {
+        private async UniTaskVoid UpdatePosition()
+        {
             await UniTask.Delay(200);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
         }
@@ -220,7 +220,10 @@ namespace MinesServer.Networking.Connection.Client
             {
                 if (actionPacket.Payload is MovePacket move)
                 {
-                    if (_teleportWindowOpen) return;
+                    if (_teleportWindowOpen)
+                    {
+                        return;
+                    }
 
                     int dx = Math.Abs(move.X - _x);
                     int dy = Math.Abs(move.Y - _y);
@@ -229,8 +232,9 @@ namespace MinesServer.Networking.Connection.Client
                     if (!isAdjacent)
                     {
                         Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not adjacent to ({_x},{_y})");
-                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
-                            new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot)
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                        {
+                            new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
                         })));
                         return;
                     }
@@ -245,8 +249,9 @@ namespace MinesServer.Networking.Connection.Client
                             if (!isPassable && !IgnoreCollision)
                             {
                                 Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not passable ({cellType})");
-                                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
-                                    new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot)
+                                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                                {
+                                    new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
                                 })));
                                 return;
                             }
@@ -281,7 +286,7 @@ namespace MinesServer.Networking.Connection.Client
 
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
-                        new SFXPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>())
+                        new SFXPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                     })));
 
                     if (MapStorage.Instance.CellLayer != null && MapStorage.Instance.IsReady)
@@ -314,7 +319,7 @@ namespace MinesServer.Networking.Connection.Client
                         OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                         {
                             new MapRegionPacket(cellX, cellY, 0, 0, new[] { CellType.Empty }),
-                            new SFXPacket(SFX.Destroy, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>())
+                            new SFXPacket(SFX.Destroy, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                         })));
                         Debug.Log($"[DummyConnection] Cell ({cellX}, {cellY}) broken → Empty");
                     }
@@ -324,27 +329,30 @@ namespace MinesServer.Networking.Connection.Client
                         _missionProgress++;
                         OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(_missionProgress, _missions[_activeMissionId].Target)));
                         if (_missionProgress >= _missions[_activeMissionId].Target)
+                        {
                             CompleteMission();
+                        }
                     }
                 }
-
                 else if (actionPacket.Payload is SuicidePacket)
                 {
                     Debug.Log("[DummyConnection] Suicide / Respawn");
-                    ushort spawnX = 25;
-                    ushort spawnY = 50;
+                    const ushort SPAWN_X = 25;
+                    const ushort SPAWN_Y = 50;
                     var effectX = _x;
                     var effectY = _y;
-                    _x = spawnX;
-                    _y = spawnY;
+                    _x = SPAWN_X;
+                    _y = SPAWN_Y;
                     _rot = Direction.Up;
 
-                    OnReceived?.Invoke(new ServerPacket(new TeleportPacket(spawnX, spawnY, false)));
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
-                        new RobotPositionPacket(_mockBotId, spawnX, spawnY, (byte)_rot),
-                        new SFXPacket(SFX.Death, _mockBotId, effectX, effectY, Array.Empty<StringPairPacket>())
+                    OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                    {
+                        new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
+                        new SFXPacket(SFX.Death, _mockBotId, effectX, effectY, Array.Empty<StringPairPacket>()),
                     })));
                 }
+
                 return;
             }
 
@@ -356,7 +364,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         OnReceived?.Invoke(new ServerPacket(new OutdatedClientPacket(
                             2, "Mines 3", "Ваша версия устарела. Скачайте новую!",
-                            "https://minesgame.ru/download", "")));
+                            "https://minesgame.ru/download", string.Empty)));
                         return;
                     }
 
@@ -393,21 +401,21 @@ namespace MinesServer.Networking.Connection.Client
                         (ushort)worldWidth,
                         (ushort)worldHeight,
                         cellConfigs,
-                        new byte[][] {
-                            new byte[] { 37, 38, 106 }
+                        new byte[][]
+                        {
+                            new byte[] { 37, 38, 106 },
                         })));
 
                     if (!skipMapDataGeneration)
                     {
                         SendTestWorldMapData(worldWidth, worldHeight);
-                        CreateCellTypeLabels(worldWidth, worldHeight);
                     }
+
                     OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
                     var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
                     HandleRobotInfoMock(_mockBotId).Forget();
                     RunCircularBots(10).Forget();
-                    //RunTilingTestLoop().Forget();
                     _x = 25;
                     _y = 50;
                     OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
@@ -426,7 +434,7 @@ namespace MinesServer.Networking.Connection.Client
                     SendChatMock().Forget();
 
                     OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
-                    OnReceived?.Invoke(new ServerPacket(new ClearStatusPacket()));
+                    OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
                     foreach (var kvp in _activeBuffs)
                     {
                         var (color, name) = kvp.Key switch
@@ -435,10 +443,11 @@ namespace MinesServer.Networking.Connection.Client
                             "freeup" => (System.Drawing.Color.Cyan, "Freeup"),
                             "x4" => (System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4"),
                             "battery" => (System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор"),
-                            _ => (System.Drawing.Color.White, kvp.Key)
+                            _ => (System.Drawing.Color.White, kvp.Key),
                         };
                         OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, color, kvp.Key, new[] { name, kvp.Value.ToString() })));
                     }
+
                     StartBuffLoop();
                     SendPingMock().Forget();
                     SendDailyBonusMock().Forget();
@@ -446,41 +455,46 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
                     {
                         [CellType.Empty] = 20,
-                        [CellType.Road] = 100
+                        [CellType.Road] = 100,
                     })));
                     OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
                     var inventoryData = new Dictionary<ItemType, long>();
                     foreach (var type in ItemRegistry.AllTypes)
+                    {
                         inventoryData[type] = 1;
+                    }
+
                     inventoryData[ItemType.Battery] = 2;
                     _inventory.Clear();
                     foreach (var kvp in inventoryData)
+                    {
                         _inventory[kvp.Key] = kvp.Value;
+                    }
+
                     OnReceived?.Invoke(new ServerPacket(new InventoryPacket(inventoryData)));
 
                     var placeholderMsg = new ChatMessagePacket(0, 0, 0, 0,
-                    System.Drawing.Color.White, "", System.Drawing.Color.White, "");
+                    System.Drawing.Color.White, string.Empty, System.Drawing.Color.White, string.Empty);
                     OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
 
                     // Send test packs
                     _teleportPositions.Clear();
                     _teleportPositions.Add((27, 50));
                     _teleportPositions.Add((227, 50));
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] {
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                    {
                         new PackPacket(27, 50, PackType.Teleport, 0, 1),
                         new PackPacket(227, 50, PackType.Teleport, 0, 1),
-                        new PackPacket(25, 48, PackType.Market, 0, 0)
+                        new PackPacket(25, 48, PackType.Market, 0, 0),
                     })));
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
                     HandleAssetRequest(runtimeAssets).Forget();
                     break;
                 case OpenHelpClickPacket:
-                    SendMockWindow(false);
                     break;
                 case OpenSettingsClickPacket:
-                    SendMockWindow(true);
                     break;
                 case SendLocalChatMessagePacket localMsg:
                     Debug.Log($"[DummyConnection] Local chat: {localMsg.Message}");
@@ -496,8 +510,7 @@ namespace MinesServer.Networking.Connection.Client
                         System.Drawing.Color.FromArgb(255, 200, 180, 100),
                         "You",
                         System.Drawing.Color.White,
-                        globalMsg.Message
-                    );
+                        globalMsg.Message);
                     OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.SelectItemPacket selectItem:
@@ -577,7 +590,7 @@ namespace MinesServer.Networking.Connection.Client
             ItemType.ScienceCentre => ("Научный центр", "Строительный пак, в котором можно изучить мир, и ознакомиться со списком лучших игроков/кланов"),
             ItemType.Currency => ("Валюта", "Валюта, которая является основной для торговли и прокачки умений."),
             ItemType.OPP => ("ОПП", "Очки, которые дают возможность купить другие умения, которые лучше чем начальные"),
-            _ => (i.ToString(), string.Empty)
+            _ => (i.ToString(), string.Empty),
         };
 
         private void HandleUseItem()
@@ -585,7 +598,10 @@ namespace MinesServer.Networking.Connection.Client
             if (IsBuildingPack(_selectedItemType))
             {
                 var packType = ItemTypeToPackType(_selectedItemType);
-                if (packType == PackType.None) return;
+                if (packType == PackType.None)
+                {
+                    return;
+                }
 
                 ushort frontX = _x;
                 ushort frontY = _y;
@@ -599,10 +615,13 @@ namespace MinesServer.Networking.Connection.Client
 
                 OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                 {
-                    new PackPacket(frontX, frontY, packType, 0, 0)
+                    new PackPacket(frontX, frontY, packType, 0, 0),
                 })));
                 if (packType == PackType.Teleport)
+                {
                     _teleportPositions.Add((frontX, frontY));
+                }
+
                 ConsumeItem(_selectedItemType, 1);
             }
             else if (_selectedItemType == ItemType.Rem)
@@ -614,7 +633,7 @@ namespace MinesServer.Networking.Connection.Client
             else if (_selectedItemType == ItemType.UpgradeBooster)
             {
                 StartBuffLoop();
-                var tag = "xp3";
+                const string tag = "xp3";
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 86400;
                 _activeBuffs[tag] = expiry;
@@ -624,7 +643,7 @@ namespace MinesServer.Networking.Connection.Client
             else if (_selectedItemType == ItemType.FreeUp)
             {
                 StartBuffLoop();
-                var tag = "freeup";
+                const string tag = "freeup";
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
                 _activeBuffs[tag] = expiry;
@@ -634,7 +653,7 @@ namespace MinesServer.Networking.Connection.Client
             else if (_selectedItemType == ItemType.MineBooster)
             {
                 StartBuffLoop();
-                var tag = "x4";
+                const string tag = "x4";
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
                 _activeBuffs[tag] = expiry;
@@ -644,7 +663,7 @@ namespace MinesServer.Networking.Connection.Client
             else if (_selectedItemType == ItemType.Battery)
             {
                 StartBuffLoop();
-                var tag = "battery";
+                const string tag = "battery";
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 3600;
                 _activeBuffs[tag] = expiry;
@@ -660,7 +679,9 @@ namespace MinesServer.Networking.Connection.Client
         private void ConsumeItem(ItemType type, long count)
         {
             if (!_inventory.TryGetValue(type, out long current) || current <= 0)
+            {
                 return;
+            }
 
             long remaining = Math.Max(0, current - count);
             _inventory[type] = remaining;
@@ -673,7 +694,7 @@ namespace MinesServer.Networking.Connection.Client
             ItemType.Teleport or ItemType.Resp or ItemType.Up or ItemType.Market or
             ItemType.Clans or ItemType.Craft or ItemType.BombShop or ItemType.Gun or
             ItemType.Storage or ItemType.ScienceCentre => true,
-            _ => false
+            _ => false,
         };
 
         private static PackType ItemTypeToPackType(ItemType type) => type switch
@@ -688,7 +709,7 @@ namespace MinesServer.Networking.Connection.Client
             ItemType.Gun => PackType.Gun,
             ItemType.Storage => PackType.Storage,
             ItemType.ScienceCentre => PackType.Science,
-            _ => PackType.None
+            _ => PackType.None,
         };
 
         private void HandleElementClick(ElementClickPacket packet)
@@ -700,7 +721,10 @@ namespace MinesServer.Networking.Connection.Client
             }
             else if (packet.WindowTag == "teleport")
             {
-                if (!_teleportWindowOpen) return;
+                if (!_teleportWindowOpen)
+                {
+                    return;
+                }
 
                 if (packet.ElementIndex == 0)
                 {
@@ -718,7 +742,7 @@ namespace MinesServer.Networking.Connection.Client
                     "Тестовое окно",
                     "Это модальное окно вызывается из HUD.\n\nНажмите OK чтобы продолжить.",
                     "OK",
-                    "")));
+                    string.Empty)));
                 Debug.Log("[DummyConnection] Modal window sent to client");
             }
             else if (packet.WindowTag == "join_clan")
@@ -773,8 +797,8 @@ namespace MinesServer.Networking.Connection.Client
                         Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
                         BorderWidth = 2,
                         Padding = new Margins(8, 12, 8, 12),
-                        Margin = new Margins(0, 0, 4, 0)
-                    }
+                        Margin = new Margins(0, 0, 4, 0),
+                    },
                 });
             }
 
@@ -782,7 +806,7 @@ namespace MinesServer.Networking.Connection.Client
             {
                 VerticalScrollBar = ScrollbarVisibility.Auto,
                 HorizontalScrollBar = ScrollbarVisibility.Auto,
-                Children = rows.ToArray()
+                Children = rows.ToArray(),
             };
 
             var rootChildren = new List<IGUIComponentPacket>
@@ -791,12 +815,12 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     AttachedProperties = new StringPairPacket[]
                     {
-                        new("DockPanel.Dock", "Top")
+                        new("DockPanel.Dock", "Top"),
                     },
                     Style = new GUIStylePacket
                     {
                         Margin = new Margins(0, 0, 10, 0),
-                        Padding = new Margins(0, 0, 0, 0)
+                        Padding = new Margins(0, 0, 0, 0),
                     },
                     Children = new List<IGUIComponentPacket>
                     {
@@ -805,7 +829,7 @@ namespace MinesServer.Networking.Connection.Client
                             Text = "<color=#B2A680>Миссии</color>",
                             AttachedProperties = new StringPairPacket[]
                             {
-                                new("DockPanel.Dock", "Left")
+                                new("DockPanel.Dock", "Left"),
                             },
                         },
                         new TextPacket
@@ -814,12 +838,12 @@ namespace MinesServer.Networking.Connection.Client
                             OnClickContext = "missions_close",
                             AttachedProperties = new StringPairPacket[]
                             {
-                                new("DockPanel.Dock", "Right")
+                                new("DockPanel.Dock", "Right"),
                             },
-                        }
-                    }
+                        },
+                    },
                 },
-                scrollViewer
+                scrollViewer,
             };
 
             if (_activeMissionId >= 0)
@@ -830,7 +854,7 @@ namespace MinesServer.Networking.Connection.Client
                     OnClickContext = "mission_cancel",
                     AttachedProperties = new StringPairPacket[]
                     {
-                        new("DockPanel.Dock", "Bottom")
+                        new("DockPanel.Dock", "Bottom"),
                     },
                     Style = new GUIStylePacket
                     {
@@ -839,7 +863,7 @@ namespace MinesServer.Networking.Connection.Client
                         Background = System.Drawing.Color.FromArgb(242, 30, 20, 20),
                         Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
                         BorderWidth = 2,
-                    }
+                    },
                 });
             }
 
@@ -850,9 +874,9 @@ namespace MinesServer.Networking.Connection.Client
                     Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
                     Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
                     BorderWidth = 2,
-                    Padding = new Margins(2, 8, 2, 8)
+                    Padding = new Margins(2, 8, 2, 8),
                 },
-                Children = rootChildren
+                Children = rootChildren,
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
@@ -862,16 +886,20 @@ namespace MinesServer.Networking.Connection.Client
         private void StartMission(int missionId)
         {
             if (missionId < 0 || missionId >= _missions.Length)
+            {
                 return;
+            }
 
             if (_missionCompleted[missionId])
+            {
                 return;
+            }
 
             var m = _missions[missionId];
             _activeMissionId = missionId;
             _missionProgress = 0;
             OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket("", 0, 0, m.Title, m.Description)));
+            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, m.Title, m.Description)));
             OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(0, m.Target)));
             Debug.Log($"[DummyConnection] Started mission: {m.Title}");
         }
@@ -883,17 +911,20 @@ namespace MinesServer.Networking.Connection.Client
                 OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
                 return;
             }
+
             _activeMissionId = -1;
             _missionProgress = 0;
             OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket("", 0, 0, "", "")));
+            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
             Debug.Log("[DummyConnection] Mission cancelled");
         }
 
         private void CompleteMission()
         {
             if (_activeMissionId < 0)
+            {
                 return;
+            }
 
             var m = _missions[_activeMissionId];
             Debug.Log($"[DummyConnection] Mission complete: {m.Title}");
@@ -907,12 +938,12 @@ namespace MinesServer.Networking.Connection.Client
             _activeMissionId = -1;
             _missionProgress = 0;
 
-            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket("", 0, 0, "", "")));
+            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
             OnReceived?.Invoke(new ServerPacket(new ModalWindowPacket(
                 "Миссия выполнена!",
                 $"Вы завершили миссию \"{m.Title}\"!\n\nНаграда: {m.RewardAmount} кредитов.",
                 "OK",
-                "")));
+                string.Empty)));
         }
 
         private void HandleDailyBonusClaim()
@@ -933,7 +964,11 @@ namespace MinesServer.Networking.Connection.Client
 
         private void StartBuffLoop()
         {
-            if (_buffLoopStarted) return;
+            if (_buffLoopStarted)
+            {
+                return;
+            }
+
             _buffLoopStarted = true;
             CheckBuffsLoop().Forget();
         }
@@ -977,7 +1012,7 @@ namespace MinesServer.Networking.Connection.Client
                 if (_y > _maxDepth)
                 {
                     int blocksBelow = _y - _maxDepth;
-                    int damage = ((blocksBelow - 1) / 10 + 1) * 10;
+                    int damage = (((blocksBelow - 1) / 10) + 1) * 10;
                     _health = Math.Max(0, _health - damage);
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
                     Debug.Log($"[DummyConnection] Depth damage: {damage} (HP: {_health}/500)");
@@ -993,7 +1028,9 @@ namespace MinesServer.Networking.Connection.Client
         private void CheckTeleportEntry()
         {
             if (!_teleportPositions.Contains((_x, _y)))
+            {
                 return;
+            }
 
             SendTeleportWindow();
         }
@@ -1024,8 +1061,8 @@ namespace MinesServer.Networking.Connection.Client
                         Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
                         BorderWidth = 2,
                         Padding = new Margins(8, 12, 8, 12),
-                        Margin = new Margins(0, 0, 4, 0)
-                    }
+                        Margin = new Margins(0, 0, 4, 0),
+                    },
                 };
             }
 
@@ -1033,7 +1070,7 @@ namespace MinesServer.Networking.Connection.Client
             {
                 VerticalScrollBar = ScrollbarVisibility.Auto,
                 HorizontalScrollBar = ScrollbarVisibility.Auto,
-                Children = rows
+                Children = rows,
             };
 
             var root = new DockPanelPacket
@@ -1043,7 +1080,7 @@ namespace MinesServer.Networking.Connection.Client
                     Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
                     Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
                     BorderWidth = 2,
-                    Padding = new Margins(2, 8, 2, 8)
+                    Padding = new Margins(2, 8, 2, 8),
                 },
                 Children = new List<IGUIComponentPacket>
                 {
@@ -1051,12 +1088,12 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         AttachedProperties = new StringPairPacket[]
                         {
-                            new("DockPanel.Dock", "Top")
+                            new("DockPanel.Dock", "Top"),
                         },
                         Style = new GUIStylePacket
                         {
                             Margin = new Margins(0, 0, 10, 0),
-                            Padding = new Margins(0, 0, 0, 0)
+                            Padding = new Margins(0, 0, 0, 0),
                         },
                         Children = new List<IGUIComponentPacket>
                         {
@@ -1065,10 +1102,10 @@ namespace MinesServer.Networking.Connection.Client
                         Text = "<color=#B2A680>Телепорты</color>",
                         AttachedProperties = new StringPairPacket[]
                         {
-                            new("DockPanel.Dock", "Left")
-                    },
+                            new("DockPanel.Dock", "Left"),
                         },
-                            new TextPacket
+                    },
+                    new TextPacket
                             {
                     Text = "<color=#B3B3B3>×</color>",
                     OnClickContext = "teleport_close",
@@ -1076,11 +1113,11 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         new("DockPanel.Dock", "Right")
                     },
-                            }
-                        }
+                            },
+                        },
                     },
-                    scrollViewer
-                }
+                    scrollViewer,
+                },
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
@@ -1092,7 +1129,7 @@ namespace MinesServer.Networking.Connection.Client
         {
             var text = new TextPacket
             {
-                Text = "<color=gray>Нет доступных телепортов</color>"
+                Text = "<color=gray>Нет доступных телепортов</color>",
             };
 
             var root = new DockPanelPacket
@@ -1102,7 +1139,7 @@ namespace MinesServer.Networking.Connection.Client
                     Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
                     Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
                     BorderWidth = 2,
-                    Padding = new Margins(0, 0, 0, 0)
+                    Padding = new Margins(0, 0, 0, 0),
                 },
                 Children = new List<IGUIComponentPacket>
                 {
@@ -1110,12 +1147,12 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         AttachedProperties = new StringPairPacket[]
                         {
-                            new("DockPanel.Dock", "Top")
+                            new("DockPanel.Dock", "Top"),
                         },
                         Style = new GUIStylePacket
                         {
                             Margin = new Margins(0, 0, 0, 0),
-                            Padding = new Margins(0, 0, 0, 0)
+                            Padding = new Margins(0, 0, 0, 0),
                         },
                         Children = new List<IGUIComponentPacket>
                         {
@@ -1124,10 +1161,10 @@ namespace MinesServer.Networking.Connection.Client
                         Text = "<color=#B2A680>Телепорты</color>",
                         AttachedProperties = new StringPairPacket[]
                         {
-                            new("DockPanel.Dock", "Left")
-                    },
+                            new("DockPanel.Dock", "Left"),
                         },
-                            new TextPacket
+                    },
+                    new TextPacket
                             {
                     Text = "<color=#B3B3B3>×</color>",
                     OnClickContext = "teleport_close",
@@ -1135,11 +1172,11 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         new("DockPanel.Dock", "Right")
                     },
-                            }
-                        }
+                            },
+                        },
                     },
-                    text
-                }
+                    text,
+                },
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
@@ -1150,7 +1187,9 @@ namespace MinesServer.Networking.Connection.Client
         private void HandleTeleportClick(int index)
         {
             if (index < 0 || index >= _teleportDestinations.Count)
+            {
                 return;
+            }
 
             var (destX, destY) = _teleportDestinations[index];
             Debug.Log($"[DummyConnection] Teleporting to ({destX}, {destY})");
@@ -1172,7 +1211,7 @@ namespace MinesServer.Networking.Connection.Client
                 ItemType.Nano, ItemType.Battery, ItemType.ConstructionBot, ItemType.PortableTeleporter,
                 ItemType.Scanner, ItemType.GeoBlackRock, ItemType.GeoRedRock, ItemType.Cred,
                 ItemType.GeoCyan, ItemType.GeoHypno, ItemType.Rem, ItemType.Charge,
-                ItemType.Geopack, ItemType.Poly, ItemType.RazBomb, ItemType.ProtonBomb
+                ItemType.Geopack, ItemType.Poly, ItemType.RazBomb, ItemType.ProtonBomb,
             };
             return items[UnityEngine.Random.Range(0, items.Length)];
         }
@@ -1186,7 +1225,7 @@ namespace MinesServer.Networking.Connection.Client
                 ItemType.Rem => UnityEngine.Random.Range(50, 101),
                 ItemType.Geopack => UnityEngine.Random.Range(10, 16),
                 ItemType.Poly => UnityEngine.Random.Range(50, 101),
-                _ => UnityEngine.Random.Range(5, 20)
+                _ => UnityEngine.Random.Range(5, 20),
             };
         }
 
@@ -1203,7 +1242,10 @@ namespace MinesServer.Networking.Connection.Client
                     _bonusCountdown--;
                 }
 
-                if (_status != ConnectionStatus.Connected) break;
+                if (_status != ConnectionStatus.Connected)
+                {
+                    break;
+                }
 
                 _pendingBonusItem = PickRandomBonusItem();
                 _pendingBonusAmount = (int)PickRandomAmount(_pendingBonusItem);
@@ -1211,255 +1253,20 @@ namespace MinesServer.Networking.Connection.Client
                 Debug.Log($"[DummyConnection] Daily bonus now available: {_pendingBonusItem} x{_pendingBonusAmount}");
 
                 while (!_bonusClaimed && _status == ConnectionStatus.Connected)
+                {
                     await UniTask.Delay(500);
+                }
 
-                if (_status != ConnectionStatus.Connected) break;
+                if (_status != ConnectionStatus.Connected)
+                {
+                    break;
+                }
 
                 _bonusCountdown = 10;
                 OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
             }
         }
 
-        private async UniTaskVoid RunTilingTestLoop()
-        {
-            ushort baseX = 144;
-            ushort baseY = 9;
-            int counter = 0;
-
-            while (_status == ConnectionStatus.Connected)
-            {
-                // We need a 3x3 grid (9 cells)
-                // Layout:
-                // 0 1 2
-                // 3 4 5
-                // 6 7 8
-                // Index 4 is the center (static)
-
-                var grid = new CellType[9];
-                int bit = 0;
-
-                for (int i = 0; i < 9; i++)
-                {
-                    if (i == 4)
-                    {
-                        // The center cell remains static
-                        grid[i] = CellType.BuildingDoor;
-                        continue;
-                    }
-
-                    // Check if the N-th bit is set in our counter
-                    bool isNeighborPresent = ((counter >> bit) & 1) == 1;
-                    grid[i] = isNeighborPresent ? CellType.BuildingDoor : CellType.Empty;
-                    bit++;
-                }
-
-                var mapRegionPacket = new MapRegionPacket
-                {
-                    X = baseX,
-                    Y = baseY,
-                    Width = 2,  // 3 cells wide (Width is Size - 1)
-                    Height = 2, // 3 cells high
-                    Payload = grid
-                };
-
-                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { mapRegionPacket })));
-
-                // Increment counter and wrap at 256
-                counter = (counter + 1) % 256;
-
-                // Delay to make the animation visible (e.g., 200ms)
-                await UniTask.Delay(200);
-            }
-        }
-
-        public void SendMockWindow(bool comprehensive)
-        {
-            var windowPacket = comprehensive ? CreateComprehensiveMockWindow() : CreateMockWindow();
-        }
-
-        private OpenWindowPacket CreateMockWindow()
-        {
-            var rootElement = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(255, 66, 66, 66),
-                    Padding = new Margins(10, 10, 10, 10)
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    new TextPacket
-                    {
-                        Text = "<color=white>Top 0</color>",
-                        Style = new GUIStylePacket {
-                            Background = System.Drawing.Color.Blue,
-                            Padding = new Margins(5,5,5,5)
-                        },
-                        AttachedProperties = new StringPairPacket[] {
-                            new("DockPanel.Dock", "Top")
-                        }
-                    },
-                    new TextPacket
-                    {
-                        Text = "<color=white>Left 1</color>",
-                        Style = new GUIStylePacket {
-                            Background = System.Drawing.Color.Red,
-                            Padding = new Margins(5,5,5,5)
-                        },
-                        AttachedProperties = new StringPairPacket[] {
-                            new("DockPanel.Dock", "Left")
-                        }
-                    },
-                    new TextPacket
-                    {
-                        Text = "<color=white>Bottom 2</color>",
-                        Style = new GUIStylePacket {
-                            Background = System.Drawing.Color.Blue,
-                            Padding = new Margins(5,5,5,5)
-                        },
-                        AttachedProperties = new StringPairPacket[] {
-                            new("DockPanel.Dock", "Bottom")
-                        }
-                    },
-                    new TextPacket
-                    {
-                        Text = "<color=white>Right 3</color>",
-                        Style = new GUIStylePacket {
-                            Background = System.Drawing.Color.Red,
-                            Padding = new Margins(5,5,5,5)
-                        },
-                        AttachedProperties = new StringPairPacket[] {
-                            new("DockPanel.Dock", "Right")
-                        }
-                    },
-                    new GridPacket
-                    {
-                        Columns = new byte[] { 1, 0, 1, 1 },
-                        Rows = new byte[] { 1, 0, 1, 1 },
-                        Children = new IGUIComponentPacket[]
-                        {
-                            new TextPacket {
-                                Text = "(0,0)",
-                                AttachedProperties = new StringPairPacket[] {
-                                    new("Grid.Row", "0"),
-                                    new("Grid.Column", "0")
-                                },
-                                Style = new GUIStylePacket{
-                                    Background = System.Drawing.Color.Yellow
-                                }
-                            },
-                            new TextPacket {
-                                Text = "Auto-Row",
-                                AttachedProperties = new StringPairPacket[] {
-                                    new("Grid.Row", "1"),
-                                    new("Grid.Column", "0")
-                                },
-                                Style = new GUIStylePacket{
-                                    Background = System.Drawing.Color.CornflowerBlue,
-                                    Padding = new Margins(5,5,15,5)
-                                }
-                            },
-                        }
-                    }
-                }
-            };
-
-            return new OpenWindowPacket("TestWindow", 800, 600, rootElement);
-        }
-
-        private OpenWindowPacket CreateComprehensiveMockWindow()
-        {
-            var @checked = new ImagePacket()
-            {
-                URI = "/ui/checked.png",
-                Width = 32,
-                Height = 32
-            };
-            var @unchecked = new ImagePacket()
-            {
-                URI = "/ui/unchecked.png",
-                Width = 32,
-                Height = 32
-            };
-            var selected = new ImagePacket()
-            {
-                URI = "/ui/selected.png",
-                Width = 32,
-                Height = 32
-            };
-            var deselected = new ImagePacket()
-            {
-                URI = "/ui/deselected.png",
-                Width = 32,
-                Height = 32
-            };
-
-            var rootElement = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(255, 22, 22, 22),
-                    Padding = new Margins(5, 5, 5, 5)
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    new TextPacket
-                    {
-                        Text = "<color=white>Header</color>",
-                        Style = new GUIStylePacket {
-                            Background = System.Drawing.Color.DarkBlue,
-                            Padding = new Margins(5,5,5,5)
-                        },
-                        AttachedProperties = new StringPairPacket[] {
-                            new("DockPanel.Dock", "Top")
-                        }
-                    },
-                    new ScrollViewerPacket
-                    {
-                         Children = new IGUIComponentPacket[]
-                         {
-                             new SelectablePacket
-                             {
-                                 Name = "testcheckbox",
-                                 Checked = @checked,
-                                 Unchecked = @unchecked
-                             },
-                             new TextBoxPacket {
-                                 DefaultValue = "123123123",
-                                 Name = "textbox",
-                                 Regex = "^\\d*$",
-                                 Style = new GUIStylePacket{
-                                     Background = System.Drawing.Color.LightGray
-                                 }
-                            },
-                            new SliderPacket {
-                                DefaultValue = 0,
-                                MinValue = 0,
-                                MaxValue = 100,
-                                Name = "slider",
-                                Knob = new()
-                                {
-                                    URI = "/ui/knob.png",
-                                    Width = 16,
-                                    Height = 16
-                                }
-                            },
-                            new ImagePacket {
-                                URI = "/test.png",
-                                Width = 50,
-                                Height = 50
-                            }
-                         }
-                    }
-                }
-            };
-
-            return new OpenWindowPacket("ComprehensiveTestWindow", 1200, 800, rootElement);
-        }
-
-        /// <summary>
-        /// Create test cell configurations for different cell types
-        /// </summary>
         private CellConfigurationPacket[] CreateTestCellConfigurations()
         {
             var configs = new CellConfigurationPacket[256];
@@ -1473,103 +1280,103 @@ namespace MinesServer.Networking.Connection.Client
                     FrameOffset = 0,
                     Properties = CellConfigProperties.None,
                     ReliefGroup = 0,
-                    Distortion = (CellDistortionType)0
+                    Distortion = (CellDistortionType)0,
                 };
             }
 
-            var roadProps = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
-            var sandBoulderProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            var artificialProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            var rockCrystalProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            var indestructibleProps = CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            var boxProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ROAD_PROPS = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties SAND_BOULDER_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ARTIFICIAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ROCK_CRYSTAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties INDESTRUCTIBLE_PROPS = CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties BOX_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
 
             // === ROADS: ReliefGroup = 0 ===
-            SetConfig(configs, CellType.BuildingRoad, roadProps, 0, Color: unchecked((int)0xFFCCCCCC));
-            SetConfig(configs, CellType.VolcanoBackground, roadProps, 0);
-            SetConfig(configs, CellType.Empty, roadProps, 0, Color: unchecked((int)0xFF808080));
-            SetConfig(configs, CellType.Road, roadProps, 0, Color: unchecked((int)0xFFCCCCCC));
-            SetConfig(configs, CellType.GoldenRoad, roadProps, 0, Color: unchecked((int)0xFFCCCC00));
-            SetConfig(configs, CellType.PolymerRoad, roadProps, 0);
+            SetConfig(configs, CellType.BuildingRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
+            SetConfig(configs, CellType.VolcanoBackground, ROAD_PROPS, 0);
+            SetConfig(configs, CellType.Empty, ROAD_PROPS, 0, color: unchecked((int)0xFF808080));
+            SetConfig(configs, CellType.Road, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
+            SetConfig(configs, CellType.GoldenRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCC00));
+            SetConfig(configs, CellType.PolymerRoad, ROAD_PROPS, 0);
 
             // === BOX: ReliefGroup = 0 ===
-            SetConfig(configs, CellType.Box, boxProps, 0);
+            SetConfig(configs, CellType.Box, BOX_PROPS, 0);
 
             // === SANDS & BOULDERS: ReliefGroup = 1 ===
-            SetConfig(configs, CellType.BlackBoulder1, sandBoulderProps, 1, Color: unchecked((int)0xFF000000));
-            SetConfig(configs, CellType.BlackBoulder2, sandBoulderProps, 1);
-            SetConfig(configs, CellType.BlackBoulder3, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MetalBoulder1, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MetalBoulder2, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MetalBoulder3, sandBoulderProps, 1);
-            SetConfig(configs, CellType.WhiteSand, sandBoulderProps, 1, Color: unchecked((int)0xFFFFFF00));
-            SetConfig(configs, CellType.DarkWhiteSand, sandBoulderProps, 1, Color: unchecked((int)0xFFCCCC00));
-            SetConfig(configs, CellType.RustySand, sandBoulderProps, 1, Color: unchecked((int)0xFFCD853F));
-            SetConfig(configs, CellType.DarkRustySand, sandBoulderProps, 1, Color: unchecked((int)0xFF8B4513));
-            SetConfig(configs, CellType.BlackSand, sandBoulderProps, 1, Color: unchecked((int)0xFF2F2F2F));
-            SetConfig(configs, CellType.DarkBlackSand, sandBoulderProps, 1, Color: unchecked((int)0xFF1A1A1A));
-            SetConfig(configs, CellType.BlueSand, sandBoulderProps, 1, Color: unchecked((int)0xFF4169E1));
-            SetConfig(configs, CellType.DarkBlueSand, sandBoulderProps, 1, Color: unchecked((int)0xFF00008B));
-            SetConfig(configs, CellType.YellowSand, sandBoulderProps, 1, Color: unchecked((int)0xFFFFD700));
-            SetConfig(configs, CellType.DarkYellowSand, sandBoulderProps, 1, Color: unchecked((int)0xFFB8860B));
-            SetConfig(configs, CellType.DeepMagmaBoulder, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MilitaryBlockSand, sandBoulderProps, 1);
-            SetConfig(configs, CellType.Lava, sandBoulderProps, 1, Color: unchecked((int)0xFFFF4500),
-                Animation: (CellAnimationType)4, AnimationSpeed: 10, FrameOffset: 0, Distortion: (CellDistortionType)0);
-            SetConfig(configs, CellType.Boulder1, sandBoulderProps, 1, Color: unchecked((int)0xFF000000));
-            SetConfig(configs, CellType.Boulder2, sandBoulderProps, 1);
-            SetConfig(configs, CellType.Boulder3, sandBoulderProps, 1);
-            SetConfig(configs, CellType.BlueSand, sandBoulderProps, 1, Color: unchecked((int)0xFF4169E1));
-            SetConfig(configs, CellType.DarkBlueSand, sandBoulderProps, 1, Color: unchecked((int)0xFF00008B));
-            SetConfig(configs, CellType.YellowSand, sandBoulderProps, 1, Color: unchecked((int)0xFFFFD700));
-            SetConfig(configs, CellType.DarkYellowSand, sandBoulderProps, 1, Color: unchecked((int)0xFFB8860B));
+            SetConfig(configs, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
+            SetConfig(configs, CellType.BlackBoulder2, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.BlackBoulder3, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MetalBoulder1, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MetalBoulder2, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MetalBoulder3, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.WhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFFF00));
+            SetConfig(configs, CellType.DarkWhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCCCC00));
+            SetConfig(configs, CellType.RustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCD853F));
+            SetConfig(configs, CellType.DarkRustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF8B4513));
+            SetConfig(configs, CellType.BlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF2F2F2F));
+            SetConfig(configs, CellType.DarkBlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF1A1A1A));
+            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1));
+            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
+            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
+            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
+            SetConfig(configs, CellType.DeepMagmaBoulder, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MilitaryBlockSand, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.Lava, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFF4500),
+                animation: (CellAnimationType)4, animationSpeed: 10, frameOffset: 0, distortion: (CellDistortionType)0);
+            SetConfig(configs, CellType.Boulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
+            SetConfig(configs, CellType.Boulder2, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.Boulder3, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1));
+            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
+            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
+            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
 
             // === ACIDS (keep existing animations): ReliefGroup = 1 ===
-            SetConfig(configs, CellType.GrayAcid, sandBoulderProps, 1, Color: unchecked((int)0xFF00FF00),
-                Animation: CellAnimationType.Blinking, AnimationSpeed: 5, FrameOffset: 1);
-            SetConfig(configs, CellType.PurpleAcid, sandBoulderProps, 1, Color: unchecked((int)0xFF800080),
-                Animation: CellAnimationType.Shimmer, AnimationSpeed: 50, FrameOffset: 1);
+            SetConfig(configs, CellType.GrayAcid, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00FF00),
+                animation: CellAnimationType.Blinking, animationSpeed: 5, frameOffset: 1);
+            SetConfig(configs, CellType.PurpleAcid, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF800080),
+                animation: CellAnimationType.Shimmer, animationSpeed: 50, frameOffset: 1);
 
             // === ARTIFICIAL: ReliefGroup = 2 ===
-            SetConfig(configs, CellType.BuildingDoor, artificialProps, 2, Color: unchecked((int)0xFF8B4513));
-            SetConfig(configs, CellType.BuildingCorner, artificialProps, 2, Color: unchecked((int)0xFF555555));
-            SetConfig(configs, CellType.QuadBlock, artificialProps, 2);
-            SetConfig(configs, CellType.Support, artificialProps, 2);
-            SetConfig(configs, CellType.MilitaryBlockFrame, artificialProps, 2);
-            SetConfig(configs, CellType.MilitaryBlock, artificialProps, 2);
-            SetConfig(configs, CellType.GreenBlock, artificialProps, 2);
-            SetConfig(configs, CellType.YellowBlock, artificialProps, 2);
-            SetConfig(configs, CellType.FedBlock, artificialProps, 2);
-            SetConfig(configs, CellType.RedBlock, artificialProps, 2);
-            SetConfig(configs, CellType.BuildingWall, artificialProps, 2, Color: unchecked((int)0xFF666666));
+            SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513));
+            SetConfig(configs, CellType.BuildingCorner, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF555555));
+            SetConfig(configs, CellType.QuadBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.Support, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.MilitaryBlockFrame, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.MilitaryBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.GreenBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.YellowBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.FedBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666));
 
             // === ROCKS & CRYSTALS: ReliefGroup = 3 ===
-            SetConfig(configs, CellType.XGreen, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XBlue, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XRed, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XCyan, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XViolet, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepObsidianRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepTurquoiseRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepRainbowRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepStripedRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Rock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Green, rockCrystalProps, 3, Color: unchecked((int)0xFF00FF00));
-            SetConfig(configs, CellType.Red, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Blue, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Violet, rockCrystalProps, 3);
-            SetConfig(configs, CellType.White, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Cyan, rockCrystalProps, 3);
-            SetConfig(configs, CellType.HeavyRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.AcidRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.GoldenRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.GRock, rockCrystalProps, 3);
+            SetConfig(configs, CellType.XGreen, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XBlue, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XRed, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XCyan, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XViolet, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepTurquoiseRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepRainbowRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Green, ROCK_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00));
+            SetConfig(configs, CellType.Red, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Blue, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Violet, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.White, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Cyan, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.AcidRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3);
 
             // === INDESTRUCTIBLE ROCKS: ReliefGroup = 4 (NO Breakable!) ===
-            SetConfig(configs, CellType.NiggerRock, indestructibleProps, 4);
-            SetConfig(configs, CellType.LivingBlackRock, indestructibleProps, 4);
-            SetConfig(configs, CellType.RedRock, indestructibleProps, 4);
+            SetConfig(configs, CellType.NiggerRock, INDESTRUCTIBLE_PROPS, 4);
+            SetConfig(configs, CellType.LivingBlackRock, INDESTRUCTIBLE_PROPS, 4);
+            SetConfig(configs, CellType.RedRock, INDESTRUCTIBLE_PROPS, 4);
 
             // === GATE & TELEPORT BLOCK (passable but not roads) ===
             SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow, 0);
@@ -1578,38 +1385,38 @@ namespace MinesServer.Networking.Connection.Client
             return configs;
         }
 
-        private void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
-            int Color = unchecked((int)0xFF808080), CellAnimationType Animation = CellAnimationType.None,
-            byte AnimationSpeed = 0, byte FrameOffset = 0, CellDistortionType Distortion = (CellDistortionType)0)
+        private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
+            int color = unchecked((int)0xFF808080), CellAnimationType animation = CellAnimationType.None,
+            byte animationSpeed = 0, byte frameOffset = 0, CellDistortionType distortion = (CellDistortionType)0)
         {
             configs[(int)type] = new CellConfigurationPacket
             {
                 Properties = props,
                 ReliefGroup = reliefGroup,
-                Color = Color,
-                Animation = Animation,
-                AnimationSpeed = AnimationSpeed,
-                FrameOffset = FrameOffset,
-                Distortion = Distortion
+                Color = color,
+                Animation = animation,
+                AnimationSpeed = animationSpeed,
+                FrameOffset = frameOffset,
+                Distortion = distortion,
             };
         }
 
-        private (int width, int height) ReadPrebakedWorldDimensions(string path)
+        private static (int width, int height) ReadPrebakedWorldDimensions(string path)
         {
             try
             {
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var br = new BinaryReader(fs);
-                int widthChunks = br.ReadInt32();
-                int heightChunks = br.ReadInt32();
-                int chunkSize = br.ReadInt32();
+                int WIDTH_CHUNKS = br.ReadInt32();
+                int HEIGHT_CHUNKS = br.ReadInt32();
+                int CHUNK_SIZE = br.ReadInt32();
                 br.ReadInt32(); // reserved
 
-                if (widthChunks > 0 && heightChunks > 0 && chunkSize > 0 && chunkSize <= 1024)
+                if (WIDTH_CHUNKS > 0 && HEIGHT_CHUNKS > 0 && CHUNK_SIZE > 0 && CHUNK_SIZE <= 1024)
                 {
-                    int w = widthChunks * chunkSize;
-                    int h = heightChunks * chunkSize;
-                    Debug.Log($"[DummyConnection] Prebaked map dimensions: {w}x{h} ({widthChunks}x{heightChunks} chunks x{chunkSize})");
+                    int w = WIDTH_CHUNKS * CHUNK_SIZE;
+                    int h = HEIGHT_CHUNKS * CHUNK_SIZE;
+                    Debug.Log($"[DummyConnection] Prebaked map dimensions: {w}x{h} ({WIDTH_CHUNKS}x{HEIGHT_CHUNKS} chunks x{CHUNK_SIZE})");
                     return (w, h);
                 }
             }
@@ -1617,22 +1424,23 @@ namespace MinesServer.Networking.Connection.Client
             {
                 Debug.LogError($"[DummyConnection] Failed to read prebaked map header: {ex.Message}");
             }
+
             return (0, 0);
         }
 
         /// <summary>
-        /// Send test world map data using MapRegionPackets
+        /// Send test world map data using MapRegionPackets.
         /// </summary>
         private void SendTestWorldMapData(int testWorldWidth, int testWorldHeight)
         {
             var testMap = CreateTestMapData(testWorldWidth, testWorldHeight);
-            const int chunkSize = 32;
-            for (int y = 0; y < testWorldHeight; y += chunkSize)
+            const int CHUNK_SIZE = 32;
+            for (int y = 0; y < testWorldHeight; y += CHUNK_SIZE)
             {
-                for (int x = 0; x < testWorldWidth; x += chunkSize)
+                for (int x = 0; x < testWorldWidth; x += CHUNK_SIZE)
                 {
-                    int chunkWidth = Math.Min(chunkSize, testWorldWidth - x);
-                    int chunkHeight = Math.Min(chunkSize, testWorldHeight - y);
+                    int chunkWidth = Math.Min(CHUNK_SIZE, testWorldWidth - x);
+                    int chunkHeight = Math.Min(CHUNK_SIZE, testWorldHeight - y);
                     var chunkData = new CellType[chunkWidth * chunkHeight];
                     int dataIndex = 0;
                     for (int cy = 0; cy < chunkHeight; cy++)
@@ -1642,13 +1450,14 @@ namespace MinesServer.Networking.Connection.Client
                             chunkData[dataIndex++] = testMap[x + cx, y + cy];
                         }
                     }
+
                     var mapRegionPacket = new MapRegionPacket
                     {
                         X = (ushort)x,
                         Y = (ushort)y,
                         Width = (byte)(chunkWidth - 1),
                         Height = (byte)(chunkHeight - 1),
-                        Payload = chunkData
+                        Payload = chunkData,
                     };
                     var hbPacket = new HBPacket(new IHBPacket[] { mapRegionPacket });
                     OnReceived?.Invoke(new ServerPacket(hbPacket));
@@ -1657,48 +1466,60 @@ namespace MinesServer.Networking.Connection.Client
         }
 
         /// <summary>
-        /// Create test map data with various cell types for renderer testing
+        /// Create test map data with various cell types for renderer testing.
         /// </summary>
-        private CellType[,] CreateTestMapData(int width, int height)
+        private static CellType[,] CreateTestMapData(int width, int height)
         {
             var map = new CellType[width, height];
             for (int y = 0; y < height; y++)
+            {
                 for (int x = 0; x < width; x++)
+                {
                     map[x, y] = CellType.Empty;
+                }
+            }
 
-            int galleryX = 5;
-            int galleryY = 5;
-            int squaresPerRow = (width - galleryX) / 15;
+            const int GALLERY_X = 5;
+            const int GALLERY_Y = 5;
+            int squaresPerRow = (width - GALLERY_X) / 15;
 
             for (int i = 0; i < _allCellTypes.Length; i++)
             {
                 int row = i / squaresPerRow;
                 int col = i % squaresPerRow;
-                int startX = galleryX + col * 15;
-                int startY = galleryY + row * 15;
+                int startX = GALLERY_X + (col * 15);
+                int startY = GALLERY_Y + (row * 15);
 
                 for (int dx = 0; dx < 10; dx++)
+                {
                     for (int dy = 0; dy < 10; dy++)
+                    {
                         map[startX + dx, startY + dy] = _allCellTypes[i];
+                    }
+                }
             }
 
             // Clear BuildingDoor square (index 9) for tiling test
             // Square starts at (140, 5), 10×10
             for (int dx = 0; dx < 10; dx++)
+            {
                 for (int dy = 0; dy < 10; dy++)
+                {
                     map[140 + dx, 5 + dy] = CellType.Empty;
+                }
+            }
 
             int lastGalleryRow = (_allCellTypes.Length - 1) / squaresPerRow;
-            int tilingStartY = galleryY + (lastGalleryRow + 1) * 15 + 5;
-            int tilingStartX = galleryX;
-            int tilingPerRow = (width - tilingStartX) / 4;
+            int tilingStartY = GALLERY_Y + ((lastGalleryRow + 1) * 15) + 5;
+            const int TILING_START_X = GALLERY_X;
+            int tilingPerRow = (width - TILING_START_X) / 4;
 
             for (int variant = 0; variant < 256; variant++)
             {
                 int tRow = variant / tilingPerRow;
                 int tCol = variant % tilingPerRow;
-                int bx = tilingStartX + tCol * 4;
-                int by = tilingStartY + tRow * 4;
+                int bx = TILING_START_X + (tCol * 4);
+                int by = tilingStartY + (tRow * 4);
 
                 for (int dy = 0; dy < 3; dy++)
                 {
@@ -1710,8 +1531,11 @@ namespace MinesServer.Networking.Connection.Client
                             continue;
                         }
 
-                        int bitIdx = dy * 3 + dx;
-                        if (bitIdx > 4) bitIdx--;
+                        int bitIdx = (dy * 3) + dx;
+                        if (bitIdx > 4)
+                        {
+                            bitIdx--;
+                        }
 
                         map[bx + dx, by + dy] = ((variant >> bitIdx) & 1) == 1
                             ? CellType.BuildingDoor
@@ -1723,55 +1547,22 @@ namespace MinesServer.Networking.Connection.Client
             return map;
         }
 
-        private void CreateCellTypeLabels(int worldWidth, int worldHeight)
-        {
-            var parent = new GameObject("CellTypeLabels");
-            UnityEngine.Object.DontDestroyOnLoad(parent);
-
-            int squaresPerRow = (worldWidth - 5) / 15;
-            int galleryX = 5;
-            int galleryY = 5;
-
-            for (int i = 0; i < _allCellTypes.Length; i++)
-            {
-                int row = i / squaresPerRow;
-                int col = i % squaresPerRow;
-                int serverX = galleryX + col * 15 + 5;
-                int serverY = galleryY + row * 15 + 10;
-
-                float unityX = serverX + 0.5f;
-                float unityY = worldHeight - 1 - serverY - 0.5f;
-
-                var labelGO = new GameObject($"Label_{i}");
-                labelGO.transform.SetParent(parent.transform);
-                labelGO.transform.position = new Vector3(unityX, unityY, 0);
-
-                var tm = labelGO.AddComponent<TextMesh>();
-                tm.text = $"{_allCellTypes[i]} ({(int)_allCellTypes[i]})";
-                tm.fontSize = 20;
-                tm.characterSize = 0.5f;
-                tm.color = new Color(1f, 1f, 1f, 0.9f);
-                tm.anchor = TextAnchor.LowerCenter;
-                tm.alignment = TextAlignment.Center;
-            }
-        }
-
         private async UniTaskVoid HandleRobotInfoMock(ushort botId)
         {
             await UniTask.Delay(2000);
-            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 999, 1, "skin/bee.png", "tail/default.png", "BeeBot")));
+            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 999, 1, "Skin/bee.png", "Tail/default.png", "BeeBot")));
         }
 
         private async UniTaskVoid RunCircularBots(int count)
         {
-            int baseId = 1000;
+            const int BASE_ID = 1000;
 
             var bots = new List<(ushort id, float cx, float cy, float r, float a, float speed)>();
             for (int i = 0; i < count; i++)
             {
-                ushort botId = (ushort)(baseId + i);
+                ushort botId = (ushort)(BASE_ID + i);
                 OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
-                    "skin/bee.png", "tail/default.png", $"")));
+                    "Skin/bee.png", "Tail/default.png", $"")));
 
                 float radius = UnityEngine.Random.Range(0.5f, 5f);
                 float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
@@ -1785,19 +1576,20 @@ namespace MinesServer.Networking.Connection.Client
                 for (int i = 0; i < bots.Count; i++)
                 {
                     var b = bots[i];
-                    int x = Mathf.RoundToInt(b.cx + Mathf.Cos(b.a) * b.r);
-                    int y = Mathf.RoundToInt(b.cy + Mathf.Sin(b.a) * b.r);
-                    float deg = (Mathf.Atan2(Mathf.Sin(b.a), Mathf.Cos(b.a)) * Mathf.Rad2Deg + 360) % 360;
+                    int x = Mathf.RoundToInt(b.cx + (Mathf.Cos(b.a) * b.r));
+                    int y = Mathf.RoundToInt(b.cy + (Mathf.Sin(b.a) * b.r));
+                    float deg = ((Mathf.Atan2(Mathf.Sin(b.a), Mathf.Cos(b.a)) * Mathf.Rad2Deg) + 360) % 360;
                     byte rot = deg switch
                     {
                         > 225 and <= 315 => 0,
                         > 135 and <= 225 => 1,
                         > 45 and <= 135 => 2,
-                        _ => 3
+                        _ => 3,
                     };
                     positions.Add(new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot));
-                    bots[i] = (b.id, b.cx, b.cy, b.r, b.a + b.speed * 0.1f, b.speed);
+                    bots[i] = (b.id, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
                 }
+
                 OnReceived?.Invoke(new ServerPacket(new HBPacket(positions.ToArray())));
                 await UniTask.Delay(20);
             }
@@ -1809,15 +1601,18 @@ namespace MinesServer.Networking.Connection.Client
             {
                 var data = await Fodinae.Scripts.Networking.Connection.Client.TextureStorageManager.Instance.GetTextureData(assetEntry.Filename.TrimStart('/'));
 
+                RuntimeAssetPacket response;
                 if (data != null)
                 {
-                    var response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), data);
-                    OnReceived?.Invoke(new ServerPacket(response));
+                    response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), data);
                 }
                 else
                 {
-                    Debug.LogError($"[DummyConnection] Failed to get asset data for: {assetEntry.Filename}");
+                    Debug.LogWarning($"[DummyConnection] Asset not found locally: {assetEntry.Filename}");
+                    response = new RuntimeAssetPacket(assetEntry.Filename, string.Empty, System.Array.Empty<byte>());
                 }
+
+                OnReceived?.Invoke(new ServerPacket(response));
             }
         }
 
@@ -1828,13 +1623,16 @@ namespace MinesServer.Networking.Connection.Client
         (SkillType.MineGeneral, 75, 100),
         (SkillType.Extraction, 120, 100),
         (SkillType.Health, 40, 100),
-        (SkillType.Movement, 10, 100)
+        (SkillType.Movement, 10, 100),
             };
 
             while (_status == ConnectionStatus.Connected)
             {
                 foreach (var s in skills)
+                {
                     OnReceived?.Invoke(new ServerPacket(new SkillProgressPacket(s.type, s.current, s.max)));
+                }
+
                 await UniTask.Delay(1000);
             }
         }
@@ -1842,8 +1640,11 @@ namespace MinesServer.Networking.Connection.Client
         private async UniTaskVoid SendChatMock()
         {
             var names = new[] { "Alice", "Bob", "Charlie", "Darkar25", "Eve" };
-            var messages = new[] { "gg", "welcome!", "как дела?", "lol", "nice",
-        "gl hf", "куда бежать?", "фармим)", "👋", "подскажите кто знает" };
+            var messages = new[]
+            {
+                "gg", "welcome!", "как дела?", "lol", "nice",
+                "gl hf", "куда бежать?", "фармим)", "👋", "подскажите кто знает",
+            };
             var rng = new System.Random();
 
             while (_status == ConnectionStatus.Connected)
@@ -1860,8 +1661,7 @@ namespace MinesServer.Networking.Connection.Client
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     rng.Next(100, 999), (byte)rng.Next(0, 3),
                     nickColor, name,
-                    System.Drawing.Color.White, msg
-                );
+                    System.Drawing.Color.White, msg);
                 OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
             }
         }
@@ -1886,7 +1686,7 @@ namespace MinesServer.Networking.Connection.Client
                 CellType.Violet => 3,
                 CellType.White => 4,
                 CellType.Cyan => 5,
-                _ => -1
+                _ => -1,
             };
         }
     }

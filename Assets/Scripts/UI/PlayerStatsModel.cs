@@ -15,7 +15,7 @@ namespace Fodinae.Scripts.UI
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<PlayerStatsModel>();
+                    _instance = FindAnyObjectByType<PlayerStatsModel>();
                     if (_instance == null)
                     {
                         var go = new GameObject("[PlayerStatsModel]");
@@ -23,6 +23,7 @@ namespace Fodinae.Scripts.UI
                         DontDestroyOnLoad(go);
                     }
                 }
+
                 return _instance;
             }
         }
@@ -51,19 +52,24 @@ namespace Fodinae.Scripts.UI
 
         public void ClearStatusLines()
         {
-            if (_statusLines.Count == 0) return;
+            if (_statusLines.Count == 0)
+            {
+                return;
+            }
+
             _statusLines.Clear();
             OnStatusLinesChanged?.Invoke();
             OnStatsChanged?.Invoke();
         }
 
-        private void Awake()
+        protected void Awake()
         {
             if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
+
             _instance = this;
             DontDestroyOnLoad(gameObject);
         }
@@ -116,6 +122,7 @@ namespace Fodinae.Scripts.UI
         public void SetNickname(string nickname)
         {
             Nickname = nickname;
+            OnNicknameChanged?.Invoke();
             OnStatsChanged?.Invoke();
         }
 
@@ -159,8 +166,12 @@ namespace Fodinae.Scripts.UI
             for (int i = 0; i < BasketContents.Length; i++)
             {
                 int pct = capacity > 0 ? (int)(BasketContents[i] * 100 / capacity) : 0;
-                if (pct > maxPct) maxPct = pct;
+                if (pct > maxPct)
+                {
+                    maxPct = pct;
+                }
             }
+
             BasketMaxPercent = Mathf.Clamp(maxPct, 0, 100);
             OnBasketChanged?.Invoke();
             OnStatsChanged?.Invoke();

@@ -18,7 +18,7 @@ namespace Fodinae.Scripts.Game
         private Sprite _packSprite;
         private Sprite _clanSprite;
 
-        private void Awake()
+        protected void Awake()
         {
             _spriteRenderer = GetComponent<SpriteRenderer>();
             if (_spriteRenderer == null)
@@ -59,8 +59,8 @@ namespace Fodinae.Scripts.Game
 
         private async UniTaskVoid LoadPackAsync(CancellationToken token)
         {
-            string packName = _packType.ToString().ToLowerInvariant();
-            string packPath = $"pack/{packName}/{_variant}";
+            string packName = _packType.ToString();
+            string packPath = $"Pack/{packName}/{_variant}";
 
             var packTexture = await ClientAssetLoader.Instance.GetTextureAsync(packPath, token);
             if (token.IsCancellationRequested || packTexture == null || _spriteRenderer == null)
@@ -72,8 +72,9 @@ namespace Fodinae.Scripts.Game
             {
                 Destroy(_packSprite);
             }
+
             // Use central PIXELS_PER_UNIT for consistency
-            _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PixelsPerUnit);
+            _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
             _spriteRenderer.sprite = _packSprite;
 
             UpdateClanPosition();
@@ -87,10 +88,11 @@ namespace Fodinae.Scripts.Game
                 {
                     _clanRenderer.sprite = null;
                 }
+
                 return;
             }
 
-            var clanTexture = await ClientAssetLoader.Instance.GetTextureAsync($"clan/{_linkedClan}", token);
+            var clanTexture = await ClientAssetLoader.Instance.GetTextureAsync($"Clan/{_linkedClan}", token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
             {
                 return;
@@ -100,6 +102,7 @@ namespace Fodinae.Scripts.Game
             {
                 Destroy(_clanSprite);
             }
+
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
             _clanRenderer.sprite = _clanSprite;
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
@@ -115,18 +118,25 @@ namespace Fodinae.Scripts.Game
             }
 
             // Position to the right and slightly below the center
-            float packWidth = _packSprite != null ? _packSprite.texture.width : RenderingConstants.PixelsPerUnit;
-            float xOffset = (packWidth / (RenderingConstants.PixelsPerUnit * 2)) + 0.1f; // Right edge + 0.1 gap
+            float packWidth = _packSprite != null ? _packSprite.texture.width : RenderingConstants.PIXELS_PER_UNIT;
+            float xOffset = (packWidth / (RenderingConstants.PIXELS_PER_UNIT * 2)) + 0.1f; // Right edge + 0.1 gap
             _clanRenderer.transform.localPosition = new Vector3(xOffset, -0.5f, 0);
         }
 
-        private void OnDestroy()
+        protected void OnDestroy()
         {
             _cts?.Cancel();
             _cts?.Dispose();
 
-            if (_packSprite != null) Destroy(_packSprite);
-            if (_clanSprite != null) Destroy(_clanSprite);
+            if (_packSprite != null)
+            {
+                Destroy(_packSprite);
+            }
+
+            if (_clanSprite != null)
+            {
+                Destroy(_clanSprite);
+            }
         }
     }
 }

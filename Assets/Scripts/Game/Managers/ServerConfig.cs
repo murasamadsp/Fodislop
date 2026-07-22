@@ -4,6 +4,7 @@ namespace Fodinae.Scripts.Game.Managers
 {
     public class ServerConfig : MonoBehaviour
     {
+        private const string TAG = "[ServerConfig]";
         private static ServerConfig _instance;
         public static ServerConfig Instance
         {
@@ -11,13 +12,14 @@ namespace Fodinae.Scripts.Game.Managers
             {
                 if (_instance == null)
                 {
-                    _instance = FindObjectOfType<ServerConfig>();
+                    _instance = FindAnyObjectByType<ServerConfig>();
                     if (_instance == null)
                     {
                         var go = new GameObject("[ServerConfig]");
                         _instance = go.AddComponent<ServerConfig>();
                     }
                 }
+
                 return _instance;
             }
         }
@@ -26,15 +28,17 @@ namespace Fodinae.Scripts.Game.Managers
         public int MaxGlobalChatLength = 50;
         public int MaxLocalChatLength = 20;
 
-        private void Awake()
+        protected void Awake()
         {
             if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
+
             _instance = this;
             DontDestroyOnLoad(gameObject);
+            Debug.Log($"{TAG} Initialized: DigCooldown={DigCooldown}, MaxGlobalChat={MaxGlobalChatLength}, MaxLocalChat={MaxLocalChatLength}");
         }
     }
 }

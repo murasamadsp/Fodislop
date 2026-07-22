@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Загрузка ассетов и CDN — Fodinae Client Documentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="js/main.js" defer></script>
+</head>
+
+<body>
+
+    <header>
+        <div class="header-title-group">
+            <div class="logo-badge">F</div>
+            <div>
+                <h1>Загрузка ассетов и CDN кэширование</h1>
+                <p class="subtitle">Спецификация дискового ETag-кэша и объединения HTTP-запросов</p>
+            </div>
+        </div>
+        <nav>
+            <a href="index.html">Обзор архитектуры</a>
+            <a href="rendering.html">Рендеринг (SingleMesh)</a>
+            <a href="networking.html">Сетевой протокол</a>
+            <a href="audio.html">Аудио (FMOD)</a>
+            <a href="assets_loading.html">Загрузка ассетов</a>
+            <a href="ui_programmator.html">UI & Программатор</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Падигма On-Demand -->
+        <section>
+            <h2>Концепция: Однократный запрос ресурса & Локальный рендер</h2>
+            <p>Клиент Fodinae следует принципу ленивой однократной загрузки: клиент инкапсулирует исполнительные
+                примитивы рендеринга (тайлы, сущности роботов, предмета паков, FMOD-звуки), в то время как сервер
+                передаёт исключительно легковесные координаты и ID состояний.</p>
+            <p>При возникновении неизвестной клиенту сущности ресурс (текстура, спрайт, банк звуков) запрашивается с
+                сервера/CDN ровно один раз. Все последующие появления того же объекта обрабатываются локальным кэшем без
+                дублирования сетевых запросов.</p>
+        </section>
+
+        <!-- Пайплайн загрузки -->
+        <section>
+            <h2>Пайплайн загрузки ресурсов (ClientAssetLoader)</h2>
+            <p>Загрузка ассетов с сервера (текстуры, аватары, анимированные спрайты, FMOD банки) выполняется через <a
+                    href="../Assets/Scripts/ClientAssetLoader.cs" class="class-ref">ClientAssetLoader</a>:</p>
+            <ol>
+                <li><strong>Проверка RAM-кэша (AssetCache)</strong>: Быстрый поиск уже декодированного ресурса в памяти
+                    по URL/ключу.</li>
+                <li><strong>Дисковый кэш (PersistentAssetCache)</strong>: Если ресурс отсутствует в RAM, проверяется
+                    локальный файл в <code>persistentDataPath</code>.</li>
+                <li><strong>HTTP ETag/MD5 Валидация</strong>: Если файл есть на диске, отправляется HTTP HEAD/GET запрос
+                    с заголовком <code>If-None-Match: "ETag"</code>.
+                    <ul>
+                        <li>При ответе <code>304 Not Modified</code> ресурс читается напрямую с диска без повторной
+                            скачки.</li>
+                        <li>При ответе <code>200 OK</code> скачивается новый поток байт и обновляется дисковый кэш.</li>
+                    </ul>
+                </li>
+                <li><strong>Дедупликация запросов (Coalescing)</strong>: При одновременном вызове нескольких загрузок
+                    одного URL создаётся единый <code>TaskCompletionSource</code>, исключающий параллельные duplicate
+                    HTTP-запросы.</li>
+            </ol>
+        </section>
+
+        <!-- Структура компонентов -->
+        <section>
+            <h2>Компоненты кэширования</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Класс</th>
+                        <th>Файл</th>
+                        <th>Назначение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>ClientAssetLoader</code></td>
+                        <td><a href="../Assets/Scripts/ClientAssetLoader.cs" class="class-ref">ClientAssetLoader.cs</a>
+                        </td>
+                        <td>Асинхронный контроллер загрузок (`GetTextureAsync`, `GetAssetPathAsync`, `GetAudioAsync`).
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>PersistentAssetCache</code></td>
+                        <td><a href="../Assets/Scripts/PersistentAssetCache.cs"
+                                class="class-ref">PersistentAssetCache.cs</a></td>
+                        <td>Стойкое дисковое хранилище ETag/MD5 метаданных и бинарных файлов.</td>
+                    </tr>
+                    <tr>
+                        <td><code>ETagCalculator</code></td>
+                        <td><a href="../Assets/Scripts/ETagCalculator.cs" class="class-ref">ETagCalculator.cs</a></td>
+                        <td>Расчёт MD5-хэша файлов для ETag-валидации.</td>
+                    </tr>
+                    <tr>
+                        <td><code>DynamicImage</code></td>
+                        <td><a href="../Assets/Scripts/DynamicImage.cs" class="class-ref">DynamicImage.cs</a></td>
+                        <td>MonoBehaviour с `UnityEngine.UI.Image`, подгружающий спрайты с сервера по URL.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+</body>
+
+</html>

@@ -477,7 +477,6 @@ InitTestScene*.unity*
 # Visual Studio / Rider generated files
 .vs/
 .idea/
-.vscode/
 *.csproj
 *.sln
 *.slnx
@@ -488,3 +487,23 @@ InitTestScene*.unity*
 *.txt
 # AI tools files
 .omo/
+.commandcode/
+
+# FMOD — не игнорим DLL библиотеки, игнорим кеш и локальные банки
+!/[Aa]ssets/Plugins/FMOD/**/lib/*
+!/[Aa]ssets/Gizmos/FMOD/*
+!/[Aa]ssets/Editor Default Resources/FMOD/*
+/[Aa]ssets/Plugins/FMOD/Cache/*
+/[Aa]ssets/StreamingAssets/**/*.bank
+/[Aa]ssets/StreamingAssets/**/*.bank.meta
+fmod_editor.log
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.dotnet_tmp/

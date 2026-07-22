@@ -9,7 +9,7 @@ namespace Fodinae.Scripts.UI
 {
     /// <summary>
     /// Chunk-batched minimap renderer with time-throttled updates and async GPU upload.
-    /// No coroutines, no per-cell WorldLayer<T> indexer calls — reads whole chunks at once.
+    /// No coroutines, no per-cell WorldLayer.<T> indexer calls — reads whole chunks at once.
     /// </summary>
     public class MinimapController : MonoBehaviour
     {
@@ -43,15 +43,15 @@ namespace Fodinae.Scripts.UI
         private float _lastUpdateTime;
         private bool _ready;
 
-        private const int TextureSize = GameConstants.UI.MINIMAP_WIDTH; // 128
-        private const float UpdateDelay = 0.1f; // 10 FPS — sufficient for minimap
+        private const int TEXTURE_SIZE = GameConstants.UI.MINIMAP_WIDTH; // 128
+        private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
 
         private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
         private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
         private static readonly Color32 MarkerColor = Color.white;
         private static readonly Color32 CenterColor = Color.red;
 
-        private void Start()
+        protected void Start()
         {
             _mapManager = MapManager.Instance;
             if (_mapManager == null)
@@ -64,17 +64,31 @@ namespace Fodinae.Scripts.UI
 
             CacheCellColors();
 
-            _minimapTexture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false)
+            _minimapTexture = new Texture2D(TEXTURE_SIZE, TEXTURE_SIZE, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
             };
 
-            _pixelColors = new Color32[TextureSize * TextureSize];
+            _pixelColors = new Color32[TEXTURE_SIZE * TEXTURE_SIZE];
 
             CreateUI();
 
-            _player = FindFirstObjectByType<PlayerMovementController>();
+            _player = PlayerMovementController.LocalPlayer;
+            if (_player != null)
+            {
+                _player.OnPlayerMoved += OnPlayerMoved;
+            }
+            else
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += OnPlayerSpawned;
+            }
+        }
+
+        private void OnPlayerSpawned(PlayerMovementController player)
+        {
+            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+            _player = player;
             if (_player != null)
             {
                 _player.OnPlayerMoved += OnPlayerMoved;
@@ -85,7 +99,7 @@ namespace Fodinae.Scripts.UI
         /// One-time initialization check (replaces coroutine).
         /// Runs every frame until the world is ready, then becomes a no-op.
         /// </summary>
-        private void Update()
+        protected void Update()
         {
             if (!_ready)
             {
@@ -110,8 +124,8 @@ namespace Fodinae.Scripts.UI
             // Initial render
             if (_player != null)
             {
-                UpdateCoordinatesText(_player.ClientPosition.x, _player.ClientPosition.y);
-                RefreshTexture(_player.ClientPosition.x, _player.ClientPosition.y);
+                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                RefreshTexture(_player.Position.x, _player.Position.y);
             }
         }
 
@@ -142,7 +156,7 @@ namespace Fodinae.Scripts.UI
 
         private void CreateUI()
         {
-            Canvas canvas = FindFirstObjectByType<Canvas>();
+            Canvas canvas = FindAnyObjectByType<Canvas>();
             if (canvas == null)
             {
                 GameObject canvasObj = new("Canvas");
@@ -207,10 +221,13 @@ namespace Fodinae.Scripts.UI
                 }
             }
 
-            UpdateCoordinatesText(newPos.x, newPos.y);
+            if (_player != null)
+            {
+                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+            }
 
             float now = Time.time;
-            if (now - _lastUpdateTime >= UpdateDelay)
+            if (now - _lastUpdateTime >= UPDATE_DELAY)
             {
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
@@ -220,10 +237,9 @@ namespace Fodinae.Scripts.UI
 
         private void RefreshTexture(int playerX, int playerY)
         {
-            int halfSize = TextureSize / 2;
-            int minX = playerX - halfSize;
-            int minY = playerY - halfSize;
-            int texSize = TextureSize;
+            const int HALF_SIZE = TEXTURE_SIZE / 2;
+            int minX = playerX - HALF_SIZE;
+            const int TEX_SIZE = TEXTURE_SIZE;
             Color32[] colors = _pixelColors;
             Dictionary<CellType, Color32> cellColors = _cellColors;
             Dictionary<int, CellType[]> cache = _chunkCache;
@@ -231,14 +247,16 @@ namespace Fodinae.Scripts.UI
 
             int index = 0;
 
-            for (int texY = 0; texY < texSize; texY++)
+            for (int texY = 0; texY < TEX_SIZE; texY++)
             {
-                int worldY = minY + texY;
+                // texY = 0 is bottom of screen (deeper underground, larger Server Y)
+                // texY = TEX_SIZE - 1 is top of screen (towards surface, smaller Server Y)
+                int serverY = playerY + HALF_SIZE - texY;
 
-                if (worldY < 0 || worldY >= _worldHeight)
+                if (serverY < 0 || serverY >= _worldHeight)
                 {
                     // Entire row is out of bounds
-                    int end = index + texSize;
+                    int end = index + TEX_SIZE;
                     while (index < end)
                     {
                         colors[index++] = OutOfBoundsColor;
@@ -247,23 +265,21 @@ namespace Fodinae.Scripts.UI
                     continue;
                 }
 
-                int serverY = Fodinae.Scripts.Utils.CoordinateUtils.UnityToServerY(worldY, _worldHeight);
-
                 // Column-major chunk indexing for WorldLayer<T>
                 int chunkY = serverY / _chunkSize;
                 int localY = serverY % _chunkSize;
 
-                for (int texX = 0; texX < texSize; texX++)
+                for (int texX = 0; texX < TEX_SIZE; texX++)
                 {
-                    int worldX = minX + texX;
+                    int serverX = minX + texX;
 
-                    if (worldX < 0 || worldX >= _worldWidth)
+                    if (serverX < 0 || serverX >= _worldWidth)
                     {
                         colors[index++] = OutOfBoundsColor;
                         continue;
                     }
 
-                    int chunkX = worldX / _chunkSize;
+                    int chunkX = serverX / _chunkSize;
                     int chunkIdx = chunkY + (chunkX * _heightChunks);
 
                     if (!cache.TryGetValue(chunkIdx, out CellType[] chunk))
@@ -275,7 +291,7 @@ namespace Fodinae.Scripts.UI
 
                     if (chunk != null)
                     {
-                        int localIdx = localY + ((worldX % _chunkSize) * _chunkSize);
+                        int localIdx = localY + ((serverX % _chunkSize) * _chunkSize);
                         colors[index++] = cellColors[chunk[localIdx]];
                     }
                     else
@@ -286,12 +302,12 @@ namespace Fodinae.Scripts.UI
             }
 
             // Draw player marker (plus sign)
-            int cx = halfSize;
-            colors[(cx * texSize) + cx - 1] = MarkerColor;
-            colors[(cx * texSize) + cx] = CenterColor;
-            colors[(cx * texSize) + cx + 1] = MarkerColor;
-            colors[((cx - 1) * texSize) + cx] = MarkerColor;
-            colors[((cx + 1) * texSize) + cx] = MarkerColor;
+            const int cx = HALF_SIZE;
+            colors[(cx * TEX_SIZE) + cx - 1] = MarkerColor;
+            colors[(cx * TEX_SIZE) + cx] = CenterColor;
+            colors[(cx * TEX_SIZE) + cx + 1] = MarkerColor;
+            colors[((cx - 1) * TEX_SIZE) + cx] = MarkerColor;
+            colors[((cx + 1) * TEX_SIZE) + cx] = MarkerColor;
 
             _minimapTexture.SetPixels32(colors);
             _minimapTexture.Apply(true); // Async GPU upload — non-blocking
@@ -309,12 +325,14 @@ namespace Fodinae.Scripts.UI
         {
             if (_player != null && _ready)
             {
-                RefreshTexture(_player.ClientPosition.x, _player.ClientPosition.y);
+                RefreshTexture(_player.Position.x, _player.Position.y);
             }
         }
 
-        private void OnDestroy()
+        protected void OnDestroy()
         {
+            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+
             if (_player != null)
             {
                 _player.OnPlayerMoved -= OnPlayerMoved;

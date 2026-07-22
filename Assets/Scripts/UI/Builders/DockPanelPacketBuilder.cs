@@ -14,25 +14,27 @@ namespace Fodinae.Scripts.UI.Builders
         public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not DockPanelPacket dpp)
+            {
                 return null;
+            }
 
             var element = new VisualElement
             {
                 style =
                 {
-                    flexGrow = 1
-                }
+                    flexGrow = 1,
+                },
             };
             HandleDockPanelChildren(element, dpp.Children, builder);
             return element;
         }
 
-        private void HandleDockPanelChildren(VisualElement parent, IEnumerable<IGUIComponentPacket> children, PacketUIBuilder builder)
+        private static void HandleDockPanelChildren(VisualElement parent, IEnumerable<IGUIComponentPacket> children, PacketUIBuilder builder)
         {
             parent.style.flexDirection = FlexDirection.Column;
             parent.style.flexGrow = 0;
 
-            var lastChild = children.LastOrDefault(c => c.AttachedProperties?.All(p => p.Key != "DockPanel.Dock") ?? true);
+            var lastChild = children.LastOrDefault(c => c.AttachedProperties == null || c.AttachedProperties.All(p => p.Key != "DockPanel.Dock"));
             VisualElement current;
             if (lastChild != null)
             {
@@ -46,7 +48,10 @@ namespace Fodinae.Scripts.UI.Builders
 
             foreach (var childPacket in children.Reverse())
             {
-                if (childPacket == lastChild) continue;
+                if (childPacket == lastChild)
+                {
+                    continue;
+                }
 
                 var childElement = builder.Build(childPacket);
                 var dock = Dock.Left;
@@ -89,6 +94,7 @@ namespace Fodinae.Scripts.UI.Builders
                         wrapper.Add(childElement);
                         break;
                 }
+
                 current = wrapper;
             }
 

@@ -25,17 +25,20 @@ namespace Fodinae.Scripts.UI
             renderer.sortingOrder = 300;
 
             if (_cam != null)
+            {
                 _textMesh.characterSize = 0.08f * (_cam.orthographicSize / 10f);
-
+            }
         }
 
-        private void Update()
+        protected void Update()
         {
             _elapsed += Time.deltaTime;
             transform.Translate(0, FLOAT_SPEED * Time.deltaTime, 0);
 
             if (_cam != null)
+            {
                 _textMesh.characterSize = 0.08f * (_cam.orthographicSize / 10f);
+            }
 
             if (_elapsed >= FADE_START)
             {
@@ -46,7 +49,9 @@ namespace Fodinae.Scripts.UI
             }
 
             if (_elapsed >= DURATION)
+            {
                 Destroy(gameObject);
+            }
         }
     }
 }

@@ -1,23 +1,34 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Utils;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.World;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Game
 {
     public class Robot : MonoBehaviour
     {
-        [SerializeField] private uint _botId;
-        [SerializeField] private int _playerId;
-        [SerializeField] private byte _clanId;
-        [SerializeField] private SpriteRenderer _spriteRenderer;
+        private const string TAG = "[Robot]";
+
+        [SerializeField]
+        private uint _botId;
+        [SerializeField]
+        private int _playerId;
+        [SerializeField]
+        private byte _clanId;
+        [SerializeField]
+        private SpriteRenderer _spriteRenderer;
         private SpriteRenderer _clanRenderer;
         private TextMesh _nicknameText;
-        [SerializeField] private string _nickname;
-        [SerializeField] private string _skinPath;
-        [SerializeField] private string _tailPath;
-        [SerializeField] private float _rotationSpeed = 1080f;
+        [SerializeField]
+        private string _nickname;
+        [SerializeField]
+        private string _skinPath;
+        [SerializeField]
+        private string _tailPath;
+        [SerializeField]
+        private float _rotationSpeed = 1080f;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
@@ -34,7 +45,8 @@ namespace Fodinae.Scripts.Game
         private Vector3 _smoothPosition;
         private Vector3 _currentVelocity;
         private float _currentAngularVelocity;
-        [SerializeField] private float _moveSpeed = 15f;
+        [SerializeField]
+        private float _moveSpeed = 15f;
         private float _tremor = 0f;
 
         private Tentacle[] _tentacles;
@@ -101,7 +113,7 @@ namespace Fodinae.Scripts.Game
             set => _moveSpeed = value;
         }
 
-        private void Awake()
+        protected void Awake()
         {
             if (_spriteRenderer == null)
             {
@@ -114,8 +126,7 @@ namespace Fodinae.Scripts.Game
             _smoothPosition = transform.position;
             _smoothAngle = transform.eulerAngles.z;
 
-            var rb = GetComponent<Rigidbody2D>();
-            if (rb != null)
+            if (TryGetComponent<Rigidbody2D>(out var rb))
             {
                 rb.freezeRotation = true;
                 rb.simulated = false;
@@ -149,13 +160,12 @@ namespace Fodinae.Scripts.Game
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
         }
 
-        private void Start()
+        protected void Start()
         {
             Vector3 snappedPos = new Vector3(
                 Mathf.Floor(transform.position.x) + 0.5f,
                 Mathf.Floor(transform.position.y) + 0.5f,
-                transform.position.z
-            );
+                transform.position.z);
             transform.position = snappedPos;
             _targetPosition = snappedPos;
             _serverPosition = snappedPos;
@@ -166,6 +176,7 @@ namespace Fodinae.Scripts.Game
             {
                 LoadMetadataAssets();
             }
+
             _targetAngle = transform.eulerAngles.z;
 
             if (gameObject.CompareTag("Player"))
@@ -174,7 +185,7 @@ namespace Fodinae.Scripts.Game
             }
         }
 
-        private void Update()
+        protected void Update()
         {
             float renderDistance = Vector2.Distance(_smoothPosition, _targetPosition);
 
@@ -204,7 +215,7 @@ namespace Fodinae.Scripts.Game
             }
             else
             {
-                // 3. Max Visual Speed limits the catch-up rate. 
+                // 3. Max Visual Speed limits the catch-up rate.
                 // Setting it to 1.25x of logical speed allows it to easily catch up without wildly slingshotting,
                 // bridging the gaps between server "ticks" smoothly when running continuously.
                 float maxVisualSpeed = Mathf.Max(_moveSpeed * 1.25f, 5f);
@@ -219,6 +230,7 @@ namespace Fodinae.Scripts.Game
                 finalPosition.x += _tremor * (Random.value - 0.5f);
                 finalPosition.y += _tremor * (Random.value - 0.5f);
             }
+
             transform.position = finalPosition;
 
             // Apply rotation smoothing (now limits turning rate using your previously unused _rotationSpeed field)
@@ -226,10 +238,6 @@ namespace Fodinae.Scripts.Game
             _smoothAngle = Mathf.SmoothDampAngle(_smoothAngle, targetAngle, ref _currentAngularVelocity, smoothTime, _rotationSpeed, Time.deltaTime);
 
             float nowRotationAngle = _smoothAngle;
-            //if (_skinPath != "1")
-            //{
-            //    nowRotationAngle += 6.6f * renderDistance * (0.5f - Random.value);
-            //}
 
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
@@ -258,13 +266,18 @@ namespace Fodinae.Scripts.Game
                 {
                     tentacle?.Destroy();
                 }
+
                 _tentacles = null;
             }
         }
 
         private void UpdateTentacles(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
         {
-            if (_tentacles == null) return;
+            if (_tentacles == null)
+            {
+                return;
+            }
+
             foreach (var tentacle in _tentacles)
             {
                 tentacle.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
@@ -275,14 +288,12 @@ namespace Fodinae.Scripts.Game
         {
             if (_nicknameText != null)
             {
-                _nicknameText.transform.position = transform.position + new Vector3(0.6f, 0.5f, 0);
-                _nicknameText.transform.rotation = Quaternion.identity;
+                _nicknameText.transform.SetPositionAndRotation(transform.position + new Vector3(0.6f, 0.5f, 0), Quaternion.identity);
             }
 
             if (_clanRenderer != null)
             {
-                _clanRenderer.transform.position = transform.position + new Vector3(0.6f, -0.5f, 0);
-                _clanRenderer.transform.rotation = Quaternion.identity;
+                _clanRenderer.transform.SetPositionAndRotation(transform.position + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
             }
         }
 
@@ -290,6 +301,7 @@ namespace Fodinae.Scripts.Game
         {
             _botId = botId;
             RobotManager.Instance?.RegisterRobot(this);
+            Debug.Log($"{TAG} Initialized botId={botId} (local={IsLocalPlayer})");
 
             _isMetadataLoaded = false;
             if (_spriteRenderer != null)
@@ -299,7 +311,7 @@ namespace Fodinae.Scripts.Game
 
             if (_nicknameText != null)
             {
-                _nicknameText.text = "";
+                _nicknameText.text = string.Empty;
             }
 
             if (_clanRenderer != null)
@@ -316,6 +328,7 @@ namespace Fodinae.Scripts.Game
             _skinPath = skinPath;
             _tailPath = tailPath;
             _isMetadataLoaded = true;
+            Debug.Log($"{TAG} Metadata set for bot {_botId}: name='{nickname}', skin='{skinPath}', tail='{tailPath}', clan={clanid}");
 
             if (_spriteRenderer != null)
             {
@@ -355,7 +368,7 @@ namespace Fodinae.Scripts.Game
                 1 => 180f,
                 2 => 90f,
                 3 => 0f,
-                _ => 0f
+                _ => 0f,
             };
         }
 
@@ -390,6 +403,7 @@ namespace Fodinae.Scripts.Game
             var loader = ClientAssetLoader.Instance;
             if (loader == null)
             {
+                Debug.LogWarning($"{TAG} ClientAssetLoader not available for skin load on bot {_botId}");
                 return;
             }
 
@@ -398,6 +412,8 @@ namespace Fodinae.Scripts.Game
             {
                 return;
             }
+
+            Debug.Log($"{TAG} Skin loaded for bot {_botId}: {_skinPath}");
 
             if (_skinSprite != null)
             {
@@ -419,6 +435,7 @@ namespace Fodinae.Scripts.Game
             var loader = ClientAssetLoader.Instance;
             if (loader == null)
             {
+                Debug.LogWarning($"{TAG} ClientAssetLoader not available for tail load on bot {_botId}");
                 return;
             }
 
@@ -430,10 +447,12 @@ namespace Fodinae.Scripts.Game
 
             if (tailTexture != null)
             {
+                Debug.Log($"{TAG} Tail loaded for bot {_botId}: {_tailPath}");
                 CreateTentacles(tailTexture);
             }
             else
             {
+                Debug.LogWarning($"{TAG} Tail texture not found for bot {_botId}: {_tailPath}");
                 ClearTentacles();
             }
         }
@@ -448,14 +467,17 @@ namespace Fodinae.Scripts.Game
             var loader = ClientAssetLoader.Instance;
             if (loader == null)
             {
+                Debug.LogWarning($"{TAG} ClientAssetLoader not available for clan load on bot {_botId}");
                 return;
             }
 
-            var clanTexture = await loader.GetTextureAsync($"/clan/{_clanId}", token);
+            var clanTexture = await loader.GetTextureAsync($"/Clan/{_clanId}", token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
             {
                 return;
             }
+
+            Debug.Log($"{TAG} Clan badge loaded for bot {_botId}: clan={_clanId}");
 
             if (_clanSprite != null)
             {
@@ -467,29 +489,32 @@ namespace Fodinae.Scripts.Game
         }
 
 #if UNITY_EDITOR
-        private void OnDrawGizmos()
+        protected void OnDrawGizmos()
         {
-            if (!Application.isPlaying || !RobotManager.ShowDebugVisuals) return;
+            if (!Application.isPlaying || !RobotManager.ShowDebugVisuals)
+            {
+                return;
+            }
 
             // Server Position: Red Square
-            Utils.FodislopGizmos.DrawBounds(_serverPosition, Vector2.one * 1.0f, Color.red);
+            Fodinae.Scripts.World.FodinaeGizmos.DrawBounds(_serverPosition, Vector2.one * 1.0f, Color.red);
 
             // Client/Target Position: Blue Square
-            Utils.FodislopGizmos.DrawBounds(_targetPosition, Vector2.one * 0.9f, Color.blue);
+            Fodinae.Scripts.World.FodinaeGizmos.DrawBounds(_targetPosition, Vector2.one * 0.9f, Color.blue);
 
             // Visual Position: Cyan Square
-            Utils.FodislopGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
+            Fodinae.Scripts.World.FodinaeGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
 
             // Draw Rotation Arrow
             float angleRad = (transform.eulerAngles.z + VISUAL_ROTATION_OFFSET) * Mathf.Deg2Rad;
             Vector3 direction = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
-            Utils.FodislopGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
+            Fodinae.Scripts.World.FodinaeGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
 
             // Metadata Status
             string status = $"ID: {_botId}\n{(IsLocalPlayer ? "LOCAL PLAYER" : "REMOTE ROBOT")}\n" +
                             $"Meta: {(_isMetadataLoaded ? "OK" : "PENDING")}\n" +
                             $"Speed: {_moveSpeed:F1}";
-            Utils.FodislopGizmos.DrawLabel(transform.position + Vector3.up * 1.5f, status, _isMetadataLoaded ? Color.green : Color.orange);
+            Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(transform.position + (Vector3.up * 1.5f), status, _isMetadataLoaded ? Color.green : Color.orange);
 
             if (!IsLocalPlayer)
             {
@@ -497,21 +522,30 @@ namespace Fodinae.Scripts.Game
                 float lag = Vector3.Distance(_serverPosition, transform.position);
                 if (lag > 0.5f)
                 {
-                    Utils.FodislopGizmos.DrawDottedLine(transform.position, _serverPosition, Color.red, 4f);
+                    Fodinae.Scripts.World.FodinaeGizmos.DrawDottedLine(transform.position, _serverPosition, Color.red, 4f);
                 }
             }
         }
 #endif
 
-        private void OnDestroy()
+        protected void OnDestroy()
         {
+            Debug.Log($"{TAG} Destroying bot {_botId}");
             _cts?.Cancel();
             _cts?.Dispose();
 
             RobotManager.InstanceIfExists?.UnregisterRobot(_botId, this);
 
-            if (_skinSprite != null) Object.Destroy(_skinSprite);
-            if (_clanSprite != null) Object.Destroy(_clanSprite);
+            if (_skinSprite != null)
+            {
+                Object.Destroy(_skinSprite);
+            }
+
+            if (_clanSprite != null)
+            {
+                Object.Destroy(_clanSprite);
+            }
+
             ClearTentacles();
         }
 
@@ -577,9 +611,9 @@ namespace Fodinae.Scripts.Game
 
                 Vector3 lastPos = rootPosition;
                 float angleRad = rotationAngle * Mathf.Deg2Rad;
-                Vector3 baseOffset = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0) * -0.2f * movementFactor;
+                Vector3 baseOffset = -0.2f * movementFactor * new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
                 float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
-                baseOffset += new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0) * 0.15f * movementFactor;
+                baseOffset += 0.15f * movementFactor * new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0);
 
                 Vector3 targetPos = rootPosition + baseOffset;
 
@@ -589,27 +623,35 @@ namespace Fodinae.Scripts.Game
                     _positions[i] = Vector3.SmoothDamp(_positions[i], targetPos, ref _velocities[i], SMOOTH_TIME, 50f, deltaTime);
 
                     // Wiggle logic
-                    float wiggle = Mathf.Sin(Time.time * 15f + i * 1.5f + _wiggleOffset) * 0.1f * movementFactor;
+                    float wiggle = Mathf.Sin((Time.time * 15f) + (i * 1.5f) + _wiggleOffset) * 0.1f * movementFactor;
                     Vector3 direction = (_positions[i] - lastPos).normalized;
                     if (direction == Vector3.zero)
                     {
                         // Default to pointing backwards from the robot's rotation
                         direction = new Vector3(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0);
                     }
+
                     Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0);
 
-                    _line.SetPosition(i, _positions[i] + perpendicular * wiggle);
+                    _line.SetPosition(i, _positions[i] + (perpendicular * wiggle));
 
                     // Set target for next segment (moving further along the chain)
                     lastPos = _positions[i];
-                    targetPos = _positions[i] + direction * MAX_SEGMENT_DIST * movementFactor;
+                    targetPos = _positions[i] + (MAX_SEGMENT_DIST * movementFactor * direction);
                 }
             }
 
             public void Destroy()
             {
-                if (_line != null) Object.Destroy(_line.gameObject);
-                if (_material != null) Object.Destroy(_material);
+                if (_line != null)
+                {
+                    Object.Destroy(_line.gameObject);
+                }
+
+                if (_material != null)
+                {
+                    Object.Destroy(_material);
+                }
             }
         }
     }

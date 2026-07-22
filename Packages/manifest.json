@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.fmod.fmod-for-unity-2-03": "2.3.14",
     "com.gamelovers.mcp-unity": "file:com.gamelovers.mcp-unity",
     "com.netpyoung.webp": "https://github.com/netpyoung/unity.webp.git?path=unity_project/Assets/unity.webp",
     "com.unity.2d.animation": "15.1.0",
