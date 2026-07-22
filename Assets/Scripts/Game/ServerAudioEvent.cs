@@ -303,7 +303,7 @@ namespace Fodinae.Scripts.Game
 
             if (_targetBotId != 0 && _gameObject != null)
             {
-                var targetBot = RobotManager.InstanceIfExists != null ? RobotManager.InstanceIfExists.GetOrCreateRobot(_targetBotId) : null;
+                var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle + 180f);
@@ -442,7 +442,7 @@ namespace Fodinae.Scripts.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = RobotManager.InstanceIfExists != null ? RobotManager.InstanceIfExists.GetOrCreateRobot(_targetBotId) : null;
+                    var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -507,11 +507,7 @@ namespace Fodinae.Scripts.Game
 
             if (_slot != null)
             {
-                if (VFXPool.Instance != null)
-                {
-                    VFXPool.Instance.Release(_slot);
-                }
-
+                VFXPool.Instance?.Release(_slot);
                 _slot = null;
             }
 

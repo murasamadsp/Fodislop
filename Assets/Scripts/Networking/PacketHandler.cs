@@ -631,8 +631,6 @@ namespace Fodinae.Scripts.Networking
             PlayerStatsModel.Instance.AddStatusLine(packet.Tag, packet.Text.ToArray(), unityColor, packet.BlinkRate, expiry);
         }
 
-
-
         private void HandleClearStatusLine(ClearStatusLinePacket packet)
         {
             _packetCount++;
