@@ -2,8 +2,10 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-public class ExportSprites : EditorWindow
+namespace Fodinae.Editor
 {
+    public class ExportSprites : EditorWindow
+    {
     [MenuItem("Tools/Export Sprites to PNG")]
     private static void ExportSelectedSpriteToPNG()
     {
@@ -68,4 +70,5 @@ public class ExportSprites : EditorWindow
 
         Debug.Log($"Exported {exportedCount} sprite(s) to {outputDir}");
     }
+}
 }

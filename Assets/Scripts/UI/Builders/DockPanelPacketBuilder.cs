@@ -34,7 +34,7 @@ namespace Fodinae.Scripts.UI.Builders
             parent.style.flexDirection = FlexDirection.Column;
             parent.style.flexGrow = 0;
 
-            var lastChild = children.LastOrDefault(c => c.AttachedProperties?.All(p => p.Key != "DockPanel.Dock") ?? true);
+            var lastChild = children.LastOrDefault(c => c.AttachedProperties == null || c.AttachedProperties.All(p => p.Key != "DockPanel.Dock"));
             VisualElement current;
             if (lastChild != null)
             {

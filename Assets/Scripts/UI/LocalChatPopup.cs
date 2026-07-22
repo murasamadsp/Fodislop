@@ -189,7 +189,6 @@ namespace Fodinae.Scripts.UI
                     text = text.Substring(0, ServerConfig.Instance.MaxLocalChatLength);
                 }
 
-                var ns = Networking.NetworkService.Instance;
                 Networking.NetworkService.Send(new SendLocalChatMessagePacket(text));
             }
 

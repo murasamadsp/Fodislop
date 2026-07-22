@@ -117,7 +117,6 @@ namespace Fodinae.Editor
                 long totalChunks = (long)_chunksW * _chunksH;
                 int chunkArea = _chunkSize * _chunkSize;
                 long cellsFileSize = new FileInfo(cellsPath).Length;
-                long roadFileSize = new FileInfo(roadPath).Length;
                 long expectedFileSize = totalChunks * chunkArea;
 
                 if (cellsFileSize < expectedFileSize)
