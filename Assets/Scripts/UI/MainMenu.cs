@@ -128,8 +128,8 @@ namespace Fodinae.Scripts
             }
 
             // Рисуем белый круг в центре
-            const int centerX = width / 2;
-            const int centerY = height / 2;
+            const int CENTER_X = width / 2;
+            const int CENTER_Y = height / 2;
             const int radius = 150;
 
             for (int y = -radius; y < radius; y++)
@@ -138,8 +138,8 @@ namespace Fodinae.Scripts
                 {
                     if ((x * x) + (y * y) < radius * radius)
                     {
-                        int px = centerX + x;
-                        int py = centerY + y;
+                        int px = CENTER_X + x;
+                        int py = CENTER_Y + y;
                         if (px >= 0 && px < width && py >= 0 && py < height)
                         {
                             pixels[(py * width) + px] = Color.white;

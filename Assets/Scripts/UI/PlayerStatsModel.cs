@@ -104,9 +104,7 @@ namespace Fodinae.Scripts.UI
         public event Action OnCurrencyChanged;
         public event Action OnGeologyChanged;
         public event Action OnLevelChanged;
-#pragma warning disable CS0067 // Зарезервировано для UI нотификаций при смене ника??? это че... нанейрослопило.... нужно ли? или мем?
         public event Action OnNicknameChanged;
-#pragma warning restore CS0067
         public event Action OnBasketChanged;
         public event Action<SkillType, long, long> OnSkillProgress;
         public event Action OnDailyBonusChanged;
@@ -124,6 +122,7 @@ namespace Fodinae.Scripts.UI
         public void SetNickname(string nickname)
         {
             Nickname = nickname;
+            OnNicknameChanged?.Invoke();
             OnStatsChanged?.Invoke();
         }
 

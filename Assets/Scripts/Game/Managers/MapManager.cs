@@ -315,7 +315,7 @@ namespace Fodinae.Scripts.Game.Managers
         public int GetAnimationFrameHeight(CellType cellType)
         {
             var config = GetCellConfig(cellType);
-            return (int)config.FrameOffset * RenderingConstants.CellSize;
+            return (int)config.FrameOffset * RenderingConstants.CELL_SIZE;
         }
 
         public byte GetAnimationSpeed(CellType cellType)
@@ -371,7 +371,7 @@ namespace Fodinae.Scripts.Game.Managers
             if (MapStorage.Instance.IsReady && MapStorage.Instance.CellLayer != null)
             {
                 var layer = MapStorage.Instance.CellLayer;
-                int chunkSize = layer.ChunkSize;
+                int CHUNK_SIZE = layer.ChunkSize;
                 var loaded = layer.GetLoadedChunkIndices();
 
                 foreach (int index in loaded)
@@ -379,10 +379,10 @@ namespace Fodinae.Scripts.Game.Managers
                     int cy = index % layer.HeightChunks;
                     int cx = index / layer.HeightChunks;
 
-                    float unityY = (cy * chunkSize) + (chunkSize * 0.5f);
-                    Vector3 chunkPos = new Vector3((cx * chunkSize) + (chunkSize * 0.5f), unityY, 0);
+                    float unityY = (cy * CHUNK_SIZE) + (CHUNK_SIZE * 0.5f);
+                    Vector3 chunkPos = new Vector3((cx * CHUNK_SIZE) + (CHUNK_SIZE * 0.5f), unityY, 0);
 
-                    Fodinae.Scripts.World.FodinaeGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f),
+                    Fodinae.Scripts.World.FodinaeGizmos.DrawSolidRect(chunkPos, new Vector2(CHUNK_SIZE - 0.2f, CHUNK_SIZE - 0.2f),
                         new Color(0, 1, 0, 0.02f), new Color(0, 1, 0, 0.1f));
                 }
 
@@ -394,7 +394,7 @@ namespace Fodinae.Scripts.Game.Managers
                 if (cam != null && Application.isPlaying)
                 {
                     Vector3 camPos = cam.transform.position;
-                    const int range = GameConstants.Debug.COLLISIONDEBUGRANGE;
+                    const int range = GameConstants.Debug.COLLISION_DEBUG_RANGE;
                     int startX = Mathf.FloorToInt(camPos.x) - range;
                     int startY = Mathf.FloorToInt(camPos.y) - range;
 

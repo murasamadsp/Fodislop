@@ -23,9 +23,9 @@ csharp_indent_case_contents = true
 csharp_space_after_cast = false
 csharp_prefer_braces = true
 
-# Использование var
+# Использование var (не заставляемvar на int/float/string/bool примитивах)
 dotnet_style_predefined_type_for_member_access_keyword_state = true:suggestion
-csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_for_built_in_types = false:silent
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = true:silent
 
@@ -50,24 +50,26 @@ dotnet_naming_symbols.interface_symbols.applicable_accessibilities = *
 dotnet_naming_style.begun_with_i_style.required_prefix = I
 dotnet_naming_style.begun_with_i_style.capitalization = pascal_case
 
-# Приватные/защищенные поля должны начинаться с _ и быть camelCase (_camelCase)
+# Приватные/защищенные поля (НЕ константы) должны начинаться с _ и быть camelCase (_camelCase)
 dotnet_naming_rule.private_members_with_underscore.severity = suggestion
 dotnet_naming_rule.private_members_with_underscore.symbols = private_fields
 dotnet_naming_rule.private_members_with_underscore.style = prefix_underscore
 
 dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private, protected
+dotnet_naming_symbols.private_fields.disabled_modifiers = const
 
 dotnet_naming_style.prefix_underscore.required_prefix = _
 dotnet_naming_style.prefix_underscore.capitalization = camel_case
 
-# Публичные/внутренние поля должны быть PascalCase
+# Публичные/внутренние поля (НЕ константы) должны быть PascalCase
 dotnet_naming_rule.public_fields_should_be_pascal_case.severity = suggestion
 dotnet_naming_rule.public_fields_should_be_pascal_case.symbols = public_fields
 dotnet_naming_rule.public_fields_should_be_pascal_case.style = pascal_case_style
 
 dotnet_naming_symbols.public_fields.applicable_kinds = field
 dotnet_naming_symbols.public_fields.applicable_accessibilities = public, internal, friend
+dotnet_naming_symbols.public_fields.disabled_modifiers = const
 
 dotnet_naming_style.pascal_case_style.capitalization = pascal_case
 
@@ -93,11 +95,16 @@ dotnet_diagnostic.SA1633.severity = none   # Нет file header
 dotnet_diagnostic.SA1101.severity = none   # Не требуем this. prefix
 dotnet_diagnostic.SA1200.severity = none   # using вне namespace — ок
 dotnet_diagnostic.SA1309.severity = none   # _underscore поля разрешены
+dotnet_diagnostic.SA1310.severity = none   # Разрешить подчёркивания (_) в названиях полей и констант
+dotnet_diagnostic.SA1108.severity = none   # Block statements with embedded comments
+dotnet_diagnostic.SA1117.severity = none   # Parameter placement on same line
+dotnet_diagnostic.SA1316.severity = none   # Tuple element names casing
+dotnet_diagnostic.SA1414.severity = none   # Tuple types signature element names
 dotnet_diagnostic.SA1512.severity = none   # Одиночный комментарий разрешён
-dotnet_diagnostic.SA1516.severity = none   # Пустые строки между элементами — не обязательны
+dotnet_diagnostic.SA1516.severity = none   # Пустые строки между элементами не обязательны
 dotnet_diagnostic.SA1600.severity = none   # XML-доки не обязательны
-dotnet_diagnostic.SA1601.severity = none   # XML-доки на partial — не обязательны
-dotnet_diagnostic.SA1602.severity = none   # XML-доки на enum — не обязательны
+dotnet_diagnostic.SA1601.severity = none
+dotnet_diagnostic.SA1602.severity = none
 dotnet_diagnostic.SA1604.severity = none
 dotnet_diagnostic.SA1611.severity = none
 dotnet_diagnostic.SA1615.severity = none
@@ -105,17 +112,10 @@ dotnet_diagnostic.SA1618.severity = none
 dotnet_diagnostic.SA1623.severity = none
 dotnet_diagnostic.SA1642.severity = none
 dotnet_diagnostic.SA1643.severity = none
+dotnet_diagnostic.SA1649.severity = none   # Имя файла не обязано совпадать с первым типом
 
 # ── Линтер: NetAnalyzers (CA) ─────────────────────────────────────────────
 dotnet_diagnostic.CA1062.severity = none   # Unity объекты — null уже гарантирует движок
-dotnet_diagnostic.SA1316.severity = none   # Tuple element names casing
-dotnet_diagnostic.SA1414.severity = none   # Tuple types signature element names
-dotnet_diagnostic.SA1117.severity = none   # Parameter placement on same line
-dotnet_diagnostic.SA1649.severity = none   # Filename must match first type name
-dotnet_diagnostic.SA1108.severity = none   # Block statements with embedded comments
-dotnet_diagnostic.UNT0017.severity = none   # SetPixels vs SetPixels32
-dotnet_diagnostic.UNT0008.severity = none   # Unity null propagation check (handled in other ways)
-dotnet_diagnostic.UNT0007.severity = none   # Unity null coalescing check
 dotnet_diagnostic.CA1303.severity = none   # Не локализуем строки
 dotnet_diagnostic.CA1304.severity = none
 dotnet_diagnostic.CA1305.severity = none
@@ -135,58 +135,18 @@ dotnet_diagnostic.CA1822.severity = warning  # Метод может быть st
 dotnet_diagnostic.RCS1036.severity = warning  # Лишние пустые строки
 dotnet_diagnostic.RCS1037.severity = warning  # Trailing whitespace в комментарии
 dotnet_diagnostic.RCS1118.severity = warning  # Неиспользуемый параметр
-dotnet_diagnostic.RCS1138.severity = none     # XML-доки — не обязательны
+dotnet_diagnostic.RCS1138.severity = none     # XML-доки не обязательны
 dotnet_diagnostic.RCS1139.severity = none
 
 # ── Линтер: Unity Analyzers (UNT) ────────────────────────────────────────
-# Type Safety
-dotnet_diagnostic.UNT0003.severity = warning  # Не-generic GetComponent
-dotnet_diagnostic.UNT0006.severity = warning  # Некорректная сигнатура Message
-dotnet_diagnostic.UNT0010.severity = warning  # new Component() вместо AddComponent
-dotnet_diagnostic.UNT0011.severity = warning  # new ScriptableObject() вместо CreateInstance
-dotnet_diagnostic.UNT0013.severity = warning  # Невалидный SerializeField
-dotnet_diagnostic.UNT0014.severity = warning  # GetComponent с не-Component типом
-dotnet_diagnostic.UNT0016.severity = warning  # nameof() вместо строки для методов
-dotnet_diagnostic.UNT0039.severity = warning  # Требовать RequireComponent
-
-# Correctness
-dotnet_diagnostic.UNT0004.severity = warning  # Time.fixedDeltaTime в Update
-dotnet_diagnostic.UNT0007.severity = warning  # Null-coalescing на Unity-объектах (ломает fake-null)
-dotnet_diagnostic.UNT0008.severity = warning  # Null-propagation на Unity-объектах
-dotnet_diagnostic.UNT0012.severity = warning  # Неиспользуемый return coroutine
-dotnet_diagnostic.UNT0020.severity = warning  # MenuItem на не-static методе
-dotnet_diagnostic.UNT0023.severity = warning  # ??= на Unity-объектах
-dotnet_diagnostic.UNT0025.severity = warning  # Input.GetKey с KeyCode вместо string
-dotnet_diagnostic.UNT0029.severity = warning  # Pattern matching с null на Unity-объектах
-dotnet_diagnostic.UNT0030.severity = warning  # Destroy на Transform вместо GameObject
-dotnet_diagnostic.UNT0031.severity = warning  # Asset-операции в LoadAttribute
-dotnet_diagnostic.UNT0033.severity = warning  # Неправильный регистр message
-dotnet_diagnostic.UNT0040.severity = warning  # isStatic — editor-only
-
-# Performance
-dotnet_diagnostic.UNT0001.severity = warning  # Пустой Update()
-dotnet_diagnostic.UNT0002.severity = warning  # tag == "..." → CompareTag()
-dotnet_diagnostic.UNT0017.severity = warning  # SetPixels медленный
-dotnet_diagnostic.UNT0018.severity = warning  # Рефлексия в горячих методах
-dotnet_diagnostic.UNT0019.severity = warning  # gameObject.gameObject
-dotnet_diagnostic.UNT0022.severity = warning  # position + rotation раздельно → SetPositionAndRotation
-dotnet_diagnostic.UNT0024.severity = warning  # Векторные операции → скалярные
-dotnet_diagnostic.UNT0026.severity = warning  # GetComponent всегда аллоцирует
-dotnet_diagnostic.UNT0028.severity = warning  # Не-аллоцирующие физикс-API
-dotnet_diagnostic.UNT0032.severity = warning  # localPosition + localRotation раздельно
-dotnet_diagnostic.UNT0036.severity = warning  # get position + get rotation раздельно
-dotnet_diagnostic.UNT0037.severity = warning  # get localPosition + get localRotation раздельно
-dotnet_diagnostic.UNT0038.severity = warning  # Кешировать new WaitForSeconds()
-dotnet_diagnostic.UNT0041.severity = warning  # Animator.StringToHash вместо строк
-
-# Readability
-dotnet_diagnostic.UNT0034.severity = suggestion  # Vector3 → Vector2
-dotnet_diagnostic.UNT0035.severity = suggestion  # Vector2 → Vector3
-
-# Message protection
-dotnet_diagnostic.UNT0021.severity = warning  # Unity-сообщения должны быть protected
-# Retired / intentionally disabled
+# Исключения и кастомные переопределения для Unity
 dotnet_diagnostic.UNT0005.severity = none     # [retired] Time.deltaTime в FixedUpdate
+dotnet_diagnostic.UNT0007.severity = none     # Unity null coalescing check
+dotnet_diagnostic.UNT0008.severity = none     # Unity null propagation check
+dotnet_diagnostic.UNT0017.severity = none     # SetPixels vs SetPixels32
+dotnet_diagnostic.UNT0021.severity = none     # Unity-сообщения (Start, Awake) не обязаны быть protected
+dotnet_diagnostic.UNT0034.severity = none     # Vector3 -> Vector2 не спамить подсказкой
+dotnet_diagnostic.UNT0035.severity = none     # Vector2 -> Vector3 не спамить подсказкой
 dotnet_diagnostic.UNT0042.severity = none     # Mesh array access in loop — слишком шумно
 dotnet_diagnostic.UNT0043.severity = warning  # Опечатка в conditional compilation symbol
 

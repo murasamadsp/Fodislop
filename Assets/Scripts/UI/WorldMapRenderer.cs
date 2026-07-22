@@ -178,9 +178,9 @@ namespace Fodinae.Scripts.UI
 
         private void InitTexture()
         {
-            const int baseRes = 512;
-            _texHeight = baseRes;
-            _texWidth = Mathf.RoundToInt(baseRes * ((float)Screen.width / Screen.height));
+            const int BASE_RES = 512;
+            _texHeight = BASE_RES;
+            _texWidth = Mathf.RoundToInt(BASE_RES * ((float)Screen.width / Screen.height));
             _mapTexture = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
             _mapTexture.filterMode = FilterMode.Point;
             _mapTexture.wrapMode = TextureWrapMode.Clamp;

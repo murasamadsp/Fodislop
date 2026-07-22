@@ -18,7 +18,7 @@ namespace Fodinae.Scripts.World
         /// </summary>
         public static WorldBackgroundSetup GetBackgroundSetup()
         {
-            return _instance != null ? _instance._backgroundSetup : null;
+            return _instance?._backgroundSetup;
         }
 
         /// <summary>

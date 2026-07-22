@@ -28,7 +28,7 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.Scripts.Networking
 {
-    public class PacketHandler : MonoBehaviour
+    public partial class PacketHandler : MonoBehaviour
     {
         public static PacketHandler Instance { get; private set; }
 
@@ -234,131 +234,6 @@ namespace Fodinae.Scripts.Networking
             }
 
             Debug.Log($"[PacketHandler] Destroyed - processed {_packetCount} total packets ({_worldInitPacketsReceived} WorldInit, {_mapRegionPacketsReceived} MapRegion)");
-        }
-
-        private void HandleOpenWindowPacket(OpenWindowPacket packet)
-        {
-            _packetCount++;
-            Debug.Log($"[PacketHandler] Handling OpenWindowPacket: {packet.WindowTag}");
-
-            if (_uiDocument == null)
-            {
-                _uiDocument = FindAnyObjectByType<UIDocument>();
-                if (_uiDocument == null)
-                {
-                    Debug.LogError("[PacketHandler] Cannot open window: UIDocument not found");
-                    return;
-                }
-            }
-
-            var builder = new PacketUIBuilder();
-            var element = builder.Build(packet.Content);
-
-            element.style.width = packet.Width;
-            element.style.height = packet.Height;
-            element.style.position = Position.Absolute;
-            element.style.left = new Length(50, LengthUnit.Percent);
-            element.style.top = new Length(50, LengthUnit.Percent);
-            element.style.translate = new Translate(new Length(-50, LengthUnit.Percent), new Length(-50, LengthUnit.Percent));
-
-            _uiDocument.rootVisualElement.Add(element);
-
-            // Set up SmartFormat binding for this window
-            var binding = new WindowBinding();
-            binding.Bind(element);
-
-            // Register clickable elements via DFS traversal
-            var clickableElements = RegisterClickableElements(element, packet.WindowTag);
-
-            var windowIndex = _openWindows.Count;
-            _openWindows.Add((packet.WindowTag, element, binding, clickableElements));
-            Debug.Log($"[PacketHandler] Window '{packet.WindowTag}' opened with {clickableElements.Count} clickable elements (window index {windowIndex})");
-        }
-
-        /// <summary>
-        /// DFS-traverses the window VisualElement tree and registers all clickable elements.
-        /// A clickable element is one whose userData contains an IGUIComponentPacket with non-empty OnClickContext.
-        /// </summary>
-        private List<VisualElement> RegisterClickableElements(VisualElement windowRoot, string windowTag)
-        {
-            var clickableElements = new List<VisualElement>();
-            WalkForClickable(windowRoot, clickableElements, windowTag);
-            return clickableElements;
-        }
-
-        private void WalkForClickable(VisualElement element, List<VisualElement> clickableElements, string windowTag)
-        {
-            // Check if this element is clickable
-            if (element.userData is IGUIComponentPacket componentPacket &&
-                !string.IsNullOrEmpty(componentPacket.OnClickContext))
-            {
-                var elementIndex = clickableElements.Count;
-                clickableElements.Add(element);
-                WireClickHandler(element, elementIndex, windowTag);
-            }
-
-            foreach (var child in element.Children())
-            {
-                WalkForClickable(child, clickableElements, windowTag);
-            }
-        }
-
-        private void WireClickHandler(VisualElement element, int elementIndex, string windowTag)
-        {
-            element.RegisterCallback<ClickEvent>(_ => HandleElementClick(element, elementIndex, windowTag));
-        }
-
-        private void HandleElementClick(VisualElement clickedElement, int elementIndex, string windowTag)
-        {
-            // Find the window data for this window tag
-            var windowEntry = _openWindows.FirstOrDefault(w => w.tag == windowTag);
-            if (windowEntry == default)
-            {
-                Debug.LogWarning($"[PacketHandler] Cannot handle element click: window '{windowTag}' not found");
-                return;
-            }
-
-            var (_, windowRoot, _, _) = windowEntry;
-
-            // Get the click context from the element's packet data
-            if (clickedElement.userData is not IGUIComponentPacket componentPacket)
-            {
-                Debug.LogWarning("[PacketHandler] Clicked element has no IGUIComponentPacket userData");
-                return;
-            }
-
-            var clickContext = componentPacket.OnClickContext;
-            Debug.Log($"[PacketHandler] Element click: index={elementIndex}, context='{clickContext}', window='{windowTag}'");
-
-            // Resolve the root element for input traversal
-            var inputRoot = ClickContextResolver.ResolveRoot(clickedElement, windowRoot, clickContext);
-
-            // Collect all input control values from the resolved root
-            var inputValues = ClickContextResolver.CollectInputValues(inputRoot);
-
-            // Send the ElementClickPacket
-            var elementClickPacket = new ElementClickPacket(windowTag, elementIndex, inputValues);
-            NetworkService.Send(elementClickPacket);
-
-            Debug.Log($"[PacketHandler] Sent ElementClickPacket: index={elementIndex}, contextValues={inputValues.Length}");
-        }
-
-        private void HandleCloseWindowPacket(CloseWindowPacket packet)
-        {
-            _packetCount++;
-            Debug.Log("[PacketHandler] Handling CloseWindowPacket");
-
-            _modalWindowHandler?.Hide();
-
-            if (_openWindows.Count == 0)
-            {
-                return;
-            }
-
-            var (_, root, binding, _) = _openWindows[^1];
-            binding.Dispose();
-            _uiDocument.rootVisualElement.Remove(root);
-            _openWindows.RemoveAt(_openWindows.Count - 1);
         }
 
         private void HandleRobotInfoPacket(RobotInfoPacket packet)
@@ -756,19 +631,7 @@ namespace Fodinae.Scripts.Networking
             PlayerStatsModel.Instance.AddStatusLine(packet.Tag, packet.Text.ToArray(), unityColor, packet.BlinkRate, expiry);
         }
 
-        private void HandleModalWindowPacket(ModalWindowPacket packet)
-        {
-            _packetCount++;
-            Debug.Log("[PacketHandler] Handling ModalWindowPacket");
 
-            if (_modalWindowHandler == null)
-            {
-                Debug.LogError("[PacketHandler] ModalWindowHandler not initialized");
-                return;
-            }
-
-            _modalWindowHandler.Show(packet);
-        }
 
         private void HandleClearStatusLine(ClearStatusLinePacket packet)
         {

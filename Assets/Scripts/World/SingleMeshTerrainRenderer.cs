@@ -15,7 +15,7 @@ namespace Fodinae.Scripts.World
     [RequireComponent(typeof(MeshRenderer))]
     [DefaultExecutionOrder(100)]
     [ExecuteAlways]
-    public class SingleMeshTerrainRenderer : MonoBehaviour
+    public partial class SingleMeshTerrainRenderer : MonoBehaviour
     {
         [Header("Configuration")]
         [SerializeField]
@@ -47,7 +47,7 @@ namespace Fodinae.Scripts.World
         // Mesh update flags to skip validation on every frame upload.
         // DontRecalculateBounds is omitted because _mesh.Clear() resets bounds to zero,
         // which would cause the mesh to be frustum-culled. Bounds must auto-recalculate.
-        private const MeshUpdateFlags UploadFlags =
+        private const MeshUpdateFlags UPLOAD_FLAGS =
             MeshUpdateFlags.DontValidateIndices;
 
         private Material[] _materials = Array.Empty<Material>();
@@ -270,7 +270,7 @@ namespace Fodinae.Scripts.World
             }
 
             // Apply hardcoded world darkness factor globally (not player-configurable)
-            Shader.SetGlobalFloat("_DarknessFactor", GameConstants.World.WorldDarknessFactor);
+            Shader.SetGlobalFloat("_DarknessFactor", GameConstants.World.WORLD_DARKNESS_FACTOR);
         }
 
         private void OnTextureLoaded(string filename, Texture2D texture)
@@ -457,9 +457,9 @@ namespace Fodinae.Scripts.World
                 AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
                 AtlasRect = atlasRect,
                 AtlasIndex = atlasIndex,
-                UVTileSize = (atlases.Count > atlasIndex) ? (float)RenderingConstants.CellSize / atlases[atlasIndex].Size : 0,
+                UVTileSize = (atlases.Count > atlasIndex) ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size : 0,
                 AnimationFrameCount = frameCount,
-                FrameHeightTiles = (float)frameSize / RenderingConstants.CellSize,
+                FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
                 IsTextureReady = atlasRect.z > 0.0001f
             };
             _metadataCache[type] = meta;
@@ -1919,7 +1919,7 @@ namespace Fodinae.Scripts.World
 
             // Single interleaved vertex buffer upload replaces 7 separate SetVertices/SetUVs/SetColors calls.
             _mesh.SetVertexBufferParams(_vertexBuffer.Length, VertexLayout);
-            _mesh.SetVertexBufferData(_vertexBuffer, 0, 0, _vertexBuffer.Length, 0, UploadFlags);
+            _mesh.SetVertexBufferData(_vertexBuffer, 0, 0, _vertexBuffer.Length, 0, UPLOAD_FLAGS);
 
             // SetVertexBufferData does NOT recalculate bounds (unlike SetVertices).
             // Without this explicit call, the mesh has zero bounds and is frustum-culled.
@@ -2061,7 +2061,7 @@ namespace Fodinae.Scripts.World
             // Single interleaved upload. Vertex count and topology are unchanged,
             // so we use DontRecalculateBounds (bounds are still valid from the
             // previous full rebuild — only a few border cells changed).
-            _mesh.SetVertexBufferData(_vertexBuffer, 0, 0, _vertexBuffer.Length, 0, UploadFlags | MeshUpdateFlags.DontRecalculateBounds);
+            _mesh.SetVertexBufferData(_vertexBuffer, 0, 0, _vertexBuffer.Length, 0, UPLOAD_FLAGS | MeshUpdateFlags.DontRecalculateBounds);
 
             // SetIndices is NOT called here — the index buffer from the previous full
             // rebuild remains valid because FillQuadData always adds indices for every

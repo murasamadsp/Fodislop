@@ -43,8 +43,8 @@ namespace Fodinae.Scripts.UI
         private float _lastUpdateTime;
         private bool _ready;
 
-        private const int TextureSize = GameConstants.UI.MINIMAPWIDTH; // 128
-        private const float UpdateDelay = 0.1f; // 10 FPS — sufficient for minimap
+        private const int TEXTURE_SIZE = GameConstants.UI.MINIMAP_WIDTH; // 128
+        private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
 
         private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
         private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
@@ -64,13 +64,13 @@ namespace Fodinae.Scripts.UI
 
             CacheCellColors();
 
-            _minimapTexture = new Texture2D(TextureSize, TextureSize, TextureFormat.RGBA32, false)
+            _minimapTexture = new Texture2D(TEXTURE_SIZE, TEXTURE_SIZE, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp,
             };
 
-            _pixelColors = new Color32[TextureSize * TextureSize];
+            _pixelColors = new Color32[TEXTURE_SIZE * TEXTURE_SIZE];
 
             CreateUI();
 
@@ -227,7 +227,7 @@ namespace Fodinae.Scripts.UI
             }
 
             float now = Time.time;
-            if (now - _lastUpdateTime >= UpdateDelay)
+            if (now - _lastUpdateTime >= UPDATE_DELAY)
             {
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
@@ -237,10 +237,9 @@ namespace Fodinae.Scripts.UI
 
         private void RefreshTexture(int playerX, int playerY)
         {
-            const int halfSize = TextureSize / 2;
-            int minX = playerX - halfSize;
-            int minY = playerY - halfSize;
-            const int texSize = TextureSize;
+            const int HALF_SIZE = TEXTURE_SIZE / 2;
+            int minX = playerX - HALF_SIZE;
+            const int TEX_SIZE = TEXTURE_SIZE;
             Color32[] colors = _pixelColors;
             Dictionary<CellType, Color32> cellColors = _cellColors;
             Dictionary<int, CellType[]> cache = _chunkCache;
@@ -248,16 +247,16 @@ namespace Fodinae.Scripts.UI
 
             int index = 0;
 
-            for (int texY = 0; texY < texSize; texY++)
+            for (int texY = 0; texY < TEX_SIZE; texY++)
             {
                 // texY = 0 is bottom of screen (deeper underground, larger Server Y)
-                // texY = texSize - 1 is top of screen (towards surface, smaller Server Y)
-                int serverY = playerY + halfSize - texY;
+                // texY = TEX_SIZE - 1 is top of screen (towards surface, smaller Server Y)
+                int serverY = playerY + HALF_SIZE - texY;
 
                 if (serverY < 0 || serverY >= _worldHeight)
                 {
                     // Entire row is out of bounds
-                    int end = index + texSize;
+                    int end = index + TEX_SIZE;
                     while (index < end)
                     {
                         colors[index++] = OutOfBoundsColor;
@@ -270,7 +269,7 @@ namespace Fodinae.Scripts.UI
                 int chunkY = serverY / _chunkSize;
                 int localY = serverY % _chunkSize;
 
-                for (int texX = 0; texX < texSize; texX++)
+                for (int texX = 0; texX < TEX_SIZE; texX++)
                 {
                     int serverX = minX + texX;
 
@@ -303,12 +302,12 @@ namespace Fodinae.Scripts.UI
             }
 
             // Draw player marker (plus sign)
-            const int cx = halfSize;
-            colors[(cx * texSize) + cx - 1] = MarkerColor;
-            colors[(cx * texSize) + cx] = CenterColor;
-            colors[(cx * texSize) + cx + 1] = MarkerColor;
-            colors[((cx - 1) * texSize) + cx] = MarkerColor;
-            colors[((cx + 1) * texSize) + cx] = MarkerColor;
+            const int cx = HALF_SIZE;
+            colors[(cx * TEX_SIZE) + cx - 1] = MarkerColor;
+            colors[(cx * TEX_SIZE) + cx] = CenterColor;
+            colors[(cx * TEX_SIZE) + cx + 1] = MarkerColor;
+            colors[((cx - 1) * TEX_SIZE) + cx] = MarkerColor;
+            colors[((cx + 1) * TEX_SIZE) + cx] = MarkerColor;
 
             _minimapTexture.SetPixels32(colors);
             _minimapTexture.Apply(true); // Async GPU upload — non-blocking

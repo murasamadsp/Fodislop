@@ -74,7 +74,7 @@ namespace Fodinae.Scripts.Game
             }
 
             // Use central PIXELS_PER_UNIT for consistency
-            _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PixelsPerUnit);
+            _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
             _spriteRenderer.sprite = _packSprite;
 
             UpdateClanPosition();
@@ -118,8 +118,8 @@ namespace Fodinae.Scripts.Game
             }
 
             // Position to the right and slightly below the center
-            float packWidth = _packSprite != null ? _packSprite.texture.width : RenderingConstants.PixelsPerUnit;
-            float xOffset = (packWidth / (RenderingConstants.PixelsPerUnit * 2)) + 0.1f; // Right edge + 0.1 gap
+            float packWidth = _packSprite != null ? _packSprite.texture.width : RenderingConstants.PIXELS_PER_UNIT;
+            float xOffset = (packWidth / (RenderingConstants.PIXELS_PER_UNIT * 2)) + 0.1f; // Right edge + 0.1 gap
             _clanRenderer.transform.localPosition = new Vector3(xOffset, -0.5f, 0);
         }
 

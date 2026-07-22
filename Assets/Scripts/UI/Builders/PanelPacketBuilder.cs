@@ -11,7 +11,7 @@ namespace Fodinae.Scripts.UI.Builders
     {
         public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
-            if (packet is not PanelPacket panelPacket)
+            if (packet is not PanelPacket)
             {
                 return null;
             }

@@ -99,8 +99,8 @@ namespace MG.GIF
             DisposalMask = 0x0C,
         }
 
-        private const uint NoCode = 0xFFFF;
-        private const ushort NoTransparency = 0xFFFF;
+        private const uint NO_CODE = 0xFFFF;
+        private const ushort NO_TRANSPARENCY = 0xFFFF;
 
         private readonly int[] pow2 = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096 };
 
@@ -134,7 +134,7 @@ namespace MG.GIF
         private IntPtr curBlockHandle;
         private uint* pCurBlock;
 
-        private const int MaxCodes = 4096;
+        private const int MAX_CODES = 4096;
         private IntPtr indicesHandle;
         private ushort** pIndicies;
 #else
@@ -160,7 +160,7 @@ namespace MG.GIF
             this.curBlockHandle = Marshal.AllocHGlobal(64 * sizeof(uint));
             this.pCurBlock = (uint*)this.curBlockHandle.ToPointer();
 
-            this.indicesHandle = Marshal.AllocHGlobal(MaxCodes * sizeof(ushort*));
+            this.indicesHandle = Marshal.AllocHGlobal(MAX_CODES * sizeof(ushort*));
             this.pIndicies = (ushort**)this.indicesHandle.ToPointer();
         }
 
@@ -195,7 +195,7 @@ namespace MG.GIF
 
             this.globalColourTable = new Color32[256];
             this.localColourTable = new Color32[256];
-            this.transparentIndex = NoTransparency;
+            this.transparentIndex = NO_TRANSPARENCY;
             this.output = null;
             this.previousImage = null;
 
@@ -403,7 +403,7 @@ namespace MG.GIF
             }
             else
             {
-                this.transparentIndex = NoTransparency;
+                this.transparentIndex = NO_TRANSPARENCY;
             }
 
             // dispose of current image
@@ -577,7 +577,7 @@ namespace MG.GIF
 
                     // LZW decode loop
 
-                    uint previousCode = NoCode;   // last code processed
+                    uint previousCode = NO_CODE;   // last code processed
                     uint mask = (uint)(nextSize - 1); // mask out code bits
                     uint shiftRegister = 0;        // shift register holds the bytes coming in from the input stream, we shift down by the number of bits
 
@@ -666,7 +666,7 @@ namespace MG.GIF
                             pCodesEnd = &this.pCodes[numCodes * 2];
 
                             // clear previous code
-                            previousCode = NoCode;
+                            previousCode = NO_CODE;
                             mask = (uint)(nextSize - 1);
 
                             continue;
@@ -685,7 +685,7 @@ namespace MG.GIF
                             // write existing code
                             pCodePos = this.pIndicies[curCode];
                         }
-                        else if (previousCode != NoCode)
+                        else if (previousCode != NO_CODE)
                         {
                             // write previous code
                             pCodePos = this.pIndicies[previousCode];
@@ -750,7 +750,7 @@ namespace MG.GIF
 
                         // create new code
 
-                        if (previousCode != NoCode && numCodes != MaxCodes)
+                        if (previousCode != NO_CODE && numCodes != MAX_CODES)
                         {
                             // get previous code from buffer
 
@@ -853,7 +853,7 @@ namespace MG.GIF
 
             // LZW decode loop
 
-            uint previousCode = NoCode; // last code processed
+            uint previousCode = NO_CODE; // last code processed
             uint mask = (uint)(nextSize - 1); // mask out code bits
             uint shiftRegister = 0; // shift register holds the bytes coming in from the input stream, we shift down by the number of bits
 
@@ -933,7 +933,7 @@ namespace MG.GIF
                     codesEnd = numCodes * 2;
 
                     // clear previous code
-                    previousCode = NoCode;
+                    previousCode = NO_CODE;
                     mask = (uint)(nextSize - 1);
 
                     continue;
@@ -952,7 +952,7 @@ namespace MG.GIF
                     // write existing code
                     codePos = this.indices[curCode];
                 }
-                else if (previousCode != NoCode)
+                else if (previousCode != NO_CODE)
                 {
                     // write previous code
                     codePos = this.indices[previousCode];
@@ -1011,7 +1011,7 @@ namespace MG.GIF
 
                 // create new code
 
-                if (previousCode != NoCode && numCodes != this.indices.Length)
+                if (previousCode != NO_CODE && numCodes != this.indices.Length)
                 {
                     // get previous code from buffer
 

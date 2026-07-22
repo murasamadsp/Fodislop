@@ -119,7 +119,7 @@ namespace Fodinae.Scripts.World
         /// <returns>UV coordinates for the animation frame.</returns>
         public AtlasCoordinate WithAnimationFrameFromServer(int frameIndex, int frameHeightInTiles)
         {
-            int frameHeightInPixels = frameHeightInTiles * RenderingConstants.CellSize;
+            int frameHeightInPixels = frameHeightInTiles * RenderingConstants.CELL_SIZE;
 
             // Calculate frame position (assuming frames are stacked vertically)
             int frameY = frameIndex * frameHeightInPixels;

@@ -9,12 +9,12 @@ namespace Fodinae.Scripts.UI
 {
     public class InventoryUI : MonoBehaviour
     {
-        private const int HOTBARCOLS = 9;
-        private const int INVENTORYROWS = 6;
-        private const int INVENTORYCOLS = 9;
+        private const int HOTBAR_COLS = 9;
+        private const int INVENTORY_ROWS = 6;
+        private const int INVENTORY_COLS = 9;
         private const int CELLSIZE = 50;
-        private const int CELLGAP = 10;
-        private const int ICONSIZE = 36;
+        private const int CELL_GAP = 10;
+        private const int ICON_SIZE = 36;
 
         private Color _cellBgColor = new Color(0.15f, 0.15f, 0.15f, 1f);
         private Color _cellBorderColor = new Color(0.4f, 0.4f, 0.4f, 1f);
@@ -233,7 +233,7 @@ namespace Fodinae.Scripts.UI
             _hotbarContainer.style.flexDirection = FlexDirection.Row;
             _hotbarContainer.style.alignItems = Align.Center;
 
-            for (int i = 0; i < HOTBARCOLS; i++)
+            for (int i = 0; i < HOTBAR_COLS; i++)
             {
                 var cell = CreateCell(i, $"Hotbar_{i}");
                 _hotbarContainer.Add(cell);
@@ -246,7 +246,7 @@ namespace Fodinae.Scripts.UI
 
             root.RegisterCallback<GeometryChangedEvent>(evt =>
             {
-                const int w = (HOTBARCOLS * CELLSIZE) + ((HOTBARCOLS - 1) * CELLGAP) + CELLSIZE + CELLGAP;
+                const int w = (HOTBAR_COLS * CELLSIZE) + ((HOTBAR_COLS - 1) * CELL_GAP) + CELLSIZE + CELL_GAP;
                 _hotbarContainer.style.left = (root.resolvedStyle.width - w) / 2;
             });
         }
@@ -328,7 +328,7 @@ namespace Fodinae.Scripts.UI
             separator.style.backgroundColor = _panelBorderColor;
             separator.style.marginTop = 15;
             separator.style.marginBottom = 15;
-            separator.style.width = (INVENTORYCOLS * CELLSIZE) + ((INVENTORYCOLS - 1) * CELLGAP);
+            separator.style.width = (INVENTORY_COLS * CELLSIZE) + ((INVENTORY_COLS - 1) * CELL_GAP);
             panelBg.Add(separator);
 
             var hotbarInPanel = CreateGrid(0, 8, "PanelHotbar");
@@ -347,7 +347,7 @@ namespace Fodinae.Scripts.UI
             grid.style.alignItems = Align.Center;
 
             int slotIndex = fromSlot;
-            int cols = (toSlot - fromSlot + 1 > 9) ? INVENTORYCOLS : (toSlot - fromSlot + 1);
+            int cols = (toSlot - fromSlot + 1 > 9) ? INVENTORY_COLS : (toSlot - fromSlot + 1);
             int rows = (toSlot - fromSlot + 1 + cols - 1) / cols;
 
             for (int row = 0; row < rows; row++)
@@ -375,8 +375,8 @@ namespace Fodinae.Scripts.UI
             cell.style.height = CELLSIZE;
             cell.style.justifyContent = Justify.Center;
             cell.style.alignItems = Align.Center;
-            cell.style.marginRight = CELLGAP;
-            cell.style.marginBottom = CELLGAP;
+            cell.style.marginRight = CELL_GAP;
+            cell.style.marginBottom = CELL_GAP;
             cell.style.backgroundColor = _cellBgColor;
             cell.style.borderTopWidth = 2;
             cell.style.borderBottomWidth = 2;
@@ -390,8 +390,8 @@ namespace Fodinae.Scripts.UI
             // Иконка-кружок
             var icon = new VisualElement();
             icon.name = "Icon";
-            icon.style.width = ICONSIZE;
-            icon.style.height = ICONSIZE;
+            icon.style.width = ICON_SIZE;
+            icon.style.height = ICON_SIZE;
             icon.style.alignSelf = Align.Center;
             icon.style.justifyContent = Justify.Center;
             icon.style.display = DisplayStyle.None;
@@ -452,12 +452,12 @@ namespace Fodinae.Scripts.UI
 
                 _floatingItem = new VisualElement();
                 _floatingItem.style.position = Position.Absolute;
-                _floatingItem.style.width = ICONSIZE;
-                _floatingItem.style.height = ICONSIZE;
-                _floatingItem.style.borderTopLeftRadius = ICONSIZE / 2;
-                _floatingItem.style.borderTopRightRadius = ICONSIZE / 2;
-                _floatingItem.style.borderBottomLeftRadius = ICONSIZE / 2;
-                _floatingItem.style.borderBottomRightRadius = ICONSIZE / 2;
+                _floatingItem.style.width = ICON_SIZE;
+                _floatingItem.style.height = ICON_SIZE;
+                _floatingItem.style.borderTopLeftRadius = ICON_SIZE / 2;
+                _floatingItem.style.borderTopRightRadius = ICON_SIZE / 2;
+                _floatingItem.style.borderBottomLeftRadius = ICON_SIZE / 2;
+                _floatingItem.style.borderBottomRightRadius = ICON_SIZE / 2;
                 if (item.Icon != null)
                 {
                     _floatingItem.style.backgroundImage = new StyleBackground(item.Icon);
@@ -547,8 +547,8 @@ namespace Fodinae.Scripts.UI
 
         private void UpdateFloatingPosition(Vector2 mousePos)
         {
-            _floatingItem.style.left = mousePos.x - (ICONSIZE / 2);
-            _floatingItem.style.top = mousePos.y - (ICONSIZE / 2);
+            _floatingItem.style.left = mousePos.x - (ICON_SIZE / 2);
+            _floatingItem.style.top = mousePos.y - (ICON_SIZE / 2);
         }
 
         private void RefreshSlot(int slotIndex)
@@ -595,7 +595,7 @@ namespace Fodinae.Scripts.UI
             btn.name = "InventoryButton";
             btn.style.width = CELLSIZE;
             btn.style.height = CELLSIZE;
-            btn.style.marginBottom = CELLGAP;
+            btn.style.marginBottom = CELL_GAP;
             btn.style.backgroundColor = _inventoryButtonColor;
             btn.style.borderTopWidth = 2;
             btn.style.borderBottomWidth = 2;

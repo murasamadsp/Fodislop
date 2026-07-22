@@ -32,8 +32,8 @@ namespace Fodinae.Scripts.Networking.Connection
 
         protected void Update()
         {
-            int processedCount = 0;
-            while (processedCount < 50 && _packetQueue.TryDequeue(out var packet))
+            float startTime = Time.realtimeSinceStartup;
+            while (_packetQueue.TryDequeue(out var packet))
             {
                 try
                 {
@@ -44,7 +44,11 @@ namespace Fodinae.Scripts.Networking.Connection
                     Debug.LogError($"[ConnectionManager] Error processing packet: {ex.Message}\n{ex.StackTrace}");
                 }
 
-                processedCount++;
+                // If processing takes more than 10ms, yield to next frame to prevent stutter
+                if ((Time.realtimeSinceStartup - startTime) * 1000f > 10f)
+                {
+                    break;
+                }
             }
         }
 

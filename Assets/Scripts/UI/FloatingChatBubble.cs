@@ -7,8 +7,8 @@ namespace Fodinae.Scripts.UI
         private TextMesh _textMesh;
         private float _elapsed = 0f;
         private const float DURATION = 5f;
-        private const float FLOATSPEED = 0.3f;
-        private const float FADESTART = 4f;
+        private const float FLOAT_SPEED = 0.3f;
+        private const float FADE_START = 4f;
         private Camera _cam;
 
         public void Init(string text)
@@ -33,16 +33,16 @@ namespace Fodinae.Scripts.UI
         protected void Update()
         {
             _elapsed += Time.deltaTime;
-            transform.Translate(0, FLOATSPEED * Time.deltaTime, 0);
+            transform.Translate(0, FLOAT_SPEED * Time.deltaTime, 0);
 
             if (_cam != null)
             {
                 _textMesh.characterSize = 0.08f * (_cam.orthographicSize / 10f);
             }
 
-            if (_elapsed >= FADESTART)
+            if (_elapsed >= FADE_START)
             {
-                float t = (_elapsed - FADESTART) / (DURATION - FADESTART);
+                float t = (_elapsed - FADE_START) / (DURATION - FADE_START);
                 Color c = _textMesh.color;
                 c.a = Mathf.Lerp(1f, 0f, t);
                 _textMesh.color = c;

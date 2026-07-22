@@ -14,17 +14,17 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.Scripts.UI
 {
-    public class PlayerHUD : MonoBehaviour
+    public partial class PlayerHUD : MonoBehaviour
     {
-        private const int PANELWIDTH = 240;
+        private const int PANEL_WIDTH = 240;
         private const int PADDING = 12;
-        private const int LABELFONTSIZE = 14;
-        private const int TITLEFONTSIZE = 14;
-        private const int HPBARHEIGHT = 14;
-        private const int BTNSIZE = 50;
-        private const int BONUSPANELWIDTH = 260;
+        private const int LABEL_FONT_SIZE = 14;
+        private const int TITLE_FONT_SIZE = 14;
+        private const int HP_BAR_HEIGHT = 14;
+        private const int BTN_SIZE = 50;
+        private const int BONUS_PANEL_WIDTH = 260;
         private const int GAP = 6;
-        private const int SKILLGRIDCOLS = 4;
+        private const int SKILL_GRID_COLS = 4;
 
         private Color _panelBgColor = new Color(0.08f, 0.08f, 0.08f, 0.85f);
         private Color _panelBorderColor = new Color(0.35f, 0.35f, 0.35f, 1f);
@@ -83,9 +83,14 @@ namespace Fodinae.Scripts.UI
         private VisualElement _missionProgressFill;
         private Label _missionProgressLabel;
 
-        protected async void Start()
+        protected void Start()
         {
-            await LoadCrystalTextures();
+            StartAsync(this.destroyCancellationToken).Forget();
+        }
+
+        private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
+        {
+            await LoadCrystalTextures(cancellationToken);
             InitializeHUD();
         }
 
@@ -94,25 +99,9 @@ namespace Fodinae.Scripts.UI
             if (PlayerStatsModel.Instance != null)
             {
                 PlayerStatsModel.Instance.OnStatsChanged -= RefreshAll;
-            }
-
-            if (PlayerStatsModel.Instance != null)
-            {
                 PlayerStatsModel.Instance.OnSkillProgress -= OnSkillProgress;
-            }
-
-            if (PlayerStatsModel.Instance != null)
-            {
                 PlayerStatsModel.Instance.OnDailyBonusChanged -= UpdateDailyBonusPanel;
-            }
-
-            if (PlayerStatsModel.Instance != null)
-            {
                 PlayerStatsModel.Instance.OnStatusLinesChanged -= RebuildStatusPanel;
-            }
-
-            if (PlayerStatsModel.Instance != null)
-            {
                 PlayerStatsModel.Instance.OnMissionChanged -= UpdateMissionPanel;
             }
 
@@ -122,7 +111,7 @@ namespace Fodinae.Scripts.UI
             }
         }
 
-        private async UniTask LoadCrystalTextures()
+        private async UniTask LoadCrystalTextures(System.Threading.CancellationToken cancellationToken)
         {
             _crystalTextures.Clear();
             foreach (CrystalType ct in Enum.GetValues(typeof(CrystalType)))
@@ -133,7 +122,7 @@ namespace Fodinae.Scripts.UI
                 }
 
                 string name = ct.ToString().ToLowerInvariant();
-                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystals/" + name);
+                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystals/" + name, cancellationToken);
                 _crystalTextures.Add(tex);
             }
         }
@@ -212,7 +201,7 @@ namespace Fodinae.Scripts.UI
             _panel.style.position = Position.Absolute;
             _panel.style.left = 10;
             _panel.style.top = 10;
-            _panel.style.width = PANELWIDTH;
+            _panel.style.width = PANEL_WIDTH;
             _panel.style.paddingTop = PADDING;
             _panel.style.paddingBottom = PADDING;
             _panel.style.paddingLeft = PADDING;
@@ -233,14 +222,14 @@ namespace Fodinae.Scripts.UI
             topRow.style.marginBottom = 4;
 
             _nicknameLabel = new Label("---");
-            _nicknameLabel.style.fontSize = TITLEFONTSIZE;
+            _nicknameLabel.style.fontSize = TITLE_FONT_SIZE;
             _nicknameLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _nicknameLabel.style.color = _accentColor;
             _nicknameLabel.style.flexGrow = 1;
             topRow.Add(_nicknameLabel);
 
             _levelLabel = new Label("Ур: 0");
-            _levelLabel.style.fontSize = TITLEFONTSIZE;
+            _levelLabel.style.fontSize = TITLE_FONT_SIZE;
             _levelLabel.style.color = _textColor;
             _levelLabel.style.marginRight = 2;
             topRow.Add(_levelLabel);
@@ -254,13 +243,13 @@ namespace Fodinae.Scripts.UI
             _panel.Add(separator);
 
             _hpLabel = new Label("Прочность: 0/0");
-            _hpLabel.style.fontSize = LABELFONTSIZE;
+            _hpLabel.style.fontSize = LABEL_FONT_SIZE;
             _hpLabel.style.color = _textColor;
             _hpLabel.style.marginBottom = 2;
             _panel.Add(_hpLabel);
 
             var hpContainer = new VisualElement();
-            hpContainer.style.height = HPBARHEIGHT;
+            hpContainer.style.height = HP_BAR_HEIGHT;
             hpContainer.style.backgroundColor = _hpBarBgColor;
             hpContainer.style.borderTopLeftRadius = 3;
             hpContainer.style.borderTopRightRadius = 3;
@@ -270,7 +259,7 @@ namespace Fodinae.Scripts.UI
             hpContainer.style.marginBottom = 4;
 
             _hpBarFill = new VisualElement();
-            _hpBarFill.style.height = HPBARHEIGHT;
+            _hpBarFill.style.height = HP_BAR_HEIGHT;
             _hpBarFill.style.borderTopLeftRadius = 3;
             _hpBarFill.style.borderTopRightRadius = 3;
             _hpBarFill.style.borderBottomLeftRadius = 3;
@@ -282,7 +271,7 @@ namespace Fodinae.Scripts.UI
 
             _moneyLabel = new Label("$ 0");
             _moneyLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _moneyLabel.style.fontSize = LABELFONTSIZE;
+            _moneyLabel.style.fontSize = LABEL_FONT_SIZE;
             _moneyLabel.style.color = Color.green;
             _moneyLabel.style.marginTop = 0;
             _moneyLabel.style.marginBottom = 0;
@@ -290,14 +279,14 @@ namespace Fodinae.Scripts.UI
 
             _credsLabel = new Label("C 0");
             _credsLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _credsLabel.style.fontSize = LABELFONTSIZE;
+            _credsLabel.style.fontSize = LABEL_FONT_SIZE;
             _credsLabel.style.color = Color.yellow;
             _credsLabel.style.marginTop = 0;
             _credsLabel.style.marginBottom = 0;
             _panel.Add(_credsLabel);
 
             _geologyLabel = new Label("Геология: 0/0");
-            _geologyLabel.style.fontSize = LABELFONTSIZE;
+            _geologyLabel.style.fontSize = LABEL_FONT_SIZE;
             _geologyLabel.style.color = _textColor;
             _geologyLabel.style.marginTop = 0;
             _geologyLabel.style.marginBottom = 0;
@@ -312,7 +301,7 @@ namespace Fodinae.Scripts.UI
 
             _basketPercentLabel = new Label("Груз: 0%");
             _basketPercentLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _basketPercentLabel.style.fontSize = LABELFONTSIZE;
+            _basketPercentLabel.style.fontSize = LABEL_FONT_SIZE;
             _basketPercentLabel.style.color = _accentColor;
             _basketPercentLabel.style.marginBottom = 2;
             _panel.Add(_basketPercentLabel);
@@ -330,13 +319,13 @@ namespace Fodinae.Scripts.UI
             _bonusButton = new Button(ToggleBonusPanel);
             _bonusButton.text = "Бонусы";
             _bonusButton.style.position = Position.Absolute;
-            _bonusButton.style.left = 10 + PANELWIDTH + GAP;
+            _bonusButton.style.left = 10 + PANEL_WIDTH + GAP;
             _bonusButton.style.top = 10;
             _bonusButton.style.width = 90;
-            _bonusButton.style.height = BTNSIZE;
+            _bonusButton.style.height = BTN_SIZE;
             _bonusButton.style.backgroundColor = _accentColor;
             _bonusButton.style.color = new Color(0.15f, 0.15f, 0.15f, 1f);
-            _bonusButton.style.fontSize = TITLEFONTSIZE;
+            _bonusButton.style.fontSize = TITLE_FONT_SIZE;
             _bonusButton.style.unityFontStyleAndWeight = FontStyle.Bold;
             _bonusButton.style.unityTextAlign = TextAnchor.MiddleCenter;
             _bonusButton.style.borderTopWidth = 2;
@@ -364,9 +353,9 @@ namespace Fodinae.Scripts.UI
         {
             _bonusPanel = new VisualElement();
             _bonusPanel.style.position = Position.Absolute;
-            _bonusPanel.style.left = 10 + PANELWIDTH + GAP + 90 + GAP;
+            _bonusPanel.style.left = 10 + PANEL_WIDTH + GAP + 90 + GAP;
             _bonusPanel.style.top = 10;
-            _bonusPanel.style.width = BONUSPANELWIDTH;
+            _bonusPanel.style.width = BONUS_PANEL_WIDTH;
             _bonusPanel.style.backgroundColor = _panelBgColor;
             _bonusPanel.style.borderTopWidth = 2;
             _bonusPanel.style.borderBottomWidth = 2;
@@ -487,7 +476,7 @@ namespace Fodinae.Scripts.UI
             }
             else
             {
-                _statusPanel.style.top = 10 + BTNSIZE + GAP;
+                _statusPanel.style.top = 10 + BTN_SIZE + GAP;
             }
         }
 
@@ -525,8 +514,8 @@ namespace Fodinae.Scripts.UI
             _statusPanel = new VisualElement();
             _statusPanel.name = "StatusPanel";
             _statusPanel.style.position = Position.Absolute;
-            _statusPanel.style.left = 10 + PANELWIDTH + GAP;
-            _statusPanel.style.top = 10 + BTNSIZE + GAP;
+            _statusPanel.style.left = 10 + PANEL_WIDTH + GAP;
+            _statusPanel.style.top = 10 + BTN_SIZE + GAP;
             _statusPanel.style.width = 220;
             _statusPanel.style.paddingTop = PADDING;
             _statusPanel.style.paddingBottom = PADDING;
@@ -599,7 +588,7 @@ namespace Fodinae.Scripts.UI
                 else
                 {
                     var row = new Label();
-                    row.style.fontSize = LABELFONTSIZE;
+                    row.style.fontSize = LABEL_FONT_SIZE;
                     row.style.color = kvp.Value.Color;
                     row.style.marginBottom = 2;
                     row.style.whiteSpace = WhiteSpace.Normal;
@@ -753,7 +742,7 @@ namespace Fodinae.Scripts.UI
 
         private void EnsureSkillRow()
         {
-            if (_currentSkillRow != null && _skillCountInRow < SKILLGRIDCOLS)
+            if (_currentSkillRow != null && _skillCountInRow < SKILL_GRID_COLS)
             {
                 return;
             }
@@ -1612,14 +1601,14 @@ namespace Fodinae.Scripts.UI
             _missionPanel.style.display = DisplayStyle.None;
 
             _missionTitleLabel = new Label("---");
-            _missionTitleLabel.style.fontSize = TITLEFONTSIZE;
+            _missionTitleLabel.style.fontSize = TITLE_FONT_SIZE;
             _missionTitleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _missionTitleLabel.style.color = _accentColor;
             _missionTitleLabel.style.marginBottom = 4;
             _missionPanel.Add(_missionTitleLabel);
 
             _missionDescLabel = new Label(string.Empty);
-            _missionDescLabel.style.fontSize = LABELFONTSIZE;
+            _missionDescLabel.style.fontSize = LABEL_FONT_SIZE;
             _missionDescLabel.style.color = _textColor;
             _missionDescLabel.style.whiteSpace = WhiteSpace.Normal;
             _missionDescLabel.style.marginBottom = 8;
@@ -1631,7 +1620,7 @@ namespace Fodinae.Scripts.UI
             progressRow.style.marginBottom = 4;
 
             _missionProgressLabel = new Label("0/0");
-            _missionProgressLabel.style.fontSize = LABELFONTSIZE;
+            _missionProgressLabel.style.fontSize = LABEL_FONT_SIZE;
             _missionProgressLabel.style.color = _textColor;
             _missionProgressLabel.style.marginRight = 8;
             _missionProgressLabel.style.minWidth = 50;

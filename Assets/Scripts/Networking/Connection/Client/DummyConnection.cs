@@ -337,18 +337,18 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is SuicidePacket)
                 {
                     Debug.Log("[DummyConnection] Suicide / Respawn");
-                    const ushort spawnX = 25;
-                    const ushort spawnY = 50;
+                    const ushort SPAWN_X = 25;
+                    const ushort SPAWN_Y = 50;
                     var effectX = _x;
                     var effectY = _y;
-                    _x = spawnX;
-                    _y = spawnY;
+                    _x = SPAWN_X;
+                    _y = SPAWN_Y;
                     _rot = Direction.Up;
 
-                    OnReceived?.Invoke(new ServerPacket(new TeleportPacket(spawnX, spawnY, false)));
+                    OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
-                        new RobotPositionPacket(_mockBotId, spawnX, spawnY, (byte)_rot),
+                        new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
                         new SFXPacket(SFX.Death, _mockBotId, effectX, effectY, Array.Empty<StringPairPacket>()),
                     })));
                 }
@@ -1284,99 +1284,99 @@ namespace MinesServer.Networking.Connection.Client
                 };
             }
 
-            const CellConfigProperties roadProps = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties sandBoulderProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties artificialProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties rockCrystalProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties indestructibleProps = CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties boxProps = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ROAD_PROPS = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties SAND_BOULDER_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ARTIFICIAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ROCK_CRYSTAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties INDESTRUCTIBLE_PROPS = CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties BOX_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
 
             // === ROADS: ReliefGroup = 0 ===
-            SetConfig(configs, CellType.BuildingRoad, roadProps, 0, color: unchecked((int)0xFFCCCCCC));
-            SetConfig(configs, CellType.VolcanoBackground, roadProps, 0);
-            SetConfig(configs, CellType.Empty, roadProps, 0, color: unchecked((int)0xFF808080));
-            SetConfig(configs, CellType.Road, roadProps, 0, color: unchecked((int)0xFFCCCCCC));
-            SetConfig(configs, CellType.GoldenRoad, roadProps, 0, color: unchecked((int)0xFFCCCC00));
-            SetConfig(configs, CellType.PolymerRoad, roadProps, 0);
+            SetConfig(configs, CellType.BuildingRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
+            SetConfig(configs, CellType.VolcanoBackground, ROAD_PROPS, 0);
+            SetConfig(configs, CellType.Empty, ROAD_PROPS, 0, color: unchecked((int)0xFF808080));
+            SetConfig(configs, CellType.Road, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
+            SetConfig(configs, CellType.GoldenRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCC00));
+            SetConfig(configs, CellType.PolymerRoad, ROAD_PROPS, 0);
 
             // === BOX: ReliefGroup = 0 ===
-            SetConfig(configs, CellType.Box, boxProps, 0);
+            SetConfig(configs, CellType.Box, BOX_PROPS, 0);
 
             // === SANDS & BOULDERS: ReliefGroup = 1 ===
-            SetConfig(configs, CellType.BlackBoulder1, sandBoulderProps, 1, color: unchecked((int)0xFF000000));
-            SetConfig(configs, CellType.BlackBoulder2, sandBoulderProps, 1);
-            SetConfig(configs, CellType.BlackBoulder3, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MetalBoulder1, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MetalBoulder2, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MetalBoulder3, sandBoulderProps, 1);
-            SetConfig(configs, CellType.WhiteSand, sandBoulderProps, 1, color: unchecked((int)0xFFFFFF00));
-            SetConfig(configs, CellType.DarkWhiteSand, sandBoulderProps, 1, color: unchecked((int)0xFFCCCC00));
-            SetConfig(configs, CellType.RustySand, sandBoulderProps, 1, color: unchecked((int)0xFFCD853F));
-            SetConfig(configs, CellType.DarkRustySand, sandBoulderProps, 1, color: unchecked((int)0xFF8B4513));
-            SetConfig(configs, CellType.BlackSand, sandBoulderProps, 1, color: unchecked((int)0xFF2F2F2F));
-            SetConfig(configs, CellType.DarkBlackSand, sandBoulderProps, 1, color: unchecked((int)0xFF1A1A1A));
-            SetConfig(configs, CellType.BlueSand, sandBoulderProps, 1, color: unchecked((int)0xFF4169E1));
-            SetConfig(configs, CellType.DarkBlueSand, sandBoulderProps, 1, color: unchecked((int)0xFF00008B));
-            SetConfig(configs, CellType.YellowSand, sandBoulderProps, 1, color: unchecked((int)0xFFFFD700));
-            SetConfig(configs, CellType.DarkYellowSand, sandBoulderProps, 1, color: unchecked((int)0xFFB8860B));
-            SetConfig(configs, CellType.DeepMagmaBoulder, sandBoulderProps, 1);
-            SetConfig(configs, CellType.MilitaryBlockSand, sandBoulderProps, 1);
-            SetConfig(configs, CellType.Lava, sandBoulderProps, 1, color: unchecked((int)0xFFFF4500),
+            SetConfig(configs, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
+            SetConfig(configs, CellType.BlackBoulder2, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.BlackBoulder3, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MetalBoulder1, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MetalBoulder2, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MetalBoulder3, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.WhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFFF00));
+            SetConfig(configs, CellType.DarkWhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCCCC00));
+            SetConfig(configs, CellType.RustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCD853F));
+            SetConfig(configs, CellType.DarkRustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF8B4513));
+            SetConfig(configs, CellType.BlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF2F2F2F));
+            SetConfig(configs, CellType.DarkBlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF1A1A1A));
+            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1));
+            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
+            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
+            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
+            SetConfig(configs, CellType.DeepMagmaBoulder, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.MilitaryBlockSand, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.Lava, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFF4500),
                 animation: (CellAnimationType)4, animationSpeed: 10, frameOffset: 0, distortion: (CellDistortionType)0);
-            SetConfig(configs, CellType.Boulder1, sandBoulderProps, 1, color: unchecked((int)0xFF000000));
-            SetConfig(configs, CellType.Boulder2, sandBoulderProps, 1);
-            SetConfig(configs, CellType.Boulder3, sandBoulderProps, 1);
-            SetConfig(configs, CellType.BlueSand, sandBoulderProps, 1, color: unchecked((int)0xFF4169E1));
-            SetConfig(configs, CellType.DarkBlueSand, sandBoulderProps, 1, color: unchecked((int)0xFF00008B));
-            SetConfig(configs, CellType.YellowSand, sandBoulderProps, 1, color: unchecked((int)0xFFFFD700));
-            SetConfig(configs, CellType.DarkYellowSand, sandBoulderProps, 1, color: unchecked((int)0xFFB8860B));
+            SetConfig(configs, CellType.Boulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
+            SetConfig(configs, CellType.Boulder2, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.Boulder3, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1));
+            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
+            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
+            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
 
             // === ACIDS (keep existing animations): ReliefGroup = 1 ===
-            SetConfig(configs, CellType.GrayAcid, sandBoulderProps, 1, color: unchecked((int)0xFF00FF00),
+            SetConfig(configs, CellType.GrayAcid, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00FF00),
                 animation: CellAnimationType.Blinking, animationSpeed: 5, frameOffset: 1);
-            SetConfig(configs, CellType.PurpleAcid, sandBoulderProps, 1, color: unchecked((int)0xFF800080),
+            SetConfig(configs, CellType.PurpleAcid, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF800080),
                 animation: CellAnimationType.Shimmer, animationSpeed: 50, frameOffset: 1);
 
             // === ARTIFICIAL: ReliefGroup = 2 ===
-            SetConfig(configs, CellType.BuildingDoor, artificialProps, 2, color: unchecked((int)0xFF8B4513));
-            SetConfig(configs, CellType.BuildingCorner, artificialProps, 2, color: unchecked((int)0xFF555555));
-            SetConfig(configs, CellType.QuadBlock, artificialProps, 2);
-            SetConfig(configs, CellType.Support, artificialProps, 2);
-            SetConfig(configs, CellType.MilitaryBlockFrame, artificialProps, 2);
-            SetConfig(configs, CellType.MilitaryBlock, artificialProps, 2);
-            SetConfig(configs, CellType.GreenBlock, artificialProps, 2);
-            SetConfig(configs, CellType.YellowBlock, artificialProps, 2);
-            SetConfig(configs, CellType.FedBlock, artificialProps, 2);
-            SetConfig(configs, CellType.RedBlock, artificialProps, 2);
-            SetConfig(configs, CellType.BuildingWall, artificialProps, 2, color: unchecked((int)0xFF666666));
+            SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513));
+            SetConfig(configs, CellType.BuildingCorner, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF555555));
+            SetConfig(configs, CellType.QuadBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.Support, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.MilitaryBlockFrame, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.MilitaryBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.GreenBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.YellowBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.FedBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2);
+            SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666));
 
             // === ROCKS & CRYSTALS: ReliefGroup = 3 ===
-            SetConfig(configs, CellType.XGreen, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XBlue, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XRed, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XCyan, rockCrystalProps, 3);
-            SetConfig(configs, CellType.XViolet, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepObsidianRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepTurquoiseRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepRainbowRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepStripedRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Rock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Green, rockCrystalProps, 3, color: unchecked((int)0xFF00FF00));
-            SetConfig(configs, CellType.Red, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Blue, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Violet, rockCrystalProps, 3);
-            SetConfig(configs, CellType.White, rockCrystalProps, 3);
-            SetConfig(configs, CellType.Cyan, rockCrystalProps, 3);
-            SetConfig(configs, CellType.HeavyRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.AcidRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.GoldenRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.DeepRock, rockCrystalProps, 3);
-            SetConfig(configs, CellType.GRock, rockCrystalProps, 3);
+            SetConfig(configs, CellType.XGreen, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XBlue, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XRed, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XCyan, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XViolet, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepTurquoiseRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepRainbowRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Green, ROCK_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00));
+            SetConfig(configs, CellType.Red, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Blue, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Violet, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.White, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Cyan, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.AcidRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3);
 
             // === INDESTRUCTIBLE ROCKS: ReliefGroup = 4 (NO Breakable!) ===
-            SetConfig(configs, CellType.NiggerRock, indestructibleProps, 4);
-            SetConfig(configs, CellType.LivingBlackRock, indestructibleProps, 4);
-            SetConfig(configs, CellType.RedRock, indestructibleProps, 4);
+            SetConfig(configs, CellType.NiggerRock, INDESTRUCTIBLE_PROPS, 4);
+            SetConfig(configs, CellType.LivingBlackRock, INDESTRUCTIBLE_PROPS, 4);
+            SetConfig(configs, CellType.RedRock, INDESTRUCTIBLE_PROPS, 4);
 
             // === GATE & TELEPORT BLOCK (passable but not roads) ===
             SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow, 0);
@@ -1407,16 +1407,16 @@ namespace MinesServer.Networking.Connection.Client
             {
                 using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var br = new BinaryReader(fs);
-                int widthChunks = br.ReadInt32();
-                int heightChunks = br.ReadInt32();
-                int chunkSize = br.ReadInt32();
+                int WIDTH_CHUNKS = br.ReadInt32();
+                int HEIGHT_CHUNKS = br.ReadInt32();
+                int CHUNK_SIZE = br.ReadInt32();
                 br.ReadInt32(); // reserved
 
-                if (widthChunks > 0 && heightChunks > 0 && chunkSize > 0 && chunkSize <= 1024)
+                if (WIDTH_CHUNKS > 0 && HEIGHT_CHUNKS > 0 && CHUNK_SIZE > 0 && CHUNK_SIZE <= 1024)
                 {
-                    int w = widthChunks * chunkSize;
-                    int h = heightChunks * chunkSize;
-                    Debug.Log($"[DummyConnection] Prebaked map dimensions: {w}x{h} ({widthChunks}x{heightChunks} chunks x{chunkSize})");
+                    int w = WIDTH_CHUNKS * CHUNK_SIZE;
+                    int h = HEIGHT_CHUNKS * CHUNK_SIZE;
+                    Debug.Log($"[DummyConnection] Prebaked map dimensions: {w}x{h} ({WIDTH_CHUNKS}x{HEIGHT_CHUNKS} chunks x{CHUNK_SIZE})");
                     return (w, h);
                 }
             }
@@ -1434,13 +1434,13 @@ namespace MinesServer.Networking.Connection.Client
         private void SendTestWorldMapData(int testWorldWidth, int testWorldHeight)
         {
             var testMap = CreateTestMapData(testWorldWidth, testWorldHeight);
-            const int chunkSize = 32;
-            for (int y = 0; y < testWorldHeight; y += chunkSize)
+            const int CHUNK_SIZE = 32;
+            for (int y = 0; y < testWorldHeight; y += CHUNK_SIZE)
             {
-                for (int x = 0; x < testWorldWidth; x += chunkSize)
+                for (int x = 0; x < testWorldWidth; x += CHUNK_SIZE)
                 {
-                    int chunkWidth = Math.Min(chunkSize, testWorldWidth - x);
-                    int chunkHeight = Math.Min(chunkSize, testWorldHeight - y);
+                    int chunkWidth = Math.Min(CHUNK_SIZE, testWorldWidth - x);
+                    int chunkHeight = Math.Min(CHUNK_SIZE, testWorldHeight - y);
                     var chunkData = new CellType[chunkWidth * chunkHeight];
                     int dataIndex = 0;
                     for (int cy = 0; cy < chunkHeight; cy++)
@@ -1479,16 +1479,16 @@ namespace MinesServer.Networking.Connection.Client
                 }
             }
 
-            const int galleryX = 5;
-            const int galleryY = 5;
-            int squaresPerRow = (width - galleryX) / 15;
+            const int GALLERY_X = 5;
+            const int GALLERY_Y = 5;
+            int squaresPerRow = (width - GALLERY_X) / 15;
 
             for (int i = 0; i < _allCellTypes.Length; i++)
             {
                 int row = i / squaresPerRow;
                 int col = i % squaresPerRow;
-                int startX = galleryX + (col * 15);
-                int startY = galleryY + (row * 15);
+                int startX = GALLERY_X + (col * 15);
+                int startY = GALLERY_Y + (row * 15);
 
                 for (int dx = 0; dx < 10; dx++)
                 {
@@ -1510,15 +1510,15 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             int lastGalleryRow = (_allCellTypes.Length - 1) / squaresPerRow;
-            int tilingStartY = galleryY + ((lastGalleryRow + 1) * 15) + 5;
-            const int tilingStartX = galleryX;
-            int tilingPerRow = (width - tilingStartX) / 4;
+            int tilingStartY = GALLERY_Y + ((lastGalleryRow + 1) * 15) + 5;
+            const int TILING_START_X = GALLERY_X;
+            int tilingPerRow = (width - TILING_START_X) / 4;
 
             for (int variant = 0; variant < 256; variant++)
             {
                 int tRow = variant / tilingPerRow;
                 int tCol = variant % tilingPerRow;
-                int bx = tilingStartX + (tCol * 4);
+                int bx = TILING_START_X + (tCol * 4);
                 int by = tilingStartY + (tRow * 4);
 
                 for (int dy = 0; dy < 3; dy++)
@@ -1555,12 +1555,12 @@ namespace MinesServer.Networking.Connection.Client
 
         private async UniTaskVoid RunCircularBots(int count)
         {
-            const int baseId = 1000;
+            const int BASE_ID = 1000;
 
             var bots = new List<(ushort id, float cx, float cy, float r, float a, float speed)>();
             for (int i = 0; i < count; i++)
             {
-                ushort botId = (ushort)(baseId + i);
+                ushort botId = (ushort)(BASE_ID + i);
                 OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
                     "Skin/bee.png", "Tail/default.png", $"")));
 

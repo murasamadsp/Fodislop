@@ -102,24 +102,24 @@ namespace Fodinae.Scripts.Game.Managers
             try
             {
                 // Use configurable chunk size (default 32) - should match WorldLayer default
-                const int chunkSize = 32;
-                int widthChunks = (width + chunkSize - 1) / chunkSize;
-                int heightChunks = (height + chunkSize - 1) / chunkSize;
+                const int CHUNK_SIZE = 32;
+                int WIDTH_CHUNKS = (width + CHUNK_SIZE - 1) / CHUNK_SIZE;
+                int HEIGHT_CHUNKS = (height + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
                 // Validate chunk calculations - CRITICAL FIX
-                if (widthChunks <= 0 || heightChunks <= 0)
+                if (WIDTH_CHUNKS <= 0 || HEIGHT_CHUNKS <= 0)
                 {
-                    Debug.LogError($"MapStorage.InitWorld: Invalid chunk calculation. widthChunks={widthChunks}, heightChunks={heightChunks}");
+                    Debug.LogError($"MapStorage.InitWorld: Invalid chunk calculation. WIDTH_CHUNKS={WIDTH_CHUNKS}, HEIGHT_CHUNKS={HEIGHT_CHUNKS}");
                     return;
                 }
 
-                long totalChunks = (long)widthChunks * heightChunks;
+                long totalChunks = (long)WIDTH_CHUNKS * HEIGHT_CHUNKS;
                 if (totalChunks > 1000000)
                 {
                     Debug.LogWarning($"MapStorage.InitWorld: Very large map detected ({totalChunks} chunks). This may cause performance issues.");
                 }
 
-                if (widthChunks > 100000 || heightChunks > 100000)
+                if (WIDTH_CHUNKS > 100000 || HEIGHT_CHUNKS > 100000)
                 {
                     Debug.LogError($"MapStorage.InitWorld: World dimensions too large for WorldLayer. Max supported: 100000x100000 chunks");
                     return;
@@ -142,8 +142,8 @@ namespace Fodinae.Scripts.Game.Managers
                 try
                 {
                     // CRITICAL FIX: Ensure proper parameter order and validation
-                    // WorldLayer constructor expects: path, widthChunks, heightChunks, chunkSize
-                    _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                    // WorldLayer constructor expects: path, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE
+                    _cellLayer = new WorldLayer<CellType>(path, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE);
 
                     // CRITICAL: Verify the WorldLayer was created successfully
                     if (_cellLayer == null)
@@ -154,9 +154,9 @@ namespace Fodinae.Scripts.Game.Managers
                     }
 
                     // Additional verification - CRITICAL CHECK
-                    if (_cellLayer.WidthChunks != widthChunks || _cellLayer.HeightChunks != heightChunks)
+                    if (_cellLayer.WidthChunks != WIDTH_CHUNKS || _cellLayer.HeightChunks != HEIGHT_CHUNKS)
                     {
-                        Debug.LogWarning($"[MapStorage] WorldLayer dimensions don't match expected: expected {widthChunks}x{heightChunks}, got {_cellLayer.WidthChunks}x{_cellLayer.HeightChunks}");
+                        Debug.LogWarning($"[MapStorage] WorldLayer dimensions don't match expected: expected {WIDTH_CHUNKS}x{HEIGHT_CHUNKS}, got {_cellLayer.WidthChunks}x{_cellLayer.HeightChunks}");
                     }
 
                     // Test basic cell access to verify WorldLayer is functional
@@ -369,11 +369,11 @@ namespace Fodinae.Scripts.Game.Managers
                 string fallbackPath = $"{Application.temporaryCachePath}/{worldCodeName}_cells_fallback.mapb";
                 Debug.LogWarning($"[MapStorage] Attempting to create fallback world at: {fallbackPath}");
 
-                const int chunkSize = 32;
-                int widthChunks = (width + chunkSize - 1) / chunkSize;
-                int heightChunks = (height + chunkSize - 1) / chunkSize;
+                const int CHUNK_SIZE = 32;
+                int WIDTH_CHUNKS = (width + CHUNK_SIZE - 1) / CHUNK_SIZE;
+                int HEIGHT_CHUNKS = (height + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
-                _cellLayer = new WorldLayer<CellType>(fallbackPath, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(fallbackPath, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE);
                 _isInitialized = true;
 
                 Debug.Log($"[MapStorage] Fallback world created successfully at {fallbackPath}");
@@ -389,17 +389,17 @@ namespace Fodinae.Scripts.Game.Managers
             try
             {
                 // Try with smaller chunk size
-                const int chunkSize = 16;
-                Debug.LogWarning($"[MapStorage] Attempting to create world with chunk size {chunkSize}");
+                const int CHUNK_SIZE = 16;
+                Debug.LogWarning($"[MapStorage] Attempting to create world with chunk size {CHUNK_SIZE}");
 
                 string path = $"{Application.persistentDataPath}/{worldCodeName}_cells.mapb";
-                int widthChunks = (width + chunkSize - 1) / chunkSize;
-                int heightChunks = (height + chunkSize - 1) / chunkSize;
+                int WIDTH_CHUNKS = (width + CHUNK_SIZE - 1) / CHUNK_SIZE;
+                int HEIGHT_CHUNKS = (height + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
-                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(path, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE);
                 _isInitialized = true;
 
-                Debug.Log($"[MapStorage] World created successfully with chunk size {chunkSize}");
+                Debug.Log($"[MapStorage] World created successfully with chunk size {CHUNK_SIZE}");
             }
             catch (System.Exception ex)
             {
@@ -411,20 +411,20 @@ namespace Fodinae.Scripts.Game.Managers
         {
             try
             {
-                const int testWidth = 64;
-                const int testHeight = 64;
+                const int TEST_WIDTH = 64;
+                const int TEST_HEIGHT = 64;
                 string path = $"{Application.temporaryCachePath}/small_test_world.mapb";
                 Debug.LogWarning($"[MapStorage] Attempting to create small test world (64x64) at: {path}");
 
-                const int chunkSize = 32;
+                const int CHUNK_SIZE = 32;
 
-                const int widthChunks = testWidth / chunkSize;
-                const int heightChunks = testHeight / chunkSize;
+                const int WIDTH_CHUNKS = TEST_WIDTH / CHUNK_SIZE;
+                const int HEIGHT_CHUNKS = TEST_HEIGHT / CHUNK_SIZE;
 
-                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(path, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE);
                 _isInitialized = true;
 
-                Debug.Log($"[MapStorage] Smaller test world created: {testWidth}x{testHeight}");
+                Debug.Log($"[MapStorage] Smaller test world created: {TEST_WIDTH}x{TEST_HEIGHT}");
             }
             catch (System.Exception ex)
             {
@@ -437,20 +437,20 @@ namespace Fodinae.Scripts.Game.Managers
             try
             {
                 // Create a minimal world in memory if possible, or just a very small file
-                const int testWidth = 32;
-                const int testHeight = 32;
+                const int TEST_WIDTH = 32;
+                const int TEST_HEIGHT = 32;
                 string path = $"{Application.temporaryCachePath}/emergency_fallback.mapb";
 
-                const int chunkSize = 32;
+                const int CHUNK_SIZE = 32;
 
-                const int widthChunks = testWidth / chunkSize;
-                const int heightChunks = testHeight / chunkSize;
+                const int WIDTH_CHUNKS = TEST_WIDTH / CHUNK_SIZE;
+                const int HEIGHT_CHUNKS = TEST_HEIGHT / CHUNK_SIZE;
 
-                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, chunkSize);
+                _cellLayer = new WorldLayer<CellType>(path, WIDTH_CHUNKS, HEIGHT_CHUNKS, CHUNK_SIZE);
                 _isInitialized = true;
                 _worldCodeName = "emergency_test";
 
-                Debug.Log($"[MapStorage] Emergency fallback world created: {testWidth}x{testHeight}");
+                Debug.Log($"[MapStorage] Emergency fallback world created: {TEST_WIDTH}x{TEST_HEIGHT}");
                 Debug.Log("[MapStorage] This should allow terrain rendering to proceed");
             }
             catch (System.Exception ex)

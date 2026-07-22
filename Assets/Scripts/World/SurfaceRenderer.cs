@@ -23,10 +23,10 @@ namespace Fodinae.Scripts.World
         [SerializeField]
         private int _perspectiveSortingOrder = -502;
 
-        private const float TransitHeight = 2f;
-        private const float PerspectiveHeight = 2f;
-        private const float TileSize = 32f;
-        private const float PerspectiveOffset = 32f;
+        private const float TRANSIT_HEIGHT = 2f;
+        private const float PERSPECTIVE_HEIGHT = 2f;
+        private const float TILE_SIZE = 32f;
+        private const float PERSPECTIVE_OFFSET = 32f;
 
         private Mesh _transitMesh;
         private Mesh _perspectiveMesh;
@@ -160,8 +160,8 @@ namespace Fodinae.Scripts.World
 
         private void UpdateTransit(float left, float right, float baseY, float camX)
         {
-            float uLeft = -(left - (Mathf.Floor(left / TileSize) * TileSize)) / TileSize;
-            float uRight = uLeft + ((left - right) / TileSize);
+            float uLeft = -(left - (Mathf.Floor(left / TILE_SIZE) * TILE_SIZE)) / TILE_SIZE;
+            float uRight = uLeft + ((left - right) / TILE_SIZE);
 
             _uvTransit[0] = new Vector2(uLeft, 0f);
             _uvTransit[1] = new Vector2(uLeft, 1f);
@@ -169,9 +169,9 @@ namespace Fodinae.Scripts.World
             _uvTransit[3] = new Vector2(uRight, 1f);
 
             _verticesTransit[0] = new Vector3(left, baseY, 0f);
-            _verticesTransit[1] = new Vector3(left, baseY + TransitHeight, 0f);
+            _verticesTransit[1] = new Vector3(left, baseY + TRANSIT_HEIGHT, 0f);
             _verticesTransit[2] = new Vector3(right, baseY, 0f);
-            _verticesTransit[3] = new Vector3(right, baseY + TransitHeight, 0f);
+            _verticesTransit[3] = new Vector3(right, baseY + TRANSIT_HEIGHT, 0f);
 
             _transitMesh.vertices = _verticesTransit;
             _transitMesh.uv = _uvTransit;
@@ -180,9 +180,9 @@ namespace Fodinae.Scripts.World
 
         private void UpdatePerspective(float left, float right, float baseY, float camX)
         {
-            const float persTileSize = 5f;
-            float uLeft = -(left - (Mathf.Floor(left / persTileSize) * persTileSize)) / persTileSize;
-            float uRight = uLeft + ((left - right) / persTileSize);
+            const float PERS_TILE_SIZE = 5f;
+            float uLeft = -(left - (Mathf.Floor(left / PERS_TILE_SIZE) * PERS_TILE_SIZE)) / PERS_TILE_SIZE;
+            float uRight = uLeft + ((left - right) / PERS_TILE_SIZE);
 
             float uMid = 0.5f * (uLeft + uRight);
             float uWidth = uRight - uLeft;
@@ -194,10 +194,10 @@ namespace Fodinae.Scripts.World
             _uvPers[2] = new Vector2(persRight, 0f);
             _uvPers[3] = new Vector2(persRight, 1f);
 
-            _verticesPers[0] = new Vector3(left, baseY + TransitHeight, 0f);
-            _verticesPers[1] = new Vector3(left, baseY + TransitHeight + PerspectiveHeight, 0f);
-            _verticesPers[2] = new Vector3(right, baseY + TransitHeight, 0f);
-            _verticesPers[3] = new Vector3(right, baseY + TransitHeight + PerspectiveHeight, 0f);
+            _verticesPers[0] = new Vector3(left, baseY + TRANSIT_HEIGHT, 0f);
+            _verticesPers[1] = new Vector3(left, baseY + TRANSIT_HEIGHT + PERSPECTIVE_HEIGHT, 0f);
+            _verticesPers[2] = new Vector3(right, baseY + TRANSIT_HEIGHT, 0f);
+            _verticesPers[3] = new Vector3(right, baseY + TRANSIT_HEIGHT + PERSPECTIVE_HEIGHT, 0f);
 
             _perspectiveMesh.vertices = _verticesPers;
             _perspectiveMesh.uv = _uvPers;

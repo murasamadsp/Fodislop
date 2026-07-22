@@ -20,7 +20,7 @@ namespace Fodinae.Scripts.Audio.Backend
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
         private readonly Dictionary<string, FMOD.Studio.Bank> _loadedBanks = new(StringComparer.OrdinalIgnoreCase);
 
-        private const string BANKPATH = "banks";
+        private const string BANK_PATH = "banks";
 
         private static readonly string[] _requiredBanks =
         {
@@ -67,7 +67,7 @@ namespace Fodinae.Scripts.Audio.Backend
             }
             else if (ClientAssetLoader.Instance != null)
             {
-                var relativeRemotePath = $"{BANKPATH}/{cleanBankName}.bank";
+                var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
                 try
                 {
                     bankFilePath = await ClientAssetLoader.Instance.GetAssetPathAsync(relativeRemotePath);

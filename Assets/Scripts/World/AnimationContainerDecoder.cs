@@ -95,7 +95,7 @@ namespace Fodinae.Scripts.World
                 frameTex.SetPixels32(pixels);
                 frameTex.Apply();
 
-                frames[i] = Sprite.Create(frameTex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), RenderingConstants.PixelsPerUnit);
+                frames[i] = Sprite.Create(frameTex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
             }
 
             return frames;
@@ -133,7 +133,7 @@ namespace Fodinae.Scripts.World
                 while (pos <= data.Length - 8)
                 {
                     string chunkId = System.Text.Encoding.ASCII.GetString(data, pos, 4);
-                    uint chunkSize = BitConverter.ToUInt32(data, pos + 4);
+                    uint CHUNK_SIZE = BitConverter.ToUInt32(data, pos + 4);
                     pos += 8;
 
                     if (chunkId == "VP8X")
@@ -144,7 +144,7 @@ namespace Fodinae.Scripts.World
                     else if (chunkId == "ANMF")
                     {
                         int duration = data[pos + 12] | (data[pos + 13] << 8) | (data[pos + 14] << 16);
-                        int payloadSize = (int)chunkSize - 16;
+                        int payloadSize = (int)CHUNK_SIZE - 16;
                         int payloadPos = pos + 16;
 
                         byte[] frameFile = new byte[payloadSize + 12];
@@ -166,7 +166,7 @@ namespace Fodinae.Scripts.World
                         }
                     }
 
-                    pos += (int)((chunkSize + 1) & ~1);
+                    pos += (int)((CHUNK_SIZE + 1) & ~1);
                 }
 
                 if (frameTextures.Count == 0)

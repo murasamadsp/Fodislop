@@ -47,22 +47,22 @@ namespace Fodinae.Scripts.Networking
             }
         }
 
+        private PlayerMovementController _cachedPlayerController;
+
         public void SendAction(IActionClientPacket action)
         {
-            var player = GameObject.FindGameObjectWithTag("Player");
-            if (player == null)
+            if (_cachedPlayerController == null)
             {
-                Debug.LogError("[NetworkService] Cannot send action: Player object not found.");
+                _cachedPlayerController = FindAnyObjectByType<PlayerMovementController>();
+            }
+
+            if (_cachedPlayerController == null)
+            {
+                Debug.LogError("[NetworkService] Cannot send action: PlayerMovementController not found.");
                 return;
             }
 
-            if (!player.TryGetComponent<PlayerMovementController>(out var controller))
-            {
-                Debug.LogError("[NetworkService] Cannot send action: PlayerMovementController not found on player.");
-                return;
-            }
-
-            Vector2Int pos = controller.Position;
+            Vector2Int pos = _cachedPlayerController.Position;
             ushort serverX = (ushort)pos.x;
             ushort serverY = (ushort)pos.y;
 
@@ -148,12 +148,11 @@ namespace Fodinae.Scripts.Networking
 
             if (_subscribers.TryGetValue(packetType, out var handlers))
             {
-                var handlersCopy = handlers.ToList();
-                foreach (var sub in handlersCopy)
+                for (int i = handlers.Count - 1; i >= 0; i--)
                 {
                     try
                     {
-                        sub.Wrapper(packet);
+                        handlers[i].Wrapper(packet);
                     }
                     catch (Exception ex)
                     {
