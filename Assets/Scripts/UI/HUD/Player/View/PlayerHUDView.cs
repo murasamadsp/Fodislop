@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Player;
+using Fodinae.Scripts.Player.Logic;
+using Fodinae.Scripts.UI.HUD.Player.Model;
 using Fodinae.Scripts.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;

@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.UI;
+using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
+using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Inventory;
 using UnityEngine;

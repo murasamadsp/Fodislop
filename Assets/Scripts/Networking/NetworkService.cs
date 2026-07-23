@@ -4,6 +4,7 @@ using System.Linq;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking.Connection;
 using Fodinae.Scripts.Player;
+using Fodinae.Scripts.Player.Logic;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;

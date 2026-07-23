@@ -1,4 +1,6 @@
 using System;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking;
@@ -90,7 +92,10 @@ namespace Fodinae.Scripts.Player.Logic
 
         protected void Update()
         {
-            if (_input == null) return;
+            if (_input == null)
+            {
+                return;
+            }
 
             ApplyMovement();
             HandleDigInput();
@@ -129,7 +134,11 @@ namespace Fodinae.Scripts.Player.Logic
             get => _aggression;
             set
             {
-                if (_aggression == value) return;
+                if (_aggression == value)
+                {
+                    return;
+                }
+
                 _aggression = value;
                 OnAggressionChanged?.Invoke(value);
             }
@@ -177,12 +186,22 @@ namespace Fodinae.Scripts.Player.Logic
 
         private void ApplyMovement()
         {
-            if (_robot == null || PacketHandler.IsInputBlocked) return;
-            if (Time.time - _lastDigTime < ServerConfig.Instance.DigCooldown) return;
+            if (_robot == null || PacketHandler.IsInputBlocked)
+            {
+                return;
+            }
+
+            if (Time.time - _lastDigTime < ServerConfig.Instance.DigCooldown)
+            {
+                return;
+            }
 
             var mm = MapManager.Instance;
             var ns = NetworkService.Instance;
-            if (mm == null || ns == null) return;
+            if (mm == null || ns == null)
+            {
+                return;
+            }
 
             Vector2 moveInput = _input.MoveInput;
             if (moveInput != Vector2.zero)
@@ -216,7 +235,10 @@ namespace Fodinae.Scripts.Player.Logic
                         _robot.MoveSpeed = 1f / cooldown;
                     }
 
-                    if (Time.time - _lastMoveTime < cooldown) return;
+                    if (Time.time - _lastMoveTime < cooldown)
+                    {
+                        return;
+                    }
 
                     if (_lastSentDirection != packetDirection)
                     {
@@ -234,7 +256,10 @@ namespace Fodinae.Scripts.Player.Logic
                         _robot.TargetAngle = direction.y > 0 ? 90f : 270f;
                     }
 
-                    if (_input.IsShiftPressed) return;
+                    if (_input.IsShiftPressed)
+                    {
+                        return;
+                    }
 
                     int deltaServerX = direction.x;
                     int deltaServerY = direction.y > 0 ? -1 : (direction.y < 0 ? 1 : 0);
@@ -243,7 +268,10 @@ namespace Fodinae.Scripts.Player.Logic
                     int targetServerYInt = Position.y + deltaServerY;
 
                     var layer = ServiceLocator.Resolve<IWorldDataStorage>().CellLayer;
-                    if (layer == null) return;
+                    if (layer == null)
+                    {
+                        return;
+                    }
 
                     int mapWidth = mm.WorldWidth;
                     int mapHeight = mm.WorldHeight;

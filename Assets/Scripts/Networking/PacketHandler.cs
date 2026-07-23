@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Networking.Processors;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Game.Managers;
