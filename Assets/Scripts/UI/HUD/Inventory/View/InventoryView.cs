@@ -5,6 +5,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
+using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
 using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -31,7 +32,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         private Color _contextMenuBg = new Color(0.12f, 0.12f, 0.12f, 0.95f);
 
         private UIDocument _doc;
-        private InventoryModel _model;
+        private IInventoryModel _model;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
         private VisualElement _hotbarContainer;
         private Button _inventoryButton;
@@ -723,7 +724,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             _fullInventoryPanel.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        public InventoryModel GetModel() => _model;
+        public IInventoryModel GetModel() => _model;
 
         private void ShowContextMenu(Vector2 mousePos, int slotIndex)
         {

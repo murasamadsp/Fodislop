@@ -1,4 +1,6 @@
 using System;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -86,7 +88,7 @@ namespace Fodinae.Scripts.World
         /// </summary>
         public bool IsReady()
         {
-            return _enableStandaloneMode && (_isInitialized || (ServiceLocator.Resolve<IWorldDataStorage>()?.IsReady == true));
+            return _enableStandaloneMode && (_isInitialized || (ServiceLocator.Resolve<IWorldDataStorage>()?.IsReady ?? false));
         }
 
         protected void Awake()

@@ -1,6 +1,9 @@
 using System.Collections.Generic;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Player;
+using Fodinae.Scripts.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -67,7 +70,7 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            _mapStorage = ServiceLocator.Resolve<IWorldDataStorage>();
+            _mapStorage = (MapStorage)ServiceLocator.Resolve<IWorldDataStorage>();
 
             CacheCellColors();
 

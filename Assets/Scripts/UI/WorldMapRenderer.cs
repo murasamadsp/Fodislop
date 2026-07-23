@@ -1,5 +1,8 @@
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Player;
+using Fodinae.Scripts.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -44,7 +47,7 @@ namespace Fodinae.Scripts.UI
 
         protected void Start()
         {
-            _storage = ServiceLocator.Resolve<IWorldDataStorage>();
+            _storage = (MapStorage)ServiceLocator.Resolve<IWorldDataStorage>();
             _manager = MapManager.Instance;
             _player = FindAnyObjectByType<PlayerMovementController>();
             if (_storage == null || _manager == null)
