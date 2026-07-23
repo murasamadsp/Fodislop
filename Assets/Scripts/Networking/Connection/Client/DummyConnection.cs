@@ -460,7 +460,7 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
                     OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
 
-                    SendSkillProgressMock().Forget();
+                    SendSkillProgressMock();
                     SendChatMock().Forget();
 
                     OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
@@ -1646,24 +1646,19 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid SendSkillProgressMock()
+        private void SendSkillProgressMock()
         {
             var skills = new (SkillType type, long current, long max)[]
             {
-        (SkillType.MineGeneral, 75, 100),
-        (SkillType.Extraction, 120, 100),
-        (SkillType.Health, 40, 100),
-        (SkillType.Movement, 10, 100),
+                (SkillType.MineGeneral, 75, 100),
+                (SkillType.Extraction, 120, 100),
+                (SkillType.Health, 40, 100),
+                (SkillType.Movement, 10, 100),
             };
 
-            while (_status == ConnectionStatus.Connected)
+            foreach (var s in skills)
             {
-                foreach (var s in skills)
-                {
-                    OnReceived?.Invoke(new ServerPacket(new SkillProgressPacket(s.type, s.current, s.max)));
-                }
-
-                await UniTask.Delay(1000);
+                OnReceived?.Invoke(new ServerPacket(new SkillProgressPacket(s.type, s.current, s.max)));
             }
         }
 
