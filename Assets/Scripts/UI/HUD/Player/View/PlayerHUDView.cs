@@ -110,6 +110,13 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 PlayerStatsModel.Instance.OnMissionChanged -= UpdateMissionPanel;
             }
 
+            var player = PlayerMovementController.LocalPlayer;
+            if (player != null)
+            {
+                player.OnAutoDigChanged -= UpdateAutoDigButton;
+                player.OnAggressionChanged -= UpdateAggressionButton;
+            }
+
             if (GlobalChatUI.Instance != null)
             {
                 GlobalChatUI.Instance.Hide();
@@ -819,6 +826,11 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
         private void RefreshAll()
         {
+            if (this == null)
+            {
+                return;
+            }
+
             var stats = PlayerStatsModel.Instance;
             if (stats == null)
             {
