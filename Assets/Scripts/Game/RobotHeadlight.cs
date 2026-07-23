@@ -32,6 +32,11 @@ namespace Fodinae.Scripts.Game
             Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
         }
 
+        protected void OnDestroy()
+        {
+            Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
+        }
+
         protected void LateUpdate()
         {
             if (!_isEnabled)
@@ -39,9 +44,11 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            Vector2 dir = Vector2.up;
+            Vector2 dir;
+            Vector2 pos;
+
             var player = PlayerMovementController.LocalPlayer;
-            if (player != null && (player.gameObject == gameObject || transform.IsChildOf(player.transform)))
+            if (player != null)
             {
                 dir = player.LastDirection switch
                 {
@@ -51,14 +58,14 @@ namespace Fodinae.Scripts.Game
                     Direction.Left => Vector2.left,
                     _ => Vector2.up
                 };
+                pos = (Vector2)player.transform.position + (dir * 0.5f);
             }
             else
             {
                 float angleRad = transform.eulerAngles.z * Mathf.Deg2Rad;
                 dir = new Vector2(-Mathf.Sin(angleRad), Mathf.Cos(angleRad));
+                pos = (Vector2)transform.position + (dir * 0.5f);
             }
-
-            Vector2 pos = (Vector2)transform.position + (dir * 0.5f);
 
             Shader.SetGlobalVector("_HeadlightPos", pos);
             Shader.SetGlobalVector("_HeadlightDir", dir);
