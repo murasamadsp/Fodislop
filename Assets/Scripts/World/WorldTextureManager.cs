@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Scripts;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
 using MinesServer.Data;
 using UnityEngine;
@@ -569,11 +570,11 @@ namespace Fodinae.Scripts.World
 
         private static CellType GetCellTypeAt(int x, int y)
         {
-            if (MapStorage.Instance != null && MapStorage.Instance.CellLayer != null)
+            if (ServiceLocator.Resolve<IWorldDataStorage>() != null && ServiceLocator.Resolve<IWorldDataStorage>().CellLayer != null)
             {
                 try
                 {
-                    return MapStorage.Instance.GetCell(x, y);
+                    return ServiceLocator.Resolve<IWorldDataStorage>().GetCell(x, y);
                 }
                 catch (Exception ex)
                 {

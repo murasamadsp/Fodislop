@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -10,7 +11,7 @@ using UnityEngine;
 namespace Fodinae.Scripts.Game.Managers
 {
     [ExecuteAlways]
-    public class MapManager : SingletonMonoBehaviour<MapManager>
+    public class MapManager : SingletonMonoBehaviour<MapManager>, IMapDataProvider
     {
         private Camera _mainCamera;
 
@@ -55,6 +56,7 @@ namespace Fodinae.Scripts.Game.Managers
 
         protected override void OnAwake()
         {
+            ServiceLocator.Register<IMapDataProvider>(this);
 #if UNITY_EDITOR
             if (!Application.isPlaying && !IsWorldInitialized)
             {
@@ -73,7 +75,7 @@ namespace Fodinae.Scripts.Game.Managers
 
         protected override void OnApplicationQuitting()
         {
-            MapStorage.Instance?.Dispose();
+            ServiceLocator.Resolve<IWorldDataStorage>()?.Dispose();
         }
 
         public void LoadWorldInit(WorldInitPacket packet)
@@ -130,22 +132,22 @@ namespace Fodinae.Scripts.Game.Managers
 
             try
             {
-                MapStorage.Instance.InitWorld(packet.CodeName, _width, _height);
+                ServiceLocator.Resolve<IWorldDataStorage>().InitWorld(packet.CodeName, _width, _height);
 
-                if (!MapStorage.Instance.IsReady)
+                if (!ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
                 {
                     Debug.LogError($"[MapManager] CRITICAL: MapStorage failed to initialize for world {packet.CodeName}");
-                    Debug.LogError($"[MapManager] MapStorage state: IsReady={MapStorage.Instance.IsReady}, IsInitialized={MapStorage.Instance.IsInitialized()}");
-                    Debug.LogError($"[MapManager] MapStorage CellLayer: {(MapStorage.Instance.CellLayer != null ? "not null" : "NULL - this is the problem!")}");
-                    Debug.LogError($"[MapManager] MapStorage world name: {MapStorage.Instance.GetWorldCodeName()}");
+                    Debug.LogError($"[MapManager] MapStorage state: IsReady={ServiceLocator.Resolve<IWorldDataStorage>().IsReady}, IsInitialized={ServiceLocator.Resolve<IWorldDataStorage>().IsInitialized()}");
+                    Debug.LogError($"[MapManager] MapStorage CellLayer: {(ServiceLocator.Resolve<IWorldDataStorage>().CellLayer != null ? "not null" : "NULL - this is the problem!")}");
+                    Debug.LogError($"[MapManager] MapStorage world name: {ServiceLocator.Resolve<IWorldDataStorage>().GetWorldCodeName()}");
 
                     Debug.LogWarning("[MapManager] Attempting emergency MapStorage initialization...");
                     try
                     {
-                        MapStorage.Instance.Dispose();
-                        MapStorage.Instance.InitWorld(packet.CodeName, _width, _height);
+                        ServiceLocator.Resolve<IWorldDataStorage>().Dispose();
+                        ServiceLocator.Resolve<IWorldDataStorage>().InitWorld(packet.CodeName, _width, _height);
 
-                        if (MapStorage.Instance.IsReady)
+                        if (ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
                         {
                             Debug.Log("[MapManager] Emergency MapStorage initialization successful!");
                         }
@@ -155,10 +157,10 @@ namespace Fodinae.Scripts.Game.Managers
                             Debug.LogError("[MapManager] This is a CRITICAL failure - terrain rendering system cannot function");
 
                             Debug.LogWarning("[MapManager] Creating test world as fallback...");
-                            MapStorage.Instance.Dispose();
-                            MapStorage.Instance.InitWorld("fallback_test_world", 64, 64);
+                            ServiceLocator.Resolve<IWorldDataStorage>().Dispose();
+                            ServiceLocator.Resolve<IWorldDataStorage>().InitWorld("fallback_test_world", 64, 64);
 
-                            if (MapStorage.Instance.IsReady)
+                            if (ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
                             {
                                 Debug.Log("[MapManager] Test world created successfully as fallback");
                                 _worldCodeName = "fallback_test_world";
@@ -180,8 +182,8 @@ namespace Fodinae.Scripts.Game.Managers
                 else
                 {
                     Debug.Log($"[MapManager] MapStorage initialized successfully for world '{packet.CodeName}'");
-                    Debug.Log($"[MapManager] WorldLayer created: {MapStorage.Instance.CellLayer.WidthChunks}x{MapStorage.Instance.CellLayer.HeightChunks} chunks");
-                    Debug.Log($"[MapManager] Chunk size: {MapStorage.Instance.CellLayer.ChunkSize}");
+                    Debug.Log($"[MapManager] WorldLayer created: {ServiceLocator.Resolve<IWorldDataStorage>().CellLayer.WidthChunks}x{ServiceLocator.Resolve<IWorldDataStorage>().CellLayer.HeightChunks} chunks");
+                    Debug.Log($"[MapManager] Chunk size: {ServiceLocator.Resolve<IWorldDataStorage>().CellLayer.ChunkSize}");
                 }
             }
             catch (System.Exception ex)
@@ -208,7 +210,7 @@ namespace Fodinae.Scripts.Game.Managers
             Debug.Log($"[MapManager] Triggering OnWorldInitialized event");
             OnWorldInitialized?.Invoke();
 
-            if (MapStorage.Instance.IsReady)
+            if (ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
             {
                 Debug.Log($"[MapManager] MapStorage is ready, triggering OnWorldDataLoaded event");
                 OnWorldDataLoaded?.Invoke();
@@ -225,7 +227,7 @@ namespace Fodinae.Scripts.Game.Managers
         {
             yield return new WaitForSeconds(2.0f);
 
-            if (MapStorage.Instance.IsReady)
+            if (ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
             {
                 Debug.Log("[MapManager] MapStorage became ready after delay, triggering OnWorldDataLoaded event");
                 OnWorldDataLoaded?.Invoke();
@@ -254,50 +256,54 @@ namespace Fodinae.Scripts.Game.Managers
             return 0f;
         }
 
-        public CellConfigurationPacket GetCellConfig(CellType cellType)
+        public CellConfigurationPacket GetCellConfig(CellType type)
         {
-            if (_cellConfigurations == null || (int)cellType < 0 || (int)cellType >= _cellConfigurations.Length)
+            if (_cellConfigurations == null || (int)type < 0 || (int)type >= _cellConfigurations.Length)
             {
                 return _fallbackConfig;
             }
 
-            return _cellConfigurations[(int)cellType];
+            return _cellConfigurations[(int)type];
         }
 
-        public static bool IsLooseRockType(CellType type)
+        private static readonly System.Collections.Generic.HashSet<CellType> LooseRockTypes = new()
         {
-            return type == CellType.BlackBoulder1 || type == CellType.BlackBoulder2 || type == CellType.BlackBoulder3 ||
-                   type == CellType.MetalBoulder1 || type == CellType.MetalBoulder2 || type == CellType.MetalBoulder3 ||
-                   type == CellType.WhiteSand || type == CellType.DarkWhiteSand ||
-                   type == CellType.RustySand || type == CellType.DarkRustySand ||
-                   type == CellType.BlackSand || type == CellType.DarkBlackSand ||
-                   type == CellType.BlueSand || type == CellType.DarkBlueSand ||
-                   type == CellType.YellowSand || type == CellType.DarkYellowSand ||
-                   type == CellType.DeepMagmaBoulder || type == CellType.MilitaryBlockSand ||
-                   type == CellType.Lava || type == CellType.Boulder1 || type == CellType.Boulder2 || type == CellType.Boulder3 ||
-                   type == CellType.GrayAcid || type == CellType.PurpleAcid;
+            CellType.BlackBoulder1, CellType.BlackBoulder2, CellType.BlackBoulder3,
+            CellType.MetalBoulder1, CellType.MetalBoulder2, CellType.MetalBoulder3,
+            CellType.WhiteSand, CellType.DarkWhiteSand,
+            CellType.RustySand, CellType.DarkRustySand,
+            CellType.BlackSand, CellType.DarkBlackSand,
+            CellType.BlueSand, CellType.DarkBlueSand,
+            CellType.YellowSand, CellType.DarkYellowSand,
+            CellType.DeepMagmaBoulder, CellType.MilitaryBlockSand,
+            CellType.Lava, CellType.Boulder1, CellType.Boulder2, CellType.Boulder3,
+            CellType.GrayAcid, CellType.PurpleAcid,
+        };
+
+        private static readonly System.Collections.Generic.HashSet<CellType> RoundableLooseTypes = new()
+        {
+            CellType.WhiteSand, CellType.DarkWhiteSand,
+            CellType.RustySand, CellType.DarkRustySand,
+            CellType.BlackSand, CellType.DarkBlackSand,
+            CellType.BlueSand, CellType.DarkBlueSand,
+            CellType.YellowSand, CellType.DarkYellowSand,
+            CellType.MilitaryBlockSand,
+            CellType.Lava,
+            CellType.GrayAcid, CellType.PurpleAcid,
+        };
+
+        public static bool IsLooseRockType(CellType type) => LooseRockTypes.Contains(type);
+
+        public static bool IsRoundableLoose(CellType type) => RoundableLooseTypes.Contains(type);
+
+        public bool TryGetTileGroup(CellType type, out int groupId)
+        {
+            return _cellToTileGroup.TryGetValue(type, out groupId);
         }
 
-        public static bool IsRoundableLoose(CellType type)
+        public Color GetCellMinimapColor(CellType type)
         {
-            return type == CellType.WhiteSand || type == CellType.DarkWhiteSand ||
-                   type == CellType.RustySand || type == CellType.DarkRustySand ||
-                   type == CellType.BlackSand || type == CellType.DarkBlackSand ||
-                   type == CellType.BlueSand || type == CellType.DarkBlueSand ||
-                   type == CellType.YellowSand || type == CellType.DarkYellowSand ||
-                   type == CellType.MilitaryBlockSand ||
-                   type == CellType.Lava ||
-                   type == CellType.GrayAcid || type == CellType.PurpleAcid;
-        }
-
-        public bool TryGetTileGroup(CellType cellType, out int groupId)
-        {
-            return _cellToTileGroup.TryGetValue(cellType, out groupId);
-        }
-
-        public Color GetCellMinimapColor(CellType cellType)
-        {
-            var config = GetCellConfig(cellType);
+            var config = GetCellConfig(type);
             if (config.Color == 0)
             {
                 return new Color(0, 0, 0, 0);
@@ -368,9 +374,9 @@ namespace Fodinae.Scripts.Game.Managers
             Gizmos.DrawSphere(Vector3.zero, 0.5f);
             Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
 
-            if (MapStorage.Instance.IsReady && MapStorage.Instance.CellLayer != null)
+            if (ServiceLocator.Resolve<IWorldDataStorage>().IsReady && ServiceLocator.Resolve<IWorldDataStorage>().CellLayer != null)
             {
-                var layer = MapStorage.Instance.CellLayer;
+                var layer = ServiceLocator.Resolve<IWorldDataStorage>().CellLayer;
                 int CHUNK_SIZE = layer.ChunkSize;
                 var loaded = layer.GetLoadedChunkIndices();
 
@@ -405,7 +411,7 @@ namespace Fodinae.Scripts.Game.Managers
                             int worldX = x;
                             int worldY = CoordinateUtils.UnityToServerY(y, WorldHeight);
 
-                            var cellType = MapStorage.Instance.GetCell(worldX, worldY);
+                            var cellType = ServiceLocator.Resolve<IWorldDataStorage>().GetCell(worldX, worldY);
                             var config = GetCellConfig(cellType);
 
                             if (config.Properties != 0)

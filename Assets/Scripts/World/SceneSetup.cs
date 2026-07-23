@@ -46,7 +46,21 @@ namespace Fodinae.Scripts.World
             SetupWorldBackground();
             SetupSurfaceRenderer();
             SetupWorldMapController();
+            SetupMinimapController();
             SetupWorldAudioController();
+        }
+
+        private void SetupMinimapController()
+        {
+            var existing = FindAnyObjectByType<MinimapController>();
+            if (existing != null)
+            {
+                return;
+            }
+
+            var minimapGO = new GameObject("MinimapController");
+            minimapGO.transform.SetParent(transform);
+            minimapGO.AddComponent<MinimapController>();
         }
 
         private void SetupWorldAudioController()
