@@ -296,25 +296,26 @@ namespace MinesServer.Networking.Connection.Client
                         new SFXPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                     })));
 
-                    if (ServiceLocator.Resolve<IWorldDataStorage>().CellLayer != null && ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
+                    var storage = ServiceLocator.Resolve<IWorldDataStorage>();
+                    if (storage?.CellLayer != null && storage.IsReady)
                     {
-                        var cellType = ServiceLocator.Resolve<IWorldDataStorage>().GetCell(cellX, cellY);
+                        var cellType = storage.GetCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
-                        var cellConfig = MapManager.Instance.GetCellConfig(cellType);
-                        bool isBreakable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Breakable);
+                        var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
+                        bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
-                        if (!isBreakable)
+                        if (!isBreakable && cellType != CellType.Empty)
                         {
                             Debug.Log($"[DummyConnection] Cell ({cellX}, {cellY}) = {cellType} is not breakable");
                             return;
                         }
 
-                        ServiceLocator.Resolve<IWorldDataStorage>().SetCell(cellX, cellY, CellType.Empty);
+                        storage.SetCell(cellX, cellY, CellType.Empty);
 
                         if (crystalIdx >= 0)
                         {
                             var stats = PlayerStatsModel.Instance;
-                            if (stats.BasketContents.Length > crystalIdx)
+                            if (stats != null && stats.BasketContents != null && stats.BasketContents.Length > crystalIdx)
                             {
                                 var newContents = new long[stats.BasketContents.Length];
                                 Array.Copy(stats.BasketContents, newContents, newContents.Length);
