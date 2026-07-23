@@ -7,8 +7,11 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae.Scripts.Audio;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.UI;
+using Fodinae.Scripts.UI.HUD.Player.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -149,27 +152,53 @@ namespace MinesServer.Networking.Connection.Client
             _status = ConnectionStatus.Connected;
             OnConnected?.Invoke();
 
-            var minimapObj = new GameObject("MinimapRoot");
-            minimapObj.AddComponent<MinimapController>();
+            if (UnityEngine.Object.FindAnyObjectByType<MinimapController>() == null)
+            {
+                var minimapObj = new GameObject("MinimapRoot");
+                minimapObj.AddComponent<MinimapController>();
+            }
 
-            var inventoryObj = new GameObject("InventoryRoot");
-            inventoryObj.AddComponent<InventoryUI>();
+            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>() == null)
+            {
+                var inventoryObj = new GameObject("InventoryRoot");
+                inventoryObj.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
+                inventoryObj.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
+            }
 
-            var hudObj = new GameObject("PlayerHUD");
-            hudObj.AddComponent<PlayerStatsModel>();
-            hudObj.AddComponent<PlayerHUD>();
+            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>() == null)
+            {
+                var hudObj = new GameObject("PlayerHUD");
+                if (PlayerStatsModel.Instance == null)
+                {
+                    hudObj.AddComponent<PlayerStatsModel>();
+                }
 
-            var pauseObj = new GameObject("PauseMenu");
-            pauseObj.AddComponent<PauseMenu>();
+                hudObj.AddComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
+                hudObj.AddComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>();
+            }
 
-            var chatObj = new GameObject("ChatSystem");
-            chatObj.AddComponent<LocalChatPopup>();
-            chatObj.AddComponent<GlobalChatUI>();
-            chatObj.AddComponent<FloatingChatManager>();
+            if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>() == null)
+            {
+                var pauseObj = new GameObject("PauseMenu");
+                pauseObj.AddComponent<PauseMenu>();
+            }
+
+            if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>() == null)
+            {
+                var chatObj = new GameObject("ChatSystem");
+                chatObj.AddComponent<LocalChatPopup>();
+                chatObj.AddComponent<GlobalChatUI>();
+                chatObj.AddComponent<FloatingChatManager>();
+            }
         }
 
         private void CreateFPSCounter()
         {
+            if (_fpsCounter != null || UnityEngine.Object.FindAnyObjectByType<FPSCounter>() != null)
+            {
+                return;
+            }
+
             GameObject fpsObject = new GameObject("FPSCounter");
             _fpsCounter = fpsObject.AddComponent<FPSCounter>();
             UnityEngine.Object.DontDestroyOnLoad(fpsObject);
@@ -239,13 +268,13 @@ namespace MinesServer.Networking.Connection.Client
                         return;
                     }
 
-                    if (MapStorage.Instance?.CellLayer != null && MapStorage.Instance.IsReady)
+                    if (ServiceLocator.Resolve<IWorldDataStorage>()?.CellLayer != null && ServiceLocator.Resolve<IWorldDataStorage>().IsReady)
                     {
-                        var cellType = MapStorage.Instance.GetCell(move.X, move.Y);
+                        var cellType = ServiceLocator.Resolve<IWorldDataStorage>().GetCell(move.X, move.Y);
                         var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
-                            bool isPassable = ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
+                            bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
                             if (!isPassable && !IgnoreCollision)
                             {
                                 Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not passable ({cellType})");
@@ -289,25 +318,26 @@ namespace MinesServer.Networking.Connection.Client
                         new SFXPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                     })));
 
-                    if (MapStorage.Instance.CellLayer != null && MapStorage.Instance.IsReady)
+                    var storage = ServiceLocator.Resolve<IWorldDataStorage>();
+                    if (storage?.CellLayer != null && storage.IsReady)
                     {
-                        var cellType = MapStorage.Instance.GetCell(cellX, cellY);
+                        var cellType = storage.GetCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
-                        var cellConfig = MapManager.Instance.GetCellConfig(cellType);
-                        bool isBreakable = ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Breakable);
+                        var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
+                        bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
-                        if (!isBreakable)
+                        if (!isBreakable && cellType != CellType.Empty)
                         {
                             Debug.Log($"[DummyConnection] Cell ({cellX}, {cellY}) = {cellType} is not breakable");
                             return;
                         }
 
-                        MapStorage.Instance.SetCell(cellX, cellY, CellType.Empty);
+                        storage.SetCell(cellX, cellY, CellType.Empty);
 
                         if (crystalIdx >= 0)
                         {
                             var stats = PlayerStatsModel.Instance;
-                            if (stats.BasketContents.Length > crystalIdx)
+                            if (stats != null && stats.BasketContents != null && stats.BasketContents.Length > crystalIdx)
                             {
                                 var newContents = new long[stats.BasketContents.Length];
                                 Array.Copy(stats.BasketContents, newContents, newContents.Length);
@@ -430,7 +460,7 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
                     OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
 
-                    SendSkillProgressMock().Forget();
+                    SendSkillProgressMock();
                     SendChatMock().Forget();
 
                     OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
@@ -1616,24 +1646,19 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid SendSkillProgressMock()
+        private void SendSkillProgressMock()
         {
             var skills = new (SkillType type, long current, long max)[]
             {
-        (SkillType.MineGeneral, 75, 100),
-        (SkillType.Extraction, 120, 100),
-        (SkillType.Health, 40, 100),
-        (SkillType.Movement, 10, 100),
+                (SkillType.MineGeneral, 75, 100),
+                (SkillType.Extraction, 120, 100),
+                (SkillType.Health, 40, 100),
+                (SkillType.Movement, 10, 100),
             };
 
-            while (_status == ConnectionStatus.Connected)
+            foreach (var s in skills)
             {
-                foreach (var s in skills)
-                {
-                    OnReceived?.Invoke(new ServerPacket(new SkillProgressPacket(s.type, s.current, s.max)));
-                }
-
-                await UniTask.Delay(1000);
+                OnReceived?.Invoke(new ServerPacket(new SkillProgressPacket(s.type, s.current, s.max)));
             }
         }
 

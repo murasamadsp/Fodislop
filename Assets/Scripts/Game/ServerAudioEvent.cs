@@ -199,8 +199,7 @@ namespace Fodinae.Scripts.Game
             }
 
             var name = sfx.ToString();
-            var sb = new System.Text.StringBuilder();
-            sb.Append("sfx_");
+            var sb = new System.Text.StringBuilder("sfx/");
             for (int i = 0; i < name.Length; i++)
             {
                 char c = name[i];

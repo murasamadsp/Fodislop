@@ -1,4 +1,5 @@
 using Fodinae.Scripts.Player.Logic;
+using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Game
@@ -51,6 +52,7 @@ namespace Fodinae.Scripts.Game
 
             if (player == null)
             {
+                // No active player found in scene — disable global headlight intensity to prevent orphan light spots on map
                 Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
                 return;
             }

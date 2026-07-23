@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Fodinae.Scripts.Audio.Core;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Audio.Backend
@@ -12,10 +13,10 @@ namespace Fodinae.Scripts.Audio.Backend
     /// Использует FmodAudioBackend для проигрывания FMOD Studio событий.
     /// Все события адресуются по строковому имени, соответствующему FMOD event path без prefix event:/.
     ///
-    /// Пример: Play("sfx_dig") → FMOD event:/sfx_dig
+    /// Пример: Play("sfx/dig") → FMOD event:/sfx/dig
     /// </summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
-    public sealed class AudioSystem : SingletonMonoBehaviour<AudioSystem>
+    public sealed class AudioSystem : SingletonMonoBehaviour<AudioSystem>, IAudioSystem
     {
         private const string TAG = "[AudioSystem]";
         private FmodAudioBackend _backend;
@@ -148,6 +149,7 @@ namespace Fodinae.Scripts.Audio.Backend
 
         protected override void OnAwake()
         {
+            ServiceLocator.Register<IAudioSystem>(this);
             _backend = new FmodAudioBackend();
             _backend.Initialize(this);
             ApplySavedBusVolumes();
