@@ -54,16 +54,12 @@ namespace Fodinae.Scripts.Player.Logic
             }
 
             _robot = GetComponent<Robot>();
-            if (_robot != null)
+            if (_robot is not null)
             {
                 _robot.MoveSpeed = _moveSpeed;
             }
 
-            _input = GetComponent<IPlayerInput>();
-            if (_input == null)
-            {
-                _input = gameObject.AddComponent<PlayerInputHandler>();
-            }
+            _input = GetComponent<IPlayerInput>() ?? gameObject.AddComponent<PlayerInputHandler>();
 
             if (!TryGetComponent<RobotHeadlight>(out var headlight))
             {
@@ -84,17 +80,17 @@ namespace Fodinae.Scripts.Player.Logic
 
         protected void Start()
         {
-            Vector3 targetGridPos = new Vector3(
+            Vector3 targetGridPos = new(
                 Mathf.Floor(transform.position.x) + 0.5f,
                 Mathf.Floor(transform.position.y) + 0.5f,
                 transform.position.z);
             transform.position = targetGridPos;
-            if (_robot != null)
+            if (_robot is not null)
             {
                 _robot.TargetPosition = targetGridPos;
             }
 
-            Position = CoordinateUtils.UnityToServerPos(transform.position, MapManager.Instance != null ? MapManager.Instance.WorldHeight : 0);
+            Position = CoordinateUtils.UnityToServerPos(transform.position, MapManager.Instance?.WorldHeight ?? 0);
         }
 
         protected void Update()
@@ -177,10 +173,10 @@ namespace Fodinae.Scripts.Player.Logic
             Vector2Int oldPos = Position;
             Position = position;
 
-            int worldHeight = MapManager.Instance != null ? MapManager.Instance.WorldHeight : 0;
+            int worldHeight = MapManager.Instance?.WorldHeight ?? 0;
             Vector3 targetWorldPos = CoordinateUtils.ServerToUnityPos(position.x, position.y, worldHeight, transform.position.z);
             transform.position = targetWorldPos;
-            if (_robot != null)
+            if (_robot is not null)
             {
                 _robot.TargetPosition = targetWorldPos;
             }
@@ -190,7 +186,7 @@ namespace Fodinae.Scripts.Player.Logic
 
         private void ApplyMovement()
         {
-            if (_robot == null || PacketHandler.IsInputBlocked)
+            if (_robot is null || PacketHandler.IsInputBlocked)
             {
                 return;
             }
@@ -200,9 +196,7 @@ namespace Fodinae.Scripts.Player.Logic
                 return;
             }
 
-            var mm = MapManager.Instance;
-            var ns = NetworkService.Instance;
-            if (mm == null || ns == null)
+            if (MapManager.Instance is not { } mm || NetworkService.Instance is not { } ns)
             {
                 return;
             }

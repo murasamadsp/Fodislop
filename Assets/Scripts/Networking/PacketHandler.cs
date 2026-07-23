@@ -66,13 +66,13 @@ namespace Fodinae.Scripts.Networking
             Debug.Log("[PacketHandler] Starting initialization...");
 
             // Verify Dependencies
-            if (MapManager.Instance == null)
+            if (MapManager.Instance is null)
             {
                 Debug.LogError("[PacketHandler] MapManager not found - cannot process world initialization");
                 return;
             }
 
-            if (ServiceLocator.Resolve<IWorldDataStorage>() == null)
+            if (!ServiceLocator.IsRegistered<IWorldDataStorage>())
             {
                 Debug.LogError("[PacketHandler] MapStorage not found - cannot process map data");
                 return;

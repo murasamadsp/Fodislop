@@ -9,10 +9,9 @@ namespace Fodinae.Scripts.Networking.Auth
 
         public static event Action<string> OnTokenChanged;
 
-        public static string LoadToken()
-        {
-            return PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
-        }
+        public static string LoadToken() => PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
+
+        public static bool HasToken => PlayerPrefs.HasKey(PlayerPrefsKey);
 
         public static void SaveToken(string token)
         {
