@@ -24,9 +24,9 @@ namespace Fodinae.Scripts
         protected void OnEnable()
         {
             _doc = GetComponent<UIDocument>();
-            if (_doc == null)
+            if (_doc == null || _doc.rootVisualElement == null)
             {
-                Debug.LogError("[MainMenu] UIDocument component not found on MainMenu GameObject");
+                Debug.LogError("[MainMenu] UIDocument component or rootVisualElement not ready on MainMenu GameObject");
                 return;
             }
 
@@ -43,6 +43,12 @@ namespace Fodinae.Scripts
             }
 
             var mainMenu = mainMenuUXML.CloneTree();
+            if (mainMenu == null)
+            {
+                Debug.LogError("[MainMenu] Failed to clone MainMenu.uxml tree");
+                return;
+            }
+
             _mainMenuContainer = mainMenu.Q<VisualElement>("MainMenuContainer");
             _playButton = mainMenu.Q<Button>("PlayButton");
             if (_playButton != null)
@@ -52,11 +58,6 @@ namespace Fodinae.Scripts
 
             root.Add(mainMenu);
 
-            // The loader is a full-screen, absolutely-positioned background overlay
-            // that stays visible until the player presses PLAY (see HideLoader).
-            // The menu must therefore sit *above* the loader and the loader must
-            // not intercept pointer events, otherwise the PLAY button is occluded
-            // and unclickable.
             mainMenu.style.position = Position.Absolute;
             mainMenu.style.left = 0;
             mainMenu.style.top = 0;
@@ -79,6 +80,11 @@ namespace Fodinae.Scripts
 
         private void ShowLoader()
         {
+            if (_doc == null || _doc.rootVisualElement == null)
+            {
+                return;
+            }
+
             var root = _doc.rootVisualElement;
             root.style.width = new Length(100, LengthUnit.Percent);
             root.style.height = new Length(100, LengthUnit.Percent);
