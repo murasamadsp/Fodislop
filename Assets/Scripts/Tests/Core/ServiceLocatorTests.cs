@@ -81,5 +81,31 @@ namespace Fodinae.Tests.Core
             var resolved = ServiceLocator.Resolve<ITestService>();
             Assert.IsNull(resolved, "After Clear(), all service registrations should be removed.");
         }
+
+        [Test]
+        public void TryResolve_RegisteredService_ReturnsTrueAndInstance()
+        {
+            var impl = new TestServiceImplementation();
+            ServiceLocator.Register<ITestService>(impl);
+
+            bool success = ServiceLocator.TryResolve<ITestService>(out var resolved);
+
+            Assert.IsTrue(success);
+            Assert.IsNotNull(resolved);
+            Assert.AreEqual(42, resolved.GetValue());
+        }
+
+        [Test]
+        public void Unregister_ExistingService_RemovesRegistration()
+        {
+            var impl = new TestServiceImplementation();
+            ServiceLocator.Register<ITestService>(impl);
+
+            bool unregistered = ServiceLocator.Unregister<ITestService>();
+
+            Assert.IsTrue(unregistered);
+            Assert.IsFalse(ServiceLocator.IsRegistered<ITestService>());
+            Assert.IsNull(ServiceLocator.Resolve<ITestService>());
+        }
     }
 }
