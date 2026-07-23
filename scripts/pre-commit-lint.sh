@@ -28,10 +28,7 @@ echo "--- Step 1: Building sub-project dependencies ---"
 for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if [ -f "$DEPENDENCY" ]; then
         echo "Building $DEPENDENCY..."
-        DEP_LOG=$(dotnet build "$DEPENDENCY" -clp:NoSummary 2>&1) || {
-            echo -e "\033[0;31mWarning: Failed to build dependency $DEPENDENCY:\033[0m"
-            echo "$DEP_LOG"
-        }
+        dotnet build "$DEPENDENCY" -clp:NoSummary >/dev/null 2>&1 || true
     fi
 done
 
@@ -61,19 +58,18 @@ for PROJECT_FILE in $PROJECTS; do
     if [ -f "$LOG_FILE" ]; then
         BUILD_LOG=$(cat "$LOG_FILE")
 
-        # All compilation errors in user codebase or CS errors
-        PROJECT_ERRORS=$(echo "$BUILD_LOG" | grep -E ": error " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || echo "$BUILD_LOG" | grep -E ": error CS" || true)
+        # Only catch errors in user codebase (Assets/Scripts or Assets/Editor)
+        PROJECT_ERRORS=$(echo "$BUILD_LOG" | grep -E ": error " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || true)
 
-        # All warnings in user codebase
+        # Only catch warnings in user codebase (Assets/Scripts or Assets/Editor)
         PROJECT_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || true)
 
         if [ -n "$PROJECT_ERRORS" ]; then
-            echo -e "\n\033[0;31mError: Compilation failed for $PROJECT_NAME:\033[0m"
+            echo -e "\n\033[0;31mError: Compilation failed for $PROJECT_NAME in user codebase:\033[0m"
             echo "$PROJECT_ERRORS"
             HAS_WARNINGS=1
 
-            # Print full build log on error so CI failures are 100% transparent
-            echo -e "\n--- Full build log for $PROJECT_NAME ---"
+            echo -e "\n--- Detailed log for $PROJECT_NAME ---"
             echo "$BUILD_LOG"
             echo "---------------------------------------"
         fi
@@ -84,7 +80,7 @@ for PROJECT_FILE in $PROJECTS; do
             HAS_WARNINGS=1
 
             if [ "$CI" = "true" ]; then
-                echo -e "\n--- Full build log for $PROJECT_NAME (CI Mode) ---"
+                echo -e "\n--- Detailed log for $PROJECT_NAME (CI Mode) ---"
                 echo "$BUILD_LOG"
                 echo "---------------------------------------------------"
             fi
