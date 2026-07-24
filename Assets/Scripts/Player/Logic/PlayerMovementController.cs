@@ -95,7 +95,7 @@ namespace Fodinae.Scripts.Player.Logic
             }
 
             Position = CoordinateUtils.UnityToServerPos(transform.position, MapManager.Instance?.WorldHeight ?? 0);
-            _lastSentDirection = Direction.Down;
+            _lastSentDirection = null;
         }
 
         protected void Update()
@@ -142,11 +142,6 @@ namespace Fodinae.Scripts.Player.Logic
             get => _aggression;
             set
             {
-                if (_aggression == value)
-                {
-                    return;
-                }
-
                 _aggression = value;
                 OnAggressionChanged?.Invoke(value);
             }
@@ -170,8 +165,11 @@ namespace Fodinae.Scripts.Player.Logic
             {
                 _ignoreCollision = value;
                 DummyConnection.IgnoreCollision = value;
+                OnCollisionChanged?.Invoke(value);
             }
         }
+
+        public event Action<bool> OnCollisionChanged;
 
         public void UpdateServerPosition(Vector2Int position)
         {

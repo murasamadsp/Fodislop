@@ -121,6 +121,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             {
                 player.OnAutoDigChanged -= UpdateAutoDigButton;
                 player.OnAggressionChanged -= UpdateAggressionButton;
+                player.OnCollisionChanged -= UpdateCollisionButton;
             }
 
             if (GlobalChatUI.Instance != null)
@@ -184,11 +185,12 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             if (player != null)
             {
                 player.OnAutoDigChanged += UpdateAutoDigButton;
-            }
-
-            if (player != null)
-            {
                 player.OnAggressionChanged += UpdateAggressionButton;
+                player.OnCollisionChanged += UpdateCollisionButton;
+
+                UpdateAutoDigButton(player.AutoDig);
+                UpdateAggressionButton(player.Aggression);
+                UpdateCollisionButton(player.IgnoreCollision);
             }
 
             if (PlayerStatsModel.Instance != null)
@@ -562,11 +564,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _autoDigLabel.AddToClassList("hud-button-label");
             _autoDigLabel.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
             _autoDigButton.Add(_autoDigLabel);
-
-            _autoDigButton.RegisterCallback<MouseEnterEvent>(_ =>
-                _autoDigButton.style.backgroundColor = new Color(0.25f, 0.05f, 0.05f, 0.85f));
-            _autoDigButton.RegisterCallback<MouseLeaveEvent>(_ =>
-                _autoDigButton.style.backgroundColor = new Color(0.15f, 0.05f, 0.05f, 0.85f));
             Tooltip.AttachTo(_autoDigButton, "Автоматическое копание блоков", _tooltip);
 
             root.Add(_autoDigButton);
@@ -585,14 +582,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _aggressionLabel.AddToClassList("hud-button-label");
             _aggressionLabel.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
             _aggressionButton.Add(_aggressionLabel);
-
-            _aggressionButton.RegisterCallback<MouseEnterEvent>(_ =>
-                _aggressionButton.style.backgroundColor = new Color(0.25f, 0.05f, 0.05f, 0.85f));
-            _aggressionButton.RegisterCallback<MouseLeaveEvent>(_ =>
-                _aggressionButton.style.backgroundColor = new Color(0.15f, 0.05f, 0.05f, 0.85f));
-
             // TODO: заменить текст
-            Tooltip.AttachTo(_aggressionButton, "Робот атакует враждебных существ", _tooltip);
+            Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
 
             root.Add(_aggressionButton);
         }
@@ -684,11 +675,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _collisionLabel.AddToClassList("hud-button-label");
             _collisionLabel.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
             _collisionButton.Add(_collisionLabel);
-
-            _collisionButton.RegisterCallback<MouseEnterEvent>(_ =>
-                _collisionButton.style.backgroundColor = new Color(0.25f, 0.05f, 0.05f, 0.85f));
-            _collisionButton.RegisterCallback<MouseLeaveEvent>(_ =>
-                _collisionButton.style.backgroundColor = new Color(0.15f, 0.05f, 0.05f, 0.85f));
             Tooltip.AttachTo(_collisionButton, "Игнорирование коллизий со стенами", _tooltip);
 
             root.Add(_collisionButton);

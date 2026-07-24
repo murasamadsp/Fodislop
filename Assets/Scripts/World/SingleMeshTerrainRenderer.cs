@@ -2204,17 +2204,31 @@ namespace Fodinae.Scripts.World
             }
             else
             {
-                for (int dy = -1; dy <= 1 && glowZ == 0f; dy++)
+                float totalX = 0f;
+                float totalY = 0f;
+                int count = 0;
+
+                // Собираем ВСЕ источники лавы вокруг в радиусе 1 клетки
+                for (int dy = -1; dy <= 1; dy++)
                 {
-                    for (int dx = -1; dx <= 1 && glowZ == 0f; dx++)
+                    for (int dx = -1; dx <= 1; dx++)
                     {
                         if ((dx != 0 || dy != 0) && GlowingCellTypes.Contains(_cellCache[cx + dx, cy + dy].Type))
                         {
-                            glowX = gridX + dx + 0.5f;
-                            glowY = unityY + dy + 0.5f;
-                            glowZ = 1f;
+                            // Прибавляем абсолютные мировые координаты центра каждой найденной лавы
+                            totalX += (gridX + dx + 0.5f);
+                            totalY += (unityY + dy + 0.5f);
+                            count++;
                         }
                     }
+                }
+
+                if (count > 0)
+                {
+                    // Находим геометрический центр между всеми источниками света
+                    glowX = totalX / count;
+                    glowY = totalY / count;
+                    glowZ = 1f;
                 }
             }
 
