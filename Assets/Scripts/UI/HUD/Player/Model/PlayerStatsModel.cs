@@ -87,6 +87,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
         public string MissionDescription { get; private set; }
         public long MissionProgress { get; private set; }
         public long MissionMaxProgress { get; private set; }
+        public ushort? MissionArrowX { get; private set; }
+        public ushort? MissionArrowY { get; private set; }
 
         public event Action OnStatsChanged;
         public event Action OnHealthChanged;
@@ -98,6 +100,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
         public event Action<SkillType, long, long> OnSkillProgress;
         public event Action OnDailyBonusChanged;
         public event Action OnMissionChanged;
+        public event Action OnMissionArrowChanged;
 
         public bool DailyBonusAvailable { get; private set; }
 
@@ -221,6 +224,15 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
             OnStatsChanged?.Invoke();
         }
 
+        public void SetMissionArrow(ushort x, ushort y)
+        {
+            Debug.Log($"[PlayerStatsModel] SetMissionArrow: X={x}, Y={y}");
+            MissionArrowX = x;
+            MissionArrowY = y;
+            OnMissionArrowChanged?.Invoke();
+            OnStatsChanged?.Invoke();
+        }
+
         public void ClearMission()
         {
             IsMissionActive = false;
@@ -228,7 +240,10 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
             MissionDescription = null;
             MissionProgress = 0;
             MissionMaxProgress = 0;
+            MissionArrowX = null;
+            MissionArrowY = null;
             OnMissionChanged?.Invoke();
+            OnMissionArrowChanged?.Invoke();
             OnStatsChanged?.Invoke();
         }
     }

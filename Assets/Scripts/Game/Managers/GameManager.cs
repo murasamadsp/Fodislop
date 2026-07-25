@@ -68,6 +68,10 @@ namespace Fodinae.Scripts.Game.Managers
             fpsGO.AddComponent<FPSCounter>();
             fpsGO.transform.SetParent(transform);
 
+            var reconnectGO = new GameObject("ReconnectUI");
+            reconnectGO.AddComponent<ReconnectUI>();
+            reconnectGO.transform.SetParent(transform);
+
             var mmGO = new GameObject("MinimapRoot");
             mmGO.AddComponent<MinimapController>();
             mmGO.transform.SetParent(_uiRoot.transform);
@@ -92,6 +96,10 @@ namespace Fodinae.Scripts.Game.Managers
             chatGO.AddComponent<GlobalChatUI>();
             chatGO.AddComponent<FloatingChatManager>();
             chatGO.transform.SetParent(_uiRoot.transform);
+
+            var arrowGO = new GameObject("MissionArrowUI");
+            arrowGO.AddComponent<MissionArrowUI>();
+            arrowGO.transform.SetParent(_uiRoot.transform);
         }
 
         public void SetState(GameState newState)

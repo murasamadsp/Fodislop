@@ -2,16 +2,15 @@
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- Generated file, do not modify, your changes will be overwritten (use AssetPostprocessor.OnGeneratedCSProject) -->
   <PropertyGroup>
-    <LangVersion>preview</LangVersion>
+    <LangVersion>9.0</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <RootNamespace>
-    </RootNamespace>
-    <ProjectGuid>{B4CD19DA-EE08-5225-FB19-1D0DFA4113DD}</ProjectGuid>
+    <RootNamespace></RootNamespace>
+    <ProjectGuid>{FB2DD6B3-3DAF-CE41-24FC-F13C201B9983}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <AssemblyName>Assembly-CSharp</AssemblyName>
@@ -124,6 +123,7 @@
     <Compile Include="Assets\Scripts\VContainer\Runtime\Annotations\IStartable.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\TextBoxPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\ComponentRegistrationBuilder.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\MissionArrowProcessor.cs" />
     <Compile Include="Assets\Scripts\SingletonBehaviour.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\SliderPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\UI\Controls\UILine.cs" />
@@ -155,6 +155,7 @@
     <Compile Include="Assets\Scripts\Networking\Connection\Client\TextureStorageManager.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\ContainerLocal.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\StatusProcessor.cs" />
+    <Compile Include="Assets\Scripts\UI\Programmator\ObserverJoystick.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Diagnostics\RegisterInfo.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\PlayerStateProcessor.cs" />
     <Compile Include="Assets\Scripts\World\StandaloneWorldInitializer.cs" />
@@ -219,6 +220,7 @@
     <Compile Include="Assets\Scripts\UI\FloatingChatManager.cs" />
     <Compile Include="Assets\Scripts\Core\Interfaces\IPlayerStats.cs" />
     <Compile Include="Assets\Scripts\UI\StyleApplicator.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\OpenURLProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\Programmator\RadialMenu.cs" />
     <Compile Include="Assets\Scripts\Tests\World\CoordinateUtilsTests.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\TypeKeyHashTable2.cs" />
@@ -230,6 +232,7 @@
     <Compile Include="Assets\Scripts\World\CoordinateUtils.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\InstanceProviders\PrefabComponentProvider.cs" />
     <Compile Include="Assets\Scripts\Audio\Spatial\AudioZone.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\ClientConfigProcessor.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\ContainerBuilder.cs" />
     <Compile Include="Assets\Scripts\World\BackgroundFloodFill.cs" />
     <Compile Include="Assets\Scripts\World\AnimationContainerDecoder.cs" />
@@ -250,6 +253,7 @@
     <Compile Include="Assets\Scripts\UI\Builders\IntDropdownPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\IPacketProcessor.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\PlayerLoopItem.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\ConnectionProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\ClickContextResolver.cs" />
     <Compile Include="Assets\Scripts\UI\HUD\Inventory\Model\ItemData.cs" />
     <Compile Include="Assets\Scripts\AssetPipeline\ETagCalculator.cs" />
@@ -271,6 +275,7 @@
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\InstanceProviders\CollectionInstanceProvider.cs" />
     <Compile Include="Assets\Scripts\UI\MinimapController.cs" />
     <Compile Include="Assets\Scripts\UI\GlobalChatUI.cs" />
+    <Compile Include="Assets\Scripts\UI\MissionArrowUI.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\ChatProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\PacketUIBuilderFactory.cs" />
     <Compile Include="Assets\Scripts\Core\Interfaces\IMapDataProvider.cs" />
@@ -291,6 +296,7 @@
     <Compile Include="Assets\Scripts\UI\Controls\ChatInputBlinker.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\DisposeLoopItem.cs" />
     <Compile Include="Assets\Scripts\Game\ServerAudioEvent.cs" />
+    <Compile Include="Assets\Scripts\UI\ReconnectUI.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\PlayerLoopRunner.cs" />
   </ItemGroup>
   <ItemGroup>

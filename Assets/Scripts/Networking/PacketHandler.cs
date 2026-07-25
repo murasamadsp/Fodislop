@@ -24,6 +24,7 @@ using MinesServer.Networking.Server.Packets.Information.StatusPanel;
 using MinesServer.Networking.Server.Packets.Inventory;
 using MinesServer.Networking.Server.Packets.Mission;
 using MinesServer.Networking.Server.Packets.Movement;
+using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -53,6 +54,10 @@ namespace Fodinae.Scripts.Networking
         private static readonly ClanProcessor Clan = new();
         private static readonly MissionProcessor Mission = new();
         private static readonly PackProcessor Pack = new();
+        private static readonly ConnectionProcessor Connection = new();
+        private static readonly OpenURLProcessor OpenURL = new();
+        private static readonly ClientConfigProcessor ClientConfig = new();
+        private static readonly MissionArrowProcessor MissionArrow = new();
         private readonly WindowPacketProcessor _windowProcessor = new();
         private bool _isInitialized;
 
@@ -146,6 +151,7 @@ namespace Fodinae.Scripts.Networking
             _networkService.Subscribe<ChatMessageListPacket>(Chat.Process);
             _networkService.Subscribe<LocalChatMessagePacket>(Chat.Process);
             _networkService.Subscribe<ChatMutePacket>(Chat.Process);
+            _networkService.Subscribe<ChatListPacket>(Chat.Process);
 
             _networkService.Subscribe<OnlinePacket>(Status.Process);
             _networkService.Subscribe<PingPacket>(Status.Process);
@@ -162,7 +168,12 @@ namespace Fodinae.Scripts.Networking
             _networkService.Subscribe<HideClanPacket>(Clan.Process);
             _networkService.Subscribe<MissionInitPacket>(Mission.Process);
             _networkService.Subscribe<MissionProgressPacket>(Mission.Process);
+            _networkService.Subscribe<DisconnectPacket>(Connection.Process);
+            _networkService.Subscribe<ReconnectPacket>(Connection.Process);
             _networkService.Subscribe<AuthTokenPacket>(HandleAuthTokenPacket);
+            _networkService.Subscribe<OpenURLPacket>(OpenURL.Process);
+            _networkService.Subscribe<ClientConfigPacket>(ClientConfig.Process);
+            _networkService.Subscribe<MissionArrowPacket>(MissionArrow.Process);
         }
 
         protected virtual void OnDestroy()
@@ -190,6 +201,7 @@ namespace Fodinae.Scripts.Networking
                 _networkService.Unsubscribe<ChatMessageListPacket>(Chat.Process);
                 _networkService.Unsubscribe<LocalChatMessagePacket>(Chat.Process);
                 _networkService.Unsubscribe<ChatMutePacket>(Chat.Process);
+                _networkService.Unsubscribe<ChatListPacket>(Chat.Process);
 
                 _networkService.Unsubscribe<LevelPacket>(PlayerStats.Process);
                 _networkService.Unsubscribe<HealthPacket>(PlayerStats.Process);
@@ -216,7 +228,12 @@ namespace Fodinae.Scripts.Networking
                 _networkService.Unsubscribe<MaxDepthPacket>(PlayerStats.Process);
                 _networkService.Unsubscribe<MissionInitPacket>(Mission.Process);
                 _networkService.Unsubscribe<MissionProgressPacket>(Mission.Process);
+                _networkService.Unsubscribe<DisconnectPacket>(Connection.Process);
+                _networkService.Unsubscribe<ReconnectPacket>(Connection.Process);
                 _networkService.Unsubscribe<AuthTokenPacket>(HandleAuthTokenPacket);
+                _networkService.Unsubscribe<OpenURLPacket>(OpenURL.Process);
+                _networkService.Unsubscribe<ClientConfigPacket>(ClientConfig.Process);
+                _networkService.Unsubscribe<MissionArrowPacket>(MissionArrow.Process);
             }
 
             // Close modal and any open windows

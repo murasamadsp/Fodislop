@@ -15,6 +15,8 @@ namespace Fodinae.Scripts.Player.Input
         public Vector2 MoveInput => _moveInput;
         public bool WantsToToggleAutoDig => Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
         public bool WantsToToggleAggression => Keyboard.current != null && Keyboard.current.lKey.wasPressedThisFrame;
+        public bool WantsToGeo => Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
+        public bool WantsToHeal => Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
 
         // Пробел удобнее Z — большой палец не загибается, проще удерживать во время движения
         public bool WantsToDig => Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
