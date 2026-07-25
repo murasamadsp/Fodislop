@@ -96,6 +96,10 @@ namespace Fodinae.Scripts.Game.Managers
             chatGO.AddComponent<GlobalChatUI>();
             chatGO.AddComponent<FloatingChatManager>();
             chatGO.transform.SetParent(_uiRoot.transform);
+
+            var arrowGO = new GameObject("MissionArrowUI");
+            arrowGO.AddComponent<MissionArrowUI>();
+            arrowGO.transform.SetParent(_uiRoot.transform);
         }
 
         public void SetState(GameState newState)

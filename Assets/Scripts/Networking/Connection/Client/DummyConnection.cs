@@ -762,6 +762,11 @@ namespace MinesServer.Networking.Connection.Client
             {
                 OnReceived?.Invoke(new ServerPacket(new OpenURLPacket("https://vk.ru/mines4reborn")));
             }
+            else if (packet.WindowTag == "test_mission_arrow")
+            {
+                OnReceived?.Invoke(new ServerPacket(new MissionArrowPacket((ushort)_x, (ushort)_y)));
+                Debug.Log($"[DummyConnection] Test mission arrow at ({_x}, {_y})");
+            }
             else if (packet.WindowTag == "save_client_config")
             {
                 Console.WriteLine($"[DummyConnection] Received save_client_config with {packet.Context.Count} entries");
@@ -1175,7 +1180,8 @@ namespace MinesServer.Networking.Connection.Client
             OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
             OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, m.Title, m.Description)));
             OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(0, m.Target)));
-            Console.WriteLine($"[DummyConnection] Started mission: {m.Title}");
+            OnReceived?.Invoke(new ServerPacket(new MissionArrowPacket((ushort)(_x + 2), (ushort)(_y + 2))));
+            Debug.Log($"[DummyConnection] Started mission: {m.Title}, arrow at ({_x + 2}, {_y + 2})");
         }
 
         private void CancelMission()

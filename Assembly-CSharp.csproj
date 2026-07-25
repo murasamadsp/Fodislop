@@ -123,6 +123,7 @@
     <Compile Include="Assets\Scripts\VContainer\Runtime\Annotations\IStartable.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\TextBoxPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\ComponentRegistrationBuilder.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\MissionArrowProcessor.cs" />
     <Compile Include="Assets\Scripts\SingletonBehaviour.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\SliderPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\UI\Controls\UILine.cs" />
@@ -274,6 +275,7 @@
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\InstanceProviders\CollectionInstanceProvider.cs" />
     <Compile Include="Assets\Scripts\UI\MinimapController.cs" />
     <Compile Include="Assets\Scripts\UI\GlobalChatUI.cs" />
+    <Compile Include="Assets\Scripts\UI\MissionArrowUI.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\ChatProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\PacketUIBuilderFactory.cs" />
     <Compile Include="Assets\Scripts\Core\Interfaces\IMapDataProvider.cs" />

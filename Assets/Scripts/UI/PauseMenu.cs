@@ -220,6 +220,12 @@ namespace Fodinae.Scripts.UI
                 CloseMenu();
             }));
 
+            _mainPage.Add(CreateButton("Тест: Стрелка миссии", () =>
+            {
+                NetworkService.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+
             _mainPage.Add(CreateButton("Миссии", () =>
             {
                 NetworkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
