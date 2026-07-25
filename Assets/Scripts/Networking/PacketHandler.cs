@@ -24,6 +24,7 @@ using MinesServer.Networking.Server.Packets.Information.StatusPanel;
 using MinesServer.Networking.Server.Packets.Inventory;
 using MinesServer.Networking.Server.Packets.Mission;
 using MinesServer.Networking.Server.Packets.Movement;
+using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -54,6 +55,7 @@ namespace Fodinae.Scripts.Networking
         private static readonly MissionProcessor Mission = new();
         private static readonly PackProcessor Pack = new();
         private static readonly ConnectionProcessor Connection = new();
+        private static readonly OpenURLProcessor OpenURL = new();
         private readonly WindowPacketProcessor _windowProcessor = new();
         private bool _isInitialized;
 
@@ -167,6 +169,7 @@ namespace Fodinae.Scripts.Networking
             _networkService.Subscribe<DisconnectPacket>(Connection.Process);
             _networkService.Subscribe<ReconnectPacket>(Connection.Process);
             _networkService.Subscribe<AuthTokenPacket>(HandleAuthTokenPacket);
+            _networkService.Subscribe<OpenURLPacket>(OpenURL.Process);
         }
 
         protected virtual void OnDestroy()
@@ -224,6 +227,7 @@ namespace Fodinae.Scripts.Networking
                 _networkService.Unsubscribe<DisconnectPacket>(Connection.Process);
                 _networkService.Unsubscribe<ReconnectPacket>(Connection.Process);
                 _networkService.Unsubscribe<AuthTokenPacket>(HandleAuthTokenPacket);
+                _networkService.Unsubscribe<OpenURLPacket>(OpenURL.Process);
             }
 
             // Close modal and any open windows

@@ -2,7 +2,7 @@
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- Generated file, do not modify, your changes will be overwritten (use AssetPostprocessor.OnGeneratedCSProject) -->
   <PropertyGroup>
-    <LangVersion>preview</LangVersion>
+    <LangVersion>9.0</LangVersion>
   </PropertyGroup>
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -219,6 +219,7 @@
     <Compile Include="Assets\Scripts\UI\FloatingChatManager.cs" />
     <Compile Include="Assets\Scripts\Core\Interfaces\IPlayerStats.cs" />
     <Compile Include="Assets\Scripts\UI\StyleApplicator.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\OpenURLProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\Programmator\RadialMenu.cs" />
     <Compile Include="Assets\Scripts\Tests\World\CoordinateUtilsTests.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\TypeKeyHashTable2.cs" />

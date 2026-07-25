@@ -195,6 +195,46 @@ namespace Fodinae.Scripts.UI
                 CloseMenu();
             }));
 
+            _mainPage.Add(CreateButton("Тест: Открыть URL", () =>
+            {
+                NetworkService.Send(new ElementClickPacket("open_url_test", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+
+            _mainPage.Add(CreateButton("Тест модального окна", () =>
+            {
+                NetworkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+
+            _mainPage.Add(CreateButton("Вступить в клан", () =>
+            {
+                NetworkService.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+
+            _mainPage.Add(CreateButton("Выйти из клана", () =>
+            {
+                NetworkService.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+
+            _mainPage.Add(CreateButton("Миссии", () =>
+            {
+                NetworkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+
+            _mainPage.Add(CreateButton("Стены ✗", () =>
+            {
+                var player = PlayerMovementController.LocalPlayer;
+                if (player != null)
+                {
+                    player.IgnoreCollision = !player.IgnoreCollision;
+                    CloseMenu();
+                }
+            }));
+
             _menuPanel.Add(_mainPage);
 
             _settingsPage = CreateStyledPanel();

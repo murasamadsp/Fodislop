@@ -751,6 +751,10 @@ namespace MinesServer.Networking.Connection.Client
                     CancelMission();
                 }
             }
+            else if (packet.WindowTag == "open_url_test")
+            {
+                OnReceived?.Invoke(new ServerPacket(new OpenURLPacket("https://vk.ru/mines4reborn")));
+            }
             else if (packet.WindowTag == "auth")
             {
                 if (!_awaitingAuth)
