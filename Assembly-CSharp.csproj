@@ -231,6 +231,7 @@
     <Compile Include="Assets\Scripts\World\CoordinateUtils.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\InstanceProviders\PrefabComponentProvider.cs" />
     <Compile Include="Assets\Scripts\Audio\Spatial\AudioZone.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\ClientConfigProcessor.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\ContainerBuilder.cs" />
     <Compile Include="Assets\Scripts\World\BackgroundFloodFill.cs" />
     <Compile Include="Assets\Scripts\World\AnimationContainerDecoder.cs" />

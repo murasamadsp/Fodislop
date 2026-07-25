@@ -56,6 +56,7 @@ namespace Fodinae.Scripts.Networking
         private static readonly PackProcessor Pack = new();
         private static readonly ConnectionProcessor Connection = new();
         private static readonly OpenURLProcessor OpenURL = new();
+        private static readonly ClientConfigProcessor ClientConfig = new();
         private readonly WindowPacketProcessor _windowProcessor = new();
         private bool _isInitialized;
 
@@ -170,6 +171,7 @@ namespace Fodinae.Scripts.Networking
             _networkService.Subscribe<ReconnectPacket>(Connection.Process);
             _networkService.Subscribe<AuthTokenPacket>(HandleAuthTokenPacket);
             _networkService.Subscribe<OpenURLPacket>(OpenURL.Process);
+            _networkService.Subscribe<ClientConfigPacket>(ClientConfig.Process);
         }
 
         protected virtual void OnDestroy()
@@ -228,6 +230,7 @@ namespace Fodinae.Scripts.Networking
                 _networkService.Unsubscribe<ReconnectPacket>(Connection.Process);
                 _networkService.Unsubscribe<AuthTokenPacket>(HandleAuthTokenPacket);
                 _networkService.Unsubscribe<OpenURLPacket>(OpenURL.Process);
+                _networkService.Unsubscribe<ClientConfigPacket>(ClientConfig.Process);
             }
 
             // Close modal and any open windows

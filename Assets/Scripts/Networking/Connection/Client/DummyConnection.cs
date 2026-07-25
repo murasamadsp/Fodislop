@@ -79,6 +79,13 @@ namespace MinesServer.Networking.Connection.Client
         private bool _buffLoopStarted;
         private const int _maxDepth = 200;
         private bool _depthWarningActive;
+
+        private byte _clientMasterVolume = 255;
+        private readonly Dictionary<string, byte> _clientSoundVolumes = new();
+        private RendererMode _clientRenderer = RendererMode.Default;
+        private readonly List<StringPairPacket> _clientKeybinds = new();
+        private readonly List<string> _clientUnrenderedTextures = new();
+
         private static readonly System.Random _rng = new();
 
         private WorldLayer<CellType> _worldLayer;
@@ -755,6 +762,35 @@ namespace MinesServer.Networking.Connection.Client
             {
                 OnReceived?.Invoke(new ServerPacket(new OpenURLPacket("https://vk.ru/mines4reborn")));
             }
+            else if (packet.WindowTag == "save_client_config")
+            {
+                Console.WriteLine($"[DummyConnection] Received save_client_config with {packet.Context.Count} entries");
+                foreach (var kv in packet.Context)
+                {
+                    switch (kv.Key)
+                    {
+                        case "master_volume":
+                            if (byte.TryParse(kv.Value, out var masterVol))
+                                _clientMasterVolume = masterVol;
+                            break;
+                        case string key when key.EndsWith("_volume") && key.Length > 7:
+                            string soundKey = key.Substring(0, key.Length - 7);
+                            if (byte.TryParse(kv.Value, out var soundVol))
+                                _clientSoundVolumes[soundKey] = soundVol;
+                            break;
+                        case "renderer":
+                            if (Enum.TryParse<RendererMode>(kv.Value, out var renderer))
+                                _clientRenderer = renderer;
+                            break;
+                        case "keybind":
+                            _clientKeybinds.Add(new StringPairPacket("unknown", kv.Value));
+                            break;
+                    }
+                }
+
+                SendClientConfigPacket();
+                Console.WriteLine("[DummyConnection] Client config saved and echoed back");
+            }
             else if (packet.WindowTag == "auth")
             {
                 if (!_awaitingAuth)
@@ -1000,6 +1036,18 @@ namespace MinesServer.Networking.Connection.Client
                 new PackPacket(227, 50, PackType.Teleport, 0, 1),
                 new PackPacket(25, 48, PackType.Market, 0, 0),
             })));
+
+            SendClientConfigPacket();
+        }
+
+        private void SendClientConfigPacket()
+        {
+            Console.WriteLine($"[DummyConnection] Sending ClientConfigPacket: master={_clientMasterVolume}, renderer={_clientRenderer}, sounds={_clientSoundVolumes.Count}");
+            OnReceived?.Invoke(new ServerPacket(new ClientConfigPacket(
+                new SoundConfigPacket(_clientMasterVolume, _clientSoundVolumes),
+                _clientRenderer,
+                _clientKeybinds,
+                _clientUnrenderedTextures)));
         }
 
         private void SendMissionWindow()
