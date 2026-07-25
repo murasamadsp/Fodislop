@@ -8,6 +8,8 @@ namespace Fodinae.Scripts.Player.Interfaces
         bool WantsToToggleAutoDig { get; }
         bool WantsToToggleAggression { get; }
         bool WantsToDig { get; }
+        bool WantsToGeo { get; }
+        bool WantsToHeal { get; }
         bool IsShiftPressed { get; }
         void SetMovementInput(Vector2 input);
     }

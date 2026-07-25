@@ -91,6 +91,7 @@ namespace MinesServer.Networking.Connection.Client
         private WorldLayer<CellType> _worldLayer;
         private CellConfigurationPacket[] _cellConfigs;
         private long[] _basketContents = new long[6];
+        private readonly Stack<CellType> _geoStack = new();
 
         public bool UsePrebakedMap = true;
         public string PrebakedWorldCodeName = "pallada";
@@ -431,6 +432,59 @@ namespace MinesServer.Networking.Connection.Client
                         new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
                         new AudioPacket(SFX.Death, _mockBotId, effectX, effectY, Array.Empty<StringPairPacket>()),
                     })));
+                }
+                else if (actionPacket.Payload is GeoPacket)
+                {
+                    Vector2Int frontOffset = _rot switch
+                    {
+                        Direction.Down => new Vector2Int(0, 1),
+                        Direction.Up => new Vector2Int(0, -1),
+                        Direction.Left => new Vector2Int(-1, 0),
+                        Direction.Right => new Vector2Int(1, 0),
+                        _ => Vector2Int.zero
+                    };
+                    ushort fx = (ushort)(_x + frontOffset.x);
+                    ushort fy = (ushort)(_y + frontOffset.y);
+
+                    var storage = MapStorage.Instance;
+                    if (storage?.CellLayer != null && storage.IsReady)
+                    {
+                        var cellType = storage.GetCell(fx, fy);
+                        var mm = MapManager.Instance;
+                        var cellConfig = mm?.GetCellConfig(cellType);
+                        bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
+
+                        if (cellType != CellType.Empty && isBreakable)
+                        {
+                            _geoStack.Push(cellType);
+                            storage.SetCell(fx, fy, CellType.Empty);
+                            OnReceived?.Invoke(new ServerPacket(new GeologyPacket(_geoStack.Count, 10, cellType, cellType.ToString())));
+                            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                            {
+                                new MapRegionPacket(fx, fy, 0, 0, new[] { CellType.Empty }),
+                                new AudioPacket(SFX.Geology, _mockBotId, fx, fy, Array.Empty<StringPairPacket>()),
+                            })));
+                            Debug.Log($"[DummyConnection] Geo took {cellType} at ({fx},{fy}), stack={_geoStack.Count}");
+                        }
+                        else if (_geoStack.Count > 0)
+                        {
+                            var placeType = _geoStack.Pop();
+                            storage.SetCell(fx, fy, placeType);
+                            OnReceived?.Invoke(new ServerPacket(new GeologyPacket(_geoStack.Count, 10, placeType, placeType.ToString())));
+                            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                            {
+                                new MapRegionPacket(fx, fy, 0, 0, new[] { placeType }),
+                                new AudioPacket(SFX.Geology, _mockBotId, fx, fy, Array.Empty<StringPairPacket>()),
+                            })));
+                            Debug.Log($"[DummyConnection] Geo placed {placeType} at ({fx},{fy}), stack={_geoStack.Count}");
+                        }
+                    }
+                }
+                else if (actionPacket.Payload is HealPacket)
+                {
+                    _health = Math.Min(500, _health + 50);
+                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
+                    Debug.Log($"[DummyConnection] Healed to {_health}/500");
                 }
 
                 return;

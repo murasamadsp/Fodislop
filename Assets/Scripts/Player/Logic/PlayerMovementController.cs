@@ -117,6 +117,16 @@ namespace Fodinae.Scripts.Player.Logic
             {
                 ToggleAggression();
             }
+
+            if (_input.WantsToGeo)
+            {
+                NetworkService.Instance.SendAction(new GeoPacket());
+            }
+
+            if (_input.WantsToHeal)
+            {
+                NetworkService.Instance.SendAction(new HealPacket());
+            }
         }
 
         public void Initialize(uint botId)
