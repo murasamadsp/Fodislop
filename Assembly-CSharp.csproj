@@ -9,9 +9,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <RootNamespace>
-    </RootNamespace>
-    <ProjectGuid>{B4CD19DA-EE08-5225-FB19-1D0DFA4113DD}</ProjectGuid>
+    <RootNamespace></RootNamespace>
+    <ProjectGuid>{FB2DD6B3-3DAF-CE41-24FC-F13C201B9983}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <AssemblyName>Assembly-CSharp</AssemblyName>
@@ -155,6 +154,7 @@
     <Compile Include="Assets\Scripts\Networking\Connection\Client\TextureStorageManager.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\ContainerLocal.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\StatusProcessor.cs" />
+    <Compile Include="Assets\Scripts\UI\Programmator\ObserverJoystick.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Diagnostics\RegisterInfo.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\PlayerStateProcessor.cs" />
     <Compile Include="Assets\Scripts\World\StandaloneWorldInitializer.cs" />
@@ -250,6 +250,7 @@
     <Compile Include="Assets\Scripts\UI\Builders\IntDropdownPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\IPacketProcessor.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\PlayerLoopItem.cs" />
+    <Compile Include="Assets\Scripts\Networking\Processors\ConnectionProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\ClickContextResolver.cs" />
     <Compile Include="Assets\Scripts\UI\HUD\Inventory\Model\ItemData.cs" />
     <Compile Include="Assets\Scripts\AssetPipeline\ETagCalculator.cs" />
@@ -291,6 +292,7 @@
     <Compile Include="Assets\Scripts\UI\Controls\ChatInputBlinker.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\DisposeLoopItem.cs" />
     <Compile Include="Assets\Scripts\Game\ServerAudioEvent.cs" />
+    <Compile Include="Assets\Scripts\UI\ReconnectUI.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\PlayerLoopRunner.cs" />
   </ItemGroup>
   <ItemGroup>

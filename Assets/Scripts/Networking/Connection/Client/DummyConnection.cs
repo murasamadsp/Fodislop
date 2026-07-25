@@ -66,7 +66,7 @@ namespace MinesServer.Networking.Connection.Client
         private ushort _y = 0;
         private Direction _rot = Direction.Up;
         private bool _aggression;
-        private ItemType _selectedItemType;
+        private ItemType? _selectedItemType;
         private readonly Dictionary<ItemType, long> _inventory = new();
         private int _bonusCountdown;
         private volatile bool _bonusClaimed;
@@ -199,6 +199,9 @@ namespace MinesServer.Networking.Connection.Client
                 return;
             }
 
+            _worldLayer?.Dispose();
+            _worldLayer = null;
+
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
             DisconnectAsync().Forget();
@@ -256,6 +259,20 @@ namespace MinesServer.Networking.Connection.Client
 
         public void Dispose()
         {
+            _worldLayer?.Dispose();
+            _worldLayer = null;
+        }
+
+        public void TriggerDisconnect(string reason)
+        {
+            Console.WriteLine($"[DummyConnection] TriggerDisconnect: {reason}");
+            OnReceived?.Invoke(new ServerPacket(new MinesServer.Networking.Server.Packets.Connection.DisconnectPacket(reason)));
+        }
+
+        public void TriggerReconnect(string reason)
+        {
+            Console.WriteLine($"[DummyConnection] TriggerReconnect: {reason}");
+            OnReceived?.Invoke(new ServerPacket(new MinesServer.Networking.Server.Packets.Connection.ReconnectPacket(reason)));
         }
 
         public void SendAsync(ClientPacket packet)
@@ -436,131 +453,7 @@ namespace MinesServer.Networking.Connection.Client
 
                     OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(receivedToken)));
 
-                    bool skipMapDataGeneration = false;
-                    int worldWidth = 500;
-                    int worldHeight = 500;
-
-                    if (UsePrebakedMap)
-                    {
-                        string prebakedPath = $"{Application.persistentDataPath}/{PrebakedWorldCodeName}_cells.mapb";
-                        (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(prebakedPath);
-                        if (worldWidth > 0 && worldHeight > 0)
-                        {
-                            skipMapDataGeneration = true;
-                            Debug.Log($"[DummyConnection] Using prebaked map: {worldWidth}x{worldHeight}");
-                        }
-                        else
-                        {
-                            worldWidth = 500;
-                            worldHeight = 500;
-                            Debug.LogWarning("[DummyConnection] Prebaked map not found or invalid, falling back to generation");
-                        }
-                    }
-                    else
-                    {
-                        worldWidth = 500;
-                        worldHeight = 500;
-                    }
-
-                    if (_cellConfigs == null)
-                    {
-                        _cellConfigs = CreateTestCellConfigurations();
-                    }
-
-                    OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
-                        "pallada",
-                        "Pallada",
-                        (ushort)worldWidth,
-                        (ushort)worldHeight,
-                        _cellConfigs,
-                        new byte[][]
-                        {
-                            new byte[] { 37, 38, 106 },
-                        })));
-
-                    if (!skipMapDataGeneration)
-                    {
-                        SendTestWorldMapData(worldWidth, worldHeight);
-                    }
-
-                    OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
-                    var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-                    HandleRobotInfoMock(_mockBotId).Forget();
-                    RunCircularBots(10).Forget();
-                    _x = 25;
-                    _y = 50;
-                    OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
-                    OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
-                    OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
-                    _bonusCountdown = 10;
-                    _bonusClaimed = false;
-                    OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
-                    _health = 250;
-                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
-                    _basketContents = new long[6];
-                    OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, _basketContents)));
-                    OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
-                    OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
-
-                    SendSkillProgressMock();
-                    SendChatMock().Forget();
-
-                    OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
-                    OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
-                    foreach (var kvp in _activeBuffs)
-                    {
-                        var (color, name) = kvp.Key switch
-                        {
-                            "xp3" => (System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3"),
-                            "freeup" => (System.Drawing.Color.Cyan, "Freeup"),
-                            "x4" => (System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4"),
-                            "battery" => (System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор"),
-                            _ => (System.Drawing.Color.White, kvp.Key),
-                        };
-                        OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, color, kvp.Key, new[] { name, kvp.Value.ToString() })));
-                    }
-
-                    StartBuffLoop();
-                    SendPingMock().Forget();
-                    SendDailyBonusMock().Forget();
-
-                    OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
-                    {
-                        [CellType.Empty] = 20,
-                        [CellType.Road] = 100,
-                    })));
-                    OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
-
-                    var inventoryData = new Dictionary<ItemType, long>();
-                    foreach (var type in ItemRegistry.AllTypes)
-                    {
-                        inventoryData[type] = 1;
-                    }
-
-                    inventoryData[ItemType.Battery] = 2;
-                    _inventory.Clear();
-                    foreach (var kvp in inventoryData)
-                    {
-                        _inventory[kvp.Key] = kvp.Value;
-                    }
-
-                    OnReceived?.Invoke(new ServerPacket(new InventoryPacket(inventoryData)));
-
-                    var placeholderMsg = new ChatMessagePacket(0, 0, 0, 0,
-                    System.Drawing.Color.White, string.Empty, System.Drawing.Color.White, string.Empty);
-                    OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
-
-                    // Send test packs
-                    _teleportPositions.Clear();
-                    _teleportPositions.Add((27, 50));
-                    _teleportPositions.Add((227, 50));
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                    {
-                        new PackPacket(27, 50, PackType.Teleport, 0, 1),
-                        new PackPacket(227, 50, PackType.Teleport, 0, 1),
-                        new PackPacket(25, 48, PackType.Market, 0, 0),
-                    })));
+                    InitWorld();
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
                     HandleAssetRequest(runtimeAssets).Forget();
@@ -590,6 +483,11 @@ namespace MinesServer.Networking.Connection.Client
                     Console.WriteLine($"[DummyConnection] SelectItem: {selectItem.Item}");
                     _selectedItemType = selectItem.Item;
                     OnReceived?.Invoke(new ServerPacket(GetItemInfoPacket(selectItem.Item)));
+                    break;
+                case MinesServer.Networking.Client.Packets.Inventory.DeselectItemPacket:
+                    Console.WriteLine("[DummyConnection] DeselectItem");
+                    _selectedItemType = null;
+                    OnReceived?.Invoke(new ServerPacket(default(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket)));
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.UseItemPacket:
                     Console.WriteLine($"[DummyConnection] UseItem: {_selectedItemType}");
@@ -668,9 +566,15 @@ namespace MinesServer.Networking.Connection.Client
 
         private void HandleUseItem()
         {
-            if (IsBuildingPack(_selectedItemType))
+            if (_selectedItemType == null)
             {
-                var packType = ItemTypeToPackType(_selectedItemType);
+                return;
+            }
+
+            var selectedType = _selectedItemType.Value;
+            if (IsBuildingPack(selectedType))
+            {
+                var packType = ItemTypeToPackType(selectedType);
                 if (packType == PackType.None)
                 {
                     return;
@@ -695,15 +599,15 @@ namespace MinesServer.Networking.Connection.Client
                     _teleportPositions.Add((frontX, frontY));
                 }
 
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
-            else if (_selectedItemType == ItemType.Rem)
+            else if (selectedType == ItemType.Rem)
             {
                 _health = 500;
                 OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
-            else if (_selectedItemType == ItemType.UpgradeBooster)
+            else if (selectedType == ItemType.UpgradeBooster)
             {
                 StartBuffLoop();
                 const string tag = "xp3";
@@ -711,9 +615,9 @@ namespace MinesServer.Networking.Connection.Client
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 86400;
                 _activeBuffs[tag] = expiry;
                 OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(0, 200, 0), tag, new[] { "Прокачка x3", expiry.ToString() })));
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
-            else if (_selectedItemType == ItemType.FreeUp)
+            else if (selectedType == ItemType.FreeUp)
             {
                 StartBuffLoop();
                 const string tag = "freeup";
@@ -721,9 +625,9 @@ namespace MinesServer.Networking.Connection.Client
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
                 _activeBuffs[tag] = expiry;
                 OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.Cyan, tag, new[] { "Freeup", expiry.ToString() })));
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
-            else if (_selectedItemType == ItemType.MineBooster)
+            else if (selectedType == ItemType.MineBooster)
             {
                 StartBuffLoop();
                 const string tag = "x4";
@@ -731,9 +635,9 @@ namespace MinesServer.Networking.Connection.Client
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
                 _activeBuffs[tag] = expiry;
                 OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(255, 165, 0), tag, new[] { "Добыча x4", expiry.ToString() })));
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
-            else if (_selectedItemType == ItemType.Battery)
+            else if (selectedType == ItemType.Battery)
             {
                 StartBuffLoop();
                 const string tag = "battery";
@@ -741,11 +645,11 @@ namespace MinesServer.Networking.Connection.Client
                 var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 3600;
                 _activeBuffs[tag] = expiry;
                 OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(65, 105, 225), tag, new[] { "Аккумулятор", expiry.ToString() })));
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
             else
             {
-                ConsumeItem(_selectedItemType, 1);
+                ConsumeItem(selectedType, 1);
             }
         }
 
@@ -996,9 +900,11 @@ namespace MinesServer.Networking.Connection.Client
                 }
             }
 
+            string worldCodeName = generated ? "generated" : PrebakedWorldCodeName;
+            string worldDisplayName = generated ? "Generated" : "Pallada";
             OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
-                "pallada",
-                "Pallada",
+                worldCodeName,
+                worldDisplayName,
                 (ushort)worldWidth,
                 (ushort)worldHeight,
                 _cellConfigs,

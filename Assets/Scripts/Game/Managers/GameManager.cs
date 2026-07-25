@@ -68,6 +68,10 @@ namespace Fodinae.Scripts.Game.Managers
             fpsGO.AddComponent<FPSCounter>();
             fpsGO.transform.SetParent(transform);
 
+            var reconnectGO = new GameObject("ReconnectUI");
+            reconnectGO.AddComponent<ReconnectUI>();
+            reconnectGO.transform.SetParent(transform);
+
             var mmGO = new GameObject("MinimapRoot");
             mmGO.AddComponent<MinimapController>();
             mmGO.transform.SetParent(_uiRoot.transform);

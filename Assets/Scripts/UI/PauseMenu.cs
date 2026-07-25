@@ -2,11 +2,13 @@ using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Networking;
+using Fodinae.Scripts.Networking.Connection;
 using Fodinae.Scripts.Player;
 using Fodinae.Scripts.Player.Logic;
 using Fodinae.Scripts.UI.Programmator;
 using Fodinae.Scripts.World;
 using MinesServer.Networking.Client.Packets.GUI;
+using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -170,6 +172,29 @@ namespace Fodinae.Scripts.UI
             _mainPage.Add(CreateButton("Продолжить", CloseMenu));
             _mainPage.Add(CreateButton("Настройки", OpenSettings));
             _mainPage.Add(CreateButton("Выйти", QuitGame));
+
+            var debugDivider = new Label("═════ Отладка ═════");
+            debugDivider.style.fontSize = 12;
+            debugDivider.style.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+            debugDivider.style.marginTop = 10;
+            debugDivider.style.marginBottom = 6;
+            debugDivider.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _mainPage.Add(debugDivider);
+
+            _mainPage.Add(CreateButton("Тест: Kick сервером", () =>
+            {
+                var conn = ConnectionManager.Instance?.Connection as DummyConnection;
+                conn?.TriggerDisconnect("Тестовый дисконнект от сервера");
+                CloseMenu();
+            }));
+
+            _mainPage.Add(CreateButton("Тест: Reconnect", () =>
+            {
+                var conn = ConnectionManager.Instance?.Connection as DummyConnection;
+                conn?.TriggerReconnect("Сервер перезагружается");
+                CloseMenu();
+            }));
+
             _menuPanel.Add(_mainPage);
 
             _settingsPage = CreateStyledPanel();

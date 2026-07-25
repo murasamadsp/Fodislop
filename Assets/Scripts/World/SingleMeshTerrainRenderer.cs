@@ -551,7 +551,7 @@ namespace Fodinae.Scripts.World
                         {
                             if (chunkIndex != lastChunkIndex)
                             {
-                                currentChunk = layer.GetChunk(chunkIndex, false, true);
+                                currentChunk = layer.GetChunk(chunkIndex, true, true);
                                 lastChunkIndex = chunkIndex;
                             }
 
@@ -2057,7 +2057,7 @@ namespace Fodinae.Scripts.World
                     }
                     else
                     {
-                        var chunk = layer.GetChunk(chunkIndex, false, true);
+                        var chunk = layer.GetChunk(chunkIndex, true, true);
                         type = chunk != null ? chunk[localIndex] : CellType.Unloaded;
                     }
                 }

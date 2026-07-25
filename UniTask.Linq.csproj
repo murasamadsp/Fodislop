@@ -9,9 +9,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <RootNamespace>
-    </RootNamespace>
-    <ProjectGuid>{EB7439E8-6A3F-DEE2-1FFD-D64A6CE87493}</ProjectGuid>
+    <RootNamespace></RootNamespace>
+    <ProjectGuid>{5809D04D-1875-96B2-EFEA-0F929885A71C}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <AssemblyName>UniTask.Linq</AssemblyName>

@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 1568dcd384777a14c932e4915eda0ad9
+guid: 438cd8e5d027a5e42afdc561c95ae75c
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 2829487664271217928
-    second: Rocks_2_1_0
+      213: 3819654588316971820
+    second: X WHITE_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -109,11 +109,37 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: WebGL
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Rocks_2_1_0
+      name: X WHITE_0
       rect:
         serializedVersion: 2
         x: 0
@@ -128,8 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 8055c351a0c544720800000000000000
-      internalID: 2829487664271217928
+      spriteID: c23f2555c93220530800000000000000
+      internalID: 3819654588316971820
       vertices: []
       indices: 
       edges: []
@@ -148,7 +174,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Rocks_2_1_0: 2829487664271217928
+      X WHITE_0: 3819654588316971820
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
