@@ -66,6 +66,7 @@ namespace MinesServer.Networking.Connection.Client
         private ushort _y = 0;
         private Direction _rot = Direction.Up;
         private bool _aggression;
+        private bool _autoDig;
         private ItemType? _selectedItemType;
         private readonly Dictionary<ItemType, long> _inventory = new();
         private int _bonusCountdown;
@@ -342,6 +343,12 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is UnmappedKeyPacket key)
                 {
                 }
+                else if (actionPacket.Payload is ToggleAutoDigPacket)
+                {
+                    _autoDig = !_autoDig;
+                    Console.WriteLine($"[DummyConnection] AutoDig toggled: {_autoDig}");
+                    OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(_autoDig)));
+                }
                 else if (actionPacket.Payload is ToggleAgressionPacket)
                 {
                     _aggression = !_aggression;
@@ -425,7 +432,9 @@ namespace MinesServer.Networking.Connection.Client
                     _x = SPAWN_X;
                     _y = SPAWN_Y;
                     _rot = Direction.Up;
+                    _health = 500;
 
+                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
                     OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
@@ -485,6 +494,41 @@ namespace MinesServer.Networking.Connection.Client
                     _health = Math.Min(500, _health + 50);
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
                     Debug.Log($"[DummyConnection] Healed to {_health}/500");
+                }
+                else if (actionPacket.Payload is BuildCyanPacket)
+                {
+                    var front = GetFrontCell();
+                    TryBuild(front.X, front.Y, CellType.MilitaryBlock);
+                }
+                else if (actionPacket.Payload is BuildGrayPacket)
+                {
+                    var front = GetFrontCell();
+                    var storage = MapStorage.Instance;
+                    if (storage?.CellLayer != null && storage.IsReady && storage.GetCell(front.X, front.Y) == CellType.Road)
+                    {
+                        storage.SetCell(front.X, front.Y, CellType.Empty);
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(front.X, front.Y, 0, 0, new[] { CellType.Empty }) })));
+                        Debug.Log($"[DummyConnection] BuildGray: removed Road at ({front.X},{front.Y})");
+                    }
+                    else
+                    {
+                        TryBuild(front.X, front.Y, CellType.Road);
+                    }
+                }
+                else if (actionPacket.Payload is BuildGreenPacket)
+                {
+                    var front = GetFrontCell();
+                    TryUpgradeBuild(front.X, front.Y,
+                        (CellType.Empty, CellType.GreenBlock),
+                        (CellType.GreenBlock, CellType.YellowBlock),
+                        (CellType.YellowBlock, CellType.RedBlock));
+                }
+                else if (actionPacket.Payload is BuildWhitePacket)
+                {
+                    var front = GetFrontCell();
+                    TryUpgradeBuild(front.X, front.Y,
+                        (CellType.Empty, CellType.Support),
+                        (CellType.Support, CellType.QuadBlock));
                 }
 
                 return;
@@ -1061,8 +1105,8 @@ namespace MinesServer.Networking.Connection.Client
 
             OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
             {
-                [CellType.Empty] = 20,
-                [CellType.Road] = 100,
+                [CellType.Empty] = 100,
+                [CellType.Road] = 20,
             })));
             OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
@@ -1352,8 +1396,22 @@ namespace MinesServer.Networking.Connection.Client
                     Console.WriteLine($"[DummyConnection] Depth damage: {damage} (HP: {_health}/500)");
                     if (_health <= 0)
                     {
-                        Console.WriteLine("[DummyConnection] Player died from depth damage");
-                        Disconnect();
+                        Console.WriteLine("[DummyConnection] Player died from depth damage, respawning");
+                        const ushort SPAWN_X = 25;
+                        const ushort SPAWN_Y = 50;
+                        var deathX = _x;
+                        var deathY = _y;
+                        _x = SPAWN_X;
+                        _y = SPAWN_Y;
+                        _rot = Direction.Up;
+                        _health = 500;
+                        OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
+                        OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                        {
+                            new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
+                            new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
+                        })));
                     }
                 }
             }
@@ -2015,6 +2073,60 @@ namespace MinesServer.Networking.Connection.Client
                 CellType.Cyan => 5,
                 _ => -1,
             };
+        }
+
+        private (ushort X, ushort Y) GetFrontCell()
+        {
+            Vector2Int offset = _rot switch
+            {
+                Direction.Down => new Vector2Int(0, 1),
+                Direction.Up => new Vector2Int(0, -1),
+                Direction.Left => new Vector2Int(-1, 0),
+                Direction.Right => new Vector2Int(1, 0),
+                _ => Vector2Int.zero,
+            };
+            return ((ushort)(_x + offset.x), (ushort)(_y + offset.y));
+        }
+
+        private void TryBuild(ushort x, ushort y, CellType placeType)
+        {
+            var storage = MapStorage.Instance;
+            if (storage?.CellLayer == null || !storage.IsReady)
+            {
+                return;
+            }
+
+            var current = storage.GetCell(x, y);
+            if (current != CellType.Empty && current != CellType.Road)
+            {
+                return;
+            }
+
+            storage.SetCell(x, y, placeType);
+            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { placeType }) })));
+            Debug.Log($"[DummyConnection] Built {placeType} at ({x},{y})");
+        }
+
+        private void TryUpgradeBuild(ushort x, ushort y, params (CellType From, CellType To)[] upgrades)
+        {
+            var storage = MapStorage.Instance;
+            if (storage?.CellLayer == null || !storage.IsReady)
+            {
+                return;
+            }
+
+            var current = storage.GetCell(x, y);
+
+            for (int i = 0; i < upgrades.Length; i++)
+            {
+                if (current == upgrades[i].From || (current == CellType.Road && i == 0 && upgrades[i].From == CellType.Empty))
+                {
+                    storage.SetCell(x, y, upgrades[i].To);
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { upgrades[i].To }) })));
+                    Debug.Log($"[DummyConnection] Built {upgrades[i].To} at ({x},{y}) (upgraded from {current})");
+                    return;
+                }
+            }
         }
     }
 }

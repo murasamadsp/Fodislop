@@ -17,10 +17,15 @@ namespace Fodinae.Scripts.Player.Input
         public bool WantsToToggleAggression => Keyboard.current != null && Keyboard.current.lKey.wasPressedThisFrame;
         public bool WantsToGeo => Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
         public bool WantsToHeal => Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
+        public bool WantsToBuildCyan => Keyboard.current != null && Keyboard.current.yKey.wasPressedThisFrame;
+        public bool WantsToBuildGray => Keyboard.current != null && Keyboard.current.hKey.wasPressedThisFrame;
+        public bool WantsToBuildGreen => Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame;
+        public bool WantsToBuildWhite => Keyboard.current != null && Keyboard.current.jKey.wasPressedThisFrame;
 
         // Пробел удобнее Z — большой палец не загибается, проще удерживать во время движения
         public bool WantsToDig => Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
         public bool IsShiftPressed => Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
+        public bool IsCtrlPressed => Keyboard.current != null && Keyboard.current.ctrlKey.isPressed;
 
         protected void OnEnable()
         {

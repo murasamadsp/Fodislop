@@ -110,7 +110,7 @@ namespace Fodinae.Scripts.Player.Logic
 
             if (_input.WantsToToggleAutoDig)
             {
-                AutoDig = !_autoDig;
+                NetworkService.Instance.SendAction(new ToggleAutoDigPacket());
             }
 
             if (_input.WantsToToggleAggression)
@@ -127,6 +127,26 @@ namespace Fodinae.Scripts.Player.Logic
             {
                 NetworkService.Instance.SendAction(new HealPacket());
             }
+
+            if (_input.WantsToBuildCyan)
+            {
+                NetworkService.Instance.SendAction(new BuildCyanPacket());
+            }
+
+            if (_input.WantsToBuildGray)
+            {
+                NetworkService.Instance.SendAction(new BuildGrayPacket());
+            }
+
+            if (_input.WantsToBuildGreen)
+            {
+                NetworkService.Instance.SendAction(new BuildGreenPacket());
+            }
+
+            if (_input.WantsToBuildWhite)
+            {
+                NetworkService.Instance.SendAction(new BuildWhitePacket());
+            }
         }
 
         public void Initialize(uint botId)
@@ -140,7 +160,6 @@ namespace Fodinae.Scripts.Player.Logic
             set
             {
                 _autoDig = value;
-                NetworkService.Instance.SendAction(new ToggleAutoDigPacket());
                 OnAutoDigChanged?.Invoke(value);
             }
         }
@@ -161,9 +180,7 @@ namespace Fodinae.Scripts.Player.Logic
 
         public void ToggleAggression()
         {
-            _aggression = !_aggression;
             NetworkService.Instance.SendAction(new ToggleAgressionPacket());
-            OnAggressionChanged?.Invoke(_aggression);
         }
 
         public bool IsMoving => _input != null && _input.MoveInput != Vector2.zero;
@@ -247,6 +264,11 @@ namespace Fodinae.Scripts.Player.Logic
 
                     var currentCellType = storage.GetCell(currentX, currentServerY);
                     float cooldown = mm.GetMoveCooldown(currentCellType);
+                    if (_input.IsCtrlPressed)
+                    {
+                        cooldown = mm.GetMoveCooldown(CellType.Empty);
+                    }
+
                     if (cooldown > 0)
                     {
                         _robot.MoveSpeed = 1f / cooldown;
@@ -323,6 +345,11 @@ namespace Fodinae.Scripts.Player.Logic
                     }
                 }
             }
+        }
+
+        public void ResetDirection()
+        {
+            _lastSentDirection = null;
         }
 
         public void SetMovementInput(Vector2 input)

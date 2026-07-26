@@ -10,7 +10,12 @@ namespace Fodinae.Scripts.Player.Interfaces
         bool WantsToDig { get; }
         bool WantsToGeo { get; }
         bool WantsToHeal { get; }
+        bool WantsToBuildCyan { get; }
+        bool WantsToBuildGray { get; }
+        bool WantsToBuildGreen { get; }
+        bool WantsToBuildWhite { get; }
         bool IsShiftPressed { get; }
+        bool IsCtrlPressed { get; }
         void SetMovementInput(Vector2 input);
     }
 }

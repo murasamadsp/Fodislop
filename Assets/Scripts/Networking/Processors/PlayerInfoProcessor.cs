@@ -57,6 +57,7 @@ namespace Fodinae.Scripts.Networking.Processors
             }
 
             player.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
+            player.ResetDirection();
         }
     }
 }
