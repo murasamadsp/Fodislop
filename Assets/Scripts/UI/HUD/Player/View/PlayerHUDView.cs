@@ -994,6 +994,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             popup.AddToClassList("popup-overlay");
 
             var dimmer = new VisualElement();
+            dimmer.pickingMode = PickingMode.Ignore;
             dimmer.AddToClassList("popup-dimmer");
             popup.Add(dimmer);
 
@@ -1019,6 +1020,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             popup.AddToClassList("popup-overlay");
 
             var dimmer = new VisualElement();
+            dimmer.pickingMode = PickingMode.Ignore;
             dimmer.AddToClassList("popup-dimmer");
             popup.Add(dimmer);
 
