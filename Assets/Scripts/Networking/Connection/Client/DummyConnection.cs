@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Cysharp.Threading.Tasks;
@@ -22,6 +23,7 @@ using MinesServer.Networking.Client.Packets.Movement;
 using MinesServer.Networking.Client.Packets.Utilities;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
+using MinesServer.Networking.Server.Packets.Compression;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -79,6 +81,7 @@ namespace MinesServer.Networking.Connection.Client
         private bool _teleportWindowOpen;
         private readonly Dictionary<string, long> _activeBuffs = new();
         private bool _buffLoopStarted;
+        private CancellationTokenSource _pathCts;
         private ushort _clanId;
         private static readonly (ushort Id, string Name, string Desc)[] _mockClans =
         {
@@ -366,6 +369,7 @@ namespace MinesServer.Networking.Connection.Client
 
                     _x = move.X;
                     _y = move.Y;
+                    _pathCts?.Cancel();
                     UpdatePosition().Forget();
                     CheckTeleportEntry();
                 }
@@ -468,6 +472,7 @@ namespace MinesServer.Networking.Connection.Client
                     _y = SPAWN_Y;
                     _rot = Direction.Up;
                     _health = 500;
+                    _pathCts?.Cancel();
 
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
                     OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
@@ -564,6 +569,17 @@ namespace MinesServer.Networking.Connection.Client
                     TryUpgradeBuild(front.X, front.Y,
                         (CellType.Empty, CellType.Support),
                         (CellType.Support, CellType.QuadBlock));
+                }
+                else if (actionPacket.Payload is ClickCellPacket click)
+                {
+                    Console.WriteLine($"[DummyConnection] ClickCell at ({click.X}, {click.Y}) — finding path from ({_x},{_y})");
+                    _pathCts?.Cancel();
+                    var path = FindPath(_x, _y, click.X, click.Y);
+                    if (path.Count > 0)
+                    {
+                        _pathCts = new CancellationTokenSource();
+                        WalkPathAsync(path, _pathCts.Token).Forget();
+                    }
                 }
 
                 return;
@@ -2374,6 +2390,116 @@ namespace MinesServer.Networking.Connection.Client
                     Debug.Log($"[DummyConnection] Built {upgrades[i].To} at ({x},{y}) (upgraded from {current})");
                     return;
                 }
+            }
+        }
+
+        private List<(ushort X, ushort Y)> FindPath(ushort startX, ushort startY, ushort targetX, ushort targetY)
+        {
+            var storage = MapStorage.Instance;
+            if (storage?.CellLayer == null || !storage.IsReady)
+            {
+                return new List<(ushort, ushort)>();
+            }
+
+            var dirs = new[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
+            var visited = new HashSet<(ushort, ushort)>();
+            var cameFrom = new Dictionary<(ushort, ushort), (ushort, ushort)>();
+
+            var queue = new Queue<(ushort X, ushort Y)>();
+            queue.Enqueue((startX, startY));
+            visited.Add((startX, startY));
+
+            bool found = false;
+
+            while (queue.Count > 0)
+            {
+                var cur = queue.Dequeue();
+                if (cur.X == targetX && cur.Y == targetY)
+                {
+                    found = true;
+                    break;
+                }
+
+                foreach (var (dx, dy) in dirs)
+                {
+                    int nx = cur.X + dx;
+                    int ny = cur.Y + dy;
+
+                    if (nx < 0 || ny < 0 || nx > ushort.MaxValue || ny > ushort.MaxValue)
+                    {
+                        continue;
+                    }
+
+                    var next = ((ushort)nx, (ushort)ny);
+                    if (visited.Contains(next))
+                    {
+                        continue;
+                    }
+
+                    var cellType = storage.GetCell((ushort)nx, (ushort)ny);
+                    var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
+                    bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
+
+                    if (!isPassable)
+                    {
+                        continue;
+                    }
+
+                    visited.Add(next);
+                    cameFrom[next] = cur;
+                    queue.Enqueue(next);
+                }
+            }
+
+            if (!found)
+            {
+                return new List<(ushort, ushort)>();
+            }
+
+            var path = new List<(ushort, ushort)>();
+            var current = (targetX, targetY);
+            while (!(current.Item1 == startX && current.Item2 == startY))
+            {
+                path.Add(current);
+                current = cameFrom[current];
+            }
+
+            path.Reverse();
+            return path;
+        }
+
+        private async UniTaskVoid WalkPathAsync(List<(ushort X, ushort Y)> path, CancellationToken ct)
+        {
+            try
+            {
+                ushort prevX = _x;
+                ushort prevY = _y;
+
+                for (int i = 0; i < path.Count; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    var (nextX, nextY) = path[i];
+
+                    _rot = nextY > prevY ? Direction.Down
+                        : nextY < prevY ? Direction.Up
+                        : nextX < prevX ? Direction.Left
+                        : Direction.Right;
+
+                    (_x, _y) = (nextX, nextY);
+                    prevX = nextX;
+                    prevY = nextY;
+
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                    {
+                        new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
+                    })));
+                    await UniTask.Delay(100, cancellationToken: ct);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // path cancelled by manual movement or new click
             }
         }
     }
