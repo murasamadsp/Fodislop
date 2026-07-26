@@ -67,6 +67,7 @@ namespace MinesServer.Networking.Connection.Client
         private Direction _rot = Direction.Up;
         private bool _aggression;
         private bool _autoDig;
+        private System.Drawing.Color _chatColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private ItemType? _selectedItemType;
         private readonly Dictionary<ItemType, long> _inventory = new();
         private int _bonusCountdown;
@@ -78,6 +79,35 @@ namespace MinesServer.Networking.Connection.Client
         private bool _teleportWindowOpen;
         private readonly Dictionary<string, long> _activeBuffs = new();
         private bool _buffLoopStarted;
+        private static readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages();
+
+        private static ChatMessagePacket[] CreateSeedMessages()
+        {
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var gray = System.Drawing.Color.FromArgb(255, 120, 120, 120);
+            var green = System.Drawing.Color.FromArgb(255, 80, 220, 80);
+            var blue = System.Drawing.Color.FromArgb(255, 80, 140, 255);
+            var red = System.Drawing.Color.FromArgb(255, 255, 80, 80);
+            var orange = System.Drawing.Color.FromArgb(255, 255, 180, 60);
+            var cyan = System.Drawing.Color.FromArgb(255, 60, 255, 255);
+            var magenta = System.Drawing.Color.FromArgb(255, 220, 60, 220);
+            var yellow = System.Drawing.Color.FromArgb(255, 255, 220, 60);
+            var white = System.Drawing.Color.White;
+
+            return new[]
+            {
+                new ChatMessagePacket(1, now - 300000, 0, 0, gray, "System", gray, "Добро пожаловать на Fodinae!"),
+                new ChatMessagePacket(2, now - 270000, 1, 1, green, "Miner77", white, "привет всем!"),
+                new ChatMessagePacket(3, now - 240000, 2, 0, blue, "DeepDrill", white, "кто на сервере?"),
+                new ChatMessagePacket(4, now - 210000, 3, 2, red, "CrystalMage", white, "иду копать алмазы"),
+                new ChatMessagePacket(5, now - 180000, 4, 0, orange, "RockBreaker", white, "нужна помощь с мобом"),
+                new ChatMessagePacket(6, now - 150000, 5, 1, cyan, "OreTrader", white, "продам редкий блок"),
+                new ChatMessagePacket(7, now - 120000, 6, 0, magenta, "NightMiner", white, "всем удачной шахты!"),
+                new ChatMessagePacket(8, now - 90000, 1, 1, green, "Miner77", white, "кто-нибудь на базе?"),
+                new ChatMessagePacket(9, now - 60000, 7, 0, yellow, "Newbie42", white, "я только зашел"),
+                new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
+            };
+        }
         private const int _maxDepth = 200;
         private bool _depthWarningActive;
 
@@ -567,6 +597,14 @@ namespace MinesServer.Networking.Connection.Client
                     break;
                 case OpenSettingsClickPacket:
                     break;
+                case ChangeChatColorPacket colorChange:
+                    _chatColor = colorChange.Color;
+                    break;
+                case QueryChatHistoryPacket qh:
+                    long startFrom = (long)qh.StartFrom;
+                    var filtered = _seedMessages.Where(m => startFrom == 0 || m.Timestamp >= startFrom).ToArray();
+                    OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket(qh.Tag, filtered)));
+                    break;
                 case SendLocalChatMessagePacket localMsg:
                     Console.WriteLine($"[DummyConnection] Local chat: {localMsg.Message}");
                     OnReceived?.Invoke(new ServerPacket(new LocalChatMessagePacket(_mockBotId, _x, _y, localMsg.Message)));
@@ -578,9 +616,9 @@ namespace MinesServer.Networking.Connection.Client
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         999, 1,
-                        System.Drawing.Color.FromArgb(255, 200, 180, 100),
+                        _chatColor,
                         "You",
-                        System.Drawing.Color.White,
+                        _chatColor,
                         globalMsg.Message);
                     OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
                     break;
