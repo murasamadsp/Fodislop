@@ -66,6 +66,8 @@ namespace MinesServer.Networking.Connection.Client
         private ushort _y = 0;
         private Direction _rot = Direction.Up;
         private bool _aggression;
+        private bool _autoDig;
+        private System.Drawing.Color _chatColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private ItemType? _selectedItemType;
         private readonly Dictionary<ItemType, long> _inventory = new();
         private int _bonusCountdown;
@@ -77,6 +79,40 @@ namespace MinesServer.Networking.Connection.Client
         private bool _teleportWindowOpen;
         private readonly Dictionary<string, long> _activeBuffs = new();
         private bool _buffLoopStarted;
+        private ushort _clanId;
+        private static readonly (ushort Id, string Name, string Desc)[] _mockClans =
+        {
+            (1, "Альфа", "Старейший клан на сервере"),
+        };
+        private static readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages();
+
+        private static ChatMessagePacket[] CreateSeedMessages()
+        {
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var gray = System.Drawing.Color.FromArgb(255, 120, 120, 120);
+            var green = System.Drawing.Color.FromArgb(255, 80, 220, 80);
+            var blue = System.Drawing.Color.FromArgb(255, 80, 140, 255);
+            var red = System.Drawing.Color.FromArgb(255, 255, 80, 80);
+            var orange = System.Drawing.Color.FromArgb(255, 255, 180, 60);
+            var cyan = System.Drawing.Color.FromArgb(255, 60, 255, 255);
+            var magenta = System.Drawing.Color.FromArgb(255, 220, 60, 220);
+            var yellow = System.Drawing.Color.FromArgb(255, 255, 220, 60);
+            var white = System.Drawing.Color.White;
+
+            return new[]
+            {
+                new ChatMessagePacket(1, now - 300000, 0, 0, gray, "System", gray, "Добро пожаловать на Fodinae!"),
+                new ChatMessagePacket(2, now - 270000, 1, 1, green, "Miner77", white, "привет всем!"),
+                new ChatMessagePacket(3, now - 240000, 2, 0, blue, "DeepDrill", white, "кто на сервере?"),
+                new ChatMessagePacket(4, now - 210000, 3, 2, red, "CrystalMage", white, "иду копать алмазы"),
+                new ChatMessagePacket(5, now - 180000, 4, 0, orange, "RockBreaker", white, "нужна помощь с мобом"),
+                new ChatMessagePacket(6, now - 150000, 5, 1, cyan, "OreTrader", white, "продам редкий блок"),
+                new ChatMessagePacket(7, now - 120000, 6, 0, magenta, "NightMiner", white, "всем удачной шахты!"),
+                new ChatMessagePacket(8, now - 90000, 1, 1, green, "Miner77", white, "кто-нибудь на базе?"),
+                new ChatMessagePacket(9, now - 60000, 7, 0, yellow, "Newbie42", white, "я только зашел"),
+                new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
+            };
+        }
         private const int _maxDepth = 200;
         private bool _depthWarningActive;
 
@@ -342,6 +378,12 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is UnmappedKeyPacket key)
                 {
                 }
+                else if (actionPacket.Payload is ToggleAutoDigPacket)
+                {
+                    _autoDig = !_autoDig;
+                    Console.WriteLine($"[DummyConnection] AutoDig toggled: {_autoDig}");
+                    OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(_autoDig)));
+                }
                 else if (actionPacket.Payload is ToggleAgressionPacket)
                 {
                     _aggression = !_aggression;
@@ -425,7 +467,9 @@ namespace MinesServer.Networking.Connection.Client
                     _x = SPAWN_X;
                     _y = SPAWN_Y;
                     _rot = Direction.Up;
+                    _health = 500;
 
+                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
                     OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
@@ -486,6 +530,41 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
                     Debug.Log($"[DummyConnection] Healed to {_health}/500");
                 }
+                else if (actionPacket.Payload is BuildCyanPacket)
+                {
+                    var front = GetFrontCell();
+                    TryBuild(front.X, front.Y, CellType.MilitaryBlock);
+                }
+                else if (actionPacket.Payload is BuildGrayPacket)
+                {
+                    var front = GetFrontCell();
+                    var storage = MapStorage.Instance;
+                    if (storage?.CellLayer != null && storage.IsReady && storage.GetCell(front.X, front.Y) == CellType.Road)
+                    {
+                        storage.SetCell(front.X, front.Y, CellType.Empty);
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(front.X, front.Y, 0, 0, new[] { CellType.Empty }) })));
+                        Debug.Log($"[DummyConnection] BuildGray: removed Road at ({front.X},{front.Y})");
+                    }
+                    else
+                    {
+                        TryBuild(front.X, front.Y, CellType.Road);
+                    }
+                }
+                else if (actionPacket.Payload is BuildGreenPacket)
+                {
+                    var front = GetFrontCell();
+                    TryUpgradeBuild(front.X, front.Y,
+                        (CellType.Empty, CellType.GreenBlock),
+                        (CellType.GreenBlock, CellType.YellowBlock),
+                        (CellType.YellowBlock, CellType.RedBlock));
+                }
+                else if (actionPacket.Payload is BuildWhitePacket)
+                {
+                    var front = GetFrontCell();
+                    TryUpgradeBuild(front.X, front.Y,
+                        (CellType.Empty, CellType.Support),
+                        (CellType.Support, CellType.QuadBlock));
+                }
 
                 return;
             }
@@ -523,6 +602,24 @@ namespace MinesServer.Networking.Connection.Client
                     break;
                 case OpenSettingsClickPacket:
                     break;
+                case ChangeChatColorPacket colorChange:
+                    _chatColor = colorChange.Color;
+                    break;
+                case OpenClanClickPacket:
+                    if (_clanId == 0)
+                    {
+                        SendClanListWindow();
+                    }
+                    else
+                    {
+                        SendClanInfoWindow();
+                    }
+                    break;
+                case QueryChatHistoryPacket qh:
+                    long startFrom = (long)qh.StartFrom;
+                    var filtered = _seedMessages.Where(m => startFrom == 0 || m.Timestamp >= startFrom).ToArray();
+                    OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket(qh.Tag, filtered)));
+                    break;
                 case SendLocalChatMessagePacket localMsg:
                     Console.WriteLine($"[DummyConnection] Local chat: {localMsg.Message}");
                     OnReceived?.Invoke(new ServerPacket(new LocalChatMessagePacket(_mockBotId, _x, _y, localMsg.Message)));
@@ -534,9 +631,9 @@ namespace MinesServer.Networking.Connection.Client
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         999, 1,
-                        System.Drawing.Color.FromArgb(255, 200, 180, 100),
+                        _chatColor,
                         "You",
-                        System.Drawing.Color.White,
+                        _chatColor,
                         globalMsg.Message);
                     OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
                     break;
@@ -785,13 +882,47 @@ namespace MinesServer.Networking.Connection.Client
             }
             else if (packet.WindowTag == "join_clan")
             {
+                _clanId = 1;
                 OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(1)));
-                Console.WriteLine("[DummyConnection] ShowClanPacket sent (clanId=1)");
+                Console.WriteLine("[DummyConnection] Joined clan 1, ShowClanPacket sent");
             }
             else if (packet.WindowTag == "leave_clan")
             {
+                _clanId = 0;
                 OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
-                Console.WriteLine("[DummyConnection] HideClanPacket sent");
+                Console.WriteLine("[DummyConnection] Left clan, HideClanPacket sent");
+            }
+            else if (packet.WindowTag == "clan_list")
+            {
+                if (packet.ElementIndex == 0)
+                {
+                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                }
+                else
+                {
+                    int idx = packet.ElementIndex - 1;
+                    if (idx >= 0 && idx < _mockClans.Length)
+                    {
+                        _clanId = _mockClans[idx].Id;
+                        OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(_clanId)));
+                        OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                        Console.WriteLine($"[DummyConnection] Joined clan {_mockClans[idx].Name} (ID={_clanId})");
+                    }
+                }
+            }
+            else if (packet.WindowTag == "clan_info")
+            {
+                if (packet.ElementIndex == 0)
+                {
+                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                }
+                else
+                {
+                    _clanId = 0;
+                    OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
+                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
+                    Console.WriteLine("[DummyConnection] Left clan from info window");
+                }
             }
             else if (packet.WindowTag == "open_missions")
             {
@@ -1061,8 +1192,8 @@ namespace MinesServer.Networking.Connection.Client
 
             OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
             {
-                [CellType.Empty] = 20,
-                [CellType.Road] = 100,
+                [CellType.Empty] = 100,
+                [CellType.Road] = 20,
             })));
             OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
@@ -1352,8 +1483,22 @@ namespace MinesServer.Networking.Connection.Client
                     Console.WriteLine($"[DummyConnection] Depth damage: {damage} (HP: {_health}/500)");
                     if (_health <= 0)
                     {
-                        Console.WriteLine("[DummyConnection] Player died from depth damage");
-                        Disconnect();
+                        Console.WriteLine("[DummyConnection] Player died from depth damage, respawning");
+                        const ushort SPAWN_X = 25;
+                        const ushort SPAWN_Y = 50;
+                        var deathX = _x;
+                        var deathY = _y;
+                        _x = SPAWN_X;
+                        _y = SPAWN_Y;
+                        _rot = Direction.Up;
+                        _health = 500;
+                        OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
+                        OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
+                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                        {
+                            new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
+                            new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
+                        })));
                     }
                 }
             }
@@ -1516,6 +1661,167 @@ namespace MinesServer.Networking.Connection.Client
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
             _teleportWindowOpen = true;
             Console.WriteLine("[DummyConnection] Teleport window opened with no destinations");
+        }
+
+        private void SendClanListWindow()
+        {
+            var items = new List<IGUIComponentPacket>();
+            foreach (var clan in _mockClans)
+            {
+                items.Add(new DockPanelPacket
+                {
+                    Style = new GUIStylePacket
+                    {
+                        Margin = new Margins(0, 0, 4, 0),
+                        Padding = new Margins(4, 6, 4, 4),
+                        Background = System.Drawing.Color.FromArgb(30, 60, 60, 60),
+                        Border = System.Drawing.Color.FromArgb(60, 80, 80, 80),
+                        BorderWidth = 1,
+                    },
+                    Children = new List<IGUIComponentPacket>
+                    {
+                        new ImagePacket
+                        {
+                            URI = $"clan/{clan.Id}.png",
+                            Width = 16,
+                            Height = 16,
+                            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
+                        },
+                        new TextPacket
+                        {
+                            Text = $"<color=white><b>Клан «{clan.Name}»</b>  <color=#888888>(ID: {clan.Id})</color></color>",
+                            OnClickContext = ".",
+                            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
+                        },
+                    },
+                });
+                items.Add(new TextPacket
+                {
+                    Text = $"<color=#999999>{clan.Desc}</color>",
+                    Style = new GUIStylePacket
+                    {
+                        Margin = new Margins(0, 0, 8, 0),
+                        Padding = new Margins(0, 10, 0, 0),
+                    },
+                });
+            }
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(8, 8, 8, 8),
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    new DockPanelPacket
+                    {
+                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
+                        Children = new List<IGUIComponentPacket>
+                        {
+                            new TextPacket
+                            {
+                                Text = "<color=#B2A680><b>Доступные кланы</b></color>",
+                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
+                            },
+                            new TextPacket
+                            {
+                                Text = "<color=#B3B3B3>×</color>",
+                                OnClickContext = "clan_close",
+                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Right") },
+                            },
+                        },
+                    },
+                    new ScrollViewerPacket
+                    {
+                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
+                        Style = new GUIStylePacket
+                        {
+                            Margin = new Margins(6, 0, 0, 0),
+                        },
+                        Children = items,
+                    },
+                },
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("clan_list", 320, 260, root)));
+            Console.WriteLine("[DummyConnection] Clan list window opened");
+        }
+
+        private void SendClanInfoWindow()
+        {
+            string clanName = _clanId.ToString();
+            string clanDesc = "";
+            foreach (var c in _mockClans)
+            {
+                if (c.Id == _clanId)
+                {
+                    clanName = c.Name;
+                    clanDesc = c.Desc;
+                    break;
+                }
+            }
+
+            var root = new DockPanelPacket
+            {
+                Style = new GUIStylePacket
+                {
+                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
+                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
+                    BorderWidth = 2,
+                    Padding = new Margins(8, 8, 8, 8),
+                },
+                Children = new List<IGUIComponentPacket>
+                {
+                    new DockPanelPacket
+                    {
+                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
+                        Children = new List<IGUIComponentPacket>
+                        {
+                            new TextPacket
+                            {
+                                Text = "<color=#B2A680><b>Мой клан</b></color>",
+                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
+                            },
+                            new TextPacket
+                            {
+                                Text = "<color=#B3B3B3>×</color>",
+                                OnClickContext = "clan_close",
+                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Right") },
+                            },
+                        },
+                    },
+                    new TextPacket
+                    {
+                        Text = $"<color=white><b>Клан «{clanName}»</b></color>\n<color=#888888>ID: {_clanId}</color>\n<color=#999999>{clanDesc}</color>",
+                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
+                        Style = new GUIStylePacket
+                        {
+                            Margin = new Margins(8, 0, 8, 0),
+                        },
+                    },
+                    new TextPacket
+                    {
+                        Text = "<color=#FF6666>Покинуть клан</color>",
+                        OnClickContext = ".",
+                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
+                        Style = new GUIStylePacket
+                        {
+                            Padding = new Margins(6, 10, 6, 6),
+                            Background = System.Drawing.Color.FromArgb(40, 80, 40, 40),
+                            Border = System.Drawing.Color.FromArgb(60, 120, 60, 60),
+                            BorderWidth = 1,
+                            Margin = new Margins(0, 0, 0, 0),
+                        },
+                    },
+                },
+            };
+
+            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("clan_info", 300, 200, root)));
+            Console.WriteLine($"[DummyConnection] Clan info window opened (clanId={_clanId})");
         }
 
         private void HandleTeleportClick(int index)
@@ -2015,6 +2321,60 @@ namespace MinesServer.Networking.Connection.Client
                 CellType.Cyan => 5,
                 _ => -1,
             };
+        }
+
+        private (ushort X, ushort Y) GetFrontCell()
+        {
+            Vector2Int offset = _rot switch
+            {
+                Direction.Down => new Vector2Int(0, 1),
+                Direction.Up => new Vector2Int(0, -1),
+                Direction.Left => new Vector2Int(-1, 0),
+                Direction.Right => new Vector2Int(1, 0),
+                _ => Vector2Int.zero,
+            };
+            return ((ushort)(_x + offset.x), (ushort)(_y + offset.y));
+        }
+
+        private void TryBuild(ushort x, ushort y, CellType placeType)
+        {
+            var storage = MapStorage.Instance;
+            if (storage?.CellLayer == null || !storage.IsReady)
+            {
+                return;
+            }
+
+            var current = storage.GetCell(x, y);
+            if (current != CellType.Empty && current != CellType.Road)
+            {
+                return;
+            }
+
+            storage.SetCell(x, y, placeType);
+            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { placeType }) })));
+            Debug.Log($"[DummyConnection] Built {placeType} at ({x},{y})");
+        }
+
+        private void TryUpgradeBuild(ushort x, ushort y, params (CellType From, CellType To)[] upgrades)
+        {
+            var storage = MapStorage.Instance;
+            if (storage?.CellLayer == null || !storage.IsReady)
+            {
+                return;
+            }
+
+            var current = storage.GetCell(x, y);
+
+            for (int i = 0; i < upgrades.Length; i++)
+            {
+                if (current == upgrades[i].From || (current == CellType.Road && i == 0 && upgrades[i].From == CellType.Empty))
+                {
+                    storage.SetCell(x, y, upgrades[i].To);
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { upgrades[i].To }) })));
+                    Debug.Log($"[DummyConnection] Built {upgrades[i].To} at ({x},{y}) (upgraded from {current})");
+                    return;
+                }
+            }
         }
     }
 }

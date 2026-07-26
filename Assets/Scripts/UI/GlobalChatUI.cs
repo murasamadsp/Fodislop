@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Game.Managers;
+using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -31,6 +32,9 @@ namespace Fodinae.Scripts.UI
         private TextField _inputField;
         private VisualElement _internalInput;
         private Button _sendButton;
+        private Button _colorButton;
+        private VisualElement _colorGrid;
+        private System.Drawing.Color _currentColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private bool _isOpen = false;
         private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker _blinker;
@@ -63,6 +67,7 @@ namespace Fodinae.Scripts.UI
 
             CreateUI();
             _panel.style.display = DisplayStyle.None;
+            Networking.NetworkService.Send(new QueryChatHistoryPacket("global", 0));
         }
 
         protected void Update()
@@ -209,7 +214,85 @@ namespace Fodinae.Scripts.UI
             _sendButton.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
             bottomRow.Add(_sendButton);
 
+            _colorButton = new Button(ToggleColorGrid);
+            _colorButton.style.width = 28;
+            _colorButton.style.height = 28;
+            _colorButton.style.flexShrink = 0;
+            _colorButton.style.paddingTop = 0;
+            _colorButton.style.paddingBottom = 0;
+            _colorButton.style.paddingLeft = 0;
+            _colorButton.style.paddingRight = 0;
+            _colorButton.style.borderTopWidth = 1;
+            _colorButton.style.borderBottomWidth = 1;
+            _colorButton.style.borderLeftWidth = 0;
+            _colorButton.style.borderRightWidth = 1;
+            _colorButton.style.borderTopColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorButton.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorButton.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorButton.style.backgroundColor = new Color(_currentColor.R / 255f, _currentColor.G / 255f, _currentColor.B / 255f);
+            bottomRow.Add(_colorButton);
+
             _panel.Add(bottomRow);
+
+            _colorGrid = new VisualElement();
+            _colorGrid.style.flexDirection = FlexDirection.Row;
+            _colorGrid.style.flexWrap = Wrap.Wrap;
+            _colorGrid.style.width = 170;
+            _colorGrid.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 0.95f);
+            _colorGrid.style.borderTopWidth = 1;
+            _colorGrid.style.borderBottomWidth = 1;
+            _colorGrid.style.borderLeftWidth = 1;
+            _colorGrid.style.borderRightWidth = 1;
+            _colorGrid.style.borderTopColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorGrid.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorGrid.style.borderLeftColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorGrid.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _colorGrid.style.paddingTop = 4;
+            _colorGrid.style.paddingBottom = 4;
+            _colorGrid.style.paddingLeft = 4;
+            _colorGrid.style.paddingRight = 4;
+            _colorGrid.style.justifyContent = Justify.Center;
+            _colorGrid.style.flexShrink = 0;
+            _colorGrid.style.display = DisplayStyle.None;
+
+            var presetColors = new System.Drawing.Color[]
+            {
+                System.Drawing.Color.White,
+                System.Drawing.Color.FromArgb(255, 60, 60),
+                System.Drawing.Color.FromArgb(60, 255, 60),
+                System.Drawing.Color.FromArgb(60, 130, 255),
+                System.Drawing.Color.FromArgb(255, 220, 60),
+                System.Drawing.Color.FromArgb(60, 255, 255),
+                System.Drawing.Color.FromArgb(255, 60, 255),
+                System.Drawing.Color.FromArgb(255, 160, 60),
+            };
+
+            foreach (var c in presetColors)
+            {
+                var swatch = new Button(() => SelectColor(c));
+                swatch.style.width = 20;
+                swatch.style.height = 20;
+                swatch.style.backgroundColor = new Color(c.R / 255f, c.G / 255f, c.B / 255f);
+                swatch.style.marginLeft = 1;
+                swatch.style.marginRight = 1;
+                swatch.style.marginTop = 1;
+                swatch.style.marginBottom = 1;
+                swatch.style.paddingTop = 0;
+                swatch.style.paddingBottom = 0;
+                swatch.style.paddingLeft = 0;
+                swatch.style.paddingRight = 0;
+                swatch.style.borderTopWidth = 1;
+                swatch.style.borderBottomWidth = 1;
+                swatch.style.borderLeftWidth = 1;
+                swatch.style.borderRightWidth = 1;
+                swatch.style.borderTopColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+                swatch.style.borderBottomColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+                swatch.style.borderLeftColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+                swatch.style.borderRightColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+                _colorGrid.Add(swatch);
+            }
+
+            _panel.Add(_colorGrid);
 
             _doc.rootVisualElement.Add(_panel);
 
@@ -350,6 +433,21 @@ namespace Fodinae.Scripts.UI
             }
 
             _scrollView.scrollOffset = new Vector2(0, float.MaxValue);
+        }
+
+        private void ToggleColorGrid()
+        {
+            _colorGrid.style.display = _colorGrid.style.display == DisplayStyle.None
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+        }
+
+        private void SelectColor(System.Drawing.Color color)
+        {
+            _currentColor = color;
+            _colorButton.style.backgroundColor = new Color(color.R / 255f, color.G / 255f, color.B / 255f);
+            _colorGrid.style.display = DisplayStyle.None;
+            Networking.NetworkService.Send(new ChangeChatColorPacket(color));
         }
     }
 }
