@@ -83,13 +83,13 @@ namespace Fodinae.Scripts.UI.Builders
                         break;
                     case Dock.Left:
                         wrapper.style.flexDirection = FlexDirection.Row;
-                        wrapper.style.alignItems = Align.FlexStart;
+                        wrapper.style.alignItems = Align.Center;
                         wrapper.Add(childElement);
                         wrapper.Add(current);
                         break;
                     case Dock.Right:
                         wrapper.style.flexDirection = FlexDirection.Row;
-                        wrapper.style.alignItems = Align.FlexStart;
+                        wrapper.style.alignItems = Align.Center;
                         wrapper.Add(current);
                         wrapper.Add(childElement);
                         break;

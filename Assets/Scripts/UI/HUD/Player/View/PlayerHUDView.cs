@@ -234,6 +234,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
             var topRow = new VisualElement();
             topRow.AddToClassList("hud-title-row");
+            topRow.style.alignItems = Align.Center;
 
             _nicknameLabel = new Label("---");
             _nicknameLabel.AddToClassList("hud-nickname");
@@ -242,6 +243,27 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _levelLabel = new Label("Ур: 0");
             _levelLabel.AddToClassList("hud-level");
             topRow.Add(_levelLabel);
+
+            var clanButton = new Button(() => NetworkService.Send(new OpenClanClickPacket()));
+            clanButton.style.width = 15;
+            clanButton.style.height = 15;
+            clanButton.style.flexShrink = 0;
+            clanButton.style.paddingTop = 0;
+            clanButton.style.paddingBottom = 0;
+            clanButton.style.paddingLeft = 0;
+            clanButton.style.paddingRight = 0;
+            clanButton.style.marginLeft = 4;
+            clanButton.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            clanButton.style.borderTopWidth = 1;
+            clanButton.style.borderBottomWidth = 1;
+            clanButton.style.borderLeftWidth = 1;
+            clanButton.style.borderRightWidth = 1;
+            clanButton.style.borderTopColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+            clanButton.style.borderBottomColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+            clanButton.style.borderLeftColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+            clanButton.style.borderRightColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+            clanButton.tooltip = "Клан";
+            topRow.Add(clanButton);
 
             _panel.Add(topRow);
 
