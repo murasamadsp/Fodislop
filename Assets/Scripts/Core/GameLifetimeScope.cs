@@ -15,32 +15,22 @@ using Fodinae.Scripts.UI.HUD.Player.Model;
 using Fodinae.Scripts.UI.HUD.Player.View;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
+using UnityEngine;
 using VContainer;
 using VContainer.Unity;
-using UnityEngine;
 
 namespace Fodinae.Scripts.Core
 {
+    [DefaultExecutionOrder(-20000)]
     public class GameLifetimeScope : LifetimeScope
     {
-        [SerializeField]
-        private GameObject _playerPrefab;
         protected override void Configure(IContainerBuilder builder)
         {
             Debug.Log("[GameLifetimeScope] Configure START");
-            Debug.Log($"[GameLifetimeScope] MapStorage exists={(ServiceLocator.Resolve<IWorldDataStorage>() != null)}");
 
-            var existingStorage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (existingStorage != null && !existingStorage.IsDisposed)
-            {
-                builder.RegisterInstance(existingStorage).As<IWorldDataStorage>();
-            }
-            else
-            {
-                var newStorage = new MapStorage();
-                newStorage.SetAsPending();
-                builder.RegisterInstance(newStorage).As<IWorldDataStorage>();
-            }
+            var newStorage = new MapStorage();
+            newStorage.SetAsPending();
+            builder.RegisterInstance(newStorage).As<IWorldDataStorage>();
 
             builder.RegisterInstance(new InventoryModel()).As<IInventoryModel>();
             builder.RegisterInstance(new PlayerStatsModel()).As<IPlayerStats>();
@@ -138,6 +128,7 @@ namespace Fodinae.Scripts.Core
                         injected++;
                     }
                 }
+
                 Debug.Log($"[GameLifetimeScope] Injected {injected} scene MonoBehaviours with [Inject] fields");
 
                 Debug.Log("[GameLifetimeScope] BuildCallback END");
@@ -166,7 +157,7 @@ namespace Fodinae.Scripts.Core
                 errors.Add("IInputBlocker is null after VContainer build — input blocking will NOT work");
             }
 
-            if ((ServiceLocator.Resolve<MapManager>()) == null)
+            if (ServiceLocator.Resolve<MapManager>() == null)
             {
                 errors.Add("MapManager is null after VContainer build");
             }
@@ -181,12 +172,12 @@ namespace Fodinae.Scripts.Core
                 errors.Add("WorldTextureManager is null after VContainer build");
             }
 
-            if ((ServiceLocator.Resolve<IAudioSystem>()) == null)
+            if (ServiceLocator.Resolve<IAudioSystem>() == null)
             {
                 errors.Add("AudioSystem is null after VContainer build");
             }
 
-            if ((ServiceLocator.Resolve<GameManager>()) == null)
+            if (ServiceLocator.Resolve<GameManager>() == null)
             {
                 errors.Add("GameManager is null after VContainer build — UI will NOT be created");
             }
@@ -217,7 +208,7 @@ namespace Fodinae.Scripts.Core
         private void ValidateInjection(System.Collections.Generic.List<string> errors)
         {
             var injectAttr = typeof(VContainer.InjectAttribute);
-            var bindFlags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+            const System.Reflection.BindingFlags bindFlags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
             var criticalTypes = new System.Type[]
             {
                 typeof(PacketHandler),
@@ -269,54 +260,6 @@ namespace Fodinae.Scripts.Core
             }
 
             return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton);
-        }
-
-        private void Start()
-        {
-            Debug.Log("[GameLifetimeScope] Start()");
-
-            if (FindAnyObjectByType<DiagnosticRunner>() == null)
-            {
-                var diagGO = new GameObject("DiagnosticRunner");
-                diagGO.AddComponent<DiagnosticRunner>();
-            }
-
-            if (FindAnyObjectByType<InjectDiagnostic>() == null)
-            {
-                var injDiagGO = new GameObject("InjectDiagnostic");
-                injDiagGO.AddComponent<InjectDiagnostic>();
-            }
-
-            var player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
-            {
-                Container.Inject(player);
-            }
-            else if (_playerPrefab != null)
-            {
-                Container.Instantiate(_playerPrefab);
-            }
-
-            var mainMenu = UnityEngine.Object.FindAnyObjectByType<MainMenu>();
-            if (mainMenu != null)
-            {
-                Container.Inject(mainMenu);
-                Debug.Log("[GameLifetimeScope] Injected MainMenu");
-            }
-
-            var inventoryView = UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
-            if (inventoryView != null)
-            {
-                Container.Inject(inventoryView);
-                Debug.Log("[GameLifetimeScope] Injected InventoryView");
-            }
-
-            var inventoryPresenter = UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
-            if (inventoryPresenter != null)
-            {
-                Container.Inject(inventoryPresenter);
-                Debug.Log("[GameLifetimeScope] Injected InventoryPresenter");
-            }
         }
     }
 }

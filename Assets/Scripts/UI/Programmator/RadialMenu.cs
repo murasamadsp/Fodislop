@@ -293,7 +293,11 @@ namespace Fodinae.Scripts.UI.Programmator
             for (int i = 0; i < _innerCount; i++)
             {
                 var item = _innerContainer[i] as VisualElement;
-                if (item == null) continue;
+                if (item == null)
+                {
+                    continue;
+                }
+
                 Color bc = (i == index) ? HoverBorder
                     : (_innerItemColors != null && i < _innerItemColors.Length) ? _innerItemColors[i] : DefaultBorder;
                 item.style.borderTopColor = bc;
@@ -327,7 +331,11 @@ namespace Fodinae.Scripts.UI.Programmator
             for (int i = 0; i < _outerCount; i++)
             {
                 var item = _outerContainer[i] as VisualElement;
-                if (item == null) continue;
+                if (item == null)
+                {
+                    continue;
+                }
+
                 Color bc = (i == index) ? HoverBorder : DefaultBorder;
                 item.style.borderTopColor = bc;
                 item.style.borderBottomColor = bc;

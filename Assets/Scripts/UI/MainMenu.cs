@@ -1,5 +1,4 @@
 using System;
-using VContainer;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
@@ -10,6 +9,7 @@ using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.GUI;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.Scripts
 {
@@ -209,15 +209,6 @@ namespace Fodinae.Scripts
             {
                 Debug.LogWarning($"[MainMenu] Cannot connect: connectionService={(connectionService != null ? "ok" : "NULL")}, IsConnected={(connectionService != null ? connectionService.IsConnected.ToString() : "N/A")}");
             }
-        }
-
-        private void OnOldClientButtonClicked()
-        {
-            Debug.Log("[MainMenu] Old client button clicked");
-            RobotManager.ShowDebugVisuals = false;
-            HideLoader();
-            HideMenu();
-            (_connectionService ?? (Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager))?.Connect(oldClient: true);
         }
     }
 }

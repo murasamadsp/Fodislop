@@ -13,18 +13,18 @@ namespace Fodinae.Scripts.Networking.Processors
         {
             foreach (var msg in packet.Messages)
             {
-                if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>()) != null)
+                if (Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>() != null)
                 {
-                    (Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>()).AddMessage(msg);
+                    Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>().AddMessage(msg);
                 }
             }
         }
 
         public void Process(LocalChatMessagePacket packet)
         {
-            if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<FloatingChatManager>()) != null)
+            if (Fodinae.Scripts.Core.ServiceLocator.Resolve<FloatingChatManager>() != null)
             {
-                (Fodinae.Scripts.Core.ServiceLocator.Resolve<FloatingChatManager>()).ShowLocalChat(packet);
+                Fodinae.Scripts.Core.ServiceLocator.Resolve<FloatingChatManager>().ShowLocalChat(packet);
             }
         }
 

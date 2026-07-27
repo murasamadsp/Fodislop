@@ -2,16 +2,14 @@ using VContainer.Internal;
 
 namespace VContainer.Unity
 {
-    interface IPlayerLoopItem
+    internal interface IPlayerLoopItem
     {
         bool MoveNext();
     }
 
-    sealed class PlayerLoopRunner
+    internal sealed class PlayerLoopRunner
     {
-        readonly FreeList<IPlayerLoopItem> runners = new FreeList<IPlayerLoopItem>(16);
-
-        int running;
+        private readonly FreeList<IPlayerLoopItem> runners = new FreeList<IPlayerLoopItem>(16);
 
         public void Dispatch(IPlayerLoopItem item)
         {

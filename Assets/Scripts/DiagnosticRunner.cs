@@ -20,11 +20,7 @@ namespace Fodinae.Scripts
         private static readonly string LogPath = Path.Combine(Application.dataPath, "..", "diagnostic.txt");
 
         private float _lastHeartbeat;
-        private int _lastPacketCount;
-        private int _lastFrame;
         private Vector2Int _lastPlayerPos;
-        private bool _terrainUpdating;
-        private int _terrainUpdateCount;
         private int _robotCount;
         private float _lastRobotMoveTime;
         private Vector3 _lastRobotPos;

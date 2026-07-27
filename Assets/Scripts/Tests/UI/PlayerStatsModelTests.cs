@@ -1,5 +1,5 @@
-using NUnit.Framework;
 using Fodinae.Scripts.UI.HUD.Player.Model;
+using NUnit.Framework;
 using UnityEngine;
 
 namespace Fodinae.Tests.UI

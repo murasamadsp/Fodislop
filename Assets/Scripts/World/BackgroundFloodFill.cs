@@ -75,9 +75,16 @@ namespace Fodinae.Scripts.World
                         {
                             for (int dx = -1; dx <= 1; dx++)
                             {
-                                if (dx == 0 && dy == 0) continue;
+                                if (dx == 0 && dy == 0)
+                                {
+                                    continue;
+                                }
+
                                 int nx = x + dx, ny = y + dy;
-                                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                                if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                                {
+                                    continue;
+                                }
 
                                 var n = cellCache.GetCell(nx + 1, ny + 1);
                                 if ((n.Properties & CellConfigProperties.Passable) != 0)
@@ -176,7 +183,10 @@ namespace Fodinae.Scripts.World
 
             bool hasXBorder = xLen > 0;
             bool hasYBorder = yLen > 0;
-            if (!hasXBorder && !hasYBorder) return;
+            if (!hasXBorder && !hasYBorder)
+            {
+                return;
+            }
 
             var frontier = _fbpwFrontier;
             frontier.Clear();
@@ -257,9 +267,16 @@ namespace Fodinae.Scripts.World
                 {
                     for (int dx = -1; dx <= 1; dx++)
                     {
-                        if (dx == 0 && dy == 0) continue;
+                        if (dx == 0 && dy == 0)
+                        {
+                            continue;
+                        }
+
                         int nx = x + dx, ny = y + dy;
-                        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                        if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                        {
+                            continue;
+                        }
 
                         var n = cellCache.GetCell(nx + 1, ny + 1);
                         if ((n.Properties & CellConfigProperties.Passable) != 0)
@@ -307,7 +324,11 @@ namespace Fodinae.Scripts.World
 
         private void FBPWPropagate(List<(int, int)> frontier, bool useParallel = false)
         {
-            if (frontier.Count == 0) return;
+            if (frontier.Count == 0)
+            {
+                return;
+            }
+
             int w = _width, h = _height;
 
             while (frontier.Count > 0)
@@ -333,12 +354,28 @@ namespace Fodinae.Scripts.World
                             {
                                 for (int dx = -1; dx <= 1; dx++)
                                 {
-                                    if (dx == 0 && dy == 0) continue;
+                                    if (dx == 0 && dy == 0)
+                                    {
+                                        continue;
+                                    }
+
                                     int nx = x + dx, ny = y + dy;
-                                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                                    if (_bgMapBuffer[nx, ny] != CellType.Unloaded) continue;
+                                    if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                                    {
+                                        continue;
+                                    }
+
+                                    if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
+                                    {
+                                        continue;
+                                    }
+
                                     int idx = nx + (ny * w);
-                                    if (Interlocked.CompareExchange(ref _fbpwGeneration[idx], gen, gen - 1) != gen - 1) continue;
+                                    if (Interlocked.CompareExchange(ref _fbpwGeneration[idx], gen, gen - 1) != gen - 1)
+                                    {
+                                        continue;
+                                    }
+
                                     _bgMapBuffer[nx, ny] = bg;
                                     local.Add((nx, ny));
                                 }
@@ -366,12 +403,28 @@ namespace Fodinae.Scripts.World
                         {
                             for (int dx = -1; dx <= 1; dx++)
                             {
-                                if (dx == 0 && dy == 0) continue;
+                                if (dx == 0 && dy == 0)
+                                {
+                                    continue;
+                                }
+
                                 int nx = x + dx, ny = y + dy;
-                                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                                if (_bgMapBuffer[nx, ny] != CellType.Unloaded) continue;
+                                if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                                {
+                                    continue;
+                                }
+
+                                if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
+                                {
+                                    continue;
+                                }
+
                                 int idx = nx + (ny * w);
-                                if (_fbpwGeneration[idx] >= gen) continue;
+                                if (_fbpwGeneration[idx] >= gen)
+                                {
+                                    continue;
+                                }
+
                                 _fbpwGeneration[idx] = gen;
                                 _bgMapBuffer[nx, ny] = bg;
                                 _fbpwNextFrontier.Add((nx, ny));
@@ -380,7 +433,6 @@ namespace Fodinae.Scripts.World
                     }
                 }
 
-                var temp = frontier;
                 frontier.Clear();
                 frontier.AddRange(_fbpwNextFrontier);
                 _fbpwNextFrontier.Clear();
@@ -389,22 +441,35 @@ namespace Fodinae.Scripts.World
 
         private static void Scroll2DArray<T>(T[,] array, int w, int h, int dx, int dy)
         {
-            if (dx == 0 && dy == 0) return;
+            if (dx == 0 && dy == 0)
+            {
+                return;
+            }
+
             if (dx > 0)
             {
                 for (int x = 0; x < w - dx; x++)
                 {
                     if (dy > 0)
                     {
-                        for (int y = 0; y < h - dy; y++) array[x, y] = array[x + dx, y + dy];
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else if (dy < 0)
                     {
-                        for (int y = h - 1; y >= -dy; y--) array[x, y] = array[x + dx, y + dy];
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++) array[x, y] = array[x + dx, y];
+                        for (int y = 0; y < h; y++)
+                        {
+                            array[x, y] = array[x + dx, y];
+                        }
                     }
                 }
             }
@@ -414,15 +479,24 @@ namespace Fodinae.Scripts.World
                 {
                     if (dy > 0)
                     {
-                        for (int y = 0; y < h - dy; y++) array[x, y] = array[x + dx, y + dy];
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else if (dy < 0)
                     {
-                        for (int y = h - 1; y >= -dy; y--) array[x, y] = array[x + dx, y + dy];
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++) array[x, y] = array[x + dx, y];
+                        for (int y = 0; y < h; y++)
+                        {
+                            array[x, y] = array[x + dx, y];
+                        }
                     }
                 }
             }
@@ -431,12 +505,22 @@ namespace Fodinae.Scripts.World
                 if (dy > 0)
                 {
                     for (int y = 0; y < h - dy; y++)
-                        for (int x = 0; x < w; x++) array[x, y] = array[x, y + dy];
+                    {
+                        for (int x = 0; x < w; x++)
+                        {
+                            array[x, y] = array[x, y + dy];
+                        }
+                    }
                 }
                 else if (dy < 0)
                 {
                     for (int y = h - 1; y >= -dy; y--)
-                        for (int x = 0; x < w; x++) array[x, y] = array[x, y + dy];
+                    {
+                        for (int x = 0; x < w; x++)
+                        {
+                            array[x, y] = array[x, y + dy];
+                        }
+                    }
                 }
             }
         }

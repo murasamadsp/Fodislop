@@ -12,7 +12,6 @@ namespace Fodinae.Scripts.Player
 {
     public class PlayerInteractionController : MonoBehaviour
     {
-        private const string TAG = "[PlayerInteraction]";
         private Camera _mainCamera;
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
@@ -172,7 +171,7 @@ namespace Fodinae.Scripts.Player
                 Key.Digit8 => (byte)'8',
                 Key.Digit9 => (byte)'9',
 
-                _ => 0
+                _ => 0,
             };
         }
     }

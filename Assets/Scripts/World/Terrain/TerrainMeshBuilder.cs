@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
-using MinesServer.Data;
-using MinesServer.Networking.Server.Packets.Connection;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
+using MinesServer.Data;
+using MinesServer.Networking.Server.Packets.Connection;
+using UnityEngine;
 
 namespace Fodinae.Scripts.World.Terrain
 {
@@ -120,7 +120,10 @@ namespace Fodinae.Scripts.World.Terrain
 
         private void ScrollVertexBuffer(int dx, int dy, int mw, int mh)
         {
-            if (dx == 0 && dy == 0) return;
+            if (dx == 0 && dy == 0)
+            {
+                return;
+            }
 
             const int stride = 8;
             int rowStride = mh * stride;
@@ -327,16 +330,18 @@ namespace Fodinae.Scripts.World.Terrain
             }
 
             CachedCellData localFallback = default;
+
             // Since we moved this logic out of TerrainRenderer, we need to manually lookup MapManager / Texture Manager if needed.
             // For now, this fallback entry can be calculated within TerrainCellCache
             var mm = ServiceLocator.Resolve<MapManager>();
             var wtm = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
 
             ref CachedCellData data = ref (isSameCell ? ref ccd : ref cellCache.GetNeighborCacheEntryRef(cellType, cx, cy, mm, wtm, atlases, ref localFallback));
-            if (isSameCell) ccd = data; // avoid unused warning, already same
-
             int atlasIndex = data.AtlasIndex;
-            if (atlasIndex < 0 || atlasIndex >= subMeshIndices.Length) atlasIndex = 0;
+            if (atlasIndex < 0 || atlasIndex >= subMeshIndices.Length)
+            {
+                atlasIndex = 0;
+            }
 
             float zOffset = isBackground ? 0.1f : 0.0f;
             float lx = x * _cellSize;
@@ -367,14 +372,20 @@ namespace Fodinae.Scripts.World.Terrain
                     (uv0.x, uv1.x) = (uv1.x, uv0.x);
                     (uv3.x, uv2.x) = (uv2.x, uv3.x);
                 }
+
                 if ((descriptor & 0x20) != 0)
                 {
                     (uv0.y, uv3.y) = (uv3.y, uv0.y);
                     (uv1.y, uv2.y) = (uv2.y, uv1.y);
                 }
+
                 if ((descriptor & 0x80) != 0)
                 {
-                    Vector2 t = uv0; uv0 = uv1; uv1 = uv2; uv2 = uv3; uv3 = t;
+                    Vector2 t = uv0;
+                    uv0 = uv1;
+                    uv1 = uv2;
+                    uv2 = uv3;
+                    uv3 = t;
                 }
             }
 
@@ -437,8 +448,15 @@ namespace Fodinae.Scripts.World.Terrain
             _vertexBuffer[vIdx + 3].UV5 = new Vector4(textureType, isRelief ? reliefMask : sv01, _localUVsBuffer[3].x, _localUVsBuffer[3].y);
 
             float glowFlags = 0f;
-            if (glowZ > 0.5f) glowFlags += 1f;
-            if (!isBackground && MapManager.IsRoundableLoose(cellFgType)) glowFlags += 2f;
+            if (glowZ > 0.5f)
+            {
+                glowFlags += 1f;
+            }
+
+            if (!isBackground && MapManager.IsRoundableLoose(cellFgType))
+            {
+                glowFlags += 2f;
+            }
 
             float sameCatMask = isSameCell ? precalc.CellSameCatMasks[x, y] : 0f;
             Vector4 glowVec = new Vector4(glowX, glowY, glowFlags, sameCatMask);

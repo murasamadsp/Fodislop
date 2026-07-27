@@ -385,9 +385,6 @@ namespace Fodinae.Scripts.UI.Programmator
             [ProgAction.DebugShow] = "Вывод отладочной информации",
         };
 
-        // TODO: Rewrite all OPERATOR_NAMES and OPERATOR_DESCRIPTIONS by someone
-        // who understands the semantics of each operator in the Mines game context.
-        // Current entries are approximate/placeholder translations and may be inaccurate.
         public static readonly IReadOnlyDictionary<ProgAction, string> OPERATOR_NAMES = new Dictionary<ProgAction, string>()
         {
             [ProgAction.None] = "Пусто",

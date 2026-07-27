@@ -14,7 +14,7 @@ namespace Fodinae.Scripts.UI.Programmator
         private VisualElement[,] _cells;
         private Label[,] _cellLabels;
         private RadialMenu _radial;
-        private ObserverJoystick _joystick; 
+        private ObserverJoystick _joystick;
         private bool _isOpen;
         private bool _radialShown;
         private int _radialCellIndex = -1;
@@ -305,8 +305,9 @@ namespace Fodinae.Scripts.UI.Programmator
             {
                 _radial.ClearOuterItems();
                 _joystick.Hide();
-                var cellCenter = _cells[_radialCellIndex / ProgrammatorData.COLS,
-                                         _radialCellIndex % ProgrammatorData.COLS].worldBound.center;
+                var cellCenter = _cells[
+                    _radialCellIndex / ProgrammatorData.COLS,
+                    _radialCellIndex % ProgrammatorData.COLS].worldBound.center;
                 _joystick.ShowAt(_doc.rootVisualElement, cellCenter);
                 return;
             }

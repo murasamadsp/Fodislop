@@ -29,8 +29,6 @@ namespace Fodinae.Scripts.World
         private const float TRANSIT_HEIGHT = 2f;
         private const float PERSPECTIVE_HEIGHT = 2f;
         private const float TILE_SIZE = 32f;
-        private const float PERSPECTIVE_OFFSET = 32f;
-
         private Mesh _transitMesh;
         private Mesh _perspectiveMesh;
         private MeshFilter _transitFilter;
@@ -143,12 +141,12 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
-            if ((ServiceLocator.Resolve<MapManager>()) == null)
+            if (ServiceLocator.Resolve<MapManager>() == null)
             {
                 return;
             }
 
-            int worldHeight = (ServiceLocator.Resolve<MapManager>()).WorldHeight;
+            int worldHeight = ServiceLocator.Resolve<MapManager>().WorldHeight;
             float camX = _mainCamera.transform.position.x;
             float halfScreenW = _mainCamera.orthographicSize * _mainCamera.aspect;
 

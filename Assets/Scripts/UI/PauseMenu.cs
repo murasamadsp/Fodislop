@@ -15,9 +15,9 @@ using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
-using VContainer;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.Scripts.UI
 {
@@ -40,8 +40,6 @@ namespace Fodinae.Scripts.UI
         private INetworkService _networkService;
         [Inject]
         private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker;
-        [Inject]
-        private IAudioSystem _audioSystem;
         [Inject]
         private TerrainRenderer _terrainRenderer;
 

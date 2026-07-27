@@ -10,18 +10,47 @@ using UnityEngine.Experimental.PlayerLoop;
 
 namespace VContainer.Unity
 {
-    public struct VContainerInitialization {}
-    public struct VContainerPostInitialization {}
-    public struct VContainerStartup {}
-    public struct VContainerPostStartup {}
-    public struct VContainerFixedUpdate {}
-    public struct VContainerPostFixedUpdate {}
-    public struct VContainerUpdate {}
-    public struct VContainerPostUpdate {}
-    public struct VContainerLateUpdate {}
-    public struct VContainerPostLateUpdate {}
+    public struct VContainerInitialization
+    {
+    }
 
-    enum PlayerLoopTiming
+    public struct VContainerPostInitialization
+    {
+    }
+
+    public struct VContainerStartup
+    {
+    }
+
+    public struct VContainerPostStartup
+    {
+    }
+
+    public struct VContainerFixedUpdate
+    {
+    }
+
+    public struct VContainerPostFixedUpdate
+    {
+    }
+
+    public struct VContainerUpdate
+    {
+    }
+
+    public struct VContainerPostUpdate
+    {
+    }
+
+    public struct VContainerLateUpdate
+    {
+    }
+
+    public struct VContainerPostLateUpdate
+    {
+    }
+
+    internal enum PlayerLoopTiming
     {
         Initialization = 0,
         PostInitialization = 1,
@@ -39,16 +68,18 @@ namespace VContainer.Unity
         PostLateUpdate = 9,
     }
 
-    static class PlayerLoopHelper
+    internal static class PlayerLoopHelper
     {
-        static readonly PlayerLoopRunner[] Runners = new PlayerLoopRunner[10];
-        static long initialized;
+        private static readonly PlayerLoopRunner[] Runners = new PlayerLoopRunner[10];
+        private static long initialized;
 
         // [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void EnsureInitialized()
         {
             if (Interlocked.CompareExchange(ref initialized, 1, 0) != 0)
+            {
                 return;
+            }
 
             for (var i = 0; i < Runners.Length; i++)
             {
@@ -71,12 +102,12 @@ namespace VContainer.Unity
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerInitialization),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.Initialization].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.Initialization].Run,
                 },
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerPostInitialization),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.PostInitialization].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.PostInitialization].Run,
                 });
 
 
@@ -87,12 +118,12 @@ namespace VContainer.Unity
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerStartup),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.Startup].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.Startup].Run,
                 },
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerPostStartup),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.PostStartup].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.PostStartup].Run,
                 });
 
             ref var fixedUpdateSystem = ref FindSubSystem(typeof(FixedUpdate), copyList);
@@ -102,12 +133,12 @@ namespace VContainer.Unity
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerFixedUpdate),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.FixedUpdate].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.FixedUpdate].Run,
                 },
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerPostFixedUpdate),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.PostFixedUpdate].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.PostFixedUpdate].Run,
                 });
 
             ref var updateSystem = ref FindSubSystem(typeof(Update), copyList);
@@ -117,12 +148,12 @@ namespace VContainer.Unity
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerUpdate),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.Update].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.Update].Run,
                 },
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerPostUpdate),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.PostUpdate].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.PostUpdate].Run,
                 });
 
             ref var lateUpdateSystem = ref FindSubSystem(typeof(PreLateUpdate), copyList);
@@ -132,12 +163,12 @@ namespace VContainer.Unity
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerLateUpdate),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.LateUpdate].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.LateUpdate].Run,
                 },
                 new PlayerLoopSystem
                 {
                     type = typeof(VContainerPostLateUpdate),
-                    updateDelegate = Runners[(int)PlayerLoopTiming.PostLateUpdate].Run
+                    updateDelegate = Runners[(int)PlayerLoopTiming.PostLateUpdate].Run,
                 });
 
             playerLoop.subSystemList = copyList;
@@ -150,17 +181,20 @@ namespace VContainer.Unity
             Runners[(int)timing].Dispatch(item);
         }
 
-        static ref PlayerLoopSystem FindSubSystem(Type targetType, PlayerLoopSystem[] systems)
+        private static ref PlayerLoopSystem FindSubSystem(Type targetType, PlayerLoopSystem[] systems)
         {
             for (var i = 0; i < systems.Length; i++)
             {
                 if (systems[i].type == targetType)
+                {
                     return ref systems[i];
+                }
             }
+
             throw new InvalidOperationException($"{targetType.FullName} not in systems");
         }
 
-        static void InsertSubsystem(
+        private static void InsertSubsystem(
             ref PlayerLoopSystem parentSystem,
             Type beforeType,
             PlayerLoopSystem newSystem,
@@ -172,6 +206,7 @@ namespace VContainer.Unity
             {
                 insertIndex = 0;
             }
+
             for (var i = 0; i < source.Length; i++)
             {
                 if (source[i].type == beforeType)

@@ -30,6 +30,13 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private Color _accentColor = new Color(0.7f, 0.65f, 0.5f, 1f);
         private Color _accentHoverColor = new Color(0.8f, 0.75f, 0.6f, 1f);
 
+        private readonly List<Texture2D> _crystalTextures = new();
+        private readonly List<Label> _basketCrystalLabels = new();
+        private readonly Dictionary<SkillType, (Label arrow, VisualElement barFill)> _skillIcons = new();
+        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
+        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
+        private readonly Dictionary<string, VisualElement> _statusLineElements = new();
+
         private UIDocument _doc;
         private Tooltip _tooltip;
         private bool _isLoaded;
@@ -51,13 +58,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private Label _credsLabel;
         private Label _geologyLabel;
         private Label _basketPercentLabel;
-        private readonly List<Texture2D> _crystalTextures = new();
-        private readonly List<Label> _basketCrystalLabels = new();
         private VisualElement _basketContainer;
         private VisualElement _skillContainer;
-        private readonly Dictionary<SkillType, (Label arrow, VisualElement barFill)> _skillIcons = new();
-        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
-        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
         private Button _autoDigButton;
         private Label _autoDigLabel;
         private Button _aggressionButton;
@@ -67,8 +69,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private int _skillCountInRow = 0;
         private Button _chatButton;
         private VisualElement _statusPanel;
-        private readonly Dictionary<string, VisualElement> _statusLineElements = new();
-
         private VisualElement _respawnPopup;
         private VisualElement _buildingsPopup;
         private VisualElement _faqPopup;
@@ -82,11 +82,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private IAssetLoader _assetLoader = null!;
         [Inject]
         private INetworkService _networkService = null!;
-
-        private Button _collisionButton;
-        private Label _collisionLabel;
-        private Button _missionButton;
-
         private VisualElement _missionPanel;
         private Label _missionTitleLabel;
         private Label _missionDescLabel;
@@ -128,9 +123,9 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 player.OnAggressionChanged -= UpdateAggressionButton;
             }
 
-            if ((_globalChatUI) != null)
+            if (_globalChatUI != null)
             {
-                (_globalChatUI).Hide();
+                _globalChatUI.Hide();
             }
         }
 
@@ -662,24 +657,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             return (arrow, barFill);
         }
 
-        private void CreateCollisionToggle(VisualElement root)
-        {
-            _collisionButton = new Button(ToggleCollision);
-            _collisionButton.text = string.Empty;
-            _collisionButton.AddToClassList("hud-button");
-            _collisionButton.AddToClassList("hud-toggle-btn");
-            _collisionButton.AddToClassList("hud-toggle-collision");
-
-            _collisionLabel = new Label("Стены ✗");
-            _collisionLabel.AddToClassList("hud-toggle-btn-label");
-            _collisionButton.Add(_collisionLabel);
-
-            Tooltip.AttachTo(_collisionButton, "Игнорирование коллизий со стенами", _tooltip);
-
-            root.Add(_collisionButton);
-        }
-
-
         private void ToggleAutoDig()
         {
             var player = PlayerMovementController.LocalPlayer;
@@ -723,30 +700,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _aggressionLabel.EnableInClassList("enabled", enabled);
             _aggressionButton.EnableInClassList("enabled", enabled);
         }
-
-        private void ToggleCollision()
-        {
-            var player = PlayerMovementController.LocalPlayer;
-            if (player != null)
-            {
-                player.IgnoreCollision = !player.IgnoreCollision;
-            }
-
-            UpdateCollisionButton(player != null && player.IgnoreCollision);
-        }
-
-        private void UpdateCollisionButton(bool enabled)
-        {
-            if (_collisionLabel == null)
-            {
-                return;
-            }
-
-            _collisionLabel.text = enabled ? "Стены ✓" : "Стены ✗";
-            _collisionLabel.EnableInClassList("enabled", enabled);
-            _collisionButton.EnableInClassList("enabled", enabled);
-        }
-
 
         private void StartSkeletonPulse()
         {
@@ -976,7 +929,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
         private void CreateChatButton(VisualElement root)
         {
-            _chatButton = new Button(() => (_globalChatUI).Toggle());
+            _chatButton = new Button(() => _globalChatUI.Toggle());
             _chatButton.text = "Чат";
             _chatButton.AddToClassList("hud-btn-action");
             _chatButton.AddToClassList("hud-chat-button");
@@ -1098,66 +1051,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             btn.style.right = 10;
             root.Add(btn);
         }
-
-        private void CreateModalTestButton(VisualElement root)
-        {
-            var btn = new Button(() =>
-            {
-                var ns = _networkService;
-                ns?.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
-            });
-            btn.text = "Тест модального окна";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.width = 160;
-            btn.style.right = 10 + ((100 + 6) * 3);
-            root.Add(btn);
-        }
-
-        private void CreateClanButtons(VisualElement root)
-        {
-            var joinBtn = new Button(() =>
-            {
-                var ns = _networkService;
-                ns?.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
-            });
-            joinBtn.text = "Вступить в клан";
-            joinBtn.AddToClassList("hud-btn-action");
-            joinBtn.AddToClassList("hud-btn-top-row");
-            joinBtn.style.width = 140;
-            joinBtn.style.right = 10 + ((100 + 6) * 3) + 160 + 6;
-            root.Add(joinBtn);
-
-            var leaveBtn = new Button(() =>
-            {
-                var ns = _networkService;
-                ns?.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
-            });
-            leaveBtn.text = "Выйти из клана";
-            leaveBtn.AddToClassList("hud-btn-action");
-            leaveBtn.AddToClassList("hud-btn-top-row");
-            leaveBtn.style.top = 10 + 28 + 6;
-            leaveBtn.style.width = 140;
-            leaveBtn.style.right = 10 + ((100 + 6) * 3) + 160 + 6;
-            root.Add(leaveBtn);
-        }
-
-        private void CreateMissionButton(VisualElement root)
-        {
-            _missionButton = new Button(() =>
-            {
-                var ns = _networkService;
-                ns?.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
-            });
-            _missionButton.text = "Миссии";
-            _missionButton.AddToClassList("hud-btn-action");
-            _missionButton.AddToClassList("hud-btn-top-row");
-            _missionButton.style.top = 10 + 28 + 6 + 28 + 6;
-            _missionButton.style.width = 140;
-            _missionButton.style.right = 10 + ((100 + 6) * 3) + 160 + 6;
-            root.Add(_missionButton);
-        }
-
 
         private void CreateMissionPanel(VisualElement root)
         {

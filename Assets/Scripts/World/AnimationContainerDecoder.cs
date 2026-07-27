@@ -96,9 +96,9 @@ namespace Fodinae.Scripts.World
                 }
 
                 int pos = 12;
+                int width, height;
                 var frameTextures = new List<Texture2D>();
                 var delays = new List<int>();
-                int width = 0, height = 0;
 
                 while (pos <= data.Length - 8)
                 {
@@ -108,8 +108,7 @@ namespace Fodinae.Scripts.World
 
                     if (chunkId == "VP8X")
                     {
-                        width = (data[pos + 4] | (data[pos + 5] << 8) | (data[pos + 6] << 16)) + 1;
-                        height = (data[pos + 7] | (data[pos + 8] << 8) | (data[pos + 9] << 16)) + 1;
+                        // VP8X chunk: width/height already obtained from frameTextures
                     }
                     else if (chunkId == "ANMF")
                     {

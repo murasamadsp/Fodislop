@@ -1,6 +1,6 @@
-using NUnit.Framework;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
+using NUnit.Framework;
 using UnityEngine;
 
 namespace Fodinae.Tests.World

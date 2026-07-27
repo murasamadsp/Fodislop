@@ -2,6 +2,7 @@ using System;
 
 namespace VContainer
 {
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = false)]
     public class PreserveAttribute : Attribute
     {
     }

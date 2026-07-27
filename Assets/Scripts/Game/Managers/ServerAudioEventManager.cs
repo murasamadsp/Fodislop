@@ -17,7 +17,7 @@ namespace Fodinae.Scripts.Game.Managers
         public void PlayEffect(AudioPacket packet)
         {
             var vfxType = MapAudioToVFX(packet.EffectType);
-            var slot = (ServiceLocator.Resolve<VFXPool>()) != null ? (ServiceLocator.Resolve<VFXPool>()).Acquire(vfxType) : null;
+            var slot = ServiceLocator.Resolve<VFXPool>() != null ? ServiceLocator.Resolve<VFXPool>().Acquire(vfxType) : null;
 
             var effect = new ServerAudioEvent(packet, slot);
             _activeEffects.Add(effect);
@@ -34,7 +34,7 @@ namespace Fodinae.Scripts.Game.Managers
                 global::MinesServer.Data.SFX.Bz => VFXType.Bz,
                 global::MinesServer.Data.SFX.Destroy => VFXType.Destroy,
                 global::MinesServer.Data.SFX.Death => VFXType.Death,
-                _ => VFXType.Custom
+                _ => VFXType.Custom,
             };
         }
 

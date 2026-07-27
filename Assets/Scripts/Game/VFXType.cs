@@ -6,6 +6,6 @@ namespace Fodinae.Scripts.Game
         Bz,
         Destroy,
         Death,
-        Custom
+        Custom,
     }
 }

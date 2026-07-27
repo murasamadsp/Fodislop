@@ -73,8 +73,10 @@
     <Compile Include="Assets/Scripts/UI/Programmator/ProgrammatorTextureRegistry.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/IPostLateTickable.cs" />
     <Compile Include="Assets/Scripts/Tests/UI/PlayerStatsModelTests.cs" />
+    <Compile Include="Assets/Scripts/World/Rectangle.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/WorldInitProcessor.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/WorldRegistrationBuilder.cs" />
+    <Compile Include="Assets/Scripts/MgGifDecoder/Image.cs" />
     <Compile Include="Assets/Scripts/UI/WorldMapRenderer.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/WorldInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/SystemRegistrationBuilder.cs" />
@@ -103,7 +105,6 @@
     <Compile Include="Assets/Scripts/Game/Pack.cs" />
     <Compile Include="Assets/Scripts/Game/Managers/MapStorage.cs" />
     <Compile Include="Assets/Scripts/Game/Robot.cs" />
-    <Compile Include="Assets/Scripts/MgGifDecoder/MgGifDecoder.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/DockPanelPacketBuilder.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Diagnostics/DiagnosticsCollector.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/FindComponentProvider.cs" />
@@ -132,6 +133,7 @@
     <Compile Include="Assets/Scripts/Tests/World/TileBitmaskConverterTests.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/ILateTickable.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/IInstanceProvider.cs" />
+    <Compile Include="Assets/Scripts/World/AtlasCell.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/IObjectResolverExtensions.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/ActionInstaller.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/ContainerBuilderUnityExtensions.cs" />
@@ -169,6 +171,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/OpenGenericInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/World/TextureAtlas.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Inventory/View/InventoryView.cs" />
+    <Compile Include="Assets/Scripts/World/TileBitmaskConverter.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/LifetimeScope.AwakeScheduler.cs" />
     <Compile Include="Assets/Scripts/Game/RobotHeadlight.cs" />
     <Compile Include="Assets/Scripts/World/WorldBackgroundSetup.cs" />
@@ -193,7 +196,6 @@
     <Compile Include="Assets/Scripts/Networking/Processors/RobotPositionProcessor.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/VContainerSettings.cs" />
     <Compile Include="Assets/Scripts/AssetPipeline/DynamicImage.cs" />
-    <Compile Include="Assets/Scripts/World/TileMaskConverter.cs" />
     <Compile Include="Assets/Scripts/UI/Programmator/ProgrammatorData.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Inventory/Presenter/InventoryPresenter.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/PlayerLoopHelper.cs" />
@@ -240,6 +242,7 @@
     <Compile Include="Assets/Scripts/Core/TentaclePool.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/ListPool.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/RegistrationBuilder.cs" />
+    <Compile Include="Assets/Scripts/UI/HUD/Player/Model/StatusLineEntry.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Registry.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Diagnostics/DiagnosticsContext.cs" />
     <Compile Include="Assets/Scripts/UI/Controls/Selectable.cs" />
@@ -1858,7 +1861,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="UniTask.TextMeshPro.csproj" />
+    <ProjectReference Include="UniTask.DOTween.csproj" />
     <ProjectReference Include="EffekseerEditor.csproj" />
+    <ProjectReference Include="UniTask.Addressables.csproj" />
     <ProjectReference Include="Effekseer.csproj" />
     <ProjectReference Include="UniTask.Linq.csproj" />
     <ProjectReference Include="McpUnity.Editor.csproj" />

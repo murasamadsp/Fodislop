@@ -111,8 +111,8 @@ namespace Fodinae.Scripts.UI
             float halfW = _doc.rootVisualElement.resolvedStyle.width / 2f;
             float halfH = _doc.rootVisualElement.resolvedStyle.height / 2f;
 
-            float posX = panelPos.x - _arrow.resolvedStyle.width / 2f;
-            float posY = panelPos.y - _arrow.resolvedStyle.height / 2f;
+            float posX = panelPos.x - (_arrow.resolvedStyle.width / 2f);
+            float posY = panelPos.y - (_arrow.resolvedStyle.height / 2f);
 
             float maxX = _doc.rootVisualElement.resolvedStyle.width - _arrow.resolvedStyle.width;
             float maxY = _doc.rootVisualElement.resolvedStyle.height - _arrow.resolvedStyle.height;
@@ -129,9 +129,9 @@ namespace Fodinae.Scripts.UI
 
                 dir.Normalize();
 
-                float margin = 40f;
-                float clampedX = Mathf.Clamp(panelPos.x, margin, _doc.rootVisualElement.resolvedStyle.width - margin) - _arrow.resolvedStyle.width / 2f;
-                float clampedY = Mathf.Clamp(panelPos.y, margin, _doc.rootVisualElement.resolvedStyle.height - margin) - _arrow.resolvedStyle.height / 2f;
+                const float margin = 40f;
+                float clampedX = Mathf.Clamp(panelPos.x, margin, _doc.rootVisualElement.resolvedStyle.width - margin) - (_arrow.resolvedStyle.width / 2f);
+                float clampedY = Mathf.Clamp(panelPos.y, margin, _doc.rootVisualElement.resolvedStyle.height - margin) - (_arrow.resolvedStyle.height / 2f);
 
                 _arrow.style.left = clampedX;
                 _arrow.style.top = clampedY;

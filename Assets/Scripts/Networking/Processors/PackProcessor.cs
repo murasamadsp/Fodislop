@@ -8,12 +8,12 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(PackPacket packet)
         {
-            (Fodinae.Scripts.Core.ServiceLocator.Resolve<PackManager>())?.AddOrUpdatePack(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
+            Fodinae.Scripts.Core.ServiceLocator.Resolve<PackManager>()?.AddOrUpdatePack(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
         }
 
         public void Process(RemovePackPacket packet)
         {
-            (Fodinae.Scripts.Core.ServiceLocator.Resolve<PackManager>())?.RemovePack(packet.X, packet.Y);
+            Fodinae.Scripts.Core.ServiceLocator.Resolve<PackManager>()?.RemovePack(packet.X, packet.Y);
         }
     }
 }

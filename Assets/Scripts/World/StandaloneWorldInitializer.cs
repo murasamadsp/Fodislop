@@ -80,45 +80,11 @@ namespace Fodinae.Scripts.World
             {
                 Debug.Log("[StandaloneWorldInitializer] START CALLED");
             }
-
-            if (!_enableStandaloneMode)
-            {
-                return;
-            }
         }
 
         protected void OnDisable()
         {
             CancelInvoke();
-        }
-
-        private void Update()
-        {
-            if (!_enableStandaloneMode || _isInitialized)
-            {
-                return;
-            }
-
-            if (!Application.isPlaying)
-            {
-                return;
-            }
-
-            if (_mapManager.IsWorldInitialized)
-            {
-                _isInitialized = true;
-                enabled = false;
-                return;
-            }
-
-            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (storage != null && storage.IsReady)
-            {
-                _isInitialized = true;
-                _mapManager.OnWorldInitialized?.Invoke();
-                _mapManager.OnWorldDataLoaded?.Invoke();
-                enabled = false;
-            }
         }
 
         private void CheckInitializationTimeout()

@@ -34,7 +34,7 @@ namespace Fodinae.Scripts.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
-            var robot = (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>()).GetOrCreateRobot(packet.BotId);
+            var robot = Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>().GetOrCreateRobot(packet.BotId);
             if (robot == null)
             {
                 return;

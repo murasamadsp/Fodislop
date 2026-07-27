@@ -2,9 +2,9 @@ using System;
 
 namespace VContainer.Unity
 {
-    sealed class EntryPointExceptionHandler
+    internal sealed class EntryPointExceptionHandler
     {
-        readonly Action<Exception> handler;
+        private readonly Action<Exception> handler;
 
         public EntryPointExceptionHandler(Action<Exception> handler)
         {

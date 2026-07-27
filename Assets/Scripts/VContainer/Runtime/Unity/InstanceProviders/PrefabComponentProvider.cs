@@ -4,18 +4,18 @@ using UnityEngine;
 
 namespace VContainer.Unity
 {
-    sealed class PrefabComponentProvider : IInstanceProvider
+    internal sealed class PrefabComponentProvider : IInstanceProvider
     {
-        readonly IInjector injector;
-        readonly IReadOnlyList<IInjectParameter> customParameters;
-        readonly Func<IObjectResolver, Component> prefabFinder;
-        ComponentDestination destination;
+        private readonly IInjector injector;
+        private readonly IReadOnlyList<IInjectParameter> customParameters;
+        private readonly Func<IObjectResolver, Component> prefabFinder;
+        private ComponentDestination destination;
 
         public PrefabComponentProvider(
             Func<IObjectResolver, Component> prefabFinder,
             IInjector injector,
             IReadOnlyList<IInjectParameter> customParameters,
-            in ComponentDestination destination)
+            ComponentDestination destination)
         {
             this.injector = injector;
             this.customParameters = customParameters;
@@ -41,7 +41,9 @@ namespace VContainer.Unity
                     : UnityEngine.Object.Instantiate(prefab);
 
                 if (VContainerSettings.Instance != null && VContainerSettings.Instance.RemoveClonePostfix)
+                {
                     component.name = prefab.name;
+                }
 
                 try
                 {
@@ -56,6 +58,7 @@ namespace VContainer.Unity
                         component.gameObject.SetActive(true);
                     }
                 }
+
                 return component;
             }
         }

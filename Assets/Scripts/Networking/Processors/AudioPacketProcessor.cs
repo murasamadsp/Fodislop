@@ -8,9 +8,9 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(AudioPacket packet)
         {
-            if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<ServerAudioEventManager>()) != null)
+            if (Fodinae.Scripts.Core.ServiceLocator.Resolve<ServerAudioEventManager>() != null)
             {
-                (Fodinae.Scripts.Core.ServiceLocator.Resolve<ServerAudioEventManager>()).PlayEffect(packet);
+                Fodinae.Scripts.Core.ServiceLocator.Resolve<ServerAudioEventManager>().PlayEffect(packet);
             }
         }
     }

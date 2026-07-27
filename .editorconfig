@@ -115,6 +115,16 @@ dotnet_diagnostic.SA1642.severity = none
 dotnet_diagnostic.SA1643.severity = none
 dotnet_diagnostic.SA1313.severity = none   # Parameter casing
 dotnet_diagnostic.SA1507.severity = none   # Multiple blank lines in a row
+dotnet_diagnostic.SA1201.severity = none   # Type/field ordering
+dotnet_diagnostic.SA1202.severity = none   # Member ordering (public before private)
+dotnet_diagnostic.SA1203.severity = none   # Constant field ordering
+dotnet_diagnostic.SA1204.severity = none   # Static member ordering
+dotnet_diagnostic.SA1214.severity = none   # Readonly field ordering
+dotnet_diagnostic.SA1401.severity = none   # Field should be private
+dotnet_diagnostic.SA1402.severity = none   # Single type per file
+dotnet_diagnostic.SA1649.severity = none   # File name matches first type
+dotnet_diagnostic.CS0649.severity = none    # Unity/VContainer injects fields at runtime
+dotnet_diagnostic.S3459.severity = none     # Unassigned field assigned via Unity API
 
 # ── Линтер: NetAnalyzers (CA) ─────────────────────────────────────────────
 dotnet_diagnostic.CA1062.severity = none   # Unity объекты — null уже гарантирует движок
@@ -185,6 +195,14 @@ dotnet_diagnostic.UNT0043.severity = warning  # Опечатка в conditional 
 
 # Vendored VContainer — полностью отключаем внешние анализаторы
 [Assets/Scripts/VContainer/**/*.cs]
+dotnet_diagnostic.SA*.severity = none
+dotnet_diagnostic.CA*.severity = none
+dotnet_diagnostic.RCS*.severity = none
+dotnet_diagnostic.S*.severity = none
+dotnet_diagnostic.UNT*.severity = none
+
+# Vendored MG.GIF decoder — подавляем анализаторы для стороннего кода
+[Assets/Scripts/MgGifDecoder/**/*.cs]
 dotnet_diagnostic.SA*.severity = none
 dotnet_diagnostic.CA*.severity = none
 dotnet_diagnostic.RCS*.severity = none

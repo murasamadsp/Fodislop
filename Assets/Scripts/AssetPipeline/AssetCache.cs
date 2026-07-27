@@ -86,6 +86,7 @@ namespace Fodinae.Scripts
             _entrySizes.Clear();
             while (_accessOrder.TryDequeue(out _))
             {
+                // drain access order queue
             }
 
             Interlocked.Exchange(ref _totalBytes, 0);

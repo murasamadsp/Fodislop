@@ -6,18 +6,18 @@ using VContainer.Internal;
 
 namespace VContainer.Unity
 {
-    sealed class FindComponentProvider : IInstanceProvider
+    internal sealed class FindComponentProvider : IInstanceProvider
     {
-        readonly Type componentType;
-        readonly IReadOnlyList<IInjectParameter> customParameters;
-        ComponentDestination destination;
-        Scene scene;
+        private readonly Type componentType;
+        private readonly IReadOnlyList<IInjectParameter> customParameters;
+        private ComponentDestination destination;
+        private Scene scene;
 
         public FindComponentProvider(
             Type componentType,
             IReadOnlyList<IInjectParameter> customParameters,
-            in Scene scene,
-            in ComponentDestination destination)
+            Scene scene,
+            ComponentDestination destination)
         {
             this.componentType = componentType;
             this.customParameters = customParameters;
@@ -46,9 +46,13 @@ namespace VContainer.Unity
                     foreach (var gameObject in gameObjectBuffer)
                     {
                         component = gameObject.GetComponentInChildren(componentType, true);
-                        if (component != null) break;
+                        if (component != null)
+                        {
+                            break;
+                        }
                     }
                 }
+
                 if (component == null)
                 {
                     throw new VContainerException(componentType, $"{componentType} is not in this scene {scene.path} : {this}");

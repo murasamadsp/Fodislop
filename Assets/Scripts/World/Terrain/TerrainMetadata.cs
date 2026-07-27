@@ -1,6 +1,6 @@
-using UnityEngine;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
+using UnityEngine;
 
 namespace Fodinae.Scripts.World.Terrain
 {

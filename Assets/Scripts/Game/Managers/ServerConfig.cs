@@ -1,5 +1,5 @@
-using UnityEngine;
 using Fodinae.Scripts.Core.Interfaces;
+using UnityEngine;
 
 namespace Fodinae.Scripts.Game.Managers
 {

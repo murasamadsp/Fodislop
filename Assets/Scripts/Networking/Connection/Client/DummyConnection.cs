@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae.Scripts;
@@ -39,6 +38,7 @@ using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client
@@ -115,6 +115,7 @@ namespace MinesServer.Networking.Connection.Client
                 new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
             };
         }
+
         private const int _maxDepth = 200;
         private bool _depthWarningActive;
 
@@ -318,7 +319,7 @@ namespace MinesServer.Networking.Connection.Client
                     if (storage?.CellLayer != null && storage.IsReady)
                     {
                         var cellType = storage.GetCell(move.X, move.Y);
-                        var cellConfig = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>())?.GetCellConfig(cellType);
+                        var cellConfig = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
                             bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
@@ -345,8 +346,9 @@ namespace MinesServer.Networking.Connection.Client
                     _rot = rotate.Direction;
                     UpdatePosition().Forget();
                 }
-                else if (actionPacket.Payload is UnmappedKeyPacket key)
+                else if (actionPacket.Payload is UnmappedKeyPacket)
                 {
+                    // intentionally left blank — unmapped keys are ignored
                 }
                 else if (actionPacket.Payload is ToggleAutoDigPacket)
                 {
@@ -385,7 +387,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         var cellType = storage.GetCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
-                        var mm = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>());
+                        var mm = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
@@ -455,7 +457,7 @@ namespace MinesServer.Networking.Connection.Client
                         Direction.Up => new Vector2Int(0, -1),
                         Direction.Left => new Vector2Int(-1, 0),
                         Direction.Right => new Vector2Int(1, 0),
-                        _ => Vector2Int.zero
+                        _ => Vector2Int.zero,
                     };
                     ushort fx = (ushort)(_x + frontOffset.x);
                     ushort fy = (ushort)(_y + frontOffset.y);
@@ -584,6 +586,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         SendClanInfoWindow();
                     }
+
                     break;
                 case QueryChatHistoryPacket qh:
                     long startFrom = (long)qh.StartFrom;
@@ -931,16 +934,25 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         case "master_volume":
                             if (byte.TryParse(kv.Value, out var masterVol))
+                            {
                                 _clientMasterVolume = masterVol;
+                            }
+
                             break;
                         case string key when key.EndsWith("_volume") && key.Length > 7:
                             string soundKey = key.Substring(0, key.Length - 7);
                             if (byte.TryParse(kv.Value, out var soundVol))
+                            {
                                 _clientSoundVolumes[soundKey] = soundVol;
+                            }
+
                             break;
                         case "renderer":
                             if (Enum.TryParse<RendererMode>(kv.Value, out var renderer))
+                            {
                                 _clientRenderer = renderer;
+                            }
+
                             break;
                         case "keybind":
                             _clientKeybinds.Add(new StringPairPacket("unknown", kv.Value));
@@ -1061,6 +1073,7 @@ namespace MinesServer.Networking.Connection.Client
                     }
                     catch
                     {
+                        // ignore copy failures in standalone mode
                     }
 
                     int wChunks = (worldWidth + 31) / 32;
@@ -1560,7 +1573,7 @@ namespace MinesServer.Networking.Connection.Client
                     OnClickContext = "teleport_close",
                     AttachedProperties = new StringPairPacket[]
                     {
-                        new("DockPanel.Dock", "Right")
+                        new("DockPanel.Dock", "Right"),
                     },
                             },
                         },
@@ -1619,7 +1632,7 @@ namespace MinesServer.Networking.Connection.Client
                     OnClickContext = "teleport_close",
                     AttachedProperties = new StringPairPacket[]
                     {
-                        new("DockPanel.Dock", "Right")
+                        new("DockPanel.Dock", "Right"),
                     },
                             },
                         },
@@ -1724,7 +1737,7 @@ namespace MinesServer.Networking.Connection.Client
         private void SendClanInfoWindow()
         {
             string clanName = _clanId.ToString();
-            string clanDesc = "";
+            string clanDesc = string.Empty;
             foreach (var c in _mockClans)
             {
                 if (c.Id == _clanId)

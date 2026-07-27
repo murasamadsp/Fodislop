@@ -16,9 +16,9 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(RobotInfoPacket packet)
         {
-            if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>()) != null)
+            if (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>() != null)
             {
-                (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>()).UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
+                Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>().UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
             }
         }
     }

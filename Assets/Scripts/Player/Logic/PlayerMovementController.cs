@@ -5,11 +5,10 @@ using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Player.Interfaces;
 using Fodinae.Scripts.Player.Input;
+using Fodinae.Scripts.Player.Interfaces;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
-using VContainer;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.Movement;
@@ -17,6 +16,7 @@ using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using VContainer;
 
 namespace Fodinae.Scripts.Player.Logic
 {
@@ -268,7 +268,7 @@ namespace Fodinae.Scripts.Player.Logic
                     {
                         1 => Direction.Right,
                         -1 => Direction.Left,
-                        _ => direction.y > 0 ? Direction.Up : Direction.Down
+                        _ => direction.y > 0 ? Direction.Up : Direction.Down,
                     };
 
                     ushort currentX = (ushort)Mathf.Clamp(Position.x, 0, ushort.MaxValue);
@@ -391,7 +391,7 @@ namespace Fodinae.Scripts.Player.Logic
                 Direction.Up => new Vector2Int(0, -1),
                 Direction.Left => new Vector2Int(-1, 0),
                 Direction.Right => new Vector2Int(1, 0),
-                _ => Vector2Int.zero
+                _ => Vector2Int.zero,
             };
 
             ushort serverX = (ushort)(Position.x + digOffset.x);

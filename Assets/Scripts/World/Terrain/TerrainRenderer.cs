@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.Rendering;
-using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Scripts.Game.Managers;
+using UnityEngine;
+using UnityEngine.Rendering;
 using VContainer;
 
 namespace Fodinae.Scripts.World.Terrain
@@ -17,19 +17,28 @@ namespace Fodinae.Scripts.World.Terrain
         public static TerrainRenderer Instance { get; private set; }
 
         [Header("Configuration")]
-        [SerializeField] private float _cellSize = GameConstants.World.CELLSIZE;
-        [SerializeField] private Shader _terrainShader;
-        [SerializeField] private Color _shimmerHighlightColor = Color.white;
-        [SerializeField] private string _sortingLayerName = "Default";
-        [SerializeField] private int _sortingOrder = -1000;
-        [SerializeField] private int _viewportPadding = 2;
+        [SerializeField]
+        private float _cellSize = GameConstants.World.CELLSIZE;
+        [SerializeField]
+        private Shader _terrainShader;
+        [SerializeField]
+        private Color _shimmerHighlightColor = Color.white;
+        [SerializeField]
+        private string _sortingLayerName = "Default";
+        [SerializeField]
+        private int _sortingOrder = -1000;
+        [SerializeField]
+        private int _viewportPadding = 2;
 
         private MeshFilter _meshFilter;
         private MeshRenderer _meshRenderer;
 
-        [Inject] private IWorldDataStorage _storage = null!;
-        [Inject] private MapManager _mapManager = null!;
-        [Inject] private ITextureService _textureService = null!;
+        [Inject]
+        private IWorldDataStorage _storage = null!;
+        [Inject]
+        private MapManager _mapManager = null!;
+        [Inject]
+        private ITextureService _textureService = null!;
 
         private Mesh _mesh;
         private Camera _mainCamera;
@@ -75,15 +84,25 @@ namespace Fodinae.Scripts.World.Terrain
 
         public static void OnCellChanged(int x, int y)
         {
-            if (Instance != null) Instance._needsRefresh = true;
+            if (Instance != null)
+            {
+                Instance._needsRefresh = true;
+            }
         }
 
         protected void Awake()
         {
             if (Instance != null && Instance != this)
             {
-                if (Application.isPlaying) Destroy(gameObject);
-                else DestroyImmediate(gameObject);
+                if (Application.isPlaying)
+                {
+                    Destroy(gameObject);
+                }
+                else
+                {
+                    DestroyImmediate(gameObject);
+                }
+
                 return;
             }
 
@@ -109,25 +128,55 @@ namespace Fodinae.Scripts.World.Terrain
 
         public void EnsureSubscriptions()
         {
-            if (_subscribedEvents) return;
+            if (_subscribedEvents)
+            {
+                return;
+            }
+
             var wtm = _textureService as WorldTextureManager;
-            if (wtm != null) wtm.OnTextureLoaded += OnTextureLoaded;
-            if (_mapManager != null) _mapManager.OnWorldDataLoaded += OnWorldDataLoaded;
+            if (wtm != null)
+            {
+                wtm.OnTextureLoaded += OnTextureLoaded;
+            }
+
+            if (_mapManager != null)
+            {
+                _mapManager.OnWorldDataLoaded += OnWorldDataLoaded;
+            }
+
             _subscribedEvents = true;
         }
 
         protected void OnDestroy()
         {
             var wtm = _textureService as WorldTextureManager;
-            if (wtm != null) wtm.OnTextureLoaded -= OnTextureLoaded;
-            if (_mapManager != null) _mapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
+            if (wtm != null)
+            {
+                wtm.OnTextureLoaded -= OnTextureLoaded;
+            }
 
-            if (Instance == this) Instance = null;
+            if (_mapManager != null)
+            {
+                _mapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
+            }
+
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
             if (_mesh != null)
             {
-                if (Application.isPlaying) Destroy(_mesh);
-                else DestroyImmediate(_mesh);
+                if (Application.isPlaying)
+                {
+                    Destroy(_mesh);
+                }
+                else
+                {
+                    DestroyImmediate(_mesh);
+                }
             }
+
             CleanupMaterials();
         }
 
@@ -140,6 +189,7 @@ namespace Fodinae.Scripts.World.Terrain
                                  ?? Shader.Find("Universal Render Pipeline/Lit")
                                  ?? Shader.Find("Sprites/Default");
             }
+
             Shader.SetGlobalFloat("_DarknessFactor", GameConstants.World.WORLD_DARKNESS_FACTOR);
             Shader.SetGlobalVector("_HeadlightPos", Vector4.zero);
             Shader.SetGlobalVector("_HeadlightDir", new Vector4(0, -1, 0, 0));
@@ -164,22 +214,45 @@ namespace Fodinae.Scripts.World.Terrain
         protected void LateUpdate()
         {
 #if UNITY_EDITOR
-            if (!Application.isPlaying) _storage?.EnsureEditorInitialized();
+            if (!Application.isPlaying)
+            {
+                _storage?.EnsureEditorInitialized();
+            }
 #endif
-            if (_mapManager == null || _storage == null || !_storage.IsReady) return;
+            if (_mapManager == null || _storage == null || !_storage.IsReady)
+            {
+                return;
+            }
 
-            if (_meshFilter != null && _meshFilter.sharedMesh != _mesh) _meshFilter.sharedMesh = _mesh;
+            if (_meshFilter != null && _meshFilter.sharedMesh != _mesh)
+            {
+                _meshFilter.sharedMesh = _mesh;
+            }
 
-            if (_mainCamera == null) _mainCamera = _mapManager.MainCamera;
-            if (_mainCamera == null) return;
+            if (_mainCamera == null)
+            {
+                _mainCamera = _mapManager.MainCamera;
+            }
+
+            if (_mainCamera == null)
+            {
+                return;
+            }
 
             int targetWidth = Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) + (_viewportPadding * 2);
             int targetHeight = Mathf.CeilToInt((_mainCamera.orthographicSize * 2) / _cellSize) + (_viewportPadding * 2);
 
             targetWidth = Mathf.Clamp(targetWidth, 2, 256);
             targetHeight = Mathf.Clamp(targetHeight, 2, 256);
-            if (targetWidth % 2 != 0) targetWidth++;
-            if (targetHeight % 2 != 0) targetHeight++;
+            if (targetWidth % 2 != 0)
+            {
+                targetWidth++;
+            }
+
+            if (targetHeight % 2 != 0)
+            {
+                targetHeight++;
+            }
 
             bool dimensionsChanged = targetWidth != _meshWidth || targetHeight != _meshHeight;
             if (dimensionsChanged || !_isInitialized)
@@ -210,10 +283,16 @@ namespace Fodinae.Scripts.World.Terrain
         private void UpdateVertexAttributes(int minX, int minY)
         {
             var wtm = _textureService as WorldTextureManager;
-            if (wtm == null || _mapManager == null) return;
+            if (wtm == null || _mapManager == null)
+            {
+                return;
+            }
 
             var atlases = wtm.GetAllAtlases();
-            if (atlases == null || atlases.Count == 0) return;
+            if (atlases == null || atlases.Count == 0)
+            {
+                return;
+            }
 
             bool materialsChanged = false;
             if (atlases.Count != _lastAtlasCount)
@@ -229,6 +308,7 @@ namespace Fodinae.Scripts.World.Terrain
                     _subMeshIndices[i] = new List<int>(estimatedPerAtlas);
                     _materials[i] = new Material(_terrainShader);
                 }
+
                 materialsChanged = true;
             }
             else
@@ -237,7 +317,10 @@ namespace Fodinae.Scripts.World.Terrain
                 foreach (var list in _subMeshIndices)
                 {
                     list.Clear();
-                    if (list.Capacity < estimatedPerAtlas) list.Capacity = estimatedPerAtlas;
+                    if (list.Capacity < estimatedPerAtlas)
+                    {
+                        list.Capacity = estimatedPerAtlas;
+                    }
                 }
             }
 
@@ -289,9 +372,11 @@ namespace Fodinae.Scripts.World.Terrain
                             _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
                             _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
                         }
+
                         _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                     }
                 }
+
                 _needsRefresh = false;
             }
             catch (Exception ex)
@@ -304,15 +389,27 @@ namespace Fodinae.Scripts.World.Terrain
             if (!needReassignMaterials)
             {
                 var sharedMats = _meshRenderer.sharedMaterials;
-                if (sharedMats == null || sharedMats.Length != _materials.Length) needReassignMaterials = true;
+                if (sharedMats == null || sharedMats.Length != _materials.Length)
+                {
+                    needReassignMaterials = true;
+                }
                 else
                 {
                     for (int i = 0; i < _materials.Length; i++)
-                        if (sharedMats[i] != _materials[i]) { needReassignMaterials = true; break; }
+                    {
+                        if (sharedMats[i] != _materials[i])
+                        {
+                            needReassignMaterials = true;
+                            break;
+                        }
+                    }
                 }
             }
 
-            if (needReassignMaterials) _meshRenderer.sharedMaterials = _materials;
+            if (needReassignMaterials)
+            {
+                _meshRenderer.sharedMaterials = _materials;
+            }
         }
 
         private void CleanupMaterials()
@@ -323,8 +420,14 @@ namespace Fodinae.Scripts.World.Terrain
                 {
                     if (mat != null)
                     {
-                        if (Application.isPlaying) Destroy(mat);
-                        else DestroyImmediate(mat);
+                        if (Application.isPlaying)
+                        {
+                            Destroy(mat);
+                        }
+                        else
+                        {
+                            DestroyImmediate(mat);
+                        }
                     }
                 }
             }
@@ -335,8 +438,12 @@ namespace Fodinae.Scripts.World.Terrain
             _targetSimpleGraphics = enabled ? 1f : 0f;
             foreach (var mat in _materials)
             {
-                if (mat != null) mat.SetFloat("_SimpleGraphics", _targetSimpleGraphics);
+                if (mat != null)
+                {
+                    mat.SetFloat("_SimpleGraphics", _targetSimpleGraphics);
+                }
             }
+
             PlayerPrefs.SetInt("SimpleGraphics", enabled ? 1 : 0);
             PlayerPrefs.Save();
         }
@@ -346,8 +453,12 @@ namespace Fodinae.Scripts.World.Terrain
             _targetUseLight2D = enabled ? 1f : 0f;
             foreach (var mat in _materials)
             {
-                if (mat != null) mat.SetFloat("_UseLight2D", _targetUseLight2D);
+                if (mat != null)
+                {
+                    mat.SetFloat("_UseLight2D", _targetUseLight2D);
+                }
             }
+
             PlayerPrefs.SetInt("UseLight2D", enabled ? 1 : 0);
             PlayerPrefs.Save();
         }

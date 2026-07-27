@@ -12,7 +12,11 @@ namespace VContainer.Unity
     {
         public static void EnsureDispatcherRegistered(IContainerBuilder containerBuilder)
         {
-            if (containerBuilder.Exists(typeof(EntryPointDispatcher), false)) return;
+            if (containerBuilder.Exists(typeof(EntryPointDispatcher), false))
+            {
+                return;
+            }
+
             containerBuilder.Register<EntryPointDispatcher>(Lifetime.Scoped);
 
             if (!containerBuilder.Exists(typeof(EntryPointExceptionHandler)))
@@ -26,8 +30,8 @@ namespace VContainer.Unity
             });
         }
 
-        readonly IContainerBuilder containerBuilder;
-        readonly Lifetime lifetime;
+        private readonly IContainerBuilder containerBuilder;
+        private readonly Lifetime lifetime;
 
         public EntryPointsBuilder(IContainerBuilder containerBuilder, Lifetime lifetime)
         {
@@ -44,8 +48,8 @@ namespace VContainer.Unity
 
     public readonly struct ComponentsBuilder
     {
-        readonly IContainerBuilder containerBuilder;
-        readonly Transform parentTransform;
+        private readonly IContainerBuilder containerBuilder;
+        private readonly Transform parentTransform;
 
         public ComponentsBuilder(IContainerBuilder containerBuilder, Transform parentTransform = null)
         {
@@ -118,7 +122,8 @@ namespace VContainer.Unity
             Lifetime lifetime)
         {
             EntryPointsBuilder.EnsureDispatcherRegistered(builder);
-            return builder.Register(new FuncRegistrationBuilder(container => implementationConfiguration(container),
+            return builder.Register(new FuncRegistrationBuilder(
+                container => implementationConfiguration(container),
                 typeof(TInterface), lifetime)).AsImplementedInterfaces();
         }
 
@@ -134,6 +139,7 @@ namespace VContainer.Unity
             TInterface component)
         {
             var registrationBuilder = new ComponentRegistrationBuilder(component).As(typeof(TInterface));
+
             // Force inject execution
             builder.RegisterBuildCallback(container => container.Resolve<TInterface>(registrationBuilder.Key));
             return builder.Register(registrationBuilder);
@@ -147,6 +153,7 @@ namespace VContainer.Unity
             var scene = lifetimeScope.gameObject.scene;
 
             var registrationBuilder = new ComponentRegistrationBuilder(scene, type);
+
             // Force inject execution
             builder.RegisterBuildCallback(
                 container =>
@@ -155,10 +162,8 @@ namespace VContainer.Unity
                         registrationBuilder.InterfaceTypes != null
                             ? registrationBuilder.InterfaceTypes[0]
                             : registrationBuilder.ImplementationType,
-                        registrationBuilder.Key
-                    );
-                }
-            );
+                        registrationBuilder.Key);
+                });
             return builder.Register(registrationBuilder);
         }
 

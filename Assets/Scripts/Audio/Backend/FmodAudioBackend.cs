@@ -28,7 +28,7 @@ namespace Fodinae.Scripts.Audio.Backend
         private static readonly string[] _requiredBanks =
         {
             "Master",
-            "Master.strings"
+            "Master.strings",
         };
 
         private static readonly FMOD.VECTOR ForwardVector = new() { x = 0f, y = 0f, z = 1f };

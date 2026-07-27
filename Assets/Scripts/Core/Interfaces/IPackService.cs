@@ -1,6 +1,6 @@
-using UnityEngine;
 using Fodinae.Scripts.Game;
 using MinesServer.Data;
+using UnityEngine;
 
 namespace Fodinae.Scripts.Core.Interfaces
 {

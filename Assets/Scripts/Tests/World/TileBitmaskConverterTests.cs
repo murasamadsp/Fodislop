@@ -1,5 +1,5 @@
-using NUnit.Framework;
 using Fodinae.Scripts;
+using NUnit.Framework;
 
 namespace Fodinae.Tests.World
 {

@@ -13,7 +13,7 @@ namespace Fodinae.Scripts.Audio.Backend
     /// Использует FmodAudioBackend для проигрывания FMOD Studio событий.
     /// Все события адресуются по строковому имени, соответствующему FMOD event path без prefix event:/.
     ///
-    /// Пример: Play("sfx/dig") → FMOD event:/sfx/dig
+    /// Пример: Play("sfx/dig") → FMOD event:/sfx/dig.
     /// </summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
     [DefaultExecutionOrder(-10000)]
@@ -146,24 +146,6 @@ namespace Fodinae.Scripts.Audio.Backend
             SetBusVolume(AudioBusType.Voice, PlayerPrefs.GetFloat("Audio_Voice", 1f));
             SetBusVolume(AudioBusType.Ambience, PlayerPrefs.GetFloat("Audio_Ambience", 0.7f));
             SetBusVolume(AudioBusType.UI, PlayerPrefs.GetFloat("Audio_UI", 1f));
-        }
-
-        private void Awake()
-        {
-            _backend = new FmodAudioBackend();
-            _backend.Initialize(this);
-            ApplySavedBusVolumes();
-        }
-
-        private void OnDestroy()
-        {
-            _backend?.Shutdown();
-            _backend = null;
-        }
-
-        private void Update()
-        {
-            _backend?.Update();
         }
     }
 }

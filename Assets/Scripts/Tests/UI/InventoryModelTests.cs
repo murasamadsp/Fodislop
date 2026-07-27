@@ -1,6 +1,6 @@
-using NUnit.Framework;
 using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using MinesServer.Data;
+using NUnit.Framework;
 using UnityEngine;
 
 namespace Fodinae.Tests.UI

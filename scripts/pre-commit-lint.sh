@@ -62,11 +62,11 @@ for PROJECT_FILE in $PROJECTS; do
         PROJECT_ERRORS=$(echo "$BUILD_LOG" | grep -E ": error " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || true)
 
         # Only catch warnings in user codebase (Assets/Scripts or Assets/Editor)
-        # Exclude vendored VContainer runtime from linting
+        # Exclude vendored VContainer and MgGifDecoder from linting
         # Only flag warnings in files that are staged for this commit
         STAGED_CS_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.cs' | sed 's|/|\\|g' || true)
         PROJECT_WARNINGS=""
-        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" || true)
+        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" | grep -v "Assets/Scripts/MgGifDecoder/" || true)
         if [ -n "$ALL_WARNINGS" ] && [ -n "$STAGED_CS_FILES" ]; then
             while IFS= read -r warning_line; do
                 # Extract filename from warning (e.g. "Assets/Scripts/Foo.cs(10,5): warning ...")

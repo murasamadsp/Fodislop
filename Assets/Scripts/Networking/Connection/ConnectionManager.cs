@@ -1,5 +1,4 @@
 using System;
-using VContainer;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
@@ -15,6 +14,7 @@ using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Shared;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts.Networking.Connection
 {
@@ -97,7 +97,7 @@ namespace Fodinae.Scripts.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            (Fodinae.Scripts.Core.ServiceLocator.Resolve<GameManager>())?.SetState(Game.Managers.GameState.Connecting);
+            Fodinae.Scripts.Core.ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Connecting);
 
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;

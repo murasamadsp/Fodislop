@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Networking;
+using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
+using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
-using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
@@ -18,7 +18,6 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
     public class InventoryView : MonoBehaviour
     {
         private const int HOTBAR_COLS = 9;
-        private const int INVENTORY_ROWS = 6;
         private const int INVENTORY_COLS = 9;
         private const int CELLSIZE = 50;
         private const int CELL_GAP = 10;

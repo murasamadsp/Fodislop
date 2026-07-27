@@ -17,7 +17,6 @@ namespace Fodinae.Scripts.World
 {
     public class WorldTextureManager : MonoBehaviour, ITextureService
     {
-
         [Header("Atlas Configuration")]
         [SerializeField]
         private int _initialAtlasSize = 4096;
@@ -655,28 +654,6 @@ namespace Fodinae.Scripts.World
             avgColor /= mostFrequentGroup.Value.Count;
 
             return avgColor;
-        }
-
-        private static Color GetFallbackColor(CellType cellType)
-        {
-            if ((ServiceLocator.Resolve<MapManager>()) != null)
-            {
-                var serverColor = (ServiceLocator.Resolve<MapManager>()).GetCellMinimapColor(cellType);
-                if (serverColor.a > 0)
-                {
-                    return serverColor;
-                }
-            }
-
-            return cellType switch
-            {
-                CellType.Empty => new Color(0.2f, 0.2f, 0.2f),
-                CellType.Road => new Color(0.8f, 0.8f, 0.8f),
-                CellType.Boulder1 => Color.black,
-                CellType.WhiteSand => new Color(1f, 0.92f, 0.8f),
-                CellType.GrayAcid => new Color(0f, 1f, 0f),
-                _ => Color.magenta,
-            };
         }
 
         public Texture2D GetCachedTexture(CellType cellType)

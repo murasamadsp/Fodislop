@@ -63,7 +63,7 @@ namespace Fodinae.Scripts.UI
 
         protected void Start()
         {
-            _mapManager = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>());
+            _mapManager = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
             _mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
 
             if (_mapManager == null)

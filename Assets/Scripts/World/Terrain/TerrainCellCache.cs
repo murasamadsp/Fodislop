@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
-using MinesServer.Data;
-using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.World;
+using MinesServer.Data;
+using UnityEngine;
 
 namespace Fodinae.Scripts.World.Terrain
 {
@@ -43,19 +43,28 @@ namespace Fodinae.Scripts.World.Terrain
 
         public CachedCellData GetCellData(int x, int y)
         {
-            if (x < 0 || x >= _cacheWidth || y < 0 || y >= _cacheHeight) return default;
+            if (x < 0 || x >= _cacheWidth || y < 0 || y >= _cacheHeight)
+            {
+                return default;
+            }
+
             return _cellCache[x, y];
         }
 
         public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
         {
             if (mm == null || mapStorage == null || !mapStorage.IsReady)
+            {
                 return;
+            }
 
             int worldWidth = mm.WorldWidth;
             int worldHeight = mm.WorldHeight;
             var layer = mapStorage.CellLayer;
-            if (layer == null || atlases == null) return;
+            if (layer == null || atlases == null)
+            {
+                return;
+            }
 
             _cacheMinX = minX - 1;
             _cacheMinY = minY - 1;
@@ -80,18 +89,24 @@ namespace Fodinae.Scripts.World.Terrain
                     }
                 }
             }
+
             wtm?.RequestTexture((CellType)0);
         }
 
         public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
         {
             if (mm == null || mapStorage == null || !mapStorage.IsReady)
+            {
                 return;
+            }
 
             int worldWidth = mm.WorldWidth;
             int worldHeight = mm.WorldHeight;
             var layer = mapStorage.CellLayer;
-            if (layer == null) return;
+            if (layer == null)
+            {
+                return;
+            }
 
             _cacheMinX += dx;
             _cacheMinY += dy;
@@ -118,23 +133,43 @@ namespace Fodinae.Scripts.World.Terrain
             if (dx > 0)
             {
                 for (int x = _cacheWidth - dx; x < _cacheWidth; x++)
-                    for (int y = 0; y < _cacheHeight; y++) FillCell(x, y);
+                {
+                    for (int y = 0; y < _cacheHeight; y++)
+                    {
+                        FillCell(x, y);
+                    }
+                }
             }
             else if (dx < 0)
             {
                 for (int x = 0; x < -dx; x++)
-                    for (int y = 0; y < _cacheHeight; y++) FillCell(x, y);
+                {
+                    for (int y = 0; y < _cacheHeight; y++)
+                    {
+                        FillCell(x, y);
+                    }
+                }
             }
 
             if (dy > 0)
             {
                 for (int y = _cacheHeight - dy; y < _cacheHeight; y++)
-                    for (int x = 0; x < _cacheWidth; x++) FillCell(x, y);
+                {
+                    for (int x = 0; x < _cacheWidth; x++)
+                    {
+                        FillCell(x, y);
+                    }
+                }
             }
             else if (dy < 0)
             {
                 for (int y = 0; y < -dy; y++)
-                    for (int x = 0; x < _cacheWidth; x++) FillCell(x, y);
+                {
+                    for (int x = 0; x < _cacheWidth; x++)
+                    {
+                        FillCell(x, y);
+                    }
+                }
             }
 
             wtm?.RequestTexture((CellType)0);
@@ -149,23 +184,30 @@ namespace Fodinae.Scripts.World.Terrain
 
             int serverY = CoordinateUtils.UnityToServerY(unityY, worldHeight);
             if (!layer.GetChunkIndexAndLocal(gridX, serverY, out int chunkIndex, out int localIndex))
+            {
                 return CellType.Unloaded;
+            }
 
             if (chunkIndex != lastChunkIndex)
             {
                 currentChunk = layer.GetChunk(chunkIndex, false, true);
                 lastChunkIndex = chunkIndex;
             }
+
             return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
         }
 
         public CellMetadata GetMetadata(CellType type, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
         {
             if (_metadataCache.TryGetValue(type, out var meta))
+            {
                 return meta;
+            }
 
             if (mm == null || wtm == null)
+            {
                 return default;
+            }
 
             var config = mm.GetCellConfig(type);
 
@@ -201,7 +243,7 @@ namespace Fodinae.Scripts.World.Terrain
                 UVTileSize = (atlases.Count > atlasIndex) ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size : 0,
                 AnimationFrameCount = frameCount,
                 FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
-                IsTextureReady = atlasRect.z > 0.0001f
+                IsTextureReady = atlasRect.z > 0.0001f,
             };
             _metadataCache[type] = meta;
             return meta;
@@ -224,7 +266,7 @@ namespace Fodinae.Scripts.World.Terrain
                 AtlasIndex = meta.AtlasIndex,
                 UVTileSize = meta.UVTileSize,
                 AnimationFrameCount = meta.AnimationFrameCount,
-                FrameHeightTiles = meta.FrameHeightTiles
+                FrameHeightTiles = meta.FrameHeightTiles,
             };
         }
 
@@ -255,15 +297,24 @@ namespace Fodinae.Scripts.World.Terrain
                     int srcX = x + dx;
                     if (dy > 0)
                     {
-                        for (int y = 0; y < h - dy; y++) buffer[x, y] = buffer[srcX, y + dy];
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            buffer[x, y] = buffer[srcX, y + dy];
+                        }
                     }
                     else if (dy < 0)
                     {
-                        for (int y = h - 1; y >= -dy; y--) buffer[x, y] = buffer[srcX, y + dy];
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            buffer[x, y] = buffer[srcX, y + dy];
+                        }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++) buffer[x, y] = buffer[srcX, y];
+                        for (int y = 0; y < h; y++)
+                        {
+                            buffer[x, y] = buffer[srcX, y];
+                        }
                     }
                 }
             }
@@ -274,15 +325,24 @@ namespace Fodinae.Scripts.World.Terrain
                     int srcX = x + dx;
                     if (dy > 0)
                     {
-                        for (int y = 0; y < h - dy; y++) buffer[x, y] = buffer[srcX, y + dy];
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            buffer[x, y] = buffer[srcX, y + dy];
+                        }
                     }
                     else if (dy < 0)
                     {
-                        for (int y = h - 1; y >= -dy; y--) buffer[x, y] = buffer[srcX, y + dy];
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            buffer[x, y] = buffer[srcX, y + dy];
+                        }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++) buffer[x, y] = buffer[srcX, y];
+                        for (int y = 0; y < h; y++)
+                        {
+                            buffer[x, y] = buffer[srcX, y];
+                        }
                     }
                 }
             }
@@ -291,12 +351,22 @@ namespace Fodinae.Scripts.World.Terrain
                 if (dy > 0)
                 {
                     for (int x = 0; x < w; x++)
-                        for (int y = 0; y < h - dy; y++) buffer[x, y] = buffer[x, y + dy];
+                    {
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            buffer[x, y] = buffer[x, y + dy];
+                        }
+                    }
                 }
                 else
                 {
                     for (int x = 0; x < w; x++)
-                        for (int y = h - 1; y >= -dy; y--) buffer[x, y] = buffer[x, y + dy];
+                    {
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            buffer[x, y] = buffer[x, y + dy];
+                        }
+                    }
                 }
             }
         }

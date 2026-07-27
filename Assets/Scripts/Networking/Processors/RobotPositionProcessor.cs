@@ -11,7 +11,7 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(RobotPositionPacket packet)
         {
-            var rm = (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>());
+            var rm = Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>();
             if (rm == null)
             {
                 return;

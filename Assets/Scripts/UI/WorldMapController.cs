@@ -116,8 +116,8 @@ namespace Fodinae.Scripts.UI
             SetHudVisible(false);
 
             // Center map on player position
-            int CENTER_X = _player != null ? _player.Position.x : ((Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>())?.WorldWidth ?? 64) / 2;
-            int CENTER_Y = _player != null ? _player.Position.y : ((Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>())?.WorldHeight ?? 64) / 2;
+            int CENTER_X = _player != null ? _player.Position.x : (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>()?.WorldWidth ?? 64) / 2;
+            int CENTER_Y = _player != null ? _player.Position.y : (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>()?.WorldHeight ?? 64) / 2;
             _mapRenderer.SetViewCenter(CENTER_X, CENTER_Y);
         }
 

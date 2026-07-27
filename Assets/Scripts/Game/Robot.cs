@@ -1,8 +1,8 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
 using TMPro;
@@ -184,7 +184,7 @@ namespace Fodinae.Scripts.Game
 
             if (gameObject.CompareTag("Player"))
             {
-                (ServiceLocator.Resolve<RobotManager>())?.RegisterRobot(this);
+                ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
             }
         }
 
@@ -303,7 +303,7 @@ namespace Fodinae.Scripts.Game
         public void Initialize(uint botId)
         {
             _botId = botId;
-            (ServiceLocator.Resolve<RobotManager>())?.RegisterRobot(this);
+            ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
             Debug.Log($"{TAG} Initialized botId={botId} (local={IsLocalPlayer})");
 
             _isMetadataLoaded = false;
@@ -348,7 +348,7 @@ namespace Fodinae.Scripts.Game
 
         public void SetPosition(ushort x, ushort y)
         {
-            var mm = (ServiceLocator.Resolve<MapManager>());
+            var mm = ServiceLocator.Resolve<MapManager>();
             if (mm != null)
             {
                 _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, mm.WorldHeight);

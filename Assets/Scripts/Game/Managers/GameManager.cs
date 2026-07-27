@@ -16,7 +16,7 @@ namespace Fodinae.Scripts.Game.Managers
         Offline,
         Connecting,
         InGame,
-        Disconnected
+        Disconnected,
     }
 
     /// <summary>
@@ -33,82 +33,6 @@ namespace Fodinae.Scripts.Game.Managers
         public event Action OnWorldLoaded;
 
         private GameObject _uiRoot;
-
-        private void Awake()
-        {
-            SetupUI();
-        }
-
-        private void OnDestroy()
-        {
-            if (_uiRoot != null)
-            {
-                if (Application.isPlaying)
-                {
-                    Destroy(_uiRoot);
-                }
-                else
-                {
-                    DestroyImmediate(_uiRoot);
-                }
-
-                _uiRoot = null;
-            }
-        }
-
-        private void SetupUI()
-        {
-            _uiRoot = new GameObject("UIRoot");
-            _uiRoot.SetActive(false);
-            _uiRoot.transform.SetParent(transform);
-
-            if (UnityEngine.Object.FindAnyObjectByType<MinimapController>() == null)
-            {
-                var mmGO = new GameObject("MinimapRoot");
-                mmGO.AddComponent<MinimapController>();
-                mmGO.transform.SetParent(_uiRoot.transform);
-            }
-
-            var reconnectGO = new GameObject("ReconnectUI");
-            reconnectGO.AddComponent<ReconnectUI>();
-            reconnectGO.transform.SetParent(transform);
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>() == null)
-            {
-                var invGO = new GameObject("InventoryRoot");
-                invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
-                invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
-                invGO.transform.SetParent(_uiRoot.transform);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>() == null)
-            {
-                var hudGO = new GameObject("PlayerHUD");
-                hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
-                hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>();
-                hudGO.transform.SetParent(_uiRoot.transform);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>() == null)
-            {
-                var pauseGO = new GameObject("PauseMenu");
-                pauseGO.AddComponent<PauseMenu>();
-                pauseGO.transform.SetParent(_uiRoot.transform);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>() == null)
-            {
-                var chatGO = new GameObject("ChatSystem");
-                chatGO.AddComponent<LocalChatPopup>();
-                chatGO.AddComponent<GlobalChatUI>();
-                chatGO.AddComponent<FloatingChatManager>();
-                chatGO.transform.SetParent(_uiRoot.transform);
-            }
-
-            var arrowGO = new GameObject("MissionArrowUI");
-            arrowGO.AddComponent<MissionArrowUI>();
-            arrowGO.transform.SetParent(_uiRoot.transform);
-        }
 
         public void SetState(GameState newState)
         {

@@ -5,7 +5,7 @@ using VContainer.Internal;
 
 namespace VContainer.Unity
 {
-    struct ComponentDestination
+    internal struct ComponentDestination
     {
         public Transform Parent;
         public Func<IObjectResolver, Transform> ParentFinder;
@@ -14,9 +14,15 @@ namespace VContainer.Unity
         public Transform GetParent(IObjectResolver resolver)
         {
             if (Parent != null)
+            {
                 return Parent;
+            }
+
             if (ParentFinder != null)
+            {
                 return ParentFinder(resolver);
+            }
+
             return null;
         }
 
@@ -31,12 +37,12 @@ namespace VContainer.Unity
 
     public sealed class ComponentRegistrationBuilder : RegistrationBuilder
     {
-        readonly object instance;
-        readonly Func<IObjectResolver, Component> prefabFinder;
-        readonly string gameObjectName;
+        private readonly object instance;
+        private readonly Func<IObjectResolver, Component> prefabFinder;
+        private readonly string gameObjectName;
 
-        ComponentDestination destination;
-        Scene scene;
+        private ComponentDestination destination;
+        private Scene scene;
 
         internal ComponentRegistrationBuilder(object instance)
             : base(instance.GetType(), Lifetime.Singleton)
@@ -44,7 +50,7 @@ namespace VContainer.Unity
             this.instance = instance;
         }
 
-        internal ComponentRegistrationBuilder(in Scene scene, Type implementationType)
+        internal ComponentRegistrationBuilder(Scene scene, Type implementationType)
             : base(implementationType, Lifetime.Singleton)
         {
             this.scene = scene;
@@ -79,18 +85,19 @@ namespace VContainer.Unity
             }
             else if (scene.IsValid())
             {
-                provider = new FindComponentProvider(ImplementationType, Parameters, in scene, in destination);
+                provider = new FindComponentProvider(ImplementationType, Parameters, scene, destination);
             }
             else if (prefabFinder != null)
             {
                 var injector = InjectorCache.GetOrBuild(ImplementationType);
-                provider = new PrefabComponentProvider(prefabFinder, injector, Parameters, in destination);
+                provider = new PrefabComponentProvider(prefabFinder, injector, Parameters, destination);
             }
             else
             {
                 var injector = InjectorCache.GetOrBuild(ImplementationType);
-                provider = new NewGameObjectProvider(ImplementationType, injector, Parameters, in destination, gameObjectName);
+                provider = new NewGameObjectProvider(ImplementationType, injector, Parameters, destination, gameObjectName);
             }
+
             return new Registration(ImplementationType, Lifetime, InterfaceTypes, provider, Key);
         }
 
@@ -117,5 +124,5 @@ namespace VContainer.Unity
             destination.DontDestroyOnLoad = true;
             return this;
         }
-   }
+    }
 }

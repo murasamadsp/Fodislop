@@ -1,7 +1,7 @@
-using UnityEngine;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets.Connection;
+using UnityEngine;
 
 namespace Fodinae.Scripts.Networking.Processors
 {

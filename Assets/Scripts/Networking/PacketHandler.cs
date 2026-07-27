@@ -1,15 +1,14 @@
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Networking.Processors;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Game.Managers;
+using Fodinae.Scripts.Networking.Processors;
 using Fodinae.Scripts.Player;
 using Fodinae.Scripts.UI;
 using Fodinae.Scripts.UI.Programmator;
 using Fodinae.UI;
 using Fodinae.UI.Binding;
-using VContainer;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -29,6 +28,7 @@ using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.Scripts.Networking
 {
@@ -59,11 +59,15 @@ namespace Fodinae.Scripts.Networking
         private bool _isInitialized;
         private bool _isSubscribed;
 
-        [Inject] private INetworkService _networkService = null!;
-        [Inject] private IWorldDataStorage _mapStorageInterface = null!;
-        [Inject] private GameManager _gameManager = null!;
-        [Inject] private IMapDataProvider _mapDataProvider = null!;
-        private MapStorage _mapStorage => _mapStorageInterface as MapStorage;
+        [Inject]
+        private INetworkService _networkService = null!;
+        [Inject]
+        private IWorldDataStorage _mapStorageInterface = null!;
+        [Inject]
+        private GameManager _gameManager = null!;
+        [Inject]
+        private IMapDataProvider _mapDataProvider = null!;
+        private MapStorage MapStorage => _mapStorageInterface as MapStorage;
 
         protected virtual void Awake()
         {
@@ -75,7 +79,7 @@ namespace Fodinae.Scripts.Networking
                 return;
             }
 
-            var mapStorage = _mapStorage;
+            var mapStorage = MapStorage;
             if (mapStorage == null)
             {
                 Debug.LogError("[PacketHandler] FATAL: MapStorage not found at Awake — PacketHandler cannot function. World will not render.");

@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using VContainer;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking.Connection;
 using Fodinae.Scripts.Player;
 using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
 using MinesServer.Networking.Client;
@@ -16,6 +15,7 @@ using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts.Networking
 {

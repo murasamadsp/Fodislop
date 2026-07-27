@@ -11,32 +11,6 @@ using UnityEngine;
 
 namespace Fodinae.Scripts.World
 {
-    /// <summary>
-    /// Represents a rectangle in the texture atlas.
-    /// </summary>
-    public struct Rectangle
-    {
-        public int X;
-        public int Y;
-        public int Width;
-        public int Height;
-
-        public Rectangle(int x, int y, int width, int height)
-        {
-            X = x;
-            Y = y;
-            Width = width;
-            Height = height;
-        }
-    }
-
-    internal struct AtlasCell
-    {
-        public CellType CellType;
-        public Rectangle Rectangle;
-        public AtlasCoordinate BaseCoordinate;
-    }
-
     public class TextureAtlas : IDisposable
     {
         public int Size { get; }
@@ -161,19 +135,13 @@ namespace Fodinae.Scripts.World
                 return AtlasCoordinate.Empty;
             }
 
-            // The cell's sub-atlas is packed at cell.Rectangle.X, cell.Rectangle.Y
             int subAtlasX = cell.Rectangle.X;
             int subAtlasY = cell.Rectangle.Y;
             int subAtlasWidth = cell.Rectangle.Width;
             int subAtlasHeight = cell.Rectangle.Height;
 
-            // Use the central constant for tile size
             const int TERRAIN_TILE_SIZE = RenderingConstants.CELL_SIZE;
-
-            // How many tiles fit in the SUB-ATLAS width and height
             int tilesPerRow = subAtlasWidth / TERRAIN_TILE_SIZE;
-
-            // If frameHeightPixels is provided, it defines the wrapping boundary for animations
             int effectiveSubAtlasHeight = frameHeightPixels > 0 ? frameHeightPixels : subAtlasHeight;
             int tilesPerColumn = effectiveSubAtlasHeight / TERRAIN_TILE_SIZE;
 
@@ -187,25 +155,19 @@ namespace Fodinae.Scripts.World
                 tilesPerColumn = 1;
             }
 
-            // Calculate wrapped position within the SUB-ATLAS (or frame)
             int wrappedX = ((globalX % tilesPerRow) + tilesPerRow) % tilesPerRow;
-
-            // Invert Y wrapping for bottom-to-top texture sampling with top-to-bottom server coords
             int wrappedY = (tilesPerColumn - 1) - (((globalY % tilesPerColumn) + tilesPerColumn) % tilesPerColumn);
 
-            // Calculate the absolute atlas position by adding the sub-atlas base position
             int atlasX = subAtlasX + (wrappedX * TERRAIN_TILE_SIZE);
-
-            // Add frame offset: subAtlasY + wrapped cell offset + current frame offset
             int atlasY = subAtlasY + (wrappedY * TERRAIN_TILE_SIZE) + (frameIndex * (frameHeightPixels > 0 ? frameHeightPixels : 0));
 
             return new AtlasCoordinate(
                 atlasX,
                 atlasY,
-                TERRAIN_TILE_SIZE,  // We only want to render one tile
                 TERRAIN_TILE_SIZE,
-                Size,             // Full atlas width
-                Size);            // Full atlas height
+                TERRAIN_TILE_SIZE,
+                Size,
+                Size);
         }
 
         public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY)
@@ -219,8 +181,6 @@ namespace Fodinae.Scripts.World
 
             lock (_lock)
             {
-                // Pack the ENTIRE texture size.
-                // Add Padding to the requested width/height to ensure space between textures.
                 var bestFit = FindBestFit(texture.width, texture.height);
                 if (bestFit == null)
                 {
@@ -240,8 +200,6 @@ namespace Fodinae.Scripts.World
                         Size),
                 };
 
-                // When adding to _usedRectangles and splitting, we must include the Padding
-                // so the next FindBestFit doesn't overlap with the padded area.
                 Rectangle rectWithPadding = new Rectangle(bestFit.Value.X, bestFit.Value.Y, bestFit.Value.Width + Padding, bestFit.Value.Height + Padding);
                 _usedRectangles.Add(rectWithPadding);
                 SplitFreeRectangles(rectWithPadding);
@@ -253,12 +211,6 @@ namespace Fodinae.Scripts.World
             }
         }
 
-        /// <summary>
-        /// After TryAddTexture, copies the texture's pixel data into the internal _atlasPixels buffer
-        /// at the position where TryAddTexture placed it. Keeps _atlasPixels incrementally in sync
-        /// without re-reading all existing textures via GetPixels32.
-        /// Must be called on the main thread after TryAddTexture for the same cellType.
-        /// </summary>
         public void CopyTextureToAtlas(CellType cellType, Texture2D texture)
         {
             if (!_cells.TryGetValue(cellType, out var cell))
@@ -273,12 +225,6 @@ namespace Fodinae.Scripts.World
             CopyPixelsToAtlasArray(sourcePixels, texture.width, texture.height, rect);
         }
 
-        /// <summary>
-        /// Synchronously uploads the current _atlasPixels to the GPU texture via SetPixels32 + Apply.
-        /// Unlike UpdateAtlasTexture, this does NOT re-read any source textures — it relies on
-        /// CopyTextureToAtlas having been called to keep _atlasPixels in sync incrementally.
-        /// Must be called on the main thread.
-        /// </summary>
         public void SyncApply()
         {
             if (!_isDirty || _atlasPixels == null)
@@ -375,7 +321,6 @@ namespace Fodinae.Scripts.World
 
         private void CopyPixelsToAtlasArray(Color32[] sourcePixels, int width, int height, Rectangle destination)
         {
-            // Copy the ENTIRE texture size
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -395,9 +340,10 @@ namespace Fodinae.Scripts.World
 
         private Texture2D GetBaseTexture(CellType cellType)
         {
-            if (ServiceLocator.Resolve<ITextureService>() as WorldTextureManager != null)
+            var textureService = ServiceLocator.Resolve<ITextureService>();
+            if (textureService is WorldTextureManager manager)
             {
-                var cachedTexture = (ServiceLocator.Resolve<ITextureService>() as WorldTextureManager).GetCachedTexture(cellType);
+                var cachedTexture = manager.GetCachedTexture(cellType);
                 if (cachedTexture != null)
                 {
                     return cachedTexture;
@@ -430,9 +376,9 @@ namespace Fodinae.Scripts.World
 
         private static Color GetCellColor(CellType cellType)
         {
-            if ((ServiceLocator.Resolve<MapManager>()) != null)
+            if (ServiceLocator.Resolve<MapManager>() != null)
             {
-                var serverColor = (ServiceLocator.Resolve<MapManager>()).GetCellMinimapColor(cellType);
+                var serverColor = ServiceLocator.Resolve<MapManager>().GetCellMinimapColor(cellType);
                 if (serverColor.a > 0)
                 {
                     return serverColor;

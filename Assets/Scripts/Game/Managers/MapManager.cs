@@ -95,7 +95,7 @@ namespace Fodinae.Scripts.Game.Managers
         {
             Debug.Log("[MapManager] LoadWorldInit START");
             IsWorldInitialized = false;
-            (ServiceLocator.Resolve<PackManager>())?.ClearAllPacks();
+            ServiceLocator.Resolve<PackManager>()?.ClearAllPacks();
             ServiceLocator.Resolve<IRobotService>()?.ClearAllRobots();
             ServiceLocator.Resolve<IServerAudioService>()?.ClearAllEffects();
 

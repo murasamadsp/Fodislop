@@ -27,38 +27,19 @@ namespace Fodinae.Scripts.Audio.Spatial
         [SerializeField]
         [Range(0f, 2f)]
         private float _volume;
-
-        [Tooltip("Играть автоматически при Start().")]
-        [SerializeField]
-        private bool _playOnStart = true;
-
         private AudioPlaybackHandle _handle;
-
-        private void Start()
-        {
-            if (_playOnStart && !string.IsNullOrEmpty(_eventName))
-            {
-                PlayCurrent();
-            }
-        }
-
-        private void OnDestroy()
-        {
-            _handle?.Stop();
-            _handle = null;
-        }
 
         /// <summary>Начать проигрывание текущего события с нативной привязкой FMOD к GameObject.</summary>
         public void PlayCurrent()
         {
-            if (string.IsNullOrEmpty(_eventName) || (ServiceLocator.Resolve<IAudioSystem>()) == null)
+            if (string.IsNullOrEmpty(_eventName) || ServiceLocator.Resolve<IAudioSystem>() == null)
             {
                 return;
             }
 
             Stop();
             float? vol = _volume > 0f ? _volume : null;
-            _handle = (ServiceLocator.Resolve<IAudioSystem>()).PlayAttached(_eventName, gameObject, _layer, vol);
+            _handle = ServiceLocator.Resolve<IAudioSystem>().PlayAttached(_eventName, gameObject, _layer, vol);
         }
 
         /// <summary>Сменить событие на лету (старое останавливается, новое стартует).</summary>

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Scripts.Game;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
@@ -16,7 +16,7 @@ namespace Fodinae.Scripts.Game.Managers
 
         public void AddOrUpdatePack(ushort x, ushort y, PackType packType, byte variant, byte linkedClan)
         {
-            if ((ServiceLocator.Resolve<MapManager>()) == null)
+            if (ServiceLocator.Resolve<MapManager>() == null)
             {
                 Debug.LogWarning($"{TAG} MapManager not ready, skipping pack at ({x},{y})");
                 return;

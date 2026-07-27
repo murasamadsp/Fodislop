@@ -15,7 +15,7 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(PlayerInfoPacket packet)
         {
-            var rm = (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>());
+            var rm = Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>();
             if (rm != null)
             {
                 rm.LocalPlayerBotId = packet.BotId;

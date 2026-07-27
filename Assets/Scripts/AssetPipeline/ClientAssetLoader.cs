@@ -27,7 +27,6 @@ namespace Fodinae.Scripts
     [DefaultExecutionOrder(-10000)]
     public class ClientAssetLoader : MonoBehaviour, IAssetLoader
     {
-
         public event Action<string, Texture2D> OnTextureLoaded;
 
         private readonly AssetCache _cache = new(LoadBytesFromServerInternal);
@@ -201,6 +200,7 @@ namespace Fodinae.Scripts
                 }
                 catch (OperationCanceledException)
                 {
+                    // cancellation is expected when requests are superseded
                 }
                 catch (Exception ex)
                 {

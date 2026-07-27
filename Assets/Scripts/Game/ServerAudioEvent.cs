@@ -313,7 +313,8 @@ namespace Fodinae.Scripts.Game
 
             if (_hasSourceBot)
             {
-                var sourceBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager) != null ? (ServiceLocator.Resolve<IRobotService>() as RobotManager).GetOrCreateRobot(_sourceBotId) : null;
+                var service = ServiceLocator.Resolve<IRobotService>();
+                var sourceBot = service is RobotManager manager ? manager.GetOrCreateRobot(_sourceBotId) : null;
                 pos = sourceBot != null ? sourceBot.transform.position : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
             }
             else
@@ -347,13 +348,13 @@ namespace Fodinae.Scripts.Game
 
         private void PlayAudio()
         {
-            if ((ServiceLocator.Resolve<IAudioSystem>()) == null)
+            if (ServiceLocator.Resolve<IAudioSystem>() == null)
             {
                 return;
             }
 
             string eventName = GetSfxEventName(_effectType);
-            (ServiceLocator.Resolve<IAudioSystem>()).PlayAt(eventName, _intendedWorldPosition);
+            ServiceLocator.Resolve<IAudioSystem>().PlayAt(eventName, _intendedWorldPosition);
         }
 
         private async UniTaskVoid LoadVisualAsync(CancellationToken token)
@@ -543,7 +544,7 @@ namespace Fodinae.Scripts.Game
 
             if (_slot != null)
             {
-                (ServiceLocator.Resolve<VFXPool>())?.Release(_slot);
+                ServiceLocator.Resolve<VFXPool>()?.Release(_slot);
                 _slot = null;
             }
 

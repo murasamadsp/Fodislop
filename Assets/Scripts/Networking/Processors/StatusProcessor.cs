@@ -15,7 +15,7 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(OnlinePacket packet)
         {
-            var fps = (Fodinae.Scripts.Core.ServiceLocator.Resolve<FPSCounter>());
+            var fps = Fodinae.Scripts.Core.ServiceLocator.Resolve<FPSCounter>();
             if (fps != null)
             {
                 fps.SetOnline((int)packet.Players, (int)packet.Programmator);
@@ -24,7 +24,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(PingPacket packet)
         {
-            var fps = (Fodinae.Scripts.Core.ServiceLocator.Resolve<FPSCounter>());
+            var fps = Fodinae.Scripts.Core.ServiceLocator.Resolve<FPSCounter>();
             if (fps != null)
             {
                 fps.SetPing(packet.PreviousPing);

@@ -2,14 +2,15 @@ using System;
 
 namespace VContainer.Internal
 {
-    sealed class FuncRegistrationBuilder : RegistrationBuilder
+    internal sealed class FuncRegistrationBuilder : RegistrationBuilder
     {
-        readonly Func<IObjectResolver, object> implementationProvider;
+        private readonly Func<IObjectResolver, object> implementationProvider;
 
         public FuncRegistrationBuilder(
             Func<IObjectResolver, object> implementationProvider,
             Type implementationType,
-            Lifetime lifetime) : base(implementationType, lifetime)
+            Lifetime lifetime)
+            : base(implementationType, lifetime)
         {
             this.implementationProvider = implementationProvider;
         }

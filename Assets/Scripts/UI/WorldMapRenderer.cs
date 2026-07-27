@@ -48,7 +48,7 @@ namespace Fodinae.Scripts.UI
         protected void Start()
         {
             _storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>());
+            _manager = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
             _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
             if (_storage == null || _manager == null)
             {
