@@ -5,6 +5,7 @@ using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.UIElements;
 
 namespace Fodinae.Scripts.Player
 {
@@ -20,6 +21,41 @@ namespace Fodinae.Scripts.Player
             _cachedAllKeys = Keyboard.current.allKeys;
         }
 
+        protected void Start()
+        {
+            var docs = FindObjectsByType<UIDocument>();
+            foreach (var doc in docs)
+            {
+                if (doc.rootVisualElement == null) continue;
+                doc.rootVisualElement.RegisterCallback<PointerDownEvent>(evt =>
+                {
+                    if (evt.button != 0) return;
+                    if (PacketHandler.IsInputBlocked) return;
+                    if (ChatInput.IsFocused) return;
+
+                    var target = evt.target as VisualElement;
+                    if (target == null) return;
+
+                    // TemplateContainer = empty UXML background, root = empty panel space
+                    if (target is TemplateContainer || target == doc.rootVisualElement)
+                    {
+                        Vector2 mousePos = Mouse.current.position.ReadValue();
+                        Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
+
+                        int unityX = Mathf.FloorToInt(worldPos.x);
+                        int unityY = Mathf.FloorToInt(worldPos.y);
+
+                        if (MapManager.Instance != null && NetworkService.Instance != null)
+                        {
+                            ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
+                            ushort serverY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
+                            NetworkService.Instance.SendAction(new ClickCellPacket(serverX, serverY));
+                        }
+                    }
+                });
+            }
+        }
+
         protected void Update()
         {
             if (_mainCamera == null)
@@ -27,48 +63,7 @@ namespace Fodinae.Scripts.Player
                 _mainCamera = Camera.main;
             }
 
-            if (_mainCamera == null)
-            {
-                return;
-            }
-
-            HandleMouseClick();
             HandleKeyboardInput();
-        }
-
-        private void HandleMouseClick()
-        {
-            if (Mouse.current == null)
-            {
-                return;
-            }
-
-            if (PacketHandler.IsInputBlocked)
-            {
-                return;
-            }
-
-            if (ChatInput.IsFocused)
-            {
-                return;
-            }
-
-            if (Mouse.current.leftButton.wasPressedThisFrame)
-            {
-                Vector2 mousePos = Mouse.current.position.ReadValue();
-                Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
-
-                int unityX = Mathf.FloorToInt(worldPos.x);
-                int unityY = Mathf.FloorToInt(worldPos.y);
-
-                if (MapManager.Instance != null && NetworkService.Instance != null)
-                {
-                    ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
-                    ushort serverY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
-
-                    NetworkService.Instance.SendAction(new ClickCellPacket(serverX, serverY));
-                }
-            }
         }
 
         private void HandleKeyboardInput()

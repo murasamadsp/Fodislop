@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -8,27 +9,62 @@ namespace Fodinae.Scripts.UI.Programmator
     {
         public const int COLS = 16;
         public const int ROWS = 12;
-        public const int PAGES = 16;
         public const int CELLS_PER_PAGE = COLS * ROWS;
-        public const int TOTAL_CELLS = PAGES * CELLS_PER_PAGE;
 
-        /// <summary>Stores ProgAction byte values (cast to int).</summary>
-        public static int[] Codes = new int[TOTAL_CELLS];
+        public static List<int> Codes = new();
+        public static List<string> Values = new();
+        public static List<string> Labels = new();
+        public static int PageCount => Codes.Count / CELLS_PER_PAGE;
 
-        public static int[] Nums = new int[TOTAL_CELLS];
-        public static string[] Labels = new string[TOTAL_CELLS];
+        static ProgrammatorData()
+        {
+            var initial = CELLS_PER_PAGE;
+            Codes = new List<int>(new int[initial]);
+            Values = new List<string>(new string[initial]);
+            Labels = new List<string>(new string[initial]);
+        }
 
         public static int CurrentPage;
         public static int HoveredCell = -1;
 
-        private static readonly Stack<int[]> _undoStack = new();
-        private static readonly Stack<int[]> _redoStack = new();
+        public static void AddPage()
+        {
+            Codes.AddRange(new int[CELLS_PER_PAGE]);
+            Values.AddRange(new string[CELLS_PER_PAGE]);
+            Labels.AddRange(new string[CELLS_PER_PAGE]);
+        }
+
+        public static bool RemoveLastPage()
+        {
+            if (PageCount <= 1) return false;
+            PushUndo();
+            int start = (PageCount - 1) * CELLS_PER_PAGE;
+            Codes.RemoveRange(start, CELLS_PER_PAGE);
+            Values.RemoveRange(start, CELLS_PER_PAGE);
+            Labels.RemoveRange(start, CELLS_PER_PAGE);
+            if (CurrentPage >= PageCount) CurrentPage = PageCount - 1;
+            return true;
+        }
+
+        private struct UndoSnapshot
+        {
+            public int[] Codes;
+            public string[] Labels;
+            public string[] Values;
+        }
+
+        private static readonly Stack<UndoSnapshot> _undoStack = new();
+        private static readonly Stack<UndoSnapshot> _redoStack = new();
         private const int MAX_UNDO_STEPS = 50;
 
         public static void PushUndo()
         {
-            var snapshot = (int[])Codes.Clone();
-            _undoStack.Push(snapshot);
+            _undoStack.Push(new UndoSnapshot
+            {
+                Codes = Codes.ToArray(),
+                Labels = Labels.ToArray(),
+                Values = Values.ToArray(),
+            });
             _redoStack.Clear();
 
             if (_undoStack.Count > MAX_UNDO_STEPS)
@@ -52,8 +88,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 return false;
             }
 
-            _redoStack.Push((int[])Codes.Clone());
-            Codes = _undoStack.Pop();
+            _redoStack.Push(new UndoSnapshot
+            {
+                Codes = Codes.ToArray(),
+                Labels = Labels.ToArray(),
+                Values = Values.ToArray(),
+            });
+            var snap = _undoStack.Pop();
+            Codes = new List<int>(snap.Codes);
+            Labels = new List<string>(snap.Labels);
+            Values = new List<string>(snap.Values);
             return true;
         }
 
@@ -64,8 +108,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 return false;
             }
 
-            _undoStack.Push((int[])Codes.Clone());
-            Codes = _redoStack.Pop();
+            _undoStack.Push(new UndoSnapshot
+            {
+                Codes = Codes.ToArray(),
+                Labels = Labels.ToArray(),
+                Values = Values.ToArray(),
+            });
+            var snap = _redoStack.Pop();
+            Codes = new List<int>(snap.Codes);
+            Labels = new List<string>(snap.Labels);
+            Values = new List<string>(snap.Values);
             return true;
         }
 

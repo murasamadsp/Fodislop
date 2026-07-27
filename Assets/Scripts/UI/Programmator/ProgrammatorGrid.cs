@@ -19,7 +19,10 @@ namespace Fodinae.Scripts.UI.Programmator
         private bool _radialShown;
         private int _radialCellIndex = -1;
         private Tooltip _tooltip;
-        private const float CELLSIZE = 30f;
+        private Label _pageLabel;
+        private Button _prevBtn;
+        private Button _nextBtn;
+        private const float CELLSIZE = 32f;
         private const float CELL_GAP = 2f;
 
         public static bool IsOpen { get; private set; }
@@ -81,6 +84,7 @@ namespace Fodinae.Scripts.UI.Programmator
             var topRow = new VisualElement();
             topRow.style.flexDirection = FlexDirection.Row;
             topRow.style.marginBottom = 10;
+            topRow.style.alignItems = Align.Center;
 
             var title = new Label("Программатор");
             title.style.fontSize = 18;
@@ -88,6 +92,88 @@ namespace Fodinae.Scripts.UI.Programmator
             title.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
             title.style.flexGrow = 1;
             topRow.Add(title);
+
+            _prevBtn = new Button(PrevPage);
+            _prevBtn.text = "<";
+            _prevBtn.style.width = 22;
+            _prevBtn.style.height = 22;
+            _prevBtn.style.backgroundColor = Color.clear;
+            _prevBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            _prevBtn.style.fontSize = 14;
+            _prevBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _prevBtn.style.borderTopWidth = 0;
+            _prevBtn.style.borderBottomWidth = 0;
+            _prevBtn.style.borderLeftWidth = 0;
+            _prevBtn.style.borderRightWidth = 0;
+            _prevBtn.style.paddingTop = 0;
+            _prevBtn.style.paddingBottom = 0;
+            _prevBtn.style.paddingLeft = 2;
+            _prevBtn.style.paddingRight = 2;
+            topRow.Add(_prevBtn);
+
+            _pageLabel = new Label("Стр. 1/1");
+            _pageLabel.style.fontSize = 12;
+            _pageLabel.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
+            _pageLabel.style.minWidth = 60;
+            _pageLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _pageLabel.style.marginLeft = 4;
+            _pageLabel.style.marginRight = 4;
+            topRow.Add(_pageLabel);
+
+            _nextBtn = new Button(NextPage);
+            _nextBtn.text = ">";
+            _nextBtn.style.width = 22;
+            _nextBtn.style.height = 22;
+            _nextBtn.style.backgroundColor = Color.clear;
+            _nextBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            _nextBtn.style.fontSize = 14;
+            _nextBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _nextBtn.style.borderTopWidth = 0;
+            _nextBtn.style.borderBottomWidth = 0;
+            _nextBtn.style.borderLeftWidth = 0;
+            _nextBtn.style.borderRightWidth = 0;
+            _nextBtn.style.paddingTop = 0;
+            _nextBtn.style.paddingBottom = 0;
+            _nextBtn.style.paddingLeft = 2;
+            _nextBtn.style.paddingRight = 2;
+            topRow.Add(_nextBtn);
+
+            var addPageBtn = new Button(AddPageClick);
+            addPageBtn.text = "+";
+            addPageBtn.style.width = 22;
+            addPageBtn.style.height = 22;
+            addPageBtn.style.backgroundColor = Color.clear;
+            addPageBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            addPageBtn.style.fontSize = 14;
+            addPageBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            addPageBtn.style.borderTopWidth = 0;
+            addPageBtn.style.borderBottomWidth = 0;
+            addPageBtn.style.borderLeftWidth = 0;
+            addPageBtn.style.borderRightWidth = 0;
+            addPageBtn.style.paddingTop = 0;
+            addPageBtn.style.paddingBottom = 0;
+            addPageBtn.style.paddingLeft = 2;
+            addPageBtn.style.paddingRight = 2;
+            topRow.Add(addPageBtn);
+
+            var removePageBtn = new Button(RemovePageClick);
+            removePageBtn.text = "−";
+            removePageBtn.style.width = 22;
+            removePageBtn.style.height = 22;
+            removePageBtn.style.backgroundColor = Color.clear;
+            removePageBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            removePageBtn.style.fontSize = 14;
+            removePageBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            removePageBtn.style.borderTopWidth = 0;
+            removePageBtn.style.borderBottomWidth = 0;
+            removePageBtn.style.borderLeftWidth = 0;
+            removePageBtn.style.borderRightWidth = 0;
+            removePageBtn.style.paddingTop = 0;
+            removePageBtn.style.paddingBottom = 0;
+            removePageBtn.style.paddingLeft = 2;
+            removePageBtn.style.paddingRight = 2;
+            removePageBtn.style.marginRight = 8;
+            topRow.Add(removePageBtn);
 
             var closeBtn = new Button(() => Hide());
             closeBtn.text = "×";
@@ -241,6 +327,51 @@ namespace Fodinae.Scripts.UI.Programmator
             _radial.ClearOuterItems();
         }
 
+        private void PrevPage()
+        {
+            if (ProgrammatorData.CurrentPage > 0)
+            {
+                _radial.Hide();
+                _joystick.Hide();
+                _radialShown = false;
+                ProgrammatorData.CurrentPage--;
+                RefreshAllCells();
+            }
+        }
+
+        private void NextPage()
+        {
+            if (ProgrammatorData.CurrentPage < ProgrammatorData.PageCount - 1)
+            {
+                _radial.Hide();
+                _joystick.Hide();
+                _radialShown = false;
+                ProgrammatorData.CurrentPage++;
+                RefreshAllCells();
+            }
+        }
+
+        private void AddPageClick()
+        {
+            ProgrammatorData.AddPage();
+            UpdatePageLabel();
+        }
+
+        private void RemovePageClick()
+        {
+            if (ProgrammatorData.RemoveLastPage())
+            {
+                RefreshAllCells();
+            }
+        }
+
+        private void UpdatePageLabel()
+        {
+            _pageLabel.text = $"Стр. {ProgrammatorData.CurrentPage + 1}/{ProgrammatorData.PageCount}";
+            _prevBtn.SetEnabled(ProgrammatorData.CurrentPage > 0);
+            _nextBtn.SetEnabled(ProgrammatorData.CurrentPage < ProgrammatorData.PageCount - 1);
+        }
+
         private void HighlightCell(int row, int col, bool highlight)
         {
             var cell = _cells[row, col];
@@ -273,7 +404,7 @@ namespace Fodinae.Scripts.UI.Programmator
             if (tex != null)
             {
                 cell.style.backgroundImage = new StyleBackground(tex);
-                cell.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Contain);
+                cell.style.backgroundSize = new BackgroundSize(tex.width, tex.height);
                 cell.style.backgroundColor = Color.clear;
                 label.text = string.Empty;
             }
@@ -343,6 +474,13 @@ namespace Fodinae.Scripts.UI.Programmator
             ProgrammatorData.Codes[idx] = (int)action;
             UpdateCell(row, col);
 
+            if (row * ProgrammatorData.COLS + col == ProgrammatorData.CELLS_PER_PAGE - 1
+                && ProgrammatorData.CurrentPage == ProgrammatorData.PageCount - 1)
+            {
+                ProgrammatorData.AddPage();
+                UpdatePageLabel();
+            }
+
             _joystick.Hide();
             _radial.Hide();
             _radialShown = false;
@@ -364,6 +502,13 @@ namespace Fodinae.Scripts.UI.Programmator
             ProgrammatorData.PushUndo();
             ProgrammatorData.Codes[idx] = selectedId;
             UpdateCell(row, col);
+
+            if (row * ProgrammatorData.COLS + col == ProgrammatorData.CELLS_PER_PAGE - 1
+                && ProgrammatorData.CurrentPage == ProgrammatorData.PageCount - 1)
+            {
+                ProgrammatorData.AddPage();
+                UpdatePageLabel();
+            }
 
             _radial.Hide();
             _radialShown = false;
@@ -434,6 +579,21 @@ namespace Fodinae.Scripts.UI.Programmator
                         RefreshAllCells();
                     }
                 }
+
+                return;
+            }
+
+            // Arrow keys for page navigation (only when radial menu is hidden)
+            if (!_radialShown)
+            {
+                if (Keyboard.current.leftArrowKey.wasPressedThisFrame)
+                {
+                    PrevPage();
+                }
+                else if (Keyboard.current.rightArrowKey.wasPressedThisFrame)
+                {
+                    NextPage();
+                }
             }
         }
 
@@ -458,6 +618,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void RefreshAllCells()
         {
+            UpdatePageLabel();
             for (int i = 0; i < ProgrammatorData.ROWS; i++)
             {
                 for (int j = 0; j < ProgrammatorData.COLS; j++)

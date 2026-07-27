@@ -12,6 +12,7 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Server.Packets;
+using MinesServer.Networking.Server.Packets.Compression;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
@@ -160,6 +161,15 @@ namespace Fodinae.Scripts.Networking
             if (payload == null)
             {
                 return;
+            }
+
+            while (payload is LzmaPacket lzma)
+            {
+                payload = lzma.Payload;
+            }
+            while (payload is LZ4Packet lz4)
+            {
+                payload = lz4.Payload;
             }
 
             if (payload is HBPacket hbPacket && hbPacket.Payload != null)
