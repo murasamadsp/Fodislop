@@ -63,7 +63,24 @@ for PROJECT_FILE in $PROJECTS; do
 
         # Only catch warnings in user codebase (Assets/Scripts or Assets/Editor)
         # Exclude vendored VContainer runtime from linting
-        PROJECT_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" || true)
+        # Only flag warnings in files that are staged for this commit
+        STAGED_CS_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.cs' | sed 's|/|\\|g' || true)
+        PROJECT_WARNINGS=""
+        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" || true)
+        if [ -n "$ALL_WARNINGS" ] && [ -n "$STAGED_CS_FILES" ]; then
+            while IFS= read -r warning_line; do
+                # Extract filename from warning (e.g. "Assets/Scripts/Foo.cs(10,5): warning ...")
+                WARN_FILE=$(echo "$warning_line" | grep -oE "Assets/[^(:]+" | head -1)
+                if [ -n "$WARN_FILE" ]; then
+                    # Check if this file is staged
+                    ESCAPED=$(echo "$WARN_FILE" | sed 's|/|\\|g')
+                    if echo "$STAGED_CS_FILES" | grep -qF "$ESCAPED"; then
+                        PROJECT_WARNINGS="${PROJECT_WARNINGS}${warning_line}"$'\n'
+                    fi
+                fi
+            done <<< "$ALL_WARNINGS"
+            PROJECT_WARNINGS=$(echo "$PROJECT_WARNINGS" | sed '/^$/d')
+        fi
 
         if [ -n "$PROJECT_ERRORS" ]; then
             echo -e "\n\033[0;31mError: Compilation failed for $PROJECT_NAME in user codebase:\033[0m"
