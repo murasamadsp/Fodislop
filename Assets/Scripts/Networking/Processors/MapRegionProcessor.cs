@@ -1,3 +1,5 @@
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 
@@ -7,7 +9,7 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(MapRegionPacket packet)
         {
-            var storage = MapStorage.Instance;
+            var storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (storage?.CellLayer == null || packet.Payload == null)
             {
                 return;

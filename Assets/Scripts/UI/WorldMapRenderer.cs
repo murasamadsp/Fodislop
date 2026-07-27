@@ -30,7 +30,7 @@ namespace Fodinae.Scripts.UI
         private float _viewCenterX;
         private float _viewCenterY;
         private float _cellsPerPixel = 1f;
-        private MapStorage _storage;
+        private IWorldDataStorage _storage;
         private MapManager _manager;
         private PlayerMovementController _player;
         private InputAction _scrollAction;
@@ -47,9 +47,9 @@ namespace Fodinae.Scripts.UI
 
         protected void Start()
         {
-            _storage = MapStorage.Instance;
-            _manager = MapManager.Instance;
-            _player = FindAnyObjectByType<PlayerMovementController>();
+            _storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>();
+            _manager = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>());
+            _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
             if (_storage == null || _manager == null)
             {
                 Debug.LogError("[WorldMapRenderer] MapStorage or MapManager not available");

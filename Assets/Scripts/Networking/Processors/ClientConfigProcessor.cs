@@ -3,7 +3,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Information;
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Networking.Processors
@@ -42,7 +42,7 @@ namespace Fodinae.Scripts.Networking.Processors
                 }
             }
 
-            var terrain = SingleMeshTerrainRenderer.Instance;
+            var terrain = TerrainRenderer.Instance;
             if (terrain != null)
             {
                 bool simple = packet.Renderer switch

@@ -2,7 +2,9 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using TMPro;
 using UnityEngine;
 
@@ -182,7 +184,7 @@ namespace Fodinae.Scripts.Game
 
             if (gameObject.CompareTag("Player"))
             {
-                RobotManager.Instance?.RegisterRobot(this);
+                (ServiceLocator.Resolve<RobotManager>())?.RegisterRobot(this);
             }
         }
 
@@ -301,7 +303,7 @@ namespace Fodinae.Scripts.Game
         public void Initialize(uint botId)
         {
             _botId = botId;
-            RobotManager.Instance?.RegisterRobot(this);
+            (ServiceLocator.Resolve<RobotManager>())?.RegisterRobot(this);
             Debug.Log($"{TAG} Initialized botId={botId} (local={IsLocalPlayer})");
 
             _isMetadataLoaded = false;
@@ -346,7 +348,7 @@ namespace Fodinae.Scripts.Game
 
         public void SetPosition(ushort x, ushort y)
         {
-            var mm = MapManager.Instance;
+            var mm = (ServiceLocator.Resolve<MapManager>());
             if (mm != null)
             {
                 _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, mm.WorldHeight);
@@ -401,7 +403,7 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            var loader = ClientAssetLoader.Instance;
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
             if (loader == null)
             {
                 Debug.LogWarning($"{TAG} ClientAssetLoader not available for skin load on bot {_botId}");
@@ -433,7 +435,7 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            var loader = ClientAssetLoader.Instance;
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
             if (loader == null)
             {
                 Debug.LogWarning($"{TAG} ClientAssetLoader not available for tail load on bot {_botId}");
@@ -465,7 +467,7 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            var loader = ClientAssetLoader.Instance;
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
             if (loader == null)
             {
                 Debug.LogWarning($"{TAG} ClientAssetLoader not available for clan load on bot {_botId}");
@@ -535,7 +537,7 @@ namespace Fodinae.Scripts.Game
             _cts?.Cancel();
             _cts?.Dispose();
 
-            RobotManager.InstanceIfExists?.UnregisterRobot(_botId, this);
+            ServiceLocator.Resolve<IRobotService>()?.UnregisterRobot(_botId, this);
 
             if (_skinSprite != null)
             {

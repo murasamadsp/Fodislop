@@ -202,38 +202,6 @@ namespace MinesServer.Networking.Connection.Client
 
             _status = ConnectionStatus.Connected;
             OnConnected?.Invoke();
-            if (UnityEngine.Object.FindAnyObjectByType<MinimapController>() == null)
-            {
-                var minimapObj = new GameObject("MinimapRoot");
-                minimapObj.AddComponent<MinimapController>();
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>() == null)
-            {
-                var inventoryObj = new GameObject("InventoryRoot");
-                inventoryObj.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
-                inventoryObj.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>() == null)
-            {
-                var hudObj = new GameObject("PlayerHUD");
-                if (PlayerStatsModel.Instance == null)
-                {
-                    hudObj.AddComponent<PlayerStatsModel>();
-                }
-
-                hudObj.AddComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
-                hudObj.AddComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>();
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>() == null)
-            {
-                var chatObj = new GameObject("ChatSystem");
-                chatObj.AddComponent<LocalChatPopup>();
-                chatObj.AddComponent<GlobalChatUI>();
-                chatObj.AddComponent<FloatingChatManager>();
-            }
         }
 
         public void Disconnect()
@@ -344,11 +312,11 @@ namespace MinesServer.Networking.Connection.Client
                         return;
                     }
 
-                    var storage = MapStorage.Instance;
+                    var storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
                     if (storage?.CellLayer != null && storage.IsReady)
                     {
                         var cellType = storage.GetCell(move.X, move.Y);
-                        var cellConfig = MapManager.Instance?.GetCellConfig(cellType);
+                        var cellConfig = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>())?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
                             bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
@@ -401,7 +369,7 @@ namespace MinesServer.Networking.Connection.Client
                         new AudioPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                     })));
 
-                    var storage = MapStorage.Instance;
+                    var storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
                     if (storage?.CellLayer != null && storage.IsReady)
                     {
                         var cellType = storage.GetCell(cellX, cellY);
@@ -415,7 +383,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         var cellType = storage.GetCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
-                        var mm = MapManager.Instance;
+                        var mm = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>());
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
@@ -429,7 +397,7 @@ namespace MinesServer.Networking.Connection.Client
 
                         if (crystalIdx >= 0)
                         {
-                            var stats = PlayerStatsModel.Instance;
+                            var stats = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
                             if (stats != null && stats.BasketContents != null && stats.BasketContents.Length > crystalIdx)
                             {
                                 var newContents = new long[stats.BasketContents.Length];
@@ -2237,7 +2205,8 @@ namespace MinesServer.Networking.Connection.Client
         {
             foreach (var assetEntry in runtimeAssets.Assets)
             {
-                var data = await Fodinae.Scripts.Networking.Connection.Client.TextureStorageManager.Instance.GetTextureData(assetEntry.Filename.TrimStart('/'));
+                var tsm = Fodinae.Scripts.Core.ServiceLocator.Resolve<ITextureStorageService>();
+                var data = tsm != null ? await tsm.GetTextureData(assetEntry.Filename.TrimStart('/')) : null;
 
                 RuntimeAssetPacket response;
                 if (data != null)

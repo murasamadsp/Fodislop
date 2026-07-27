@@ -1,5 +1,4 @@
 - [ ] TODO: Refactor GIF decoding (mgGif.cs) to use sprite sheets or optimize performance for handling multiple animated skins/tails simultaneously. Unsafe blocks and raw pointers in C# may cause CPU spikes.
-- [ ] AudioPacket алиас — Заменить клиентский `using AudioPacket = SFXPacket` на прямой `AudioPacket` после обновления пакета `MinesServerNetworking` на сервере.
 - [ ] Настройки аудио и обработка смены аудио-устройств — Реализовать UI настроек громкости шин (Master, SFX, Music, Voice, Ambience, UI, Narrative) и авто-рессет/переинициализацию FMOD/Unity бэкенда при смене устройства вывода по умолчанию (`Default audio device was changed`).
 - [ ] Аудит `Assets/Editor/` — разобраться какие скрипты ещё нужны, а какие можно удалить: `MapbConverter.cs`, `ExportSprites.cs` и `FmodBankBuilder.cs` — вероятно разовые утилиты, которые можно убрать если больше не используются.
 - ПЕРЕВЕСТИ НА СОВРЕМЕННЫЙ СИ ШАРП
@@ -12,3 +11,5 @@
 - добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - режим предпросмотра сделать
 - разобраться со сценами
+- А че у нас 2 раза пауза открывается? Чтобы продолжить мне надо продолжить дважды
+- тег система не идеальна. сделать ревью

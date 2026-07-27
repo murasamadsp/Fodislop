@@ -8,8 +8,8 @@
         "node",
         "Packages/com.gamelovers.mcp-unity/Server~/build/index.js"
       ],
-	  "timeout": 30000,
-      "environment": {}
+      "timeout": 30000
     }
-  }
+  },
+  "snapshot": false
 }

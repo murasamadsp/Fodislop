@@ -1,29 +1,22 @@
 using System.Collections.Generic;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Game.Managers
 {
-    public class PackManager : MonoBehaviour
+    public class PackManager : MonoBehaviour, IPackService
     {
-        private static PackManager _instance;
-        public static PackManager Instance => _instance;
-        public static PackManager InstanceIfExists => _instance;
-
         private const string TAG = "[PackManager]";
         private Dictionary<Vector2Int, Pack> _packs = new();
 
-        protected void Awake()
-        {
-            _instance = this;
-        }
-
         public void AddOrUpdatePack(ushort x, ushort y, PackType packType, byte variant, byte linkedClan)
         {
-            if (MapManager.Instance == null)
+            if ((ServiceLocator.Resolve<MapManager>()) == null)
             {
                 Debug.LogWarning($"{TAG} MapManager not ready, skipping pack at ({x},{y})");
                 return;

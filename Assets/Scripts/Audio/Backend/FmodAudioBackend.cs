@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Audio.Core;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Audio.Backend
@@ -66,16 +68,20 @@ namespace Fodinae.Scripts.Audio.Backend
             {
                 bankFilePath = localPath;
             }
-            else if (ClientAssetLoader.Instance != null)
+            else
             {
-                var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
-                try
+                var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+                if (assetLoader != null)
                 {
-                    bankFilePath = await ClientAssetLoader.Instance.GetAssetPathAsync(relativeRemotePath);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[FmodAudioBackend] Ошибка загрузки банка '{cleanBankName}' с CDN: {ex.Message}");
+                    var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
+                    try
+                    {
+                        bankFilePath = await assetLoader.GetAssetPathAsync(relativeRemotePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[FmodAudioBackend] Ошибка загрузки банка '{cleanBankName}' с CDN: {ex.Message}");
+                    }
                 }
             }
 

@@ -1,3 +1,4 @@
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Information;
@@ -15,9 +16,9 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(RobotInfoPacket packet)
         {
-            if (RobotManager.Instance != null)
+            if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>()) != null)
             {
-                RobotManager.Instance.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
+                (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>()).UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
             }
         }
     }

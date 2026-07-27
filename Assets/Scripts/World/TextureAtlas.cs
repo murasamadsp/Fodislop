@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Cysharp.Threading.Tasks;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Data;
 using UnityEngine;
@@ -393,9 +395,9 @@ namespace Fodinae.Scripts.World
 
         private Texture2D GetBaseTexture(CellType cellType)
         {
-            if (WorldTextureManager.Instance != null)
+            if (ServiceLocator.Resolve<ITextureService>() as WorldTextureManager != null)
             {
-                var cachedTexture = WorldTextureManager.Instance.GetCachedTexture(cellType);
+                var cachedTexture = (ServiceLocator.Resolve<ITextureService>() as WorldTextureManager).GetCachedTexture(cellType);
                 if (cachedTexture != null)
                 {
                     return cachedTexture;
@@ -428,9 +430,9 @@ namespace Fodinae.Scripts.World
 
         private static Color GetCellColor(CellType cellType)
         {
-            if (MapManager.Instance != null)
+            if ((ServiceLocator.Resolve<MapManager>()) != null)
             {
-                var serverColor = MapManager.Instance.GetCellMinimapColor(cellType);
+                var serverColor = (ServiceLocator.Resolve<MapManager>()).GetCellMinimapColor(cellType);
                 if (serverColor.a > 0)
                 {
                     return serverColor;

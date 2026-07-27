@@ -6,9 +6,11 @@ using Cysharp.Threading.Tasks;
 using Effekseer;
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Effekseer;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared.Packets;
@@ -133,7 +135,7 @@ namespace Fodinae.Scripts.Game
             {
                 if (_hasSourceBot)
                 {
-                    var sourceBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_sourceBotId);
+                    var sourceBot = ServiceLocator.Resolve<IRobotService>()?.GetOrCreateRobot(_sourceBotId);
                     if (sourceBot != null)
                     {
                         _effekseerHandle.SetLocation(sourceBot.transform.position);
@@ -142,7 +144,7 @@ namespace Fodinae.Scripts.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -311,7 +313,7 @@ namespace Fodinae.Scripts.Game
 
             if (_hasSourceBot)
             {
-                var sourceBot = RobotManager.InstanceIfExists != null ? RobotManager.InstanceIfExists.GetOrCreateRobot(_sourceBotId) : null;
+                var sourceBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager) != null ? (ServiceLocator.Resolve<IRobotService>() as RobotManager).GetOrCreateRobot(_sourceBotId) : null;
                 pos = sourceBot != null ? sourceBot.transform.position : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
             }
             else
@@ -328,7 +330,7 @@ namespace Fodinae.Scripts.Game
 
             if (_targetBotId != 0 && _gameObject != null)
             {
-                var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
+                var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle + 180f);
@@ -345,13 +347,13 @@ namespace Fodinae.Scripts.Game
 
         private void PlayAudio()
         {
-            if (AudioSystem.Instance == null)
+            if ((ServiceLocator.Resolve<IAudioSystem>()) == null)
             {
                 return;
             }
 
             string eventName = GetSfxEventName(_effectType);
-            AudioSystem.Instance.PlayAt(eventName, _intendedWorldPosition);
+            (ServiceLocator.Resolve<IAudioSystem>()).PlayAt(eventName, _intendedWorldPosition);
         }
 
         private async UniTaskVoid LoadVisualAsync(CancellationToken token)
@@ -359,7 +361,7 @@ namespace Fodinae.Scripts.Game
             try
             {
                 var filename = $"VFX/{_effectType.ToString().ToLowerInvariant()}";
-                var loader = ClientAssetLoader.Instance;
+                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
                 if (loader == null)
                 {
                     MarkVisualCompleted();
@@ -476,7 +478,7 @@ namespace Fodinae.Scripts.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -541,7 +543,7 @@ namespace Fodinae.Scripts.Game
 
             if (_slot != null)
             {
-                VFXPool.Instance?.Release(_slot);
+                (ServiceLocator.Resolve<VFXPool>())?.Release(_slot);
                 _slot = null;
             }
 

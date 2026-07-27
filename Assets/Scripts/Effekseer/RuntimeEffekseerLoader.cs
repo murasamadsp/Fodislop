@@ -6,7 +6,10 @@ using Cysharp.Threading.Tasks;
 using Effekseer;
 using Effekseer.Internal;
 using Fodinae.Scripts;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Effekseer
@@ -68,7 +71,7 @@ namespace Fodinae.Scripts.Effekseer
                 return null;
             }
 
-            var loader = clientAssetLoader ?? ClientAssetLoader.Instance;
+            var loader = clientAssetLoader ?? (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader);
             if (loader == null)
             {
                 Debug.LogError("[RuntimeEffekseerLoader] No ClientAssetLoader available");

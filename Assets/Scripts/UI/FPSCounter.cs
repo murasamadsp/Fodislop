@@ -1,3 +1,4 @@
+using Fodinae.Scripts.Core;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,22 +12,19 @@ namespace Fodinae.Scripts.UI
     /// </summary>
     public class FPSCounter : MonoBehaviour
     {
-        public static FPSCounter Instance { get; private set; }
-
         private const int SAMPLE_SIZE = 30;
         private readonly float[] _frameTimes = new float[SAMPLE_SIZE];
         private int _frameIndex;
         private float _runningSum;
 
         private Text _fpsText;
+        private Canvas _ownedCanvas;
         private int _pingMs;
         private int _onlinePlayers;
         private int _onlineProgrammator;
 
         protected void Awake()
         {
-            Instance = this;
-
             Canvas canvas = FindAnyObjectByType<Canvas>();
             if (canvas == null)
             {
@@ -35,6 +33,7 @@ namespace Fodinae.Scripts.UI
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 canvasGO.AddComponent<CanvasScaler>();
                 canvasGO.AddComponent<GraphicRaycaster>();
+                _ownedCanvas = canvas;
             }
 
             GameObject textGO = new GameObject("FPSLabel");
@@ -58,6 +57,21 @@ namespace Fodinae.Scripts.UI
             rt.anchorMax = new Vector2(0.5f, 1);
             rt.pivot = new Vector2(0.5f, 1);
             rt.anchoredPosition = new Vector2(0, -10);
+        }
+
+        protected void OnDestroy()
+        {
+            if (_ownedCanvas != null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(_ownedCanvas.gameObject);
+                }
+                else
+                {
+                    DestroyImmediate(_ownedCanvas.gameObject);
+                }
+            }
         }
 
         protected void Update()

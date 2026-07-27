@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using VContainer;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking.Connection;
 using Fodinae.Scripts.Player;
@@ -8,6 +9,7 @@ using Fodinae.Scripts.Player.Logic;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -17,56 +19,48 @@ using UnityEngine;
 
 namespace Fodinae.Scripts.Networking
 {
-    #pragma warning disable CS0649
     public class NetworkService : MonoBehaviour, INetworkService
     {
-        private static NetworkService _instance;
-        public static NetworkService Instance => _instance;
-        public static NetworkService InstanceIfExists => _instance;
+        public static NetworkService Instance { get; private set; }
+
+        [Inject]
+        private IConnectionService _connectionService = null!;
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
+        private readonly object _subscribersLock = new();
 
         protected void Awake()
         {
-            _instance = this;
+            Instance = this;
         }
 
         protected void OnEnable()
         {
-            if (Instance != this)
+            if (_connectionService != null)
             {
-                return;
-            }
-
-            if (ConnectionManager.Instance != null)
-            {
-                ConnectionManager.Instance.OnPacketReceived -= OnPacketReceived;
-                ConnectionManager.Instance.OnPacketReceived += OnPacketReceived;
+                _connectionService.OnPacketReceived -= OnPacketReceived;
+                _connectionService.OnPacketReceived += OnPacketReceived;
             }
         }
 
         protected void OnDisable()
         {
-            if (Instance != this)
+            if (_connectionService != null)
             {
-                return;
-            }
-
-            var cm = ConnectionManager.InstanceIfExists;
-            if (cm != null)
-            {
-                cm.OnPacketReceived -= OnPacketReceived;
+                _connectionService.OnPacketReceived -= OnPacketReceived;
             }
         }
 
-        public static bool IsConnected
+        public bool IsConnected
         {
             get
             {
-                var cm = ConnectionManager.InstanceIfExists;
-                return cm != null && cm.Connection != null && cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected;
+                return _connectionService != null && _connectionService.IsConnected;
             }
         }
+
+        public static void Send(IRootClientPacket packet) => Instance?.Send(packet);
+        public static void SendAction(IActionClientPacket action) => Instance?.SendAction(action);
 
         private PlayerMovementController _cachedPlayerController;
 
@@ -95,62 +89,63 @@ namespace Fodinae.Scripts.Networking
             Send(new ActionClientPacket(serverX, serverY, action));
         }
 
-        void INetworkService.Send(IRootClientPacket packet) => Send(packet);
-
-        public static void Send(IRootClientPacket packet)
+        public void Send(IRootClientPacket packet)
         {
-            if (ConnectionManager.Instance == null)
-            {
-                return;
-            }
-
-            var connection = ConnectionManager.Instance.Connection;
-            if (connection == null || connection.ConnectionStatus != MinesServer.Networking.Shared.ConnectionStatus.Connected)
+            var connection = Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
+            if (connection == null)
             {
                 return;
             }
 
             var timestamp = (uint)DateTimeOffset.UtcNow.Ticks;
-            connection.SendAsync(new ClientPacket(timestamp, packet));
+            connection.Connection.SendAsync(new ClientPacket(timestamp, packet));
         }
+
+        void INetworkService.Send(IRootClientPacket packet) => Send(packet);
 
         public void Subscribe<T>(Action<T> handler)
         {
             var type = typeof(T);
-            if (!_subscribers.TryGetValue(type, out var handlers))
+            lock (_subscribersLock)
             {
-                handlers = new List<Subscription>();
-                _subscribers[type] = handlers;
-            }
-
-            bool alreadySubscribed = false;
-            for (int i = 0; i < handlers.Count; i++)
-            {
-                if (handlers[i].OriginalHandler == (Delegate)handler)
+                if (!_subscribers.TryGetValue(type, out var handlers))
                 {
-                    alreadySubscribed = true;
-                    break;
+                    handlers = new List<Subscription>();
+                    _subscribers[type] = handlers;
                 }
-            }
 
-            if (alreadySubscribed)
-            {
-                return;
-            }
+                bool alreadySubscribed = false;
+                for (int i = 0; i < handlers.Count; i++)
+                {
+                    if (handlers[i].OriginalHandler == (Delegate)handler)
+                    {
+                        alreadySubscribed = true;
+                        break;
+                    }
+                }
 
-            handlers.Add(new Subscription
-            {
-                OriginalHandler = handler,
-                Wrapper = obj => handler((T)obj),
-            });
+                if (alreadySubscribed)
+                {
+                    return;
+                }
+
+                handlers.Add(new Subscription
+                {
+                    OriginalHandler = handler,
+                    Wrapper = obj => handler((T)obj),
+                });
+            }
         }
 
         public void Unsubscribe<T>(Action<T> handler)
         {
             var type = typeof(T);
-            if (_subscribers.TryGetValue(type, out var handlers))
+            lock (_subscribersLock)
             {
-                handlers.RemoveAll(s => s.OriginalHandler == (Delegate)handler);
+                if (_subscribers.TryGetValue(type, out var handlers))
+                {
+                    handlers.RemoveAll(s => s.OriginalHandler == (Delegate)handler);
+                }
             }
         }
 
@@ -159,8 +154,11 @@ namespace Fodinae.Scripts.Networking
             var payload = packet.Payload;
             if (payload == null)
             {
+                Debug.LogWarning("[NetworkService] Received ServerPacket with null Payload");
                 return;
             }
+
+            Debug.Log($"[NetworkService] Received packet: {payload.GetType().Name}");
 
             if (payload is HBPacket hbPacket && hbPacket.Payload != null)
             {
@@ -182,18 +180,26 @@ namespace Fodinae.Scripts.Networking
 
             var packetType = packet.GetType();
 
-            if (_subscribers.TryGetValue(packetType, out var handlers))
+            List<Subscription> handlers;
+            lock (_subscribersLock)
             {
-                for (int i = handlers.Count - 1; i >= 0; i--)
+                if (!_subscribers.TryGetValue(packetType, out var h))
                 {
-                    try
-                    {
-                        handlers[i].Wrapper(packet);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[NetworkService] Error dispatching packet {packetType.Name} to subscriber: {ex.Message}\n{ex.StackTrace}");
-                    }
+                    return;
+                }
+
+                handlers = new List<Subscription>(h);
+            }
+
+            for (int i = handlers.Count - 1; i >= 0; i--)
+            {
+                try
+                {
+                    handlers[i].Wrapper(packet);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[NetworkService] Error dispatching packet {packetType.Name} to subscriber: {ex.Message}\n{ex.StackTrace}");
                 }
             }
         }

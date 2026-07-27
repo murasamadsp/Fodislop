@@ -1,4 +1,5 @@
 using VContainer;
+using UnityEngine;
 
 namespace Fodinae.Scripts.Core
 {
@@ -16,11 +17,17 @@ namespace Fodinae.Scripts.Core
         {
             try
             {
-                return _resolver != null ? _resolver.Resolve<T>() : null;
+                if (_resolver == null)
+                {
+                    Debug.LogError($"[ServiceLocator] Cannot resolve {typeof(T).Name}, _resolver is null!");
+                    return null;
+                }
+                return _resolver.Resolve<T>();
             }
-            catch (VContainerException)
+            catch (VContainerException ex)
             {
-                return null;
+                Debug.LogException(ex);
+                throw;
             }
         }
     }

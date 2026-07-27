@@ -313,35 +313,35 @@
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "d2bb1db690777afe3d1418b9405f9da6180a5b6b"
+      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
     },
     "darkar25.fodinae.networking": {
       "version": "https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Networking/",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "6772aeb6fae4759ab34b24cb8044fca0d33baf98"
+      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
     },
     "darkar25.fodinae.networking.client": {
       "version": "https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Networking.Connection.Client/",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "d2bb1db690777afe3d1418b9405f9da6180a5b6b"
+      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
     },
     "darkar25.fodinae.networking.connection": {
       "version": "https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Networking.Connection/",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "6772aeb6fae4759ab34b24cb8044fca0d33baf98"
+      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
     },
     "darkar25.fodinae.utils": {
       "version": "https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Utils/",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "6772aeb6fae4759ab34b24cb8044fca0d33baf98"
+      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
     },
     "org.effekseer.effekseerforunity": {
       "version": "file:org.effekseer.effekseerforunity",

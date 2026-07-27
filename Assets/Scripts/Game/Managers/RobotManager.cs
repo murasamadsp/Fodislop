@@ -1,24 +1,17 @@
 using System.Collections.Generic;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Game.Managers
 {
-    public class RobotManager : MonoBehaviour
+    public class RobotManager : MonoBehaviour, IRobotService
     {
-        private static RobotManager _instance;
-        public static RobotManager Instance => _instance;
-        public static RobotManager InstanceIfExists => _instance;
-
         private const string TAG = "[RobotManager]";
         private Dictionary<uint, Robot> _robots = new();
-
-        protected void Awake()
-        {
-            _instance = this;
-        }
 
         public static bool ShowDebugVisuals { get; set; }
 

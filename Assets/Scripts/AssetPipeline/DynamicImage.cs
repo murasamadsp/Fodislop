@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,7 +34,7 @@ namespace Fodinae.Scripts
             var cancellationToken = this.GetCancellationTokenOnDestroy();
 
             // Start the loading process and "forget" it. The loader handles the rest.
-            Fodinae.Scripts.ClientAssetLoader.Instance.LoadAndApplyTexture(applyAction, assetFilename, cancellationToken).Forget();
+            (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).LoadAndApplyTexture(applyAction, assetFilename, cancellationToken).Forget();
         }
     }
 }

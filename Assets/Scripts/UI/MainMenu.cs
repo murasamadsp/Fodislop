@@ -1,4 +1,7 @@
 using System;
+using VContainer;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Networking.Connection;
@@ -13,6 +16,9 @@ namespace Fodinae.Scripts
     [RequireComponent(typeof(UIDocument))]
     public class MainMenu : MonoBehaviour
     {
+        [Inject]
+        private IConnectionService _connectionService = null!;
+
         [SerializeField]
         private Texture2D _loaderTexture;
         private UIDocument _doc;
@@ -191,17 +197,17 @@ namespace Fodinae.Scripts
         {
             Debug.Log("[MainMenu] Play button clicked");
 
-            // Скрываем лоадер
             HideLoader();
-
-            // Скрываем меню с кнопкой
             HideMenu();
 
-            // Выполняем остальную логику
-            if (ConnectionManager.Instance != null && (ConnectionManager.Instance.Connection == null ||
-                ConnectionManager.Instance.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Disconnected))
+            var connectionService = _connectionService ?? (Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager);
+            if (connectionService != null && !connectionService.IsConnected)
             {
-                ConnectionManager.Instance.Connect(oldClient: false);
+                connectionService.Connect(oldClient: false);
+            }
+            else
+            {
+                Debug.LogWarning($"[MainMenu] Cannot connect: connectionService={(connectionService != null ? "ok" : "NULL")}, IsConnected={(connectionService != null ? connectionService.IsConnected.ToString() : "N/A")}");
             }
         }
 
@@ -211,7 +217,7 @@ namespace Fodinae.Scripts
             RobotManager.ShowDebugVisuals = false;
             HideLoader();
             HideMenu();
-            ConnectionManager.Instance.Connect(oldClient: true);
+            (_connectionService ?? (Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager))?.Connect(oldClient: true);
         }
     }
 }

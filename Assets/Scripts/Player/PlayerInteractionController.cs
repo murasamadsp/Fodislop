@@ -1,10 +1,12 @@
-using Fodinae.Scripts.Networking;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
+using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.UI;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using VContainer;
 
 namespace Fodinae.Scripts.Player
 {
@@ -13,11 +15,20 @@ namespace Fodinae.Scripts.Player
         private const string TAG = "[PlayerInteraction]";
         private Camera _mainCamera;
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
+        [Inject]
+        private IMapDataProvider _mapManager = null!;
+        [Inject]
+        private INetworkService _networkService = null!;
+        [Inject]
+        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {
             _mainCamera = Camera.main;
-            _cachedAllKeys = Keyboard.current.allKeys;
+            if (Keyboard.current != null)
+            {
+                _cachedAllKeys = Keyboard.current.allKeys;
+            }
         }
 
         protected void Update()
@@ -43,7 +54,7 @@ namespace Fodinae.Scripts.Player
                 return;
             }
 
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -61,12 +72,12 @@ namespace Fodinae.Scripts.Player
                 int unityX = Mathf.FloorToInt(worldPos.x);
                 int unityY = Mathf.FloorToInt(worldPos.y);
 
-                if (MapManager.Instance != null && NetworkService.Instance != null)
+                if (_mapManager != null && _networkService != null)
                 {
                     ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
-                    ushort serverY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
+                    ushort serverY = (ushort)Mathf.Clamp(_mapManager.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
 
-                    NetworkService.Instance.SendAction(new ClickCellPacket(serverX, serverY));
+                    _networkService.SendAction(new ClickCellPacket(serverX, serverY));
                 }
             }
         }
@@ -78,7 +89,7 @@ namespace Fodinae.Scripts.Player
                 return;
             }
 
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -102,9 +113,9 @@ namespace Fodinae.Scripts.Player
                         bool alt = Keyboard.current.altKey.isPressed;
                         bool shift = Keyboard.current.shiftKey.isPressed;
 
-                        if (NetworkService.Instance != null)
+                        if (_networkService != null)
                         {
-                            NetworkService.Instance.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
+                            _networkService.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
                         }
                     }
                 }

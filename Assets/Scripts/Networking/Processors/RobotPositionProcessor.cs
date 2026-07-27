@@ -1,3 +1,4 @@
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Player;
 using Fodinae.Scripts.Player.Logic;
@@ -10,7 +11,7 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(RobotPositionPacket packet)
         {
-            var rm = RobotManager.Instance;
+            var rm = (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>());
             if (rm == null)
             {
                 return;

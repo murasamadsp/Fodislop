@@ -1,3 +1,4 @@
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 
@@ -7,12 +8,12 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(PackPacket packet)
         {
-            PackManager.Instance?.AddOrUpdatePack(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
+            (Fodinae.Scripts.Core.ServiceLocator.Resolve<PackManager>())?.AddOrUpdatePack(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
         }
 
         public void Process(RemovePackPacket packet)
         {
-            PackManager.Instance?.RemovePack(packet.X, packet.Y);
+            (Fodinae.Scripts.Core.ServiceLocator.Resolve<PackManager>())?.RemovePack(packet.X, packet.Y);
         }
     }
 }

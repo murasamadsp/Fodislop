@@ -1,6 +1,8 @@
 using System.IO;
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -8,15 +10,16 @@ namespace Fodinae.Scripts.Game.Managers
 {
     public class MapStorage : IWorldDataStorage
     {
-        private static MapStorage _instance;
-        public static MapStorage Instance => _instance;
-        public static MapStorage InstanceIfExists => _instance;
-
         private WorldLayer<CellType> _cellLayer;
 
         public MapStorage()
         {
-            _instance = this;
+            Debug.Log($"[MapStorage] Constructor called, instance hash={GetHashCode()}");
+        }
+
+        internal void SetAsPending()
+        {
+            _pendingInstance = this;
         }
 
         private bool _isInitialized;
@@ -25,6 +28,8 @@ namespace Fodinae.Scripts.Game.Managers
         public WorldLayer<CellType> CellLayer => _cellLayer;
 
         public bool IsReady => _isInitialized && _cellLayer != null;
+
+        public bool IsDisposed { get; private set; }
 
 #if UNITY_EDITOR
         public void EnsureEditorInitialized()
@@ -40,6 +45,8 @@ namespace Fodinae.Scripts.Game.Managers
 
         public void InitWorld(string worldCodeName, int width, int height)
         {
+            Debug.Log("[MapStorage] InitWorld START");
+            Debug.Log($"[MapStorage] InitWorld — current instance hash={GetHashCode()}, IsDisposed={IsDisposed}, IsInitialized={_isInitialized}, CellLayer={_cellLayer != null}");
             Dispose();
 
             if (string.IsNullOrEmpty(worldCodeName))
@@ -92,6 +99,8 @@ namespace Fodinae.Scripts.Game.Managers
 
             _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
             _isInitialized = true;
+            IsDisposed = false;
+            Debug.Log($"[MapStorage] InitWorld END — IsReady={IsReady}, CellLayer hash={_cellLayer.GetHashCode()}");
         }
 
         public bool IsInitialized() => _isInitialized;
@@ -113,16 +122,18 @@ namespace Fodinae.Scripts.Game.Managers
             if (_isInitialized && _cellLayer != null)
             {
                 _cellLayer[x, y] = type;
-                SingleMeshTerrainRenderer.OnCellChanged(x, y);
+                TerrainRenderer.OnCellChanged(x, y);
             }
         }
 
         public void Dispose()
         {
+            Debug.Log("[MapStorage] Dispose called");
             _cellLayer?.Dispose();
             _cellLayer = null;
             _isInitialized = false;
             _worldCodeName = string.Empty;
+            IsDisposed = true;
         }
     }
 }

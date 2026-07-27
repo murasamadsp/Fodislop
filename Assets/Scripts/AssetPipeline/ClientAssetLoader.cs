@@ -10,6 +10,7 @@ using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Networking.Connection;
 using Fodinae.Scripts.Networking.Connection.Client;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Utilities;
 using MinesServer.Networking.Connection;
@@ -26,9 +27,6 @@ namespace Fodinae.Scripts
     [DefaultExecutionOrder(-10000)]
     public class ClientAssetLoader : MonoBehaviour, IAssetLoader
     {
-        private static ClientAssetLoader _instance;
-        public static ClientAssetLoader Instance => _instance;
-        public static ClientAssetLoader InstanceIfExists => _instance;
 
         public event Action<string, Texture2D> OnTextureLoaded;
 
@@ -43,7 +41,6 @@ namespace Fodinae.Scripts
 
         protected void Awake()
         {
-            _instance = this;
             _placeholderTexture = new Texture2D(1, 1);
             _placeholderTexture.SetPixel(0, 0, Color.gray);
             _placeholderTexture.Apply();
@@ -54,9 +51,10 @@ namespace Fodinae.Scripts
             _errorTexture.Apply();
             _errorTexture.name = "Error_Texture";
 
-            if (ConnectionManager.Instance != null)
+            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
+            if (cm != null)
             {
-                ConnectionManager.Instance.OnPacketReceived += OnPacketReceived;
+                cm.OnPacketReceived += OnPacketReceived;
             }
 
             _loopCts = new CancellationTokenSource();
@@ -65,14 +63,9 @@ namespace Fodinae.Scripts
 
         protected void OnDestroy()
         {
-            if (_instance != this)
-            {
-                return;
-            }
-
             _loopCts?.Cancel();
             _loopCts?.Dispose();
-            var cm = ConnectionManager.InstanceIfExists;
+            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
             if (cm != null)
             {
                 cm.OnPacketReceived -= OnPacketReceived;
@@ -150,7 +143,7 @@ namespace Fodinae.Scripts
 
         private static async UniTask<byte[]> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
         {
-            var instance = Instance;
+            var instance = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
             if (instance == null)
             {
                 Debug.LogError("[ClientAssetLoader] Cannot load bytes: instance is null");
@@ -165,7 +158,7 @@ namespace Fodinae.Scripts
             filename = filename.TrimStart('/').ToLowerInvariant();
 
             // 1. Check local RAM/disk cache first when offline
-            var cm = ConnectionManager.InstanceIfExists;
+            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
             var isConnected = cm != null && cm.Connection != null && cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected;
 
             if (!isConnected)
@@ -177,13 +170,17 @@ namespace Fodinae.Scripts
             }
 
             // 2. Check local TextureStorageManager if available
-            if (IsTextureFile(filename) && TextureStorageManager.Instance != null && TextureStorageManager.Instance.HasTexture(filename))
+            if (IsTextureFile(filename))
             {
-                var localData = await TextureStorageManager.Instance.GetTextureData(filename);
-                if (localData != null && localData.Length > 0)
+                var tsm = ServiceLocator.Resolve<ITextureStorageService>();
+                if (tsm != null && tsm.HasTexture(filename))
                 {
-                    await SaveAssetAsync(filename, localData, null);
-                    return localData;
+                    var localData = await tsm.GetTextureData(filename);
+                    if (localData != null && localData.Length > 0)
+                    {
+                        await SaveAssetAsync(filename, localData, null);
+                        return localData;
+                    }
                 }
             }
 
@@ -217,13 +214,17 @@ namespace Fodinae.Scripts
                 return await GetAssetAsync(filename);
             }
 
-            if (IsTextureFile(filename) && TextureStorageManager.Instance != null)
+            if (IsTextureFile(filename))
             {
-                var localData = await TextureStorageManager.Instance.GetTextureData(filename);
-                if (localData != null && localData.Length > 0)
+                var tsm = ServiceLocator.Resolve<ITextureStorageService>();
+                if (tsm != null)
                 {
-                    await SaveAssetAsync(filename, localData, null);
-                    return localData;
+                    var localData = await tsm.GetTextureData(filename);
+                    if (localData != null && localData.Length > 0)
+                    {
+                        await SaveAssetAsync(filename, localData, null);
+                        return localData;
+                    }
                 }
             }
 
@@ -273,7 +274,7 @@ namespace Fodinae.Scripts
 
                 if (batch.Count > 0)
                 {
-                    var cm = ConnectionManager.Instance;
+                    var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
                     if (cm != null && cm.Connection != null &&
                         cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected)
                     {
@@ -336,13 +337,13 @@ namespace Fodinae.Scripts
                 _pendingRequests.TryRemove(filename, out _);
             });
 
-            var cm = ConnectionManager.Instance;
+            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
             if (cm == null || cm.Connection == null ||
                 cm.Connection.ConnectionStatus != MinesServer.Networking.Shared.ConnectionStatus.Connected)
             {
                 try
                 {
-                    var tsm = Fodinae.Scripts.Networking.Connection.Client.TextureStorageManager.Instance;
+                    var tsm = ServiceLocator.Resolve<ITextureStorageService>();
                     if (tsm != null)
                     {
                         var localData = await tsm.GetTextureData(filename);

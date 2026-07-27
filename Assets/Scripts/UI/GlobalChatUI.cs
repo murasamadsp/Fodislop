@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -12,20 +14,6 @@ namespace Fodinae.Scripts.UI
 {
     public class GlobalChatUI : MonoBehaviour
     {
-        private static GlobalChatUI _instance;
-        public static GlobalChatUI Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = FindAnyObjectByType<GlobalChatUI>();
-                }
-
-                return _instance;
-            }
-        }
-
         private UIDocument _doc;
         private VisualElement _panel;
         private ScrollView _scrollView;
@@ -39,17 +27,6 @@ namespace Fodinae.Scripts.UI
         private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker _blinker;
         private CancellationTokenSource _idleCts;
-
-        protected void Awake()
-        {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            _instance = this;
-        }
 
         protected void OnDestroy()
         {
@@ -178,7 +155,7 @@ namespace Fodinae.Scripts.UI
             _inputField.style.paddingRight = 4;
             _inputField.style.flexShrink = 1;
             _inputField.style.minWidth = 0;
-            _inputField.maxLength = ServerConfig.Instance.MaxGlobalChatLength;
+            _inputField.maxLength = Fodinae.Scripts.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
             bottomRow.Add(_inputField);
 
             _inputField.RegisterCallback<FocusEvent>(_ =>
@@ -331,12 +308,14 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            if (text.Length > ServerConfig.Instance.MaxGlobalChatLength)
+            var chatMaxLen = Fodinae.Scripts.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
+            if (text.Length > chatMaxLen)
             {
-                text = text.Substring(0, ServerConfig.Instance.MaxGlobalChatLength);
+                text = text.Substring(0, chatMaxLen);
             }
 
-            Networking.NetworkService.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
+            var networkService = Fodinae.Scripts.Core.ServiceLocator.Resolve<INetworkService>();
+            networkService?.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
 
             _inputField.value = string.Empty;
             _inputField.Focus();
@@ -411,6 +390,11 @@ namespace Fodinae.Scripts.UI
 
         public void AddMessage(ChatMessagePacket msg)
         {
+            if (_scrollView == null)
+            {
+                return;
+            }
+
             var time = DateTime.Now.ToString("HH:mm");
             var nickHex = $"#{msg.NicknameColor.R:X2}{msg.NicknameColor.G:X2}{msg.NicknameColor.B:X2}";
             var msgHex = $"#{msg.MessageColor.R:X2}{msg.MessageColor.G:X2}{msg.MessageColor.B:X2}";

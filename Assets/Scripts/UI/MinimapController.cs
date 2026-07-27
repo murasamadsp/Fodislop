@@ -63,14 +63,27 @@ namespace Fodinae.Scripts.UI
 
         protected void Start()
         {
-            _mapManager = MapManager.Instance;
+            _mapManager = (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>());
+            _mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+
             if (_mapManager == null)
             {
-                Debug.LogError("[MinimapController] MapManager.Instance is null");
+                Debug.LogError("[MinimapController] MapManager is null — minimap disabled");
+                enabled = false;
                 return;
             }
 
-            _mapStorage = MapStorage.Instance;
+            if (_mapStorage == null)
+            {
+                Debug.LogError("[MinimapController] MapStorage is null — minimap disabled");
+                enabled = false;
+                return;
+            }
+
+            _worldWidth = _mapManager.WorldWidth;
+            _worldHeight = _mapManager.WorldHeight;
+            _chunkSize = _mapStorage.CellLayer != null ? _mapStorage.CellLayer.ChunkSize : 32;
+            _heightChunks = (_worldHeight + _chunkSize - 1) / _chunkSize;
 
             _minimapTexture = new Texture2D(TEXTURE_SIZE, TEXTURE_SIZE, TextureFormat.RGBA32, false)
             {
@@ -95,6 +108,7 @@ namespace Fodinae.Scripts.UI
 
         private void OnPlayerSpawned(PlayerMovementController player)
         {
+            Debug.Log("[MinimapController] OnPlayerSpawned called");
             PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
             _player = player;
             if (_player != null)
@@ -127,6 +141,16 @@ namespace Fodinae.Scripts.UI
 
         private void TryInitialize()
         {
+            if (_mapManager == null)
+            {
+                _mapManager = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+            }
+
+            if (_mapStorage == null)
+            {
+                _mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            }
+
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
                 return;
@@ -139,7 +163,6 @@ namespace Fodinae.Scripts.UI
 
             InitializeWorldState();
 
-            // Initial render
             if (_player != null)
             {
                 UpdateCoordinatesText(_player.Position.x, _player.Position.y);
@@ -164,18 +187,23 @@ namespace Fodinae.Scripts.UI
 
         private void InitializeWorldState()
         {
+            Debug.Log("[MinimapController] InitializeWorldState START");
             _cellLayer = _mapStorage.CellLayer;
             _worldWidth = _mapManager.WorldWidth;
             _worldHeight = _mapManager.WorldHeight;
             _chunkSize = _cellLayer.ChunkSize;
             _heightChunks = _cellLayer.HeightChunks;
+            Debug.Log($"[MinimapController] InitializeWorldState: world={_worldWidth}x{_worldHeight}, chunkSize={_chunkSize}, heightChunks={_heightChunks}");
             CacheCellColors();
             _ready = true;
+            Debug.Log("[MinimapController] InitializeWorldState END, _ready=true");
             SetVisible(_isVisible);
         }
 
         private void CreateUI()
         {
+            Debug.Log("[MinimapController] CreateUI START");
+
             // UI Toolkit renders independently from uGUI. A dedicated overlay canvas
             // prevents a full-screen UIDocument from covering the minimap.
             GameObject canvasObj = new("MinimapCanvas");
@@ -236,6 +264,7 @@ namespace Fodinae.Scripts.UI
             // only once a world has been initialized.
             _isVisible = true;
             SetVisible(false);
+            Debug.Log("[MinimapController] CreateUI END");
         }
 
         protected void OnEnable()
@@ -253,11 +282,13 @@ namespace Fodinae.Scripts.UI
 
         private void OnPlayerMoved(Vector2Int oldPos, Vector2Int newPos)
         {
+            Debug.Log($"[MinimapController] OnPlayerMoved: old={oldPos}, new={newPos}, _ready={_ready}");
             if (!_ready)
             {
                 TryInitialize();
                 if (!_ready)
                 {
+                    Debug.LogWarning("[MinimapController] OnPlayerMoved EXIT: not ready after TryInitialize");
                     return;
                 }
             }
@@ -272,12 +303,14 @@ namespace Fodinae.Scripts.UI
             {
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
+                Debug.Log($"[MinimapController] OnPlayerMoved: refreshing texture at {newPos.x},{newPos.y}");
                 RefreshTexture(newPos.x, newPos.y);
             }
         }
 
         private void RefreshTexture(int playerX, int playerY)
         {
+            Debug.Log($"[MinimapController] RefreshTexture START: playerX={playerX}, playerY={playerY}");
             const int HALF_SIZE = TEXTURE_SIZE / 2;
             int minX = playerX - HALF_SIZE;
             const int TEX_SIZE = TEXTURE_SIZE;
@@ -352,6 +385,7 @@ namespace Fodinae.Scripts.UI
 
             _minimapTexture.SetPixels32(colors);
             _minimapTexture.Apply(true); // Async GPU upload — non-blocking
+            Debug.Log("[MinimapController] RefreshTexture END");
         }
 
         private void UpdateCoordinatesText(int x, int y)
@@ -395,6 +429,7 @@ namespace Fodinae.Scripts.UI
 
         private void SetVisible(bool visible)
         {
+            Debug.Log($"[MinimapController] SetVisible: visible={visible}, _minimapObj={(_minimapObj != null ? "ok" : "NULL")}, _textObj={(_textObj != null ? "ok" : "NULL")}");
             if (_minimapObj != null)
             {
                 _minimapObj.SetActive(visible);

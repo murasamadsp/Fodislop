@@ -1,4 +1,5 @@
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
@@ -6,34 +7,9 @@ namespace Fodinae.Scripts.UI
 {
     public class FloatingChatManager : MonoBehaviour
     {
-        private static FloatingChatManager _instance;
-        public static FloatingChatManager Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = FindAnyObjectByType<FloatingChatManager>();
-                }
-
-                return _instance;
-            }
-        }
-
         private Camera _camera;
         private FloatingChatBubble _bubblePrefab;
         private readonly System.Collections.Generic.List<FloatingChatBubble> _activeBubbles = new();
-
-        protected void Awake()
-        {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            _instance = this;
-        }
 
         protected void Start()
         {
@@ -58,7 +34,7 @@ namespace Fodinae.Scripts.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
-            var robot = Game.Managers.RobotManager.Instance.GetOrCreateRobot(packet.BotId);
+            var robot = (Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>()).GetOrCreateRobot(packet.BotId);
             if (robot == null)
             {
                 return;

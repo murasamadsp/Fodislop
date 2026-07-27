@@ -26,10 +26,6 @@ namespace Fodinae.Scripts.Game.Managers
     /// </summary>
     public sealed class GameManager : MonoBehaviour
     {
-        private static GameManager _instance;
-        public static GameManager Instance => _instance;
-        public static GameManager InstanceIfExists => _instance;
-
         public GameState CurrentState { get; private set; } = GameState.Offline;
         public bool IsUIAuthorized { get; private set; }
 
@@ -40,20 +36,22 @@ namespace Fodinae.Scripts.Game.Managers
 
         private void Awake()
         {
-            _instance = this;
             SetupUI();
         }
 
         private void OnDestroy()
         {
-            if (_instance != this)
-            {
-                return;
-            }
-
             if (_uiRoot != null)
             {
-                Destroy(_uiRoot);
+                if (Application.isPlaying)
+                {
+                    Destroy(_uiRoot);
+                }
+                else
+                {
+                    DestroyImmediate(_uiRoot);
+                }
+
                 _uiRoot = null;
             }
         }
@@ -64,38 +62,48 @@ namespace Fodinae.Scripts.Game.Managers
             _uiRoot.SetActive(false);
             _uiRoot.transform.SetParent(transform);
 
-            var fpsGO = new GameObject("FPSCounter");
-            fpsGO.AddComponent<FPSCounter>();
-            fpsGO.transform.SetParent(transform);
+            if (UnityEngine.Object.FindAnyObjectByType<MinimapController>() == null)
+            {
+                var mmGO = new GameObject("MinimapRoot");
+                mmGO.AddComponent<MinimapController>();
+                mmGO.transform.SetParent(_uiRoot.transform);
+            }
 
             var reconnectGO = new GameObject("ReconnectUI");
             reconnectGO.AddComponent<ReconnectUI>();
             reconnectGO.transform.SetParent(transform);
 
-            var mmGO = new GameObject("MinimapRoot");
-            mmGO.AddComponent<MinimapController>();
-            mmGO.transform.SetParent(_uiRoot.transform);
+            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>() == null)
+            {
+                var invGO = new GameObject("InventoryRoot");
+                invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
+                invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
+                invGO.transform.SetParent(_uiRoot.transform);
+            }
 
-            var invGO = new GameObject("InventoryRoot");
-            invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
-            invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
-            invGO.transform.SetParent(_uiRoot.transform);
+            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>() == null)
+            {
+                var hudGO = new GameObject("PlayerHUD");
+                hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
+                hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>();
+                hudGO.transform.SetParent(_uiRoot.transform);
+            }
 
-            var hudGO = new GameObject("PlayerHUD");
-            hudGO.AddComponent<PlayerStatsModel>();
-            hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
-            hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>();
-            hudGO.transform.SetParent(_uiRoot.transform);
+            if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>() == null)
+            {
+                var pauseGO = new GameObject("PauseMenu");
+                pauseGO.AddComponent<PauseMenu>();
+                pauseGO.transform.SetParent(_uiRoot.transform);
+            }
 
-            var pauseGO = new GameObject("PauseMenu");
-            pauseGO.AddComponent<PauseMenu>();
-            pauseGO.transform.SetParent(_uiRoot.transform);
-
-            var chatGO = new GameObject("ChatSystem");
-            chatGO.AddComponent<LocalChatPopup>();
-            chatGO.AddComponent<GlobalChatUI>();
-            chatGO.AddComponent<FloatingChatManager>();
-            chatGO.transform.SetParent(_uiRoot.transform);
+            if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>() == null)
+            {
+                var chatGO = new GameObject("ChatSystem");
+                chatGO.AddComponent<LocalChatPopup>();
+                chatGO.AddComponent<GlobalChatUI>();
+                chatGO.AddComponent<FloatingChatManager>();
+                chatGO.transform.SetParent(_uiRoot.transform);
+            }
 
             var arrowGO = new GameObject("MissionArrowUI");
             arrowGO.AddComponent<MissionArrowUI>();

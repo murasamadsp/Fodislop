@@ -912,6 +912,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1792288505}
   - component: {fileID: 1792288504}
+  - component: {fileID: 1792288506, guid: 857c53d34c431384697ffcdaecea4268, type: 3}
+  - component: {fileID: 1792288507, guid: f83192ba33a746847a80f0c4b06c1ce7, type: 3}
   m_Layer: 0
   m_Name: MapManager
   m_TagString: Untagged
@@ -932,6 +934,36 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.Game.Managers.MapManager
   _isWorldInitialized: 0
+--- !u!114 &1792288506
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1792288503}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 857c53d34c431384697ffcdaecea4268, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.World.StandaloneWorldInitializer
+  _enableStandaloneMode: 1
+  _testWorldWidth: 128
+  _testWorldHeight: 128
+  _testWorldName: Standalone_Test_World
+  _checkInterval: 2
+  _enableDebugLogging: 1
+--- !u!114 &1792288507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1792288503}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f83192ba33a746847a80f0c4b06c1ce7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.UI.MinimapController
 --- !u!1 &2000000000
 GameObject:
   m_ObjectHideFlags: 0

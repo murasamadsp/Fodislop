@@ -57,18 +57,26 @@ Assets/
 
     # Системная инфраструктура
     Core/
-      Interfaces/             # IWorldDataStorage, IMapDataProvider, IPlayerInput, IAssetLoader, IAudioSystem, IPlayerStats, IInventoryModel
+      Interfaces/             # IWorldDataStorage, IMapDataProvider, IPlayerInput, IAssetLoader, IAudioSystem, IPlayerStats, IInventoryModel, IConnectionService, INetworkService, IInputBlocker, IRobotService, IPackService, IVFXService, IServerAudioService, IServerConfig
+      DI/
+        IServiceLocator.cs    # Интерфейс IServiceLocator (не используется — мёртвый код, не удалять)
       ServiceLocator.cs       # Тонкий bridge → VContainer (только Initialize + Resolve)
-      CompositionRoot.cs      # Регистрация всех сервисов через VContainer ContainerBuilder (BeforeSceneLoad)
-      GameLifetimeScope.cs    # LifetimeScope для сцены (необязательно, CompositionRoot статический)
-      SingletonMonoBehaviour.cs   # Базовый класс синглтонов MonoBehaviour
-      GameConstants.cs            # Игровые константы
+      GameLifetimeScope.cs    # LifetimeScope для сцены: регистрация DI + BuildCallback с инжекцией через reflection
+      GameConstants.cs        # Игровые константы
+      ObjectPool.cs           # Пул объектов
+      TentaclePool.cs         # Пул щупалец
+      SharedMaterialCache.cs  # Кэш общих материалов
+      GlobalUsings.cs         # Глобальные using'и
     VContainer/
       Runtime/                # Vendored VContainer 1.19 (81 файлов)
 
     # Эффекты (Effekseer)
     Effekseer/
       RuntimeEffekseerLoader.cs   # Загрузчик эффектов Effekseer в рантайме
+
+    # Диагностика (runtime)
+    DiagnosticRunner.cs          # F12 — снимок состояния в diagnostic.txt (каждую секунду heartbeat)
+    InjectDiagnostic.cs          # Авто-скан [Inject] полей на старте + F11 для ручного рескана → inject_diagnostic.txt
 
     # Игровые сущности и менеджеры
     Game/
@@ -78,7 +86,7 @@ Assets/
       ServerAudioEvent.cs         # Серверный аудио-эффект (SFXPacket → FMOD + VFX)
       VFXPool.cs                  # Пул визуальных эффектов
       Managers/
-        GameManager.cs            # Точка входа: инициализация сцены и подсистем
+        GameManager.cs            # Точка входа: инициализация UI-сцены и подсистем
         MapManager.cs             # Жизненный цикл мира (WorldInit, MapRegion), конфиги ячеек
         MapStorage.cs             # Хранилище карты (чанки 32×32), кэш в .mapb
         RobotManager.cs           # Управление роботами (спавн, движение, деспавн)
@@ -94,7 +102,7 @@ Assets/
     # Сеть
     Networking/
       NetworkService.cs           # Синглтон: подписка/отписка пакетов Subscribe<T>
-      PacketHandler.cs            # Диспетчер пакетов → менеджеры
+      PacketHandler.cs            # Диспетчер пакетов → менеджеры (static IsInputBlocked, TopWindowTag)
       Processors/                 # WorldInitProcessor, MapRegionProcessor и др.
       Connection/
         ConnectionManager.cs      # Синглтон: управление подключением (DummyConnection или TCP, авторизация, реконнект)
@@ -134,30 +142,40 @@ Assets/
         LogiCalcFormatter.cs      # Форматтер вычислений для SmartFormat
       Programmator/
         ProgrammatorData.cs          # Данные программатора
-        ProgrammatorGrid.cs          # Сетка программатора
+        ProgrammatorGrid.cs          # Сетка программатора (static IsOpen)
         ProgrammatorTextureRegistry.cs # Реестр текстур программатора
         RadialMenu.cs                # Радиальное меню программатора
+        ObserverJoystick.cs          # Джойсток наблюдателя (из upstream)
       ChatInput.cs                # Управление фокусом чата (блокировка управления)
       ClickContextResolver.cs     # Разрешение clickContext-путей в VisualElement
       FloatingChatBubble.cs       # Всплывающее сообщение над персонажем
       FloatingChatManager.cs      # Менеджер всплывающих чат-сообщений
-      FPSCounter.cs               # Счётчик FPS
+      FPSCounter.cs               # Счётчик FPS (с OnDestroy — уничтожает FPSCanvas)
       GlobalChatUI.cs             # Глобальный чат (ввод, история)
       ItemData.cs                 # Данные предмета (тип, количество)
+      UIInputManager.cs           # Менеджер модальных UI-окон
       HUD/
         Inventory/
+          Interfaces/
+            IInventoryModel.cs    # Интерфейс инвентаря (в UI/HUD/Inventory/Interfaces/)
           Model/
             InventoryModel.cs     # Модель данных инвентаря
           View/
             InventoryView.cs      # Окно инвентаря (сетка 9×6 + хотбар)
           Presenter/
             InventoryPresenter.cs # Презентер инвентаря
+        Player/
+          Model/
+            PlayerStatsModel.cs   # Модель статистики игрока
+          View/
+            PlayerHUDView.cs      # HUD игрока
+          Presenter/
+            PlayerHUDPresenter.cs # Презентер HUD
       LocalChatPopup.cs           # Popup локального чата
       MainMenu.cs                 # Главное меню
       MinimapController.cs        # Контроллер миникарты
       ModalWindowHandler.cs       # Обработчик модальных окон
-      PauseMenu.cs                # Меню паузы (настройки, выход)
-      PlayerStatsModel.cs         # Модель статистики игрока
+      PauseMenu.cs                # Меню паузы (static IsMenuOpen, ESC через ProgrammatorGrid)
       StyleApplicator.cs          # Применение стилей к UI-элементам
       WorldMapController.cs       # Полноэкранная карта мира (управление)
       WorldMapRenderer.cs         # Рендеринг карты мира (текстура из MapStorage)
@@ -182,38 +200,89 @@ Assets/
       Extensions/
         WorldLayerTextureExtensions.cs # Расширения WorldLayer для текстур
 
+    # Редактор
+    Editor/
+      InjectValidator.cs            # MenuItem для валидации [Inject] полей в Edit Mode
+
   Settings/            # URP и Renderer2D конфиги
   Textures/            # Cells/, Clan/, Crystals/, Exported/, Items/,
                        #   Pack/, Skin/, Tail/, UI/, VFX/ — тайлы, UI, экипировка
   UI Toolkit/          # PanelSettings.asset, темы (.tss)
+
+scripts/
+  inject_analysis.py               # Python-скрипт для статического анализа покрытия [Inject] полей
+  pre-commit-lint.sh               # Прекоммит-хук: Roslyn-анализаторы
 ```
 
 ## 3. Архитектура систем
 
 ### 3.0 DI и сервисы (VContainer)
 
-Все сервисы регистрируются через **VContainer** в `CompositionRoot.Initialize()` (вызывается `BeforeSceneLoad`):
+**CompositionRoot и SingletonMonoBehaviour полностью удалены.** DI построен на VContainer с единой точкой регистрации в `GameLifetimeScope`.
 
-| Интерфейс | Реализация | Назначение |
+#### Lifecycle
+
+`GameLifetimeScope` наследует `LifetimeScope` (VContainer) и выполняется в `BeforeSceneLoad`:
+
+1. **`Configure(IContainerBuilder)`** — регистрация сервисов (详见 таблица ниже). Для каждого типа `T` вызывается `RegisterManager<T>`, который:
+   - Ищет существующий объект в сцене через `FindAnyObjectByType<T>()`.
+   - Если найден — регистрирует через `RegisterInstance(existing)` + `resolver.Inject(existing)` в BuildCallback.
+   - Если не найден — создаёт новый GameObject через `RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)`.
+2. **`BuildCallback`** (после построения контейнера):
+   - Инициализирует `ServiceLocator.Initialize(resolver)`.
+   - Явно резолвит все сервисы для принудительной инстанциации (ConnectionManager → NetworkService → MapManager → PacketHandler → ... → FloatingChatManager).
+   - Инжектит `SingleMeshTerrainRenderer` и вызывает `EnsureSubscriptions()`.
+   - **Сканирует ВСЕ активные MonoBehaviour** в сцене через reflection, находит те что имеют `[VContainer.InjectAttribute]` на полях, и вызывает `resolver.Inject(mb)`.
+   - Вызывает `ValidateStartup()`.
+3. **`ValidateStartup()`** — проверяет что ни одно критическое `[Inject]` поле не осталось null (PacketHandler, PauseMenu, PlayerHUDView, InventoryView, PlayerMovementController, MapManager, WorldTextureManager, ClientAssetLoader, AudioSystem, SingleMeshTerrainRenderer).
+
+#### Таблица регистрации сервисов
+
+| Регистрация | Интерфейсы | Тип |
 |---|---|---|
-| `IWorldDataStorage` | `MapStorage.Instance` | Доступ к клеткам мира |
-| `IInventoryModel` | `InventoryModel.Instance` | Инвентарь |
-| `IAssetLoader` | `ClientAssetLoader.Instance` | Загрузка ассетов |
-| `IMapDataProvider` | `MapManager.Instance` | Конфиги карты |
-| `IAudioSystem` | `AudioSystem.Instance` | Аудио |
-| `IPlayerStats` | `PlayerStatsModel.Instance` | Статистика игрока |
+| `RegisterInstance(MapStorage)` | `IWorldDataStorage` | Синглтон |
+| `RegisterInstance(InventoryModel)` | `IInventoryModel` | Синглтон |
+| `RegisterInstance(PlayerStatsModel)` | `IPlayerStats` | Синглтон |
+| `RegisterManager<MapManager>` | `IMapDataProvider`, `MapManager` | MonoBeh |
+| `RegisterManager<SingleMeshTerrainRenderer>` | (self) | MonoBeh |
+| `RegisterManager<ClientAssetLoader>` | `IAssetLoader`, `ClientAssetLoader` | MonoBeh |
+| `RegisterManager<AudioSystem>` | `IAudioSystem`, `AudioSystem` | MonoBeh |
+| `RegisterManager<WorldTextureManager>` | `ITextureService`, `WorldTextureManager` | MonoBeh |
+| `RegisterManager<ServerAudioEventManager>` | `IServerAudioService`, `ServerAudioEventManager` | MonoBeh |
+| `RegisterManager<ConnectionManager>` | `IConnectionService`, `ConnectionManager` | MonoBeh |
+| `RegisterManager<PacketHandler>` | `PacketHandler` | MonoBeh |
+| `RegisterManager<NetworkService>` | `INetworkService`, `NetworkService` | MonoBeh |
+| `RegisterManager<GameManager>` | (self) | MonoBeh |
+| `RegisterManager<VFXPool>` | `IVFXService`, `VFXPool` | MonoBeh |
+| `RegisterManager<PackManager>` | `IPackService`, `PackManager` | MonoBeh |
+| `RegisterManager<RobotManager>` | `IRobotService`, `RobotManager` | MonoBeh |
+| `RegisterManager<ServerConfig>` | `IServerConfig`, `ServerConfig` | MonoBeh |
+| `RegisterManager<TextureStorageManager>` | `ITextureStorageService`, `TextureStorageManager` | MonoBeh |
+| `RegisterManager<GlobalChatUI>` | (self) | MonoBeh |
+| `RegisterManager<UIInputManager>` | `IInputBlocker`, `UIInputManager` | MonoBeh |
+| `RegisterManager<FPSCounter>` | (self) | MonoBeh |
+| `RegisterManager<FloatingChatManager>` | (self) | MonoBeh |
 
-`ServiceLocator` — тонкий bridge-прослойка (только `Initialize` + `Resolve<T>`), делегирует VContainer. Старый `ConcurrentDictionary`, `Register`, `Unregister`, `TryResolve` удалены. Для резолва предпочтительны прямые обращения через `.Instance` синглтонов (монолитный код) или `[Inject]` (после миграции на LifetimeScope).
+#### ServiceLocator
 
-Порядок инициализации гарантирован VContainer: все регистрации явные в одном месте, рантайм-NullReferenceException заменён на `DependencyInjectorException` при старте.
+`ServiceLocator` — тонкий bridge-прослойка (только `Initialize` + `Resolve<T>`), делегирует VContainer. Старый `ConcurrentDictionary`, `Register`, `Unregister`, `TryResolve` удалены.
+
+```csharp
+// Только эти два метода:
+public static void Initialize(IObjectResolver resolver)
+public static T Resolve<T>() where T : class
+```
+
+Для резолва предпочтительны прямые обращения через `.Instance` синглтонов (монолитный код) или `[Inject]` (после миграции на LifetimeScope).
 
 ### 3.1 Сетевой слой (Networking)
 
-- **NetworkService**: Синглтон. Подписка: `Subscribe<T>` / `Unsubscribe<T>`.
-- **PacketHandler**: Диспетчеризация пакетов через подписки (Processors). Читает очередь из `ConnectionManager`.
+- **NetworkService**: Синглтон с `Awake()` инициализацией (`_instance = this`). Подписка: `Subscribe<T>` / `Unsubscribe<T>`.
+- **PacketHandler**: Диспетчеризация пакетов через подписки (Processors). **Static свойства**: `IsInputBlocked` (вычисляет из `HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen`), `TopWindowTag`. `Instance` — стандартный синглтон через `Awake()`.
 - **ConnectionManager**: Синглтон. Управление подключением, авторизация, реконнект. При `Connect()` создаёт `DummyConnection` или TCP-соединение из Git-пакета `MinesServer.Networking.Connection.Client`.
+- **DummyConnection**: Оффлайн-режим. `ConnectAsync()` минимальный — `await UniTask.Yield()`, установка статуса, `OnConnected`. **Не создаёт UI-объекты** — это ответственность `GameManager.SetupUI()`.
 - **TextureStorageManager**: Загрузка и кэширование текстур с сервера.
-- **Processors**: `WorldInitProcessor` (загружает WorldInit в MapManager), `MapRegionProcessor` (загружает регионы в MapStorage без вызова `RequestRefresh`), `ClanProcessor`, `AudioPacketProcessor`, `WindowPacketProcessor`, `ChatProcessor`, `RobotPositionProcessor`, `RobotInfoProcessor`, `PackProcessor`, `StatusProcessor`, `MissionProcessor`, `PlayerInfoProcessor`, `InventoryProcessor`, `PlayerStatsProcessor`, `PlayerStateProcessor` и др.
+- **Processors**: `WorldInitProcessor`, `MapRegionProcessor`, `ClanProcessor`, `AudioPacketProcessor`, `WindowPacketProcessor`, `ChatProcessor`, `RobotPositionProcessor`, `RobotInfoProcessor`, `PackProcessor`, `StatusProcessor`, `MissionProcessor`, `PlayerInfoProcessor`, `InventoryProcessor`, `PlayerStatsProcessor`, `PlayerStateProcessor` и др.
 - **Пакетный UI**: Динамическая сборка UI из `OpenWindowPacket` через `PacketUIBuilderFactory`.
 
 ### 3.2 Мир и Рендеринг (World & Rendering)
@@ -222,7 +291,7 @@ Assets/
 - **MapStorage**: Хранилище данных карты (чанки 32x32). Кэширует в `persistentDataPath/*.mapb`. Реализует `IWorldDataStorage`. `SetCell()` оповещает `SingleMeshTerrainRenderer.OnCellChanged()`.
 - **WorldLayer\<T\>**: Дисковый стриминг с LRU-кэшем в RAM. RLE-сжатие. Append-only запись с компактификацией.
 - **WorldTextureManager**: Загружает тайл-текстуры из файловой системы (не Resources/Addressables), упаковывает в `TextureAtlas`.
-- **SingleMeshTerrainRenderer**: Один меш на весь видимый террейн. 7 UV-каналов (атлас, тайлинг, анимация, тени, рельеф). `Sorting Order = -1000`. `OnCellChanged` + `LateUpdate` для дифференциального обновления.
+- **SingleMeshTerrainRenderer**: Один меш на весь видимый террейн. 7 UV-каналов (атлас, тайлинг, анимация, тени, рельеф). `Sorting Order = -1000`. `OnCellChanged` + `LateUpdate` для дифференциального обновления. Синглтон — самоуничтожается при дубликате.
 - **SurfaceRenderer**: Дополнительные меши для Transit (переходы между слоями) и Perspective (перспективные блоки). Два материала, отдельные Sorting Orders.
 - **CellTextureCache**: ConcurrentDictionary-кэш текстур ячеек для быстрой загрузки из файловой системы. Хранит `Texture2D` по `CellType`.
 - **AtlasCoordinate**: Структура координат ячейки в текстурном атласе.
@@ -254,7 +323,7 @@ Audio/
     AudioPlaybackHandle.cs      # Прямая обёртка над FMOD.Studio.EventInstance (Stop, SetPosition, SetVolume, SetParameter)
   Backend/                      # FMOD Studio Бэкенд
     FmodAudioBackend.cs         # Низкоуровневый FMOD API: loadBankFile, AttachInstanceToGameObject, Snapshots, Global Parameters
-    AudioSystem.cs              # Синглтон (SingletonMonoBehaviour): API Play, PlayAttached, PlaySnapshot, SetGlobalParameter, SetBusVolume
+    AudioSystem.cs              # Синглтон: API Play, PlayAttached, PlaySnapshot, SetGlobalParameter, SetBusVolume
   Spatial/
     AudioSpatial.cs             # Компонент на GameObject: нативная привязка 3D-звука к трансформу (AttachInstanceToGameObject)
     AudioZone.cs                # Триггерная зона: запускает FMOD Snapshots (snapshot:/...) и выставляет Global Parameters
@@ -271,19 +340,10 @@ Audio/
 
 **Примеры использования:**
 ```csharp
-// Проигрывание звука UI (2D)
 AudioSystem.Instance.Play2D("ui/click");
-
-// Проигрывание 3D-звука с нативной привязкой к GameObject
 AudioSystem.Instance.PlayAttached("robot_engine", gameObject);
-
-// Запуск FMOD Snapshot (например пещера)
 var snapshot = AudioSystem.Instance.PlaySnapshot("snapshot:/cave_ambient");
-
-// Установка глобального параметра FMOD (глубина)
 AudioSystem.Instance.SetGlobalParameter("Depth", 450f);
-
-// Настройка громкости шины SFX
 AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 ```
 
@@ -304,21 +364,31 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 ### 3.6 UI-системы
 
 - **Пакетный UI** (см. 3.1): Динамическая сборка окон из `OpenWindowPacket` — фабрика `PacketUIBuilderFactory` и несколько типовых билдеров (Canvas, Panel, Grid, Text, Slider, Dropdown, ScrollView, Line, DockPanel...).
+- **GameManager.SetupUI()**: Создаёт все UI-объекты (MinimapController, InventoryView, PlayerHUDView, PauseMenu, GlobalChatUI + LocalChatPopup + FloatingChatManager) под выключенным `_uiRoot`. `_uiRoot` активируется через `GameManager.AuthorizeUI()`. **Единственный источник создания UI — DummyConnection не создаёт UI.**
 - **Принцип авторитета сервера при закрытии окон (ESC)**: Нажатие клавиши `ESC` или клик по кнопке закрытия окна **НЕ ДОЛЖНЫ** принудительно скрывать пакетное окно локально на клиенте. Клиент отправляет пакет закрытия окна на сервер. Только сервер решает, закрывается ли окно, и отправляет клиенту подтверждающий пакет закрытия (`CloseWindowPacket`). Локальное самовольное закрытие окна клиентом ломает состояние `PacketHandler.IsInputBlocked`, из-за чего игрок вечно застревает без возможности движения.
+- **PacketHandler.IsInputBlocked (static)**: Вычисляется как `HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen`. Нет отдельного поля `_inputBlocker` — логика инлайн в static property.
+- **PauseMenu**: Меню паузы с настройкой всех 6 шин громкости FMOD. `IsMenuOpen` — static property. ESC-логика: сначала проверяет `ProgrammatorGrid.IsOpen` (программатор обрабатывает ESC сам), затем `PacketHandler.IsInputBlocked` для отправки `ElementClickPacket` на закрытие верхнего окна.
 - **Binding**: `WindowBinding` привязывает данные через `SmartFormat`. Сканирует VisualElement-дерево, ищет именованные поля ввода (источники) и Label с SmartFormat-шаблонами (потребители), пересчитывает при любом изменении.
-- **PauseMenu**: Меню паузы с настройкой всех 6 шин громкости FMOD (`Master`, `SFX`, `Music`, `Voice`, `Ambience`, `UI`), масштабом UI, графикой и выбором разрешения. Автоматически выставляет `PauseMenu.IsMenuOpen`, блокируя ввод движения и кликов (`PacketHandler.IsInputBlocked`).
 - **Инвентарь**: `InventoryView` (сетка 9×6 + хотбар 9 ячеек), `InventoryModel` (данные), `InventoryPresenter` (презентер), `ItemData` (тип/количество).
 - **HUD**: Хотбар, HP, энергия, баффы, кнопки (включая авто-копку и программатор).
 - **Карта**: `WorldMapController` (управление, переключение режима), `WorldMapRenderer` (рендеринг текстуры из `MapStorage`).
 - **Чат**: `GlobalChatUI` (история + ввод), `LocalChatPopup`, `FloatingChatManager`/`FloatingChatBubble` (всплывающие сообщения над персонажами), `ChatInput` (блокировка управления при фокусе).
-- **Прочее**: `PauseMenu` (пауза, настройки громкости/полноэкранного режима, выход), `FPSCounter`, `MinimapController`, `ModalWindowHandler`, `StyleApplicator`, `ClickContextResolver`.
+- **FPSCounter**: Счётчик FPS + Ping + Online. Создаёт standalone `FPSCanvas` если нет существующего Canvas. `OnDestroy()` уничтожает `_ownedCanvas` для предотвращения утечек.
 - **MainMenu**: Загружает `MainMenu.uxml` из Resources. Имеет фикс PanelSettings — перезапись `panelSettings` после сборки UI для предотвращения бага UI Toolkit с нерегистрируемыми ивентами (UI рендерится но кнопки не кликаются, проявляется рандомно ~каждый второй запуск).
 
 ### 3.7 Программатор (Programmator)
 
-- **ProgrammatorGrid**: Графическая сетка для визуального программирования алгоритмов поведения робота.
+- **ProgrammatorGrid**: Графическая сетка для визуального программирования алгоритмов поведения робота. `static bool IsOpen` — проверяется `PacketHandler.IsInputBlocked` и `PauseMenu` для блокировки ESC.
 - **ProgrammatorData**: Модель данных и структура алгоритма робота.
 - **RadialMenu**: Радиальное круговое меню выбора команд для быстрого размещения на сетке программатора.
+- **ObserverJoystick**: Джойсток наблюдателя за роботом.
+
+### 3.8 Диагностика
+
+- **DiagnosticRunner** (`Assets/Scripts/DiagnosticRunner.cs`): Runtime-диагностика. Каждую секунду пишет heartbeat в `diagnostic.txt` (состояние MapManager, MapStorage, позиция игрока, ввод, соединение, роботы, террейн, камера). **F12** — полный снимок. Создаётся автоматически `GameLifetimeScope.Start()`.
+- **InjectDiagnostic** (`Assets/Scripts/InjectDiagnostic.cs`): Автоскан `[Inject]` полей при старте. F11 — ручной рескан. Пишет `inject_diagnostic.txt` — список всех MonoBehaviour с `[Inject]` полями и их значения (OK/null).
+- **InjectValidator** (`Assets/Scripts/Editor/InjectValidator.cs`): Edit Mode. MenuItem `Fodinae/Diagnostics/Validate Injections`. Сканирует все MonoBehaviour (включая inactive) и пишет `inject_diagnostic_editmode.txt`.
+- **inject_analysis.py** (`scripts/inject_analysis.py`): Внешний Python-скрипт статического анализа. Сканирует C#-файлы на `[Inject]` поля, проверяет регистрацию в VContainer и наличие явных `resolver.Inject()` вызовов. Пишет `inject_analysis.txt`.
 
 ## 4. Стандарты разработки
 
@@ -330,20 +400,18 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 
 ### C# и Код
 
-- **Синглтоны**: Паттерн `Instance` + `DontDestroyOnLoad` для менеджеров.
+- **DI**: VContainer через `GameLifetimeScope`. `RegisterManager<T>` для поиска/создания сцен-объектов. `[Inject]` для полей. `ServiceLocator.Resolve<T>()` для быстрого доступа.
+- **Синглтоны**: `Instance` property + `Awake()` инициализация (не через `SingletonMonoBehaviour` — он удалён). См. `SingleMeshTerrainRenderer`, `PacketHandler`, `AudioSystem`.
 - **События**: `Action` для связи между компонентами (`OnWorldInitialized`, `OnWorldDataLoaded`).
 - **UniTask**: Для асинхронных операций (загрузка текстур, сетевые запросы).
+- **UI создание**: Только через `GameManager.SetupUI()` (под deactivated UIRoot). **DummyConnection НЕ создаёт UI** — `FindAnyObjectByType` не видит inactive объекты, приводя к дублированию.
 
 ### Стандарты именования (Casing Standards)
-
-В проекте строго соблюдаются следующие разграничения регистра (Casing):
 
 1. **Unity Файлы и C# Код (`PascalCase`)**:
    - Классы, структуры, интерфейсы, перечисления: `WorldTextureManager`, `CellType`.
    - Публичные методы, свойства, события: `GetCellTextureCoordinate()`, `ActiveVoiceCount`.
    - Константы: `MaxLifetime`.
-   - Директории Unity внутри `Assets/`: `Assets/Scripts/`, `Assets/Textures/Cells/`, `Assets/Audio/`.
-   - Файлы ассетов: `SampleScene.unity`, `PlayerHUD.uxml`, `PanelSettings.asset`.
    - Приватные/защищенные поля: `_camelCase` (`private float _volume;`).
    - Параметры и локальные переменные: `camelCase` (`int x, int y`).
 
@@ -368,14 +436,18 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 5. **Текстуры**: Пайплайн кастомный — файловая система, не Resources. Билд должен копировать `Textures/` вручную.
 6. **UI Toolkit**: Темы привязаны к GUID. Missing Reference в `PanelSettings` = пустой UI. Интермиттентный баг: UI рендерится но не принимает клики — лечится перезаписью `panelSettings` в MainMenu.
 7. **Сортировка**: `SingleMeshTerrainRenderer` рисуется на `Sorting Order = -1000` (под спрайтами роботов).
-8. **CompositionRoot vs GameLifetimeScope**: Сейчас CompositionRoot статический (BeforeSceneLoad), GameLifetimeScope есть но не обязателен. Для `[Inject]` на MonoBehaviours — добавь GameLifetimeScope в сцену.
+8. **DI injection**: VContainer инжектит `[Inject]` поля **только** в объекты которые он создаёт или в которые явно вызван `resolver.Inject()`. `BuildCallback` сканирует все MonoBehaviour через reflection и вызывает `resolver.Inject()` для каждого. Если поле остаётся null — это FATAL ERROR в логах.
+9. **UI дублирование**: `GameManager.SetupUI()` создаёт UI под выключенным UIRoot. `FindAnyObjectByType<T>()` **не видит inactive объектов**. DummyConnection не должен создавать UI — иначе появляются дубли-сироты.
+10. **FPSCounter утечка**: `FPSCounter.Awake()` создаёт отдельный корневой `FPSCanvas` GameObject. `OnDestroy()` уничтожает его через `_ownedCanvas`. Если OnDestroy не вызван — Canvas остаётся навсегда.
+11. **CompositionRoot удалён**: DI полностью через `GameLifetimeScope` (VContainer). `CompositionRoot` и `SingletonMonoBehaviour` удалены.
 
 ## 6. Рабочий процесс (Workflow)
 
 - **Открытие**: Unity Hub → папка проекта. Основная сцена: `Assets/Scenes/SampleScene.unity`.
 - **Сборка**: Использовать `BuildScript.BuildMacOS` из `Assets/Editor/`. Стандартный Build Settings не копирует текстуры.
 - **Автономный режим**: `DummyConnection` создаст тестовый мир без сервера.
-- **Сцена содержит**: `SingleMeshTerrainRenderer`, `UIDocument`, `Main Camera`, `Global Light 2D`, `SceneSetup`, `MapManager`. `CompositionRoot` срабатывает автоматически через `BeforeSceneLoad`.
+- **Сцена содержит**: `TerrainMesh`, `SingleMeshTerrainRenderer`, `UIDocument`, `Main Camera`, `Global Light 2D`, `SceneSetup`, `AutoMapManager`, `MapManager`, `GameLifetimeScope`. `GameLifetimeScope` инициализирует DI до `BeforeSceneLoad`.
+- **Диагностика**: F12 — снимок в `diagnostic.txt`. F11 — рескан [Inject] в `inject_diagnostic.txt`. Python: `python3 scripts/inject_analysis.py` → `inject_analysis.txt`.
 
 ## 7. Линтинг C# (обязательно для ИИ)
 
@@ -392,7 +464,7 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 ### Обязательный хук после генерации C# кода
 
 ```bash
-dotnet build Assembly-CSharp.csproj --no-incremental 2>&1
+dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary 2>&1
 ```
 
 Вывод содержит предупреждения вида:
@@ -402,7 +474,7 @@ WorldLayer.cs(88,5): warning CA1031: ...
 MapStorage.cs(15,1): warning S3903: ...
 ```
 
-**Правило**: все предупреждения с префиксами `SA`, `CA`, `RCS`, `S`, `UNT` — нарушения линтера. Исправляй их до финального ответа пользователю.
+**Правило**: все предупреждения с префиксами `SA`, `CA`, `RCS`, `S`, `UNT` — нарушения линтера. Исправляй до финального ответа пользователю.
 
 ### Запрет обхода Git Hooks
 
@@ -414,6 +486,7 @@ MapStorage.cs(15,1): warning S3903: ...
 - `Directory.Build.props` — подключает анализаторы через NuGet во все `.csproj`
 - `.stylecop.json` — отключает нерелевантные для Unity правила (XML-доки, file headers)
 - `.editorconfig` — severity для каждого правила (`none` / `warning` / `error`)
+- `CS0649` — `[Inject]` поля инициализируются `= null!;` чтобы компилятор знал что VContainer заполнит их в рантайме.
 
 ## 8. Правила работы (от юзера)
 

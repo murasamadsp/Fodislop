@@ -10,26 +10,6 @@ namespace Fodinae.Scripts.UI
     /// </summary>
     public class UIInputManager : MonoBehaviour
     {
-        private static UIInputManager _instance;
-        public static UIInputManager Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = FindAnyObjectByType<UIInputManager>();
-                    if (_instance == null)
-                    {
-                        var go = new GameObject("[UIInputManager]");
-                        _instance = go.AddComponent<UIInputManager>();
-                        DontDestroyOnLoad(go);
-                    }
-                }
-
-                return _instance;
-            }
-        }
-
         private readonly Stack<VisualElement> _modalStack = new();
         public bool IsChatFocused { get; set; }
 

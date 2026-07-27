@@ -1,9 +1,12 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Effekseer;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -72,7 +75,7 @@ namespace Fodinae.Scripts.Game
             string packPath = $"Pack/{packName}/{_variant}";
 
             // 1. Try loading as a texture (existing behavior — static or animated sprite)
-            var packTexture = await ClientAssetLoader.Instance.GetTextureAsync(packPath, token);
+            var packTexture = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetTextureAsync(packPath, token);
             if (token.IsCancellationRequested || _spriteRenderer == null)
             {
                 return;
@@ -94,7 +97,7 @@ namespace Fodinae.Scripts.Game
             }
 
             // 2. Texture not found — try loading as Effekseer effect (.efk data)
-            var efkBytes = await ClientAssetLoader.Instance.GetAssetBytesAsync(packPath, timeoutSeconds: 10);
+            var efkBytes = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetAssetBytesAsync(packPath, timeoutSeconds: 10);
             if (token.IsCancellationRequested || efkBytes == null || efkBytes.Length < 4)
             {
                 return;
@@ -143,7 +146,7 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            var clanTexture = await ClientAssetLoader.Instance.GetTextureAsync($"Clan/{_linkedClan}", token);
+            var clanTexture = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetTextureAsync($"Clan/{_linkedClan}", token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
             {
                 return;

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using UnityEngine;
 
 namespace Fodinae.Scripts

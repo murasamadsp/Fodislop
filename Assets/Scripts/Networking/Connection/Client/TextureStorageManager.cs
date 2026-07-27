@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Networking.Connection.Client
@@ -15,22 +17,13 @@ namespace Fodinae.Scripts.Networking.Connection.Client
     /// Writes downloaded assets to persistentDataPath to prevent Unity AssetDatabase reloads in Editor.
     /// </summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch file and texture loading exceptions to fall back to random texture generation.")]
-    public class TextureStorageManager : MonoBehaviour
+    public class TextureStorageManager : MonoBehaviour, ITextureStorageService
     {
-        private static TextureStorageManager _instance;
-        public static TextureStorageManager Instance => _instance;
-        public static TextureStorageManager InstanceIfExists => _instance;
-
         [SerializeField]
         private bool _enableDebugLogging = false;
 
         [SerializeField]
         private int _fallbackTextureSize = 64;
-
-        protected void Awake()
-        {
-            _instance = this;
-        }
 
         private readonly ConcurrentDictionary<string, Texture2D> _textureCache = new();
         private readonly ConcurrentDictionary<string, string> _resolvedPathsCache = new();
@@ -110,10 +103,18 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// </summary>
         /// <param name="filename">The texture filename.</param>
         /// <returns>PNG/WEBP bytes, or null if not found.</returns>
-        public async UniTask<byte[]> GetTextureData(string filename)
+        public async UniTask<byte[]> GetTextureData(string filename, CancellationToken cancellationToken = default)
         {
-            return await LoadTextureFromStorage(filename);
+            var data = await LoadTextureFromStorage(filename);
+            if (data != null)
+            {
+                OnTextureLoaded?.Invoke(filename);
+            }
+
+            return data;
         }
+
+        public event Action<string> OnTextureLoaded;
 
         /// <summary>
         /// Create a fallback texture and cache it.

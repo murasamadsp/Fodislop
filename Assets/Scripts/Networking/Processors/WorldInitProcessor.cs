@@ -1,3 +1,5 @@
+using UnityEngine;
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets.Connection;
 
@@ -7,7 +9,15 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(WorldInitPacket packet)
         {
-            MapManager.Instance.LoadWorldInit(packet);
+            Debug.Log("[WorldInitProcessor] Processing WorldInitPacket");
+            var mm = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+            if (mm == null)
+            {
+                Debug.LogError("[WorldInitProcessor] MapManager is null — cannot process WorldInitPacket");
+                return;
+            }
+
+            mm.LoadWorldInit(packet);
         }
     }
 }

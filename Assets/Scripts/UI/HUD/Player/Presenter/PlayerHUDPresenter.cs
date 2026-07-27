@@ -1,5 +1,5 @@
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI.HUD.Player.Model;
 using Fodinae.Scripts.UI.HUD.Player.View;
 using UnityEngine;
 
@@ -14,7 +14,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.Presenter
         private void Start()
         {
             _view = GetComponent<PlayerHUDView>();
-            _model = PlayerStatsModel.Instance;
+            _model = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
         }
     }
 }

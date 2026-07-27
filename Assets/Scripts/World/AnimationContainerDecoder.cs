@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MG.GIF;
 using unity.libwebp;
 using unity.libwebp.Interop;

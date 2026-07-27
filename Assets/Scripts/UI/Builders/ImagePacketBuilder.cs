@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual; // Corrected using directive for ImagePacket
 using UnityEngine;
@@ -36,7 +38,7 @@ namespace Fodinae.Scripts.UI.Builders
 
         private static void LoadImage(VisualElement element, string uri, CancellationToken token)
         {
-            Fodinae.Scripts.ClientAssetLoader.Instance.LoadAndApplyTexture(
+            (Fodinae.Scripts.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).LoadAndApplyTexture(
                 (texture) =>
             {
                 if (element != null)

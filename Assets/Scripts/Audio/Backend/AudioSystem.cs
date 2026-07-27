@@ -19,9 +19,6 @@ namespace Fodinae.Scripts.Audio.Backend
     [DefaultExecutionOrder(-10000)]
     public sealed class AudioSystem : MonoBehaviour, IAudioSystem
     {
-        private static AudioSystem _instance;
-        public static AudioSystem Instance => _instance;
-        public static AudioSystem InstanceIfExists => _instance;
         private const string TAG = "[AudioSystem]";
         private FmodAudioBackend _backend;
 
@@ -153,7 +150,6 @@ namespace Fodinae.Scripts.Audio.Backend
 
         private void Awake()
         {
-            _instance = this;
             _backend = new FmodAudioBackend();
             _backend.Initialize(this);
             ApplySavedBusVolumes();
@@ -161,11 +157,6 @@ namespace Fodinae.Scripts.Audio.Backend
 
         private void OnDestroy()
         {
-            if (_instance != this)
-            {
-                return;
-            }
-
             _backend?.Shutdown();
             _backend = null;
         }

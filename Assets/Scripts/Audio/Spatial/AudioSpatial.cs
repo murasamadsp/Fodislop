@@ -1,5 +1,7 @@
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Audio.Spatial
@@ -49,14 +51,14 @@ namespace Fodinae.Scripts.Audio.Spatial
         /// <summary>Начать проигрывание текущего события с нативной привязкой FMOD к GameObject.</summary>
         public void PlayCurrent()
         {
-            if (string.IsNullOrEmpty(_eventName) || AudioSystem.Instance == null)
+            if (string.IsNullOrEmpty(_eventName) || (ServiceLocator.Resolve<IAudioSystem>()) == null)
             {
                 return;
             }
 
             Stop();
             float? vol = _volume > 0f ? _volume : null;
-            _handle = AudioSystem.Instance.PlayAttached(_eventName, gameObject, _layer, vol);
+            _handle = (ServiceLocator.Resolve<IAudioSystem>()).PlayAttached(_eventName, gameObject, _layer, vol);
         }
 
         /// <summary>Сменить событие на лету (старое останавливается, новое стартует).</summary>

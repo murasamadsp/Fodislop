@@ -1,5 +1,7 @@
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using UnityEngine;
 
@@ -26,27 +28,27 @@ namespace Fodinae.Scripts.Audio.Spatial
 
         private void Start()
         {
-            if (MapManager.Instance != null)
+            if ((ServiceLocator.Resolve<MapManager>()) != null)
             {
-                MapManager.Instance.OnWorldInitialized += OnWorldInitialized;
+                (ServiceLocator.Resolve<MapManager>()).OnWorldInitialized += OnWorldInitialized;
             }
 
-            if (GameManager.Instance != null)
+            if ((ServiceLocator.Resolve<GameManager>()) != null)
             {
-                GameManager.Instance.OnWorldLoaded += OnWorldLoaded;
+                (ServiceLocator.Resolve<GameManager>()).OnWorldLoaded += OnWorldLoaded;
             }
         }
 
         private void OnDestroy()
         {
-            if (MapManager.InstanceIfExists != null)
+            if ((ServiceLocator.Resolve<MapManager>()) != null)
             {
-                MapManager.InstanceIfExists.OnWorldInitialized -= OnWorldInitialized;
+                (ServiceLocator.Resolve<MapManager>()).OnWorldInitialized -= OnWorldInitialized;
             }
 
-            if (GameManager.InstanceIfExists != null)
+            if ((ServiceLocator.Resolve<GameManager>()) != null)
             {
-                GameManager.InstanceIfExists.OnWorldLoaded -= OnWorldLoaded;
+                (ServiceLocator.Resolve<GameManager>()).OnWorldLoaded -= OnWorldLoaded;
             }
 
             if (_musicHandle != null)
@@ -68,7 +70,7 @@ namespace Fodinae.Scripts.Audio.Spatial
 
         private void PlayWorldMusic()
         {
-            if (AudioSystem.Instance == null || string.IsNullOrEmpty(_worldMusicEvent))
+            if ((ServiceLocator.Resolve<IAudioSystem>()) == null || string.IsNullOrEmpty(_worldMusicEvent))
             {
                 return;
             }
@@ -79,7 +81,7 @@ namespace Fodinae.Scripts.Audio.Spatial
                 _musicHandle = null;
             }
 
-            _musicHandle = AudioSystem.Instance.Play2D(_worldMusicEvent, AudioLayer.MusicDefault(), _musicVolume);
+            _musicHandle = (ServiceLocator.Resolve<IAudioSystem>()).Play2D(_worldMusicEvent, AudioLayer.MusicDefault(), _musicVolume);
         }
     }
 }

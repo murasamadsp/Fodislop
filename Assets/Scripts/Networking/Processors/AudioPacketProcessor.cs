@@ -1,3 +1,4 @@
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 
@@ -7,9 +8,9 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(AudioPacket packet)
         {
-            if (ServerAudioEventManager.Instance != null)
+            if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<ServerAudioEventManager>()) != null)
             {
-                ServerAudioEventManager.Instance.PlayEffect(packet);
+                (Fodinae.Scripts.Core.ServiceLocator.Resolve<ServerAudioEventManager>()).PlayEffect(packet);
             }
         }
     }

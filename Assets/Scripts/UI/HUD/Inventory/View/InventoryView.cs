@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Networking;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -9,6 +11,7 @@ using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
 using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.Scripts.UI.HUD.Inventory.View
 {
@@ -32,7 +35,10 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         private Color _contextMenuBg = new Color(0.12f, 0.12f, 0.12f, 0.95f);
 
         private UIDocument _doc;
-        private IInventoryModel _model;
+        [Inject]
+        private IInventoryModel _model = null!;
+        [Inject]
+        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
         private VisualElement _hotbarContainer;
         private Button _inventoryButton;
@@ -67,7 +73,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 return;
             }
 
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -123,7 +129,13 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 return;
             }
 
-            _model = InventoryModel.Instance;
+            _model = Fodinae.Scripts.Core.ServiceLocator.Resolve<IInventoryModel>();
+            if (_model == null)
+            {
+                Debug.LogError("[InventoryUI] IInventoryModel not registered in DI");
+                return;
+            }
+
             _model.OnSlotChanged += RefreshSlot;
             _model.OnSlotSelected += OnModelSlotSelected;
 

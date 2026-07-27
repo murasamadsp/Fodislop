@@ -1,4 +1,5 @@
 using System;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Player.Logic;
 using UnityEngine;
@@ -35,6 +36,8 @@ namespace Fodinae.Scripts.Player
         private InputAction _scrollAction;
         private bool _scrollEnabled = true;
         private Vector3 _followVelocity;
+        [Inject]
+        private IInputBlocker _inputBlocker;
 
         protected void Awake()
         {
@@ -96,7 +99,7 @@ namespace Fodinae.Scripts.Player
 
         private void HandleZoom()
         {
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker != null && _inputBlocker.IsInputBlocked)
             {
                 return;
             }

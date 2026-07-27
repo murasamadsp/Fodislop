@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.UI;
 using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
@@ -12,9 +14,16 @@ namespace Fodinae.Scripts.Networking.Processors
 {
     public class InventoryProcessor : IPacketProcessor<InventoryPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
     {
+        private static IInventoryModel Model => Fodinae.Scripts.Core.ServiceLocator.Resolve<IInventoryModel>();
+
         public void Process(InventoryPacket packet)
         {
-            var model = InventoryModel.Instance;
+            var model = Model;
+            if (model == null)
+            {
+                return;
+            }
+
             var remaining = new Dictionary<MinesServer.Data.ItemType, long>(packet.Changes);
 
             for (int i = 0; i < InventoryModel.TOTALSLOTS; i++)
@@ -69,7 +78,12 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket packet)
         {
-            var model = InventoryModel.Instance;
+            var model = Model;
+            if (model == null)
+            {
+                return;
+            }
+
             int slot = model.SelectedSlot;
             if (slot < 0)
             {
@@ -89,7 +103,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket packet)
         {
-            InventoryModel.Instance.ClearSelection();
+            Model?.ClearSelection();
         }
     }
 }

@@ -5,10 +5,6 @@ using System.Threading.Tasks;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 
-// SA1503/SA1519: допустимо в hot-циклах (FBPW flood fill)
-#pragma warning disable SA1503
-#pragma warning disable SA1519
-
 namespace Fodinae.Scripts.World
 {
     /// <summary>
@@ -454,7 +450,7 @@ namespace Fodinae.Scripts.World
 
     /// <summary>
     /// Interface used by BackgroundFloodFill to read cell data without coupling to the full
-    /// SingleMeshTerrainRenderer cell cache.
+    /// TerrainRenderer cell cache.
     /// </summary>
     public struct CachedCellInfo
     {

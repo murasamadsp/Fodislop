@@ -14,6 +14,7 @@ namespace Fodinae.Scripts.Core.Interfaces
         Camera MainCamera { get; }
         bool IsStandaloneMode { get; }
         CellConfigurationPacket GetCellConfig(CellType type);
+        float GetMoveCooldown(CellType cellType);
         bool TryGetTileGroup(CellType type, out int groupId);
         Color GetCellMinimapColor(CellType type);
         void UpdateMovementSpeeds(MovementSpeedPacket packet);

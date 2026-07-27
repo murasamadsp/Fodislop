@@ -1,5 +1,7 @@
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Scripts.Audio.Spatial
@@ -82,19 +84,19 @@ namespace Fodinae.Scripts.Audio.Spatial
 
         private void StartSnapshot()
         {
-            if (AudioSystem.Instance == null)
+            if ((ServiceLocator.Resolve<IAudioSystem>()) == null)
             {
                 return;
             }
 
             if (!string.IsNullOrEmpty(_snapshotPath))
             {
-                _activeSnapshot = AudioSystem.Instance.PlaySnapshot(_snapshotPath);
+                _activeSnapshot = (ServiceLocator.Resolve<IAudioSystem>()).PlaySnapshot(_snapshotPath);
             }
 
             if (!string.IsNullOrEmpty(_globalParameterName))
             {
-                AudioSystem.Instance.SetGlobalParameter(_globalParameterName, _parameterValueOnEnter);
+                (ServiceLocator.Resolve<IAudioSystem>()).SetGlobalParameter(_globalParameterName, _parameterValueOnEnter);
             }
         }
 
@@ -106,9 +108,9 @@ namespace Fodinae.Scripts.Audio.Spatial
                 _activeSnapshot = null;
             }
 
-            if (!string.IsNullOrEmpty(_globalParameterName) && AudioSystem.Instance != null)
+            if (!string.IsNullOrEmpty(_globalParameterName) && (ServiceLocator.Resolve<IAudioSystem>()) != null)
             {
-                AudioSystem.Instance.SetGlobalParameter(_globalParameterName, _parameterValueOnExit);
+                (ServiceLocator.Resolve<IAudioSystem>()).SetGlobalParameter(_globalParameterName, _parameterValueOnExit);
             }
         }
     }

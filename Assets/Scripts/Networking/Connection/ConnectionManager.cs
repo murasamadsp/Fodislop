@@ -1,9 +1,12 @@
 using System;
+using VContainer;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking.Auth;
 using Fodinae.Scripts.UI;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -15,13 +18,12 @@ using UnityEngine;
 
 namespace Fodinae.Scripts.Networking.Connection
 {
-    public class ConnectionManager : MonoBehaviour
+    public class ConnectionManager : MonoBehaviour, IConnectionService
     {
-        private static ConnectionManager _instance;
-        public static ConnectionManager Instance => _instance;
-        public static ConnectionManager InstanceIfExists => _instance;
+        public static ConnectionManager Instance { get; private set; }
 
         public IServerConnection Connection { get; private set; }
+        public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         private bool _useOldClient;
         public event Action<ServerPacket> OnPacketReceived;
 
@@ -36,27 +38,21 @@ namespace Fodinae.Scripts.Networking.Connection
 
         protected void Awake()
         {
-            Debug.Log("[ConnectionManager] Awake START");
-            _instance = this;
-            gameObject.AddComponent<PacketHandler>();
-            Debug.Log("[ConnectionManager] Awake END");
+            Instance = this;
         }
 
         protected void OnDestroy()
         {
-            if (_instance != this)
-            {
-                return;
-            }
-
             Disconnect();
         }
 
         protected void Update()
         {
             float startTime = Time.realtimeSinceStartup;
+            int processedCount = 0;
             while (_packetQueue.TryDequeue(out var packet))
             {
+                processedCount++;
                 try
                 {
                     OnPacketReceived?.Invoke(packet);
@@ -101,7 +97,7 @@ namespace Fodinae.Scripts.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            Game.Managers.GameManager.InstanceIfExists?.SetState(Game.Managers.GameState.Connecting);
+            (Fodinae.Scripts.Core.ServiceLocator.Resolve<GameManager>())?.SetState(Game.Managers.GameState.Connecting);
 
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;

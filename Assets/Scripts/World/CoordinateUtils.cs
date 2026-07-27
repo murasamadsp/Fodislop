@@ -1,3 +1,4 @@
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Game.Managers;
 using UnityEngine;
 
@@ -22,9 +23,9 @@ namespace Fodinae.Scripts.World
             }
 
             _lastFrame = frame;
-            if (MapManager.Instance != null && MapManager.Instance.WorldHeight > 0)
+            if ((ServiceLocator.Resolve<MapManager>()) != null && (ServiceLocator.Resolve<MapManager>()).WorldHeight > 0)
             {
-                _cachedHeight = MapManager.Instance.WorldHeight;
+                _cachedHeight = (ServiceLocator.Resolve<MapManager>()).WorldHeight;
             }
             else
             {

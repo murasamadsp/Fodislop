@@ -1,4 +1,5 @@
 using System.Linq;
+using Fodinae.Scripts.Core;
 using Fodinae.Scripts.UI;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
@@ -12,18 +13,18 @@ namespace Fodinae.Scripts.Networking.Processors
         {
             foreach (var msg in packet.Messages)
             {
-                if (GlobalChatUI.Instance != null)
+                if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>()) != null)
                 {
-                    GlobalChatUI.Instance.AddMessage(msg);
+                    (Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>()).AddMessage(msg);
                 }
             }
         }
 
         public void Process(LocalChatMessagePacket packet)
         {
-            if (FloatingChatManager.Instance != null)
+            if ((Fodinae.Scripts.Core.ServiceLocator.Resolve<FloatingChatManager>()) != null)
             {
-                FloatingChatManager.Instance.ShowLocalChat(packet);
+                (Fodinae.Scripts.Core.ServiceLocator.Resolve<FloatingChatManager>()).ShowLocalChat(packet);
             }
         }
 

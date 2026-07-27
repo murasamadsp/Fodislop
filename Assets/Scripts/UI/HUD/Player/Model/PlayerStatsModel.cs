@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
@@ -8,14 +7,9 @@ using UnityEngine;
 namespace Fodinae.Scripts.UI.HUD.Player.Model
 {
     public readonly record struct StatusLineEntry(string[] Text, Color Color, byte BlinkRate, long Expiry);
-    [DefaultExecutionOrder(-10000)]
-    public class PlayerStatsModel : MonoBehaviour, IPlayerStats
+
+    public sealed class PlayerStatsModel : IPlayerStats
     {
-        private static PlayerStatsModel _instance;
-
-        public static PlayerStatsModel InstanceIfExists => _instance;
-        public static PlayerStatsModel Instance => _instance;
-
         private readonly Dictionary<string, StatusLineEntry> _statusLines = new();
 
         public event Action OnStatusLinesChanged;
@@ -48,19 +42,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
             _statusLines.Clear();
             OnStatusLinesChanged?.Invoke();
             OnStatsChanged?.Invoke();
-        }
-
-        protected void Awake()
-        {
-            _instance = this;
-        }
-
-        protected void OnDestroy()
-        {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
         }
 
         public string Nickname { get; private set; }

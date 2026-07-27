@@ -8,6 +8,7 @@ using Fodinae.Scripts.Networking.Connection;
 using Fodinae.Scripts.Player.Interfaces;
 using Fodinae.Scripts.Player.Input;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using VContainer;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -19,7 +20,6 @@ using UnityEngine.InputSystem;
 
 namespace Fodinae.Scripts.Player.Logic
 {
-    #pragma warning disable CS0649
     public class PlayerMovementController : MonoBehaviour
     {
         [Header("Movement Settings")]
@@ -41,7 +41,19 @@ namespace Fodinae.Scripts.Player.Logic
         private float _lastDigTime;
         private Direction? _lastSentDirection;
         [Inject]
-        private IWorldDataStorage _storage;
+        private IWorldDataStorage _storage = null!;
+
+        [Inject]
+        private IServerConfig _serverConfig = null!;
+
+        [Inject]
+        private INetworkService _networkService = null!;
+
+        [Inject]
+        private IMapDataProvider _mapDataProvider = null!;
+
+        [Inject]
+        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
         public static PlayerMovementController LocalPlayer { get; private set; }
         public static event Action<PlayerMovementController> OnLocalPlayerSpawned;
@@ -94,7 +106,11 @@ namespace Fodinae.Scripts.Player.Logic
                 _robot.TargetPosition = targetGridPos;
             }
 
-            Position = CoordinateUtils.UnityToServerPos(transform.position, MapManager.Instance?.WorldHeight ?? 0);
+            if (_mapDataProvider != null)
+            {
+                Position = CoordinateUtils.UnityToServerPos(transform.position, _mapDataProvider.WorldHeight);
+            }
+
             _lastSentDirection = null;
         }
 
@@ -180,7 +196,9 @@ namespace Fodinae.Scripts.Player.Logic
 
         public void ToggleAggression()
         {
-            NetworkService.Instance.SendAction(new ToggleAgressionPacket());
+            _aggression = !_aggression;
+            _networkService?.SendAction(new ToggleAgressionPacket());
+            OnAggressionChanged?.Invoke(_aggression);
         }
 
         public bool IsMoving => _input != null && _input.MoveInput != Vector2.zero;
@@ -203,7 +221,7 @@ namespace Fodinae.Scripts.Player.Logic
             Vector2Int oldPos = Position;
             Position = position;
 
-            int worldHeight = MapManager.Instance?.WorldHeight ?? 0;
+            int worldHeight = _mapDataProvider != null ? _mapDataProvider.WorldHeight : 128;
             Vector3 targetWorldPos = CoordinateUtils.ServerToUnityPos(position.x, position.y, worldHeight, transform.position.z);
             transform.position = targetWorldPos;
             if (_robot is not null)
@@ -216,17 +234,17 @@ namespace Fodinae.Scripts.Player.Logic
 
         private void ApplyMovement()
         {
-            if (_robot is null || _input is null || ServerConfig.Instance is null || PacketHandler.IsInputBlocked)
+            if (_robot is null || _input is null || _serverConfig is null || _inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;
             }
 
-            if (_input.WantsToDig || Time.time - _lastDigTime < ServerConfig.Instance.DigCooldown)
+            if (_input.WantsToDig || Time.time - _lastDigTime < _serverConfig.DigCooldown)
             {
                 return;
             }
 
-            if (MapManager.Instance is not { } mm || NetworkService.Instance is not { } ns)
+            if (_mapDataProvider is null || _networkService is null || _mapDataProvider is null)
             {
                 return;
             }
@@ -256,17 +274,17 @@ namespace Fodinae.Scripts.Player.Logic
                     ushort currentX = (ushort)Mathf.Clamp(Position.x, 0, ushort.MaxValue);
                     ushort currentServerY = (ushort)Mathf.Clamp(Position.y, 0, ushort.MaxValue);
 
-                    var storage = _storage ?? MapStorage.Instance;
+                    var storage = _storage;
                     if (storage == null)
                     {
                         return;
                     }
 
                     var currentCellType = storage.GetCell(currentX, currentServerY);
-                    float cooldown = mm.GetMoveCooldown(currentCellType);
+                    float cooldown = _mapDataProvider.GetMoveCooldown(currentCellType);
                     if (_input.IsCtrlPressed)
                     {
-                        cooldown = mm.GetMoveCooldown(CellType.Empty);
+                        cooldown = _mapDataProvider.GetMoveCooldown(CellType.Empty);
                     }
 
                     if (cooldown > 0)
@@ -281,7 +299,7 @@ namespace Fodinae.Scripts.Player.Logic
 
                     if (_lastSentDirection != packetDirection)
                     {
-                        ns.SendAction(new RotatePacket(packetDirection));
+                        _networkService?.SendAction(new RotatePacket(packetDirection));
                         _lastSentDirection = packetDirection;
                         _lastMoveTime = Time.time;
                     }
@@ -312,8 +330,8 @@ namespace Fodinae.Scripts.Player.Logic
                         return;
                     }
 
-                    int mapWidth = mm.WorldWidth;
-                    int mapHeight = mm.WorldHeight;
+                    int mapWidth = _mapDataProvider.WorldWidth;
+                    int mapHeight = _mapDataProvider.WorldHeight;
 
                     if (targetServerXInt < 0 || targetServerXInt >= mapWidth || targetServerYInt < 0 || targetServerYInt >= mapHeight)
                     {
@@ -324,22 +342,22 @@ namespace Fodinae.Scripts.Player.Logic
                     ushort targetServerY = (ushort)targetServerYInt;
 
                     var cellType = storage.GetCell(targetServerX, targetServerY);
-                    var cellConfig = mm.GetCellConfig(cellType);
+                    var cellConfig = _mapDataProvider.GetCellConfig(cellType);
 
                     bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
 
                     if (isPassable || _ignoreCollision)
                     {
-                        _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(targetServerX, targetServerY, mm.WorldHeight, transform.position.z);
+                        _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(targetServerX, targetServerY, _mapDataProvider.WorldHeight, transform.position.z);
                         Vector2Int oldPos = Position;
                         Position = new Vector2Int(targetServerX, targetServerY);
                         OnPlayerMoved?.Invoke(oldPos, Position);
                         _lastMoveTime = Time.time;
-                        ns.SendAction(new MovePacket(targetServerX, targetServerY));
+                        _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));
                     }
                     else if (_autoDig)
                     {
-                        NetworkService.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
+                        _networkService?.Send(new ActionClientPacket(targetServerX, targetServerY, new BzPacket()));
                         _lastMoveTime = Time.time;
                         _lastDigTime = Time.time;
                     }
@@ -362,7 +380,7 @@ namespace Fodinae.Scripts.Player.Logic
 
         private void HandleDigInput()
         {
-            if (!_input.WantsToDig || _lastSentDirection == null || Time.time - _lastDigTime < ServerConfig.Instance.DigCooldown)
+            if (!_input.WantsToDig || _lastSentDirection == null || Time.time - _lastDigTime < _serverConfig.DigCooldown)
             {
                 return;
             }
@@ -379,7 +397,7 @@ namespace Fodinae.Scripts.Player.Logic
             ushort serverX = (ushort)(Position.x + digOffset.x);
             ushort serverY = (ushort)(Position.y + digOffset.y);
 
-            NetworkService.Send(new ActionClientPacket(serverX, serverY, new BzPacket()));
+            _networkService?.Send(new ActionClientPacket(serverX, serverY, new BzPacket()));
             _lastDigTime = Time.time;
         }
 
@@ -387,7 +405,7 @@ namespace Fodinae.Scripts.Player.Logic
         protected void OnDrawGizmos()
         {
             Gizmos.color = Color.cyan;
-            int worldHeight = MapManager.Instance != null ? MapManager.Instance.WorldHeight : 0;
+            int worldHeight = _mapDataProvider != null ? _mapDataProvider.WorldHeight : 0;
             Vector3 gridPos = CoordinateUtils.ServerToUnityPos(Position.x, Position.y, worldHeight, transform.position.z);
             Gizmos.DrawWireCube(gridPos, new Vector3(1f, 1f, 0.1f));
 

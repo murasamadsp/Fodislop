@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
@@ -14,10 +15,6 @@ namespace Fodinae.Scripts.Game.Managers
     [DefaultExecutionOrder(-10000)]
     public class MapManager : MonoBehaviour, IMapDataProvider
     {
-        private static MapManager _instance;
-        public static MapManager Instance => _instance;
-        public static MapManager InstanceIfExists => _instance;
-
         private Camera _mainCamera;
 
         public Camera MainCamera
@@ -55,13 +52,26 @@ namespace Fodinae.Scripts.Game.Managers
         private ushort _width;
         private ushort _height;
 
-        public bool IsWorldInitialized { get; private set; } = false;
+        private bool _isWorldInitialized;
+        public bool IsWorldInitialized
+        {
+            get => _isWorldInitialized;
+            private set
+            {
+                if (_isWorldInitialized == value)
+                {
+                    return;
+                }
+
+                _isWorldInitialized = value;
+                Debug.LogError($"[MapManager] IsWorldInitialized CHANGED -> {value}");
+            }
+        }
 
         public bool IsStandaloneMode { get; set; } = false;
 
         protected void Awake()
         {
-            _instance = this;
 #if UNITY_EDITOR
             if (!Application.isPlaying && !IsWorldInitialized)
             {
@@ -73,18 +83,21 @@ namespace Fodinae.Scripts.Game.Managers
 #endif
         }
 
-        private static IWorldDataStorage WorldStorage => MapStorage.Instance;
+        private static IWorldDataStorage WorldStorage => ServiceLocator.Resolve<IWorldDataStorage>();
 
         protected void OnDestroy()
         {
-            MapStorage.InstanceIfExists?.Dispose();
+            IsWorldInitialized = false;
+            (ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage)?.Dispose();
         }
 
         public void LoadWorldInit(WorldInitPacket packet)
         {
-            PackManager.Instance?.ClearAllPacks();
-            RobotManager.InstanceIfExists?.ClearAllRobots();
-            ServerAudioEventManager.InstanceIfExists?.ClearAllEffects();
+            Debug.Log("[MapManager] LoadWorldInit START");
+            IsWorldInitialized = false;
+            (ServiceLocator.Resolve<PackManager>())?.ClearAllPacks();
+            ServiceLocator.Resolve<IRobotService>()?.ClearAllRobots();
+            ServiceLocator.Resolve<IServerAudioService>()?.ClearAllEffects();
 
             if (packet == null)
             {
@@ -132,11 +145,15 @@ namespace Fodinae.Scripts.Game.Managers
             var storage = WorldStorage;
             if (storage == null)
             {
-                Debug.LogError("[MapManager] WorldStorage is null — MapStorage.Instance is null");
+                Debug.LogError("[MapManager] WorldStorage is null — IWorldDataStorage not registered");
                 return;
             }
 
+            Debug.Log("[MapManager] LoadWorldInit — applying cells to storage");
+
+            Debug.Log("[MapManager] LoadWorldInit — calling InitWorld");
             storage.InitWorld(packet.CodeName, _width, _height);
+            Debug.Log("[MapManager] LoadWorldInit — InitWorld done, IsReady=" + storage.IsReady);
 
             if (!storage.IsReady)
             {
@@ -144,11 +161,12 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            Debug.Log($"[MapManager] WorldLayer: {storage.CellLayer.WidthChunks}x{storage.CellLayer.HeightChunks} chunks, size={storage.CellLayer.ChunkSize}");
-
+            Debug.Log($"[MapManager] Firing OnWorldInitialized and OnWorldDataLoaded on instance hash={GetHashCode()}");
             IsWorldInitialized = true;
             OnWorldInitialized?.Invoke();
             OnWorldDataLoaded?.Invoke();
+            Debug.Log("[MapManager] LoadWorldInit END");
+            Debug.Assert(IsWorldInitialized, "[MapManager] IsWorldInitialized must be true at the end of LoadWorldInit");
         }
 
         public void UpdateMovementSpeeds(MovementSpeedPacket packet)

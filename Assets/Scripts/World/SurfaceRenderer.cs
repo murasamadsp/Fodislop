@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using UnityEngine;
 
@@ -108,7 +110,7 @@ namespace Fodinae.Scripts.World
 
             try
             {
-                var loader = ClientAssetLoader.Instance;
+                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
                 if (loader != null)
                 {
                     var transitTex = await loader.GetTextureAsync(_transitTexturePath);
@@ -141,12 +143,12 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
-            if (MapManager.Instance == null)
+            if ((ServiceLocator.Resolve<MapManager>()) == null)
             {
                 return;
             }
 
-            int worldHeight = MapManager.Instance.WorldHeight;
+            int worldHeight = (ServiceLocator.Resolve<MapManager>()).WorldHeight;
             float camX = _mainCamera.transform.position.x;
             float halfScreenW = _mainCamera.orthographicSize * _mainCamera.aspect;
 

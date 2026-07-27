@@ -6,18 +6,17 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae.Scripts;
 using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.World;
+using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Scripts.World
 {
-    public class WorldTextureManager : MonoBehaviour
+    public class WorldTextureManager : MonoBehaviour, ITextureService
     {
-        private static WorldTextureManager _instance;
-        public static WorldTextureManager Instance => _instance;
-        public static WorldTextureManager InstanceIfExists => _instance;
 
         [Header("Atlas Configuration")]
         [SerializeField]
@@ -43,20 +42,16 @@ namespace Fodinae.Scripts.World
 
         protected void Awake()
         {
-            _instance = this;
+            Debug.Log("[WorldTextureManager] Awake — initializing");
             Initialize();
         }
 
         protected void OnDestroy()
         {
-            if (_instance != this)
+            var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            if (assetLoader != null)
             {
-                return;
-            }
-
-            if (ClientAssetLoader.InstanceIfExists != null)
-            {
-                ClientAssetLoader.InstanceIfExists.OnTextureLoaded -= OnTextureLoadedHandler;
+                assetLoader.OnTextureLoaded -= OnTextureLoadedHandler;
             }
 
             _textureCache?.Clear();
@@ -91,16 +86,11 @@ namespace Fodinae.Scripts.World
 
             if (Application.isPlaying)
             {
-                var assetLoader = ClientAssetLoader.InstanceIfExists;
+                var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
                 if (assetLoader != null)
                 {
                     assetLoader.OnTextureLoaded -= OnTextureLoadedHandler;
                     assetLoader.OnTextureLoaded += OnTextureLoadedHandler;
-                }
-                else if (ClientAssetLoader.Instance != null)
-                {
-                    ClientAssetLoader.Instance.OnTextureLoaded -= OnTextureLoadedHandler;
-                    ClientAssetLoader.Instance.OnTextureLoaded += OnTextureLoadedHandler;
                 }
             }
         }
@@ -171,6 +161,12 @@ namespace Fodinae.Scripts.World
             GetCellTextureCoordinate(cellType, 0, 0).Forget();
         }
 
+        public AtlasCoordinate GetCellTextureCoordinate(CellType cellType)
+        {
+            EnsureInitialized();
+            return GetCellTextureCoordinateSync(cellType, 0, 0);
+        }
+
         public bool HasAnimations(CellType cellType)
         {
             EnsureInitialized();
@@ -200,14 +196,15 @@ namespace Fodinae.Scripts.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    float speed = textureInfo.ContainerFPS > 0 ? textureInfo.ContainerFPS : MapManager.Instance.GetAnimationSpeed(cellType);
-                    if (speed == 0)
+                    var mmForAnim = ServiceLocator.Resolve<MapManager>();
+                    float speed = textureInfo.ContainerFPS > 0 ? textureInfo.ContainerFPS : (mmForAnim != null ? mmForAnim.GetAnimationSpeed(cellType) : 5f);
+                    if (speed <= 0)
                     {
                         speed = 5;
                     }
 
                     frameIndex = (int)(Time.realtimeSinceStartup * speed) % textureInfo.AnimationFrames;
-                    frameHeight = textureInfo.ContainerFPS > 0 ? textureInfo.FrameSize : MapManager.Instance.GetAnimationFrameHeight(cellType);
+                    frameHeight = textureInfo.ContainerFPS > 0 ? textureInfo.FrameSize : (mmForAnim != null ? mmForAnim.GetAnimationFrameHeight(cellType) : textureInfo.FrameSize);
                 }
 
                 foreach (var atlas in _atlases)
@@ -260,8 +257,9 @@ namespace Fodinae.Scripts.World
                     return info.ContainerFPS;
                 }
 
-                byte speed = MapManager.Instance.GetAnimationSpeed(cellType);
-                return speed > 0 ? speed : 5f;
+                var mmForSpeed = ServiceLocator.Resolve<MapManager>();
+                var speed = mmForSpeed != null ? mmForSpeed.GetAnimationSpeed(cellType) : 5;
+                return speed > 0 ? speed : 5;
             }
 
             return 5f;
@@ -348,7 +346,7 @@ namespace Fodinae.Scripts.World
             Texture2D texture = null;
             try
             {
-                texture = await ClientAssetLoader.Instance.GetTextureAsync(filename);
+                texture = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetTextureAsync(filename);
             }
             catch (Exception ex)
             {
@@ -374,7 +372,8 @@ namespace Fodinae.Scripts.World
 
         private void AddTextureToAtlas(CellType cellType, Texture2D texture)
         {
-            int frameHeight = MapManager.Instance.GetAnimationFrameHeight(cellType);
+            var mmForFrame = ServiceLocator.Resolve<MapManager>();
+            int frameHeight = mmForFrame != null ? mmForFrame.GetAnimationFrameHeight(cellType) : texture.height;
             float containerFPS = 0;
 
             if (texture.name.Contains("|"))
@@ -579,7 +578,7 @@ namespace Fodinae.Scripts.World
 
         private static CellType GetCellTypeAt(int x, int y)
         {
-            var storage = MapStorage.Instance;
+            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (storage?.CellLayer != null)
             {
                 try
@@ -660,9 +659,9 @@ namespace Fodinae.Scripts.World
 
         private static Color GetFallbackColor(CellType cellType)
         {
-            if (MapManager.Instance != null)
+            if ((ServiceLocator.Resolve<MapManager>()) != null)
             {
-                var serverColor = MapManager.Instance.GetCellMinimapColor(cellType);
+                var serverColor = (ServiceLocator.Resolve<MapManager>()).GetCellMinimapColor(cellType);
                 if (serverColor.a > 0)
                 {
                     return serverColor;
