@@ -9,6 +9,8 @@ using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae.Scripts;
 using Fodinae.Scripts.Audio;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.UI;
 using Fodinae.Scripts.UI.HUD.Player.Model;
@@ -458,11 +460,11 @@ namespace MinesServer.Networking.Connection.Client
                     ushort fx = (ushort)(_x + frontOffset.x);
                     ushort fy = (ushort)(_y + frontOffset.y);
 
-                    var storage = MapStorage.Instance;
+                    var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
                     if (storage?.CellLayer != null && storage.IsReady)
                     {
                         var cellType = storage.GetCell(fx, fy);
-                        var mm = MapManager.Instance;
+                        var mm = ServiceLocator.Resolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
@@ -506,7 +508,7 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is BuildGrayPacket)
                 {
                     var front = GetFrontCell();
-                    var storage = MapStorage.Instance;
+                    var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
                     if (storage?.CellLayer != null && storage.IsReady && storage.GetCell(front.X, front.Y) == CellType.Road)
                     {
                         storage.SetCell(front.X, front.Y, CellType.Empty);
@@ -2307,7 +2309,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private void TryBuild(ushort x, ushort y, CellType placeType)
         {
-            var storage = MapStorage.Instance;
+            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (storage?.CellLayer == null || !storage.IsReady)
             {
                 return;
@@ -2326,7 +2328,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private void TryUpgradeBuild(ushort x, ushort y, params (CellType From, CellType To)[] upgrades)
         {
-            var storage = MapStorage.Instance;
+            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (storage?.CellLayer == null || !storage.IsReady)
             {
                 return;

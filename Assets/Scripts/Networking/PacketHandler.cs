@@ -32,16 +32,10 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.Scripts.Networking
 {
-    public partial class PacketHandler : MonoBehaviour, Fodinae.Scripts.Core.Interfaces.IInputBlocker
-        [VContainer.Inject] private Fodinae.Scripts.Core.Interfaces.IWorldDataStorage _mapStorageInterface;
-        private Fodinae.Scripts.Game.Managers.MapStorage _mapStorage => _mapStorageInterface as Fodinae.Scripts.Game.Managers.MapStorage;
-        [VContainer.Inject] private Fodinae.Scripts.Networking.Connection.INetworkService _networkService;
-        [VContainer.Inject] private Fodinae.Scripts.Game.Managers.GameManager _gameManager;
+    public partial class PacketHandler : MonoBehaviour, IInputBlocker
     {
         public bool IsInputBlocked => _windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen);
         public string TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
-
-        private string TopWindowTagValue => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
 
         private static readonly WorldInitProcessor WorldInit = new();
         private static readonly RobotInfoProcessor RobotInfo = new();
@@ -64,15 +58,18 @@ namespace Fodinae.Scripts.Networking
         private readonly WindowPacketProcessor _windowProcessor = new();
         private bool _isInitialized;
         private bool _isSubscribed;
-        private INetworkService _networkService;
-        [Inject]
-        private IMapDataProvider _mapManager;
+
+        [Inject] private INetworkService _networkService = null!;
+        [Inject] private IWorldDataStorage _mapStorageInterface = null!;
+        [Inject] private GameManager _gameManager = null!;
+        [Inject] private IMapDataProvider _mapDataProvider = null!;
+        private MapStorage _mapStorage => _mapStorageInterface as MapStorage;
 
         protected virtual void Awake()
         {
             Debug.Log("[PacketHandler] Starting initialization...");
 
-            if (_mapManager == null)
+            if (_mapDataProvider == null)
             {
                 Debug.LogError("[PacketHandler] FATAL: IMapDataProvider is not injected — PacketHandler cannot function. World will not render.");
                 return;
@@ -94,7 +91,7 @@ namespace Fodinae.Scripts.Networking
 
             TrySubscribeToNetworkService();
 
-            if (_mapManager is MapManager concreteMM)
+            if (_mapDataProvider is MapManager concreteMM)
             {
                 concreteMM.OnWorldInitialized += OnWorldInitialized;
             }
@@ -110,13 +107,7 @@ namespace Fodinae.Scripts.Networking
 
         private void TrySubscribeToNetworkService()
         {
-            if (_isSubscribed || _networkService != null)
-            {
-                return;
-            }
-
-            _networkService = _networkService;
-            if (_networkService == null)
+            if (_isSubscribed || _networkService == null)
             {
                 return;
             }
@@ -241,7 +232,7 @@ namespace Fodinae.Scripts.Networking
                 _windowProcessor.Dispose();
             }
 
-            if (_mapManager is MapManager concreteMM)
+            if (_mapDataProvider is MapManager concreteMM)
             {
                 concreteMM.OnWorldInitialized -= OnWorldInitialized;
             }

@@ -19,7 +19,6 @@ namespace Fodinae.Scripts.Game.Managers
 
         internal void SetAsPending()
         {
-            _pendingInstance = this;
         }
 
         private bool _isInitialized;

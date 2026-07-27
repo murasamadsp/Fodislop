@@ -74,6 +74,19 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private VisualElement _faqPopup;
         private ProgrammatorGrid _programmatorGrid;
 
+        [Inject]
+        private PlayerStatsModel _model = null!;
+        [Inject]
+        private GlobalChatUI _globalChatUI = null!;
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
+        [Inject]
+        private INetworkService _networkService = null!;
+
+        private Button _collisionButton;
+        private Label _collisionLabel;
+        private Button _missionButton;
+
         private VisualElement _missionPanel;
         private Label _missionTitleLabel;
         private Label _missionDescLabel;
@@ -238,7 +251,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _levelLabel.AddToClassList("hud-level");
             topRow.Add(_levelLabel);
 
-            var clanButton = new Button(() => NetworkService.Send(new OpenClanClickPacket()));
+            var clanButton = new Button(() => NetworkService.Instance?.Send(new OpenClanClickPacket()));
             clanButton.style.width = 15;
             clanButton.style.height = 15;
             clanButton.style.flexShrink = 0;

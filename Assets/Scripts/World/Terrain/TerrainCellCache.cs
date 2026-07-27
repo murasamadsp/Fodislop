@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using Fodinae.Scripts.Data;
 using MinesServer.Data;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Scripts.World;
 
 namespace Fodinae.Scripts.World.Terrain
 {
@@ -140,7 +140,7 @@ namespace Fodinae.Scripts.World.Terrain
             wtm?.RequestTexture((CellType)0);
         }
 
-        private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, CellLayer layer, ref int lastChunkIndex, ref CellType[] currentChunk)
+        private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, WorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[] currentChunk)
         {
             if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
             {

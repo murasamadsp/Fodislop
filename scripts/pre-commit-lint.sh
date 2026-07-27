@@ -53,7 +53,7 @@ for PROJECT_FILE in $PROJECTS; do
     echo "Running full C# Roslyn analyzer check for $PROJECT_NAME..."
 
     # Build sequentially and capture all build output
-    dotnet build "$PROJECT_FILE" -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary > "$LOG_FILE" 2>&1 || true
+    dotnet build "$PROJECT_FILE" --no-dependencies -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary > "$LOG_FILE" 2>&1 || true
 
     if [ -f "$LOG_FILE" ]; then
         BUILD_LOG=$(cat "$LOG_FILE")

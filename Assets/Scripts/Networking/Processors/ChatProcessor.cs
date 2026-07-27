@@ -34,7 +34,8 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(ChatListPacket packet)
         {
-            if (GlobalChatUI.Instance == null)
+            var chatUi = Fodinae.Scripts.Core.ServiceLocator.Resolve<GlobalChatUI>();
+            if (chatUi == null)
             {
                 return;
             }

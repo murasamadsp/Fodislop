@@ -4,6 +4,7 @@ using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Player.Logic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using VContainer;
 
 namespace Fodinae.Scripts.Player
 {

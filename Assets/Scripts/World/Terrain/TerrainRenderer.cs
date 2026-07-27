@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
-using Fodinae.Scripts.Data;
-using MinesServer.Data;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;

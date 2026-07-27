@@ -1,3 +1,5 @@
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.UI.HUD.Player.Model;
 using Fodinae.Scripts.World;
 using UnityEngine;
@@ -35,7 +37,7 @@ namespace Fodinae.Scripts.UI
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);
 
-            var stats = PlayerStatsModel.Instance;
+            var stats = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
             if (stats != null)
             {
                 stats.OnMissionArrowChanged += OnArrowChanged;
@@ -51,16 +53,17 @@ namespace Fodinae.Scripts.UI
 
         protected void OnDestroy()
         {
-            if (PlayerStatsModel.InstanceIfExists != null)
+            var existing = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
+            if (existing != null)
             {
-                PlayerStatsModel.InstanceIfExists.OnMissionArrowChanged -= OnArrowChanged;
+                existing.OnMissionArrowChanged -= OnArrowChanged;
             }
         }
 
         private void OnArrowChanged()
         {
             Debug.Log("[MissionArrowUI] OnArrowChanged fired");
-            var stats = PlayerStatsModel.Instance;
+            var stats = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
             if (stats == null || !stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
             {
                 Debug.Log("[MissionArrowUI] Arrow cleared (null target)");

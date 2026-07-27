@@ -59,9 +59,6 @@ namespace Fodinae.Scripts.Networking
             }
         }
 
-        public static void Send(IRootClientPacket packet) => Instance?.Send(packet);
-        public static void SendAction(IActionClientPacket action) => Instance?.SendAction(action);
-
         private PlayerMovementController _cachedPlayerController;
 
         public void SendAction(IActionClientPacket action)

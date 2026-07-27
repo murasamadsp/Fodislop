@@ -44,7 +44,7 @@ namespace Fodinae.Scripts.UI
 
             CreateUI();
             _panel.style.display = DisplayStyle.None;
-            Networking.NetworkService.Send(new QueryChatHistoryPacket("global", 0));
+            Networking.NetworkService.Instance?.Send(new QueryChatHistoryPacket("global", 0));
         }
 
         protected void Update()
@@ -431,7 +431,7 @@ namespace Fodinae.Scripts.UI
             _currentColor = color;
             _colorButton.style.backgroundColor = new Color(color.R / 255f, color.G / 255f, color.B / 255f);
             _colorGrid.style.display = DisplayStyle.None;
-            Networking.NetworkService.Send(new ChangeChatColorPacket(color));
+            Networking.NetworkService.Instance?.Send(new ChangeChatColorPacket(color));
         }
     }
 }

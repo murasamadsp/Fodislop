@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
+using Fodinae.Scripts.Core;
+using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game;
 using Fodinae.Scripts.Networking;
 using Fodinae.Scripts.Networking.Connection;
@@ -13,6 +15,7 @@ using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
+using VContainer;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
@@ -38,7 +41,7 @@ namespace Fodinae.Scripts.UI
         [Inject]
         private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker;
         [Inject]
-        private Fodinae.Scripts.Audio.Backend.IAudioSystem _audioSystem;
+        private IAudioSystem _audioSystem;
         [Inject]
         private TerrainRenderer _terrainRenderer;
 
@@ -160,37 +163,37 @@ namespace Fodinae.Scripts.UI
 
             _mainPage.Add(CreateButton("Тест: Открыть URL", () =>
             {
-                NetworkService.Send(new ElementClickPacket("open_url_test", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Instance?.Send(new ElementClickPacket("open_url_test", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
             _mainPage.Add(CreateButton("Тест модального окна", () =>
             {
-                NetworkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Instance?.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
             _mainPage.Add(CreateButton("Вступить в клан", () =>
             {
-                NetworkService.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Instance?.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
             _mainPage.Add(CreateButton("Выйти из клана", () =>
             {
-                NetworkService.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Instance?.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
             _mainPage.Add(CreateButton("Тест: Стрелка миссии", () =>
             {
-                NetworkService.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Instance?.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
             _mainPage.Add(CreateButton("Миссии", () =>
             {
-                NetworkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
+                NetworkService.Instance?.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
@@ -312,13 +315,14 @@ namespace Fodinae.Scripts.UI
 
         private static VisualElement CreateAudioSlider(string title, AudioBusType busType, string prefKey, float defaultValue)
         {
-            float currentVol = _audioSystem != null ? _audioSystem.GetBusVolume(busType) : PlayerPrefs.GetFloat(prefKey, defaultValue);
+            var audio = ServiceLocator.Resolve<IAudioSystem>();
+            float currentVol = audio != null ? audio.GetBusVolume(busType) : PlayerPrefs.GetFloat(prefKey, defaultValue);
             return CreateSlider(
                 title,
                 currentVol,
                 v =>
                 {
-                    _audioSystem?.SetBusVolume(busType, v);
+                    audio?.SetBusVolume(busType, v);
                     PlayerPrefs.SetFloat(prefKey, v);
                     PlayerPrefs.Save();
                 },
@@ -460,7 +464,7 @@ namespace Fodinae.Scripts.UI
         private void SendClientConfig()
         {
             var context = new List<StringPairPacket>();
-            var audio = AudioSystem.Instance;
+            var audio = ServiceLocator.Resolve<IAudioSystem>();
 
             context.Add(new StringPairPacket("master_volume", ((byte)((audio?.GetBusVolume(AudioBusType.Master) ?? PlayerPrefs.GetFloat("Audio_Master", 1f)) * 255)).ToString()));
             context.Add(new StringPairPacket("sfx_volume", ((byte)((audio?.GetBusVolume(AudioBusType.SFX) ?? PlayerPrefs.GetFloat("Audio_SFX", 1f)) * 255)).ToString()));
@@ -474,7 +478,7 @@ namespace Fodinae.Scripts.UI
             context.Add(new StringPairPacket("ui_scale", PlayerPrefs.GetFloat("UIScale", 1f).ToString("F2")));
 
             Debug.Log($"[PauseMenu] Sending save_client_config with {context.Count} entries");
-            NetworkService.Send(new ElementClickPacket("save_client_config", 0, context));
+            NetworkService.Instance?.Send(new ElementClickPacket("save_client_config", 0, context));
         }
 
         private void OpenSettings()
