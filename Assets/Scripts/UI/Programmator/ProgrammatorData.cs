@@ -29,6 +29,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
         public static void AddPage()
         {
+            if (PageCount >= 100) return;
             Codes.AddRange(new int[CELLS_PER_PAGE]);
             Values.AddRange(new string[CELLS_PER_PAGE]);
             Labels.AddRange(new string[CELLS_PER_PAGE]);
