@@ -7,8 +7,8 @@ namespace Fodinae.Scripts.UI.Programmator
 {
     public static class ProgrammatorData
     {
-        public const int COLS = 16;
-        public const int ROWS = 12;
+public const int COLS = 16;
+public const int ROWS = 12;
         public const int CELLS_PER_PAGE = COLS * ROWS;
 
         public static List<int> Codes = new();

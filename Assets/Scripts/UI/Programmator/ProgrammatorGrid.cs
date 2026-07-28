@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,6 +18,7 @@ namespace Fodinae.Scripts.UI.Programmator
         private RadialMenu _radial;
         private ObserverJoystick _joystick; 
         private bool _isOpen;
+        private bool _isRunning;
         private bool _radialShown;
         private int _radialCellIndex = -1;
         private Tooltip _tooltip;
@@ -24,6 +26,10 @@ namespace Fodinae.Scripts.UI.Programmator
         private IntegerField _pageInput;
         private Button _prevBtn;
         private Button _nextBtn;
+        private Button _saveBtn;
+        private Button _runBtn;
+        private Button _stopBtn;
+        private VisualElement _panel;
         private bool _hasSelection;
         private int _selStartRow, _selStartCol;
         private int _selEndRow, _selEndCol;
@@ -75,7 +81,8 @@ namespace Fodinae.Scripts.UI.Programmator
             dimmer.pickingMode = PickingMode.Ignore;
             _popup.Add(dimmer);
 
-            var panel = new VisualElement();
+            _panel = new VisualElement();
+            var panel = _panel;
             panel.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
             panel.style.borderTopWidth = 2;
             panel.style.borderBottomWidth = 2;
@@ -87,23 +94,32 @@ namespace Fodinae.Scripts.UI.Programmator
             panel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
             panel.style.paddingTop = 10;
             panel.style.paddingBottom = 10;
-            panel.style.paddingLeft = 20;
-            panel.style.paddingRight = 20;
+            panel.style.paddingLeft = 10;
+            panel.style.paddingRight = 10;
             panel.style.flexDirection = FlexDirection.Column;
-            panel.style.minWidth = 584;
+            panel.style.width = 618;
             panel.style.minHeight = 520;
 
             var topRow = new VisualElement();
-            topRow.style.flexDirection = FlexDirection.Row;
+            topRow.style.flexDirection = FlexDirection.Column;
             topRow.style.marginBottom = 10;
-            topRow.style.alignItems = Align.Center;
+
+            var buttonsRow = new VisualElement();
+            buttonsRow.style.flexDirection = FlexDirection.Row;
+            buttonsRow.style.alignItems = Align.Center;
+            topRow.Add(buttonsRow);
+
+            var actionRow = new VisualElement();
+            actionRow.style.flexDirection = FlexDirection.Row;
+            actionRow.style.alignItems = Align.Center;
+            actionRow.style.marginTop = 4;
+            topRow.Add(actionRow);
 
             var title = new Label("Программатор");
             title.style.fontSize = 18;
             title.style.unityFontStyleAndWeight = FontStyle.Bold;
             title.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            title.style.flexGrow = 1;
-            topRow.Add(title);
+            buttonsRow.Add(title);
 
             _prevBtn = new Button(PrevPage);
             _prevBtn.text = "<";
@@ -121,7 +137,7 @@ namespace Fodinae.Scripts.UI.Programmator
             _prevBtn.style.paddingBottom = 0;
             _prevBtn.style.paddingLeft = 2;
             _prevBtn.style.paddingRight = 2;
-            topRow.Add(_prevBtn);
+            buttonsRow.Add(_prevBtn);
 
             _pageLabel = new Label("Стр. 1/1");
             _pageLabel.style.fontSize = 12;
@@ -130,7 +146,7 @@ namespace Fodinae.Scripts.UI.Programmator
             _pageLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
             _pageLabel.style.marginLeft = 4;
             _pageLabel.style.marginRight = 4;
-            topRow.Add(_pageLabel);
+            buttonsRow.Add(_pageLabel);
 
             _nextBtn = new Button(NextPage);
             _nextBtn.text = ">";
@@ -148,7 +164,7 @@ namespace Fodinae.Scripts.UI.Programmator
             _nextBtn.style.paddingBottom = 0;
             _nextBtn.style.paddingLeft = 2;
             _nextBtn.style.paddingRight = 2;
-            topRow.Add(_nextBtn);
+            buttonsRow.Add(_nextBtn);
 
             _pageInput = new IntegerField();
             _pageInput.value = ProgrammatorData.CurrentPage + 1;
@@ -208,7 +224,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     _pageInput.SetValueWithoutNotify(ProgrammatorData.CurrentPage + 1);
                 }
             });
-            topRow.Add(_pageInput);
+            buttonsRow.Add(_pageInput);
 
             var addPageBtn = new Button(AddPageClick);
             addPageBtn.text = "+";
@@ -226,7 +242,7 @@ namespace Fodinae.Scripts.UI.Programmator
             addPageBtn.style.paddingBottom = 0;
             addPageBtn.style.paddingLeft = 2;
             addPageBtn.style.paddingRight = 2;
-            topRow.Add(addPageBtn);
+            buttonsRow.Add(addPageBtn);
 
             var removePageBtn = new Button(RemovePageClick);
             removePageBtn.text = "−";
@@ -245,7 +261,7 @@ namespace Fodinae.Scripts.UI.Programmator
             removePageBtn.style.paddingLeft = 2;
             removePageBtn.style.paddingRight = 2;
             removePageBtn.style.marginRight = 8;
-            topRow.Add(removePageBtn);
+            buttonsRow.Add(removePageBtn);
 
             var shiftUpBtn = new Button(() => ShiftSelection(0, -1));
             shiftUpBtn.text = "↑";
@@ -263,7 +279,7 @@ namespace Fodinae.Scripts.UI.Programmator
             shiftUpBtn.style.paddingBottom = 0;
             shiftUpBtn.style.paddingLeft = 2;
             shiftUpBtn.style.paddingRight = 2;
-            topRow.Add(shiftUpBtn);
+            buttonsRow.Add(shiftUpBtn);
 
             var shiftDownBtn = new Button(() => ShiftSelection(0, 1));
             shiftDownBtn.text = "↓";
@@ -281,7 +297,7 @@ namespace Fodinae.Scripts.UI.Programmator
             shiftDownBtn.style.paddingBottom = 0;
             shiftDownBtn.style.paddingLeft = 2;
             shiftDownBtn.style.paddingRight = 2;
-            topRow.Add(shiftDownBtn);
+            buttonsRow.Add(shiftDownBtn);
 
             var shiftLeftBtn = new Button(() => ShiftSelection(-1, 0));
             shiftLeftBtn.text = "←";
@@ -299,7 +315,7 @@ namespace Fodinae.Scripts.UI.Programmator
             shiftLeftBtn.style.paddingBottom = 0;
             shiftLeftBtn.style.paddingLeft = 2;
             shiftLeftBtn.style.paddingRight = 2;
-            topRow.Add(shiftLeftBtn);
+            buttonsRow.Add(shiftLeftBtn);
 
             var shiftRightBtn = new Button(() => ShiftSelection(1, 0));
             shiftRightBtn.text = "→";
@@ -318,7 +334,63 @@ namespace Fodinae.Scripts.UI.Programmator
             shiftRightBtn.style.paddingLeft = 2;
             shiftRightBtn.style.paddingRight = 2;
             shiftRightBtn.style.marginRight = 8;
-            topRow.Add(shiftRightBtn);
+            buttonsRow.Add(shiftRightBtn);
+
+            _saveBtn = new Button(SaveProgram);
+            _saveBtn.text = "💾";
+            _saveBtn.style.width = 24;
+            _saveBtn.style.height = 24;
+            _saveBtn.style.backgroundColor = Color.clear;
+            _saveBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            _saveBtn.style.fontSize = 14;
+            _saveBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _saveBtn.style.borderTopWidth = 0;
+            _saveBtn.style.borderBottomWidth = 0;
+            _saveBtn.style.borderLeftWidth = 0;
+            _saveBtn.style.borderRightWidth = 0;
+            _saveBtn.style.paddingTop = 0;
+            _saveBtn.style.paddingBottom = 0;
+            _saveBtn.style.paddingLeft = 0;
+            _saveBtn.style.paddingRight = 0;
+            actionRow.Add(_saveBtn);
+
+            _runBtn = new Button(RunProgram);
+            _runBtn.text = "▶";
+            _runBtn.style.width = 22;
+            _runBtn.style.height = 22;
+            _runBtn.style.backgroundColor = new Color(0f, 0.35f, 0f, 0.3f);
+            _runBtn.style.color = new Color(0.4f, 0.9f, 0.4f, 1f);
+            _runBtn.style.fontSize = 12;
+            _runBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _runBtn.style.borderTopWidth = 0;
+            _runBtn.style.borderBottomWidth = 0;
+            _runBtn.style.borderLeftWidth = 0;
+            _runBtn.style.borderRightWidth = 0;
+            _runBtn.style.paddingTop = 0;
+            _runBtn.style.paddingBottom = 0;
+            _runBtn.style.paddingLeft = 0;
+            _runBtn.style.paddingRight = 0;
+            _runBtn.style.marginLeft = 4;
+            actionRow.Add(_runBtn);
+
+            _stopBtn = new Button(StopProgram);
+            _stopBtn.text = "■";
+            _stopBtn.style.width = 22;
+            _stopBtn.style.height = 22;
+            _stopBtn.style.backgroundColor = new Color(0.35f, 0f, 0f, 0.3f);
+            _stopBtn.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
+            _stopBtn.style.fontSize = 12;
+            _stopBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _stopBtn.style.borderTopWidth = 0;
+            _stopBtn.style.borderBottomWidth = 0;
+            _stopBtn.style.borderLeftWidth = 0;
+            _stopBtn.style.borderRightWidth = 0;
+            _stopBtn.style.paddingTop = 0;
+            _stopBtn.style.paddingBottom = 0;
+            _stopBtn.style.paddingLeft = 0;
+            _stopBtn.style.paddingRight = 0;
+            _stopBtn.SetEnabled(false);
+            actionRow.Add(_stopBtn);
 
             var closeBtn = new Button(() => Hide());
             closeBtn.text = "×";
@@ -340,18 +412,21 @@ namespace Fodinae.Scripts.UI.Programmator
                 closeBtn.style.color = Color.white);
             closeBtn.RegisterCallback<MouseLeaveEvent>(_ =>
                 closeBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f));
-            topRow.Add(closeBtn);
+            var headerRow = new VisualElement();
+            headerRow.style.flexDirection = FlexDirection.Row;
+            headerRow.style.alignItems = Align.FlexStart;
+            topRow.style.flexGrow = 1;
+            headerRow.Add(topRow);
+            headerRow.Add(closeBtn);
+            panel.Add(headerRow);
 
-            panel.Add(topRow);
-
-            var gridScroll = new ScrollView();
-            gridScroll.style.flexGrow = 1;
-            gridScroll.style.maxHeight = ProgrammatorData.ROWS * (CELLSIZE + (CELL_GAP * 2));
+            var gridScroll = new VisualElement();
+            gridScroll.style.maxHeight = ProgrammatorData.ROWS * (CELLSIZE + (CELL_GAP * 2) + 2f);
 
             _gridContainer = new VisualElement();
             _gridContainer.style.flexDirection = FlexDirection.Row;
             _gridContainer.style.flexWrap = Wrap.Wrap;
-            _gridContainer.style.width = ProgrammatorData.COLS * (CELLSIZE + (CELL_GAP * 2));
+            _gridContainer.style.width = ProgrammatorData.COLS * (CELLSIZE + (CELL_GAP * 2) + 2f);
 
             _cells = new VisualElement[ProgrammatorData.ROWS, ProgrammatorData.COLS];
             _cellLabels = new Label[ProgrammatorData.ROWS, ProgrammatorData.COLS];
@@ -472,7 +547,13 @@ namespace Fodinae.Scripts.UI.Programmator
             }
 
             gridScroll.Add(_gridContainer);
-            panel.Add(gridScroll);
+
+            var gridRow = new VisualElement();
+            gridRow.style.flexDirection = FlexDirection.Row;
+            gridRow.style.justifyContent = Justify.Center;
+            gridRow.Add(gridScroll);
+
+            panel.Add(gridRow);
 
             _popup.Add(panel);
             _doc.rootVisualElement.Add(_popup);
@@ -1158,6 +1239,75 @@ namespace Fodinae.Scripts.UI.Programmator
             _selEndCol = newMaxCol;
         }
 
+        [System.Serializable]
+        private class ProgrammatorSave
+        {
+            public int[] Codes;
+            public string[] Labels;
+            public string[] Values;
+        }
+
+        private string SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
+
+        private void SaveProgram()
+        {
+            var data = new ProgrammatorSave
+            {
+                Codes = ProgrammatorData.Codes.ToArray(),
+                Labels = ProgrammatorData.Labels.ToArray(),
+                Values = ProgrammatorData.Values.ToArray(),
+            };
+            File.WriteAllText(SavePath, JsonUtility.ToJson(data));
+            Debug.Log("[Programmator] Program saved");
+        }
+
+        private void LoadProgramFromDisk()
+        {
+            if (!File.Exists(SavePath)) return;
+            try
+            {
+                var data = JsonUtility.FromJson<ProgrammatorSave>(File.ReadAllText(SavePath));
+                if (data.Codes == null || data.Codes.Length == 0) return;
+                int total = data.Codes.Length;
+                ProgrammatorData.Codes = new List<int>(total);
+                ProgrammatorData.Labels = new List<string>(total);
+                ProgrammatorData.Values = new List<string>(total);
+                ProgrammatorData.Codes.AddRange(data.Codes);
+                ProgrammatorData.Labels.AddRange(data.Labels ?? new string[total]);
+                ProgrammatorData.Values.AddRange(data.Values ?? new string[total]);
+                ProgrammatorData.CurrentPage = 0;
+                Debug.Log($"[Programmator] Program loaded ({total} cells)");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Programmator] Failed to load program: {e.Message}");
+            }
+        }
+
+        private void RunProgram()
+        {
+            _isRunning = true;
+            _runBtn.SetEnabled(false);
+            _stopBtn.SetEnabled(true);
+            _panel.style.borderTopColor = new Color(0.2f, 0.8f, 0.2f, 1f);
+            _panel.style.borderBottomColor = new Color(0.2f, 0.8f, 0.2f, 1f);
+            _panel.style.borderLeftColor = new Color(0.2f, 0.8f, 0.2f, 1f);
+            _panel.style.borderRightColor = new Color(0.2f, 0.8f, 0.2f, 1f);
+            Debug.Log("[Programmator] Program running");
+        }
+
+        private void StopProgram()
+        {
+            _isRunning = false;
+            _runBtn.SetEnabled(true);
+            _stopBtn.SetEnabled(false);
+            _panel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _panel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _panel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _panel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            Debug.Log("[Programmator] Program stopped");
+        }
+
         private void UpdateCell(int row, int col)
         {
             int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
@@ -1425,6 +1575,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
         public void Show()
         {
+            LoadProgramFromDisk();
             _isOpen = true;
             IsOpen = true;
             RefreshAllCells();
@@ -1433,6 +1584,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
         public void Hide()
         {
+            if (_isRunning) StopProgram();
             ClearSelection();
             _joystick.Hide();
             _radial.Hide();
