@@ -43,6 +43,24 @@ namespace Fodinae.Scripts.UI.Programmator
         private const float CELLSIZE = 32f;
         private const float CELL_GAP = 2f;
 
+        private class ProgramItem
+        {
+            public string Name;
+            public List<int> Codes = new();
+            public List<string> Labels = new();
+            public List<string> Values = new();
+        }
+
+        private readonly List<ProgramItem> _programItems = new();
+        private int _activeIndex = -1;
+        private VisualElement _programListPanel;
+        private ScrollView _listScroll;
+        private Label _programTitle;
+        private VisualElement _createContainer;
+        private Button _createBtn;
+        private TextField _createInput;
+        private VisualElement _createDialog;
+
         public static bool IsOpen { get; private set; }
 
         protected void Start()
@@ -115,11 +133,11 @@ namespace Fodinae.Scripts.UI.Programmator
             actionRow.style.marginTop = 4;
             topRow.Add(actionRow);
 
-            var title = new Label("Программатор");
-            title.style.fontSize = 18;
-            title.style.unityFontStyleAndWeight = FontStyle.Bold;
-            title.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            buttonsRow.Add(title);
+            _programTitle = new Label("Программатор");
+            _programTitle.style.fontSize = 18;
+            _programTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _programTitle.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
+            buttonsRow.Add(_programTitle);
 
             _prevBtn = new Button(PrevPage);
             _prevBtn.text = "<";
@@ -392,7 +410,7 @@ namespace Fodinae.Scripts.UI.Programmator
             _stopBtn.SetEnabled(false);
             actionRow.Add(_stopBtn);
 
-            var closeBtn = new Button(() => Hide());
+            var closeBtn = new Button(CloseProgram);
             closeBtn.text = "×";
             closeBtn.style.width = 24;
             closeBtn.style.height = 24;
@@ -556,6 +574,215 @@ namespace Fodinae.Scripts.UI.Programmator
             panel.Add(gridRow);
 
             _popup.Add(panel);
+
+            _programListPanel = new VisualElement();
+            _programListPanel.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
+            _programListPanel.style.borderTopWidth = 2;
+            _programListPanel.style.borderBottomWidth = 2;
+            _programListPanel.style.borderLeftWidth = 2;
+            _programListPanel.style.borderRightWidth = 2;
+            _programListPanel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _programListPanel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _programListPanel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _programListPanel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _programListPanel.style.paddingTop = 10;
+            _programListPanel.style.paddingBottom = 10;
+            _programListPanel.style.paddingLeft = 20;
+            _programListPanel.style.paddingRight = 20;
+            _programListPanel.style.flexDirection = FlexDirection.Column;
+            _programListPanel.style.width = 400;
+            _programListPanel.style.minHeight = 300;
+            _programListPanel.style.display = DisplayStyle.None;
+
+            var listHeaderRow = new VisualElement();
+            listHeaderRow.style.flexDirection = FlexDirection.Row;
+            listHeaderRow.style.marginBottom = 10;
+
+            var listTitle = new Label("Программы");
+            listTitle.style.fontSize = 18;
+            listTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            listTitle.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
+            listTitle.style.flexGrow = 1;
+            listHeaderRow.Add(listTitle);
+
+            var listCloseBtn = new Button(() => Hide());
+            listCloseBtn.text = "\u00d7";
+            listCloseBtn.style.width = 24;
+            listCloseBtn.style.height = 24;
+            listCloseBtn.style.backgroundColor = Color.clear;
+            listCloseBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            listCloseBtn.style.fontSize = 18;
+            listCloseBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            listCloseBtn.style.borderTopWidth = 0;
+            listCloseBtn.style.borderBottomWidth = 0;
+            listCloseBtn.style.borderLeftWidth = 0;
+            listCloseBtn.style.borderRightWidth = 0;
+            listCloseBtn.style.paddingTop = 0;
+            listCloseBtn.style.paddingBottom = 0;
+            listCloseBtn.style.paddingLeft = 0;
+            listCloseBtn.style.paddingRight = 0;
+            listCloseBtn.RegisterCallback<MouseEnterEvent>(_ =>
+                listCloseBtn.style.color = Color.white);
+            listCloseBtn.RegisterCallback<MouseLeaveEvent>(_ =>
+                listCloseBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f));
+            listHeaderRow.Add(listCloseBtn);
+
+            _programListPanel.Add(listHeaderRow);
+
+            _listScroll = new ScrollView();
+            _listScroll.style.flexGrow = 1;
+            _listScroll.style.minHeight = 200;
+            _programListPanel.Add(_listScroll);
+
+            _createContainer = new VisualElement();
+            _createContainer.style.flexDirection = FlexDirection.Column;
+            _createContainer.style.marginTop = 10;
+
+            _createBtn = new Button(ShowCreateInput);
+            _createBtn.text = "+ Создать программу";
+            _createBtn.style.width = Length.Percent(100);
+            _createBtn.style.height = 30;
+            _createBtn.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f);
+            _createBtn.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
+            _createBtn.style.fontSize = 14;
+            _createBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            _createBtn.style.borderTopWidth = 1;
+            _createBtn.style.borderBottomWidth = 1;
+            _createBtn.style.borderLeftWidth = 1;
+            _createBtn.style.borderRightWidth = 1;
+            _createBtn.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _createBtn.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _createBtn.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _createBtn.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _createBtn.RegisterCallback<MouseEnterEvent>(_ =>
+                _createBtn.style.backgroundColor = new Color(0.2f, 0.2f, 0.2f, 1f));
+            _createBtn.RegisterCallback<MouseLeaveEvent>(_ =>
+                _createBtn.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f));
+            _createContainer.Add(_createBtn);
+
+            _programListPanel.Add(_createContainer);
+
+            _popup.Add(_programListPanel);
+
+            _createDialog = new VisualElement();
+            _createDialog.style.position = Position.Absolute;
+            _createDialog.style.left = 0;
+            _createDialog.style.top = 0;
+            _createDialog.style.right = 0;
+            _createDialog.style.bottom = 0;
+            _createDialog.style.justifyContent = Justify.Center;
+            _createDialog.style.alignItems = Align.Center;
+            _createDialog.style.display = DisplayStyle.None;
+
+            var dialogPanel = new VisualElement();
+            dialogPanel.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
+            dialogPanel.style.borderTopWidth = 2;
+            dialogPanel.style.borderBottomWidth = 2;
+            dialogPanel.style.borderLeftWidth = 2;
+            dialogPanel.style.borderRightWidth = 2;
+            dialogPanel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            dialogPanel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            dialogPanel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            dialogPanel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            dialogPanel.style.paddingTop = 16;
+            dialogPanel.style.paddingBottom = 16;
+            dialogPanel.style.paddingLeft = 20;
+            dialogPanel.style.paddingRight = 20;
+            dialogPanel.style.flexDirection = FlexDirection.Column;
+            dialogPanel.style.alignItems = Align.Stretch;
+            dialogPanel.style.width = 350;
+
+            var dialogTitle = new Label("Новая программа");
+            dialogTitle.style.fontSize = 16;
+            dialogTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
+            dialogTitle.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
+            dialogTitle.style.marginBottom = 12;
+            dialogPanel.Add(dialogTitle);
+
+            _createInput = new TextField();
+            _createInput.value = $"Программа {_programItems.Count + 1}";
+            _createInput.style.height = 32;
+            _createInput.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 1f);
+            _createInput.style.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+            _createInput.style.fontSize = 14;
+            _createInput.style.borderTopWidth = 1;
+            _createInput.style.borderBottomWidth = 1;
+            _createInput.style.borderLeftWidth = 1;
+            _createInput.style.borderRightWidth = 1;
+            _createInput.style.borderTopColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _createInput.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _createInput.style.borderLeftColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _createInput.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            _createInput.style.paddingLeft = 8;
+            _createInput.style.marginBottom = 16;
+            _createInput.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                var ti = _createInput.Q("unity-text-input");
+                if (ti != null)
+                {
+                    ti.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 1f);
+                    ti.style.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+                    ti.style.fontSize = 14;
+                    ti.style.borderTopWidth = 0;
+                    ti.style.borderBottomWidth = 0;
+                    ti.style.borderLeftWidth = 0;
+                    ti.style.borderRightWidth = 0;
+                }
+            });
+            dialogPanel.Add(_createInput);
+
+            _createInput.RegisterCallback<KeyDownEvent>(e =>
+            {
+                if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
+                {
+                    CreateNewProgram(_createInput.value);
+                }
+            });
+
+            var dialogButtons = new VisualElement();
+            dialogButtons.style.flexDirection = FlexDirection.Row;
+            dialogButtons.style.justifyContent = Justify.FlexEnd;
+
+            var dialogCancelBtn = new Button(HideCreateInput);
+            dialogCancelBtn.text = "Отмена";
+            dialogCancelBtn.style.height = 30;
+            dialogCancelBtn.style.minWidth = 80;
+            dialogCancelBtn.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f);
+            dialogCancelBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
+            dialogCancelBtn.style.fontSize = 14;
+            dialogCancelBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            dialogCancelBtn.style.borderTopWidth = 1;
+            dialogCancelBtn.style.borderBottomWidth = 1;
+            dialogCancelBtn.style.borderLeftWidth = 1;
+            dialogCancelBtn.style.borderRightWidth = 1;
+            dialogCancelBtn.style.borderTopColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            dialogCancelBtn.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            dialogCancelBtn.style.borderLeftColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            dialogCancelBtn.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            dialogCancelBtn.style.marginRight = 8;
+            dialogButtons.Add(dialogCancelBtn);
+
+            var dialogConfirmBtn = new Button(() => CreateNewProgram(_createInput.value));
+            dialogConfirmBtn.text = "Создать";
+            dialogConfirmBtn.style.height = 30;
+            dialogConfirmBtn.style.minWidth = 80;
+            dialogConfirmBtn.style.backgroundColor = new Color(0f, 0.3f, 0f, 0.3f);
+            dialogConfirmBtn.style.color = new Color(0.4f, 0.9f, 0.4f, 1f);
+            dialogConfirmBtn.style.fontSize = 14;
+            dialogConfirmBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+            dialogConfirmBtn.style.borderTopWidth = 1;
+            dialogConfirmBtn.style.borderBottomWidth = 1;
+            dialogConfirmBtn.style.borderLeftWidth = 1;
+            dialogConfirmBtn.style.borderRightWidth = 1;
+            dialogConfirmBtn.style.borderTopColor = new Color(0.2f, 0.5f, 0.2f, 1f);
+            dialogConfirmBtn.style.borderBottomColor = new Color(0.2f, 0.5f, 0.2f, 1f);
+            dialogConfirmBtn.style.borderLeftColor = new Color(0.2f, 0.5f, 0.2f, 1f);
+            dialogConfirmBtn.style.borderRightColor = new Color(0.2f, 0.5f, 0.2f, 1f);
+            dialogButtons.Add(dialogConfirmBtn);
+
+            dialogPanel.Add(dialogButtons);
+            _createDialog.Add(dialogPanel);
+            _popup.Add(_createDialog);
             _doc.rootVisualElement.Add(_popup);
 
             _radial = new RadialMenu();
@@ -1284,6 +1511,136 @@ namespace Fodinae.Scripts.UI.Programmator
             }
         }
 
+        private void ShowProgramList()
+        {
+            ClearSelection();
+            _joystick.Hide();
+            _radial.Hide();
+            _radialShown = false;
+            _radialCellIndex = -1;
+            if (_isRunning) StopProgram();
+            _programTitle.text = "Программатор";
+            RefreshProgramList();
+            _panel.style.display = DisplayStyle.None;
+            _programListPanel.style.display = DisplayStyle.Flex;
+            _activeIndex = -1;
+        }
+
+        private void OpenProgram(int index)
+        {
+            if (index < 0 || index >= _programItems.Count) return;
+            var item = _programItems[index];
+            ProgrammatorData.Codes = new List<int>(item.Codes);
+            ProgrammatorData.Labels = new List<string>(item.Labels);
+            ProgrammatorData.Values = new List<string>(item.Values);
+            _activeIndex = index;
+            ProgrammatorData.CurrentPage = 0;
+            _programTitle.text = item.Name;
+            _programListPanel.style.display = DisplayStyle.None;
+            _panel.style.display = DisplayStyle.Flex;
+            RefreshAllCells();
+        }
+
+        private void CloseProgram()
+        {
+            if (_isRunning) StopProgram();
+            if (_activeIndex >= 0 && _activeIndex < _programItems.Count)
+            {
+                var item = _programItems[_activeIndex];
+                item.Codes = new List<int>(ProgrammatorData.Codes);
+                item.Labels = new List<string>(ProgrammatorData.Labels);
+                item.Values = new List<string>(ProgrammatorData.Values);
+            }
+            ShowProgramList();
+        }
+
+        private void CreateNewProgram(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                name = $"Программа {_programItems.Count + 1}";
+            var item = new ProgramItem
+            {
+                Name = name,
+                Codes = new List<int>(new int[ProgrammatorData.CELLS_PER_PAGE]),
+                Labels = new List<string>(new string[ProgrammatorData.CELLS_PER_PAGE]),
+                Values = new List<string>(new string[ProgrammatorData.CELLS_PER_PAGE]),
+            };
+            _programItems.Add(item);
+            HideCreateInput();
+            OpenProgram(_programItems.Count - 1);
+        }
+
+        private void ShowCreateInput()
+        {
+            _createInput.value = $"Программа {_programItems.Count + 1}";
+            _createDialog.style.display = DisplayStyle.Flex;
+            _createInput.Focus();
+        }
+
+        private void HideCreateInput()
+        {
+            _createDialog.style.display = DisplayStyle.None;
+        }
+
+        private void DeleteProgram(int index)
+        {
+            if (index < 0 || index >= _programItems.Count) return;
+            _programItems.RemoveAt(index);
+            RefreshProgramList();
+        }
+
+        private void RefreshProgramList()
+        {
+            _listScroll.Clear();
+            for (int i = 0; i < _programItems.Count; i++)
+            {
+                int idx = i;
+                var item = _programItems[i];
+                var row = new VisualElement();
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.alignItems = Align.Center;
+                row.style.paddingTop = 6;
+                row.style.paddingBottom = 6;
+                row.style.paddingLeft = 8;
+                row.style.paddingRight = 8;
+                row.style.borderBottomWidth = 1;
+                row.style.borderBottomColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+                var nameLabel = new Label(item.Name);
+                nameLabel.style.flexGrow = 1;
+                nameLabel.style.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+                nameLabel.style.fontSize = 14;
+                nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+                row.Add(nameLabel);
+
+                var delBtn = new Button(() => DeleteProgram(idx));
+                delBtn.text = "\u00d7";
+                delBtn.style.width = 22;
+                delBtn.style.height = 22;
+                delBtn.style.backgroundColor = new Color(0.3f, 0f, 0f, 0.3f);
+                delBtn.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
+                delBtn.style.fontSize = 14;
+                delBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
+                delBtn.style.borderTopWidth = 0;
+                delBtn.style.borderBottomWidth = 0;
+                delBtn.style.borderLeftWidth = 0;
+                delBtn.style.borderRightWidth = 0;
+                delBtn.style.paddingTop = 0;
+                delBtn.style.paddingBottom = 0;
+                delBtn.style.paddingLeft = 0;
+                delBtn.style.paddingRight = 0;
+                delBtn.style.marginLeft = 8;
+                row.Add(delBtn);
+
+                row.RegisterCallback<ClickEvent>(_ => OpenProgram(idx));
+                row.RegisterCallback<MouseEnterEvent>(_ =>
+                    row.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f));
+                row.RegisterCallback<MouseLeaveEvent>(_ =>
+                    row.style.backgroundColor = Color.clear);
+
+                _listScroll.Add(row);
+            }
+        }
+
         private void RunProgram()
         {
             _isRunning = true;
@@ -1451,7 +1808,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 return;
             }
 
-            // ESC closes the programmator window or clears selection
+            // ESC closes the programmator or goes back to list
             if (Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 if (_hasSelection && !_radialShown)
@@ -1462,6 +1819,11 @@ namespace Fodinae.Scripts.UI.Programmator
                 if (_selectedCells.Count > 0 && !_radialShown)
                 {
                     ClearSelection();
+                    return;
+                }
+                if (_panel.style.display == DisplayStyle.Flex)
+                {
+                    CloseProgram();
                     return;
                 }
                 Hide();
@@ -1575,11 +1937,10 @@ namespace Fodinae.Scripts.UI.Programmator
 
         public void Show()
         {
-            LoadProgramFromDisk();
             _isOpen = true;
             IsOpen = true;
-            RefreshAllCells();
             _popup.style.display = DisplayStyle.Flex;
+            ShowProgramList();
         }
 
         public void Hide()
@@ -1592,6 +1953,9 @@ namespace Fodinae.Scripts.UI.Programmator
             _radialCellIndex = -1;
             _isOpen = false;
             IsOpen = false;
+            HideCreateInput();
+            _programListPanel.style.display = DisplayStyle.None;
+            _panel.style.display = DisplayStyle.None;
             _popup.style.display = DisplayStyle.None;
         }
 
