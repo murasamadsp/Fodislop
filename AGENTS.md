@@ -134,9 +134,10 @@ Assets/
         LogiCalcFormatter.cs      # Форматтер вычислений для SmartFormat
       Programmator/
         ProgrammatorData.cs          # Данные программатора
-        ProgrammatorGrid.cs          # Сетка программатора
+        ProgrammatorGrid.cs          # Сетка программатора + список программ + save/load
         ProgrammatorTextureRegistry.cs # Реестр текстур программатора
         RadialMenu.cs                # Радиальное меню программатора
+        ObserverJoystick.cs          # Джойстик для Observer-операторов
       ChatInput.cs                # Управление фокусом чата (блокировка управления)
       ClickContextResolver.cs     # Разрешение clickContext-путей в VisualElement
       FloatingChatBubble.cs       # Всплывающее сообщение над персонажем
@@ -316,9 +317,61 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 
 ### 3.7 Программатор (Programmator)
 
-- **ProgrammatorGrid**: Графическая сетка для визуального программирования алгоритмов поведения робота.
-- **ProgrammatorData**: Модель данных и структура алгоритма робота.
-- **RadialMenu**: Радиальное круговое меню выбора команд для быстрого размещения на сетке программатора.
+Программатор — визуальный редактор алгоритмов поведения робота. Открывается через кнопку в HUD игрока (`PlayerHUDView.cs:988`).
+
+**Навигация:**
+```
+HUD [Программатор]
+  ↓ Show()
+  [Список программ] → клик по программе → [Сетка редактора]
+                    → [+ Создать] → модальное окно с TextField → [Сетка редактора]
+  × или ESC в списке → Hide()
+  × или ESC в сетке → CloseProgram() → сохранение данных → [Список программ]
+```
+
+**Компоненты:**
+
+| Компонент | Файл | Назначение |
+|---|---|---|
+| `ProgrammatorGrid` | `ProgrammatorGrid.cs` | Главный UI: список программ, сетка, сохранение, run/stop |
+| `ProgrammatorData` | `ProgrammatorData.cs` | Статические данные: Codes/Labels/Values, категории, имена операторов, undo/redo |
+| `ProgrammatorTextureRegistry` | `ProgrammatorTextureRegistry.cs` | Загрузка текстур операторов из `Resources/Programmator/{id}` |
+| `RadialMenu` | `RadialMenu.cs` | Двухкольцевое радиальное меню выбора категории → оператора |
+| `ObserverJoystick` | `ObserverJoystick.cs` | 8-направленный джойстик для операторов Observer (drag-to-shift) |
+
+**Структура UI сетки (`ProgrammatorGrid.cs`):**
+```
+_popup (absolute, fullscreen, center)
+  dimmer
+  _programListPanel (column, ~400px, shown при ShowProgramList())
+    header: "Программы" + × close
+    _listScroll (ScrollView): строки программ (клик → открыть, × удалить)
+    _createContainer: [+ Создать программу] (показывает _createDialog)
+  _panel (grid panel, shown при OpenProgram())
+    headerRow (row)
+      topRow (column, flexGrow: 1)
+        buttonsRow (row): [имя программы] [<][Стр. 1/1][>][+][−][↑][↓][←][→]
+        actionRow (row): [💾 Save][▶ Run][■ Stop]
+      closeBtn (×) — прижат вправо
+    gridRow (row, justifyCenter)
+      gridScroll (VisualElement)
+        _gridContainer (608px, 16×12 ячеек)
+  _createDialog (absolute overlay) — модальное окно создания программы
+    panel: "Новая программа" + TextField + [Отмена] [Создать]
+```
+
+**Ключевые детали реализации:**
+- **Список программ сессионный**: `List<ProgramItem> _programItems` в памяти. Создание/удаление без сохранения на диск.
+- `ProgramItem` содержит `Name`, `Codes/Labels/Values` как `List<>`
+- При открытии программы → данные копируются в статический `ProgrammatorData`, при закрытии — копируются обратно
+- **Save (💾)** сохраняет текущую программу в `programmator.json` через `JsonUtility` (единственный файл)
+- **Run/Stop** — чисто визуальные (зелёная рамка панели), без логики выполнения
+- **`_createDialog`**: Modal dialog with `position: Absolute` overlay, dark-styled TextField (inner `unity-text-input` darkened via `AttachToPanelEvent`), Enter confirms
+- **Название программы** отображается в шапке сетки через `_programTitle` Label
+- `CELLSIZE = 32f`, `CELL_GAP = 2f`, сетка `16×12 = 192` ячеек
+- Ширина контейнера: `16 * (32 + 4 + 2) = 608px`
+- Ширина панели: `648px` (608 + 20px padding с каждой стороны)
+- CloseBtn в headerRow (не в buttonsRow) с `flexGrow: 1` на topRow для прижатия вправо
 
 ## 4. Стандарты разработки
 
@@ -369,6 +422,10 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 6. **UI Toolkit**: Темы привязаны к GUID. Missing Reference в `PanelSettings` = пустой UI. Интермиттентный баг: UI рендерится но не принимает клики — лечится перезаписью `panelSettings` в MainMenu.
 7. **Сортировка**: `SingleMeshTerrainRenderer` рисуется на `Sorting Order = -1000` (под спрайтами роботов).
 8. **CompositionRoot vs GameLifetimeScope**: Сейчас CompositionRoot статический (BeforeSceneLoad), GameLifetimeScope есть но не обязателен. Для `[Inject]` на MonoBehaviours — добавь GameLifetimeScope в сцену.
+9. **ProgrammatorGrid — ширина контейнера**: `_gridContainer.width = COLS * (CELLSIZE + CELL_GAP*2 + 2f)` — `+2f` обязателен из-за `borderWidth: 1` на каждой ячейке (UI Toolkit content-box модель).
+10. **ProgrammatorGrid — два UI-слоя**: `_popup` содержит три элемента: `dimmer`, `_panel` (сетка) и `_programListPanel` (список). Показывается только один из панельных слоёв за раз; `_createDialog` — абсолютный оверлей поверх обоих.
+11. **ESC-навигация в программаторе**: Если открыта сетка, ESC возвращает в список программ (с сохранением данных). Если открыт список, ESC закрывает программатор. Если открыт диалог создания, ESC его не закрывает (только × или Отмена).
+12. **Список программ сессионный**: `_programItems` живёт только в RAM. Созданные программы теряются при перезапуске. Единственный файл на диске — `programmator.json` (через Save).
 
 ## 6. Рабочий процесс (Workflow)
 
