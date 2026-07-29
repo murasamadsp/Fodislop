@@ -128,7 +128,8 @@ namespace Fodinae.Scripts.Game.Managers
 
         // Runtime-created components never reach GameLifetimeScope's startup injection
         // scan — inject explicitly so their [Inject] fields are filled immediately.
-        private static void AddInjectedComponent<T>(GameObject go) where T : Component
+        private static void AddInjectedComponent<T>(GameObject go)
+            where T : Component
         {
             var comp = go.AddComponent<T>();
             Fodinae.Scripts.Core.ServiceLocator.Inject(comp);

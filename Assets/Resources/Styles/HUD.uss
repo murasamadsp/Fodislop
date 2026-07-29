@@ -93,6 +93,18 @@
 .hud-title-row {
     flex-direction: row;
     margin-bottom: 10px;
+    align-items: center;
+}
+
+.hud-clan-button {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    padding: 0;
+    margin-left: 4px;
+    background-color: rgb(77, 77, 77);
+    border-width: 1px;
+    border-color: rgb(102, 102, 102);
 }
 
 .hud-panel .hud-title-row {

@@ -138,11 +138,7 @@ namespace Fodinae.Scripts.UI
             _mainPage.Add(CreateButton("Выйти", QuitGame));
 
             var debugDivider = new Label("═════ Отладка ═════");
-            debugDivider.style.fontSize = 12;
-            debugDivider.style.color = new Color(0.5f, 0.5f, 0.5f, 1f);
-            debugDivider.style.marginTop = 10;
-            debugDivider.style.marginBottom = 6;
-            debugDivider.style.unityTextAlign = TextAnchor.MiddleCenter;
+            debugDivider.AddToClassList("pause-debug-divider");
             _mainPage.Add(debugDivider);
 
             _mainPage.Add(CreateButton("Тест: Kick сервером", () =>

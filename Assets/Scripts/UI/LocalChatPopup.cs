@@ -41,51 +41,16 @@ namespace Fodinae.Scripts.UI
         private void CreateUI()
         {
             _overlay = new VisualElement();
-            _overlay.style.position = Position.Absolute;
-            _overlay.style.left = new Length(50, LengthUnit.Percent);
-            _overlay.style.top = new Length(50, LengthUnit.Percent);
-            _overlay.style.translate = new Translate(new Length(-50, LengthUnit.Percent), new Length(-50, LengthUnit.Percent));
-            _overlay.style.width = 400;
-            _overlay.style.height = 36;
-            _overlay.style.backgroundColor = new Color(0.06f, 0.06f, 0.06f, 0.92f);
-            _overlay.style.borderTopWidth = 2;
-            _overlay.style.borderBottomWidth = 2;
-            _overlay.style.borderLeftWidth = 2;
-            _overlay.style.borderRightWidth = 2;
-            _overlay.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _overlay.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _overlay.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _overlay.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _overlay.style.paddingTop = 2;
-            _overlay.style.paddingBottom = 2;
-            _overlay.style.paddingLeft = 4;
-            _overlay.style.paddingRight = 4;
-            _overlay.style.flexDirection = FlexDirection.Row;
-            _overlay.style.alignItems = Align.Center;
+            _overlay.AddToClassList("lchat-overlay");
 
             var prompt = new Label(">");
-            prompt.style.fontSize = 14;
-            prompt.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            prompt.style.marginRight = 4;
-            prompt.style.unityFontStyleAndWeight = FontStyle.Bold;
+            prompt.AddToClassList("lchat-prompt");
             _overlay.Add(prompt);
 
             _inputField = new TextField();
             _inputField.selectAllOnFocus = false;
             _inputField.selectAllOnMouseUp = false;
-            _inputField.style.flexGrow = 1;
-            _inputField.style.fontSize = 14;
-            _inputField.style.color = Color.white;
-            _inputField.style.backgroundColor = new Color(0, 0, 0, 0);
-            _inputField.style.borderTopWidth = 0;
-            _inputField.style.borderBottomWidth = 0;
-            _inputField.style.borderLeftWidth = 0;
-            _inputField.style.borderRightWidth = 0;
-            _inputField.style.paddingTop = 0;
-            _inputField.style.paddingBottom = 0;
-            _inputField.style.paddingLeft = 0;
-            _inputField.style.paddingRight = 0;
-            _inputField.style.unityFontStyleAndWeight = FontStyle.Normal;
+            _inputField.AddToClassList("lchat-input");
             _inputField.maxLength = Fodinae.Scripts.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxLocalChatLength ?? 20;
             _overlay.Add(_inputField);
 
@@ -107,14 +72,7 @@ namespace Fodinae.Scripts.UI
 
             if (_internalInput != null)
             {
-                _internalInput.style.backgroundColor = new Color(0, 0, 0, 0);
-                _internalInput.style.borderTopWidth = 0;
-                _internalInput.style.borderBottomWidth = 0;
-                _internalInput.style.borderLeftWidth = 0;
-                _internalInput.style.borderRightWidth = 0;
-                _internalInput.style.paddingTop = 0;
-                _internalInput.style.paddingBottom = 0;
-                _internalInput.style.color = Color.white;
+                _internalInput.AddToClassList("lchat-internal-input");
             }
 
             _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
@@ -122,6 +80,12 @@ namespace Fodinae.Scripts.UI
             if (uss != null)
             {
                 _inputField.styleSheets.Add(uss);
+            }
+
+            var chatUss = Resources.Load<StyleSheet>("Styles/Chat");
+            if (chatUss != null)
+            {
+                _overlay.styleSheets.Add(chatUss);
             }
         }
 
