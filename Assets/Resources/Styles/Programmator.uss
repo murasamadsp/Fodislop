@@ -222,7 +222,91 @@
     border-color: rgba(64, 64, 64, 1);
     border-width: 1px;
     margin: 2px;
+    overflow: visible;
 }
+
+/* ─── Cell Input Fields ─── */
+.programmator-cell-text-input {
+    position: absolute;
+    background-color: transparent;
+    --unity-cursor-color: rgba(255, 255, 255, 1);
+    color: rgba(204, 179, 128, 1);
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+.programmator-cell-text-input-inner {
+    background-color: transparent;
+    color: rgba(204, 179, 128, 1);
+    font-size: 9px;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    -unity-text-align: middle-center;
+}
+
+.programmator-cell-num-input {
+    position: absolute;
+    background-color: transparent;
+    --unity-cursor-color: rgba(255, 255, 255, 1);
+    color: rgba(204, 179, 128, 1);
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+.programmator-cell-num-input-inner {
+    background-color: transparent;
+    color: rgba(204, 179, 128, 1);
+    font-size: 9px;
+    border-width: 0;
+    padding: 0;
+    margin: 0;
+    -unity-text-align: middle-center;
+}
+
+/* ─── Cell Input Positions ─── */
+.programmator-cell-input-pos-label  { left: 1px; top: 11px; }
+.programmator-cell-input-pos-goto   { left: 12px; top: 11px; }
+.programmator-cell-input-pos-gosub  { left: 8px; top: 11px; }
+.programmator-cell-input-pos-if     { left: 5px; top: 20px;  }
+.programmator-cell-input-pos-debug  { left: 16px; top: 18px; }
+.programmator-cell-input-pos-var     { left: 1px; top: 6px; }
+.programmator-cell-input-pos-writestate { left: 7px; top: 16px; }
+.programmator-cell-input-pos-readstate  { left: 5px; top: 16px; }
+.programmator-cell-input-pos-state   { left: 7px; top: 18px; }
+.programmator-cell-input-pos-compare { left: 9px; top: 14px; }
+.programmator-cell-input-pos-round   { left: 6px; top: 11px; }
+.programmator-cell-input-pos-setnum  { left: 7px; top: 19px; }
+.programmator-cell-input-pos-varop1  { left: 3px; top: 2px; }
+.programmator-cell-input-pos-varop2  { left: 5px; top: 19px; }
+.programmator-cell-num-pos-var      { left: 1px; top: 20px; }
+.programmator-cell-num-pos-setnum   { left: 2px; top: 2px; }
+
+/* ─── Cell Input Sizes ─── */
+.programmator-cell-input-sz-label  { width: 17px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-goto   { width: 17px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-gosub  { width: 17px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-if     { width: 17px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-debug  { width: 48px; height: 14px; font-size: 9px; }
+.programmator-cell-input-sz-var     { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-writestate { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-readstate  { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-state   { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-compare { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-round   { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-setnum  { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-varop1  { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-input-sz-varop2  { width: 19px; height: 9px; font-size: 9px; }
+.programmator-cell-num-sz-var      { width: 27px; height: 9px; font-size: 9px; }
+.programmator-cell-num-sz-setnum   { width: 27px; height: 9px; font-size: 9px; }
 
 .programmator-cell:hover {
     border-color: rgba(255, 214, 0, 1);

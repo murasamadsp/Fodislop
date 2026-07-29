@@ -15,6 +15,9 @@ namespace Fodinae.Scripts.UI.Programmator
         private VisualElement _gridContainer;
         private VisualElement[,] _cells;
         private Label[,] _cellLabels;
+        private TextField[,] _cellTextInputs;
+        private TextField[,] _cellTextInputs2;
+        private TextField[,] _cellNumInputs;
         private RadialMenu _radial;
         private ObserverJoystick _joystick; 
         private bool _isOpen;
@@ -204,6 +207,9 @@ namespace Fodinae.Scripts.UI.Programmator
 
             _cells = new VisualElement[ProgrammatorData.ROWS, ProgrammatorData.COLS];
             _cellLabels = new Label[ProgrammatorData.ROWS, ProgrammatorData.COLS];
+            _cellTextInputs = new TextField[ProgrammatorData.ROWS, ProgrammatorData.COLS];
+            _cellTextInputs2 = new TextField[ProgrammatorData.ROWS, ProgrammatorData.COLS];
+            _cellNumInputs = new TextField[ProgrammatorData.ROWS, ProgrammatorData.COLS];
 
             for (int i = 0; i < ProgrammatorData.ROWS; i++)
             {
@@ -229,10 +235,11 @@ namespace Fodinae.Scripts.UI.Programmator
                         _tooltip?.UpdatePosition(evt.position);
                     });
 
-                    // LMB — selection
+                    // LMB — selection (ignore clicks on input fields)
                     cell.RegisterCallback<PointerDownEvent>(evt =>
                     {
                         if (evt.button != 0) return;
+                        if (evt.target is TextField) return;
 
                         if (_radialShown)
                         {
@@ -282,6 +289,57 @@ namespace Fodinae.Scripts.UI.Programmator
                     label.AddToClassList("programmator-cell-label");
                     label.pickingMode = PickingMode.Ignore;
                     cell.Add(label);
+
+                    var textInput = new TextField();
+                    textInput.AddToClassList("programmator-cell-text-input");
+                    textInput.style.display = DisplayStyle.None;
+                    textInput.RegisterCallback<AttachToPanelEvent>(_ =>
+                    {
+                        var ti = textInput.Q("unity-text-input");
+                        ti?.AddToClassList("programmator-cell-text-input-inner");
+                    });
+                    textInput.RegisterValueChangedCallback(evt =>
+                    {
+                        int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
+                                  + (row * ProgrammatorData.COLS) + col;
+                        ProgrammatorData.Labels[idx] = evt.newValue;
+                    });
+                    cell.Add(textInput);
+                    _cellTextInputs[row, col] = textInput;
+
+                    var numInput = new TextField();
+                    numInput.AddToClassList("programmator-cell-num-input");
+                    numInput.style.display = DisplayStyle.None;
+                    numInput.RegisterCallback<AttachToPanelEvent>(_ =>
+                    {
+                        var ti = numInput.Q("unity-text-input");
+                        ti?.AddToClassList("programmator-cell-num-input-inner");
+                    });
+                    numInput.RegisterValueChangedCallback(evt =>
+                    {
+                        int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
+                                  + (row * ProgrammatorData.COLS) + col;
+                        ProgrammatorData.Values[idx] = evt.newValue;
+                    });
+                    cell.Add(numInput);
+                    _cellNumInputs[row, col] = numInput;
+
+                    var textInput2 = new TextField();
+                    textInput2.AddToClassList("programmator-cell-text-input");
+                    textInput2.style.display = DisplayStyle.None;
+                    textInput2.RegisterCallback<AttachToPanelEvent>(_ =>
+                    {
+                        var ti = textInput2.Q("unity-text-input");
+                        ti?.AddToClassList("programmator-cell-text-input-inner");
+                    });
+                    textInput2.RegisterValueChangedCallback(evt =>
+                    {
+                        int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
+                                  + (row * ProgrammatorData.COLS) + col;
+                        ProgrammatorData.Values[idx] = evt.newValue;
+                    });
+                    cell.Add(textInput2);
+                    _cellTextInputs2[row, col] = textInput2;
 
                     _cells[row, col] = cell;
                     _cellLabels[row, col] = label;
@@ -1248,6 +1306,291 @@ namespace Fodinae.Scripts.UI.Programmator
                 cell.AddToClassList("programmator-cell-unknown");
                 string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? n : string.Empty;
                 label.text = name;
+            }
+
+            UpdateInputFields(row, col, idx);
+        }
+
+        private static bool NeedsTextInput(ProgAction action)
+        {
+            return action == ProgAction.Label
+                || action == ProgAction.Goto
+                || action == ProgAction.Call
+                || action == ProgAction.CallArg
+                || action == ProgAction.CallState
+                || action == ProgAction.YesNoGoto
+                || action == ProgAction.NoYesGoto
+                || action == ProgAction.CallWhenDied
+                || action == ProgAction.DebugPause
+                || action == ProgAction.DebugShow
+                || action == ProgAction.WriteStateToVar
+                || action == ProgAction.ReadVarToState
+                || (action >= ProgAction.AddStateToVar && action <= ProgAction.SubStateToVar)
+                || (action >= ProgAction.VarLessThanState && action <= ProgAction.VarNotEqualsState)
+                || (action >= ProgAction.VarGreaterThanNumber && action <= ProgAction.VarNotEqualsNumber)
+                || (action >= ProgAction.VarRound && action <= ProgAction.VarFloor)
+                || (action >= ProgAction.SetNumberToVar && action <= ProgAction.SubNumberToVar)
+                || (action >= ProgAction.AddVarToVar && action <= ProgAction.SubVarToVar);
+        }
+
+        private static bool NeedsNumInput(ProgAction action)
+        {
+            return (action >= ProgAction.VarGreaterThanNumber && action <= ProgAction.VarNotEqualsNumber)
+                || (action >= ProgAction.SetNumberToVar && action <= ProgAction.SubNumberToVar);
+        }
+
+        private static bool NeedsTextInput2(ProgAction action)
+        {
+            return action >= ProgAction.AddVarToVar && action <= ProgAction.SubVarToVar;
+        }
+
+        private static readonly string[] TextPosClasses =
+        {
+            "programmator-cell-input-pos-label",
+            "programmator-cell-input-pos-goto",
+            "programmator-cell-input-pos-gosub",
+            "programmator-cell-input-pos-if",
+            "programmator-cell-input-pos-debug",
+            "programmator-cell-input-pos-var",
+            "programmator-cell-input-pos-writestate",
+            "programmator-cell-input-pos-readstate",
+            "programmator-cell-input-pos-state",
+            "programmator-cell-input-pos-compare",
+            "programmator-cell-input-pos-round",
+            "programmator-cell-input-pos-setnum",
+            "programmator-cell-input-pos-varop1",
+        };
+
+        private static readonly string[] Text2PosClasses =
+        {
+            "programmator-cell-input-pos-varop2",
+        };
+
+        private static readonly string[] NumPosClasses =
+        {
+            "programmator-cell-num-pos-var",
+            "programmator-cell-num-pos-setnum",
+        };
+
+        private static readonly string[] TextSizeClasses =
+        {
+            "programmator-cell-input-sz-label",
+            "programmator-cell-input-sz-goto",
+            "programmator-cell-input-sz-gosub",
+            "programmator-cell-input-sz-if",
+            "programmator-cell-input-sz-debug",
+            "programmator-cell-input-sz-var",
+            "programmator-cell-input-sz-writestate",
+            "programmator-cell-input-sz-readstate",
+            "programmator-cell-input-sz-state",
+            "programmator-cell-input-sz-compare",
+            "programmator-cell-input-sz-round",
+            "programmator-cell-input-sz-setnum",
+            "programmator-cell-input-sz-varop1",
+        };
+
+        private static readonly string[] Text2SizeClasses =
+        {
+            "programmator-cell-input-sz-varop2",
+        };
+
+        private static readonly string[] NumSizeClasses =
+        {
+            "programmator-cell-num-sz-var",
+            "programmator-cell-num-sz-setnum",
+        };
+
+        private static string GetTextInputPositionClass(ProgAction action)
+        {
+            switch (action)
+            {
+                case ProgAction.Label:          return "programmator-cell-input-pos-label";
+                case ProgAction.Goto:           return "programmator-cell-input-pos-goto";
+                case ProgAction.Call:
+                case ProgAction.CallArg:
+                case ProgAction.CallState:      return "programmator-cell-input-pos-gosub";
+                case ProgAction.YesNoGoto:
+                case ProgAction.NoYesGoto:
+                case ProgAction.CallWhenDied:   return "programmator-cell-input-pos-if";
+                case ProgAction.DebugPause:
+                case ProgAction.DebugShow:      return "programmator-cell-input-pos-debug";
+                case ProgAction.WriteStateToVar: return "programmator-cell-input-pos-writestate";
+                case ProgAction.ReadVarToState: return "programmator-cell-input-pos-readstate";
+                case ProgAction.AddStateToVar:
+                case ProgAction.MultStateToVar:
+                case ProgAction.DivStateToVar:
+                case ProgAction.SubStateToVar:  return "programmator-cell-input-pos-state";
+                case ProgAction.VarLessThanState:
+                case ProgAction.VarGreaterThanState:
+                case ProgAction.VarGreaterThanOrEqualsState:
+                case ProgAction.VarLessThanOrEqualState:
+                case ProgAction.VarEqualsState:
+                case ProgAction.VarNotEqualsState: return "programmator-cell-input-pos-compare";
+                case ProgAction.VarRound:
+                case ProgAction.VarCeil:
+                case ProgAction.VarFloor:       return "programmator-cell-input-pos-round";
+                case ProgAction.SetNumberToVar:
+                case ProgAction.AddNumberToVar:
+                case ProgAction.MultNumberToVar:
+                case ProgAction.DivNumberToVar:
+                case ProgAction.SubNumberToVar: return "programmator-cell-input-pos-setnum";
+                case ProgAction.AddVarToVar:
+                case ProgAction.MultVarToVar:
+                case ProgAction.DivVarToVar:
+                case ProgAction.SubVarToVar:    return "programmator-cell-input-pos-varop1";
+                default:                        return "programmator-cell-input-pos-var";
+            }
+        }
+
+        private static string GetTextInput2PositionClass(ProgAction action)
+        {
+            switch (action)
+            {
+                case ProgAction.AddVarToVar:
+                case ProgAction.MultVarToVar:
+                case ProgAction.DivVarToVar:
+                case ProgAction.SubVarToVar:    return "programmator-cell-input-pos-varop2";
+                default:                        return "programmator-cell-input-pos-varop2";
+            }
+        }
+
+        private static string GetNumInputPositionClass(ProgAction action)
+        {
+            switch (action)
+            {
+                case ProgAction.SetNumberToVar:
+                case ProgAction.AddNumberToVar:
+                case ProgAction.MultNumberToVar:
+                case ProgAction.DivNumberToVar:
+                case ProgAction.SubNumberToVar: return "programmator-cell-num-pos-setnum";
+                default:                        return "programmator-cell-num-pos-var";
+            }
+        }
+
+        private static string GetTextInputSizeClass(ProgAction action)
+        {
+            switch (action)
+            {
+                case ProgAction.Label:          return "programmator-cell-input-sz-label";
+                case ProgAction.Goto:           return "programmator-cell-input-sz-goto";
+                case ProgAction.Call:
+                case ProgAction.CallArg:
+                case ProgAction.CallState:      return "programmator-cell-input-sz-gosub";
+                case ProgAction.YesNoGoto:
+                case ProgAction.NoYesGoto:
+                case ProgAction.CallWhenDied:   return "programmator-cell-input-sz-if";
+                case ProgAction.DebugPause:
+                case ProgAction.DebugShow:      return "programmator-cell-input-sz-debug";
+                case ProgAction.WriteStateToVar: return "programmator-cell-input-sz-writestate";
+                case ProgAction.ReadVarToState: return "programmator-cell-input-sz-readstate";
+                case ProgAction.AddStateToVar:
+                case ProgAction.MultStateToVar:
+                case ProgAction.DivStateToVar:
+                case ProgAction.SubStateToVar:  return "programmator-cell-input-sz-state";
+                case ProgAction.VarLessThanState:
+                case ProgAction.VarGreaterThanState:
+                case ProgAction.VarGreaterThanOrEqualsState:
+                case ProgAction.VarLessThanOrEqualState:
+                case ProgAction.VarEqualsState:
+                case ProgAction.VarNotEqualsState: return "programmator-cell-input-sz-compare";
+                case ProgAction.VarRound:
+                case ProgAction.VarCeil:
+                case ProgAction.VarFloor:       return "programmator-cell-input-sz-round";
+                case ProgAction.SetNumberToVar:
+                case ProgAction.AddNumberToVar:
+                case ProgAction.MultNumberToVar:
+                case ProgAction.DivNumberToVar:
+                case ProgAction.SubNumberToVar: return "programmator-cell-input-sz-setnum";
+                case ProgAction.AddVarToVar:
+                case ProgAction.MultVarToVar:
+                case ProgAction.DivVarToVar:
+                case ProgAction.SubVarToVar:    return "programmator-cell-input-sz-varop1";
+                default:                        return "programmator-cell-input-sz-var";
+            }
+        }
+
+        private static string GetTextInput2SizeClass(ProgAction action)
+        {
+            switch (action)
+            {
+                case ProgAction.AddVarToVar:
+                case ProgAction.MultVarToVar:
+                case ProgAction.DivVarToVar:
+                case ProgAction.SubVarToVar:    return "programmator-cell-input-sz-varop2";
+                default:                        return "programmator-cell-input-sz-varop2";
+            }
+        }
+
+        private static string GetNumInputSizeClass(ProgAction action)
+        {
+            switch (action)
+            {
+                case ProgAction.SetNumberToVar:
+                case ProgAction.AddNumberToVar:
+                case ProgAction.MultNumberToVar:
+                case ProgAction.DivNumberToVar:
+                case ProgAction.SubNumberToVar: return "programmator-cell-num-sz-setnum";
+                default:                        return "programmator-cell-num-sz-var";
+            }
+        }
+
+        private void UpdateInputFields(int row, int col, int idx)
+        {
+            var action = (ProgAction)ProgrammatorData.Codes[idx];
+            var textInput = _cellTextInputs[row, col];
+            var textInput2 = _cellTextInputs2[row, col];
+            var numInput = _cellNumInputs[row, col];
+
+            bool showText = NeedsTextInput(action);
+            bool showText2 = NeedsTextInput2(action);
+            bool showNum = NeedsNumInput(action);
+
+            if (showText)
+            {
+                foreach (var cls in TextPosClasses)
+                    textInput.RemoveFromClassList(cls);
+                foreach (var cls in TextSizeClasses)
+                    textInput.RemoveFromClassList(cls);
+                textInput.AddToClassList(GetTextInputPositionClass(action));
+                textInput.AddToClassList(GetTextInputSizeClass(action));
+                textInput.SetValueWithoutNotify(ProgrammatorData.Labels[idx] ?? string.Empty);
+                textInput.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                textInput.style.display = DisplayStyle.None;
+            }
+
+            if (showText2)
+            {
+                foreach (var cls in Text2PosClasses)
+                    textInput2.RemoveFromClassList(cls);
+                foreach (var cls in Text2SizeClasses)
+                    textInput2.RemoveFromClassList(cls);
+                textInput2.AddToClassList(GetTextInput2PositionClass(action));
+                textInput2.AddToClassList(GetTextInput2SizeClass(action));
+                textInput2.SetValueWithoutNotify(ProgrammatorData.Values[idx] ?? string.Empty);
+                textInput2.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                textInput2.style.display = DisplayStyle.None;
+            }
+
+            if (showNum)
+            {
+                foreach (var cls in NumPosClasses)
+                    numInput.RemoveFromClassList(cls);
+                foreach (var cls in NumSizeClasses)
+                    numInput.RemoveFromClassList(cls);
+                numInput.AddToClassList(GetNumInputPositionClass(action));
+                numInput.AddToClassList(GetNumInputSizeClass(action));
+                numInput.SetValueWithoutNotify(ProgrammatorData.Values[idx] ?? string.Empty);
+                numInput.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                numInput.style.display = DisplayStyle.None;
             }
         }
 
