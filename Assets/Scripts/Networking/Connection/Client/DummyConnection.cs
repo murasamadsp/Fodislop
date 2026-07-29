@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
@@ -81,6 +82,7 @@ namespace MinesServer.Networking.Connection.Client
         private bool _teleportWindowOpen;
         private readonly Dictionary<string, long> _activeBuffs = new();
         private bool _buffLoopStarted;
+        private CancellationTokenSource _pathCts;
         private ushort _clanId;
         private static readonly (ushort Id, string Name, string Desc)[] _mockClans =
         {
@@ -253,7 +255,7 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DummyConnection] Failed to load tokens: {ex.Message}");
+                Debug.Log($"[DummyConnection] Failed to load tokens: {ex.Message}");
             }
 
             return new HashSet<string>();
@@ -268,7 +270,7 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DummyConnection] Failed to save tokens: {ex.Message}");
+                Debug.Log($"[DummyConnection] Failed to save tokens: {ex.Message}");
             }
         }
 
@@ -280,13 +282,13 @@ namespace MinesServer.Networking.Connection.Client
 
         public void TriggerDisconnect(string reason)
         {
-            Console.WriteLine($"[DummyConnection] TriggerDisconnect: {reason}");
+            Debug.Log($"[DummyConnection] TriggerDisconnect: {reason}");
             OnReceived?.Invoke(new ServerPacket(new MinesServer.Networking.Server.Packets.Connection.DisconnectPacket(reason)));
         }
 
         public void TriggerReconnect(string reason)
         {
-            Console.WriteLine($"[DummyConnection] TriggerReconnect: {reason}");
+            Debug.Log($"[DummyConnection] TriggerReconnect: {reason}");
             OnReceived?.Invoke(new ServerPacket(new MinesServer.Networking.Server.Packets.Connection.ReconnectPacket(reason)));
         }
 
@@ -307,7 +309,7 @@ namespace MinesServer.Networking.Connection.Client
 
                     if (!isAdjacent)
                     {
-                        Console.WriteLine($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not adjacent to ({_x},{_y})");
+                        Debug.Log($"[DummyConnection] Rejected move ({move.X},{move.Y}) - not adjacent to ({_x},{_y})");
                         OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                         {
                             new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
@@ -337,12 +339,13 @@ namespace MinesServer.Networking.Connection.Client
 
                     _x = move.X;
                     _y = move.Y;
+                    _pathCts?.Cancel();
                     UpdatePosition().Forget();
                     CheckTeleportEntry();
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
-                    Console.WriteLine($"  - Rotate to {rotate.Direction}");
+                    Debug.Log($"  - Rotate to {rotate.Direction}");
                     _rot = rotate.Direction;
                     UpdatePosition().Forget();
                 }
@@ -353,20 +356,20 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is ToggleAutoDigPacket)
                 {
                     _autoDig = !_autoDig;
-                    Console.WriteLine($"[DummyConnection] AutoDig toggled: {_autoDig}");
+                    Debug.Log($"[DummyConnection] AutoDig toggled: {_autoDig}");
                     OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(_autoDig)));
                 }
                 else if (actionPacket.Payload is ToggleAgressionPacket)
                 {
                     _aggression = !_aggression;
-                    Console.WriteLine($"[DummyConnection] Aggression toggled: {_aggression}");
+                    Debug.Log($"[DummyConnection] Aggression toggled: {_aggression}");
                     OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(_aggression)));
                 }
                 else if (actionPacket.Payload is BzPacket)
                 {
                     ushort cellX = actionPacket.X;
                     ushort cellY = actionPacket.Y;
-                    Console.WriteLine($"[DummyConnection] DIG at ({cellX}, {cellY})");
+                    Debug.Log($"[DummyConnection] DIG at ({cellX}, {cellY})");
 
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
@@ -431,7 +434,7 @@ namespace MinesServer.Networking.Connection.Client
                 }
                 else if (actionPacket.Payload is SuicidePacket)
                 {
-                    Console.WriteLine("[DummyConnection] Suicide / Respawn");
+                    Debug.Log("[DummyConnection] Suicide / Respawn");
                     const ushort SPAWN_X = 25;
                     const ushort SPAWN_Y = 50;
                     var effectX = _x;
@@ -440,6 +443,7 @@ namespace MinesServer.Networking.Connection.Client
                     _y = SPAWN_Y;
                     _rot = Direction.Up;
                     _health = 500;
+                    _pathCts?.Cancel();
 
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
                     OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
@@ -537,6 +541,18 @@ namespace MinesServer.Networking.Connection.Client
                         (CellType.Empty, CellType.Support),
                         (CellType.Support, CellType.QuadBlock));
                 }
+                else if (actionPacket.Payload is ClickCellPacket click)
+                {
+                    Debug.Log($"[DummyConnection] ClickCell at ({click.X}, {click.Y}) — finding path from ({_x},{_y})");
+                    _pathCts?.Cancel();
+                    _pathCts?.Dispose();
+                    var path = FindPath(_x, _y, click.X, click.Y);
+                    if (path.Count > 0)
+                    {
+                        _pathCts = new CancellationTokenSource();
+                        WalkPathAsync(path, _pathCts.Token).Forget();
+                    }
+                }
 
                 return;
             }
@@ -594,12 +610,12 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket(qh.Tag, filtered)));
                     break;
                 case SendLocalChatMessagePacket localMsg:
-                    Console.WriteLine($"[DummyConnection] Local chat: {localMsg.Message}");
+                    Debug.Log($"[DummyConnection] Local chat: {localMsg.Message}");
                     OnReceived?.Invoke(new ServerPacket(new LocalChatMessagePacket(_mockBotId, _x, _y, localMsg.Message)));
                     break;
 
                 case SendChatMessagePacket globalMsg:
-                    Console.WriteLine($"[DummyConnection] Global chat ({globalMsg.Tag}): {globalMsg.Message}");
+                    Debug.Log($"[DummyConnection] Global chat ({globalMsg.Tag}): {globalMsg.Message}");
                     var chatMsg = new ChatMessagePacket(
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
@@ -611,17 +627,17 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.SelectItemPacket selectItem:
-                    Console.WriteLine($"[DummyConnection] SelectItem: {selectItem.Item}");
+                    Debug.Log($"[DummyConnection] SelectItem: {selectItem.Item}");
                     _selectedItemType = selectItem.Item;
                     OnReceived?.Invoke(new ServerPacket(GetItemInfoPacket(selectItem.Item)));
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.DeselectItemPacket:
-                    Console.WriteLine("[DummyConnection] DeselectItem");
+                    Debug.Log("[DummyConnection] DeselectItem");
                     _selectedItemType = null;
                     OnReceived?.Invoke(new ServerPacket(default(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket)));
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.UseItemPacket:
-                    Console.WriteLine($"[DummyConnection] UseItem: {_selectedItemType}");
+                    Debug.Log($"[DummyConnection] UseItem: {_selectedItemType}");
                     HandleUseItem();
                     break;
                 case ElementClickPacket elementClick:
@@ -822,7 +838,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private void HandleElementClick(ElementClickPacket packet)
         {
-            Console.WriteLine($"[DummyConnection] ElementClick: WindowTag={packet.WindowTag}, Index={packet.ElementIndex}");
+            Debug.Log($"[DummyConnection] ElementClick: WindowTag={packet.WindowTag}, Index={packet.ElementIndex}");
             if (packet.WindowTag == "daily_bonus")
             {
                 HandleDailyBonusClaim();
@@ -851,19 +867,19 @@ namespace MinesServer.Networking.Connection.Client
                     "Это модальное окно вызывается из HUD.\n\nНажмите OK чтобы продолжить.",
                     "OK",
                     string.Empty)));
-                Console.WriteLine("[DummyConnection] Modal window sent to client");
+                Debug.Log("[DummyConnection] Modal window sent to client");
             }
             else if (packet.WindowTag == "join_clan")
             {
                 _clanId = 1;
                 OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(1)));
-                Console.WriteLine("[DummyConnection] Joined clan 1, ShowClanPacket sent");
+                Debug.Log("[DummyConnection] Joined clan 1, ShowClanPacket sent");
             }
             else if (packet.WindowTag == "leave_clan")
             {
                 _clanId = 0;
                 OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
-                Console.WriteLine("[DummyConnection] Left clan, HideClanPacket sent");
+                Debug.Log("[DummyConnection] Left clan, HideClanPacket sent");
             }
             else if (packet.WindowTag == "clan_list")
             {
@@ -879,7 +895,7 @@ namespace MinesServer.Networking.Connection.Client
                         _clanId = _mockClans[idx].Id;
                         OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(_clanId)));
                         OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                        Console.WriteLine($"[DummyConnection] Joined clan {_mockClans[idx].Name} (ID={_clanId})");
+                        Debug.Log($"[DummyConnection] Joined clan {_mockClans[idx].Name} (ID={_clanId})");
                     }
                 }
             }
@@ -894,7 +910,7 @@ namespace MinesServer.Networking.Connection.Client
                     _clanId = 0;
                     OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
                     OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                    Console.WriteLine("[DummyConnection] Left clan from info window");
+                    Debug.Log("[DummyConnection] Left clan from info window");
                 }
             }
             else if (packet.WindowTag == "open_missions")
@@ -927,7 +943,7 @@ namespace MinesServer.Networking.Connection.Client
             }
             else if (packet.WindowTag == "save_client_config")
             {
-                Console.WriteLine($"[DummyConnection] Received save_client_config with {packet.Context.Count} entries");
+                Debug.Log($"[DummyConnection] Received save_client_config with {packet.Context.Count} entries");
                 foreach (var kv in packet.Context)
                 {
                     switch (kv.Key)
@@ -961,7 +977,7 @@ namespace MinesServer.Networking.Connection.Client
                 }
 
                 SendClientConfigPacket();
-                Console.WriteLine("[DummyConnection] Client config saved and echoed back");
+                Debug.Log("[DummyConnection] Client config saved and echoed back");
             }
             else if (packet.WindowTag == "auth")
             {
@@ -1047,7 +1063,7 @@ namespace MinesServer.Networking.Connection.Client
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("auth", 300, 160, root)));
-            Console.WriteLine("[DummyConnection] Auth window opened");
+            Debug.Log("[DummyConnection] Auth window opened");
         }
 
         private void InitWorld()
@@ -1079,13 +1095,13 @@ namespace MinesServer.Networking.Connection.Client
                     int wChunks = (worldWidth + 31) / 32;
                     int hChunks = (worldHeight + 31) / 32;
                     _worldLayer = new WorldLayer<CellType>(serverCopy, wChunks, hChunks, 32, 36);
-                    Console.WriteLine($"[DummyConnection] Using prebaked map: {worldWidth}x{worldHeight} ({wChunks}x{hChunks} chunks)");
+                    Debug.Log($"[DummyConnection] Using prebaked map: {worldWidth}x{worldHeight} ({wChunks}x{hChunks} chunks)");
                 }
                 else
                 {
                     worldWidth = 500;
                     worldHeight = 500;
-                    Console.WriteLine("[DummyConnection] Prebaked map not found or invalid, falling back to generation");
+                    Debug.Log("[DummyConnection] Prebaked map not found or invalid, falling back to generation");
                     generated = true;
                 }
             }
@@ -1215,7 +1231,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private void SendClientConfigPacket()
         {
-            Console.WriteLine($"[DummyConnection] Sending ClientConfigPacket: master={_clientMasterVolume}, renderer={_clientRenderer}, sounds={_clientSoundVolumes.Count}");
+            Debug.Log($"[DummyConnection] Sending ClientConfigPacket: master={_clientMasterVolume}, renderer={_clientRenderer}, sounds={_clientSoundVolumes.Count}");
             OnReceived?.Invoke(new ServerPacket(new ClientConfigPacket(
                 new SoundConfigPacket(_clientMasterVolume, _clientSoundVolumes),
                 _clientRenderer,
@@ -1327,7 +1343,7 @@ namespace MinesServer.Networking.Connection.Client
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
-            Console.WriteLine("[DummyConnection] Mission selection window opened");
+            Debug.Log("[DummyConnection] Mission selection window opened");
         }
 
         private void StartMission(int missionId)
@@ -1364,7 +1380,7 @@ namespace MinesServer.Networking.Connection.Client
             _missionProgress = 0;
             OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
             OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
-            Console.WriteLine("[DummyConnection] Mission cancelled");
+            Debug.Log("[DummyConnection] Mission cancelled");
         }
 
         private void CompleteMission()
@@ -1375,7 +1391,7 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             var m = _missions[_activeMissionId];
-            Console.WriteLine($"[DummyConnection] Mission complete: {m.Title}");
+            Debug.Log($"[DummyConnection] Mission complete: {m.Title}");
 
             _inventory.TryGetValue(m.RewardItem, out long current);
             _inventory[m.RewardItem] = current + m.RewardAmount;
@@ -1398,7 +1414,7 @@ namespace MinesServer.Networking.Connection.Client
         {
             var rewardItem = _pendingBonusItem;
             var rewardAmount = _pendingBonusAmount;
-            Console.WriteLine($"[DummyConnection] Daily bonus claimed: {rewardItem} x{rewardAmount}");
+            Debug.Log($"[DummyConnection] Daily bonus claimed: {rewardItem} x{rewardAmount}");
 
             _inventory.TryGetValue(rewardItem, out long current);
             long newQty = current + rewardAmount;
@@ -1432,7 +1448,7 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     _activeBuffs.Remove(tag);
                     OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket(tag)));
-                    Console.WriteLine($"[DummyConnection] Buff expired: {tag}");
+                    Debug.Log($"[DummyConnection] Buff expired: {tag}");
                 }
 
                 // Depth warning check
@@ -1443,7 +1459,7 @@ namespace MinesServer.Networking.Connection.Client
                         _depthWarningActive = true;
                         OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
                             0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
-                        Console.WriteLine("[DummyConnection] Depth warning activated");
+                        Debug.Log("[DummyConnection] Depth warning activated");
                     }
                 }
                 else
@@ -1452,7 +1468,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         _depthWarningActive = false;
                         OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
-                        Console.WriteLine("[DummyConnection] Depth warning cleared");
+                        Debug.Log("[DummyConnection] Depth warning cleared");
                     }
                 }
 
@@ -1463,10 +1479,10 @@ namespace MinesServer.Networking.Connection.Client
                     int damage = (((blocksBelow - 1) / 10) + 1) * 10;
                     _health = Math.Max(0, _health - damage);
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
-                    Console.WriteLine($"[DummyConnection] Depth damage: {damage} (HP: {_health}/500)");
+                    Debug.Log($"[DummyConnection] Depth damage: {damage} (HP: {_health}/500)");
                     if (_health <= 0)
                     {
-                        Console.WriteLine("[DummyConnection] Player died from depth damage, respawning");
+                        Debug.Log("[DummyConnection] Player died from depth damage, respawning");
                         const ushort SPAWN_X = 25;
                         const ushort SPAWN_Y = 50;
                         var deathX = _x;
@@ -1584,7 +1600,7 @@ namespace MinesServer.Networking.Connection.Client
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
             _teleportWindowOpen = true;
-            Console.WriteLine($"[DummyConnection] Teleport window opened with {_teleportDestinations.Count} destinations");
+            Debug.Log($"[DummyConnection] Teleport window opened with {_teleportDestinations.Count} destinations");
         }
 
         private void SendTeleportWindowNoDestinations()
@@ -1643,7 +1659,7 @@ namespace MinesServer.Networking.Connection.Client
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
             _teleportWindowOpen = true;
-            Console.WriteLine("[DummyConnection] Teleport window opened with no destinations");
+            Debug.Log("[DummyConnection] Teleport window opened with no destinations");
         }
 
         private void SendClanListWindow()
@@ -1731,7 +1747,7 @@ namespace MinesServer.Networking.Connection.Client
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("clan_list", 320, 260, root)));
-            Console.WriteLine("[DummyConnection] Clan list window opened");
+            Debug.Log("[DummyConnection] Clan list window opened");
         }
 
         private void SendClanInfoWindow()
@@ -1804,7 +1820,7 @@ namespace MinesServer.Networking.Connection.Client
             };
 
             OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("clan_info", 300, 200, root)));
-            Console.WriteLine($"[DummyConnection] Clan info window opened (clanId={_clanId})");
+            Debug.Log($"[DummyConnection] Clan info window opened (clanId={_clanId})");
         }
 
         private void HandleTeleportClick(int index)
@@ -1815,7 +1831,7 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             var (destX, destY) = _teleportDestinations[index];
-            Console.WriteLine($"[DummyConnection] Teleporting to ({destX}, {destY})");
+            Debug.Log($"[DummyConnection] Teleporting to ({destX}, {destY})");
 
             _x = destX;
             _y = destY;
@@ -1872,7 +1888,7 @@ namespace MinesServer.Networking.Connection.Client
                 _pendingBonusItem = PickRandomBonusItem();
                 _pendingBonusAmount = (int)PickRandomAmount(_pendingBonusItem);
                 OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(true)));
-                Console.WriteLine($"[DummyConnection] Daily bonus now available: {_pendingBonusItem} x{_pendingBonusAmount}");
+                Debug.Log($"[DummyConnection] Daily bonus now available: {_pendingBonusItem} x{_pendingBonusAmount}");
 
                 while (!_bonusClaimed && _status == ConnectionStatus.Connected)
                 {
@@ -2038,13 +2054,13 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     int w = WIDTH_CHUNKS * CHUNK_SIZE;
                     int h = HEIGHT_CHUNKS * CHUNK_SIZE;
-                    Console.WriteLine($"[DummyConnection] Prebaked map dimensions: {w}x{h} ({WIDTH_CHUNKS}x{HEIGHT_CHUNKS} chunks x{CHUNK_SIZE})");
+                    Debug.Log($"[DummyConnection] Prebaked map dimensions: {w}x{h} ({WIDTH_CHUNKS}x{HEIGHT_CHUNKS} chunks x{CHUNK_SIZE})");
                     return (w, h);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DummyConnection] Failed to read prebaked map header: {ex.Message}");
+                Debug.Log($"[DummyConnection] Failed to read prebaked map header: {ex.Message}");
             }
 
             return (0, 0);
@@ -2230,7 +2246,7 @@ namespace MinesServer.Networking.Connection.Client
                 }
                 else
                 {
-                    Console.WriteLine($"[DummyConnection] Asset not found locally: {assetEntry.Filename}");
+                    Debug.Log($"[DummyConnection] Asset not found locally: {assetEntry.Filename}");
                     response = new RuntimeAssetPacket(assetEntry.Filename, string.Empty, System.Array.Empty<byte>());
                 }
 
@@ -2358,6 +2374,120 @@ namespace MinesServer.Networking.Connection.Client
                     Debug.Log($"[DummyConnection] Built {upgrades[i].To} at ({x},{y}) (upgraded from {current})");
                     return;
                 }
+            }
+        }
+
+        private List<(ushort X, ushort Y)> FindPath(ushort startX, ushort startY, ushort targetX, ushort targetY)
+        {
+            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            if (storage?.CellLayer == null || !storage.IsReady)
+            {
+                Debug.Log($"[FindPath] storage not ready — returning empty path");
+                return new List<(ushort, ushort)>();
+            }
+
+            var dirs = new (int dx, int dy)[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
+            var visited = new HashSet<(ushort, ushort)>();
+            var cameFrom = new Dictionary<(ushort, ushort), (ushort, ushort)>();
+            var queue = new Queue<(ushort X, ushort Y)>();
+            queue.Enqueue((startX, startY));
+            visited.Add((startX, startY));
+            int cellsChecked = 0;
+            bool found = false;
+
+            while (queue.Count > 0)
+            {
+                var cur = queue.Dequeue();
+                cellsChecked++;
+                if (cur.X == targetX && cur.Y == targetY)
+                {
+                    found = true;
+                    break;
+                }
+
+                foreach (var (dx, dy) in dirs)
+                {
+                    int nx = cur.X + dx;
+                    int ny = cur.Y + dy;
+                    if (nx < 0 || ny < 0 || nx > ushort.MaxValue || ny > ushort.MaxValue)
+                    {
+                        continue;
+                    }
+
+                    var next = ((ushort)nx, (ushort)ny);
+                    if (visited.Contains(next))
+                    {
+                        continue;
+                    }
+
+                    var cellType = storage.GetCell((ushort)nx, (ushort)ny);
+                    var cellConfig = ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
+                    bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
+                    if (!isPassable)
+                    {
+                        continue;
+                    }
+
+                    visited.Add(next);
+                    cameFrom[next] = cur;
+                    queue.Enqueue(next);
+                }
+            }
+
+            if (!found)
+            {
+                Debug.Log($"[FindPath] ({startX},{startY}) → ({targetX},{targetY}) — path NOT FOUND (checked {cellsChecked} cells)");
+                return new List<(ushort, ushort)>();
+            }
+
+            var path = new List<(ushort, ushort)>();
+            var current = (targetX, targetY);
+            while (current != (startX, startY))
+            {
+                path.Add(current);
+                current = cameFrom[current];
+            }
+
+            path.Reverse();
+            Debug.Log($"[FindPath] ({startX},{startY}) → ({targetX},{targetY}) — path found: {path.Count} steps, {cellsChecked} cells checked");
+            return path;
+        }
+
+        private async UniTaskVoid WalkPathAsync(List<(ushort X, ushort Y)> path, CancellationToken ct)
+        {
+            try
+            {
+                Debug.Log($"[WalkPath] starting: {path.Count} steps from ({_x},{_y})");
+                ushort prevX = _x;
+                ushort prevY = _y;
+
+                for (int i = 0; i < path.Count; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    var (nextX, nextY) = path[i];
+                    Direction dir = nextY > prevY ? Direction.Down
+                        : nextY < prevY ? Direction.Up
+                        : nextX < prevX ? Direction.Left
+                        : Direction.Right;
+
+                    (_x, _y) = (nextX, nextY);
+                    prevX = nextX;
+                    prevY = nextY;
+
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                    {
+                        new RobotPositionPacket(_mockBotId, _x, _y, (byte)dir),
+                    })));
+
+                    await UniTask.Delay(100, cancellationToken: ct);
+                }
+
+                Debug.Log($"[WalkPath] arrived at ({_x},{_y})");
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.Log($"[WalkPath] cancelled at ({_x},{_y}) — was en route to step {path.Count}/{path.Count}");
             }
         }
     }

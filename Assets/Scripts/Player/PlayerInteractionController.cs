@@ -6,6 +6,7 @@ using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.UIElements;
 using VContainer;
 
 namespace Fodinae.Scripts.Player
@@ -66,6 +67,11 @@ namespace Fodinae.Scripts.Player
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
                 Vector2 mousePos = Mouse.current.position.ReadValue();
+                if (IsPointerOverUI(mousePos))
+                {
+                    return;
+                }
+
                 Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
 
                 int unityX = Mathf.FloorToInt(worldPos.x);
@@ -79,6 +85,31 @@ namespace Fodinae.Scripts.Player
                     _networkService.SendAction(new ClickCellPacket(serverX, serverY));
                 }
             }
+        }
+
+        // Клик по миру шлётся только если указатель не над UI-элементом.
+        // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
+        private static bool IsPointerOverUI(Vector2 mousePos)
+        {
+            var docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            foreach (var doc in docs)
+            {
+                var root = doc.rootVisualElement;
+                if (root?.panel == null)
+                {
+                    continue;
+                }
+
+                // Input System gives bottom-left origin; UI Toolkit panels expect top-left.
+                var panelPos = new Vector2(mousePos.x, Screen.height - mousePos.y);
+                var picked = root.panel.Pick(panelPos);
+                if (picked != null && picked != root && picked is not TemplateContainer)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void HandleKeyboardInput()
