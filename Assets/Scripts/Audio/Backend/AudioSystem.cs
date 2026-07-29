@@ -171,7 +171,7 @@ namespace Fodinae.Audio.Backend
                 var ok = await EnsureBankLoadedAsync(bankName);
                 if (!ok)
                 {
-                    Debug.LogWarning($"{TAG} Банк категории '{bankName}' не найден — событие '{eventName}' пропущено");
+                    // Bank not present in current environment (e.g. offline test mode without FMOD bank assets)
                     return;
                 }
 
