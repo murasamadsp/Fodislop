@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts.Core.Interfaces;
@@ -42,7 +44,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
             OnStatsChanged?.Invoke();
         }
 
-        public string Nickname { get; private set; }
+        public string Nickname { get; private set; } = string.Empty;
         public long Level { get; private set; }
         public int Health { get; private set; }
         public int MaxHealth { get; private set; }
@@ -51,7 +53,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
         public long Creds { get; private set; }
         public int GeologyCurrent { get; private set; }
         public int GeologyMax { get; private set; }
-        public string GeologyText { get; private set; }
+        public string GeologyText { get; private set; } = string.Empty;
         public uint BasketCapacity { get; private set; }
         public long[] BasketContents { get; private set; } = Array.Empty<long>();
         public int BasketMaxPercent { get; private set; }
@@ -62,8 +64,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
         public int CurrentDepth { get; private set; }
 
         public bool IsMissionActive { get; private set; }
-        public string MissionTitle { get; private set; }
-        public string MissionDescription { get; private set; }
+        public string MissionTitle { get; private set; } = string.Empty;
+        public string MissionDescription { get; private set; } = string.Empty;
         public long MissionProgress { get; private set; }
         public long MissionMaxProgress { get; private set; }
         public ushort? MissionArrowX { get; private set; }
@@ -76,7 +78,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
         public event Action OnLevelChanged;
         public event Action OnNicknameChanged;
         public event Action OnBasketChanged;
-        public event Action<SkillType, long, long> OnSkillProgress;
+        public event Action<SkillType, long, long>? OnSkillProgress;
         public event Action OnDailyBonusChanged;
         public event Action OnMissionChanged;
         public event Action OnMissionArrowChanged;
@@ -215,8 +217,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.Model
         public void ClearMission()
         {
             IsMissionActive = false;
-            MissionTitle = null;
-            MissionDescription = null;
+            MissionTitle = string.Empty;
+            MissionDescription = string.Empty;
             MissionProgress = 0;
             MissionMaxProgress = 0;
             MissionArrowX = null;

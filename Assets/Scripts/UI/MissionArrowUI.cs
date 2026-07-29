@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.UI.HUD.Player.Model;
@@ -34,6 +36,7 @@ namespace Fodinae.Scripts.UI
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
             _arrow.AddToClassList("mission-arrow");
+
             // Видимость — рантайм-состояние
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);

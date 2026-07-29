@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
@@ -7,7 +9,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class CanvasPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not CanvasPacket canvasPacket)
             {
@@ -24,7 +26,7 @@ namespace Fodinae.Scripts.UI.Builders
 
             foreach (var childPacket in canvasPacket.Children)
             {
-                var childElement = builder.Build(childPacket);
+                var childElement = builder.Build(childPacket)!;
                 element.Add(childElement);
             }
 

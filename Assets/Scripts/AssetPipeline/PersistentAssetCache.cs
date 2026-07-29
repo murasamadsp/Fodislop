@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -21,7 +23,7 @@ namespace Fodinae.Scripts
         //  Public API
         // ═══════════════════════════════════════════════════════════
 
-        public static byte[] GetAsset(string filename)
+        public static byte[]? GetAsset(string filename)
         {
             try
             {
@@ -48,7 +50,7 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static async Task<byte[]> GetAssetAsync(string filename)
+        public static async Task<byte[]?> GetAssetAsync(string filename)
         {
             try
             {
@@ -104,7 +106,6 @@ namespace Fodinae.Scripts
 
                 File.WriteAllBytes(assetPath, data);
                 File.WriteAllText(etagPath, etag ?? string.Empty);
-
             }
             catch (Exception ex)
             {
@@ -142,7 +143,6 @@ namespace Fodinae.Scripts
 
                 await File.WriteAllBytesAsync(assetPath, data);
                 await File.WriteAllTextAsync(etagPath, etag ?? string.Empty);
-
             }
             catch (Exception ex)
             {
@@ -151,7 +151,7 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static string GetETag(string filename)
+        public static string? GetETag(string filename)
         {
             try
             {
@@ -178,7 +178,7 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static async Task<string> GetETagAsync(string filename)
+        public static async Task<string?> GetETagAsync(string filename)
         {
             try
             {

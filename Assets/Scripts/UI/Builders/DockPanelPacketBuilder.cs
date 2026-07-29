@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +13,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class DockPanelPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not DockPanelPacket dpp)
             {
@@ -53,7 +55,7 @@ namespace Fodinae.Scripts.UI.Builders
                     continue;
                 }
 
-                var childElement = builder.Build(childPacket);
+                var childElement = builder.Build(childPacket)!;
                 var dock = Dock.Left;
                 var dockProp = childPacket.AttachedProperties?.FirstOrDefault(p => p.Key == "DockPanel.Dock");
                 if (dockProp != null)

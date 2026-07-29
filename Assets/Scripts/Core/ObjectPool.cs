@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,7 +14,7 @@ namespace Fodinae.Scripts.Core
 
         public int CountInactive => _pool.Count;
 
-        public ObjectPool(T prefab, Transform parent = null, int preload = 0)
+        public ObjectPool(T prefab, Transform? parent = null, int preload = 0)
         {
             _prefab = prefab;
             _parent = parent;

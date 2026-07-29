@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -37,8 +39,8 @@ namespace Fodinae.Scripts.UI.Programmator
         private int _selEndCol;
         private readonly HashSet<long> _selectedCells = new HashSet<long>();
         private int[] _clipboardCodes;
-        private string[] _clipboardLabels;
-        private string[] _clipboardValues;
+        private string[]? _clipboardLabels;
+        private string[]? _clipboardValues;
         private int _clipboardWidth;
         private int _clipboardHeight;
         private bool _hasClipboard;
@@ -227,7 +229,10 @@ namespace Fodinae.Scripts.UI.Programmator
                     {
                         ProgrammatorData.HoveredCell = (row * ProgrammatorData.COLS) + col;
                         if (!IsSelected(row, col))
+                        {
                             HighlightCell(row, col, true);
+                        }
+
                         ShowCellTooltip(row, col);
                     });
                     cell.RegisterCallback<PointerLeaveEvent>(_ =>
@@ -235,7 +240,10 @@ namespace Fodinae.Scripts.UI.Programmator
                         if (ProgrammatorData.HoveredCell == (row * ProgrammatorData.COLS) + col)
                         {
                             if (!IsSelected(row, col))
+                            {
                                 HighlightCell(row, col, false);
+                            }
+
                             ProgrammatorData.HoveredCell = -1;
                         }
 
@@ -250,7 +258,10 @@ namespace Fodinae.Scripts.UI.Programmator
                     // LMB — selection
                     cell.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (evt.button != 0) return;
+                        if (evt.button != 0)
+                        {
+                            return;
+                        }
 
                         if (_radialShown)
                         {
@@ -278,7 +289,10 @@ namespace Fodinae.Scripts.UI.Programmator
                     // RMB — radial menu
                     cell.RegisterCallback<PointerDownEvent>(evt =>
                     {
-                        if (evt.button != 1) return;
+                        if (evt.button != 1)
+                        {
+                            return;
+                        }
 
                         if (_radialShown)
                         {
@@ -463,7 +477,11 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void AddPageClick()
         {
-            if (ProgrammatorData.PageCount >= 100) return;
+            if (ProgrammatorData.PageCount >= 100)
+            {
+                return;
+            }
+
             ProgrammatorData.AddPage();
             UpdatePageLabel();
         }
@@ -491,8 +509,15 @@ namespace Fodinae.Scripts.UI.Programmator
         private bool IsSelected(int row, int col)
         {
             if (_selectedCells.Count > 0)
-                return _selectedCells.Contains((long)row * ProgrammatorData.COLS + col);
-            if (!_hasSelection) return false;
+            {
+                return _selectedCells.Contains(((long)row * ProgrammatorData.COLS) + col);
+            }
+
+            if (!_hasSelection)
+            {
+                return false;
+            }
+
             int minRow = Mathf.Min(_selStartRow, _selEndRow);
             int maxRow = Mathf.Max(_selStartRow, _selEndRow);
             int minCol = Mathf.Min(_selStartCol, _selEndCol);
@@ -512,16 +537,20 @@ namespace Fodinae.Scripts.UI.Programmator
                 for (int c = 0; c < ProgrammatorData.COLS; c++)
                 {
                     if (IsSelected(r, c))
+                    {
                         SetSelectionBorder(r, c, true);
+                    }
                     else if (ProgrammatorData.HoveredCell != (r * ProgrammatorData.COLS) + c)
+                    {
                         SetSelectionBorder(r, c, false);
+                    }
                 }
             }
         }
 
         private void ToggleCellSelection(int row, int col)
         {
-            long key = (long)row * ProgrammatorData.COLS + col;
+            long key = ((long)row * ProgrammatorData.COLS) + col;
             if (!_selectedCells.Remove(key))
             {
                 if (_hasSelection)
@@ -531,11 +560,13 @@ namespace Fodinae.Scripts.UI.Programmator
                     int minC = Mathf.Min(_selStartCol, _selEndCol);
                     int maxC = Mathf.Max(_selStartCol, _selEndCol);
                     for (int r = minR; r <= maxR; r++)
+                    {
                         for (int c = minC; c <= maxC; c++)
                         {
-                            _selectedCells.Add((long)r * ProgrammatorData.COLS + c);
+                            _selectedCells.Add(((long)r * ProgrammatorData.COLS) + c);
                             SetSelectionBorder(r, c, true);
                         }
+                    }
 
                     _hasSelection = false;
                 }
@@ -568,14 +599,17 @@ namespace Fodinae.Scripts.UI.Programmator
                     int c = (int)(key % ProgrammatorData.COLS);
                     SetSelectionBorder(r, c, false);
                 }
+
                 _selectedCells.Clear();
                 _hasSelection = false;
             }
+
             if (!_hasSelection)
             {
                 SelectCell(row, col);
                 return;
             }
+
             int oldMinRow = Mathf.Min(_selStartRow, _selEndRow);
             int oldMaxRow = Mathf.Max(_selStartRow, _selEndRow);
             int oldMinCol = Mathf.Min(_selStartCol, _selEndCol);
@@ -592,9 +626,13 @@ namespace Fodinae.Scripts.UI.Programmator
                 {
                     bool nowSelected = r >= newMinRow && r <= newMaxRow && c >= newMinCol && c <= newMaxCol;
                     if (nowSelected)
+                    {
                         SetSelectionBorder(r, c, true);
+                    }
                     else if (ProgrammatorData.HoveredCell != (r * ProgrammatorData.COLS) + c)
+                    {
                         SetSelectionBorder(r, c, false);
+                    }
                 }
             }
         }
@@ -608,10 +646,14 @@ namespace Fodinae.Scripts.UI.Programmator
                     int r = (int)(key / ProgrammatorData.COLS);
                     int c = (int)(key % ProgrammatorData.COLS);
                     if (ProgrammatorData.HoveredCell != (r * ProgrammatorData.COLS) + c)
+                    {
                         SetSelectionBorder(r, c, false);
+                    }
                 }
+
                 _selectedCells.Clear();
             }
+
             if (_hasSelection)
             {
                 int minRow = Mathf.Min(_selStartRow, _selEndRow);
@@ -619,9 +661,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 int minCol = Mathf.Min(_selStartCol, _selEndCol);
                 int maxCol = Mathf.Max(_selStartCol, _selEndCol);
                 for (int r = minRow; r <= maxRow; r++)
+                {
                     for (int c = minCol; c <= maxCol; c++)
+                    {
                         if (ProgrammatorData.HoveredCell != (r * ProgrammatorData.COLS) + c)
+                        {
                             SetSelectionBorder(r, c, false);
+                        }
+                    }
+                }
+
                 _hasSelection = false;
             }
         }
@@ -634,11 +683,27 @@ namespace Fodinae.Scripts.UI.Programmator
             {
                 int r = (int)(key / ProgrammatorData.COLS);
                 int c = (int)(key % ProgrammatorData.COLS);
-                if (r < minR) minR = r;
-                if (r > maxR) maxR = r;
-                if (c < minC) minC = c;
-                if (c > maxC) maxC = c;
+                if (r < minR)
+                {
+                    minR = r;
+                }
+
+                if (r > maxR)
+                {
+                    maxR = r;
+                }
+
+                if (c < minC)
+                {
+                    minC = c;
+                }
+
+                if (c > maxC)
+                {
+                    maxC = c;
+                }
             }
+
             return (minR, maxR, minC, maxC);
         }
 
@@ -646,13 +711,19 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void CopySelection()
         {
-            if (!HasAnySelection()) return;
+            if (!HasAnySelection())
+            {
+                return;
+            }
+
             int minRow, maxRow, minCol, maxCol;
             if (_selectedCells.Count > 0)
             {
                 var b = GetSetBounds();
-                minRow = b.minRow; maxRow = b.maxRow;
-                minCol = b.minCol; maxCol = b.maxCol;
+                minRow = b.minRow;
+                maxRow = b.maxRow;
+                minCol = b.minCol;
+                maxCol = b.maxCol;
             }
             else
             {
@@ -661,6 +732,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 minCol = Mathf.Min(_selStartCol, _selEndCol);
                 maxCol = Mathf.Max(_selStartCol, _selEndCol);
             }
+
             _clipboardWidth = (maxCol - minCol) + 1;
             _clipboardHeight = (maxRow - minRow) + 1;
             _clipboardCodes = new int[_clipboardWidth * _clipboardHeight];
@@ -678,20 +750,27 @@ namespace Fodinae.Scripts.UI.Programmator
                     _clipboardValues[dstIdx] = ProgrammatorData.Values[srcIdx];
                 }
             }
+
             _hasClipboard = true;
         }
 
         private void CutSelection()
         {
-            if (!HasAnySelection()) return;
+            if (!HasAnySelection())
+            {
+                return;
+            }
+
             CopySelection();
             ProgrammatorData.PushUndo();
             int minRow, maxRow, minCol, maxCol;
             if (_selectedCells.Count > 0)
             {
                 var b = GetSetBounds();
-                minRow = b.minRow; maxRow = b.maxRow;
-                minCol = b.minCol; maxCol = b.maxCol;
+                minRow = b.minRow;
+                maxRow = b.maxRow;
+                minCol = b.minCol;
+                maxCol = b.maxCol;
             }
             else
             {
@@ -700,12 +779,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 minCol = Mathf.Min(_selStartCol, _selEndCol);
                 maxCol = Mathf.Max(_selStartCol, _selEndCol);
             }
+
             for (int r = minRow; r <= maxRow; r++)
             {
                 for (int c = minCol; c <= maxCol; c++)
                 {
-                    if (_selectedCells.Count > 0 && !_selectedCells.Contains((long)r * ProgrammatorData.COLS + c))
+                    if (_selectedCells.Count > 0 && !_selectedCells.Contains(((long)r * ProgrammatorData.COLS) + c))
+                    {
                         continue;
+                    }
+
                     int idx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                               + (r * ProgrammatorData.COLS) + c;
                     ProgrammatorData.Codes[idx] = 0;
@@ -716,7 +799,11 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void PasteClipboard()
         {
-            if (!_hasClipboard) return;
+            if (!_hasClipboard)
+            {
+                return;
+            }
+
             ProgrammatorData.PushUndo();
             int anchorRow = 0, anchorCol = 0;
             if (_selectedCells.Count > 0)
@@ -730,6 +817,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 anchorRow = Mathf.Min(_selStartRow, _selEndRow);
                 anchorCol = Mathf.Min(_selStartCol, _selEndCol);
             }
+
             for (int r = 0; r < _clipboardHeight; r++)
             {
                 for (int c = 0; c < _clipboardWidth; c++)
@@ -737,7 +825,10 @@ namespace Fodinae.Scripts.UI.Programmator
                     int targetRow = anchorRow + r;
                     int targetCol = anchorCol + c;
                     if (targetRow >= ProgrammatorData.ROWS || targetCol >= ProgrammatorData.COLS)
+                    {
                         continue;
+                    }
+
                     int dstIdx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                                  + (targetRow * ProgrammatorData.COLS) + targetCol;
                     int srcIdx = (r * _clipboardWidth) + c;
@@ -747,6 +838,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     UpdateCell(targetRow, targetCol);
                 }
             }
+
             SelectCell(anchorRow, anchorCol);
             _selEndRow = Mathf.Min(anchorRow + _clipboardHeight - 1, ProgrammatorData.ROWS - 1);
             _selEndCol = Mathf.Min(anchorCol + _clipboardWidth - 1, ProgrammatorData.COLS - 1);
@@ -755,24 +847,32 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void ShiftSelection(int dx, int dy)
         {
-            if (!HasAnySelection()) return;
+            if (!HasAnySelection())
+            {
+                return;
+            }
+
             int page = ProgrammatorData.CurrentPage;
-            int cols = ProgrammatorData.COLS;
-            int rows = ProgrammatorData.ROWS;
-            int cellsPerPage = ProgrammatorData.CELLS_PER_PAGE;
+            const int cols = ProgrammatorData.COLS;
+            const int rows = ProgrammatorData.ROWS;
+            const int cellsPerPage = ProgrammatorData.CELLS_PER_PAGE;
 
             if (_selectedCells.Count > 0)
             {
                 var b = GetSetBounds();
                 if (b.minRow + dy < 0 || b.maxRow + dy >= rows ||
                     b.minCol + dx < 0 || b.maxCol + dx >= cols)
+                {
                     return;
+                }
+
                 var temp = new Dictionary<long, (int code, string label, string value)>();
                 foreach (long key in _selectedCells)
                 {
                     int idx = (page * cellsPerPage) + (int)key;
                     temp[key] = (ProgrammatorData.Codes[idx], ProgrammatorData.Labels[idx], ProgrammatorData.Values[idx]);
                 }
+
                 foreach (long key in _selectedCells)
                 {
                     int r = (int)(key / cols);
@@ -784,11 +884,25 @@ namespace Fodinae.Scripts.UI.Programmator
                     UpdateCell(r, c);
                     SetSelectionBorder(r, c, false);
                 }
+
                 var ordered = new List<long>(_selectedCells);
-                if (dx > 0) ordered.Sort((a, b) => (int)((b % cols) - (a % cols)));
-                else if (dx < 0) ordered.Sort((a, b) => (int)((a % cols) - (b % cols)));
-                else if (dy > 0) ordered.Sort((a, b) => (int)((b / cols) - (a / cols)));
-                else if (dy < 0) ordered.Sort((a, b) => (int)((a / cols) - (b / cols)));
+                if (dx > 0)
+                {
+                    ordered.Sort((a, b) => (int)((b % cols) - (a % cols)));
+                }
+                else if (dx < 0)
+                {
+                    ordered.Sort((a, b) => (int)((a % cols) - (b % cols)));
+                }
+                else if (dy > 0)
+                {
+                    ordered.Sort((a, b) => (int)((b / cols) - (a / cols)));
+                }
+                else if (dy < 0)
+                {
+                    ordered.Sort((a, b) => (int)((a / cols) - (b / cols)));
+                }
+
                 ProgrammatorData.PushUndo();
                 var newSet = new HashSet<long>();
                 foreach (long key in ordered)
@@ -808,6 +922,7 @@ namespace Fodinae.Scripts.UI.Programmator
                         newSet.Add(key);
                         continue;
                     }
+
                     int destIdx = (page * cellsPerPage) + (newR * cols) + newC;
                     if (ProgrammatorData.Codes[destIdx] != 0)
                     {
@@ -830,9 +945,11 @@ namespace Fodinae.Scripts.UI.Programmator
                                 pushed = true;
                                 break;
                             }
+
                             pushR += dy;
                             pushC += dx;
                         }
+
                         if (!pushed)
                         {
                             int origIdx = (page * cellsPerPage) + (int)key;
@@ -845,15 +962,21 @@ namespace Fodinae.Scripts.UI.Programmator
                             continue;
                         }
                     }
+
                     ProgrammatorData.Codes[destIdx] = temp[key].code;
                     ProgrammatorData.Labels[destIdx] = temp[key].label;
                     ProgrammatorData.Values[destIdx] = temp[key].value;
                     UpdateCell(newR, newC);
                     SetSelectionBorder(newR, newC, true);
-                    newSet.Add((long)newR * cols + newC);
+                    newSet.Add(((long)newR * cols) + newC);
                 }
+
                 _selectedCells.Clear();
-                foreach (long k in newSet) _selectedCells.Add(k);
+                foreach (long k in newSet)
+                {
+                    _selectedCells.Add(k);
+                }
+
                 _hasSelection = false;
                 return;
             }
@@ -868,61 +991,117 @@ namespace Fodinae.Scripts.UI.Programmator
             int newMaxCol = maxCol + dx;
             if (newMinRow < 0 || newMaxRow >= rows ||
                 newMinCol < 0 || newMaxCol >= cols)
+            {
                 return;
+            }
+
             if (dx > 0)
             {
                 for (int r = minRow; r <= maxRow; r++)
+                {
                     for (int c = maxCol + 1; c <= maxCol + dx; c++)
+                    {
                         if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + c] != 0)
                         {
                             bool found = false;
                             for (int e = c + dx; e < cols; e++)
+                            {
                                 if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + e] == 0)
-                                { found = true; break; }
-                            if (!found) return;
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!found)
+                            {
+                                return;
+                            }
                         }
+                    }
+                }
             }
             else if (dx < 0)
             {
                 int absDx = -dx;
                 for (int r = minRow; r <= maxRow; r++)
+                {
                     for (int c = minCol + dx; c <= minCol - 1; c++)
+                    {
                         if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + c] != 0)
                         {
                             bool found = false;
                             for (int e = c - absDx; e >= 0; e--)
+                            {
                                 if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + e] == 0)
-                                { found = true; break; }
-                            if (!found) return;
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!found)
+                            {
+                                return;
+                            }
                         }
+                    }
+                }
             }
             else if (dy > 0)
             {
                 for (int c = minCol; c <= maxCol; c++)
+                {
                     for (int r = maxRow + 1; r <= maxRow + dy; r++)
+                    {
                         if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + c] != 0)
                         {
                             bool found = false;
                             for (int e = r + dy; e < rows; e++)
+                            {
                                 if (ProgrammatorData.Codes[(page * cellsPerPage) + (e * cols) + c] == 0)
-                                { found = true; break; }
-                            if (!found) return;
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!found)
+                            {
+                                return;
+                            }
                         }
+                    }
+                }
             }
             else if (dy < 0)
             {
                 int absDy = -dy;
                 for (int c = minCol; c <= maxCol; c++)
+                {
                     for (int r = minRow + dy; r <= minRow - 1; r++)
+                    {
                         if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + c] != 0)
                         {
                             bool found = false;
                             for (int e = r - absDy; e >= 0; e--)
+                            {
                                 if (ProgrammatorData.Codes[(page * cellsPerPage) + (e * cols) + c] == 0)
-                                { found = true; break; }
-                            if (!found) return;
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+
+                            if (!found)
+                            {
+                                return;
+                            }
                         }
+                    }
+                }
             }
+
             ProgrammatorData.PushUndo();
             int width = (maxCol - minCol) + 1;
             int height = (maxRow - minRow) + 1;
@@ -945,6 +1124,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     SetSelectionBorder(r, c, false);
                 }
             }
+
             if (dx > 0)
             {
                 for (int r = minRow; r <= maxRow; r++)
@@ -952,14 +1132,26 @@ namespace Fodinae.Scripts.UI.Programmator
                     for (int c = maxCol + dx; c >= maxCol + 1; c--)
                     {
                         int idx = (page * cellsPerPage) + (r * cols) + c;
-                        if (ProgrammatorData.Codes[idx] == 0) continue;
+                        if (ProgrammatorData.Codes[idx] == 0)
+                        {
+                            continue;
+                        }
+
                         int emptyCol = -1;
                         for (int e = c + dx; e < cols; e++)
                         {
                             if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + e] == 0)
-                            { emptyCol = e; break; }
+                            {
+                                emptyCol = e;
+                                break;
+                            }
                         }
-                        if (emptyCol < 0) continue;
+
+                        if (emptyCol < 0)
+                        {
+                            continue;
+                        }
+
                         int dst = (page * cellsPerPage) + (r * cols) + emptyCol;
                         ProgrammatorData.Codes[dst] = ProgrammatorData.Codes[idx];
                         ProgrammatorData.Labels[dst] = ProgrammatorData.Labels[idx];
@@ -980,14 +1172,26 @@ namespace Fodinae.Scripts.UI.Programmator
                     for (int c = minCol + dx; c <= minCol - 1; c++)
                     {
                         int idx = (page * cellsPerPage) + (r * cols) + c;
-                        if (ProgrammatorData.Codes[idx] == 0) continue;
+                        if (ProgrammatorData.Codes[idx] == 0)
+                        {
+                            continue;
+                        }
+
                         int emptyCol = -1;
                         for (int e = c - absDx; e >= 0; e--)
                         {
                             if (ProgrammatorData.Codes[(page * cellsPerPage) + (r * cols) + e] == 0)
-                            { emptyCol = e; break; }
+                            {
+                                emptyCol = e;
+                                break;
+                            }
                         }
-                        if (emptyCol < 0) continue;
+
+                        if (emptyCol < 0)
+                        {
+                            continue;
+                        }
+
                         int dst = (page * cellsPerPage) + (r * cols) + emptyCol;
                         ProgrammatorData.Codes[dst] = ProgrammatorData.Codes[idx];
                         ProgrammatorData.Labels[dst] = ProgrammatorData.Labels[idx];
@@ -1007,14 +1211,26 @@ namespace Fodinae.Scripts.UI.Programmator
                     for (int r = maxRow + dy; r >= maxRow + 1; r--)
                     {
                         int idx = (page * cellsPerPage) + (r * cols) + c;
-                        if (ProgrammatorData.Codes[idx] == 0) continue;
+                        if (ProgrammatorData.Codes[idx] == 0)
+                        {
+                            continue;
+                        }
+
                         int emptyRow = -1;
                         for (int e = r + dy; e < rows; e++)
                         {
                             if (ProgrammatorData.Codes[(page * cellsPerPage) + (e * cols) + c] == 0)
-                            { emptyRow = e; break; }
+                            {
+                                emptyRow = e;
+                                break;
+                            }
                         }
-                        if (emptyRow < 0) continue;
+
+                        if (emptyRow < 0)
+                        {
+                            continue;
+                        }
+
                         int dst = (page * cellsPerPage) + (emptyRow * cols) + c;
                         ProgrammatorData.Codes[dst] = ProgrammatorData.Codes[idx];
                         ProgrammatorData.Labels[dst] = ProgrammatorData.Labels[idx];
@@ -1035,14 +1251,26 @@ namespace Fodinae.Scripts.UI.Programmator
                     for (int r = minRow + dy; r <= minRow - 1; r++)
                     {
                         int idx = (page * cellsPerPage) + (r * cols) + c;
-                        if (ProgrammatorData.Codes[idx] == 0) continue;
+                        if (ProgrammatorData.Codes[idx] == 0)
+                        {
+                            continue;
+                        }
+
                         int emptyRow = -1;
                         for (int e = r - absDy; e >= 0; e--)
                         {
                             if (ProgrammatorData.Codes[(page * cellsPerPage) + (e * cols) + c] == 0)
-                            { emptyRow = e; break; }
+                            {
+                                emptyRow = e;
+                                break;
+                            }
                         }
-                        if (emptyRow < 0) continue;
+
+                        if (emptyRow < 0)
+                        {
+                            continue;
+                        }
+
                         int dst = (page * cellsPerPage) + (emptyRow * cols) + c;
                         ProgrammatorData.Codes[dst] = ProgrammatorData.Codes[idx];
                         ProgrammatorData.Labels[dst] = ProgrammatorData.Labels[idx];
@@ -1055,6 +1283,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     }
                 }
             }
+
             for (int r = newMinRow; r <= newMaxRow; r++)
             {
                 for (int c = newMinCol; c <= newMaxCol; c++)
@@ -1068,6 +1297,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     SetSelectionBorder(r, c, true);
                 }
             }
+
             _selStartRow = newMinRow;
             _selStartCol = newMinCol;
             _selEndRow = newMaxRow;
@@ -1078,8 +1308,8 @@ namespace Fodinae.Scripts.UI.Programmator
         private class ProgrammatorSave
         {
             public int[] Codes;
-            public string[] Labels;
-            public string[] Values;
+            public string[]? Labels;
+            public string[]? Values;
         }
 
         private string SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
@@ -1096,29 +1326,6 @@ namespace Fodinae.Scripts.UI.Programmator
             Debug.Log("[Programmator] Program saved");
         }
 
-        private void LoadProgramFromDisk()
-        {
-            if (!File.Exists(SavePath)) return;
-            try
-            {
-                var data = JsonUtility.FromJson<ProgrammatorSave>(File.ReadAllText(SavePath));
-                if (data.Codes == null || data.Codes.Length == 0) return;
-                int total = data.Codes.Length;
-                ProgrammatorData.Codes = new List<int>(total);
-                ProgrammatorData.Labels = new List<string>(total);
-                ProgrammatorData.Values = new List<string>(total);
-                ProgrammatorData.Codes.AddRange(data.Codes);
-                ProgrammatorData.Labels.AddRange(data.Labels ?? new string[total]);
-                ProgrammatorData.Values.AddRange(data.Values ?? new string[total]);
-                ProgrammatorData.CurrentPage = 0;
-                Debug.Log($"[Programmator] Program loaded ({total} cells)");
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[Programmator] Failed to load program: {e.Message}");
-            }
-        }
-
         private void ShowProgramList()
         {
             ClearSelection();
@@ -1126,7 +1333,11 @@ namespace Fodinae.Scripts.UI.Programmator
             _radial.Hide();
             _radialShown = false;
             _radialCellIndex = -1;
-            if (_isRunning) StopProgram();
+            if (_isRunning)
+            {
+                StopProgram();
+            }
+
             _programTitle.text = "Программатор";
             RefreshProgramList();
             _panel.style.display = DisplayStyle.None;
@@ -1136,7 +1347,11 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void OpenProgram(int index)
         {
-            if (index < 0 || index >= _programItems.Count) return;
+            if (index < 0 || index >= _programItems.Count)
+            {
+                return;
+            }
+
             var item = _programItems[index];
             ProgrammatorData.Codes = new List<int>(item.Codes);
             ProgrammatorData.Labels = new List<string>(item.Labels);
@@ -1151,7 +1366,11 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void CloseProgram()
         {
-            if (_isRunning) StopProgram();
+            if (_isRunning)
+            {
+                StopProgram();
+            }
+
             if (_activeIndex >= 0 && _activeIndex < _programItems.Count)
             {
                 var item = _programItems[_activeIndex];
@@ -1159,13 +1378,17 @@ namespace Fodinae.Scripts.UI.Programmator
                 item.Labels = new List<string>(ProgrammatorData.Labels);
                 item.Values = new List<string>(ProgrammatorData.Values);
             }
+
             ShowProgramList();
         }
 
         private void CreateNewProgram(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
+            {
                 name = $"Программа {_programItems.Count + 1}";
+            }
+
             var item = new ProgramItem
             {
                 Name = name,
@@ -1192,7 +1415,11 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void DeleteProgram(int index)
         {
-            if (index < 0 || index >= _programItems.Count) return;
+            if (index < 0 || index >= _programItems.Count)
+            {
+                return;
+            }
+
             _programItems.RemoveAt(index);
             RefreshProgramList();
         }
@@ -1354,7 +1581,7 @@ namespace Fodinae.Scripts.UI.Programmator
             ProgrammatorData.Codes[idx] = (int)action;
             UpdateCell(row, col);
 
-            if (row * ProgrammatorData.COLS + col == ProgrammatorData.CELLS_PER_PAGE - 1
+            if ((row * ProgrammatorData.COLS) + col == ProgrammatorData.CELLS_PER_PAGE - 1
                 && ProgrammatorData.CurrentPage == ProgrammatorData.PageCount - 1)
             {
                 ProgrammatorData.AddPage();
@@ -1383,7 +1610,7 @@ namespace Fodinae.Scripts.UI.Programmator
             ProgrammatorData.Codes[idx] = selectedId;
             UpdateCell(row, col);
 
-            if (row * ProgrammatorData.COLS + col == ProgrammatorData.CELLS_PER_PAGE - 1
+            if ((row * ProgrammatorData.COLS) + col == ProgrammatorData.CELLS_PER_PAGE - 1
                 && ProgrammatorData.CurrentPage == ProgrammatorData.PageCount - 1)
             {
                 ProgrammatorData.AddPage();
@@ -1422,16 +1649,19 @@ namespace Fodinae.Scripts.UI.Programmator
                     ClearSelection();
                     return;
                 }
+
                 if (_selectedCells.Count > 0 && !_radialShown)
                 {
                     ClearSelection();
                     return;
                 }
+
                 if (_panel.style.display == DisplayStyle.Flex)
                 {
                     CloseProgram();
                     return;
                 }
+
                 Hide();
                 return;
             }
@@ -1458,6 +1688,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     _radialCellIndex = -1;
                     return;
                 }
+
                 return;
             }
 
@@ -1467,12 +1698,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 if (Keyboard.current.zKey.wasPressedThisFrame)
                 {
                     if (ProgrammatorData.Undo())
+                    {
                         RefreshAllCells();
+                    }
                 }
                 else if (Keyboard.current.yKey.wasPressedThisFrame)
                 {
                     if (ProgrammatorData.Redo())
+                    {
                         RefreshAllCells();
+                    }
                 }
                 else if (Keyboard.current.cKey.wasPressedThisFrame && HasAnySelection())
                 {
@@ -1486,13 +1721,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 {
                     PasteClipboard();
                 }
+
                 return;
             }
 
             // DEL clears selected cells
             if (Keyboard.current.deleteKey.wasPressedThisFrame)
             {
-                if (!HasAnySelection()) { /* fall through */ }
+                if (!HasAnySelection())
+                { /* fall through */
+                }
                 else if (_selectedCells.Count > 0)
                 {
                     ProgrammatorData.PushUndo();
@@ -1505,6 +1743,7 @@ namespace Fodinae.Scripts.UI.Programmator
                         ProgrammatorData.Codes[idx] = 0;
                         UpdateCell(r, c);
                     }
+
                     _selectedCells.Clear();
                     _hasSelection = false;
                     return;
@@ -1526,6 +1765,7 @@ namespace Fodinae.Scripts.UI.Programmator
                             UpdateCell(r, c);
                         }
                     }
+
                     return;
                 }
             }
@@ -1551,7 +1791,11 @@ namespace Fodinae.Scripts.UI.Programmator
 
         public void Hide()
         {
-            if (_isRunning) StopProgram();
+            if (_isRunning)
+            {
+                StopProgram();
+            }
+
             ClearSelection();
             _joystick.Hide();
             _radial.Hide();

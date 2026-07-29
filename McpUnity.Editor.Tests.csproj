@@ -15,7 +15,7 @@
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
-    <LangVersion>preview</LangVersion>
+    <LangVersion>12.0</LangVersion>
     <RootNamespace>McpUnity.Tests</RootNamespace>
     <OutputType>Library</OutputType>
     <AssemblyName>McpUnity.Editor.Tests</AssemblyName>

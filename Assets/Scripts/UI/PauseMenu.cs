@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;

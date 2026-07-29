@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.IO;
 using System.Text;
 using Fodinae.Scripts.Core;

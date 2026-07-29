@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.IO;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
@@ -21,7 +23,7 @@ namespace Fodinae.Scripts.Game.Managers
         }
 
         private bool _isInitialized;
-        private string _worldCodeName;
+        private string? _worldCodeName;
 
         public WorldLayer<CellType> CellLayer => _cellLayer;
 

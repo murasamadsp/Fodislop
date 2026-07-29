@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -160,6 +162,7 @@ namespace Fodinae.Scripts.Networking
             {
                 payload = lzma.Payload;
             }
+
             while (payload is LZ4Packet lz4)
             {
                 payload = lz4.Payload;

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
@@ -19,12 +21,13 @@ namespace Fodinae.Scripts.Game
         private PackType _packType;
         private byte _variant;
         private byte _linkedClan;
-        private CancellationTokenSource _cts;
-        private Sprite _packSprite;
-        private Sprite _clanSprite;
+        private CancellationTokenSource? _cts;
+        private Sprite? _packSprite;
+        private Sprite? _clanSprite;
 
         private EffekseerHandle _effekseerHandle;
-        private EffekseerEffectAsset _effekseerAsset;
+
+    // private EffekseerEffectAsset _effekseerAsset;
         private bool _hasEffekseerEffect;
 
         protected void Awake()

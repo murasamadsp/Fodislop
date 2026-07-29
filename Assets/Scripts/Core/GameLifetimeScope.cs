@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Core.Interfaces;
@@ -28,7 +30,6 @@ namespace Fodinae.Scripts.Core
 
         protected override void Configure(IContainerBuilder builder)
         {
-
             var newStorage = new MapStorage();
             newStorage.SetAsPending();
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();

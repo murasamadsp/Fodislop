@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.IO;
 using MinesServer.Data;
@@ -17,7 +19,7 @@ namespace Fodinae.Scripts.Game.Managers
 
         public static IEnumerable<ItemType> AllTypes => (ItemType[])System.Enum.GetValues(typeof(ItemType));
 
-        public static Texture2D GetIcon(ItemType type)
+        public static Texture2D? GetIcon(ItemType type)
         {
             if (_iconCache.TryGetValue(type, out var t))
             {

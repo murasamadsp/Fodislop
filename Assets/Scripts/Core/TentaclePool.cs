@@ -1,92 +1,93 @@
+#nullable enable
+
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core
+namespace Fodinae.Scripts.Game;
+
+public static class TentaclePool
 {
-    public static class TentaclePool
+    private static readonly Queue<LineRenderer> _pool = new();
+    private static Transform? _parent;
+
+    private static Transform? Parent
     {
-        private static readonly Queue<LineRenderer> _pool = new();
-        private static Transform _parent;
-
-        private static Transform Parent
+        get
         {
-            get
+            if (_parent == null)
             {
-                if (_parent == null)
+                if (!Application.isPlaying)
                 {
-                    if (!Application.isPlaying)
-                    {
-                        return null;
-                    }
-
-                    var go = new GameObject("[TentaclePool]");
-                    go.SetActive(false);
-                    _parent = go.transform;
+                    return null;
                 }
 
-                return _parent;
+                var go = new GameObject("[TentaclePool]");
+                go.SetActive(false);
+                _parent = go.transform;
+            }
+
+            return _parent;
+        }
+    }
+
+    public static LineRenderer Get()
+    {
+        while (_pool.Count > 0)
+        {
+            var line = _pool.Dequeue();
+            if (line != null)
+            {
+                line.gameObject.SetActive(true);
+                return line;
             }
         }
 
-        public static LineRenderer Get()
+        var go = new GameObject("Tentacle");
+        if (Parent != null)
         {
-            while (_pool.Count > 0)
-            {
-                var line = _pool.Dequeue();
-                if (line != null)
-                {
-                    line.gameObject.SetActive(true);
-                    return line;
-                }
-            }
-
-            var go = new GameObject("Tentacle");
-            if (Parent != null)
-            {
-                go.transform.SetParent(Parent);
-            }
-
-            var lr = go.AddComponent<LineRenderer>();
-            lr.positionCount = 5;
-            lr.textureMode = LineTextureMode.Stretch;
-            return lr;
+            go.transform.SetParent(Parent);
         }
 
-        public static void Return(LineRenderer line)
+        var lr = go.AddComponent<LineRenderer>();
+        lr.positionCount = 5;
+        lr.textureMode = LineTextureMode.Stretch;
+        return lr;
+    }
+
+    public static void Return(LineRenderer line)
+    {
+        if (line == null)
         {
-            if (line == null)
-            {
-                return;
-            }
-
-            if (!Application.isPlaying || _parent == null)
-            {
-                if (Application.isPlaying)
-                {
-                    Object.Destroy(line.gameObject);
-                }
-                else
-                {
-                    Object.DestroyImmediate(line.gameObject);
-                }
-
-                return;
-            }
-
-            line.gameObject.SetActive(false);
-            line.transform.SetParent(_parent);
-            _pool.Enqueue(line);
+            return;
         }
 
-        public static void Clear()
+        if (!Application.isPlaying || _parent == null)
         {
-            while (_pool.Count > 0)
+            if (Application.isPlaying)
             {
-                var line = _pool.Dequeue();
-                if (line != null)
-                {
-                    Object.Destroy(line.gameObject);
-                }
+                Object.Destroy(line.gameObject);
+            }
+            else
+            {
+                Object.DestroyImmediate(line.gameObject);
+            }
+
+            return;
+        }
+
+        line.gameObject.SetActive(false);
+        line.transform.SetParent(_parent);
+        _pool.Enqueue(line);
+    }
+
+    public static void Clear()
+    {
+        while (_pool.Count > 0)
+        {
+            var line = _pool.Dequeue();
+            if (line != null)
+            {
+                Object.Destroy(line.gameObject);
             }
         }
     }

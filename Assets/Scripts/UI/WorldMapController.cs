@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
@@ -15,19 +17,20 @@ namespace Fodinae.Scripts.UI
         private CameraFollow _cameraFollow;
         private PlayerMovementController _player;
         private TerrainRenderer _terrain;
-        private WorldMapRenderer _mapRenderer;
+        private WorldMapRenderer? _mapRenderer;
         private InputAction _mapToggleAction;
 
         private bool _isInMapMode;
-        private Vector3 _storedCamPos;
-        private float _storedCamZoom;
+        // [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052")] private Vector3 _storedCamPos;
+        // [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052")] private float _storedCamZoom;
 
         // HUD elements
         private Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView _playerHud;
         private Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView _inventory;
         private FPSCounter _fps;
         private MinimapController _minimap;
-        private PauseMenu _pauseMenu;
+
+    // private PauseMenu _pauseMenu;
 
         protected void Start()
         {

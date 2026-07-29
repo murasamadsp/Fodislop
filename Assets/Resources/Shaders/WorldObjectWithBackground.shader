@@ -40,15 +40,12 @@ Shader "Custom/WorldObjectWithBackground"
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float2 bgUV : TEXCOORD1;
-                float4 screenPos : TEXCOORD2;
             };
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
             TEXTURE2D(_BackgroundTex);
             SAMPLER(sampler_BackgroundTex);
-            TEXTURE2D(_CameraDepthTexture);
-            SAMPLER(sampler_CameraDepthTexture);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
@@ -63,7 +60,6 @@ Shader "Custom/WorldObjectWithBackground"
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.bgUV = TRANSFORM_TEX(input.bgUV, _BackgroundTex);
-                output.screenPos = ComputeScreenPos(output.positionCS);
                 return output;
             }
 

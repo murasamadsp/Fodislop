@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
@@ -8,7 +10,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class SliderPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not SliderPacket sliderPkt)
             {
@@ -19,7 +21,7 @@ namespace Fodinae.Scripts.UI.Builders
             {
                 value = Mathf.Clamp(sliderPkt.DefaultValue, sliderPkt.MinValue, sliderPkt.MaxValue),
             };
-            var knob = builder.Build(sliderPkt.Knob);
+            var knob = builder.Build(sliderPkt.Knob)!;
             if (knob == null)
             {
                 Debug.LogError("Slider knob is null");

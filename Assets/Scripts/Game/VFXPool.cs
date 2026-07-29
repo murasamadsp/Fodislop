@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts.Core;
@@ -126,7 +128,7 @@ namespace Fodinae.Scripts.Game
             SpawnToTargetSize(pool);
         }
 
-        public PooledSlot Acquire(VFXType vfxType)
+        public PooledSlot? Acquire(VFXType vfxType)
         {
             var pool = GetOrCreateSubPool(vfxType);
             var slot = AcquireInternal(pool);
@@ -305,8 +307,8 @@ namespace Fodinae.Scripts.Game
         public sealed class PooledSlot
         {
             public VFXType VfxType;
-            public GameObject GameObject;
-            public SpriteRenderer SpriteRenderer;
+            public GameObject? GameObject;
+            public SpriteRenderer? SpriteRenderer;
             public float PlayStartTime;
             public bool IsInPool;
             public bool IsManagedExternally;

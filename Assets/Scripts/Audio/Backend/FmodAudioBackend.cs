@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -168,7 +170,7 @@ namespace Fodinae.Scripts.Audio.Backend
             }
         }
 
-        public AudioPlaybackHandle CreateVoice(string eventName, AudioLayer layer, Vector3? worldPosition, GameObject targetGameObject = null)
+        public AudioPlaybackHandle? CreateVoice(string eventName, AudioLayer layer, Vector3? worldPosition, GameObject? targetGameObject = null)
         {
             if (string.IsNullOrEmpty(eventName))
             {
@@ -217,7 +219,7 @@ namespace Fodinae.Scripts.Audio.Backend
             return new AudioPlaybackHandle(instance, layer.Bus);
         }
 
-        public AudioPlaybackHandle PlaySnapshot(string snapshotPath)
+        public AudioPlaybackHandle? PlaySnapshot(string snapshotPath)
         {
             string fullPath = snapshotPath.StartsWith("snapshot:/", StringComparison.OrdinalIgnoreCase) || snapshotPath.StartsWith("event:/", StringComparison.OrdinalIgnoreCase)
                 ? snapshotPath

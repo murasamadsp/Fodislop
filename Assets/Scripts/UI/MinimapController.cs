@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
@@ -49,7 +51,7 @@ namespace Fodinae.Scripts.UI
         private readonly Dictionary<int, CellType[]> _chunkCache = new();
 
         // Throttle state
-        private Vector2Int _lastUpdatePos;
+        private Vector2Int _lastUpdatePos; public Vector2Int LastUpdatePos => _lastUpdatePos;
         private float _lastUpdateTime;
         private bool _ready;
 
@@ -199,7 +201,6 @@ namespace Fodinae.Scripts.UI
 
         private void CreateUI()
         {
-
             // UI Toolkit renders independently from uGUI. A dedicated overlay canvas
             // prevents a full-screen UIDocument from covering the minimap.
             GameObject canvasObj = new("MinimapCanvas");

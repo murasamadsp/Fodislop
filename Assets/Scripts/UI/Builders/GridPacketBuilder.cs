@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +13,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class GridPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not GridPacket gridPkt)
             {
@@ -58,7 +60,7 @@ namespace Fodinae.Scripts.UI.Builders
                     }
                 }
 
-                var childElement = builder.Build(childPacket);
+                var childElement = builder.Build(childPacket)!;
                 childElement.style.alignSelf = Align.FlexStart;
                 gridRoot.Add(childElement);
                 gridItems.Add((childElement, row, col, rowSpan, colSpan));

@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Core.Interfaces;
 using UnityEngine;
 

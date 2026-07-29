@@ -1,3 +1,5 @@
+#nullable enable
+
 using UnityEngine;
 using VContainer;
 
@@ -26,7 +28,7 @@ namespace Fodinae.Scripts.Core
             _resolver?.Inject(instance);
         }
 
-        public static T Resolve<T>()
+        public static T? Resolve<T>()
             where T : class
         {
             if (_resolver == null)

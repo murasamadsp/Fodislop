@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Networking;

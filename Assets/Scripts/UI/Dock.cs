@@ -1,3 +1,5 @@
+#nullable enable
+
 namespace Fodinae.Scripts
 {
     public enum Dock

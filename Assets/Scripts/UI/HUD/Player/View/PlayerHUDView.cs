@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
@@ -37,42 +39,42 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
         private readonly Dictionary<string, VisualElement> _statusLineElements = new();
 
-        private UIDocument _doc;
-        private Tooltip _tooltip;
+        private UIDocument? _doc;
+        private Tooltip? _tooltip;
         private bool _isLoaded;
         [Inject]
         private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         private IVisualElementScheduledItem _skeletonPulse;
-        private VisualElement _panel;
-        private Button _bonusButton;
-        private VisualElement _bonusPanel;
-        private Label _bonusStatusLabel;
-        private Button _bonusClaimButton;
+        private VisualElement? _panel;
+        private Button? _bonusButton;
+        private VisualElement? _bonusPanel;
+        private Label? _bonusStatusLabel;
+        private Button? _bonusClaimButton;
         private bool _isBonusOpen;
 
-        private Label _nicknameLabel;
-        private Label _levelLabel;
-        private Label _hpLabel;
-        private VisualElement _hpBarFill;
-        private Label _moneyLabel;
-        private Label _credsLabel;
-        private Label _geologyLabel;
-        private Label _basketPercentLabel;
-        private VisualElement _basketContainer;
-        private VisualElement _skillContainer;
-        private Button _autoDigButton;
-        private Label _autoDigLabel;
-        private Button _aggressionButton;
-        private Label _aggressionLabel;
+        private Label? _nicknameLabel;
+        private Label? _levelLabel;
+        private Label? _hpLabel;
+        private VisualElement? _hpBarFill;
+        private Label? _moneyLabel;
+        private Label? _credsLabel;
+        private Label? _geologyLabel;
+        private Label? _basketPercentLabel;
+        private VisualElement? _basketContainer;
+        private VisualElement? _skillContainer;
+        private Button? _autoDigButton;
+        private Label? _autoDigLabel;
+        private Button? _aggressionButton;
+        private Label? _aggressionLabel;
 
-        private VisualElement _currentSkillRow;
+        private VisualElement? _currentSkillRow;
         private int _skillCountInRow = 0;
-        private Button _chatButton;
-        private VisualElement _statusPanel;
-        private VisualElement _respawnPopup;
-        private VisualElement _buildingsPopup;
-        private VisualElement _faqPopup;
-        private ProgrammatorGrid _programmatorGrid;
+        private Button? _chatButton;
+        private VisualElement? _statusPanel;
+        private VisualElement? _respawnPopup;
+        private VisualElement? _buildingsPopup;
+        private VisualElement? _faqPopup;
+        private ProgrammatorGrid? _programmatorGrid;
 
         [Inject]
         private PlayerStatsModel _model = null!;
@@ -82,11 +84,11 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private IAssetLoader _assetLoader = null!;
         [Inject]
         private INetworkService _networkService = null!;
-        private VisualElement _missionPanel;
-        private Label _missionTitleLabel;
-        private Label _missionDescLabel;
-        private VisualElement _missionProgressFill;
-        private Label _missionProgressLabel;
+        private VisualElement? _missionPanel;
+        private Label? _missionTitleLabel;
+        private Label? _missionDescLabel;
+        private VisualElement? _missionProgressFill;
+        private Label? _missionProgressLabel;
 
         protected void Start()
         {

@@ -14,7 +14,7 @@
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
-    <LangVersion>preview</LangVersion>
+    <LangVersion>12.0</LangVersion>
     <RootNamespace>MinesServer.Networking.Connection</RootNamespace>
     <OutputType>Library</OutputType>
     <AssemblyName>MinesServer.Networking.Connection</AssemblyName>

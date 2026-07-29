@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
@@ -7,7 +9,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class TextPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not TextPacket textPkt)
             {

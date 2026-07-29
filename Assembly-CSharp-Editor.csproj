@@ -15,7 +15,7 @@
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
-    <LangVersion>preview</LangVersion>
+    <LangVersion>12.0</LangVersion>
     <RootNamespace></RootNamespace>
     <OutputType>Library</OutputType>
     <AssemblyName>Assembly-CSharp-Editor</AssemblyName>
@@ -57,7 +57,6 @@
     <Compile Include="Assets/Editor/FmodBankBuilder.cs" />
     <Compile Include="Assets/Editor/BuildScript.cs" />
     <Compile Include="Assets/Editor/MapbConverter.cs" />
-    <Compile Include="Assets/Editor/ExportSprites.cs" />
     <Compile Include="Assets/Scripts/Editor/InjectValidator.cs" />
   </ItemGroup>
   <ItemGroup>

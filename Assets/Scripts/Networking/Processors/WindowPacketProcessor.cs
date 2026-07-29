@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Scripts.Core;
@@ -19,12 +21,12 @@ namespace Fodinae.Scripts.Networking.Processors
     /// </summary>
     public class WindowPacketProcessor : IPacketProcessor<OpenWindowPacket>, IPacketProcessor<CloseWindowPacket>, IInputBlocker
     {
-        private UIDocument _uiDocument;
-        private ModalWindowHandler _modalWindowHandler;
+        private UIDocument _uiDocument = null!;
+        private ModalWindowHandler _modalWindowHandler = null!;
         private readonly List<(string tag, VisualElement root, WindowBinding binding, List<VisualElement> clickableElements)> _openWindows = new();
 
         public bool HasOpenWindows => _openWindows.Count > 0;
-        public string TopWindowTag => _openWindows.Count > 0 ? _openWindows[^1].tag : null;
+        public string? TopWindowTag => _openWindows.Count > 0 ? _openWindows[^1].tag : null;
         public bool IsModalShowing => _modalWindowHandler?.IsShowing == true;
         bool IInputBlocker.IsInputBlocked => HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen;
 

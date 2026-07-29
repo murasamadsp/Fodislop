@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using MinesServer.Data;
 using UnityEngine;
@@ -124,7 +126,7 @@ namespace Fodinae.Scripts.UI.Programmator
             return ring;
         }
 
-        public void SetInnerItems(int[] ids, Color[] colors = null)
+        public void SetInnerItems(int[] ids, Color[]? colors = null)
         {
             _innerContainer.Clear();
             _innerIds = ids ?? Array.Empty<int>();
@@ -180,7 +182,7 @@ namespace Fodinae.Scripts.UI.Programmator
             }
         }
 
-        public void SetOuterItems(int[] ids, Color[] colors = null)
+        public void SetOuterItems(int[] ids, Color[]? colors = null)
         {
             _outerContainer.Clear();
             _outerIds = ids ?? Array.Empty<int>();

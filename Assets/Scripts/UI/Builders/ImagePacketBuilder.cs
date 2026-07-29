@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -13,7 +15,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class ImagePacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not ImagePacket imagePacket)
             {

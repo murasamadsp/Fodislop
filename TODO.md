@@ -1,15 +1,12 @@
 - [ ] TODO: Refactor GIF decoding (mgGif.cs) to use sprite sheets or optimize performance for handling multiple animated skins/tails simultaneously. Unsafe blocks and raw pointers in C# may cause CPU spikes.
 - [ ] Настройки аудио и обработка смены аудио-устройств — Реализовать UI настроек громкости шин (Master, SFX, Music, Voice, Ambience, UI, Narrative) и авто-рессет/переинициализацию FMOD/Unity бэкенда при смене устройства вывода по умолчанию (`Default audio device was changed`).
-- [ ] Аудит `Assets/Editor/` — разобраться какие скрипты ещё нужны, а какие можно удалить: `MapbConverter.cs`, `ExportSprites.cs` и `FmodBankBuilder.cs` — вероятно разовые утилиты, которые можно убрать если больше не используются.
+- [x] Аудит `Assets/Editor/` — `ExportSprites.cs` удалён (мёртвая разовая утилита). Оставлены: `BuildScript.cs` (билды), `CsProjFix.cs` (csproj), `FmodBankBuilder.cs` (активен: синк банков FodinaeAudio → StreamingAssets, fallback в рантайме), `MapbConverter.cs` (единственный генератор baked-мира). ⚠ Найдено: `StreamingAssets/WorldMaps/` содержит 74МБ `pallada_cells.zip`, который НИКТО не распаковывает — рантайм ищет `pallada_cells.mapb`. Отдельная задача: либо распаковать zip→mapb репо, либо удалить zip.
 - ПЕРЕВЕСТИ НА СОВРЕМЕННЫЙ СИ ШАРП
 - тексты написать (без иишки)
 - компонентно-солид mvp рефакторинг
-- документацию в субмодуль?
-- глубокий баг: иногда при плее не работает интерфейс
-- тонна блять синхронных процессов и гонок определений
+- тонна блять синхронных (серийных) процессов и гонок определений
 - нет экрана загрузки
 - добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - режим предпросмотра сделать
 - разобраться со сценами
-- А че у нас 2 раза пауза открывается? Чтобы продолжить мне надо продолжить дважды
 - тег система не идеальна. сделать ревью

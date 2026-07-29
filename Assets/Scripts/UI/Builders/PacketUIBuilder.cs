@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using Fodinae.Scripts.UI.Builders;
 using MinesServer.Networking.Server.Packets.GUI;
@@ -12,10 +14,10 @@ namespace Fodinae.Scripts
     {
         private readonly PacketUIBuilderFactory _builderFactory = new();
 
-        public VisualElement Build(IGUIComponentPacket packet)
+        public VisualElement? Build(IGUIComponentPacket packet)
         {
             var builder = _builderFactory.CreateBuilder(packet);
-            VisualElement element;
+            VisualElement? element;
 
             if (builder != null)
             {
@@ -27,10 +29,10 @@ namespace Fodinae.Scripts
                 element.style.backgroundColor = Color.magenta;
             }
 
-            StyleApplicator.ApplyStyles(element, packet);
-            ApplyAttachedProperties(element, packet);
+            StyleApplicator.ApplyStyles(element!, packet);
+            ApplyAttachedProperties(element!, packet);
 
-            element.userData = packet;
+            element!.userData = packet;
 
             return element;
         }

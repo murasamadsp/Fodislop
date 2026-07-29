@@ -1,3 +1,5 @@
+#nullable enable
+
 using MinesServer.Networking.Server.Packets.GUI;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -23,6 +25,7 @@ namespace Fodinae.Scripts.UI
 
             var panel = new VisualElement();
             panel.AddToClassList("popup-panel");
+
             // Размеры окна под контент пакета
             panel.style.minWidth = 300;
             panel.style.maxWidth = 500;

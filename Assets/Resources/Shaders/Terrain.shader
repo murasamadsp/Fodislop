@@ -146,12 +146,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
-                if (input.worldPos.w > 1.5) discard;
+                // TBDR: no discard anywhere in this shader — transparent output instead.
+                // discard kills Hidden Surface Removal on Apple GPUs; alpha-0 blending is visually identical.
+                if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
                 if (input.subAtlasRect.z < 0.0001)
                 {
                     return input.color;
                 }
-                if (input.color.a < 0.05) discard;
+                if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
                 if (_DebugMode > 0.5)
                 {
@@ -164,7 +166,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (subAtlasSizeUV.x <= 0 || tileSizeUV.x <= 0)
                 {
-                    if (input.color.a < 0.05) discard;
+                    if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
                     return input.color;
                 }
 
@@ -221,7 +223,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (texColor.a < 0.05)
                 {
-                    discard;
+                    return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
                 float3 finalRgb = texColor.rgb;
@@ -495,12 +497,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
-                if (input.worldPos.w > 1.5) discard;
+                // TBDR: no discard anywhere in this shader — transparent output instead.
+                // discard kills Hidden Surface Removal on Apple GPUs; alpha-0 blending is visually identical.
+                if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
                 if (input.subAtlasRect.z < 0.0001)
                 {
                     return input.color;
                 }
-                if (input.color.a < 0.05) discard;
+                if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
                 if (_DebugMode > 0.5)
                 {
@@ -513,7 +517,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (subAtlasSizeUV.x <= 0 || tileSizeUV.x <= 0)
                 {
-                    if (input.color.a < 0.05) discard;
+                    if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
                     return input.color;
                 }
 
@@ -570,7 +574,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (texColor.a < 0.05)
                 {
-                    discard;
+                    return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
                 float3 finalRgb = texColor.rgb;

@@ -1,3 +1,5 @@
+#nullable enable
+
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -14,6 +16,7 @@ namespace Fodinae.Scripts.UI
             _tooltipElement = new VisualElement();
             _tooltipElement.name = "Tooltip";
             _tooltipElement.AddToClassList("tooltip-panel");
+
             // Видимость — рантайм-состояние
             _tooltipElement.style.display = DisplayStyle.None;
             _tooltipElement.pickingMode = PickingMode.Ignore;

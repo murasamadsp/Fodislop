@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -42,10 +44,10 @@ namespace Fodinae.Scripts.World
 
         private IAssetLoader _assetLoader;
 
-        // Method injection runs right after Awake — the earliest moment the
-        // dependency is actually available (field injection happens after AddComponent).
         [Inject]
-        private void Construct(IAssetLoader assetLoader)
+
+
+        public void Construct(IAssetLoader assetLoader)
         {
             _assetLoader = assetLoader;
             if (Application.isPlaying && assetLoader is ClientAssetLoader loader)
@@ -340,11 +342,6 @@ namespace Fodinae.Scripts.World
                 filename = "Cells/32";
             }
 
-            if (cellType == CellType.Empty)
-            {
-                filename = "Cells/32";
-            }
-
 
             var cachedTexture = _textureCache.GetCachedTexture(cellType);
             if (cachedTexture != null)
@@ -478,7 +475,7 @@ namespace Fodinae.Scripts.World
             }
         }
 
-        public TextureAtlas GetAtlasForCell(CellType cellType)
+        public TextureAtlas? GetAtlasForCell(CellType cellType)
         {
             EnsureInitialized();
             foreach (var atlas in _atlases)

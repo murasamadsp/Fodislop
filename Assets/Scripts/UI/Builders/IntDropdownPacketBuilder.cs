@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Linq;
 using Fodinae.Scripts;
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -8,7 +10,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class IntDropdownPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not IntDropdownPacket intDropPkt)
             {

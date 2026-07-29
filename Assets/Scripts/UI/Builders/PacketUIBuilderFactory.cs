@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts;
@@ -30,7 +32,7 @@ namespace Fodinae.Scripts.UI.Builders
             _builders.Add(typeof(StringDropdownPacket), () => new StringDropdownPacketBuilder());
         }
 
-        public PacketUIBuilderBase CreateBuilder(IGUIComponentPacket packet)
+        public PacketUIBuilderBase? CreateBuilder(IGUIComponentPacket packet)
         {
             if (_builders.TryGetValue(packet.GetType(), out var builderFactory))
             {

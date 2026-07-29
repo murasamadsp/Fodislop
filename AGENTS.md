@@ -4,13 +4,22 @@
 
 **Fodinae** — 2D-клиент игры на Unity (URP) с тайловым рендерингом мира и сетевым обменом данными. MMORPG песочница с программатором.
 
+- **Язык & Ядро**: Modern C# (C# 12, `<LangVersion>12.0</LangVersion>`, `#nullable enable` включены глобально).
 - **Движок**: Unity 6 (`6000.5.0f1`).
 - **Рендер**: Universal Render Pipeline 2D (`com.unity.render-pipelines.universal` 17.5.0).
 - **Сетевое взаимодействие**: Пакеты `darkar25.fodinae.*` (data, networking, connection) — подключены как Git-зависимости из [MinesReborn/MinesServerNetworking](https://github.com/MinesReborn/MinesServerNetworking).
 - **Интерфейс**: UI Toolkit — пакетная сборка окон из `OpenWindowPacket` через `PacketUIBuilderFactory` (Canvas, Panel, Grid, Text, TextBox, Image, Selectable, Slider, Dropdown, ScrollView, Line, DockPanel), Binding (SmartFormat), Programmator (визуальное программирование), кастомные контролы (Selectable, RegexTextField, UILine, ChatInputBlinker).
 - **Асинхронность**: `UniTask` (vendored в `Assets/Plugins/UniTask/`).
 
-### 1.1 Архитектурная концепция клиенто-серверного взаимодействия
+### 1.1 Стандарты C# 12 и Архитектурные Правила
+
+1. **File-Scoped Namespaces**: Все файлы используют `namespace Fodinae.Domain;` вместо вложенных фигурных скобок.
+2. **Nullable Reference Types**: Глобально включен `#nullable enable`. Все поля, свойства и параметры явно размечаются (`string?`, `null!`).
+3. **Primary Constructors & Record Structs**: Легковесные структуры и хендлы используют `readonly record struct` и первичные конструкторы.
+4. **Collection Expressions**: Использование `[]` вместо `new List<T>()` или `new T[]`.
+5. **Global Usings**: В `Fodinae.Core.GlobalUsings` объявлены глобальные usings для всех основных пространств имён: `Fodinae.Core`, `Fodinae.AssetPipeline`, `Fodinae.Audio.*`, `Fodinae.Networking.*`, `Fodinae.World.*`, `Fodinae.Game.*`, `Fodinae.Player.*`, `Fodinae.UI.*`, `Fodinae.Effekseer`.
+
+### 1.2 Архитектурная концепция клиенто-серверного взаимодействия
 
 Архитектура Fodinae построена на четком разделении тяжелого рендеринга и легкого сетевого состояния:
 
@@ -19,11 +28,12 @@
 3. **Ленивая однократная загрузка тяжелых ассетов (On-Demand Fetching)**: При первом появлении ранее неизвестного объекта (новый блок, скин робота, иконка пака, аудио-банк) клиент запрашивает бинарные ассеты (текстуры, спрайты, `.bank`) с CDN/сервера один раз.
 4. **Кэширование и локальный рендер**: Все полученные ассеты сохраняются в стойком дисковом кэше `PersistentAssetCache` (с ETag/MD5 валидацией) и ОЗУ (`CellTextureCache`, `AssetCache`). В дальнейшем клиент выполняет тяжелый рендеринг исключительно из локального кэша без повторных сетевых запросов.
 
+
 ## 2. Структура проекта
 
 ```text
 Assets/
-  Editor/              # BuildScript.cs, CsProjFix.cs, ExportSprites.cs, FmodBankBuilder.cs, MapbConverter.cs — тулинг сборки, экспорта, конвертации карт
+  Editor/              # BuildScript.cs (сборка билдов), CsProjFix.cs (csproj постпроцессор), FmodBankBuilder.cs (синк FMOD-банков), MapbConverter.cs (конвертер серверных карт)
   Plugins/             # Vendored DLL
     UniTask/           # Vendored UniTask (полный пакет)
     SharpCompress, ZstdSharp, K4os.Compression.LZ4  # Сжатие
@@ -64,8 +74,7 @@ Assets/
       GameLifetimeScope.cs    # LifetimeScope для сцены: регистрация DI + BuildCallback с инжекцией через reflection
       GameConstants.cs        # Игровые константы
       ObjectPool.cs           # Пул объектов
-      TentaclePool.cs         # Пул щупалец
-      SharedMaterialCache.cs  # Кэш общих материалов
+      SharedMaterialCache.cs  # Кэш общих материалов (Sprites/Default по текстуре — используется и TentacleBatchRenderer)
       GlobalUsings.cs         # Глобальные using'и
     VContainer/
       Runtime/                # Vendored VContainer 1.19 (81 файлов)
@@ -83,6 +92,8 @@ Assets/
       Pack.cs                     # Игровой предмет (пак на земле)
       Robot.cs                    # Робот (NPC/игрок в мире)
       RobotHeadlight.cs           # Фары/освещение робота
+      Tentacle.cs                 # Симуляция щупал хвоста (пружинная цепь)
+      TentacleBatchRenderer.cs    # Батч-рендер всех щупал: 1 меш на текстуру хвоста (1 draw call вместо 4/робота)
       ServerAudioEvent.cs         # Серверный аудио-эффект (SFXPacket → FMOD + VFX)
       VFXPool.cs                  # Пул визуальных эффектов
       Managers/
@@ -256,6 +267,7 @@ scripts/
 | `RegisterManager<VFXPool>` | `IVFXService`, `VFXPool` | MonoBeh |
 | `RegisterManager<PackManager>` | `IPackService`, `PackManager` | MonoBeh |
 | `RegisterManager<RobotManager>` | `IRobotService`, `RobotManager` | MonoBeh |
+| `RegisterManager<TentacleBatchRenderer>` | (self) | MonoBeh |
 | `RegisterManager<ServerConfig>` | `IServerConfig`, `ServerConfig` | MonoBeh |
 | `RegisterManager<TextureStorageManager>` | `ITextureStorageService`, `TextureStorageManager` | MonoBeh |
 | `RegisterManager<GlobalChatUI>` | (self) | MonoBeh |

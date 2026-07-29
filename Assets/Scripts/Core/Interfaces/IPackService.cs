@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Game;
 using MinesServer.Data;
 using UnityEngine;

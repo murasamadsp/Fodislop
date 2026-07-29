@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;

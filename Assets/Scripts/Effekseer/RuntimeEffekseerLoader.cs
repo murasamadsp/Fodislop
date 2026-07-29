@@ -1,3 +1,5 @@
+#nullable enable
+
 // Copyright (c) PlaceholderCompany. All rights reserved.
 
 using System;
@@ -52,11 +54,11 @@ namespace Fodinae.Scripts.Effekseer
         /// registered in <see cref="EffekseerSystem"/> and ready to play.
         /// Returns null if the .efk data is invalid or loading fails.
         /// </returns>
-        public static async UniTask<EffekseerEffectAsset> LoadEffectAsync(
+        public static async UniTask<EffekseerEffectAsset?> LoadEffectAsync(
             byte[] efkBytes,
             string effectName,
-            Func<string, string> texturePathMapper = null,
-            ClientAssetLoader clientAssetLoader = null,
+            Func<string, string>? texturePathMapper = null,
+            ClientAssetLoader? clientAssetLoader = null,
             int textureTimeoutSeconds = 10)
         {
             if (efkBytes == null || efkBytes.Length < 4)
@@ -111,7 +113,6 @@ namespace Fodinae.Scripts.Effekseer
                         path = rawPath,
                         texture = tex,
                     });
-
                 }
                 else
                 {
@@ -157,7 +158,7 @@ namespace Fodinae.Scripts.Effekseer
         /// </summary>
         /// <param name="efkBytes">Raw .efk file data.</param>
         /// <returns>Parsed resource paths, or null if parsing fails.</returns>
-        public static EffekseerResourcePath GetResourcePaths(byte[] efkBytes)
+        public static EffekseerResourcePath? GetResourcePaths(byte[] efkBytes)
         {
             var resourcePath = new EffekseerResourcePath();
             if (EffekseerEffectAsset.ReadResourcePath(efkBytes, ref resourcePath))
@@ -171,7 +172,7 @@ namespace Fodinae.Scripts.Effekseer
         /// <summary>
         /// Download a single texture from the server and decode it into a Texture2D.
         /// </summary>
-        private static async UniTask<Texture2D> DownloadTextureAsync(
+        private static async UniTask<Texture2D?> DownloadTextureAsync(
             ClientAssetLoader loader,
             string serverPath,
             int timeoutSeconds)

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Scripts.Core.Interfaces;
@@ -35,7 +37,7 @@ namespace Fodinae.Scripts.Networking
     public partial class PacketHandler : MonoBehaviour, IInputBlocker
     {
         public bool IsInputBlocked => _windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen);
-        public string TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
+        public string? TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
 
         private static readonly WorldInitProcessor WorldInit = new();
         private static readonly RobotInfoProcessor RobotInfo = new();
@@ -67,11 +69,10 @@ namespace Fodinae.Scripts.Networking
         private GameManager _gameManager = null!;
         [Inject]
         private IMapDataProvider _mapDataProvider = null!;
-        private MapStorage MapStorage => _mapStorageInterface as MapStorage;
+        private MapStorage? MapStorage => _mapStorageInterface as MapStorage;
 
         protected virtual void Awake()
         {
-
             if (_mapDataProvider == null)
             {
                 Debug.LogError("[PacketHandler] FATAL: IMapDataProvider is not injected — PacketHandler cannot function. World will not render.");
@@ -238,7 +239,6 @@ namespace Fodinae.Scripts.Networking
             {
                 concreteMM.OnWorldInitialized -= OnWorldInitialized;
             }
-
         }
 
         private void OnWorldInitialized()
@@ -267,7 +267,6 @@ namespace Fodinae.Scripts.Networking
             {
                 gm.AuthorizeUI();
             }
-
         }
     }
 }

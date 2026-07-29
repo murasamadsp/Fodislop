@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -26,24 +28,24 @@ namespace Fodinae.Scripts
         private readonly ConcurrentDictionary<string, CacheEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, long> _entrySizes = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentQueue<string> _accessOrder = new();
-        private readonly Func<string, CancellationToken, int, UniTask<byte[]>> _bytesLoader;
+        private readonly Func<string, CancellationToken, int, UniTask<byte[]?>> _bytesLoader;
         private long _totalBytes;
         private long _maxBytes = DEFAULT_MAX_BYTES;
 
-        public AssetCache(Func<string, CancellationToken, int, UniTask<byte[]>> bytesLoader)
+        public AssetCache(Func<string, CancellationToken, int, UniTask<byte[]?>> bytesLoader)
         {
             _bytesLoader = bytesLoader ?? throw new ArgumentNullException(nameof(bytesLoader));
         }
 
         /// <summary>Retrieve raw bytes. Cached and deduplicated.</summary>
-        public UniTask<byte[]> GetBytesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
+        public UniTask<byte[]?> GetBytesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetBytesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve a decoded Texture2D. Cached after first decode.</summary>
-        public UniTask<Texture2D> GetTextureAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
+        public UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetTextureAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -138,18 +140,18 @@ namespace Fodinae.Scripts
             private readonly AssetCache _cache;
 
             // ── Raw bytes ──
-            private byte[] _bytes;
-            private TaskCompletionSource<byte[]> _bytesPromise;
+            private byte[]? _bytes;
+            private TaskCompletionSource<byte[]?> _bytesPromise;
 
             // ── Derivated formats (lazy, computed on first request) ──
-            private Texture2D _texture;
-            private TaskCompletionSource<Texture2D> _texturePromise;
+            private Texture2D? _texture;
+            private TaskCompletionSource<Texture2D?> _texturePromise;
 
-            private AudioClip _audio;
-            private TaskCompletionSource<AudioClip> _audioPromise;
+            private AudioClip? _audio;
+            private TaskCompletionSource<AudioClip?> _audioPromise;
 
-            private Sprite[] _sprites;
-            private TaskCompletionSource<Sprite[]> _spritePromise;
+            private Sprite[]? _sprites;
+            private TaskCompletionSource<Sprite[]?> _spritePromise;
 
             // Stored alongside sprites for AnimatedSpriteData lookups
             private float _spriteFps;
@@ -192,7 +194,7 @@ namespace Fodinae.Scripts
 
             // ── Public API ──
 
-            public UniTask<byte[]> GetBytesAsync(Func<UniTask<byte[]>> loader)
+            public UniTask<byte[]?> GetBytesAsync(Func<UniTask<byte[]?>> loader)
             {
                 // Fast path — already loaded
                 lock (_lock)
@@ -209,7 +211,7 @@ namespace Fodinae.Scripts
                 }
 
                 // First caller — create the promise
-                TaskCompletionSource<byte[]> promise;
+                TaskCompletionSource<byte[]?> promise;
                 lock (_lock)
                 {
                     if (_bytes != null)
@@ -222,13 +224,13 @@ namespace Fodinae.Scripts
                         return AwaitTask(_bytesPromise.Task);
                     }
 
-                    _bytesPromise = promise = new TaskCompletionSource<byte[]>();
+                    _bytesPromise = promise = new TaskCompletionSource<byte[]?>();
                 }
 
                 return LoadBytes(promise, loader);
             }
 
-            public UniTask<Texture2D> GetTextureAsync(Func<UniTask<byte[]>> loader)
+            public UniTask<Texture2D?> GetTextureAsync(Func<UniTask<byte[]?>> loader)
             {
                 lock (_lock)
                 {
@@ -261,7 +263,7 @@ namespace Fodinae.Scripts
                 return DecodeTexture(loader);
             }
 
-            public UniTask<AudioClip> GetAudioAsync(Func<UniTask<byte[]>> loader)
+            public UniTask<AudioClip?> GetAudioAsync(Func<UniTask<byte[]?>> loader)
             {
                 lock (_lock)
                 {
@@ -294,7 +296,7 @@ namespace Fodinae.Scripts
                 return DecodeAudio(loader);
             }
 
-            public UniTask<Sprite[]> GetSpritesAsync(Func<UniTask<byte[]>> loader)
+            public UniTask<Sprite[]?> GetSpritesAsync(Func<UniTask<byte[]?>> loader)
             {
                 lock (_lock)
                 {
@@ -327,7 +329,7 @@ namespace Fodinae.Scripts
                 return DecodeSprites(loader);
             }
 
-            public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(Func<UniTask<byte[]>> loader)
+            public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(Func<UniTask<byte[]?>> loader)
             {
                 // Fast path — already decoded
                 lock (_lock)
@@ -381,7 +383,7 @@ namespace Fodinae.Scripts
 
             // ── Private Instance Methods ──
 
-            private async UniTask<byte[]> LoadBytes(TaskCompletionSource<byte[]> promise, Func<UniTask<byte[]>> loader)
+            private async UniTask<byte[]?> LoadBytes(TaskCompletionSource<byte[]?> promise, Func<UniTask<byte[]?>> loader)
             {
                 try
                 {
@@ -412,7 +414,7 @@ namespace Fodinae.Scripts
                 }
             }
 
-            private async UniTask<Texture2D> DecodeTexture(Func<UniTask<byte[]>> loader)
+            private async UniTask<Texture2D?> DecodeTexture(Func<UniTask<byte[]>> loader)
             {
                 try
                 {
@@ -493,7 +495,7 @@ namespace Fodinae.Scripts
                 }
             }
 
-            private async UniTask<AudioClip> DecodeAudio(Func<UniTask<byte[]>> loader)
+            private async UniTask<AudioClip?> DecodeAudio(Func<UniTask<byte[]>> loader)
             {
                 try
                 {
@@ -542,7 +544,7 @@ namespace Fodinae.Scripts
                 }
             }
 
-            private async UniTask<Sprite[]> DecodeSprites(Func<UniTask<byte[]>> loader)
+            private async UniTask<Sprite[]?> DecodeSprites(Func<UniTask<byte[]>> loader)
             {
                 try
                 {

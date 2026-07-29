@@ -1,3 +1,5 @@
+#nullable enable
+
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;

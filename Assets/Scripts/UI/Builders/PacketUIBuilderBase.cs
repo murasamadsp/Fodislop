@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -7,6 +9,6 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public abstract class PacketUIBuilderBase
     {
-        public abstract VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder);
+        public abstract VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder);
     }
 }

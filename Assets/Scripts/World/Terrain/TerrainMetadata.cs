@@ -1,3 +1,5 @@
+#nullable enable
+
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;

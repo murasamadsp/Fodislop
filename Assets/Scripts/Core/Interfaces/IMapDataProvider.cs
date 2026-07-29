@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;

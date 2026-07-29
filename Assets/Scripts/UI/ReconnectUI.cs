@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Networking.Connection;
 using UnityEngine;
 using UnityEngine.UIElements;

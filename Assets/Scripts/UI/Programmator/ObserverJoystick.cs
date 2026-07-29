@@ -1,3 +1,5 @@
+#nullable enable
+
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;

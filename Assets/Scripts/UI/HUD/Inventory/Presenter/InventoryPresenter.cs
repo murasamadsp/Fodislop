@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.UI.HUD.Inventory.View;
 using UnityEngine;
 

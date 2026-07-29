@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.UI;
@@ -29,8 +31,8 @@ namespace Fodinae.Scripts.Game.Managers
         public GameState CurrentState { get; private set; } = GameState.Offline;
         public bool IsUIAuthorized { get; private set; }
 
-        public event Action<GameState> OnGameStateChanged;
-        public event Action OnWorldLoaded;
+        public event Action<GameState>? OnGameStateChanged;
+        public event Action? OnWorldLoaded;
 
         private GameObject _uiRoot;
 
@@ -48,12 +50,6 @@ namespace Fodinae.Scripts.Game.Managers
             }
         }
 
-        /// <summary>
-        /// Создаёт неактивный UIRoot с HUD-окнами (инвентарь, HUD игрока, меню паузы, локальный чат).
-        /// Активируется через <see cref="AuthorizeUI"/> после успешной авторизации.
-        /// FPSCounter, GlobalChatUI, FloatingChatManager — создаются DI (GameLifetimeScope).
-        /// MinimapController — компонент в сцене.
-        /// </summary>
         private void SetupUI()
         {
             _uiRoot = new GameObject("UIRoot");

@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using Fodinae.UI.Controls; // Add this using directive
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -8,7 +10,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class TextBoxPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not TextBoxPacket textInputPkt)
             {

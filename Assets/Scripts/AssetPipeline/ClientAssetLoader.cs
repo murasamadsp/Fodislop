@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -41,19 +43,6 @@ namespace Fodinae.Scripts
 
         private IConnectionService _connectionService;
 
-        // Method injection runs right after Awake — the earliest moment the
-        // dependency is actually available (field injection happens after AddComponent).
-        [Inject]
-        private void Construct(IConnectionService connectionService)
-        {
-            _connectionService = connectionService;
-            if (connectionService is ConnectionManager cm)
-            {
-                cm.OnPacketReceived -= OnPacketReceived;
-                cm.OnPacketReceived += OnPacketReceived;
-            }
-        }
-
         protected void Awake()
         {
             _placeholderTexture = new Texture2D(1, 1);
@@ -92,7 +81,7 @@ namespace Fodinae.Scripts
             return GetAssetPath(cleanFilename);
         }
 
-        public async UniTask<Texture2D> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
             var texture = await _cache.GetTextureAsync(filename, cancellationToken, timeoutSeconds: 5);
 
@@ -149,7 +138,7 @@ namespace Fodinae.Scripts
             _cache.Clear();
         }
 
-        private static async UniTask<byte[]> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
+        private static async UniTask<byte[]?> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
         {
             var instance = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
             if (instance == null)
@@ -161,7 +150,7 @@ namespace Fodinae.Scripts
             return await instance.LoadBytesFromServer(filename, ct, timeoutSeconds);
         }
 
-        private async UniTask<byte[]> LoadBytesFromServer(string filename, CancellationToken ct, int timeoutSeconds)
+        private async UniTask<byte[]?> LoadBytesFromServer(string filename, CancellationToken ct, int timeoutSeconds)
         {
             filename = filename.TrimStart('/').ToLowerInvariant();
 

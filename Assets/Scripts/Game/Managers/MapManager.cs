@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts.Core;
@@ -16,13 +18,15 @@ namespace Fodinae.Scripts.Game.Managers
     [DefaultExecutionOrder(-10000)]
     public class MapManager : MonoBehaviour, IMapDataProvider
     {
-        private Camera _mainCamera;
+        private Camera? _mainCamera;
         private IWorldDataStorage _worldStorage = null!;
         private PackManager _packManager = null!;
         private IRobotService _robotService = null!;
         private IServerAudioService _audioService = null!;
         [Inject]
-        private void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
+
+
+        public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
         {
             _worldStorage = worldStorage;
             _packManager = packManager;

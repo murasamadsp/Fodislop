@@ -1,15 +1,85 @@
 {
-  "$schema": "https:/opencode.ai/config.json",
+  "$schema": "https://opencode.ai/config.json",
+  "model": "modal/murasama-off--ep-kimi-k3-server.us-west.modal.direct",
+  "small_model": "modal/murasama-off--ep-kimi-k3-server.us-west.modal.direct",
+  "snapshot": false,
+  "provider": {
+    "modal": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Modal",
+      "options": {
+        "baseURL": "https://inference.us-west.modal.direct/v1",
+        "apiKey": "wk-JABtwfsQjFuUq9s0mKOmyS.ws-ByeGqaT5odi8sgBmXJMN1e"
+      },
+      "models": {
+        "murasama-off--ep-kimi-k3-server.us-west.modal.direct": {
+          "name": "Kimi K3",
+          "attachment": false,
+          "reasoning": true,
+          "temperature": true,
+          "tool_call": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  },
+  "lsp": {
+    "csharp": {
+      "command": ["/Users/murasama/.dotnet/tools/csharp-ls"],
+      "extensions": [".cs"],
+      "env": {
+        "DOTNET_ROOT": "/opt/homebrew/opt/dotnet/libexec"
+      }
+    }
+  },
   "mcp": {
     "mcp-unity": {
       "type": "local",
+      "command": ["node", "Packages/com.gamelovers.mcp-unity/Server~/build/index.js"],
       "enabled": true,
-      "command": [
-        "node",
-        "Packages/com.gamelovers.mcp-unity/Server~/build/index.js"
-      ],
       "timeout": 30000
     }
   },
-  "snapshot": false
+  "permission": {
+    "lsp": "allow",
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git blame*": "allow",
+      "git branch*": "allow",
+      "git rev-parse*": "allow",
+      "git ls-files*": "allow",
+      "git stash list*": "allow",
+      "dotnet build*": "allow",
+      "dotnet test*": "allow",
+      "dotnet restore*": "allow",
+      "python3 *": "allow",
+      "ls*": "allow",
+      "cat *": "allow",
+      "rg *": "allow",
+      "which *": "allow",
+      "head *": "allow",
+      "tail *": "allow"
+    }
+  },
+  "watcher": {
+    "ignore": [
+      "Library/**",
+      "Temp/**",
+      "Logs/**",
+      "obj/**",
+      "bin/**",
+      "**/obj/**",
+      "**/bin/**",
+      "UserSettings/**",
+      "Build/**",
+      "Builds/**"
+    ]
+  }
 }

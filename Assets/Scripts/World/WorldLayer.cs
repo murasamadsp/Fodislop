@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -120,7 +122,7 @@ namespace Fodinae.Scripts
         }
 
         // --- Core Paging Logic ---
-        public T[] GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
+        public T[]? GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
         {
             if (_loadedChunks.TryGetValue(chunkIndex, out T[] chunk))
             {
@@ -399,7 +401,7 @@ namespace Fodinae.Scripts
             _dirtyChunks.Add(chunkIndex);
         }
 
-        private T[] LoadChunkFromDisk(int index)
+        private T[]? LoadChunkFromDisk(int index)
         {
             long offset = _chunkOffsets[index];
             if (offset < 0)

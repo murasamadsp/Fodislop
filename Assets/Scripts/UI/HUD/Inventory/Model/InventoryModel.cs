@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts.Core.Interfaces;
@@ -23,7 +25,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.Model
 
         private int _selectedSlot = -1;
         public int SelectedSlot => _selectedSlot;
-        public event Action<int> OnSlotSelected;
+        public event Action<int>? OnSlotSelected;
 
         public ItemData GetSlot(int index) => _slots[index];
         public void SetSlot(int index, ItemData item)

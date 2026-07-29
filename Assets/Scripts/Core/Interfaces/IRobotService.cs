@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Game;
 
 namespace Fodinae.Scripts.Core.Interfaces

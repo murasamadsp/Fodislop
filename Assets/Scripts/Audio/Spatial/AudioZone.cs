@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts.Audio.Backend;
 using Fodinae.Scripts.Audio.Core;
 using Fodinae.Scripts.Core;

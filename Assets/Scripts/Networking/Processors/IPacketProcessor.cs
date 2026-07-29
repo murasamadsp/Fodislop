@@ -1,3 +1,5 @@
+#nullable enable
+
 using MinesServer.Networking.Server.Packets;
 
 namespace Fodinae.Scripts.Networking.Processors

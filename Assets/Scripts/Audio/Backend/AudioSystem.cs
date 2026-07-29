@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Fodinae.Scripts.Audio.Core;
@@ -55,7 +57,7 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести событие по имени с опциональной 3D-позицией.</summary>
-        public AudioPlaybackHandle Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
+        public AudioPlaybackHandle? Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName))
             {
@@ -86,7 +88,7 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести 3D-событие с нативной привязкой FMOD к GameObject (позиция/поворот следуют автоматически в C++).</summary>
-        public AudioPlaybackHandle PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
+        public AudioPlaybackHandle? PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName) || targetGameObject == null)
             {
@@ -117,7 +119,7 @@ namespace Fodinae.Scripts.Audio.Backend
         // ─── Фиче-банки по требованию ────────────────────────────────
 
         /// <summary>Извлекает имя фиче-банка из категории события: "sfx/bz" → "sfx".</summary>
-        private static string GetFeatureBankName(string eventName)
+        private static string? GetFeatureBankName(string eventName)
         {
             var name = eventName;
             if (name.StartsWith("event:/", System.StringComparison.OrdinalIgnoreCase))
@@ -187,7 +189,7 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести FMOD Snapshot (например "snapshot:/cave_ambient").</summary>
-        public AudioPlaybackHandle PlaySnapshot(string snapshotPath)
+        public AudioPlaybackHandle? PlaySnapshot(string snapshotPath)
         {
             if (string.IsNullOrEmpty(snapshotPath))
             {
@@ -210,11 +212,11 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести 3D-событие на заданной позиции в мире.</summary>
-        public AudioPlaybackHandle PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null)
+        public AudioPlaybackHandle? PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null)
             => Play(eventName, worldPosition, layer, volume);
 
         /// <summary>Воспроизвести 2D-событие (без пространственного позиционирования).</summary>
-        public AudioPlaybackHandle Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
+        public AudioPlaybackHandle? Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
             => Play(eventName, null, layer, volume);
 
         // ═══════════════════════════════════════════════════════════

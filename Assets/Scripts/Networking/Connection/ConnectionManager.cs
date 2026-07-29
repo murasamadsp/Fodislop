@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
@@ -25,7 +27,7 @@ namespace Fodinae.Scripts.Networking.Connection
         public IServerConnection Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         private bool _useOldClient;
-        public event Action<ServerPacket> OnPacketReceived;
+        public event Action<ServerPacket>? OnPacketReceived;
 
         private readonly System.Collections.Concurrent.ConcurrentQueue<ServerPacket> _packetQueue = new();
 
@@ -34,7 +36,8 @@ namespace Fodinae.Scripts.Networking.Connection
         private const float ReconnectInterval = 20f;
         private string _reconnectStatus = string.Empty;
         private bool _serverInitiatedDisconnect;
-        private string _disconnectReason = string.Empty;
+
+    // private string _disconnectReason = string.Empty;
 
         protected void Awake()
         {

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.Scripts.Core;
@@ -23,32 +25,33 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         private const int CELL_GAP = 10;
         private const int ICON_SIZE = 36;
 
-        private UIDocument _doc;
+        private UIDocument _doc = null!;
         [Inject]
         private IInventoryModel _model = null!;
         [Inject]
         private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
-        private VisualElement _hotbarContainer;
-        private Button _inventoryButton;
-        private VisualElement _fullInventoryPanel;
+        private VisualElement _hotbarContainer = null!;
+        private Button _inventoryButton = null!;
+        private VisualElement _fullInventoryPanel = null!;
         private bool _isInventoryOpen = false;
 
         // Drag-and-drop
-        private VisualElement _floatingItem;
+        private VisualElement _floatingItem = null!;
         private int _dragFromSlot = -1;
-        private ItemData _draggedItem;
+        private ItemData? _draggedItem;
 
         // Context menu
-        private VisualElement _contextMenu;
-        private int _contextMenuSlot = -1;
+        private VisualElement _contextMenu = null!;
+
+    // private int _contextMenuSlot = -1;
 
         // Selection
         private int _lastSelectedSlot = -1;
-        private VisualElement _tooltipWrapper;
-        private VisualElement _tooltipBg;
-        private Label _tooltipName;
-        private Label _tooltipDesc;
+        private VisualElement _tooltipWrapper = null!;
+        private VisualElement _tooltipBg = null!;
+        private Label _tooltipName = null!;
+        private Label _tooltipDesc = null!;
 
         protected void Start()
         {
@@ -565,7 +568,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             if (_contextMenu != null)
             {
                 _contextMenu.RemoveFromHierarchy();
-                _contextMenu = null;
+                _contextMenu = null!;
             }
 
             _contextMenuSlot = -1;

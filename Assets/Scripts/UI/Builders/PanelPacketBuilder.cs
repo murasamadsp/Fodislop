@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -9,7 +11,7 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class PanelPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not PanelPacket)
             {

@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -21,7 +23,7 @@ namespace Fodinae.Scripts.Core
             }
         }
 
-        public static Material GetForTexture(Texture2D texture)
+        public static Material? GetForTexture(Texture2D texture)
         {
             if (texture == null)
             {

@@ -1,3 +1,5 @@
+#nullable enable
+
 using Fodinae.Scripts;
 using Fodinae.UI.Controls;
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -8,15 +10,15 @@ namespace Fodinae.Scripts.UI.Builders
 {
     public class SelectablePacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not SelectablePacket selectablePacket)
             {
                 return null;
             }
 
-            var checkedVisual = builder.Build(selectablePacket.Checked);
-            var uncheckedVisual = builder.Build(selectablePacket.Unchecked);
+            var checkedVisual = builder.Build(selectablePacket.Checked)!;
+            var uncheckedVisual = builder.Build(selectablePacket.Unchecked)!;
 
             var selectable = new Selectable
             {
