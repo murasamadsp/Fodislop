@@ -87,30 +87,6 @@ namespace Fodinae.Scripts.Player.Input
                         _moveInput.x += 1f;
                     }
                 }
-
-                // Fallback to Legacy Input System if Keyboard.current is empty
-                if (_moveInput == Vector2.zero)
-                {
-                    if (UnityEngine.Input.GetKey(KeyCode.W) || UnityEngine.Input.GetKey(KeyCode.UpArrow))
-                    {
-                        _moveInput.y += 1f;
-                    }
-
-                    if (UnityEngine.Input.GetKey(KeyCode.S) || UnityEngine.Input.GetKey(KeyCode.DownArrow))
-                    {
-                        _moveInput.y -= 1f;
-                    }
-
-                    if (UnityEngine.Input.GetKey(KeyCode.A) || UnityEngine.Input.GetKey(KeyCode.LeftArrow))
-                    {
-                        _moveInput.x -= 1f;
-                    }
-
-                    if (UnityEngine.Input.GetKey(KeyCode.D) || UnityEngine.Input.GetKey(KeyCode.RightArrow))
-                    {
-                        _moveInput.x += 1f;
-                    }
-                }
             }
 
             if (_moveInput.sqrMagnitude > 1f)
