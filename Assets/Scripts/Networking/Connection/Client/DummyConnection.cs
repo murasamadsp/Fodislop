@@ -1118,6 +1118,7 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
+            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(_mockBotId, 999, 1, "Skin/bee.png", "Tail/default.png", "Darkar25")));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
             HandleRobotInfoMock(_mockBotId).Forget();

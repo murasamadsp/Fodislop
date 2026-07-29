@@ -180,6 +180,12 @@ public class Robot : MonoBehaviour
         _smoothPosition = snappedPos;
         _smoothAngle = transform.eulerAngles.z;
 
+        if (string.IsNullOrEmpty(_skinPath) && IsLocalPlayer)
+        {
+            _skinPath = "Skin/bee.png";
+            _tailPath = "Tail/default.png";
+        }
+
         if (!string.IsNullOrEmpty(_skinPath))
         {
             LoadMetadataAssets();
