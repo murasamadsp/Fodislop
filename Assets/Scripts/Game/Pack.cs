@@ -26,8 +26,7 @@ namespace Fodinae.Scripts.Game
         private Sprite? _clanSprite;
 
         private EffekseerHandle _effekseerHandle;
-
-    // private EffekseerEffectAsset _effekseerAsset;
+        private EffekseerEffectAsset _effekseerAsset;
         private bool _hasEffekseerEffect;
 
         protected void Awake()

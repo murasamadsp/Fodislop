@@ -36,8 +36,7 @@ namespace Fodinae.Scripts.Networking.Connection
         private const float ReconnectInterval = 20f;
         private string _reconnectStatus = string.Empty;
         private bool _serverInitiatedDisconnect;
-
-    // private string _disconnectReason = string.Empty;
+        private string _disconnectReason = string.Empty;
 
         protected void Awake()
         {

@@ -44,7 +44,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         // Context menu
         private VisualElement _contextMenu = null!;
 
-    // private int _contextMenuSlot = -1;
+    private int _contextMenuSlot = -1;
 
         // Selection
         private int _lastSelectedSlot = -1;

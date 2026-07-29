@@ -21,16 +21,15 @@ namespace Fodinae.Scripts.UI
         private InputAction _mapToggleAction;
 
         private bool _isInMapMode;
-        // [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052")] private Vector3 _storedCamPos;
-        // [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052")] private float _storedCamZoom;
+        private Vector3 _storedCamPos;
+        private float _storedCamZoom;
 
         // HUD elements
         private Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView _playerHud;
         private Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView _inventory;
         private FPSCounter _fps;
         private MinimapController _minimap;
-
-    // private PauseMenu _pauseMenu;
+        private PauseMenu _pauseMenu;
 
         protected void Start()
         {
