@@ -63,48 +63,48 @@ namespace Fodinae.Scripts.Game.Managers
             if (UnityEngine.Object.FindAnyObjectByType<MinimapController>() == null)
             {
                 var mmGO = new GameObject("MinimapRoot");
-                mmGO.AddComponent<MinimapController>();
+                AddInjectedComponent<MinimapController>(mmGO);
                 mmGO.transform.SetParent(_uiRoot.transform);
             }
 
             var reconnectGO = new GameObject("ReconnectUI");
-            reconnectGO.AddComponent<ReconnectUI>();
+            AddInjectedComponent<ReconnectUI>(reconnectGO);
             reconnectGO.transform.SetParent(transform);
 
             if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>() == null)
             {
                 var invGO = new GameObject("InventoryRoot");
-                invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
-                invGO.AddComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>();
+                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>(invGO);
+                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>(invGO);
                 invGO.transform.SetParent(_uiRoot.transform);
             }
 
             if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>() == null)
             {
                 var hudGO = new GameObject("PlayerHUD");
-                hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
-                hudGO.AddComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>();
+                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>(hudGO);
+                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>(hudGO);
                 hudGO.transform.SetParent(_uiRoot.transform);
             }
 
             if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>() == null)
             {
                 var pauseGO = new GameObject("PauseMenu");
-                pauseGO.AddComponent<PauseMenu>();
+                AddInjectedComponent<PauseMenu>(pauseGO);
                 pauseGO.transform.SetParent(_uiRoot.transform);
             }
 
             if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>() == null)
             {
                 var chatGO = new GameObject("ChatSystem");
-                chatGO.AddComponent<LocalChatPopup>();
-                chatGO.AddComponent<GlobalChatUI>();
-                chatGO.AddComponent<FloatingChatManager>();
+                AddInjectedComponent<LocalChatPopup>(chatGO);
+                AddInjectedComponent<GlobalChatUI>(chatGO);
+                AddInjectedComponent<FloatingChatManager>(chatGO);
                 chatGO.transform.SetParent(_uiRoot.transform);
             }
 
             var arrowGO = new GameObject("MissionArrowUI");
-            arrowGO.AddComponent<MissionArrowUI>();
+            AddInjectedComponent<MissionArrowUI>(arrowGO);
             arrowGO.transform.SetParent(_uiRoot.transform);
         }
 
@@ -124,6 +124,14 @@ namespace Fodinae.Scripts.Game.Managers
         {
             Debug.Log("[GameManager] World load completed, notifying listeners.");
             OnWorldLoaded?.Invoke();
+        }
+
+        // Runtime-created components never reach GameLifetimeScope's startup injection
+        // scan — inject explicitly so their [Inject] fields are filled immediately.
+        private static void AddInjectedComponent<T>(GameObject go) where T : Component
+        {
+            var comp = go.AddComponent<T>();
+            Fodinae.Scripts.Core.ServiceLocator.Inject(comp);
         }
 
         public void AuthorizeUI()

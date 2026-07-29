@@ -12,6 +12,20 @@ namespace Fodinae.Scripts.Core
             _resolver = resolver;
         }
 
+        /// <summary>
+        /// Injects [Inject] members into a runtime-created object (AddComponent/from code).
+        /// Runtime-created components never reach GameLifetimeScope's startup injection scan.
+        /// </summary>
+        public static void Inject(object instance)
+        {
+            if (instance == null)
+            {
+                return;
+            }
+
+            _resolver?.Inject(instance);
+        }
+
         public static T Resolve<T>()
             where T : class
         {

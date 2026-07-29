@@ -29,8 +29,29 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            if (_robots.ContainsKey(robot.BotId))
+            // Same instance re-registered (e.g. Start() + Initialize()) — idempotent.
+            uint? staleKey = null;
+            foreach (var kvp in _robots)
             {
+                if (ReferenceEquals(kvp.Value, robot) && kvp.Key != robot.BotId)
+                {
+                    staleKey = kvp.Key;
+                    break;
+                }
+            }
+
+            if (staleKey.HasValue)
+            {
+                _robots.Remove(staleKey.Value);
+            }
+
+            if (_robots.TryGetValue(robot.BotId, out var existing))
+            {
+                if (ReferenceEquals(existing, robot))
+                {
+                    return;
+                }
+
                 Debug.LogWarning($"{TAG} Robot {robot.BotId} already registered, overwriting");
             }
 
