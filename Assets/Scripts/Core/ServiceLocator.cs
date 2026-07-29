@@ -17,6 +17,7 @@ namespace Fodinae.Scripts.Core
         {
             if (_resolver == null)
             {
+                Debug.LogError($"[ServiceLocator] Cannot resolve {typeof(T).Name}, _resolver is null!");
                 return null;
             }
 
