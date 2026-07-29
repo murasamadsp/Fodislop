@@ -82,6 +82,8 @@ namespace Fodinae.Scripts
                 _doc.panelSettings = null;
                 _doc.panelSettings = ps;
             }
+
+            Debug.Log($"[MainMenu] UI BUILT: rootChildren={root.childCount}, rootLayout={root.layout}, panel={(_doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
         }
 
         protected void OnDisable()

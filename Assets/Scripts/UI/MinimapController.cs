@@ -8,6 +8,7 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using VContainer;
 
 namespace Fodinae.Scripts.UI
 {
@@ -29,8 +30,11 @@ namespace Fodinae.Scripts.UI
 
         // World state
         private PlayerMovementController _player;
-        private MapStorage _mapStorage;
-        private MapManager _mapManager;
+        [Inject]
+        private MapStorage _mapStorage = null!;
+
+        [Inject]
+        private MapManager _mapManager = null!;
         private WorldLayer<CellType> _cellLayer;
         private int _worldWidth;
         private int _worldHeight;
@@ -63,9 +67,6 @@ namespace Fodinae.Scripts.UI
 
         protected void Start()
         {
-            _mapManager = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
-            _mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-
             if (_mapManager == null)
             {
                 Debug.LogError("[MinimapController] MapManager is null — minimap disabled");

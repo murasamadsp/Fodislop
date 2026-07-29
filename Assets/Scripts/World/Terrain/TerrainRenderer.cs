@@ -35,8 +35,10 @@ namespace Fodinae.Scripts.World.Terrain
 
         [Inject]
         private IWorldDataStorage _storage = null!;
+
         [Inject]
         private MapManager _mapManager = null!;
+
         [Inject]
         private ITextureService _textureService = null!;
 
@@ -196,8 +198,22 @@ namespace Fodinae.Scripts.World.Terrain
             Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
         }
 
+        private int _diagLogged;
+
+        private void LogDiag(int bit, string message)
+        {
+            if ((_diagLogged & bit) != 0)
+            {
+                return;
+            }
+
+            _diagLogged |= bit;
+            Debug.Log(message);
+        }
+
         private void OnTextureLoaded(string filename, Texture2D texture)
         {
+            LogDiag(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
             if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
             {
                 InitializeShader();
@@ -221,9 +237,11 @@ namespace Fodinae.Scripts.World.Terrain
 #endif
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
+                LogDiag(1 << 0, $"[TerrainDiag] gate BLOCKED: mapManager={(_mapManager == null ? "NULL" : "ok")}, storage={(_storage == null ? "NULL" : (_storage.IsReady ? "ready" : "NOT_READY"))}");
                 return;
             }
 
+            LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
             if (_meshFilter != null && _meshFilter.sharedMesh != _mesh)
             {
                 _meshFilter.sharedMesh = _mesh;
@@ -236,8 +254,11 @@ namespace Fodinae.Scripts.World.Terrain
 
             if (_mainCamera == null)
             {
+                LogDiag(1 << 2, "[TerrainDiag] camera NULL");
                 return;
             }
+
+            LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
 
             int targetWidth = Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) + (_viewportPadding * 2);
             int targetHeight = Mathf.CeilToInt((_mainCamera.orthographicSize * 2) / _cellSize) + (_viewportPadding * 2);
@@ -265,6 +286,10 @@ namespace Fodinae.Scripts.World.Terrain
                 _precalc.EnsureCapacity(_meshWidth, _meshHeight);
                 _meshBuilder.EnsureCapacity(_meshWidth, _meshHeight, _cellSize);
                 _backgroundFloodFill.Allocate(_meshWidth, _meshHeight);
+
+                // Размеры меша поменялись — скролл-путь небезопасен (вершины/индексы переаллоцируются),
+                // принудительно идём в полный ребилд.
+                _needsRefresh = true;
             }
 
             Vector3 camPos = _mainCamera.transform.position;
@@ -282,17 +307,22 @@ namespace Fodinae.Scripts.World.Terrain
 
         private void UpdateVertexAttributes(int minX, int minY)
         {
+            LogDiag(1 << 4, $"[TerrainDiag] UpdateVertexAttributes min=({minX},{minY}) size={_meshWidth}x{_meshHeight}");
             var wtm = _textureService as WorldTextureManager;
             if (wtm == null || _mapManager == null)
             {
+                LogDiag(1 << 5, $"[TerrainDiag] BAIL: wtm={(wtm == null ? "NULL" : "ok")} mapManager={(_mapManager == null ? "NULL" : "ok")}");
                 return;
             }
 
             var atlases = wtm.GetAllAtlases();
             if (atlases == null || atlases.Count == 0)
             {
+                LogDiag(1 << 6, "[TerrainDiag] BAIL: atlases empty");
                 return;
             }
+
+            LogDiag(1 << 7, $"[TerrainDiag] atlases: {atlases.Count}");
 
             bool materialsChanged = false;
             if (atlases.Count != _lastAtlasCount)
@@ -326,55 +356,39 @@ namespace Fodinae.Scripts.World.Terrain
 
             wtm.FlushDirtyAtlases();
 
-            bool canScroll = _cellCache.CacheMinX != int.MinValue && !_needsRefresh;
-            int dx = 0, dy = 0;
-            if (canScroll)
-            {
-                dx = (minX - 1) - _cellCache.CacheMinX;
-                dy = (minY - 1) - _cellCache.CacheMinY;
-                canScroll = Mathf.Abs(dx) < _cellCache.CacheWidth && Mathf.Abs(dy) < _cellCache.CacheHeight;
-            }
-
+            // ВАЖНО: инкрементальный скролл-путь (ScrollAndFill/BuildIncremental) сломан
+            // концептуально: он сдвигает вершины в буфере, но не обновляет индексный буфер
+            // меша — индексы указывают на чужие ячейки. Поэтому всегда полный ребилд:
+            // он детерминирован (вершины+индексы+bounds заливаются атомарно).
             try
             {
-                if (canScroll)
+                _cellCache.PopulateFull(minX, minY, _storage, _mapManager, wtm, atlases);
+                _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight, _mapManager);
+                _backgroundFloodFill.ComputeFull(this);
+                _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod);
+
+                _mesh.Clear();
+                _mesh.subMeshCount = atlases.Count;
+                _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+                _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
+                _mesh.RecalculateBounds();
+                LogDiag(1 << 8, $"[TerrainDiag] BuildFull: verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} bounds={_mesh.bounds}");
+
+                for (int i = 0; i < atlases.Count; i++)
                 {
-                    _cellCache.ScrollAndFill(dx, dy, _storage, _mapManager, wtm, atlases);
-                    _precalc.PrecalculateIncremental(_cellCache, _meshWidth, _meshHeight, dx, dy, _mapManager);
-                    _backgroundFloodFill.ComputeIncremental(dx, dy, this);
-                    _meshBuilder.BuildIncremental(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, dx, dy, atlases, _subMeshIndices, _useColorLod);
-
-                    _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS | MeshUpdateFlags.DontRecalculateBounds);
-                }
-                else
-                {
-                    _cellCache.PopulateFull(minX, minY, _storage, _mapManager, wtm, atlases);
-                    _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight, _mapManager);
-                    _backgroundFloodFill.ComputeFull(this);
-                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod);
-
-                    _mesh.Clear();
-                    _mesh.subMeshCount = atlases.Count;
-                    _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
-                    _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
-                    _mesh.RecalculateBounds();
-
-                    for (int i = 0; i < atlases.Count; i++)
+                    var atlasTex = atlases[i].Texture;
+                    if (_materials[i].GetTexture("_BaseMap") != atlasTex)
                     {
-                        var atlasTex = atlases[i].Texture;
-                        if (_materials[i].GetTexture("_BaseMap") != atlasTex)
-                        {
-                            var flowMapCoord = wtm.GetFlowMapCoordinate(atlases[i]);
-                            Rect r = flowMapCoord.UVRect;
-                            _materials[i].SetVector("_FlowMapRect", new Vector4(r.x, r.y, r.width, r.height));
-                            _materials[i].SetColor("_ShimmerColor", _shimmerHighlightColor);
-                            _materials[i].SetTexture("_BaseMap", atlasTex);
-                            _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
-                            _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
-                        }
-
-                        _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+                        var flowMapCoord = wtm.GetFlowMapCoordinate(atlases[i]);
+                        Rect r = flowMapCoord.UVRect;
+                        _materials[i].SetVector("_FlowMapRect", new Vector4(r.x, r.y, r.width, r.height));
+                        _materials[i].SetColor("_ShimmerColor", _shimmerHighlightColor);
+                        _materials[i].SetTexture("_BaseMap", atlasTex);
+                        _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
+                        _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
                     }
+
+                    _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                 }
 
                 _needsRefresh = false;

@@ -5,6 +5,7 @@ using Fodinae.Scripts.Game;
 using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts.Game.Managers
 {
@@ -12,6 +13,9 @@ namespace Fodinae.Scripts.Game.Managers
     {
         private const string TAG = "[RobotManager]";
         private Dictionary<uint, Robot> _robots = new();
+
+        [Inject]
+        private IObjectResolver _resolver = null!;
 
         public static bool ShowDebugVisuals { get; set; }
 
@@ -64,6 +68,10 @@ namespace Fodinae.Scripts.Game.Managers
             {
                 robot = robotGo.AddComponent<Robot>();
             }
+
+            // Runtime-created components never reach GameLifetimeScope's startup
+            // injection scan — inject explicitly so Robot's [Inject] fields are filled.
+            _resolver?.Inject(robot);
 
             robot.Initialize(botId);
             _robots[botId] = robot;

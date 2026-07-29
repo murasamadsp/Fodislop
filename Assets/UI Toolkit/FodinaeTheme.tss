@@ -9,3 +9,8 @@
 @import url("../Resources/Styles/Inventory.uss");
 @import url("../Resources/Styles/Programmator.uss");
 @import url("../Resources/Styles/Modal.uss");
+
+.unity-button {
+    background-color: rgba(38, 38, 38, 1);
+    color: white;
+}

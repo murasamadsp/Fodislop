@@ -64,7 +64,7 @@ namespace Fodinae.Scripts.Player
             _targetZoom = _camera.orthographicSize;
             _currentZoom = _targetZoom;
             _lastZoom = _currentZoom;
-            if (_target == null)
+            if (_target == null || _target == transform)
             {
                 var player = PlayerMovementController.LocalPlayer;
                 if (player != null)
@@ -151,7 +151,7 @@ namespace Fodinae.Scripts.Player
 
         private void HandleFollow()
         {
-            if (_target == null)
+            if (_target == null || _target == transform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
                 {

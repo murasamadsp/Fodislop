@@ -71,6 +71,14 @@ namespace Fodinae.Scripts.Audio.Backend
             var handle = _backend?.CreateVoice(eventName, layer, worldPosition);
             if (handle == null)
             {
+                // Фиче-банки ("sfx/bz" → банк "sfx") подгружаются на лету по категории
+                // события (часть исходного дизайна аудио-пайплайна) и звук дожимает ретраем.
+                if (TryAutoLoadFeatureBank(eventName))
+                {
+                    LoadBankAndReplayAsync(eventName, layer, worldPosition, null).Forget();
+                    return null;
+                }
+
                 Debug.LogWarning($"{TAG} Failed to play '{eventName}': backend returned null");
             }
 
@@ -94,10 +102,88 @@ namespace Fodinae.Scripts.Audio.Backend
             var handle = _backend?.CreateVoice(eventName, layer, null, targetGameObject);
             if (handle == null)
             {
+                if (TryAutoLoadFeatureBank(eventName))
+                {
+                    LoadBankAndReplayAsync(eventName, layer, null, targetGameObject).Forget();
+                    return null;
+                }
+
                 Debug.LogWarning($"{TAG} Failed to play attached '{eventName}': backend returned null");
             }
 
             return handle;
+        }
+
+        // ─── Фиче-банки по требованию ────────────────────────────────
+
+        /// <summary>Извлекает имя фиче-банка из категории события: "sfx/bz" → "sfx".</summary>
+        private static string GetFeatureBankName(string eventName)
+        {
+            var name = eventName;
+            if (name.StartsWith("event:/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                name = name.Substring(7);
+            }
+
+            if (name.StartsWith("snapshot:/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return null; // Снэпшоты живут в Master-банке.
+            }
+
+            int slash = name.IndexOf('/');
+            return slash > 0 ? name.Substring(0, slash) : null;
+        }
+
+        /// <summary>Есть ли категория-банк, которую можно подгрузить (и ещё не подгружена).</summary>
+        private bool TryAutoLoadFeatureBank(string eventName)
+        {
+            var bankName = GetFeatureBankName(eventName);
+            if (string.IsNullOrEmpty(bankName))
+            {
+                return false;
+            }
+
+            if (_autoLoadInFlight || _autoLoadedBanks.Contains(bankName))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool _autoLoadInFlight;
+        private readonly HashSet<string> _autoLoadedBanks = new();
+
+        private async Cysharp.Threading.Tasks.UniTaskVoid LoadBankAndReplayAsync(
+            string eventName, AudioLayer layer, Vector3? worldPosition, GameObject targetGameObject)
+        {
+            var bankName = GetFeatureBankName(eventName);
+            if (string.IsNullOrEmpty(bankName))
+            {
+                return;
+            }
+
+            _autoLoadInFlight = true;
+            try
+            {
+                var ok = await EnsureBankLoadedAsync(bankName);
+                if (!ok)
+                {
+                    Debug.LogWarning($"{TAG} Банк категории '{bankName}' не найден — событие '{eventName}' пропущено");
+                    return;
+                }
+
+                _autoLoadedBanks.Add(bankName);
+                var handle = _backend?.CreateVoice(eventName, layer, worldPosition, targetGameObject);
+                if (handle == null)
+                {
+                    Debug.LogWarning($"{TAG} Failed to play '{eventName}' after bank '{bankName}' load");
+                }
+            }
+            finally
+            {
+                _autoLoadInFlight = false;
+            }
         }
 
         /// <summary>Воспроизвести FMOD Snapshot (например "snapshot:/cave_ambient").</summary>

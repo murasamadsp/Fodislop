@@ -187,9 +187,8 @@ namespace Fodinae.Scripts.UI.Programmator
 
                         _radialCellIndex = (row * ProgrammatorData.COLS) + col;
                         ShowCategoryRing();
-                        var cellCenter = _cells[row, col].worldBound.center;
-                        _radial.ShowAt(_doc.rootVisualElement, cellCenter);
                         _radialShown = true;
+                        ShowAtCellCenter(_cells[row, col], center => _radial.ShowAt(_doc.rootVisualElement, center));
                     });
 
                     var label = new Label();
@@ -225,6 +224,26 @@ namespace Fodinae.Scripts.UI.Programmator
 
             _joystick = new ObserverJoystick();
             _joystick.OnOperatorSelected += OnJoystickOperatorSelected;
+        }
+
+        // Layout race guard: on the frame the popup becomes visible UI Toolkit hasn't
+        // run layout yet, so cell.worldBound is (0,0) and the radial spawns in the
+        // top-left corner. Wait for one GeometryChangedEvent when bounds aren't ready.
+        private static void ShowAtCellCenter(VisualElement cell, Action<Vector2> show)
+        {
+            if (cell.worldBound.width > 0f || cell.worldBound.height > 0f)
+            {
+                show(cell.worldBound.center);
+                return;
+            }
+
+            EventCallback<GeometryChangedEvent> callback = null;
+            callback = _ =>
+            {
+                cell.UnregisterCallback(callback);
+                show(cell.worldBound.center);
+            };
+            cell.RegisterCallback(callback);
         }
 
         private void ShowCategoryRing()
@@ -305,10 +324,10 @@ namespace Fodinae.Scripts.UI.Programmator
             {
                 _radial.ClearOuterItems();
                 _joystick.Hide();
-                var cellCenter = _cells[
+                var cell = _cells[
                     _radialCellIndex / ProgrammatorData.COLS,
-                    _radialCellIndex % ProgrammatorData.COLS].worldBound.center;
-                _joystick.ShowAt(_doc.rootVisualElement, cellCenter);
+                    _radialCellIndex % ProgrammatorData.COLS];
+                ShowAtCellCenter(cell, center => _joystick.ShowAt(_doc.rootVisualElement, center));
                 return;
             }
 

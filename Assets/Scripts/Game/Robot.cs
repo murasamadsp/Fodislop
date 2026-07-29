@@ -7,6 +7,7 @@ using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
 using TMPro;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts.Game
 {
@@ -52,6 +53,8 @@ namespace Fodinae.Scripts.Game
         private float _moveSpeed = 15f;
         private float _tremor = 0f;
 
+        [Inject]
+        private IRobotService _robotService = null!;
         private Tentacle[] _tentacles;
         private GameObject _tailContainer;
         private Sprite _skinSprite;
@@ -184,7 +187,7 @@ namespace Fodinae.Scripts.Game
 
             if (gameObject.CompareTag("Player"))
             {
-                ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
+                _robotService?.RegisterRobot(this);
             }
         }
 
@@ -537,7 +540,7 @@ namespace Fodinae.Scripts.Game
             _cts?.Cancel();
             _cts?.Dispose();
 
-            ServiceLocator.Resolve<IRobotService>()?.UnregisterRobot(_botId, this);
+            _robotService?.UnregisterRobot(_botId, this);
 
             if (_skinSprite != null)
             {

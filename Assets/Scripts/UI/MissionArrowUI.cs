@@ -4,6 +4,7 @@ using Fodinae.Scripts.UI.HUD.Player.Model;
 using Fodinae.Scripts.World;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.Scripts.UI
 {
@@ -14,6 +15,8 @@ namespace Fodinae.Scripts.UI
         private Camera _camera;
         private ushort? _targetX;
         private ushort? _targetY;
+        [Inject]
+        private IPlayerStats _playerStats = null!;
 
         protected void Start()
         {
@@ -37,7 +40,7 @@ namespace Fodinae.Scripts.UI
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);
 
-            var stats = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
+            var stats = _playerStats as PlayerStatsModel;
             if (stats != null)
             {
                 stats.OnMissionArrowChanged += OnArrowChanged;
@@ -53,7 +56,7 @@ namespace Fodinae.Scripts.UI
 
         protected void OnDestroy()
         {
-            var existing = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
+            var existing = _playerStats as PlayerStatsModel;
             if (existing != null)
             {
                 existing.OnMissionArrowChanged -= OnArrowChanged;

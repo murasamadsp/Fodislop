@@ -12,6 +12,7 @@ using Fodinae.Scripts.World;
 using Fodinae.Scripts.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts.World
 {
@@ -39,6 +40,21 @@ namespace Fodinae.Scripts.World
 
         private Texture2D _cachedEmptyTexture;
 
+        private IAssetLoader _assetLoader;
+
+        // Method injection runs right after Awake — the earliest moment the
+        // dependency is actually available (field injection happens after AddComponent).
+        [Inject]
+        private void Construct(IAssetLoader assetLoader)
+        {
+            _assetLoader = assetLoader;
+            if (Application.isPlaying && assetLoader is ClientAssetLoader loader)
+            {
+                loader.OnTextureLoaded -= OnTextureLoadedHandler;
+                loader.OnTextureLoaded += OnTextureLoadedHandler;
+            }
+        }
+
         protected void Awake()
         {
             Debug.Log("[WorldTextureManager] Awake — initializing");
@@ -47,8 +63,7 @@ namespace Fodinae.Scripts.World
 
         protected void OnDestroy()
         {
-            var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            if (assetLoader != null)
+            if (_assetLoader is ClientAssetLoader assetLoader)
             {
                 assetLoader.OnTextureLoaded -= OnTextureLoadedHandler;
             }
@@ -82,16 +97,6 @@ namespace Fodinae.Scripts.World
 
             GenerateFlowMap();
             EnsureFlowMapInAtlas(_currentAtlas);
-
-            if (Application.isPlaying)
-            {
-                var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-                if (assetLoader != null)
-                {
-                    assetLoader.OnTextureLoaded -= OnTextureLoadedHandler;
-                    assetLoader.OnTextureLoaded += OnTextureLoadedHandler;
-                }
-            }
         }
 
         private void EnsureInitialized()
@@ -335,6 +340,13 @@ namespace Fodinae.Scripts.World
                 filename = "Cells/32";
             }
 
+            if (cellType == CellType.Empty)
+            {
+                filename = "Cells/32";
+            }
+
+            Debug.Log($"[AssetDiag] LoadTexture ENTER {filename}");
+
             var cachedTexture = _textureCache.GetCachedTexture(cellType);
             if (cachedTexture != null)
             {
@@ -356,15 +368,16 @@ namespace Fodinae.Scripts.World
             {
                 if (cellType == CellType.Empty)
                 {
-                    Debug.Log($"[WorldTextureManager] Successfully loaded texture for Empty cell (32.png)");
                     _cachedEmptyTexture = texture;
                 }
 
                 await UniTask.SwitchToMainThread();
                 AddTextureToAtlas(cellType, texture);
+                Debug.Log($"[AssetDiag] TEXOK {filename} -> atlas");
             }
             else
             {
+                Debug.LogWarning($"[AssetDiag] TEXFAIL {filename} — texture null");
                 throw new Exception($"Failed to load texture for {cellType}");
             }
         }

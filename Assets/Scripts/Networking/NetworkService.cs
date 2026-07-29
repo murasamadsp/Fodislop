@@ -89,7 +89,7 @@ namespace Fodinae.Scripts.Networking
         public void Send(IRootClientPacket packet)
         {
             var connection = Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (connection == null)
+            if (connection == null || connection.Connection == null)
             {
                 return;
             }

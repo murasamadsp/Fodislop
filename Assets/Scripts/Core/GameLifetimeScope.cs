@@ -24,16 +24,20 @@ namespace Fodinae.Scripts.Core
     [DefaultExecutionOrder(-20000)]
     public class GameLifetimeScope : LifetimeScope
     {
+        private readonly System.Collections.Generic.List<string> _injectionFailures = new();
+
         protected override void Configure(IContainerBuilder builder)
         {
             Debug.Log("[GameLifetimeScope] Configure START");
 
             var newStorage = new MapStorage();
             newStorage.SetAsPending();
-            builder.RegisterInstance(newStorage).As<IWorldDataStorage>();
+            builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
 
-            builder.RegisterInstance(new InventoryModel()).As<IInventoryModel>();
-            builder.RegisterInstance(new PlayerStatsModel()).As<IPlayerStats>();
+            // Register (не RegisterInstance): VContainer сам конструирует и инжектит [Inject]-поля.
+            // RegisterInstance НЕ инжектит уже созданные вручную объекты — _networkService остаётся null.
+            builder.Register<InventoryModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<PlayerStatsModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
 
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
@@ -48,6 +52,7 @@ namespace Fodinae.Scripts.Core
             RegisterManager<VFXPool>(builder);
             RegisterManager<PackManager>(builder);
             RegisterManager<RobotManager>(builder).AsImplementedInterfaces().AsSelf();
+            RegisterManager<PlayerMovementController>(builder);
             RegisterManager<ServerConfig>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TextureStorageManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder);
@@ -90,15 +95,32 @@ namespace Fodinae.Scripts.Core
                 Debug.Log("[GameLifetimeScope] Resolved RobotManager");
                 resolver.Resolve<IPlayerStats>();
                 Debug.Log("[GameLifetimeScope] Resolved IPlayerStats");
+                resolver.Resolve<PlayerMovementController>();
+                Debug.Log("[GameLifetimeScope] Resolved PlayerMovementController");
+
+                // UI-сервисы: явно резолвим, чтобы VContainer их инсталлировал
+                // (они не существуют в сцене и создаются здесь).
+                resolver.Resolve<GlobalChatUI>();
+                Debug.Log("[GameLifetimeScope] Resolved GlobalChatUI");
+                resolver.Resolve<FPSCounter>();
+                Debug.Log("[GameLifetimeScope] Resolved FPSCounter");
+                resolver.Resolve<FloatingChatManager>();
+                Debug.Log("[GameLifetimeScope] Resolved FloatingChatManager");
+                resolver.Resolve<IInputBlocker>();
+                Debug.Log("[GameLifetimeScope] Resolved IInputBlocker");
 
                 foreach (var terrain in FindObjectsByType<TerrainRenderer>())
                 {
-                    resolver.Inject(terrain);
-                    terrain.EnsureSubscriptions();
-                    Debug.Log("[GameLifetimeScope] Injected and subscribed terrain: " + terrain.name);
+                    if (TryInject(resolver, terrain))
+                    {
+                        terrain.EnsureSubscriptions();
+                        Debug.Log("[GameLifetimeScope] Injected and subscribed terrain: " + terrain.name);
+                    }
                 }
 
-                var allMonoBehaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Exclude);
+                // ВАЖНО: Include — HUD живёт под неактивным UIRoot до авторизации (GameManager.SetupUI),
+                // но его [Inject]-поля должны быть заполнены до Awake компонентов.
+                var allMonoBehaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
                 int injected = 0;
                 foreach (var mb in allMonoBehaviours)
                 {
@@ -124,7 +146,7 @@ namespace Fodinae.Scripts.Core
 
                     if (hasInject)
                     {
-                        resolver.Inject(mb);
+                        TryInject(resolver, mb);
                         injected++;
                     }
                 }
@@ -132,9 +154,37 @@ namespace Fodinae.Scripts.Core
                 Debug.Log($"[GameLifetimeScope] Injected {injected} scene MonoBehaviours with [Inject] fields");
 
                 Debug.Log("[GameLifetimeScope] BuildCallback END");
+                LogInjectionFailures();
                 ValidateStartup();
             });
             Debug.Log("[GameLifetimeScope] Configure END");
+        }
+
+        private bool TryInject(IObjectResolver resolver, object target)
+        {
+            try
+            {
+                resolver.Inject(target);
+                return true;
+            }
+            catch (VContainerException ex)
+            {
+                _injectionFailures.Add($"{target.GetType().Name}: {ex.Message}");
+                Debug.LogError($"[GameLifetimeScope] Injection failed for {target.GetType().Name}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void LogInjectionFailures()
+        {
+            if (_injectionFailures.Count == 0)
+            {
+                return;
+            }
+
+            Debug.LogError(
+                $"[GameLifetimeScope] {_injectionFailures.Count} injection failure(s) during startup:\n- " +
+                string.Join("\n- ", _injectionFailures));
         }
 
         private void ValidateStartup()
@@ -255,7 +305,7 @@ namespace Fodinae.Scripts.Core
             if (existing != null)
             {
                 var registration = builder.RegisterInstance(existing);
-                builder.RegisterBuildCallback(resolver => resolver.Inject(existing));
+                builder.RegisterBuildCallback(resolver => TryInject(resolver, existing));
                 return registration;
             }
 

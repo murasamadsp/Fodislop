@@ -8,6 +8,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts.Game.Managers
 {
@@ -16,6 +17,18 @@ namespace Fodinae.Scripts.Game.Managers
     public class MapManager : MonoBehaviour, IMapDataProvider
     {
         private Camera _mainCamera;
+        private IWorldDataStorage _worldStorage = null!;
+        private PackManager _packManager = null!;
+        private IRobotService _robotService = null!;
+        private IServerAudioService _audioService = null!;
+        [Inject]
+        private void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
+        {
+            _worldStorage = worldStorage;
+            _packManager = packManager;
+            _robotService = robotService;
+            _audioService = audioService;
+        }
 
         public Camera MainCamera
         {
@@ -83,21 +96,21 @@ namespace Fodinae.Scripts.Game.Managers
 #endif
         }
 
-        private static IWorldDataStorage WorldStorage => ServiceLocator.Resolve<IWorldDataStorage>();
+        private IWorldDataStorage WorldStorage => _worldStorage;
 
         protected void OnDestroy()
         {
             IsWorldInitialized = false;
-            (ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage)?.Dispose();
+            (_worldStorage as MapStorage)?.Dispose();
         }
 
         public void LoadWorldInit(WorldInitPacket packet)
         {
             Debug.Log("[MapManager] LoadWorldInit START");
             IsWorldInitialized = false;
-            ServiceLocator.Resolve<PackManager>()?.ClearAllPacks();
-            ServiceLocator.Resolve<IRobotService>()?.ClearAllRobots();
-            ServiceLocator.Resolve<IServerAudioService>()?.ClearAllEffects();
+            _packManager?.ClearAllPacks();
+            _robotService?.ClearAllRobots();
+            _audioService?.ClearAllEffects();
 
             if (packet == null)
             {

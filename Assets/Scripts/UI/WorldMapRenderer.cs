@@ -7,6 +7,7 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using VContainer;
 
 namespace Fodinae.Scripts.UI
 {
@@ -30,8 +31,12 @@ namespace Fodinae.Scripts.UI
         private float _viewCenterX;
         private float _viewCenterY;
         private float _cellsPerPixel = 1f;
-        private IWorldDataStorage _storage;
-        private MapManager _manager;
+
+        [Inject]
+        private IWorldDataStorage _storage = null!;
+
+        [Inject]
+        private MapManager _manager = null!;
         private PlayerMovementController _player;
         private InputAction _scrollAction;
 
@@ -47,8 +52,10 @@ namespace Fodinae.Scripts.UI
 
         protected void Start()
         {
-            _storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+            // WorldMapRenderer is created at runtime by WorldMapController after the
+            // DI startup injection pass — fall back to ServiceLocator when not injected.
+            _storage ??= Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>();
+            _manager ??= Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
             _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
             if (_storage == null || _manager == null)
             {

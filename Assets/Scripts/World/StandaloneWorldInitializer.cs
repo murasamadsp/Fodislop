@@ -3,6 +3,7 @@ using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
 using Fodinae.Scripts.Game.Managers;
 using Fodinae.Scripts.Networking.Connection;
+using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
@@ -181,10 +182,39 @@ namespace Fodinae.Scripts.World
                     Color = 0,
                     FrameOffset = 0,
                     Properties = 0,
+                    ReliefGroup = 0,
+                    Distortion = 0,
                 };
             }
 
+            const CellConfigProperties ROAD_PROPS = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties SAND_BOULDER_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+
+            SetConfig(configurations, CellType.Empty, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.Road, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.BuildingRoad, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.GoldenRoad, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.PolymerRoad, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.VolcanoBackground, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1);
+            SetConfig(configurations, CellType.Boulder1, SAND_BOULDER_PROPS, 1);
+            SetConfig(configurations, CellType.WhiteSand, SAND_BOULDER_PROPS, 1);
+
             return configurations;
+        }
+
+        private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup)
+        {
+            configs[(int)type] = new CellConfigurationPacket
+            {
+                Animation = 0,
+                AnimationSpeed = 0,
+                Color = 0,
+                FrameOffset = 0,
+                Properties = props,
+                ReliefGroup = reliefGroup,
+                Distortion = 0,
+            };
         }
     }
 }

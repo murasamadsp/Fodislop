@@ -218,7 +218,7 @@
 .hud-bonus-panel {
     position: absolute;
     top: 10px;
-    left: calc(10px + 240px + 6px);
+    left: 256px;
     width: 260px;
     padding: 10px;
     background-color: var(--color-panel-bg);
@@ -244,7 +244,7 @@
 .hud-status-panel {
     position: absolute;
     top: 10px;
-    left: calc(10px + 240px + 6px);
+    left: 256px;
     width: 220px;
     padding: 12px;
     background-color: var(--color-panel-bg);
@@ -460,7 +460,7 @@
 
 .hud-bonus-button {
     position: absolute;
-    left: calc(10px + 240px + 6px);
+    left: 256px;
     top: 10px;
     width: 90px;
     height: 50px;

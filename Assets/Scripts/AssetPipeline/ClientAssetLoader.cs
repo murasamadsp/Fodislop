@@ -18,6 +18,7 @@ using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Utilities;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Scripts
 {
@@ -38,6 +39,21 @@ namespace Fodinae.Scripts
         private Texture2D _placeholderTexture;
         private Texture2D _errorTexture;
 
+        private IConnectionService _connectionService;
+
+        // Method injection runs right after Awake — the earliest moment the
+        // dependency is actually available (field injection happens after AddComponent).
+        [Inject]
+        private void Construct(IConnectionService connectionService)
+        {
+            _connectionService = connectionService;
+            if (connectionService is ConnectionManager cm)
+            {
+                cm.OnPacketReceived -= OnPacketReceived;
+                cm.OnPacketReceived += OnPacketReceived;
+            }
+        }
+
         protected void Awake()
         {
             _placeholderTexture = new Texture2D(1, 1);
@@ -50,12 +66,6 @@ namespace Fodinae.Scripts
             _errorTexture.Apply();
             _errorTexture.name = "Error_Texture";
 
-            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (cm != null)
-            {
-                cm.OnPacketReceived += OnPacketReceived;
-            }
-
             _loopCts = new CancellationTokenSource();
             ProcessBatchLoop(_loopCts.Token).Forget();
         }
@@ -64,8 +74,7 @@ namespace Fodinae.Scripts
         {
             _loopCts?.Cancel();
             _loopCts?.Dispose();
-            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (cm != null)
+            if (_connectionService is ConnectionManager cm)
             {
                 cm.OnPacketReceived -= OnPacketReceived;
             }
@@ -159,6 +168,7 @@ namespace Fodinae.Scripts
             // 1. Check local RAM/disk cache first when offline
             var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
             var isConnected = cm != null && cm.Connection != null && cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected;
+            Debug.Log($"[AssetDiag] LOAD {filename} conn={isConnected} disk={HasAsset(filename)}");
 
             if (!isConnected)
             {
@@ -172,7 +182,9 @@ namespace Fodinae.Scripts
             if (IsTextureFile(filename))
             {
                 var tsm = ServiceLocator.Resolve<ITextureStorageService>();
-                if (tsm != null && tsm.HasTexture(filename))
+                bool tsmHas = tsm != null && tsm.HasTexture(filename);
+                Debug.Log($"[AssetDiag] TSM {filename} tsm={tsm != null} has={tsmHas}");
+                if (tsmHas)
                 {
                     var localData = await tsm.GetTextureData(filename);
                     if (localData != null && localData.Length > 0)
@@ -228,6 +240,7 @@ namespace Fodinae.Scripts
                 }
             }
 
+            Debug.Log($"[AssetDiag] FAIL {filename} -> null");
             return null;
         }
 

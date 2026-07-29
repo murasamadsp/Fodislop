@@ -61,6 +61,7 @@
     <Compile Include="Assets/Scripts/UI/Dock.cs" />
     <Compile Include="Assets/Scripts/World/Terrain/TerrainMetadata.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/FixedTypeObjectKeyHashtable.cs" />
+    <Compile Include="Assets/Scripts/World/SingleMeshTerrainRenderer.cs" />
     <Compile Include="Assets/Scripts/Core/ServiceLocator.cs" />
     <Compile Include="Assets/Scripts/Audio/Core/AudioLayer.cs" />
     <Compile Include="Assets/Scripts/UI/ModalWindowHandler.cs" />
@@ -280,8 +281,8 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/CollectionInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/UI/MinimapController.cs" />
     <Compile Include="Assets/Scripts/UI/GlobalChatUI.cs" />
-    <Compile Include="Assets/Scripts/Networking/Processors/ChatProcessor.cs" />
     <Compile Include="Assets/Scripts/UI/MissionArrowUI.cs" />
+    <Compile Include="Assets/Scripts/Networking/Processors/ChatProcessor.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IVFXService.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/PacketUIBuilderFactory.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IMapDataProvider.cs" />
