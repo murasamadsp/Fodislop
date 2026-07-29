@@ -247,17 +247,18 @@ namespace Fodinae.Player.Logic
                 }
             }
 
-            if (_robot is null || _input is null || _serverConfig is null || _inputBlocker == null || _inputBlocker.IsInputBlocked)
+            _serverConfig ??= Fodinae.Core.ServiceLocator.Resolve<IServerConfig>();
+            _mapDataProvider ??= Fodinae.Core.ServiceLocator.Resolve<IMapDataProvider>();
+            _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
+            _inputBlocker ??= Fodinae.Core.ServiceLocator.Resolve<Fodinae.Core.Interfaces.IInputBlocker>();
+            _networkService ??= Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
+
+            if (_robot is null || _input is null)
             {
                 return;
             }
 
-            if (_input.WantsToDig || Time.time - _lastDigTime < _serverConfig.DigCooldown)
-            {
-                return;
-            }
-
-            if (_mapDataProvider is null || _networkService is null || _mapDataProvider is null)
+            if (_inputBlocker != null && _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -393,7 +394,8 @@ namespace Fodinae.Player.Logic
 
         private void HandleDigInput()
         {
-            if (!_input.WantsToDig || _lastSentDirection == null || Time.time - _lastDigTime < _serverConfig.DigCooldown)
+            float digCooldown = _serverConfig != null ? _serverConfig.DigCooldown : 0.2f;
+            if (_input.WantsToDig || Time.time - _lastDigTime < digCooldown)
             {
                 return;
             }
