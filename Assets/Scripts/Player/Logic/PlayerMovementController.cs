@@ -170,6 +170,10 @@ namespace Fodinae.Player.Logic
         public void Initialize(uint botId)
         {
             BotId = botId;
+            if (_robot != null)
+            {
+                _robot.Initialize(botId);
+            }
         }
 
         public bool AutoDig
