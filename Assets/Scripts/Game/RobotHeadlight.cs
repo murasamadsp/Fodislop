@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game
+namespace Fodinae.Game
 {
     public class RobotHeadlight : MonoBehaviour
     {

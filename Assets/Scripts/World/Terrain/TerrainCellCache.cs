@@ -2,14 +2,14 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.World;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Terrain
+namespace Fodinae.World.Terrain
 {
     public class TerrainCellCache
     {

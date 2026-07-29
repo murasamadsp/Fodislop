@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Terrain
+namespace Fodinae.World.Terrain
 {
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
     public struct TerrainVertex

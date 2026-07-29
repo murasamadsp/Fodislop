@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Scripts.Player.Interfaces;
+using Fodinae.Player.Interfaces;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace Fodinae.Scripts.Player.Input
+namespace Fodinae.Player.Input
 {
     public class PlayerInputHandler : MonoBehaviour, IPlayerInput
     {

@@ -5,7 +5,7 @@ using System.Linq;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     public static class ProgrammatorData
     {

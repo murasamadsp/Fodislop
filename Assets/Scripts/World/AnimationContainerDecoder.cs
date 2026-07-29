@@ -4,16 +4,16 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MG.GIF;
 using unity.libwebp;
 using unity.libwebp.Interop;
 using UnityEngine;
 using WebP;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     public static class AnimationContainerDecoder
     {

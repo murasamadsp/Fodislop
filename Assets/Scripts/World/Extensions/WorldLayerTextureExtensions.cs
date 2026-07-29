@@ -4,14 +4,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Extensions
+namespace Fodinae.World.Extensions
 {
     /// <summary>
     /// Extension methods for WorldLayer to integrate with WorldTextureManager.

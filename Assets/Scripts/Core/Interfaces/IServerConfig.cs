@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface IServerConfig
     {

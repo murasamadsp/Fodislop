@@ -1,11 +1,11 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Networking.Connection;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.Networking.Connection;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -13,7 +13,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     [RequireComponent(typeof(UIDocument))]
     public class MainMenu : MonoBehaviour
@@ -190,7 +190,7 @@ namespace Fodinae.Scripts
             HideLoader();
             HideMenu();
 
-            var connectionService = _connectionService ?? (Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager);
+            var connectionService = _connectionService ?? (Fodinae.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager);
             if (connectionService != null && !connectionService.IsConnected)
             {
                 connectionService.Connect(oldClient: false);

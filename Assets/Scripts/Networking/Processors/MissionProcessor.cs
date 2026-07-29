@@ -1,16 +1,16 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.Mission;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class MissionProcessor : IPacketProcessor<MissionInitPacket>, IPacketProcessor<MissionProgressPacket>
     {
         public void Process(MissionInitPacket packet)
         {
-            var s = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s == null)
             {
                 return;
@@ -27,7 +27,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(MissionProgressPacket packet)
         {
-            var s = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s == null)
             {
                 return;

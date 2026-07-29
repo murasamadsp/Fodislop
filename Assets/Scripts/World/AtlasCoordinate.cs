@@ -4,7 +4,7 @@ using System;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Represents coordinates within a texture atlas for a specific cell type.

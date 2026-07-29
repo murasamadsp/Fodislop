@@ -1,15 +1,15 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     public class RobotManager : MonoBehaviour, IRobotService
     {

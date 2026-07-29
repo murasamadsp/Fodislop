@@ -3,16 +3,16 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class GlobalChatUI : MonoBehaviour
     {
@@ -105,7 +105,7 @@ namespace Fodinae.Scripts.UI
             _inputField.selectAllOnFocus = false;
             _inputField.selectAllOnMouseUp = false;
             _inputField.AddToClassList("gchat-input");
-            _inputField.maxLength = Fodinae.Scripts.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
+            _inputField.maxLength = Fodinae.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
             bottomRow.Add(_inputField);
 
             _inputField.RegisterCallback<FocusEvent>(_ =>
@@ -189,13 +189,13 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            var chatMaxLen = Fodinae.Scripts.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
+            var chatMaxLen = Fodinae.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
             if (text.Length > chatMaxLen)
             {
                 text = text.Substring(0, chatMaxLen);
             }
 
-            var networkService = Fodinae.Scripts.Core.ServiceLocator.Resolve<INetworkService>();
+            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
             networkService?.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
 
             _inputField.value = string.Empty;

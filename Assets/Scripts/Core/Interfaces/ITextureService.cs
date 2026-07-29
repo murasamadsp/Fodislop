@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface ITextureService
     {

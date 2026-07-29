@@ -7,7 +7,7 @@ using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface IMapDataProvider
     {

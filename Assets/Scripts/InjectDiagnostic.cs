@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public class InjectDiagnostic : MonoBehaviour
     {

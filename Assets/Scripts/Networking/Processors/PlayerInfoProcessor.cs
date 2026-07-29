@@ -1,29 +1,29 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class PlayerInfoProcessor : IPacketProcessor<PlayerInfoPacket>, IPacketProcessor<MovementSpeedPacket>, IPacketProcessor<TeleportPacket>
     {
         public void Process(PlayerInfoPacket packet)
         {
-            var rm = Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>();
+            var rm = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
             if (rm != null)
             {
                 rm.LocalPlayerBotId = packet.BotId;
             }
 
-            var s = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetNickname(packet.Nickname);
@@ -43,7 +43,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(MovementSpeedPacket packet)
         {
-            var map = Fodinae.Scripts.Core.ServiceLocator.Resolve<IMapDataProvider>();
+            var map = Fodinae.Core.ServiceLocator.Resolve<IMapDataProvider>();
             map?.UpdateMovementSpeeds(packet);
         }
 

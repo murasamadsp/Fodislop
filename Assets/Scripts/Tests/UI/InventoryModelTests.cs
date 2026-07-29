@@ -1,6 +1,6 @@
 #nullable enable
 
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
+using Fodinae.UI.HUD.Inventory.Model;
 using MinesServer.Data;
 using NUnit.Framework;
 using UnityEngine;

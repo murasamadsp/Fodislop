@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI.HUD.Player.Model
+namespace Fodinae.UI.HUD.Player.Model
 {
     public sealed class PlayerStatsModel : IPlayerStats
     {

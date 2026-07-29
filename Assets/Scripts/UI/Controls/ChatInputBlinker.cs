@@ -3,7 +3,7 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Controls
+namespace Fodinae.UI.Controls
 {
     public class ChatInputBlinker
     {

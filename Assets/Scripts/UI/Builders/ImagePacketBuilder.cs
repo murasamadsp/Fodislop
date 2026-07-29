@@ -3,15 +3,15 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual; // Corrected using directive for ImagePacket
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class ImagePacketBuilder : PacketUIBuilderBase
     {
@@ -40,7 +40,7 @@ namespace Fodinae.Scripts.UI.Builders
 
         private static void LoadImage(VisualElement element, string uri, CancellationToken token)
         {
-            (Fodinae.Scripts.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).LoadAndApplyTexture(
+            (Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).LoadAndApplyTexture(
                 (texture) =>
             {
                 if (element != null)

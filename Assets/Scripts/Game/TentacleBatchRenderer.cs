@@ -1,12 +1,12 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.World;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Fodinae.Scripts.Game;
+namespace Fodinae.Game;
 
 /// <summary>
 /// Batches every robot tail tentacle into a single mesh per tail texture:

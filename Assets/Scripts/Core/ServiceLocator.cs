@@ -3,7 +3,7 @@
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts.Core
+namespace Fodinae.Core
 {
     public static class ServiceLocator
     {

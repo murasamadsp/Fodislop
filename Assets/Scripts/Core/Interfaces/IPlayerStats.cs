@@ -5,9 +5,9 @@ using System.Collections.Generic;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
-    using Fodinae.Scripts.UI.HUD.Player.Model;
+    using Fodinae.UI.HUD.Player.Model;
     public interface IPlayerStats
     {
         int Health { get; }

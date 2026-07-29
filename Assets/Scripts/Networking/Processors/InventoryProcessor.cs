@@ -2,21 +2,21 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.UI;
+using Fodinae.UI.HUD.Inventory.Interfaces;
+using Fodinae.UI.HUD.Inventory.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Inventory;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class InventoryProcessor : IPacketProcessor<InventoryPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
     {
-        private static IInventoryModel Model => Fodinae.Scripts.Core.ServiceLocator.Resolve<IInventoryModel>();
+        private static IInventoryModel Model => Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
 
         public void Process(InventoryPacket packet)
         {

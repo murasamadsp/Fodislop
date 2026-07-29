@@ -1,17 +1,17 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class MapRegionProcessor : IPacketProcessor<MapRegionPacket>
     {
         public void Process(MapRegionPacket packet)
         {
-            var storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            var storage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (storage?.CellLayer == null || packet.Payload == null)
             {
                 return;

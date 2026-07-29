@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class FloatingChatBubble : MonoBehaviour
     {

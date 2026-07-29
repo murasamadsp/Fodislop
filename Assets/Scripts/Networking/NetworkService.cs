@@ -3,14 +3,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Connection;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -20,7 +20,7 @@ using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts.Networking
+namespace Fodinae.Networking
 {
     public class NetworkService : MonoBehaviour, INetworkService
     {
@@ -91,7 +91,7 @@ namespace Fodinae.Scripts.Networking
 
         public void Send(IRootClientPacket packet)
         {
-            var connection = Fodinae.Scripts.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
+            var connection = Fodinae.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
             if (connection == null || connection.Connection == null)
             {
                 return;

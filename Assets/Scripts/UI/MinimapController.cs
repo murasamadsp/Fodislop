@@ -1,18 +1,18 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using VContainer;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     /// <summary>
     /// Chunk-batched minimap renderer with time-throttled updates and async GPU upload.
@@ -145,12 +145,12 @@ namespace Fodinae.Scripts.UI
         {
             if (_mapManager == null)
             {
-                _mapManager = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+                _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
             }
 
             if (_mapStorage == null)
             {
-                _mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+                _mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             }
 
             if (_mapManager == null || !_mapManager.IsWorldInitialized)

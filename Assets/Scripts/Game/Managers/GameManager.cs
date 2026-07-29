@@ -1,12 +1,12 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.HUD.Player.Model;
+using Fodinae.Core;
+using Fodinae.UI;
+using Fodinae.UI.HUD.Player.Model;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     /// <summary>
     /// Высокоуровневые состояния игрового сеанса.
@@ -67,19 +67,19 @@ namespace Fodinae.Scripts.Game.Managers
             AddInjectedComponent<ReconnectUI>(reconnectGO);
             reconnectGO.transform.SetParent(transform);
 
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>() == null)
+            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>() == null)
             {
                 var invGO = new GameObject("InventoryRoot");
-                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>(invGO);
-                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Inventory.Presenter.InventoryPresenter>(invGO);
+                AddInjectedComponent<Fodinae.UI.HUD.Inventory.View.InventoryView>(invGO);
+                AddInjectedComponent<Fodinae.UI.HUD.Inventory.Presenter.InventoryPresenter>(invGO);
                 invGO.transform.SetParent(_uiRoot.transform);
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>() == null)
+            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>() == null)
             {
                 var hudGO = new GameObject("PlayerHUD");
-                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>(hudGO);
-                AddInjectedComponent<Fodinae.Scripts.UI.HUD.Player.Presenter.PlayerHUDPresenter>(hudGO);
+                AddInjectedComponent<Fodinae.UI.HUD.Player.View.PlayerHUDView>(hudGO);
+                AddInjectedComponent<Fodinae.UI.HUD.Player.Presenter.PlayerHUDPresenter>(hudGO);
                 hudGO.transform.SetParent(_uiRoot.transform);
             }
 
@@ -128,7 +128,7 @@ namespace Fodinae.Scripts.Game.Managers
             where T : Component
         {
             var comp = go.AddComponent<T>();
-            Fodinae.Scripts.Core.ServiceLocator.Inject(comp);
+            Fodinae.Core.ServiceLocator.Inject(comp);
         }
 
         public void AuthorizeUI()

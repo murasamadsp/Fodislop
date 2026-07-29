@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     public class ProgrammatorGrid : MonoBehaviour
     {

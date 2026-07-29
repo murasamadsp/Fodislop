@@ -1,19 +1,19 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Core;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class RobotPositionProcessor : IPacketProcessor<RobotPositionPacket>
     {
         public void Process(RobotPositionPacket packet)
         {
-            var rm = Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>();
+            var rm = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
             if (rm == null)
             {
                 return;

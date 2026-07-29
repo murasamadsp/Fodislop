@@ -5,7 +5,7 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface INetworkService
     {

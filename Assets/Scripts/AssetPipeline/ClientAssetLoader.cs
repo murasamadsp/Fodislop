@@ -7,12 +7,12 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Networking.Connection.Client;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking.Connection;
+using Fodinae.Networking.Connection.Client;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Utilities;
 using MinesServer.Networking.Connection;
@@ -22,7 +22,7 @@ using MinesServer.Networking.Server.Packets.Utilities;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     using static ETagCalculator;
     using static PersistentAssetCache;

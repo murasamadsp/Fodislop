@@ -6,11 +6,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     /// <summary>
     /// Thread-safe RAM cache for server assets.

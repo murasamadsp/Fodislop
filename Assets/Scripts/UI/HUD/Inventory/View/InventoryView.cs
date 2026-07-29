@@ -2,11 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.UI.HUD.Inventory.Interfaces;
+using Fodinae.UI.HUD.Inventory.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
@@ -15,7 +15,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts.UI.HUD.Inventory.View
+namespace Fodinae.UI.HUD.Inventory.View
 {
     public class InventoryView : MonoBehaviour
     {
@@ -29,7 +29,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         [Inject]
         private IInventoryModel _model = null!;
         [Inject]
-        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
         private VisualElement _hotbarContainer = null!;
         private Button _inventoryButton = null!;
@@ -121,7 +121,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 return;
             }
 
-            _model = Fodinae.Scripts.Core.ServiceLocator.Resolve<IInventoryModel>();
+            _model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
             if (_model == null)
             {
                 Debug.LogError("[InventoryUI] IInventoryModel not registered in DI");

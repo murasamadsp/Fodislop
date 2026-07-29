@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class UIStack
     {

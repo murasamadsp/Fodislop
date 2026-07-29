@@ -2,7 +2,7 @@
 
 using MinesServer.Networking.Server.Packets.World;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface IServerAudioService
     {

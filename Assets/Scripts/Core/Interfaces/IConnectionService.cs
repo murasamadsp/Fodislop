@@ -3,7 +3,7 @@
 using System;
 using MinesServer.Networking.Server.Packets;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface IConnectionService
     {

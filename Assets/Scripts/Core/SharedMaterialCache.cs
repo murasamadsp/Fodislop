@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core
+namespace Fodinae.Core
 {
     public static class SharedMaterialCache
     {

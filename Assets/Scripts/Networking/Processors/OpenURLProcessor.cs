@@ -3,7 +3,7 @@
 using MinesServer.Networking.Server.Packets.Utilities;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class OpenURLProcessor : IPacketProcessor<OpenURLPacket>
     {

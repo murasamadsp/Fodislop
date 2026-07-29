@@ -3,7 +3,7 @@
 using System;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Auth
+namespace Fodinae.Networking.Auth
 {
     public static class AuthTokenManager
     {

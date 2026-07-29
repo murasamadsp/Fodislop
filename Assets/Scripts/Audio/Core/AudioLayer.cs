@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Core
+namespace Fodinae.Audio.Core
 {
     /// <summary>
     /// Тип аудио-шины — определяет куда маршрутизируется звук в FMOD Studio.

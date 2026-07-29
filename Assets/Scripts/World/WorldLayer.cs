@@ -8,7 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public class WorldLayer<T> : IDisposable
         where T : unmanaged

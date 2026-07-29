@@ -1,12 +1,12 @@
 #nullable enable
 
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Audio.Backend;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Spatial
+namespace Fodinae.Audio.Spatial
 {
     /// <summary>
     /// Вешается на любой GameObject чтобы он излучал пространственный звук.

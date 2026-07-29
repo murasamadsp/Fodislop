@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Represents a rectangle in the texture atlas.

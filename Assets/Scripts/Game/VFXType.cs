@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Scripts.Game
+namespace Fodinae.Game
 {
     public enum VFXType
     {

@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.UI;
+using Fodinae.UI;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Scene setup manager that ensures the world background renderer is properly configured.

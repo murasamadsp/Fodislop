@@ -2,12 +2,12 @@
 
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Backend
+namespace Fodinae.Audio.Backend
 {
     /// <summary>
     /// Точка входа в аудио-домен — синглтон, висящий в DontDestroyOnLoad.

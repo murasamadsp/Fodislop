@@ -2,9 +2,9 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.UI;
 using Fodinae.UI;
 using Fodinae.UI.Binding;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -13,7 +13,7 @@ using MinesServer.Networking.Server.Packets.GUI.Components;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     /// <summary>
     /// Decoupled SOLID Processor for dynamic server WPF windows and element click contexts.
@@ -73,7 +73,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
             _uiDocument.rootVisualElement.Add(element);
 
-            var uiInputManager = Fodinae.Scripts.Core.ServiceLocator.Resolve<UIInputManager>();
+            var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
             if (uiInputManager != null)
             {
                 uiInputManager.PushModal(element);
@@ -100,7 +100,7 @@ namespace Fodinae.Scripts.Networking.Processors
             var (_, root, binding, _) = _openWindows[^1];
             binding.Dispose();
 
-            var uiInputManager = Fodinae.Scripts.Core.ServiceLocator.Resolve<UIInputManager>();
+            var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
             if (uiInputManager != null)
             {
                 uiInputManager.PopModal(root);
@@ -172,7 +172,7 @@ namespace Fodinae.Scripts.Networking.Processors
             var inputRoot = ClickContextResolver.ResolveRoot(clickedElement, windowRoot, clickContext);
             var inputValues = ClickContextResolver.CollectInputValues(inputRoot);
 
-            var networkService = Fodinae.Scripts.Core.ServiceLocator.Resolve<INetworkService>();
+            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
             networkService?.Send(new ElementClickPacket(windowTag, elementIndex, inputValues));
         }
 

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     public static class ProgrammatorTextureRegistry
     {

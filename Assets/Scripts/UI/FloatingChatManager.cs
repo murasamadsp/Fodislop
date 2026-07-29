@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class FloatingChatManager : MonoBehaviour
     {
@@ -36,7 +36,7 @@ namespace Fodinae.Scripts.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
-            var robot = Fodinae.Scripts.Core.ServiceLocator.Resolve<RobotManager>().GetOrCreateRobot(packet.BotId);
+            var robot = Fodinae.Core.ServiceLocator.Resolve<RobotManager>().GetOrCreateRobot(packet.BotId);
             if (robot == null)
             {
                 return;

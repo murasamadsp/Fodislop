@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public static class GameConstants
     {

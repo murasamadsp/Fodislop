@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Game.Managers;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     public static class CoordinateUtils
     {

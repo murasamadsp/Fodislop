@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Scripts.Game;
+using Fodinae.Game;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface IPackService
     {

@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.Player;
+using Fodinae.Player;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public static class ChatInput
     {

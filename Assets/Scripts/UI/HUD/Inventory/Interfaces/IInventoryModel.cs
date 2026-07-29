@@ -1,9 +1,9 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
+using Fodinae.UI.HUD.Inventory.Model;
 
-namespace Fodinae.Scripts.UI.HUD.Inventory.Interfaces
+namespace Fodinae.UI.HUD.Inventory.Interfaces
 {
     public interface IInventoryModel
     {

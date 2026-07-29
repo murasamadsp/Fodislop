@@ -1,10 +1,10 @@
 #nullable enable
 
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Audio.Core;
+using Fodinae.Audio.Core;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface IAudioSystem
     {

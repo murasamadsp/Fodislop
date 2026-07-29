@@ -1,18 +1,18 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.UI.Programmator;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Audio.Backend;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Networking;
+using Fodinae.Networking.Connection;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
+using Fodinae.UI.Programmator;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Shared.Packets;
@@ -21,7 +21,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class PauseMenu : MonoBehaviour
     {
@@ -41,7 +41,7 @@ namespace Fodinae.Scripts.UI
         [Inject]
         private INetworkService _networkService;
         [Inject]
-        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker;
         [Inject]
         private TerrainRenderer _terrainRenderer;
 

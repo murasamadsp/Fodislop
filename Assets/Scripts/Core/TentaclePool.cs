@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game;
+namespace Fodinae.Game;
 
 public static class TentaclePool
 {

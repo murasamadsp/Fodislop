@@ -4,7 +4,7 @@ using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Terrain
+namespace Fodinae.World.Terrain
 {
     public struct CachedCellData
     {

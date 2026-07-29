@@ -1,15 +1,15 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking.Connection;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Connection;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     [RequireComponent(typeof(MapManager))]
     public class StandaloneWorldInitializer : MonoBehaviour

@@ -3,13 +3,13 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.UI.HUD.Player.Model;
-using Fodinae.Scripts.UI.Programmator;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
+using Fodinae.UI.HUD.Player.Model;
+using Fodinae.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -19,7 +19,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts.UI.HUD.Player.View
+namespace Fodinae.UI.HUD.Player.View
 {
     public class PlayerHUDView : MonoBehaviour
     {
@@ -43,7 +43,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private Tooltip? _tooltip;
         private bool _isLoaded;
         [Inject]
-        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         private IVisualElementScheduledItem _skeletonPulse;
         private VisualElement? _panel;
         private Button? _bonusButton;

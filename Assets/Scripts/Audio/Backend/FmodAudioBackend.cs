@@ -4,12 +4,12 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Backend
+namespace Fodinae.Audio.Backend
 {
     /// <summary>
     /// FMOD Studio аудио-бэкенд с диск-стримингом банков и селективной загрузкой сэмплов в ОЗУ.

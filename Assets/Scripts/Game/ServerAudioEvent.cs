@@ -6,19 +6,19 @@ using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Effekseer;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Audio.Backend;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Effekseer;
+using Fodinae.Game.Managers;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game
+namespace Fodinae.Game
 {
     /// <summary>
     /// Единый контроллер эффекта мира (SFX/VFX).

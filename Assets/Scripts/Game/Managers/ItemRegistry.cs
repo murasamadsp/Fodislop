@@ -5,7 +5,7 @@ using System.IO;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     public static class ItemRegistry
     {

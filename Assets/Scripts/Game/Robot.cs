@@ -2,16 +2,16 @@
 
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using TMPro;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts.Game;
+namespace Fodinae.Game;
 
 public class Robot : MonoBehaviour
 {
@@ -506,24 +506,24 @@ public class Robot : MonoBehaviour
         }
 
         // Server Position: Red Square
-        Fodinae.Scripts.World.FodinaeGizmos.DrawBounds(_serverPosition, Vector2.one * 1.0f, Color.red);
+        Fodinae.World.FodinaeGizmos.DrawBounds(_serverPosition, Vector2.one * 1.0f, Color.red);
 
         // Client/Target Position: Blue Square
-        Fodinae.Scripts.World.FodinaeGizmos.DrawBounds(_targetPosition, Vector2.one * 0.9f, Color.blue);
+        Fodinae.World.FodinaeGizmos.DrawBounds(_targetPosition, Vector2.one * 0.9f, Color.blue);
 
         // Visual Position: Cyan Square
-        Fodinae.Scripts.World.FodinaeGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
+        Fodinae.World.FodinaeGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
 
         // Draw Rotation Arrow
         float angleRad = (transform.eulerAngles.z + VISUAL_ROTATION_OFFSET) * Mathf.Deg2Rad;
         Vector3 direction = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
-        Fodinae.Scripts.World.FodinaeGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
+        Fodinae.World.FodinaeGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
 
         // Metadata Status
         string status = $"ID: {_botId}\n{(IsLocalPlayer ? "LOCAL PLAYER" : "REMOTE ROBOT")}\n" +
                         $"Meta: {(_isMetadataLoaded ? "OK" : "PENDING")}\n" +
                         $"Speed: {_moveSpeed:F1}";
-        Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(transform.position + (Vector3.up * 1.5f), status, _isMetadataLoaded ? Color.green : Color.orange);
+        Fodinae.World.FodinaeGizmos.DrawLabel(transform.position + (Vector3.up * 1.5f), status, _isMetadataLoaded ? Color.green : Color.orange);
 
         if (!IsLocalPlayer)
         {
@@ -531,7 +531,7 @@ public class Robot : MonoBehaviour
             float lag = Vector3.Distance(_serverPosition, transform.position);
             if (lag > 0.5f)
             {
-                Fodinae.Scripts.World.FodinaeGizmos.DrawDottedLine(transform.position, _serverPosition, Color.red, 4f);
+                Fodinae.World.FodinaeGizmos.DrawDottedLine(transform.position, _serverPosition, Color.red, 4f);
             }
         }
     }

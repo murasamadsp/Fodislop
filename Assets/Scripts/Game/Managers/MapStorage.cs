@@ -1,14 +1,14 @@
 #nullable enable
 
 using System.IO;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     public class MapStorage : IWorldDataStorage
     {

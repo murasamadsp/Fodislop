@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.World.Terrain;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     [ExecuteAlways]
     public class WorldBackgroundSetup : MonoBehaviour

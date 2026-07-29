@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.UI;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -11,7 +11,7 @@ using UnityEngine.InputSystem.Controls;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts.Player
+namespace Fodinae.Player
 {
     public class PlayerInteractionController : MonoBehaviour
     {
@@ -22,7 +22,7 @@ namespace Fodinae.Scripts.Player
         [Inject]
         private INetworkService _networkService = null!;
         [Inject]
-        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {

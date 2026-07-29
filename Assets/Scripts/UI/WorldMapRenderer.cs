@@ -1,17 +1,17 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using VContainer;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class WorldMapRenderer : MonoBehaviour
     {
@@ -56,8 +56,8 @@ namespace Fodinae.Scripts.UI
         {
             // WorldMapRenderer is created at runtime by WorldMapController after the
             // DI startup injection pass — fall back to ServiceLocator when not injected.
-            _storage ??= Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager ??= Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+            _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
+            _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
             _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
             if (_storage == null || _manager == null)
             {

@@ -1,16 +1,16 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Player.Input;
-using Fodinae.Scripts.Player.Interfaces;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.Networking.Connection;
+using Fodinae.Player.Input;
+using Fodinae.Player.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.Movement;
@@ -20,7 +20,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
 
-namespace Fodinae.Scripts.Player.Logic
+namespace Fodinae.Player.Logic
 {
     public class PlayerMovementController : MonoBehaviour
     {
@@ -55,7 +55,7 @@ namespace Fodinae.Scripts.Player.Logic
         private IMapDataProvider _mapDataProvider = null!;
 
         [Inject]
-        private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
         public static PlayerMovementController? LocalPlayer { get; private set; }
         public static event Action<PlayerMovementController>? OnLocalPlayerSpawned;

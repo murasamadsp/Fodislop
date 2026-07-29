@@ -1,7 +1,7 @@
 #nullable enable
 
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using NUnit.Framework;
 using UnityEngine;
 

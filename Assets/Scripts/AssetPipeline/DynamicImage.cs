@@ -3,12 +3,12 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     [RequireComponent(typeof(Image))]
     public class DynamicImage : MonoBehaviour

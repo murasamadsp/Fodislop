@@ -1,6 +1,6 @@
 #nullable enable
 
-using Fodinae.Scripts;
+using Fodinae;
 using NUnit.Framework;
 
 namespace Fodinae.Tests.World

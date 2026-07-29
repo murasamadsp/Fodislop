@@ -1,12 +1,12 @@
 #nullable enable
 
-using Fodinae.Scripts;
+using Fodinae;
 using Fodinae.UI.Controls;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class SelectablePacketBuilder : PacketUIBuilderBase
     {

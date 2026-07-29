@@ -1,12 +1,12 @@
 #nullable enable
 
-using Fodinae.Scripts;
+using Fodinae;
 using Fodinae.UI.Controls; // Add this using directive
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class TextBoxPacketBuilder : PacketUIBuilderBase
     {

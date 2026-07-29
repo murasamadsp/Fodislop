@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Frontier-Based Parallel Wavefront (FBPW) flood fill for background map.

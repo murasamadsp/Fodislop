@@ -5,7 +5,7 @@ using MinesServer.Networking.Server.Packets.GUI.Components;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public static class StyleApplicator
     {

@@ -4,7 +4,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
-namespace Fodinae.Scripts.Core.Interfaces
+namespace Fodinae.Core.Interfaces
 {
     public interface ITextureStorageService
     {

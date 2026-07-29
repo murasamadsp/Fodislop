@@ -1,7 +1,7 @@
 #nullable enable
 
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 

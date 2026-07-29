@@ -1,14 +1,14 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI.HUD.Player.Model;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.UI.HUD.Player.Model;
+using Fodinae.World;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class MissionArrowUI : MonoBehaviour
     {

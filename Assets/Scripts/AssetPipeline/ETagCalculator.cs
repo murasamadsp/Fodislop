@@ -3,7 +3,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public static class ETagCalculator
     {

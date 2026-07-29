@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Terrain
+namespace Fodinae.World.Terrain
 {
     public class TerrainPrecalculator
     {

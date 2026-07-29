@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     internal struct AtlasCell
     {

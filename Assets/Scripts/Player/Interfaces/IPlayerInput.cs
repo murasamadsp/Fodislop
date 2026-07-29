@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Scripts.Player.Interfaces
+namespace Fodinae.Player.Interfaces
 {
     public interface IPlayerInput
     {

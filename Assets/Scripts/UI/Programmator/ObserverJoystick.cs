@@ -4,7 +4,7 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     /// <summary>
     /// 8-directional joystick for Observer operators.

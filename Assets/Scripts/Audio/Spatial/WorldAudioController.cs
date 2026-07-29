@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Spatial
+namespace Fodinae.Audio.Spatial
 {
     public sealed class WorldAudioController : MonoBehaviour
     {

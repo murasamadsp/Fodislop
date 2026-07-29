@@ -1,18 +1,18 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class WorldInitProcessor : IPacketProcessor<WorldInitPacket>
     {
         public void Process(WorldInitPacket packet)
         {
             Debug.Log("[WorldInitProcessor] Processing WorldInitPacket");
-            var mm = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+            var mm = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
             if (mm == null)
             {
                 Debug.LogError("[WorldInitProcessor] MapManager is null — cannot process WorldInitPacket");

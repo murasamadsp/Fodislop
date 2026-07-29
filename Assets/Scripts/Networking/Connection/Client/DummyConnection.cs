@@ -9,13 +9,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
-using Fodinae.Scripts;
-using Fodinae.Scripts.Audio;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.HUD.Player.Model;
+using Fodinae;
+using Fodinae.Audio;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.UI;
+using Fodinae.UI.HUD.Player.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -316,11 +316,11 @@ namespace MinesServer.Networking.Connection.Client
                         return;
                     }
 
-                    var storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+                    var storage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
                     if (storage?.CellLayer != null && storage.IsReady)
                     {
                         var cellType = storage.GetCell(move.X, move.Y);
-                        var cellConfig = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
+                        var cellConfig = Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
                             bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
@@ -370,7 +370,7 @@ namespace MinesServer.Networking.Connection.Client
                         new AudioPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                     })));
 
-                    var storage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+                    var storage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
                     if (storage?.CellLayer != null && storage.IsReady)
                     {
                         var cellType = storage.GetCell(cellX, cellY);
@@ -384,7 +384,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         var cellType = storage.GetCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
-                        var mm = Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>();
+                        var mm = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
@@ -397,7 +397,7 @@ namespace MinesServer.Networking.Connection.Client
 
                         if (crystalIdx >= 0)
                         {
-                            var stats = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+                            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
                             if (stats != null && stats.BasketContents != null && stats.BasketContents.Length > crystalIdx)
                             {
                                 var newContents = new long[stats.BasketContents.Length];
@@ -2189,7 +2189,7 @@ namespace MinesServer.Networking.Connection.Client
         {
             foreach (var assetEntry in runtimeAssets.Assets)
             {
-                var tsm = Fodinae.Scripts.Core.ServiceLocator.Resolve<ITextureStorageService>();
+                var tsm = Fodinae.Core.ServiceLocator.Resolve<ITextureStorageService>();
                 var data = tsm != null ? await tsm.GetTextureData(assetEntry.Filename.TrimStart('/')) : null;
 
                 RuntimeAssetPacket response;

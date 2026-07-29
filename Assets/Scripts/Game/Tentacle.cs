@@ -2,7 +2,7 @@
 
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game;
+namespace Fodinae.Game;
 
 /// <summary>
 /// Simulated spring-chain tail segment. Owns only simulation state —

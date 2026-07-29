@@ -1,12 +1,12 @@
 #nullable enable
 
 using System.Linq;
-using Fodinae.Scripts;
+using Fodinae;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class IntDropdownPacketBuilder : PacketUIBuilderBase
     {

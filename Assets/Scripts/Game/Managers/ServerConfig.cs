@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     public class ServerConfig : MonoBehaviour, IServerConfig
     {

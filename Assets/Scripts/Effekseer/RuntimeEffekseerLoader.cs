@@ -7,14 +7,14 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Effekseer;
 using Effekseer.Internal;
-using Fodinae.Scripts;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Effekseer
+namespace Fodinae.Effekseer
 {
     /// <summary>
     /// Utility for loading Effekseer effects from raw .efk bytes at runtime,

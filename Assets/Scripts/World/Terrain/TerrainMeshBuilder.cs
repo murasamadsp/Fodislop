@@ -2,14 +2,14 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Terrain
+namespace Fodinae.World.Terrain
 {
     public class TerrainMeshBuilder
     {

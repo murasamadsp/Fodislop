@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Fodinae.Scripts.Core.DI
+namespace Fodinae.Core.DI
 {
     public interface IServiceLocator
     {

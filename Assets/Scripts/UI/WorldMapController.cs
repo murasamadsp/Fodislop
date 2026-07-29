@@ -1,16 +1,16 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class WorldMapController : MonoBehaviour
     {
@@ -25,8 +25,8 @@ namespace Fodinae.Scripts.UI
         private float _storedCamZoom;
 
         // HUD elements
-        private Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView _playerHud;
-        private Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView _inventory;
+        private Fodinae.UI.HUD.Player.View.PlayerHUDView _playerHud;
+        private Fodinae.UI.HUD.Inventory.View.InventoryView _inventory;
         private FPSCounter _fps;
         private MinimapController _minimap;
         private PauseMenu _pauseMenu;
@@ -36,8 +36,8 @@ namespace Fodinae.Scripts.UI
             _cameraFollow = UnityEngine.Object.FindAnyObjectByType<CameraFollow>();
             _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
             _terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
-            _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
-            _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
+            _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
+            _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>();
             _fps = UnityEngine.Object.FindAnyObjectByType<FPSCounter>();
             _minimap = UnityEngine.Object.FindAnyObjectByType<MinimapController>();
             _pauseMenu = UnityEngine.Object.FindAnyObjectByType<PauseMenu>();
@@ -66,7 +66,7 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            var mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (mapStorage == null || !mapStorage.IsReady)
             {
                 return;
@@ -89,7 +89,7 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            var mapStorage = Fodinae.Scripts.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (mapStorage == null || !mapStorage.IsReady)
             {
                 return;
@@ -118,8 +118,8 @@ namespace Fodinae.Scripts.UI
             SetHudVisible(false);
 
             // Center map on player position
-            int CENTER_X = _player != null ? _player.Position.x : (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>()?.WorldWidth ?? 64) / 2;
-            int CENTER_Y = _player != null ? _player.Position.y : (Fodinae.Scripts.Core.ServiceLocator.Resolve<MapManager>()?.WorldHeight ?? 64) / 2;
+            int CENTER_X = _player != null ? _player.Position.x : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldWidth ?? 64) / 2;
+            int CENTER_Y = _player != null ? _player.Position.y : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldHeight ?? 64) / 2;
             _mapRenderer.SetViewCenter(CENTER_X, CENTER_Y);
         }
 

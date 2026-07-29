@@ -1,11 +1,11 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI.HUD.Player.View;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.UI.HUD.Player.View;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI.HUD.Player.Presenter
+namespace Fodinae.UI.HUD.Player.Presenter
 {
     [RequireComponent(typeof(PlayerHUDView))]
     public class PlayerHUDPresenter : MonoBehaviour

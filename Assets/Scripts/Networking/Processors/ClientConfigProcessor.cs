@@ -1,15 +1,15 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class ClientConfigProcessor : IPacketProcessor<ClientConfigPacket>
     {
@@ -26,7 +26,7 @@ namespace Fodinae.Scripts.Networking.Processors
         public void Process(ClientConfigPacket packet)
         {
             Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, renderer={packet.Renderer}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
-            var audio = Fodinae.Scripts.Core.ServiceLocator.Resolve<IAudioSystem>();
+            var audio = Fodinae.Core.ServiceLocator.Resolve<IAudioSystem>();
             if (audio != null)
             {
                 float masterVol = packet.SoundConfig.Master / 255f;

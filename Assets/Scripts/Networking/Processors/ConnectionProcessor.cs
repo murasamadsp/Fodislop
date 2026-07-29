@@ -1,9 +1,9 @@
 #nullable enable
 
-using Fodinae.Scripts.Networking.Connection;
+using Fodinae.Networking.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class ConnectionProcessor : IPacketProcessor<DisconnectPacket>, IPacketProcessor<ReconnectPacket>
     {

@@ -6,7 +6,7 @@ using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any I/O failure without crashing the asset loading pipeline.")]
     public static class PersistentAssetCache

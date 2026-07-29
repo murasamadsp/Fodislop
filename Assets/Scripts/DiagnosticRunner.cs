@@ -2,20 +2,20 @@
 
 using System.IO;
 using System.Text;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.Networking.Connection;
+using Fodinae.Player.Logic;
+using Fodinae.UI;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public class DiagnosticRunner : MonoBehaviour
     {
@@ -166,7 +166,7 @@ namespace Fodinae.Scripts
             sb.AppendLine($"  IInputBlocker: {(bl != null ? $"IsInputBlocked={bl.IsInputBlocked}" : "NULL")}");
             sb.AppendLine($"  Keyboard.current: {(Keyboard.current != null ? "OK" : "NULL")}");
             sb.AppendLine($"  ChatInput.IsFocused: {ChatInput.IsFocused}");
-            sb.AppendLine($"  PauseMenu.IsMenuOpen: {Fodinae.Scripts.UI.PauseMenu.IsMenuOpen}");
+            sb.AppendLine($"  PauseMenu.IsMenuOpen: {Fodinae.UI.PauseMenu.IsMenuOpen}");
 
             sb.AppendLine("\n[GAME]");
             var gm = ServiceLocator.Resolve<GameManager>();
@@ -202,7 +202,7 @@ namespace Fodinae.Scripts
                 sb.AppendLine($"  #{r.BotId} local={r.IsLocalPlayer} GO={rgo.name} active={rgo.activeInHierarchy} pos={r.transform.position}");
             }
 
-            foreach (var pk in FindObjectsByType<Fodinae.Scripts.Game.Pack>(FindObjectsInactive.Exclude))
+            foreach (var pk in FindObjectsByType<Fodinae.Game.Pack>(FindObjectsInactive.Exclude))
             {
                 sb.AppendLine($"  Pack {pk.name} pos={pk.transform.position}");
             }

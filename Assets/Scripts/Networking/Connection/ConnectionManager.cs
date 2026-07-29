@@ -1,13 +1,13 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking.Auth;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Auth;
+using Fodinae.UI;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -18,7 +18,7 @@ using MinesServer.Networking.Shared;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts.Networking.Connection
+namespace Fodinae.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService
     {
@@ -99,7 +99,7 @@ namespace Fodinae.Scripts.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            Fodinae.Scripts.Core.ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Connecting);
+            Fodinae.Core.ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Connecting);
 
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;

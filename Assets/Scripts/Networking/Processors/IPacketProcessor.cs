@@ -2,7 +2,7 @@
 
 using MinesServer.Networking.Server.Packets;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     /// <summary>
     /// SOLID Single Responsibility Interface for processing specific server packets.

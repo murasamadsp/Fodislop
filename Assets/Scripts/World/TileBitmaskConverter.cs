@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public static class TileBitmaskConverter
     {

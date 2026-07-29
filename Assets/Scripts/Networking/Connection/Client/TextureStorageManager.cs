@@ -7,11 +7,11 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Connection.Client
+namespace Fodinae.Networking.Connection.Client
 {
     /// <summary>
     /// Manager for storing and caching textures downloaded from the server or loaded locally.

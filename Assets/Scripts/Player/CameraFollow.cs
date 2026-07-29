@@ -1,14 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.Player.Logic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
 
-namespace Fodinae.Scripts.Player
+namespace Fodinae.Player
 {
     public class CameraFollow : MonoBehaviour
     {
@@ -220,7 +220,7 @@ namespace Fodinae.Scripts.Player
                 // Draw target marker
                 Gizmos.DrawWireSphere(_target.position, 0.5f);
 
-                Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(_target.position + (Vector3.up * 0.7f), "Camera Target", Color.yellow);
+                Fodinae.World.FodinaeGizmos.DrawLabel(_target.position + (Vector3.up * 0.7f), "Camera Target", Color.yellow);
             }
 
             // Draw current viewport visualization

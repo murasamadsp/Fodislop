@@ -1,13 +1,13 @@
 #nullable enable
 
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.Builders;
+using Fodinae.UI;
+using Fodinae.UI.Builders;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class LinePacketBuilder : PacketUIBuilderBase
     {

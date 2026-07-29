@@ -5,7 +5,7 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     public class RadialMenu
     {

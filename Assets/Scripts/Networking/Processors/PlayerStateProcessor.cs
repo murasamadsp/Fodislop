@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using MinesServer.Networking.Server.Packets.Information;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class PlayerStateProcessor : IPacketProcessor<AutoMineStatePacket>, IPacketProcessor<AggressionStatePacket>
     {

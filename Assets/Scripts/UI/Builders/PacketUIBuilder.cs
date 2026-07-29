@@ -1,14 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Scripts.UI.Builders;
+using Fodinae.UI.Builders;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public class PacketUIBuilder
     {

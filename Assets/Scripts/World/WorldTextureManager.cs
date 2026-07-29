@@ -6,17 +6,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     public class WorldTextureManager : MonoBehaviour, ITextureService
     {

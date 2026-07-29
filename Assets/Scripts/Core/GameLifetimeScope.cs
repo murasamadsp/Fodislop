@@ -1,27 +1,27 @@
 #nullable enable
 
-using Fodinae.Scripts;
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Networking.Connection;
-using Fodinae.Scripts.Networking.Connection.Client;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
-using Fodinae.Scripts.UI.HUD.Inventory.View;
-using Fodinae.Scripts.UI.HUD.Player.Model;
-using Fodinae.Scripts.UI.HUD.Player.View;
-using Fodinae.Scripts.World;
-using Fodinae.Scripts.World.Terrain;
+using Fodinae;
+using Fodinae.Audio.Backend;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.Networking.Connection;
+using Fodinae.Networking.Connection.Client;
+using Fodinae.Player.Logic;
+using Fodinae.UI;
+using Fodinae.UI.HUD.Inventory.Interfaces;
+using Fodinae.UI.HUD.Inventory.Model;
+using Fodinae.UI.HUD.Inventory.View;
+using Fodinae.UI.HUD.Player.Model;
+using Fodinae.UI.HUD.Player.View;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
 
-namespace Fodinae.Scripts.Core
+namespace Fodinae.Core
 {
     [DefaultExecutionOrder(-20000)]
     public class GameLifetimeScope : LifetimeScope
@@ -239,8 +239,8 @@ namespace Fodinae.Scripts.Core
             {
                 typeof(PacketHandler),
                 typeof(PauseMenu),
-                typeof(Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView),
-                typeof(Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView),
+                typeof(Fodinae.UI.HUD.Player.View.PlayerHUDView),
+                typeof(Fodinae.UI.HUD.Inventory.View.InventoryView),
                 typeof(PlayerMovementController),
                 typeof(MapManager),
                 typeof(WorldTextureManager),

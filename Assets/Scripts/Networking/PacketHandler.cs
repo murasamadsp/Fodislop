@@ -2,13 +2,13 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking.Processors;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.Programmator;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Processors;
+using Fodinae.Player;
+using Fodinae.UI;
+using Fodinae.UI.Programmator;
 using Fodinae.UI;
 using Fodinae.UI.Binding;
 using MinesServer.Data;
@@ -32,7 +32,7 @@ using UnityEngine.Rendering;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae.Scripts.Networking
+namespace Fodinae.Networking
 {
     public partial class PacketHandler : MonoBehaviour, IInputBlocker
     {

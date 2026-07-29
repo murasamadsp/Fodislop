@@ -4,7 +4,7 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Utility class to draw consistent and pretty Gizmos in the Editor.

@@ -7,7 +7,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Editor
+namespace Fodinae.Editor
 {
     public static class InjectValidator
     {

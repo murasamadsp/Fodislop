@@ -1,23 +1,23 @@
 #nullable enable
 
 using System.Linq;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.UI;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Information.StatusPanel;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class StatusProcessor : IPacketProcessor<OnlinePacket>, IPacketProcessor<PingPacket>, IPacketProcessor<OutdatedClientPacket>, IPacketProcessor<AddStatusLinePacket>, IPacketProcessor<ClearStatusLinePacket>, IPacketProcessor<ClearStatusPacket>
     {
         public void Process(OnlinePacket packet)
         {
-            var fps = Fodinae.Scripts.Core.ServiceLocator.Resolve<FPSCounter>();
+            var fps = Fodinae.Core.ServiceLocator.Resolve<FPSCounter>();
             if (fps != null)
             {
                 fps.SetOnline((int)packet.Players, (int)packet.Programmator);
@@ -26,13 +26,13 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(PingPacket packet)
         {
-            var fps = Fodinae.Scripts.Core.ServiceLocator.Resolve<FPSCounter>();
+            var fps = Fodinae.Core.ServiceLocator.Resolve<FPSCounter>();
             if (fps != null)
             {
                 fps.SetPing(packet.PreviousPing);
             }
 
-            var networkService = Fodinae.Scripts.Core.ServiceLocator.Resolve<INetworkService>();
+            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
             networkService?.Send(new PongPacket(packet.SentAt));
         }
 
@@ -46,7 +46,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(AddStatusLinePacket packet)
         {
-            var stats = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (stats == null)
             {
                 return;
@@ -65,13 +65,13 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(ClearStatusLinePacket packet)
         {
-            var stats = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             stats?.RemoveStatusLine(packet.Tag);
         }
 
         public void Process(ClearStatusPacket packet)
         {
-            var stats = Fodinae.Scripts.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             stats?.ClearStatusLines();
         }
     }

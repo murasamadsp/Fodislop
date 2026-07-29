@@ -1,10 +1,10 @@
 #nullable enable
 
-using Fodinae.Scripts.Core;
+using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     /// <summary>
     /// Displays the current frames‑per‑second in the top‑right corner of the screen.
