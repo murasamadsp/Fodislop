@@ -120,7 +120,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e55a1800031c9374ba92fb984b2216f6, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.Player.PlayerMovementController
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.Player.Logic.PlayerMovementController
   _moveSpeed: 15
   _moveActionReference: {fileID: 0}
 --- !u!114 &11400001
