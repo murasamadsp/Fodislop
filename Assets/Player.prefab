@@ -12,6 +12,8 @@ GameObject:
   - component: {fileID: 11400001}
   - component: {fileID: 11400002}
   - component: {fileID: 11400003}
+  - component: {fileID: 11400004}
+  - component: {fileID: 11400005}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -165,5 +167,29 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4f9b8c7d6e5a4b3c2d1e0f9a8b7c6d5e, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Player.PlayerInteractionController
+--- !u!114 &11400004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 309b32c6878a84474a1b2376baed4735, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Player.Input.PlayerInputHandler
+--- !u!114 &11400005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d01101e153d8b846858b2936a854cc6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Game.RobotHeadlight
