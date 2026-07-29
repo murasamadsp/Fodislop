@@ -6,6 +6,7 @@ using Fodinae.Audio.Core;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Audio.Backend
 {
@@ -22,7 +23,9 @@ namespace Fodinae.Audio.Backend
     public sealed class AudioSystem : MonoBehaviour, IAudioSystem
     {
         private const string TAG = "[AudioSystem]";
-        private FmodAudioBackend _backend;
+
+        [Inject]
+        private FmodAudioBackend _backend = null!;
 
         public float GetBusVolume(AudioBusType type)
         {
@@ -222,6 +225,11 @@ namespace Fodinae.Audio.Backend
         // ═══════════════════════════════════════════════════════════
         //  Protected Lifecycle Methods
         // ═══════════════════════════════════════════════════════════
+
+        protected void Awake()
+        {
+            ApplySavedBusVolumes();
+        }
 
         /// <summary>
         /// Применяет сохранённые в PlayerPrefs значения громкости для всех 6 шин FMOD Studio.

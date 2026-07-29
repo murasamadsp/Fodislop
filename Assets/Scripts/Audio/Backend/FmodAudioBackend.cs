@@ -8,6 +8,7 @@ using Fodinae.Audio.Core;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Audio.Backend
 {
@@ -22,6 +23,13 @@ namespace Fodinae.Audio.Backend
     public sealed class FmodAudioBackend
     {
         private AudioSystem _system;
+
+        [Inject]
+        public FmodAudioBackend(IAudioSystem system)
+        {
+            _system = (AudioSystem)system;
+            LoadRequiredBanksAsync().Forget();
+        }
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
         private readonly ConcurrentDictionary<string, FMOD.Studio.Bank> _loadedBanks = new(StringComparer.OrdinalIgnoreCase);
 
