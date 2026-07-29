@@ -142,10 +142,10 @@ Assets/
         LogiCalcFormatter.cs      # Форматтер вычислений для SmartFormat
       Programmator/
         ProgrammatorData.cs          # Данные программатора
-        ProgrammatorGrid.cs          # Сетка программатора (static IsOpen)
+        ProgrammatorGrid.cs          # Сетка программатора + список программ + save/load (static IsOpen)
         ProgrammatorTextureRegistry.cs # Реестр текстур программатора
         RadialMenu.cs                # Радиальное меню программатора
-        ObserverJoystick.cs          # Джойсток наблюдателя (из upstream)
+        ObserverJoystick.cs          # Джойстик для Observer-операторов
       ChatInput.cs                # Управление фокусом чата (блокировка управления)
       ClickContextResolver.cs     # Разрешение clickContext-путей в VisualElement
       FloatingChatBubble.cs       # Всплывающее сообщение над персонажем
@@ -378,10 +378,61 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 
 ### 3.7 Программатор (Programmator)
 
-- **ProgrammatorGrid**: Графическая сетка для визуального программирования алгоритмов поведения робота. `static bool IsOpen` — проверяется `PacketHandler.IsInputBlocked` и `PauseMenu` для блокировки ESC.
-- **ProgrammatorData**: Модель данных и структура алгоритма робота.
-- **RadialMenu**: Радиальное круговое меню выбора команд для быстрого размещения на сетке программатора.
-- **ObserverJoystick**: Джойсток наблюдателя за роботом.
+Программатор — визуальный редактор алгоритмов поведения робота. Открывается через кнопку в HUD игрока (`PlayerHUDView.cs:988`). `static bool IsOpen` проверяется `PacketHandler.IsInputBlocked` и `PauseMenu` для блокировки ESC.
+
+**Навигация:**
+```
+HUD [Программатор]
+  ↓ Show()
+  [Список программ] → клик по программе → [Сетка редактора]
+                    → [+ Создать] → модальное окно с TextField → [Сетка редактора]
+  × или ESC в списке → Hide()
+  × или ESC в сетке → CloseProgram() → сохранение данных → [Список программ]
+```
+
+**Компоненты:**
+
+| Компонент | Файл | Назначение |
+|---|---|---|
+| `ProgrammatorGrid` | `ProgrammatorGrid.cs` | Главный UI: список программ, сетка, сохранение, run/stop |
+| `ProgrammatorData` | `ProgrammatorData.cs` | Статические данные: Codes/Labels/Values, категории, имена операторов, undo/redo |
+| `ProgrammatorTextureRegistry` | `ProgrammatorTextureRegistry.cs` | Загрузка текстур операторов из `Resources/Programmator/{id}` |
+| `RadialMenu` | `RadialMenu.cs` | Двухкольцевое радиальное меню выбора категории → оператора |
+| `ObserverJoystick` | `ObserverJoystick.cs` | 8-направленный джойстик для операторов Observer (drag-to-shift) |
+
+**Структура UI сетки (`ProgrammatorGrid.cs`):**
+```
+_popup (absolute, fullscreen, center)
+  dimmer
+  _programListPanel (column, ~400px, shown при ShowProgramList())
+    header: "Программы" + × close
+    _listScroll (ScrollView): строки программ (клик → открыть, × удалить)
+    _createContainer: [+ Создать программу] (показывает _createDialog)
+  _panel (grid panel, shown при OpenProgram())
+    headerRow (row)
+      topRow (column, flexGrow: 1)
+        buttonsRow (row): [имя программы] [<][Стр. 1/1][>][+][−][↑][↓][←][→]
+        actionRow (row): [💾 Save][▶ Run][■ Stop]
+      closeBtn (×) — прижат вправо
+    gridRow (row, justifyCenter)
+      gridScroll (VisualElement)
+        _gridContainer (608px, 16×12 ячеек)
+  _createDialog (absolute overlay) — модальное окно создания программы
+    panel: "Новая программа" + TextField + [Отмена] [Создать]
+```
+
+**Ключевые детали реализации:**
+- **Список программ сессионный**: `List<ProgramItem> _programItems` в памяти. Создание/удаление без сохранения на диск.
+- `ProgramItem` содержит `Name`, `Codes/Labels/Values` как `List<>`
+- При открытии программы → данные копируются в статический `ProgrammatorData`, при закрытии — копируются обратно
+- **Save (💾)** сохраняет текущую программу в `programmator.json` через `JsonUtility` (единственный файл)
+- **Run/Stop** — чисто визуальные (зелёная рамка панели), без логики выполнения
+- **`_createDialog`**: Modal dialog with `position: Absolute` overlay, dark-styled TextField (inner `unity-text-input` darkened via `AttachToPanelEvent`), Enter confirms
+- **Название программы** отображается в шапке сетки через `_programTitle` Label
+- `CELLSIZE = 32f`, `CELL_GAP = 2f`, сетка `16×12 = 192` ячеек
+- Ширина контейнера: `16 * (32 + 4 + 2) = 608px`
+- Ширина панели: `648px` (608 + 20px padding с каждой стороны)
+- CloseBtn в headerRow (не в buttonsRow) с `flexGrow: 1` на topRow для прижатия вправо
 
 ### 3.8 Диагностика
 
@@ -436,10 +487,14 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 5. **Текстуры**: Пайплайн кастомный — файловая система, не Resources. Билд должен копировать `Textures/` вручную.
 6. **UI Toolkit**: Темы привязаны к GUID. Missing Reference в `PanelSettings` = пустой UI. Интермиттентный баг: UI рендерится но не принимает клики — лечится перезаписью `panelSettings` в MainMenu.
 7. **Сортировка**: `SingleMeshTerrainRenderer` рисуется на `Sorting Order = -1000` (под спрайтами роботов).
-8. **DI injection**: VContainer инжектит `[Inject]` поля **только** в объекты которые он создаёт или в которые явно вызван `resolver.Inject()`. `BuildCallback` сканирует все MonoBehaviour через reflection и вызывает `resolver.Inject()` для каждого. Если поле остаётся null — это FATAL ERROR в логах.
+8. **DI injection**: VContainer инжектит `[Inject]` поля **только** в объекты которые он создаёт или в которые явно вызван `resolver.Inject()`. `BuildCallback` сканирует все MonoBehaviour (включая неактивные) через reflection и вызывает `resolver.Inject()` для каждого. Если поле остаётся null — это FATAL ERROR в логах.
 9. **UI дублирование**: `GameManager.SetupUI()` создаёт UI под выключенным UIRoot. `FindAnyObjectByType<T>()` **не видит inactive объектов**. DummyConnection не должен создавать UI — иначе появляются дубли-сироты.
 10. **FPSCounter утечка**: `FPSCounter.Awake()` создаёт отдельный корневой `FPSCanvas` GameObject. `OnDestroy()` уничтожает его через `_ownedCanvas`. Если OnDestroy не вызван — Canvas остаётся навсегда.
-11. **CompositionRoot удалён**: DI полностью через `GameLifetimeScope` (VContainer). `CompositionRoot` и `SingletonMonoBehaviour` удалены.
+11. **CompositionRoot удалён**: DI полностью через `GameLifetimeScope` (VContainer). `CompositionRoot` и `SingletonMonoBehaviour` удалены. ВАЖНО: `RegisterInstance` НЕ инжектит вручную созданные экземпляры — для DI-объектов с `[Inject]` используй `Register<T>(Lifetime.Singleton)`.
+12. **ProgrammatorGrid — ширина контейнера**: `_gridContainer.width = COLS * (CELLSIZE + CELL_GAP*2 + 2f)` — `+2f` обязателен из-за `borderWidth: 1` на каждой ячейке (UI Toolkit content-box модель).
+13. **ProgrammatorGrid — два UI-слоя**: `_popup` содержит три элемента: `dimmer`, `_panel` (сетка) и `_programListPanel` (список). Показывается только один из панельных слоёв за раз; `_createDialog` — абсолютный оверлей поверх обоих.
+14. **ESC-навигация в программаторе**: Если открыта сетка, ESC возвращает в список программ (с сохранением данных). Если открыт список, ESC закрывает программатор. Если открыт диалог создания, ESC его не закрывает (только × или Отмена).
+15. **Список программ сессионный**: `_programItems` живёт только в RAM. Созданные программы теряются при перезапуске. Единственный файл на диске — `programmator.json` (через Save).
 
 ## 6. Рабочий процесс (Workflow)
 

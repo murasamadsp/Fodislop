@@ -13,6 +13,7 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Server.Packets;
+using MinesServer.Networking.Server.Packets.Compression;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using VContainer;
@@ -153,6 +154,15 @@ namespace Fodinae.Scripts.Networking
             {
                 Debug.LogWarning("[NetworkService] Received ServerPacket with null Payload");
                 return;
+            }
+
+            while (payload is LzmaPacket lzma)
+            {
+                payload = lzma.Payload;
+            }
+            while (payload is LZ4Packet lz4)
+            {
+                payload = lz4.Payload;
             }
 
             Debug.Log($"[NetworkService] Received packet: {payload.GetType().Name}");
