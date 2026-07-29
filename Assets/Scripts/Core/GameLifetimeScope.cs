@@ -42,7 +42,6 @@ namespace Fodinae.Core
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
             RegisterManager<ClientAssetLoader>(builder).AsImplementedInterfaces().AsSelf();
-            builder.Register<FmodAudioBackend>(Lifetime.Singleton).AsSelf();
             RegisterManager<AudioSystem>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldTextureManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder).AsImplementedInterfaces().AsSelf();
@@ -70,7 +69,6 @@ namespace Fodinae.Core
                 resolver.Resolve<MapManager>();
                 resolver.Resolve<PacketHandler>();
                 resolver.Resolve<IAssetLoader>();
-                resolver.Resolve<FmodAudioBackend>();
                 resolver.Resolve<IAudioSystem>();
                 resolver.Resolve<GameManager>();
                 resolver.Resolve<ServerConfig>();
