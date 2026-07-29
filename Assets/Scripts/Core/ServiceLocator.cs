@@ -33,7 +33,11 @@ namespace Fodinae.Core
         {
             if (_resolver == null)
             {
-                Debug.LogError($"[ServiceLocator] Cannot resolve {typeof(T).Name}, _resolver is null!");
+                if (typeof(MonoBehaviour).IsAssignableFrom(typeof(T)))
+                {
+                    return Object.FindAnyObjectByType(typeof(T)) as T;
+                }
+
                 return null;
             }
 

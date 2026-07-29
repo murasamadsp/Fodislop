@@ -417,7 +417,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e7ee9e8630524226aecbf115a9824cba, type: 3}
   m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.MainMenu
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MainMenu
   _loaderTexture: {fileID: 2800000, guid: bb2d88d590a7c9241a54276262f96c47, type: 3}
 --- !u!114 &439439806
 MonoBehaviour:
@@ -646,7 +646,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ecf77f7bb98b5af49b03a4907506829a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.World.SceneSetup
 --- !u!4 &1000000002
 Transform:
   m_ObjectHideFlags: 0
@@ -891,7 +891,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f7aa63301fea8470eb7f24a0e718216d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Core.GameLifetimeScope
   parentReference:
     TypeName: 
   autoRun: 1
