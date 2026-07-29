@@ -76,7 +76,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 5272401415994956661, guid: d0790dbacbe8cfe48be914eecc1a2ab2, type: 3}
+  m_Sprite: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -154,7 +154,7 @@ MonoBehaviour:
   _botId: 0
   _spriteRenderer: {fileID: 21200000}
   _nickname: Player
-  _skinPath: skin/bee.png
+  _skinPath: Skin/bee.png
 --- !u!114 &11400003
 MonoBehaviour:
   m_ObjectHideFlags: 0
