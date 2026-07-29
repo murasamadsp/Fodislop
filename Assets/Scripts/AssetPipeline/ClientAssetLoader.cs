@@ -168,7 +168,6 @@ namespace Fodinae.Scripts
             // 1. Check local RAM/disk cache first when offline
             var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
             var isConnected = cm != null && cm.Connection != null && cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected;
-            Debug.Log($"[AssetDiag] LOAD {filename} conn={isConnected} disk={HasAsset(filename)}");
 
             if (!isConnected)
             {
@@ -183,7 +182,6 @@ namespace Fodinae.Scripts
             {
                 var tsm = ServiceLocator.Resolve<ITextureStorageService>();
                 bool tsmHas = tsm != null && tsm.HasTexture(filename);
-                Debug.Log($"[AssetDiag] TSM {filename} tsm={tsm != null} has={tsmHas}");
                 if (tsmHas)
                 {
                     var localData = await tsm.GetTextureData(filename);
@@ -240,7 +238,6 @@ namespace Fodinae.Scripts
                 }
             }
 
-            Debug.Log($"[AssetDiag] FAIL {filename} -> null");
             return null;
         }
 

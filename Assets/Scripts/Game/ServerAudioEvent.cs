@@ -448,7 +448,6 @@ namespace Fodinae.Scripts.Game
                     {
                         if (_textureOverrideMap != null && _textureOverrideMap.TryGetValue(path, out var mapped))
                         {
-                            Debug.Log($"[ServerAudioEvent] Remapping texture '{path}' → '{mapped}' for effect '{_effectType}'");
                             return mapped;
                         }
 

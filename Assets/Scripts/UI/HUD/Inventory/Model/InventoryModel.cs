@@ -105,12 +105,10 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.Model
             var item = _slots[index];
             if (item != null)
             {
-                Debug.Log($"[InventoryModel] Sending SelectItemPacket: slot={index}, item={item.ItemType}");
                 _networkService.Send(new SelectItemPacket(item.ItemType));
             }
             else
             {
-                Debug.Log($"[InventoryModel] Sending DeselectItemPacket (empty slot {index})");
                 _networkService.Send(new DeselectItemPacket());
             }
         }
@@ -125,7 +123,6 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.Model
                 return;
             }
 
-            Debug.Log("[InventoryModel] Sending DeselectItemPacket");
             _networkService.Send(new DeselectItemPacket());
         }
 

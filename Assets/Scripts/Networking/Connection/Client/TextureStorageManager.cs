@@ -82,7 +82,6 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             // Fallback: generate fallback texture
             if (_enableDebugLogging)
             {
-                Debug.Log($"[TextureStorageManager] Texture not found, generating fallback: {filename}");
             }
 
             var fallback = CreateFallbackTexture(filename);
@@ -159,7 +158,6 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 {
                     if (_enableDebugLogging)
                     {
-                        Debug.Log($"[TextureStorageManager] Texture file not found: {filename}");
                     }
 
                     return null;
@@ -303,7 +301,6 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 _textureFolderPath = persistentPath;
                 if (_enableDebugLogging)
                 {
-                    Debug.Log($"[TextureStorageManager] Using texture folder: {_textureFolderPath}");
                 }
 
                 _folderInitialized = true;
@@ -324,7 +321,6 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             _resolvedPathsCache.Clear();
             if (_enableDebugLogging)
             {
-                Debug.Log("[TextureStorageManager] Texture cache cleared");
             }
         }
 

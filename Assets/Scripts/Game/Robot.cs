@@ -307,7 +307,6 @@ namespace Fodinae.Scripts.Game
         {
             _botId = botId;
             ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
-            Debug.Log($"{TAG} Initialized botId={botId} (local={IsLocalPlayer})");
 
             _isMetadataLoaded = false;
             if (_spriteRenderer != null)
@@ -334,7 +333,6 @@ namespace Fodinae.Scripts.Game
             _skinPath = skinPath;
             _tailPath = tailPath;
             _isMetadataLoaded = true;
-            Debug.Log($"{TAG} Metadata set for bot {_botId}: name='{nickname}', skin='{skinPath}', tail='{tailPath}', clan={clanid}");
 
             if (_spriteRenderer != null)
             {
@@ -419,7 +417,6 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            Debug.Log($"{TAG} Skin loaded for bot {_botId}: {_skinPath}");
 
             if (_skinSprite != null)
             {
@@ -453,7 +450,6 @@ namespace Fodinae.Scripts.Game
 
             if (tailTexture != null)
             {
-                Debug.Log($"{TAG} Tail loaded for bot {_botId}: {_tailPath}");
                 CreateTentacles(tailTexture);
             }
             else
@@ -483,7 +479,6 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            Debug.Log($"{TAG} Clan badge loaded for bot {_botId}: clan={_clanId}");
 
             if (_clanSprite != null)
             {
@@ -536,7 +531,6 @@ namespace Fodinae.Scripts.Game
 
         protected void OnDestroy()
         {
-            Debug.Log($"{TAG} Destroying bot {_botId}");
             _cts?.Cancel();
             _cts?.Dispose();
 

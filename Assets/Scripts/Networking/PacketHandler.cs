@@ -71,7 +71,6 @@ namespace Fodinae.Scripts.Networking
 
         protected virtual void Awake()
         {
-            Debug.Log("[PacketHandler] Starting initialization...");
 
             if (_mapDataProvider == null)
             {
@@ -100,7 +99,6 @@ namespace Fodinae.Scripts.Networking
                 concreteMM.OnWorldInitialized += OnWorldInitialized;
             }
 
-            Debug.Log("[PacketHandler] Initialization complete - ready to receive packets");
             _isInitialized = true;
         }
 
@@ -241,12 +239,10 @@ namespace Fodinae.Scripts.Networking
                 concreteMM.OnWorldInitialized -= OnWorldInitialized;
             }
 
-            Debug.Log("[PacketHandler] Destroyed");
         }
 
         private void OnWorldInitialized()
         {
-            Debug.Log("[PacketHandler] World initialized event received from MapManager");
             var gm = _gameManager;
             if (gm != null)
             {
@@ -272,7 +268,6 @@ namespace Fodinae.Scripts.Networking
                 gm.AuthorizeUI();
             }
 
-            Debug.Log($"[Auth] Token received and saved, length={newToken.Length}");
         }
     }
 }

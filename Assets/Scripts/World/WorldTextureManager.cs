@@ -345,7 +345,6 @@ namespace Fodinae.Scripts.World
                 filename = "Cells/32";
             }
 
-            Debug.Log($"[AssetDiag] LoadTexture ENTER {filename}");
 
             var cachedTexture = _textureCache.GetCachedTexture(cellType);
             if (cachedTexture != null)
@@ -373,7 +372,6 @@ namespace Fodinae.Scripts.World
 
                 await UniTask.SwitchToMainThread();
                 AddTextureToAtlas(cellType, texture);
-                Debug.Log($"[AssetDiag] TEXOK {filename} -> atlas");
             }
             else
             {

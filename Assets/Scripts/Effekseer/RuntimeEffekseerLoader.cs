@@ -112,7 +112,6 @@ namespace Fodinae.Scripts.Effekseer
                         texture = tex,
                     });
 
-                    Debug.Log($"[RuntimeEffekseerLoader] Loaded texture '{rawPath}' → '{serverPath}' for effect '{effectName}'");
                 }
                 else
                 {
@@ -133,7 +132,6 @@ namespace Fodinae.Scripts.Effekseer
             EffekseerSystem.Instance.LoadEffect(asset);
             asset.LoadEffect();
 
-            Debug.Log($"[RuntimeEffekseerLoader] Effect '{effectName}' loaded with {textureResources.Count} texture(s)");
             return asset;
         }
 

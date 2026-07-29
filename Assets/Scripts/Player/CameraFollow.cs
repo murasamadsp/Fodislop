@@ -36,6 +36,8 @@ namespace Fodinae.Scripts.Player
         public event Action<float> OnZoomChanged;
         private InputAction _scrollAction;
         private bool _scrollEnabled = true;
+        private bool _cameraNullLogged;
+        private bool _scrollNullLogged;
         private Vector3 _followVelocity;
         [Inject]
         private IInputBlocker _inputBlocker;
@@ -112,13 +114,23 @@ namespace Fodinae.Scripts.Player
 
             if (_camera == null)
             {
-                Debug.LogError("[CameraFollow] Camera is null in HandleZoom!");
+                if (!_cameraNullLogged)
+                {
+                    _cameraNullLogged = true;
+                    Debug.LogError("[CameraFollow] Camera is null in HandleZoom! (показано один раз)");
+                }
+
                 return;
             }
 
             if (_scrollAction == null)
             {
-                Debug.LogError("[CameraFollow] Scroll action is null in HandleZoom!");
+                if (!_scrollNullLogged)
+                {
+                    _scrollNullLogged = true;
+                    Debug.LogError("[CameraFollow] Scroll action is null in HandleZoom! (показано один раз)");
+                }
+
                 return;
             }
 

@@ -165,8 +165,6 @@ namespace Fodinae.Scripts.Networking
                 payload = lz4.Payload;
             }
 
-            Debug.Log($"[NetworkService] Received packet: {payload.GetType().Name}");
-
             if (payload is HBPacket hbPacket && hbPacket.Payload != null)
             {
                 foreach (var innerPacket in hbPacket.Payload)

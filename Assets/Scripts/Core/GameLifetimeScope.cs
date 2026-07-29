@@ -28,7 +28,6 @@ namespace Fodinae.Scripts.Core
 
         protected override void Configure(IContainerBuilder builder)
         {
-            Debug.Log("[GameLifetimeScope] Configure START");
 
             var newStorage = new MapStorage();
             newStorage.SetAsPending();
@@ -62,59 +61,37 @@ namespace Fodinae.Scripts.Core
 
             builder.RegisterBuildCallback(resolver =>
             {
-                Debug.Log("[GameLifetimeScope] BuildCallback START");
                 ServiceLocator.Initialize(resolver);
 
                 resolver.Resolve<ConnectionManager>();
-                Debug.Log("[GameLifetimeScope] Resolved ConnectionManager");
                 resolver.Resolve<NetworkService>();
-                Debug.Log("[GameLifetimeScope] Resolved NetworkService");
                 resolver.Resolve<MapManager>();
-                Debug.Log("[GameLifetimeScope] Resolved MapManager");
                 resolver.Resolve<PacketHandler>();
-                Debug.Log("[GameLifetimeScope] Resolved PacketHandler");
                 resolver.Resolve<IAssetLoader>();
-                Debug.Log("[GameLifetimeScope] Resolved IAssetLoader");
                 resolver.Resolve<IAudioSystem>();
-                Debug.Log("[GameLifetimeScope] Resolved IAudioSystem");
                 resolver.Resolve<GameManager>();
-                Debug.Log("[GameLifetimeScope] Resolved GameManager");
                 resolver.Resolve<ServerConfig>();
-                Debug.Log("[GameLifetimeScope] Resolved ServerConfig");
                 resolver.Resolve<TextureStorageManager>();
-                Debug.Log("[GameLifetimeScope] Resolved TextureStorageManager");
                 resolver.Resolve<WorldTextureManager>();
-                Debug.Log("[GameLifetimeScope] Resolved WorldTextureManager");
                 resolver.Resolve<ServerAudioEventManager>();
-                Debug.Log("[GameLifetimeScope] Resolved ServerAudioEventManager");
                 resolver.Resolve<VFXPool>();
-                Debug.Log("[GameLifetimeScope] Resolved VFXPool");
                 resolver.Resolve<PackManager>();
-                Debug.Log("[GameLifetimeScope] Resolved PackManager");
                 resolver.Resolve<RobotManager>();
-                Debug.Log("[GameLifetimeScope] Resolved RobotManager");
                 resolver.Resolve<IPlayerStats>();
-                Debug.Log("[GameLifetimeScope] Resolved IPlayerStats");
                 resolver.Resolve<PlayerMovementController>();
-                Debug.Log("[GameLifetimeScope] Resolved PlayerMovementController");
 
                 // UI-сервисы: явно резолвим, чтобы VContainer их инсталлировал
                 // (они не существуют в сцене и создаются здесь).
                 resolver.Resolve<GlobalChatUI>();
-                Debug.Log("[GameLifetimeScope] Resolved GlobalChatUI");
                 resolver.Resolve<FPSCounter>();
-                Debug.Log("[GameLifetimeScope] Resolved FPSCounter");
                 resolver.Resolve<FloatingChatManager>();
-                Debug.Log("[GameLifetimeScope] Resolved FloatingChatManager");
                 resolver.Resolve<IInputBlocker>();
-                Debug.Log("[GameLifetimeScope] Resolved IInputBlocker");
 
                 foreach (var terrain in FindObjectsByType<TerrainRenderer>())
                 {
                     if (TryInject(resolver, terrain))
                     {
                         terrain.EnsureSubscriptions();
-                        Debug.Log("[GameLifetimeScope] Injected and subscribed terrain: " + terrain.name);
                     }
                 }
 
@@ -153,11 +130,9 @@ namespace Fodinae.Scripts.Core
 
                 Debug.Log($"[GameLifetimeScope] Injected {injected} scene MonoBehaviours with [Inject] fields");
 
-                Debug.Log("[GameLifetimeScope] BuildCallback END");
                 LogInjectionFailures();
                 ValidateStartup();
             });
-            Debug.Log("[GameLifetimeScope] Configure END");
         }
 
         private bool TryInject(IObjectResolver resolver, object target)

@@ -105,7 +105,6 @@ namespace Fodinae.Scripts
                 File.WriteAllBytes(assetPath, data);
                 File.WriteAllText(etagPath, etag ?? string.Empty);
 
-                Debug.Log($"[PersistentAssetCache] Successfully saved asset: {filename}");
             }
             catch (Exception ex)
             {
@@ -144,7 +143,6 @@ namespace Fodinae.Scripts
                 await File.WriteAllBytesAsync(assetPath, data);
                 await File.WriteAllTextAsync(etagPath, etag ?? string.Empty);
 
-                Debug.Log($"[PersistentAssetCache] Successfully saved asset: {filename}");
             }
             catch (Exception ex)
             {

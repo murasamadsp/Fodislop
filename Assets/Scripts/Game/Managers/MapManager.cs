@@ -66,6 +66,7 @@ namespace Fodinae.Scripts.Game.Managers
         private ushort _height;
 
         private bool _isWorldInitialized;
+        private bool _nullConfigWarned;
         public bool IsWorldInitialized
         {
             get => _isWorldInitialized;
@@ -77,7 +78,6 @@ namespace Fodinae.Scripts.Game.Managers
                 }
 
                 _isWorldInitialized = value;
-                Debug.LogError($"[MapManager] IsWorldInitialized CHANGED -> {value}");
             }
         }
 
@@ -106,7 +106,6 @@ namespace Fodinae.Scripts.Game.Managers
 
         public void LoadWorldInit(WorldInitPacket packet)
         {
-            Debug.Log("[MapManager] LoadWorldInit START");
             IsWorldInitialized = false;
             _packManager?.ClearAllPacks();
             _robotService?.ClearAllRobots();
@@ -162,11 +161,8 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            Debug.Log("[MapManager] LoadWorldInit — applying cells to storage");
 
-            Debug.Log("[MapManager] LoadWorldInit — calling InitWorld");
             storage.InitWorld(packet.CodeName, _width, _height);
-            Debug.Log("[MapManager] LoadWorldInit — InitWorld done, IsReady=" + storage.IsReady);
 
             if (!storage.IsReady)
             {
@@ -174,11 +170,9 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            Debug.Log($"[MapManager] Firing OnWorldInitialized and OnWorldDataLoaded on instance hash={GetHashCode()}");
             IsWorldInitialized = true;
             OnWorldInitialized?.Invoke();
             OnWorldDataLoaded?.Invoke();
-            Debug.Log("[MapManager] LoadWorldInit END");
             Debug.Assert(IsWorldInitialized, "[MapManager] IsWorldInitialized must be true at the end of LoadWorldInit");
         }
 
@@ -214,7 +208,12 @@ namespace Fodinae.Scripts.Game.Managers
         {
             if (_cellConfigurations == null)
             {
-                Debug.LogWarning("[MapManager] GetConfigLength called but _cellConfigurations is null");
+                if (!_nullConfigWarned)
+                {
+                    _nullConfigWarned = true;
+                    Debug.LogWarning("[MapManager] GetConfigLength called but _cellConfigurations is null (показано один раз)");
+                }
+
                 return -1;
             }
 
