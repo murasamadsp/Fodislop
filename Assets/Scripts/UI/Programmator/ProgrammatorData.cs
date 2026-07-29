@@ -7,29 +7,25 @@ namespace Fodinae.Scripts.UI.Programmator
 {
     public static class ProgrammatorData
     {
-public const int COLS = 16;
-public const int ROWS = 12;
+        public const int COLS = 16;
+        public const int ROWS = 12;
         public const int CELLS_PER_PAGE = COLS * ROWS;
 
-        public static List<int> Codes = new();
-        public static List<string> Values = new();
-        public static List<string> Labels = new();
+        public static List<int> Codes = new(new int[CELLS_PER_PAGE]);
+        public static List<string> Values = new(new string[CELLS_PER_PAGE]);
+        public static List<string> Labels = new(new string[CELLS_PER_PAGE]);
         public static int PageCount => Codes.Count / CELLS_PER_PAGE;
-
-        static ProgrammatorData()
-        {
-            var initial = CELLS_PER_PAGE;
-            Codes = new List<int>(new int[initial]);
-            Values = new List<string>(new string[initial]);
-            Labels = new List<string>(new string[initial]);
-        }
 
         public static int CurrentPage;
         public static int HoveredCell = -1;
 
         public static void AddPage()
         {
-            if (PageCount >= 100) return;
+            if (PageCount >= 100)
+            {
+                return;
+            }
+
             Codes.AddRange(new int[CELLS_PER_PAGE]);
             Values.AddRange(new string[CELLS_PER_PAGE]);
             Labels.AddRange(new string[CELLS_PER_PAGE]);
@@ -37,13 +33,21 @@ public const int ROWS = 12;
 
         public static bool RemoveLastPage()
         {
-            if (PageCount <= 1) return false;
+            if (PageCount <= 1)
+            {
+                return false;
+            }
+
             PushUndo();
             int start = (PageCount - 1) * CELLS_PER_PAGE;
             Codes.RemoveRange(start, CELLS_PER_PAGE);
             Values.RemoveRange(start, CELLS_PER_PAGE);
             Labels.RemoveRange(start, CELLS_PER_PAGE);
-            if (CurrentPage >= PageCount) CurrentPage = PageCount - 1;
+            if (CurrentPage >= PageCount)
+            {
+                CurrentPage = PageCount - 1;
+            }
+
             return true;
         }
 
@@ -624,5 +628,9 @@ public const int ROWS = 12;
             [ProgAction.SetStartWhenHurt] = "Старт при ранении",
             [ProgAction.SetStartWhenBotNearby] = "Старт: робот рядом",
         };
+
+        // NOTE (from original author): OPERATOR_NAMES and OPERATOR_DESCRIPTIONS entries are
+        // approximate/placeholder translations and may be inaccurate — must be rewritten by
+        // someone who understands the semantics of each operator in the Mines game context.
     }
 }
