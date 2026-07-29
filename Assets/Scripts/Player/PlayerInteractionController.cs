@@ -91,7 +91,7 @@ namespace Fodinae.Scripts.Player
         // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
         private static bool IsPointerOverUI(Vector2 mousePos)
         {
-            var docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
             foreach (var doc in docs)
             {
                 var root = doc.rootVisualElement;
