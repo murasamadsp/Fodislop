@@ -814,8 +814,8 @@ GameObject:
   m_Component:
   - component: {fileID: 1792288505}
   - component: {fileID: 1792288504}
-  - component: {fileID: 1792288506, guid: 857c53d34c431384697ffcdaecea4268, type: 3}
-  - component: {fileID: 1792288507, guid: f83192ba33a746847a80f0c4b06c1ce7, type: 3}
+  - component: {fileID: 1792288506}
+  - component: {fileID: 1792288507}
   m_Layer: 0
   m_Name: MapManager
   m_TagString: Untagged
