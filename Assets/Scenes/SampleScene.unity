@@ -851,9 +851,6 @@ MonoBehaviour:
   _enableStandaloneMode: 1
   _testWorldWidth: 128
   _testWorldHeight: 128
-  _testWorldName: Standalone_Test_World
-  _checkInterval: 2
-  _enableDebugLogging: 1
 --- !u!114 &1792288507
 MonoBehaviour:
   m_ObjectHideFlags: 0
