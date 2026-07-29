@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
@@ -28,7 +30,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         private readonly ConcurrentDictionary<string, Texture2D> _textureCache = new();
         private readonly ConcurrentDictionary<string, string> _resolvedPathsCache = new();
 
-        private string _textureFolderPath;
+        private string? _textureFolderPath;
         private bool _folderInitialized;
 
         /// <summary>
@@ -82,6 +84,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             // Fallback: generate fallback texture
             if (_enableDebugLogging)
             {
+                Debug.LogWarning($"[TextureStorageManager] Fallback texture created for: {filename}");
             }
 
             var fallback = CreateFallbackTexture(filename);
@@ -102,7 +105,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// </summary>
         /// <param name="filename">The texture filename.</param>
         /// <returns>PNG/WEBP bytes, or null if not found.</returns>
-        public async UniTask<byte[]> GetTextureData(string filename, CancellationToken cancellationToken = default)
+        public async UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default)
         {
             var data = await LoadTextureFromStorage(filename);
             if (data != null)
@@ -113,7 +116,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             return data;
         }
 
-        public event Action<string> OnTextureLoaded;
+        public event Action<string>? OnTextureLoaded;
 
         /// <summary>
         /// Create a fallback texture and cache it.
@@ -136,7 +139,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// Load texture file bytes from storage asynchronously.
         /// Searches persistentDataPath first (dynamic downloads), then bundled Assets/Textures (read-only).
         /// </summary>
-        private async UniTask<byte[]> LoadTextureFromStorage(string filename)
+        private async UniTask<byte[]?> LoadTextureFromStorage(string filename)
         {
             try
             {
@@ -158,6 +161,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 {
                     if (_enableDebugLogging)
                     {
+                        Debug.LogWarning($"[TextureStorageManager] File not found for: {filename}");
                     }
 
                     return null;
@@ -177,7 +181,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             }
         }
 
-        private string ResolveTextureFullPath(string filename)
+        private string? ResolveTextureFullPath(string filename)
         {
             var normalizedFilename = filename.TrimStart('/');
 
@@ -205,40 +209,62 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             return null;
         }
 
-        private static string SearchInFolder(string baseFolder, string filename)
+        private static string? SearchInFolder(string baseFolder, string filename)
         {
-            var fullPath = Path.Combine(baseFolder, filename);
-            if (File.Exists(fullPath))
+            // Walk each path segment case-insensitively so that
+            // "skin/bee.png" finds "Assets/Textures/Skin/bee.png" on macOS
+            // (ClientAssetLoader normalises filenames to lowercase).
+            var segments = filename.Replace('\\', '/').Split('/');
+            string currentDir = baseFolder;
+
+            for (int i = 0; i < segments.Length - 1; i++)
             {
-                return fullPath;
+                string seg = segments[i];
+                string exactSub = Path.Combine(currentDir, seg);
+                if (Directory.Exists(exactSub))
+                {
+                    currentDir = exactSub;
+                }
+                else if (Directory.Exists(currentDir))
+                {
+                    // case-insensitive fallback for macOS
+                    var sub = Directory.GetDirectories(currentDir)
+                        .FirstOrDefault(d => string.Equals(
+                            Path.GetFileName(d), seg,
+                            StringComparison.OrdinalIgnoreCase));
+                    if (sub == null)
+                    {
+                        return null;
+                    }
+
+                    currentDir = sub;
+                }
+                else
+                {
+                    return null;
+                }
             }
 
-            string directory = Path.GetDirectoryName(fullPath);
-            string filenameWithoutExtension = Path.GetFileNameWithoutExtension(fullPath);
+            string leafName = segments[segments.Length - 1];
+            string leafNameWithoutExt = Path.GetFileNameWithoutExtension(leafName);
 
-            if (Directory.Exists(directory))
+            // Exact match first
+            string leafExact = Path.Combine(currentDir, leafName);
+            if (File.Exists(leafExact))
             {
-                var files = Directory.GetFiles(directory, filenameWithoutExtension + ".*")
-                    .Where(f => !f.EndsWith(".meta", StringComparison.OrdinalIgnoreCase) && !f.EndsWith(".asset", StringComparison.OrdinalIgnoreCase))
+                return leafExact;
+            }
+
+            // Wildcard match (any extension), prefer webp -> gif -> png
+            if (Directory.Exists(currentDir))
+            {
+                var files = Directory.GetFiles(currentDir, leafNameWithoutExt + ".*")
+                    .Where(f => !f.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)
+                             && !f.EndsWith(".asset", StringComparison.OrdinalIgnoreCase))
                     .OrderBy(f =>
                     {
                         string ext = Path.GetExtension(f).ToLowerInvariant();
-                        if (ext == ".webp")
-                        {
-                            return 0;
-                        }
-
-                        if (ext == ".gif")
-                        {
-                            return 1;
-                        }
-
-                        if (ext == ".png")
-                        {
-                            return 2;
-                        }
-
-                        return 3;
+                        return ext switch { ".webp" => 0, ".gif" => 1, ".png" => 2, _ => 3 };
                     }).ToArray();
 
                 if (files.Length > 0)
@@ -253,7 +279,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// <summary>
         /// Generate a random texture as fallback.
         /// </summary>
-        private byte[] GenerateRandomTexture()
+        private byte[]? GenerateRandomTexture()
         {
             try
             {
@@ -301,6 +327,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 _textureFolderPath = persistentPath;
                 if (_enableDebugLogging)
                 {
+                    Debug.Log($"[TextureStorageManager] Initialized texture folder: {persistentPath}");
                 }
 
                 _folderInitialized = true;
@@ -321,10 +348,11 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             _resolvedPathsCache.Clear();
             if (_enableDebugLogging)
             {
+                Debug.Log("[TextureStorageManager] Cache cleared");
             }
         }
 
-        public string GetTextureFolderPath()
+        public string? GetTextureFolderPath()
         {
             if (!_folderInitialized)
             {

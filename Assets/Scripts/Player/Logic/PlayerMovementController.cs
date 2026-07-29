@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using Fodinae.Scripts.Core;
 using Fodinae.Scripts.Core.Interfaces;
@@ -29,7 +31,7 @@ namespace Fodinae.Scripts.Player.Logic
         public uint BotId { get; private set; }
         public Vector2Int Position { get; private set; }
         public Direction LastDirection => _lastSentDirection ?? Direction.Up;
-        public event Action<Vector2Int, Vector2Int> OnPlayerMoved;
+        public event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
 
         private Robot _robot;
         private IPlayerInput _input;
@@ -55,8 +57,8 @@ namespace Fodinae.Scripts.Player.Logic
         [Inject]
         private Fodinae.Scripts.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
-        public static PlayerMovementController LocalPlayer { get; private set; }
-        public static event Action<PlayerMovementController> OnLocalPlayerSpawned;
+        public static PlayerMovementController? LocalPlayer { get; private set; }
+        public static event Action<PlayerMovementController>? OnLocalPlayerSpawned;
 
         protected void Awake()
         {
@@ -180,7 +182,7 @@ namespace Fodinae.Scripts.Player.Logic
             }
         }
 
-        public event Action<bool> OnAutoDigChanged;
+        public event Action<bool>? OnAutoDigChanged;
 
         public bool Aggression
         {
@@ -192,7 +194,7 @@ namespace Fodinae.Scripts.Player.Logic
             }
         }
 
-        public event Action<bool> OnAggressionChanged;
+        public event Action<bool>? OnAggressionChanged;
 
         public void ToggleAggression()
         {
@@ -214,7 +216,7 @@ namespace Fodinae.Scripts.Player.Logic
             }
         }
 
-        public event Action<bool> OnCollisionChanged;
+        public event Action<bool>? OnCollisionChanged;
 
         public void UpdateServerPosition(Vector2Int position)
         {
@@ -234,6 +236,17 @@ namespace Fodinae.Scripts.Player.Logic
 
         private void ApplyMovement()
         {
+            // _robot может быть null если PlayerMovementController создан VContainer'ом
+            // отдельно от префаба Player. Пробуем получить его лениво.
+            if (_robot is null)
+            {
+                _robot = GetComponent<Robot>();
+                if (_robot is not null)
+                {
+                    _robot.MoveSpeed = _moveSpeed;
+                }
+            }
+
             if (_robot is null || _input is null || _serverConfig is null || _inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;

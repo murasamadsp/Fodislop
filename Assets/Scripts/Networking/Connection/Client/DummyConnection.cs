@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -50,11 +52,11 @@ namespace MinesServer.Networking.Connection.Client
 
         public ConnectionStatus ConnectionStatus => _status;
 
-        public event Action<ServerPacket> OnReceived;
-        public event Action OnConnected;
-        public event Action OnDisconnected;
-        public event Action OnDisconnecting;
-        public event Action OnConnecting;
+        public event Action<ServerPacket>? OnReceived;
+        public event Action? OnConnected;
+        public event Action? OnDisconnected;
+        public event Action? OnDisconnecting;
+        public event Action? OnConnecting;
 
         public static bool IgnoreCollision = false;
 
@@ -82,7 +84,7 @@ namespace MinesServer.Networking.Connection.Client
         private bool _teleportWindowOpen;
         private readonly Dictionary<string, long> _activeBuffs = new();
         private bool _buffLoopStarted;
-        private CancellationTokenSource _pathCts;
+        private CancellationTokenSource? _pathCts;
         private ushort _clanId;
         private static readonly (ushort Id, string Name, string Desc)[] _mockClans =
         {
@@ -129,8 +131,8 @@ namespace MinesServer.Networking.Connection.Client
 
         private static readonly System.Random _rng = new();
 
-        private WorldLayer<CellType> _worldLayer;
-        private CellConfigurationPacket[] _cellConfigs;
+        private WorldLayer<CellType>? _worldLayer;
+        private CellConfigurationPacket[]? _cellConfigs;
         private long[] _basketContents = new long[6];
         private readonly Stack<CellType> _geoStack = new();
 
@@ -255,6 +257,7 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
+                Debug.LogWarning($"[DummyConnection] Failed to load tokens: {ex.Message}");
             }
 
             return new HashSet<string>();
@@ -269,6 +272,7 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
+                Debug.LogWarning($"[DummyConnection] Failed to save tokens: {ex.Message}");
             }
         }
 
@@ -528,6 +532,7 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     _pathCts?.Cancel();
                     _pathCts?.Dispose();
+                    _pathCts = null;
                     var path = FindPath(_x, _y, click.X, click.Y);
                     if (path.Count > 0)
                     {
@@ -2007,6 +2012,7 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
+                Debug.LogWarning($"[DummyConnection] Failed reading map dimensions: {ex.Message}");
             }
 
             return (0, 0);
@@ -2030,7 +2036,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         for (int cx = 0; cx < chunkWidth; cx++)
                         {
-                            chunkData[dataIndex++] = _worldLayer[x + cx, y + cy];
+                            chunkData[dataIndex++] = _worldLayer != null ? _worldLayer[x + cx, y + cy] : CellType.Empty;
                         }
                     }
 
@@ -2421,10 +2427,10 @@ namespace MinesServer.Networking.Connection.Client
 
                     await UniTask.Delay(100, cancellationToken: ct);
                 }
-
             }
             catch (OperationCanceledException)
             {
+                // path walk cancelled — expected when a new click or move cancels the walk
             }
         }
     }
