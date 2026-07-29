@@ -400,7 +400,8 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            Vector2Int digOffset = _lastSentDirection.Value switch
+            Direction dir = _lastSentDirection ?? Direction.Up;
+            Vector2Int digOffset = dir switch
             {
                 Direction.Down => new Vector2Int(0, 1),
                 Direction.Up => new Vector2Int(0, -1),
