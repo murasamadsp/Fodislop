@@ -40,9 +40,6 @@ namespace Fodinae.Scripts.UI.Programmator
         private int _clipboardWidth;
         private int _clipboardHeight;
         private bool _hasClipboard;
-        private const float CELLSIZE = 32f;
-        private const float CELL_GAP = 2f;
-
         private class ProgramItem
         {
             public string Name;
@@ -71,6 +68,12 @@ namespace Fodinae.Scripts.UI.Programmator
                 return;
             }
 
+            var sheet = Resources.Load<StyleSheet>("Styles/Programmator");
+            if (sheet != null)
+            {
+                _doc.rootVisualElement.styleSheets.Add(sheet);
+            }
+
             CreateUI();
             _popup.style.display = DisplayStyle.None;
 
@@ -81,149 +84,51 @@ namespace Fodinae.Scripts.UI.Programmator
         private void CreateUI()
         {
             _popup = new VisualElement();
-            _popup.style.position = Position.Absolute;
-            _popup.style.left = 0;
-            _popup.style.top = 0;
-            _popup.style.right = 0;
-            _popup.style.bottom = 0;
-            _popup.style.justifyContent = Justify.Center;
-            _popup.style.alignItems = Align.Center;
+            _popup.AddToClassList("programmator-popup");
 
             var dimmer = new VisualElement();
-            dimmer.style.position = Position.Absolute;
-            dimmer.style.left = 0;
-            dimmer.style.top = 0;
-            dimmer.style.right = 0;
-            dimmer.style.bottom = 0;
-            dimmer.style.backgroundColor = new Color(0f, 0f, 0f, 0.4f);
+            dimmer.AddToClassList("programmator-dimmer");
             dimmer.pickingMode = PickingMode.Ignore;
             _popup.Add(dimmer);
 
             _panel = new VisualElement();
             var panel = _panel;
-            panel.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
-            panel.style.borderTopWidth = 2;
-            panel.style.borderBottomWidth = 2;
-            panel.style.borderLeftWidth = 2;
-            panel.style.borderRightWidth = 2;
-            panel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            panel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            panel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            panel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            panel.style.paddingTop = 10;
-            panel.style.paddingBottom = 10;
-            panel.style.paddingLeft = 10;
-            panel.style.paddingRight = 10;
-            panel.style.flexDirection = FlexDirection.Column;
-            panel.style.width = 618;
-            panel.style.minHeight = 520;
+            panel.AddToClassList("programmator-panel");
 
             var topRow = new VisualElement();
-            topRow.style.flexDirection = FlexDirection.Column;
-            topRow.style.marginBottom = 10;
+            topRow.AddToClassList("programmator-header-top");
 
             var buttonsRow = new VisualElement();
-            buttonsRow.style.flexDirection = FlexDirection.Row;
-            buttonsRow.style.alignItems = Align.Center;
+            buttonsRow.AddToClassList("programmator-toolbar");
             topRow.Add(buttonsRow);
 
             var actionRow = new VisualElement();
-            actionRow.style.flexDirection = FlexDirection.Row;
-            actionRow.style.alignItems = Align.Center;
-            actionRow.style.marginTop = 4;
+            actionRow.AddToClassList("programmator-action-row");
             topRow.Add(actionRow);
 
             _programTitle = new Label("Программатор");
-            _programTitle.style.fontSize = 18;
-            _programTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _programTitle.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
+            _programTitle.AddToClassList("programmator-header-title");
             buttonsRow.Add(_programTitle);
 
-            _prevBtn = new Button(PrevPage);
-            _prevBtn.text = "<";
-            _prevBtn.style.width = 22;
-            _prevBtn.style.height = 22;
-            _prevBtn.style.backgroundColor = Color.clear;
-            _prevBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            _prevBtn.style.fontSize = 14;
-            _prevBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _prevBtn.style.borderTopWidth = 0;
-            _prevBtn.style.borderBottomWidth = 0;
-            _prevBtn.style.borderLeftWidth = 0;
-            _prevBtn.style.borderRightWidth = 0;
-            _prevBtn.style.paddingTop = 0;
-            _prevBtn.style.paddingBottom = 0;
-            _prevBtn.style.paddingLeft = 2;
-            _prevBtn.style.paddingRight = 2;
+            _prevBtn = new Button(PrevPage) { text = "<" };
+            _prevBtn.AddToClassList("programmator-btn-icon");
             buttonsRow.Add(_prevBtn);
 
             _pageLabel = new Label("Стр. 1/1");
-            _pageLabel.style.fontSize = 12;
-            _pageLabel.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            _pageLabel.style.minWidth = 60;
-            _pageLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _pageLabel.style.marginLeft = 4;
-            _pageLabel.style.marginRight = 4;
+            _pageLabel.AddToClassList("programmator-page-label");
             buttonsRow.Add(_pageLabel);
 
-            _nextBtn = new Button(NextPage);
-            _nextBtn.text = ">";
-            _nextBtn.style.width = 22;
-            _nextBtn.style.height = 22;
-            _nextBtn.style.backgroundColor = Color.clear;
-            _nextBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            _nextBtn.style.fontSize = 14;
-            _nextBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _nextBtn.style.borderTopWidth = 0;
-            _nextBtn.style.borderBottomWidth = 0;
-            _nextBtn.style.borderLeftWidth = 0;
-            _nextBtn.style.borderRightWidth = 0;
-            _nextBtn.style.paddingTop = 0;
-            _nextBtn.style.paddingBottom = 0;
-            _nextBtn.style.paddingLeft = 2;
-            _nextBtn.style.paddingRight = 2;
+            _nextBtn = new Button(NextPage) { text = ">" };
+            _nextBtn.AddToClassList("programmator-btn-icon");
             buttonsRow.Add(_nextBtn);
 
             _pageInput = new IntegerField();
             _pageInput.value = ProgrammatorData.CurrentPage + 1;
-            _pageInput.style.width = 52;
-            _pageInput.style.height = 22;
-            _pageInput.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 1f);
-            _pageInput.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            _pageInput.style.fontSize = 12;
-            _pageInput.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _pageInput.style.borderTopWidth = 0;
-            _pageInput.style.borderBottomWidth = 0;
-            _pageInput.style.borderLeftWidth = 0;
-            _pageInput.style.borderRightWidth = 0;
-            _pageInput.style.marginLeft = 4;
-            _pageInput.style.marginRight = 4;
-            _pageInput.style.paddingTop = 0;
-            _pageInput.style.paddingBottom = 0;
-            _pageInput.style.paddingLeft = 0;
-            _pageInput.style.paddingRight = 0;
+            _pageInput.AddToClassList("programmator-page-input");
             _pageInput.RegisterCallback<AttachToPanelEvent>(_ =>
             {
                 var ti = _pageInput.Q("unity-text-input");
-                if (ti != null)
-                {
-                    ti.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 1f);
-                    ti.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-                    ti.style.fontSize = 12;
-                    ti.style.unityTextAlign = TextAnchor.MiddleCenter;
-                    ti.style.borderTopWidth = 0;
-                    ti.style.borderBottomWidth = 0;
-                    ti.style.borderLeftWidth = 0;
-                    ti.style.borderRightWidth = 0;
-                    ti.style.paddingTop = 0;
-                    ti.style.paddingBottom = 0;
-                    ti.style.paddingLeft = 0;
-                    ti.style.paddingRight = 0;
-                    ti.style.marginTop = 0;
-                    ti.style.marginBottom = 0;
-                    ti.style.marginLeft = 0;
-                    ti.style.marginRight = 0;
-                }
+                ti?.AddToClassList("programmator-page-input-inner");
             });
             _pageInput.RegisterValueChangedCallback(evt =>
             {
@@ -244,207 +149,58 @@ namespace Fodinae.Scripts.UI.Programmator
             });
             buttonsRow.Add(_pageInput);
 
-            var addPageBtn = new Button(AddPageClick);
-            addPageBtn.text = "+";
-            addPageBtn.style.width = 22;
-            addPageBtn.style.height = 22;
-            addPageBtn.style.backgroundColor = Color.clear;
-            addPageBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            addPageBtn.style.fontSize = 14;
-            addPageBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            addPageBtn.style.borderTopWidth = 0;
-            addPageBtn.style.borderBottomWidth = 0;
-            addPageBtn.style.borderLeftWidth = 0;
-            addPageBtn.style.borderRightWidth = 0;
-            addPageBtn.style.paddingTop = 0;
-            addPageBtn.style.paddingBottom = 0;
-            addPageBtn.style.paddingLeft = 2;
-            addPageBtn.style.paddingRight = 2;
+            var addPageBtn = new Button(AddPageClick) { text = "+" };
+            addPageBtn.AddToClassList("programmator-btn-icon");
             buttonsRow.Add(addPageBtn);
 
-            var removePageBtn = new Button(RemovePageClick);
-            removePageBtn.text = "−";
-            removePageBtn.style.width = 22;
-            removePageBtn.style.height = 22;
-            removePageBtn.style.backgroundColor = Color.clear;
-            removePageBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            removePageBtn.style.fontSize = 14;
-            removePageBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            removePageBtn.style.borderTopWidth = 0;
-            removePageBtn.style.borderBottomWidth = 0;
-            removePageBtn.style.borderLeftWidth = 0;
-            removePageBtn.style.borderRightWidth = 0;
-            removePageBtn.style.paddingTop = 0;
-            removePageBtn.style.paddingBottom = 0;
-            removePageBtn.style.paddingLeft = 2;
-            removePageBtn.style.paddingRight = 2;
-            removePageBtn.style.marginRight = 8;
+            var removePageBtn = new Button(RemovePageClick) { text = "−" };
+            removePageBtn.AddToClassList("programmator-btn-icon");
+            removePageBtn.AddToClassList("programmator-btn-icon-mr");
             buttonsRow.Add(removePageBtn);
 
-            var shiftUpBtn = new Button(() => ShiftSelection(0, -1));
-            shiftUpBtn.text = "↑";
-            shiftUpBtn.style.width = 22;
-            shiftUpBtn.style.height = 22;
-            shiftUpBtn.style.backgroundColor = Color.clear;
-            shiftUpBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            shiftUpBtn.style.fontSize = 14;
-            shiftUpBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            shiftUpBtn.style.borderTopWidth = 0;
-            shiftUpBtn.style.borderBottomWidth = 0;
-            shiftUpBtn.style.borderLeftWidth = 0;
-            shiftUpBtn.style.borderRightWidth = 0;
-            shiftUpBtn.style.paddingTop = 0;
-            shiftUpBtn.style.paddingBottom = 0;
-            shiftUpBtn.style.paddingLeft = 2;
-            shiftUpBtn.style.paddingRight = 2;
+            var shiftUpBtn = new Button(() => ShiftSelection(0, -1)) { text = "↑" };
+            shiftUpBtn.AddToClassList("programmator-btn-icon");
             buttonsRow.Add(shiftUpBtn);
 
-            var shiftDownBtn = new Button(() => ShiftSelection(0, 1));
-            shiftDownBtn.text = "↓";
-            shiftDownBtn.style.width = 22;
-            shiftDownBtn.style.height = 22;
-            shiftDownBtn.style.backgroundColor = Color.clear;
-            shiftDownBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            shiftDownBtn.style.fontSize = 14;
-            shiftDownBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            shiftDownBtn.style.borderTopWidth = 0;
-            shiftDownBtn.style.borderBottomWidth = 0;
-            shiftDownBtn.style.borderLeftWidth = 0;
-            shiftDownBtn.style.borderRightWidth = 0;
-            shiftDownBtn.style.paddingTop = 0;
-            shiftDownBtn.style.paddingBottom = 0;
-            shiftDownBtn.style.paddingLeft = 2;
-            shiftDownBtn.style.paddingRight = 2;
+            var shiftDownBtn = new Button(() => ShiftSelection(0, 1)) { text = "↓" };
+            shiftDownBtn.AddToClassList("programmator-btn-icon");
             buttonsRow.Add(shiftDownBtn);
 
-            var shiftLeftBtn = new Button(() => ShiftSelection(-1, 0));
-            shiftLeftBtn.text = "←";
-            shiftLeftBtn.style.width = 22;
-            shiftLeftBtn.style.height = 22;
-            shiftLeftBtn.style.backgroundColor = Color.clear;
-            shiftLeftBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            shiftLeftBtn.style.fontSize = 14;
-            shiftLeftBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            shiftLeftBtn.style.borderTopWidth = 0;
-            shiftLeftBtn.style.borderBottomWidth = 0;
-            shiftLeftBtn.style.borderLeftWidth = 0;
-            shiftLeftBtn.style.borderRightWidth = 0;
-            shiftLeftBtn.style.paddingTop = 0;
-            shiftLeftBtn.style.paddingBottom = 0;
-            shiftLeftBtn.style.paddingLeft = 2;
-            shiftLeftBtn.style.paddingRight = 2;
+            var shiftLeftBtn = new Button(() => ShiftSelection(-1, 0)) { text = "←" };
+            shiftLeftBtn.AddToClassList("programmator-btn-icon");
             buttonsRow.Add(shiftLeftBtn);
 
-            var shiftRightBtn = new Button(() => ShiftSelection(1, 0));
-            shiftRightBtn.text = "→";
-            shiftRightBtn.style.width = 22;
-            shiftRightBtn.style.height = 22;
-            shiftRightBtn.style.backgroundColor = Color.clear;
-            shiftRightBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            shiftRightBtn.style.fontSize = 14;
-            shiftRightBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            shiftRightBtn.style.borderTopWidth = 0;
-            shiftRightBtn.style.borderBottomWidth = 0;
-            shiftRightBtn.style.borderLeftWidth = 0;
-            shiftRightBtn.style.borderRightWidth = 0;
-            shiftRightBtn.style.paddingTop = 0;
-            shiftRightBtn.style.paddingBottom = 0;
-            shiftRightBtn.style.paddingLeft = 2;
-            shiftRightBtn.style.paddingRight = 2;
-            shiftRightBtn.style.marginRight = 8;
+            var shiftRightBtn = new Button(() => ShiftSelection(1, 0)) { text = "→" };
+            shiftRightBtn.AddToClassList("programmator-btn-icon");
+            shiftRightBtn.AddToClassList("programmator-btn-icon-mr");
             buttonsRow.Add(shiftRightBtn);
 
-            _saveBtn = new Button(SaveProgram);
-            _saveBtn.text = "💾";
-            _saveBtn.style.width = 24;
-            _saveBtn.style.height = 24;
-            _saveBtn.style.backgroundColor = Color.clear;
-            _saveBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            _saveBtn.style.fontSize = 14;
-            _saveBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _saveBtn.style.borderTopWidth = 0;
-            _saveBtn.style.borderBottomWidth = 0;
-            _saveBtn.style.borderLeftWidth = 0;
-            _saveBtn.style.borderRightWidth = 0;
-            _saveBtn.style.paddingTop = 0;
-            _saveBtn.style.paddingBottom = 0;
-            _saveBtn.style.paddingLeft = 0;
-            _saveBtn.style.paddingRight = 0;
+            _saveBtn = new Button(SaveProgram) { text = "\U0001f4be" };
+            _saveBtn.AddToClassList("programmator-btn-save");
             actionRow.Add(_saveBtn);
 
-            _runBtn = new Button(RunProgram);
-            _runBtn.text = "▶";
-            _runBtn.style.width = 22;
-            _runBtn.style.height = 22;
-            _runBtn.style.backgroundColor = new Color(0f, 0.35f, 0f, 0.3f);
-            _runBtn.style.color = new Color(0.4f, 0.9f, 0.4f, 1f);
-            _runBtn.style.fontSize = 12;
-            _runBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _runBtn.style.borderTopWidth = 0;
-            _runBtn.style.borderBottomWidth = 0;
-            _runBtn.style.borderLeftWidth = 0;
-            _runBtn.style.borderRightWidth = 0;
-            _runBtn.style.paddingTop = 0;
-            _runBtn.style.paddingBottom = 0;
-            _runBtn.style.paddingLeft = 0;
-            _runBtn.style.paddingRight = 0;
-            _runBtn.style.marginLeft = 4;
+            _runBtn = new Button(RunProgram) { text = "\u25b6" };
+            _runBtn.AddToClassList("programmator-btn-run");
             actionRow.Add(_runBtn);
 
-            _stopBtn = new Button(StopProgram);
-            _stopBtn.text = "■";
-            _stopBtn.style.width = 22;
-            _stopBtn.style.height = 22;
-            _stopBtn.style.backgroundColor = new Color(0.35f, 0f, 0f, 0.3f);
-            _stopBtn.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
-            _stopBtn.style.fontSize = 12;
-            _stopBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _stopBtn.style.borderTopWidth = 0;
-            _stopBtn.style.borderBottomWidth = 0;
-            _stopBtn.style.borderLeftWidth = 0;
-            _stopBtn.style.borderRightWidth = 0;
-            _stopBtn.style.paddingTop = 0;
-            _stopBtn.style.paddingBottom = 0;
-            _stopBtn.style.paddingLeft = 0;
-            _stopBtn.style.paddingRight = 0;
+            _stopBtn = new Button(StopProgram) { text = "\u25a0" };
+            _stopBtn.AddToClassList("programmator-btn-stop");
             _stopBtn.SetEnabled(false);
             actionRow.Add(_stopBtn);
 
-            var closeBtn = new Button(CloseProgram);
-            closeBtn.text = "×";
-            closeBtn.style.width = 24;
-            closeBtn.style.height = 24;
-            closeBtn.style.backgroundColor = Color.clear;
-            closeBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            closeBtn.style.fontSize = 18;
-            closeBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            closeBtn.style.borderTopWidth = 0;
-            closeBtn.style.borderBottomWidth = 0;
-            closeBtn.style.borderLeftWidth = 0;
-            closeBtn.style.borderRightWidth = 0;
-            closeBtn.style.paddingTop = 0;
-            closeBtn.style.paddingBottom = 0;
-            closeBtn.style.paddingLeft = 0;
-            closeBtn.style.paddingRight = 0;
-            closeBtn.RegisterCallback<MouseEnterEvent>(_ =>
-                closeBtn.style.color = Color.white);
-            closeBtn.RegisterCallback<MouseLeaveEvent>(_ =>
-                closeBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f));
+            var closeBtn = new Button(CloseProgram) { text = "\u00d7" };
+            closeBtn.AddToClassList("programmator-btn-close");
             var headerRow = new VisualElement();
-            headerRow.style.flexDirection = FlexDirection.Row;
-            headerRow.style.alignItems = Align.FlexStart;
-            topRow.style.flexGrow = 1;
+            headerRow.AddToClassList("programmator-header");
             headerRow.Add(topRow);
             headerRow.Add(closeBtn);
             panel.Add(headerRow);
 
             var gridScroll = new VisualElement();
-            gridScroll.style.maxHeight = ProgrammatorData.ROWS * (CELLSIZE + (CELL_GAP * 2) + 2f);
+            gridScroll.AddToClassList("programmator-grid-scroll");
 
             _gridContainer = new VisualElement();
-            _gridContainer.style.flexDirection = FlexDirection.Row;
-            _gridContainer.style.flexWrap = Wrap.Wrap;
-            _gridContainer.style.width = ProgrammatorData.COLS * (CELLSIZE + (CELL_GAP * 2) + 2f);
+            _gridContainer.AddToClassList("programmator-grid-container");
 
             _cells = new VisualElement[ProgrammatorData.ROWS, ProgrammatorData.COLS];
             _cellLabels = new Label[ProgrammatorData.ROWS, ProgrammatorData.COLS];
@@ -455,38 +211,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 {
                     int row = i, col = j;
                     var cell = new VisualElement();
-                    cell.style.width = CELLSIZE;
-                    cell.style.height = CELLSIZE;
-                    cell.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f);
-                    cell.style.borderTopWidth = 1;
-                    cell.style.borderBottomWidth = 1;
-                    cell.style.borderLeftWidth = 1;
-                    cell.style.borderRightWidth = 1;
-                    cell.style.borderTopColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                    cell.style.borderBottomColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                    cell.style.borderLeftColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                    cell.style.borderRightColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                    cell.style.marginLeft = CELL_GAP;
-                    cell.style.marginRight = CELL_GAP;
-                    cell.style.marginTop = CELL_GAP;
-                    cell.style.marginBottom = CELL_GAP;
+                    cell.AddToClassList("programmator-cell");
 
                     cell.RegisterCallback<PointerEnterEvent>(_ =>
                     {
                         ProgrammatorData.HoveredCell = (row * ProgrammatorData.COLS) + col;
-                        if (!IsSelected(row, col))
-                            HighlightCell(row, col, true);
                         ShowCellTooltip(row, col);
                     });
                     cell.RegisterCallback<PointerLeaveEvent>(_ =>
                     {
-                        if (ProgrammatorData.HoveredCell == (row * ProgrammatorData.COLS) + col)
-                        {
-                            if (!IsSelected(row, col))
-                                HighlightCell(row, col, false);
-                            ProgrammatorData.HoveredCell = -1;
-                        }
-
+                        ProgrammatorData.HoveredCell = -1;
                         _tooltip?.Hide();
                     });
 
@@ -545,16 +279,7 @@ namespace Fodinae.Scripts.UI.Programmator
                     });
 
                     var label = new Label();
-                    label.style.fontSize = 8;
-                    label.style.color = Color.white;
-                    label.style.unityTextAlign = TextAnchor.MiddleCenter;
-                    label.style.position = Position.Absolute;
-                    label.style.left = 0;
-                    label.style.right = 0;
-                    label.style.top = 0;
-                    label.style.bottom = 0;
-                    label.style.paddingTop = 0;
-                    label.style.paddingBottom = 0;
+                    label.AddToClassList("programmator-cell-label");
                     label.pickingMode = PickingMode.Ignore;
                     cell.Add(label);
 
@@ -567,8 +292,7 @@ namespace Fodinae.Scripts.UI.Programmator
             gridScroll.Add(_gridContainer);
 
             var gridRow = new VisualElement();
-            gridRow.style.flexDirection = FlexDirection.Row;
-            gridRow.style.justifyContent = Justify.Center;
+            gridRow.AddToClassList("programmator-grid-row");
             gridRow.Add(gridScroll);
 
             panel.Add(gridRow);
@@ -576,88 +300,31 @@ namespace Fodinae.Scripts.UI.Programmator
             _popup.Add(panel);
 
             _programListPanel = new VisualElement();
-            _programListPanel.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
-            _programListPanel.style.borderTopWidth = 2;
-            _programListPanel.style.borderBottomWidth = 2;
-            _programListPanel.style.borderLeftWidth = 2;
-            _programListPanel.style.borderRightWidth = 2;
-            _programListPanel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _programListPanel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _programListPanel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _programListPanel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _programListPanel.style.paddingTop = 10;
-            _programListPanel.style.paddingBottom = 10;
-            _programListPanel.style.paddingLeft = 20;
-            _programListPanel.style.paddingRight = 20;
-            _programListPanel.style.flexDirection = FlexDirection.Column;
-            _programListPanel.style.width = 400;
-            _programListPanel.style.minHeight = 300;
+            _programListPanel.AddToClassList("programmator-list-panel");
             _programListPanel.style.display = DisplayStyle.None;
 
             var listHeaderRow = new VisualElement();
-            listHeaderRow.style.flexDirection = FlexDirection.Row;
-            listHeaderRow.style.marginBottom = 10;
+            listHeaderRow.AddToClassList("programmator-header-row");
 
             var listTitle = new Label("Программы");
-            listTitle.style.fontSize = 18;
-            listTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
-            listTitle.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            listTitle.style.flexGrow = 1;
+            listTitle.AddToClassList("programmator-header-title");
             listHeaderRow.Add(listTitle);
 
-            var listCloseBtn = new Button(() => Hide());
-            listCloseBtn.text = "\u00d7";
-            listCloseBtn.style.width = 24;
-            listCloseBtn.style.height = 24;
-            listCloseBtn.style.backgroundColor = Color.clear;
-            listCloseBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            listCloseBtn.style.fontSize = 18;
-            listCloseBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            listCloseBtn.style.borderTopWidth = 0;
-            listCloseBtn.style.borderBottomWidth = 0;
-            listCloseBtn.style.borderLeftWidth = 0;
-            listCloseBtn.style.borderRightWidth = 0;
-            listCloseBtn.style.paddingTop = 0;
-            listCloseBtn.style.paddingBottom = 0;
-            listCloseBtn.style.paddingLeft = 0;
-            listCloseBtn.style.paddingRight = 0;
-            listCloseBtn.RegisterCallback<MouseEnterEvent>(_ =>
-                listCloseBtn.style.color = Color.white);
-            listCloseBtn.RegisterCallback<MouseLeaveEvent>(_ =>
-                listCloseBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f));
+            var listCloseBtn = new Button(() => Hide()) { text = "\u00d7" };
+            listCloseBtn.AddToClassList("programmator-btn-close");
             listHeaderRow.Add(listCloseBtn);
 
             _programListPanel.Add(listHeaderRow);
 
             _listScroll = new ScrollView();
-            _listScroll.style.flexGrow = 1;
-            _listScroll.style.minHeight = 200;
+            _listScroll.AddToClassList("programmator-list-scroll");
             _programListPanel.Add(_listScroll);
 
             _createContainer = new VisualElement();
-            _createContainer.style.flexDirection = FlexDirection.Column;
-            _createContainer.style.marginTop = 10;
+            _createContainer.AddToClassList("programmator-create-container");
 
-            _createBtn = new Button(ShowCreateInput);
-            _createBtn.text = "+ Создать программу";
-            _createBtn.style.width = Length.Percent(100);
-            _createBtn.style.height = 30;
-            _createBtn.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f);
-            _createBtn.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            _createBtn.style.fontSize = 14;
-            _createBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            _createBtn.style.borderTopWidth = 1;
-            _createBtn.style.borderBottomWidth = 1;
-            _createBtn.style.borderLeftWidth = 1;
-            _createBtn.style.borderRightWidth = 1;
-            _createBtn.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _createBtn.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _createBtn.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _createBtn.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _createBtn.RegisterCallback<MouseEnterEvent>(_ =>
-                _createBtn.style.backgroundColor = new Color(0.2f, 0.2f, 0.2f, 1f));
-            _createBtn.RegisterCallback<MouseLeaveEvent>(_ =>
-                _createBtn.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f));
+            _createBtn = new Button(ShowCreateInput) { text = "+ Создать программу" };
+            _createBtn.AddToClassList("programmator-create-btn");
             _createContainer.Add(_createBtn);
 
             _programListPanel.Add(_createContainer);
@@ -665,69 +332,23 @@ namespace Fodinae.Scripts.UI.Programmator
             _popup.Add(_programListPanel);
 
             _createDialog = new VisualElement();
-            _createDialog.style.position = Position.Absolute;
-            _createDialog.style.left = 0;
-            _createDialog.style.top = 0;
-            _createDialog.style.right = 0;
-            _createDialog.style.bottom = 0;
-            _createDialog.style.justifyContent = Justify.Center;
-            _createDialog.style.alignItems = Align.Center;
+            _createDialog.AddToClassList("programmator-dialog");
             _createDialog.style.display = DisplayStyle.None;
 
             var dialogPanel = new VisualElement();
-            dialogPanel.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.95f);
-            dialogPanel.style.borderTopWidth = 2;
-            dialogPanel.style.borderBottomWidth = 2;
-            dialogPanel.style.borderLeftWidth = 2;
-            dialogPanel.style.borderRightWidth = 2;
-            dialogPanel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            dialogPanel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            dialogPanel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            dialogPanel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            dialogPanel.style.paddingTop = 16;
-            dialogPanel.style.paddingBottom = 16;
-            dialogPanel.style.paddingLeft = 20;
-            dialogPanel.style.paddingRight = 20;
-            dialogPanel.style.flexDirection = FlexDirection.Column;
-            dialogPanel.style.alignItems = Align.Stretch;
-            dialogPanel.style.width = 350;
+            dialogPanel.AddToClassList("programmator-dialog-panel");
 
             var dialogTitle = new Label("Новая программа");
-            dialogTitle.style.fontSize = 16;
-            dialogTitle.style.unityFontStyleAndWeight = FontStyle.Bold;
-            dialogTitle.style.color = new Color(0.7f, 0.65f, 0.5f, 1f);
-            dialogTitle.style.marginBottom = 12;
+            dialogTitle.AddToClassList("programmator-dialog-title");
             dialogPanel.Add(dialogTitle);
 
             _createInput = new TextField();
             _createInput.value = $"Программа {_programItems.Count + 1}";
-            _createInput.style.height = 32;
-            _createInput.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 1f);
-            _createInput.style.color = new Color(0.8f, 0.8f, 0.8f, 1f);
-            _createInput.style.fontSize = 14;
-            _createInput.style.borderTopWidth = 1;
-            _createInput.style.borderBottomWidth = 1;
-            _createInput.style.borderLeftWidth = 1;
-            _createInput.style.borderRightWidth = 1;
-            _createInput.style.borderTopColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            _createInput.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            _createInput.style.borderLeftColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            _createInput.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            _createInput.style.paddingLeft = 8;
-            _createInput.style.marginBottom = 16;
+            _createInput.AddToClassList("programmator-dialog-input");
             _createInput.RegisterCallback<AttachToPanelEvent>(_ =>
             {
                 var ti = _createInput.Q("unity-text-input");
-                if (ti != null)
-                {
-                    ti.style.backgroundColor = new Color(0.12f, 0.12f, 0.12f, 1f);
-                    ti.style.color = new Color(0.8f, 0.8f, 0.8f, 1f);
-                    ti.style.fontSize = 14;
-                    ti.style.borderTopWidth = 0;
-                    ti.style.borderBottomWidth = 0;
-                    ti.style.borderLeftWidth = 0;
-                    ti.style.borderRightWidth = 0;
-                }
+                ti?.AddToClassList("programmator-dialog-input-inner");
             });
             dialogPanel.Add(_createInput);
 
@@ -740,44 +361,14 @@ namespace Fodinae.Scripts.UI.Programmator
             });
 
             var dialogButtons = new VisualElement();
-            dialogButtons.style.flexDirection = FlexDirection.Row;
-            dialogButtons.style.justifyContent = Justify.FlexEnd;
+            dialogButtons.AddToClassList("programmator-dialog-buttons");
 
-            var dialogCancelBtn = new Button(HideCreateInput);
-            dialogCancelBtn.text = "Отмена";
-            dialogCancelBtn.style.height = 30;
-            dialogCancelBtn.style.minWidth = 80;
-            dialogCancelBtn.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f);
-            dialogCancelBtn.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            dialogCancelBtn.style.fontSize = 14;
-            dialogCancelBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            dialogCancelBtn.style.borderTopWidth = 1;
-            dialogCancelBtn.style.borderBottomWidth = 1;
-            dialogCancelBtn.style.borderLeftWidth = 1;
-            dialogCancelBtn.style.borderRightWidth = 1;
-            dialogCancelBtn.style.borderTopColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            dialogCancelBtn.style.borderBottomColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            dialogCancelBtn.style.borderLeftColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            dialogCancelBtn.style.borderRightColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            dialogCancelBtn.style.marginRight = 8;
+            var dialogCancelBtn = new Button(HideCreateInput) { text = "Отмена" };
+            dialogCancelBtn.AddToClassList("programmator-dialog-btn-cancel");
             dialogButtons.Add(dialogCancelBtn);
 
-            var dialogConfirmBtn = new Button(() => CreateNewProgram(_createInput.value));
-            dialogConfirmBtn.text = "Создать";
-            dialogConfirmBtn.style.height = 30;
-            dialogConfirmBtn.style.minWidth = 80;
-            dialogConfirmBtn.style.backgroundColor = new Color(0f, 0.3f, 0f, 0.3f);
-            dialogConfirmBtn.style.color = new Color(0.4f, 0.9f, 0.4f, 1f);
-            dialogConfirmBtn.style.fontSize = 14;
-            dialogConfirmBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-            dialogConfirmBtn.style.borderTopWidth = 1;
-            dialogConfirmBtn.style.borderBottomWidth = 1;
-            dialogConfirmBtn.style.borderLeftWidth = 1;
-            dialogConfirmBtn.style.borderRightWidth = 1;
-            dialogConfirmBtn.style.borderTopColor = new Color(0.2f, 0.5f, 0.2f, 1f);
-            dialogConfirmBtn.style.borderBottomColor = new Color(0.2f, 0.5f, 0.2f, 1f);
-            dialogConfirmBtn.style.borderLeftColor = new Color(0.2f, 0.5f, 0.2f, 1f);
-            dialogConfirmBtn.style.borderRightColor = new Color(0.2f, 0.5f, 0.2f, 1f);
+            var dialogConfirmBtn = new Button(() => CreateNewProgram(_createInput.value)) { text = "Создать" };
+            dialogConfirmBtn.AddToClassList("programmator-dialog-btn-confirm");
             dialogButtons.Add(dialogConfirmBtn);
 
             dialogPanel.Add(dialogButtons);
@@ -861,17 +452,11 @@ namespace Fodinae.Scripts.UI.Programmator
             var cell = _cells[row, col];
             if (highlight)
             {
-                cell.style.borderTopColor = new Color(1f, 0.84f, 0f, 1f);
-                cell.style.borderBottomColor = new Color(1f, 0.84f, 0f, 1f);
-                cell.style.borderLeftColor = new Color(1f, 0.84f, 0f, 1f);
-                cell.style.borderRightColor = new Color(1f, 0.84f, 0f, 1f);
+                cell.AddToClassList("programmator-cell-highlighted");
             }
             else
             {
-                cell.style.borderTopColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                cell.style.borderBottomColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                cell.style.borderLeftColor = new Color(0.25f, 0.25f, 0.25f, 1f);
-                cell.style.borderRightColor = new Color(0.25f, 0.25f, 0.25f, 1f);
+                cell.RemoveFromClassList("programmator-cell-highlighted");
             }
         }
 
@@ -890,13 +475,14 @@ namespace Fodinae.Scripts.UI.Programmator
         private void SetSelectionBorder(int row, int col, bool selected)
         {
             var cell = _cells[row, col];
-            var color = selected
-                ? new Color(0.2f, 0.5f, 1f, 1f)
-                : new Color(0.25f, 0.25f, 0.25f, 1f);
-            cell.style.borderTopColor = color;
-            cell.style.borderBottomColor = color;
-            cell.style.borderLeftColor = color;
-            cell.style.borderRightColor = color;
+            if (selected)
+            {
+                cell.AddToClassList("programmator-cell-selected");
+            }
+            else
+            {
+                cell.RemoveFromClassList("programmator-cell-selected");
+            }
         }
 
         private void RefreshSelectionBorders()
@@ -1597,45 +1183,16 @@ namespace Fodinae.Scripts.UI.Programmator
                 int idx = i;
                 var item = _programItems[i];
                 var row = new VisualElement();
-                row.style.flexDirection = FlexDirection.Row;
-                row.style.alignItems = Align.Center;
-                row.style.paddingTop = 6;
-                row.style.paddingBottom = 6;
-                row.style.paddingLeft = 8;
-                row.style.paddingRight = 8;
-                row.style.borderBottomWidth = 1;
-                row.style.borderBottomColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+                row.AddToClassList("programmator-list-item");
                 var nameLabel = new Label(item.Name);
-                nameLabel.style.flexGrow = 1;
-                nameLabel.style.color = new Color(0.8f, 0.8f, 0.8f, 1f);
-                nameLabel.style.fontSize = 14;
-                nameLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
+                nameLabel.AddToClassList("programmator-list-item-name");
                 row.Add(nameLabel);
 
-                var delBtn = new Button(() => DeleteProgram(idx));
-                delBtn.text = "\u00d7";
-                delBtn.style.width = 22;
-                delBtn.style.height = 22;
-                delBtn.style.backgroundColor = new Color(0.3f, 0f, 0f, 0.3f);
-                delBtn.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
-                delBtn.style.fontSize = 14;
-                delBtn.style.unityTextAlign = TextAnchor.MiddleCenter;
-                delBtn.style.borderTopWidth = 0;
-                delBtn.style.borderBottomWidth = 0;
-                delBtn.style.borderLeftWidth = 0;
-                delBtn.style.borderRightWidth = 0;
-                delBtn.style.paddingTop = 0;
-                delBtn.style.paddingBottom = 0;
-                delBtn.style.paddingLeft = 0;
-                delBtn.style.paddingRight = 0;
-                delBtn.style.marginLeft = 8;
+                var delBtn = new Button(() => DeleteProgram(idx)) { text = "\u00d7" };
+                delBtn.AddToClassList("programmator-list-item-delete");
                 row.Add(delBtn);
 
                 row.RegisterCallback<ClickEvent>(_ => OpenProgram(idx));
-                row.RegisterCallback<MouseEnterEvent>(_ =>
-                    row.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f));
-                row.RegisterCallback<MouseLeaveEvent>(_ =>
-                    row.style.backgroundColor = Color.clear);
 
                 _listScroll.Add(row);
             }
@@ -1646,10 +1203,7 @@ namespace Fodinae.Scripts.UI.Programmator
             _isRunning = true;
             _runBtn.SetEnabled(false);
             _stopBtn.SetEnabled(true);
-            _panel.style.borderTopColor = new Color(0.2f, 0.8f, 0.2f, 1f);
-            _panel.style.borderBottomColor = new Color(0.2f, 0.8f, 0.2f, 1f);
-            _panel.style.borderLeftColor = new Color(0.2f, 0.8f, 0.2f, 1f);
-            _panel.style.borderRightColor = new Color(0.2f, 0.8f, 0.2f, 1f);
+            _panel.AddToClassList("programmator-panel-running");
             Debug.Log("[Programmator] Program running");
         }
 
@@ -1658,10 +1212,7 @@ namespace Fodinae.Scripts.UI.Programmator
             _isRunning = false;
             _runBtn.SetEnabled(true);
             _stopBtn.SetEnabled(false);
-            _panel.style.borderTopColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _panel.style.borderBottomColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _panel.style.borderLeftColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-            _panel.style.borderRightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+            _panel.RemoveFromClassList("programmator-panel-running");
             Debug.Log("[Programmator] Program stopped");
         }
 
@@ -1674,24 +1225,27 @@ namespace Fodinae.Scripts.UI.Programmator
             var cell = _cells[row, col];
             var label = _cellLabels[row, col];
 
+            cell.RemoveFromClassList("programmator-cell-empty");
+            cell.RemoveFromClassList("programmator-cell-unknown");
+
             var tex = ProgrammatorTextureRegistry.GetTexture(action);
             if (tex != null)
             {
                 cell.style.backgroundImage = new StyleBackground(tex);
                 cell.style.backgroundSize = new BackgroundSize(tex.width, tex.height);
-                cell.style.backgroundColor = Color.clear;
+                cell.style.backgroundColor = StyleKeyword.None;
                 label.text = string.Empty;
             }
             else if (id == 0)
             {
                 cell.style.backgroundImage = null;
-                cell.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 1f);
+                cell.AddToClassList("programmator-cell-empty");
                 label.text = string.Empty;
             }
             else
             {
                 cell.style.backgroundImage = null;
-                cell.style.backgroundColor = new Color(0.3f, 0.1f, 0.1f, 1f);
+                cell.AddToClassList("programmator-cell-unknown");
                 string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? n : string.Empty;
                 label.text = name;
             }

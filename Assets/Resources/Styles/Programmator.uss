@@ -1,51 +1,401 @@
 /* ═══════════════════════════════════════════════════════════
-   Programmator — стили программатора
+   Programmator — стили визуального редактора программ
    ═══════════════════════════════════════════════════════════ */
 
-.programmator-root {
+/* ─── Popup & Dimmer ─── */
+.programmator-popup {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    translate: -50% -50%;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
-    border-width: var(--panel-border-width);
-    border-radius: 4px;
-    padding: var(--panel-padding);
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
 }
 
-.programmator-grid {
-    flex-wrap: wrap;
+.programmator-dimmer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Panel (сетка) ─── */
+.programmator-panel {
+    background-color: rgba(20, 20, 20, 0.95);
+    border-color: rgba(89, 89, 89, 1);
+    border-width: 2px;
+    padding: 10px;
+    flex-direction: column;
+    width: 618px;
+    min-height: 520px;
+}
+
+.programmator-panel-running {
+    border-color: rgba(51, 204, 51, 1);
+}
+
+/* ─── Panel (список программ) ─── */
+.programmator-list-panel {
+    background-color: rgba(20, 20, 20, 0.95);
+    border-color: rgba(89, 89, 89, 1);
+    border-width: 2px;
+    padding: 10px 20px;
+    flex-direction: column;
+    width: 400px;
+    min-height: 300px;
+}
+
+/* ─── Header ─── */
+.programmator-header {
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.programmator-header-top {
+    flex-direction: column;
+    margin-bottom: 10px;
+    flex-grow: 1;
+}
+
+.programmator-header-row {
+    flex-direction: row;
+    margin-bottom: 10px;
+}
+
+.programmator-header-title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: var(--color-accent);
+    flex-grow: 1;
+}
+
+/* ─── Toolbar ─── */
+.programmator-toolbar {
+    flex-direction: row;
+    align-items: center;
+}
+
+.programmator-action-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4px;
+}
+
+/* ─── Toolbar Buttons (22x22, transparent, gray) ─── */
+.programmator-btn-icon {
+    width: 22px;
+    height: 22px;
+    background-color: transparent;
+    color: var(--color-text-dim);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0 2px;
+}
+
+.programmator-btn-icon:hover {
+    color: white;
+}
+
+.programmator-btn-icon-mr {
+    margin-right: 8px;
+}
+
+/* ─── Action Buttons ─── */
+.programmator-btn-save {
+    width: 24px;
+    height: 24px;
+    background-color: transparent;
+    color: var(--color-text-dim);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+}
+
+.programmator-btn-save:hover {
+    color: white;
+}
+
+.programmator-btn-run {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(0, 89, 0, 0.3);
+    color: rgba(102, 230, 102, 1);
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+    margin-left: 4px;
+}
+
+.programmator-btn-run:hover {
+    background-color: rgba(0, 128, 0, 0.4);
+}
+
+.programmator-btn-stop {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(89, 0, 0, 0.3);
+    color: rgba(230, 77, 77, 1);
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+}
+
+.programmator-btn-stop:hover {
+    background-color: rgba(128, 0, 0, 0.4);
+}
+
+.programmator-btn-stop:disabled {
+    opacity: 0.4;
+}
+
+/* ─── Close Button ─── */
+.programmator-btn-close {
+    width: 24px;
+    height: 24px;
+    background-color: transparent;
+    color: var(--color-text-dim);
+    font-size: 18px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+}
+
+.programmator-btn-close:hover {
+    color: white;
+}
+
+/* ─── Page Navigation ─── */
+.programmator-page-label {
+    font-size: 12px;
+    color: var(--color-accent);
+    min-width: 60px;
+    -unity-text-align: middle-center;
+    margin-left: 4px;
+    margin-right: 4px;
+}
+
+.programmator-page-input {
+    width: 35px;
     background-color: rgba(30, 30, 30, 1);
-    border-color: var(--btn-border);
-    border-width: 1px;
-    border-radius: 3px;
-    padding: 4px;
+    --unity-cursor-color: rgba(255, 255, 255, 1);
+    color: var(--color-accent);
+    -unity-text-align: middle-center;
+    border-width: 1;
+    padding: 0;
+}
+
+.programmator-page-input-inner {
+    background-color: rgba(30, 30, 30, 1);
+    color: var(--color-accent);
+    -unity-text-align: middle-center;
+    border-width: 1;
+    padding: 0;
+}
+
+/* ─── Grid ─── */
+.programmator-grid-scroll {
+    max-height: 456px;
+}
+
+.programmator-grid-row {
+    flex-direction: row;
+    justify-content: center;
+}
+
+.programmator-grid-container {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 608px;
 }
 
 .programmator-cell {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     background-color: rgba(38, 38, 38, 1);
-    border-color: var(--btn-border);
+    border-color: rgba(64, 64, 64, 1);
     border-width: 1px;
-    border-radius: 2px;
-    margin: 1px;
-    -unity-text-align: middle-center;
-    font-size: var(--font-size-sm);
-    color: var(--color-text);
+    margin: 2px;
 }
 
 .programmator-cell:hover {
-    border-color: var(--color-accent);
+    border-color: rgba(255, 214, 0, 1);
 }
 
-.programmator-cell.has-operator {
-    background-color: rgba(178, 166, 128, 0.3);
-    color: var(--color-accent);
+.programmator-cell-highlighted {
+    border-color: rgba(255, 214, 0, 1);
 }
 
-.programmator-toolbar {
+.programmator-cell-selected {
+    border-color: rgba(51, 128, 255, 1);
+}
+
+.programmator-cell-empty {
+    background-color: rgba(38, 38, 38, 1);
+}
+
+.programmator-cell-unknown {
+    background-color: rgba(77, 26, 26, 1);
+}
+
+.programmator-cell-label {
+    font-size: 8px;
+    color: white;
+    -unity-text-align: middle-center;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    padding: 0;
+}
+
+/* ─── Program List ─── */
+.programmator-list-scroll {
+    flex-grow: 1;
+    min-height: 200px;
+}
+
+.programmator-list-item {
     flex-direction: row;
-    margin-top: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom-color: rgba(51, 51, 51, 1);
+    border-bottom-width: 1px;
+}
+
+.programmator-list-item:hover {
+    background-color: rgba(38, 38, 38, 1);
+}
+
+.programmator-list-item-name {
+    flex-grow: 1;
+    color: rgba(204, 204, 204, 1);
+    font-size: 14px;
+    -unity-text-align: middle-left;
+}
+
+.programmator-list-item-delete {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(77, 0, 0, 0.3);
+    color: rgba(230, 77, 77, 1);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+    margin-left: 8px;
+}
+
+.programmator-list-item-delete:hover {
+    background-color: rgba(128, 0, 0, 0.4);
+}
+
+/* ─── Create Container ─── */
+.programmator-create-container {
+    flex-direction: column;
+    margin-top: 10px;
+}
+
+.programmator-create-btn {
+    width: 100%;
+    height: 30px;
+    background-color: rgba(38, 38, 38, 1);
+    color: var(--color-accent);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-color: rgba(89, 89, 89, 1);
+    border-width: 1px;
+    padding: 0;
+}
+
+.programmator-create-btn:hover {
+    background-color: rgba(51, 51, 51, 1);
+}
+
+/* ─── Create Dialog ─── */
+.programmator-dialog {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.programmator-dialog-panel {
+    background-color: rgba(20, 20, 20, 0.95);
+    border-color: rgba(89, 89, 89, 1);
+    border-width: 2px;
+    padding: 16px 20px;
+    flex-direction: column;
+    align-items: stretch;
+    width: 350px;
+}
+
+.programmator-dialog-title {
+    font-size: 16px;
+    -unity-font-style: bold;
+    color: var(--color-accent);
+    margin-bottom: 12px;
+}
+
+.programmator-dialog-input {
+    background-color: rgba(30, 30, 30, 1);
+    color: rgba(204, 204, 204, 1);
+    border-color: rgba(77, 77, 77, 1);
+    border-width: 1px;
+    margin-bottom: 16px;
+}
+
+.programmator-dialog-input-inner {
+    background-color: rgba(30, 30, 30, 1);
+    color: rgba(204, 204, 204, 1);
+    --unity-cursor-color: rgba(255, 255, 255, 1);
+    font-size: 14px;
+}
+
+.programmator-dialog-buttons {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.programmator-dialog-btn-cancel {
+    height: 30px;
+    min-width: 80px;
+    background-color: rgba(38, 38, 38, 1);
+    color: var(--color-text-dim);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-color: rgba(77, 77, 77, 1);
+    border-width: 1px;
+    padding: 0;
+    margin-right: 8px;
+}
+
+.programmator-dialog-btn-cancel:hover {
+    background-color: rgba(51, 51, 51, 1);
+}
+
+.programmator-dialog-btn-confirm {
+    height: 30px;
+    min-width: 80px;
+    background-color: rgba(0, 77, 0, 0.3);
+    color: rgba(102, 230, 102, 1);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-color: rgba(51, 128, 51, 1);
+    border-width: 1px;
+    padding: 0;
+}
+
+.programmator-dialog-btn-confirm:hover {
+    background-color: rgba(0, 102, 0, 0.4);
 }
