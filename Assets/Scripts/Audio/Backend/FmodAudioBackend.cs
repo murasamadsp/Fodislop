@@ -22,12 +22,11 @@ namespace Fodinae.Audio.Backend
     /// </summary>
     public sealed class FmodAudioBackend
     {
-        private AudioSystem _system;
+        private AudioSystem _system = null!;
 
-        [Inject]
-        public FmodAudioBackend(IAudioSystem system)
+        public void Initialize(AudioSystem system)
         {
-            _system = (AudioSystem)system;
+            _system = system;
             LoadRequiredBanksAsync().Forget();
         }
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
@@ -44,11 +43,7 @@ namespace Fodinae.Audio.Backend
         private static readonly FMOD.VECTOR ForwardVector = new() { x = 0f, y = 0f, z = 1f };
         private static readonly FMOD.VECTOR UpVector = new() { x = 0f, y = 1f, z = 0f };
 
-        public void Initialize(AudioSystem system)
-        {
-            _system = system;
-            LoadRequiredBanksAsync().Forget();
-        }
+
 
         public async UniTaskVoid LoadRequiredBanksAsync()
         {
