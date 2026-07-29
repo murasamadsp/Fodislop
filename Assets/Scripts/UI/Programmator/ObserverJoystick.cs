@@ -107,9 +107,8 @@ namespace Fodinae.Scripts.UI.Programmator
             _centerTex = ProgrammatorTextureRegistry.GetTexture(CenterClickOp);
 
             _root = new VisualElement();
-            _root.style.position = Position.Absolute;
-            _root.style.width = RootSize;
-            _root.style.height = RootSize;
+            RadialMenu.AttachStyles(_root);
+            _root.AddToClassList("prog-joy-root");
             _root.pickingMode = PickingMode.Ignore;
 
             // Direction buttons
@@ -148,10 +147,7 @@ namespace Fodinae.Scripts.UI.Programmator
             var (centerItem, centerLabel) = MakeItem(cx, cy, cSize, "\u25CB");
             _centerItem = centerItem;
             _centerLabel = centerLabel;
-            centerItem.style.borderTopLeftRadius = 20;
-            centerItem.style.borderTopRightRadius = 20;
-            centerItem.style.borderBottomLeftRadius = 20;
-            centerItem.style.borderBottomRightRadius = 20;
+            centerItem.AddToClassList("prog-joy-center");
             centerItem.name = "joy_center";
             WireHover(centerItem);
 
@@ -329,11 +325,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 var img = new Image();
                 img.image = tex;
                 img.scaleMode = ScaleMode.ScaleToFit;
-                img.style.position = Position.Absolute;
-                img.style.left = 0;
-                img.style.top = 0;
-                img.style.right = 0;
-                img.style.bottom = 0;
+                img.AddToClassList("prog-radial-fill");
                 img.pickingMode = PickingMode.Ignore;
                 item.Add(img);
                 label.text = string.Empty;

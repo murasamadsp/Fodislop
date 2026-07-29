@@ -37,8 +37,7 @@ namespace Fodinae.Scripts
             }
 
             var root = _doc.rootVisualElement;
-            root.style.justifyContent = Justify.Center;
-            root.style.alignItems = Align.Center;
+            root.AddToClassList("mm-root");
             ShowLoader();
 
             var mainMenuUXML = Resources.Load<VisualTreeAsset>("UI/MainMenu");
@@ -64,11 +63,7 @@ namespace Fodinae.Scripts
 
             root.Add(mainMenu);
 
-            mainMenu.style.position = Position.Absolute;
-            mainMenu.style.left = 0;
-            mainMenu.style.top = 0;
-            mainMenu.style.right = 0;
-            mainMenu.style.bottom = 0;
+            mainMenu.AddToClassList("mm-menu-fill");
             mainMenu.BringToFront();
             if (_loaderContainer != null)
             {
@@ -102,18 +97,10 @@ namespace Fodinae.Scripts
             }
 
             var root = _doc.rootVisualElement;
-            root.style.width = new Length(100, LengthUnit.Percent);
-            root.style.height = new Length(100, LengthUnit.Percent);
 
             _loaderContainer = new VisualElement();
             _loaderContainer.name = "LoaderContainer";
-            _loaderContainer.style.position = Position.Absolute;
-            _loaderContainer.style.top = 0;
-            _loaderContainer.style.left = 0;
-            _loaderContainer.style.right = 0;
-            _loaderContainer.style.bottom = 0;
-            _loaderContainer.style.alignItems = Align.Stretch;
-            _loaderContainer.style.justifyContent = Justify.Center;
+            _loaderContainer.AddToClassList("mm-loader");
 
             var image = new UnityEngine.UIElements.Image();
             Texture2D loaderTexture = _loaderTexture;
@@ -124,8 +111,7 @@ namespace Fodinae.Scripts
             }
 
             image.image = loaderTexture;
-            image.style.width = new Length(100, LengthUnit.Percent);
-            image.style.height = new Length(100, LengthUnit.Percent);
+            image.AddToClassList("mm-loader-image");
             image.scaleMode = ScaleMode.ScaleAndCrop; // покрывает весь элемент, сохраняя пропорции
 
             _loaderContainer.Add(image);

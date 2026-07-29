@@ -33,10 +33,8 @@ namespace Fodinae.Scripts.UI
 
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
-            _arrow.style.position = Position.Absolute;
-            _arrow.style.width = 20;
-            _arrow.style.height = 20;
-            _arrow.style.backgroundColor = new Color(1f, 0.85f, 0f, 0.9f);
+            _arrow.AddToClassList("mission-arrow");
+            // Видимость — рантайм-состояние
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);
 

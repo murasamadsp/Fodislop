@@ -34,3 +34,44 @@
     --font-size-lg: 16px;
     --font-size-xl: 20px;
 }
+
+/* ─── Главное меню (MainMenu) ─── */
+
+.mm-root {
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.mm-menu-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.mm-loader {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: stretch;
+    justify-content: center;
+}
+
+.mm-loader-image {
+    width: 100%;
+    height: 100%;
+}
+
+/* ─── Стрелка миссии (MissionArrowUI) ─── */
+
+.mission-arrow {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background-color: rgba(255, 217, 0, 0.9);
+}
