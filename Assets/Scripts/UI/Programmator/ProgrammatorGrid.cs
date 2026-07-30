@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using MinesServer.Data;
+using Fodinae.Scripts.Networking;
+using MinesServer.Networking.Client.Packets.Programmator;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -31,7 +32,12 @@ namespace Fodinae.Scripts.UI.Programmator
         private Button _nextBtn;
         private Button _saveBtn;
         private Button _runBtn;
+        private Button _pauseBtn;
         private Button _stopBtn;
+        private Button _stepInBtn;
+        private Button _stepOverBtn;
+        private Button _stepOutBtn;
+        private bool _isPaused;
         private VisualElement _panel;
         private bool _hasSelection;
         private int _selStartRow, _selStartCol;
@@ -60,6 +66,10 @@ namespace Fodinae.Scripts.UI.Programmator
         private Button _createBtn;
         private TextField _createInput;
         private VisualElement _createDialog;
+        private Label _dialogTitle;
+        private Button _dialogConfirmBtn;
+        private bool _isRenameMode;
+        private int _renameTargetIndex = -1;
 
         public static bool IsOpen { get; private set; }
 
@@ -178,18 +188,43 @@ namespace Fodinae.Scripts.UI.Programmator
             shiftRightBtn.AddToClassList("programmator-btn-icon-mr");
             buttonsRow.Add(shiftRightBtn);
 
-            _saveBtn = new Button(SaveProgram) { text = "\U0001f4be" };
-            _saveBtn.AddToClassList("programmator-btn-save");
-            actionRow.Add(_saveBtn);
-
             _runBtn = new Button(RunProgram) { text = "\u25b6" };
             _runBtn.AddToClassList("programmator-btn-run");
             actionRow.Add(_runBtn);
+
+            _pauseBtn = new Button(PauseProgram) { text = "\u23f8" };
+            _pauseBtn.AddToClassList("programmator-btn-pause");
+            _pauseBtn.SetEnabled(false);
+            actionRow.Add(_pauseBtn);
+
+            _saveBtn = new Button(SaveProgram) { text = "\U0001f4be" };
+            _saveBtn.AddToClassList("programmator-btn-save");
+            actionRow.Add(_saveBtn);
 
             _stopBtn = new Button(StopProgram) { text = "\u25a0" };
             _stopBtn.AddToClassList("programmator-btn-stop");
             _stopBtn.SetEnabled(false);
             actionRow.Add(_stopBtn);
+
+            var stepGroup = new VisualElement();
+            stepGroup.AddToClassList("programmator-step-group");
+
+            _stepInBtn = new Button(StepIn) { text = "\u2193" };
+            _stepInBtn.AddToClassList("programmator-btn-step");
+            _stepInBtn.SetEnabled(false);
+            stepGroup.Add(_stepInBtn);
+
+            _stepOverBtn = new Button(StepOver) { text = "\u2192" };
+            _stepOverBtn.AddToClassList("programmator-btn-step");
+            _stepOverBtn.SetEnabled(false);
+            stepGroup.Add(_stepOverBtn);
+
+            _stepOutBtn = new Button(StepOut) { text = "\u2191" };
+            _stepOutBtn.AddToClassList("programmator-btn-step");
+            _stepOutBtn.SetEnabled(false);
+            stepGroup.Add(_stepOutBtn);
+
+            actionRow.Add(stepGroup);
 
             var closeBtn = new Button(CloseProgram) { text = "\u00d7" };
             closeBtn.AddToClassList("programmator-btn-close");
@@ -396,9 +431,9 @@ namespace Fodinae.Scripts.UI.Programmator
             var dialogPanel = new VisualElement();
             dialogPanel.AddToClassList("programmator-dialog-panel");
 
-            var dialogTitle = new Label("Новая программа");
-            dialogTitle.AddToClassList("programmator-dialog-title");
-            dialogPanel.Add(dialogTitle);
+            _dialogTitle = new Label("Новая программа");
+            _dialogTitle.AddToClassList("programmator-dialog-title");
+            dialogPanel.Add(_dialogTitle);
 
             _createInput = new TextField();
             _createInput.value = $"Программа {_programItems.Count + 1}";
@@ -414,7 +449,7 @@ namespace Fodinae.Scripts.UI.Programmator
             {
                 if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
                 {
-                    CreateNewProgram(_createInput.value);
+                    ConfirmDialogAction();
                 }
             });
 
@@ -425,9 +460,9 @@ namespace Fodinae.Scripts.UI.Programmator
             dialogCancelBtn.AddToClassList("programmator-dialog-btn-cancel");
             dialogButtons.Add(dialogCancelBtn);
 
-            var dialogConfirmBtn = new Button(() => CreateNewProgram(_createInput.value)) { text = "Создать" };
-            dialogConfirmBtn.AddToClassList("programmator-dialog-btn-confirm");
-            dialogButtons.Add(dialogConfirmBtn);
+            _dialogConfirmBtn = new Button(ConfirmDialogAction) { text = "Создать" };
+            _dialogConfirmBtn.AddToClassList("programmator-dialog-btn-confirm");
+            dialogButtons.Add(_dialogConfirmBtn);
 
             dialogPanel.Add(dialogButtons);
             _createDialog.Add(dialogPanel);
@@ -1110,49 +1145,17 @@ namespace Fodinae.Scripts.UI.Programmator
             _selEndCol = newMaxCol;
         }
 
-        [System.Serializable]
-        private class ProgrammatorSave
-        {
-            public int[] Codes;
-            public string[] Labels;
-            public string[] Values;
-        }
-
-        private string SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
-
         private void SaveProgram()
         {
-            var data = new ProgrammatorSave
+            var instructions = new List<(ProgAction Operator, string Label, string Value)>();
+            for (int i = 0; i < ProgrammatorData.Codes.Count; i++)
             {
-                Codes = ProgrammatorData.Codes.ToArray(),
-                Labels = ProgrammatorData.Labels.ToArray(),
-                Values = ProgrammatorData.Values.ToArray(),
-            };
-            File.WriteAllText(SavePath, JsonUtility.ToJson(data));
+                var action = (ProgAction)ProgrammatorData.Codes[i];
+                if (action == 0) continue;
+                instructions.Add((action, ProgrammatorData.Labels[i] ?? string.Empty, ProgrammatorData.Values[i] ?? string.Empty));
+            }
+            NetworkService.Send(new SaveProgramPacket(0, false, instructions));
             Debug.Log("[Programmator] Program saved");
-        }
-
-        private void LoadProgramFromDisk()
-        {
-            if (!File.Exists(SavePath)) return;
-            try
-            {
-                var data = JsonUtility.FromJson<ProgrammatorSave>(File.ReadAllText(SavePath));
-                if (data.Codes == null || data.Codes.Length == 0) return;
-                int total = data.Codes.Length;
-                ProgrammatorData.Codes = new List<int>(total);
-                ProgrammatorData.Labels = new List<string>(total);
-                ProgrammatorData.Values = new List<string>(total);
-                ProgrammatorData.Codes.AddRange(data.Codes);
-                ProgrammatorData.Labels.AddRange(data.Labels ?? new string[total]);
-                ProgrammatorData.Values.AddRange(data.Values ?? new string[total]);
-                ProgrammatorData.CurrentPage = 0;
-                Debug.Log($"[Programmator] Program loaded ({total} cells)");
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"[Programmator] Failed to load program: {e.Message}");
-            }
         }
 
         private void ShowProgramList()
@@ -1188,6 +1191,7 @@ namespace Fodinae.Scripts.UI.Programmator
         private void CloseProgram()
         {
             if (_isRunning) StopProgram();
+            _isPaused = false;
             if (_activeIndex >= 0 && _activeIndex < _programItems.Count)
             {
                 var item = _programItems[_activeIndex];
@@ -1223,6 +1227,10 @@ namespace Fodinae.Scripts.UI.Programmator
 
         private void HideCreateInput()
         {
+            _isRenameMode = false;
+            _renameTargetIndex = -1;
+            _dialogTitle.text = "Новая программа";
+            _dialogConfirmBtn.text = "Создать";
             _createDialog.style.display = DisplayStyle.None;
         }
 
@@ -1231,6 +1239,7 @@ namespace Fodinae.Scripts.UI.Programmator
             if (index < 0 || index >= _programItems.Count) return;
             _programItems.RemoveAt(index);
             RefreshProgramList();
+            NetworkService.Send(new DeleteProgramClickPacket());
         }
 
         private void RefreshProgramList()
@@ -1246,8 +1255,14 @@ namespace Fodinae.Scripts.UI.Programmator
                 nameLabel.AddToClassList("programmator-list-item-name");
                 row.Add(nameLabel);
 
+                var renameBtn = new Button(() => RenameProgram(idx)) { text = "\u270e" };
+                renameBtn.AddToClassList("programmator-list-item-rename");
+                renameBtn.RegisterCallback<ClickEvent>(e => e.StopPropagation());
+                row.Add(renameBtn);
+
                 var delBtn = new Button(() => DeleteProgram(idx)) { text = "\u00d7" };
                 delBtn.AddToClassList("programmator-list-item-delete");
+                delBtn.RegisterCallback<ClickEvent>(e => e.StopPropagation());
                 row.Add(delBtn);
 
                 row.RegisterCallback<ClickEvent>(_ => OpenProgram(idx));
@@ -1259,19 +1274,113 @@ namespace Fodinae.Scripts.UI.Programmator
         private void RunProgram()
         {
             _isRunning = true;
+            _isPaused = false;
             _runBtn.SetEnabled(false);
             _stopBtn.SetEnabled(true);
+            _pauseBtn.SetEnabled(true);
+            _pauseBtn.text = "\u23f8";
+            _panel.RemoveFromClassList("programmator-panel-paused");
             _panel.AddToClassList("programmator-panel-running");
+            var instructions = new List<(ProgAction Operator, string Label, string Value)>();
+            for (int i = 0; i < ProgrammatorData.Codes.Count; i++)
+            {
+                var action = (ProgAction)ProgrammatorData.Codes[i];
+                if (action == 0) continue;
+                instructions.Add((action, ProgrammatorData.Labels[i] ?? string.Empty, ProgrammatorData.Values[i] ?? string.Empty));
+            }
+            NetworkService.Send(new SaveProgramPacket(0, false, instructions));
+            NetworkService.Send(new StartProgramPacket());
             Debug.Log("[Programmator] Program running");
+        }
+
+        private void PauseProgram()
+        {
+            if (!_isRunning) return;
+            _isPaused = !_isPaused;
+            if (_isPaused)
+            {
+                _runBtn.SetEnabled(false);
+                _pauseBtn.text = "\u25b6";
+                _panel.RemoveFromClassList("programmator-panel-running");
+                _panel.AddToClassList("programmator-panel-paused");
+                NetworkService.Send(new PauseProgramPacket());
+                Debug.Log("[Programmator] Program paused");
+            }
+            else
+            {
+                _runBtn.SetEnabled(true);
+                _pauseBtn.text = "\u23f8";
+                _panel.RemoveFromClassList("programmator-panel-paused");
+                _panel.AddToClassList("programmator-panel-running");
+                NetworkService.Send(new StartProgramPacket());
+                Debug.Log("[Programmator] Program resumed");
+            }
         }
 
         private void StopProgram()
         {
             _isRunning = false;
+            _isPaused = false;
             _runBtn.SetEnabled(true);
             _stopBtn.SetEnabled(false);
+            _pauseBtn.SetEnabled(false);
+            _pauseBtn.text = "\u23f8";
             _panel.RemoveFromClassList("programmator-panel-running");
+            _panel.RemoveFromClassList("programmator-panel-paused");
+            NetworkService.Send(new StopProgramPacket());
             Debug.Log("[Programmator] Program stopped");
+        }
+
+        private void StepIn()
+        {
+            NetworkService.Send(new ProgramStepInPacket());
+            Debug.Log("[Programmator] Step In");
+        }
+
+        private void StepOver()
+        {
+            NetworkService.Send(new ProgramStepOverPacket());
+            Debug.Log("[Programmator] Step Over");
+        }
+
+        private void StepOut()
+        {
+            NetworkService.Send(new ProgramStepOutPacket());
+            Debug.Log("[Programmator] Step Out");
+        }
+
+        private void RenameProgram(int index)
+        {
+            if (index < 0 || index >= _programItems.Count) return;
+            _isRenameMode = true;
+            _renameTargetIndex = index;
+            _dialogTitle.text = "Переименовать";
+            _dialogConfirmBtn.text = "Переименовать";
+            _createInput.value = _programItems[index].Name;
+            _createDialog.style.display = DisplayStyle.Flex;
+            _createInput.Focus();
+            NetworkService.Send(new RenameProgramClickPacket());
+        }
+
+        private void ConfirmDialogAction()
+        {
+            if (_isRenameMode)
+            {
+                if (_renameTargetIndex < 0 || _renameTargetIndex >= _programItems.Count)
+                {
+                    HideCreateInput();
+                    return;
+                }
+                _programItems[_renameTargetIndex].Name = _createInput.value;
+                _programTitle.text = _createInput.value;
+                _isRenameMode = false;
+                HideCreateInput();
+                RefreshProgramList();
+            }
+            else
+            {
+                CreateNewProgram(_createInput.value);
+            }
         }
 
         private void UpdateCell(int row, int col)
@@ -1843,6 +1952,8 @@ namespace Fodinae.Scripts.UI.Programmator
         public void Hide()
         {
             if (_isRunning) StopProgram();
+            _isPaused = false;
+            _isRenameMode = false;
             ClearSelection();
             _joystick.Hide();
             _radial.Hide();

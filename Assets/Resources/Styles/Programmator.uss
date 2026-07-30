@@ -29,12 +29,16 @@
     border-width: 2px;
     padding: 10px;
     flex-direction: column;
-    width: 618px;
+    width: 600px;
     min-height: 520px;
 }
 
 .programmator-panel-running {
     border-color: rgba(51, 204, 51, 1);
+}
+
+.programmator-panel-paused {
+    border-color: rgba(230, 230, 77, 1);
 }
 
 /* ─── Panel (список программ) ─── */
@@ -155,6 +159,51 @@
     opacity: 0.4;
 }
 
+.programmator-btn-pause {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(89, 89, 0, 0.3);
+    color: rgba(230, 230, 77, 1);
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+    margin-left: 4px;
+}
+
+.programmator-btn-pause:hover {
+    background-color: rgba(128, 128, 0, 0.4);
+}
+
+.programmator-btn-pause:disabled {
+    opacity: 0.4;
+}
+
+.programmator-btn-step {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(0, 51, 102, 0.3);
+    color: rgba(77, 166, 255, 1);
+    font-size: 11px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+}
+
+.programmator-btn-step:hover {
+    background-color: rgba(0, 77, 153, 0.4);
+}
+
+.programmator-btn-step:disabled {
+    opacity: 0.4;
+}
+
+.programmator-step-group {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 12px;
+}
+
 /* ─── Close Button ─── */
 .programmator-btn-close {
     width: 24px;
@@ -201,7 +250,6 @@
 
 /* ─── Grid ─── */
 .programmator-grid-scroll {
-    max-height: 456px;
 }
 
 .programmator-grid-row {
@@ -212,7 +260,7 @@
 .programmator-grid-container {
     flex-direction: row;
     flex-wrap: wrap;
-    width: 608px;
+    justify-content: center;
 }
 
 .programmator-cell {
@@ -379,6 +427,22 @@
 
 .programmator-list-item-delete:hover {
     background-color: rgba(128, 0, 0, 0.4);
+}
+
+.programmator-list-item-rename {
+    width: 22px;
+    height: 22px;
+    background-color: transparent;
+    color: var(--color-text-dim);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+    margin-left: 8px;
+}
+
+.programmator-list-item-rename:hover {
+    color: white;
 }
 
 /* ─── Create Container ─── */
