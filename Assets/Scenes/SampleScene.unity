@@ -734,30 +734,6 @@ PrefabInstance:
       propertyPath: _moveSpeed
       value: 15
       objectReference: {fileID: 0}
-    - target: {fileID: 11400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
-      propertyPath: _moveActionReference
-      value: 
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400001, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
-      propertyPath: _target
-      value: 
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400001, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
-      propertyPath: _offset.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400001, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
-      propertyPath: _offset.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400001, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
-      propertyPath: _originalZ
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400001, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
-      propertyPath: _smoothSpeed
-      value: 5
-      objectReference: {fileID: 0}
     - target: {fileID: 21200000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
       propertyPath: m_SortingOrder
       value: 1
