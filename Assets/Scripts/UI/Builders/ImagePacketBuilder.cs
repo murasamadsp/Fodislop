@@ -40,12 +40,13 @@ namespace Fodinae.UI.Builders
 
         private static void LoadImage(VisualElement element, string uri, CancellationToken token)
         {
-            (Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).LoadAndApplyTexture(
+            var loader = Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            loader?.LoadAndApplyTexture(
                 (texture) =>
             {
-                if (element != null)
+                if (element != null && texture != null)
                 {
-                    element.style.backgroundImage = new StyleBackground(texture); // Set StyleBackground directly
+                    element.style.backgroundImage = new StyleBackground(texture);
                 }
             }, uri, token).Forget();
         }

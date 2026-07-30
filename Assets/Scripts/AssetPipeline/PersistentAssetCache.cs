@@ -11,7 +11,7 @@ namespace Fodinae
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any I/O failure without crashing the asset loading pipeline.")]
     public static class PersistentAssetCache
     {
-        private static string _cachePath;
+        private static string _cachePath = string.Empty;
         private static bool _isInitialized = false;
 
         static PersistentAssetCache()

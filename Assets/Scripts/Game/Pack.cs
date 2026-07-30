@@ -16,9 +16,9 @@ namespace Fodinae.Game
 {
     public class Pack : MonoBehaviour
     {
-        private SpriteRenderer _spriteRenderer;
-        private SpriteRenderer _clanRenderer;
-        private PackType _packType;
+        private SpriteRenderer? _spriteRenderer;
+        private SpriteRenderer? _clanRenderer;
+        private PackType? _packType;
         private byte _variant;
         private byte _linkedClan;
         private CancellationTokenSource? _cts;
@@ -26,7 +26,7 @@ namespace Fodinae.Game
         private Sprite? _clanSprite;
 
         private EffekseerHandle _effekseerHandle;
-        private EffekseerEffectAsset _effekseerAsset;
+        private EffekseerEffectAsset? _effekseerAsset;
         private bool _hasEffekseerEffect;
 
         protected void Awake()
@@ -77,7 +77,13 @@ namespace Fodinae.Game
             string packPath = $"Pack/{packName}/{_variant}";
 
             // 1. Try loading as a texture (existing behavior — static or animated sprite)
-            var packTexture = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetTextureAsync(packPath, token);
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            if (loader == null)
+            {
+                return;
+            }
+
+            var packTexture = await loader.GetTextureAsync(packPath, token);
             if (token.IsCancellationRequested || _spriteRenderer == null)
             {
                 return;
@@ -99,7 +105,7 @@ namespace Fodinae.Game
             }
 
             // 2. Texture not found — try loading as Effekseer effect (.efk data)
-            var efkBytes = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetAssetBytesAsync(packPath, timeoutSeconds: 10);
+            var efkBytes = await loader.GetAssetBytesAsync(packPath, timeoutSeconds: 10);
             if (token.IsCancellationRequested || efkBytes == null || efkBytes.Length < 4)
             {
                 return;
@@ -148,7 +154,13 @@ namespace Fodinae.Game
                 return;
             }
 
-            var clanTexture = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetTextureAsync($"Clan/{_linkedClan}", token);
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            if (loader == null)
+            {
+                return;
+            }
+
+            var clanTexture = await loader.GetTextureAsync($"Clan/{_linkedClan}", token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
             {
                 return;

@@ -30,18 +30,19 @@ namespace Fodinae
     [DefaultExecutionOrder(-10000)]
     public class ClientAssetLoader : MonoBehaviour, IAssetLoader
     {
-        public event Action<string, Texture2D> OnTextureLoaded;
+        public event Action<string, Texture2D>? OnTextureLoaded;
 
         private readonly AssetCache _cache = new(LoadBytesFromServerInternal);
 
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
-        private CancellationTokenSource _loopCts;
+        private CancellationTokenSource? _loopCts;
 
-        private Texture2D _placeholderTexture;
-        private Texture2D _errorTexture;
+        private Texture2D? _placeholderTexture;
+        private Texture2D? _errorTexture;
 
-        private IConnectionService _connectionService;
+        [Inject]
+        private IConnectionService _connectionService = null!;
 
         protected void Awake()
         {
@@ -69,7 +70,7 @@ namespace Fodinae
             }
         }
 
-        public UniTask<byte[]> GetAssetBytesAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 5)
+        public UniTask<byte[]?> GetAssetBytesAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 5)
         {
             return _cache.GetBytesAsync(filename, cancellationToken, timeoutSeconds);
         }
@@ -78,39 +79,40 @@ namespace Fodinae
         {
             var cleanFilename = filename.TrimStart('/').ToLowerInvariant();
             await GetAssetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
-            return GetAssetPath(cleanFilename);
+            return PersistentAssetCache.GetAssetPath(cleanFilename);
         }
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            var texture = await _cache.GetTextureAsync(filename, cancellationToken, timeoutSeconds: 5);
-
-            if (texture != null && !cancellationToken.IsCancellationRequested)
+            var texture = await _cache.GetTextureAsync(filename, cancellationToken);
+            if (texture != null)
             {
                 OnTextureLoaded?.Invoke(filename, texture);
             }
-
             return texture;
         }
 
-        public UniTask<AudioClip> GetAudioAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 10)
+        public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _cache.GetAudioAsync(filename, cancellationToken, timeoutSeconds);
+            return _cache.GetAudioAsync(filename, cancellationToken);
         }
 
-        public UniTask<Sprite[]> GetSpritesAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 10)
+        public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _cache.GetSpritesAsync(filename, cancellationToken, timeoutSeconds);
+            return _cache.GetSpritesAsync(filename, cancellationToken);
         }
 
-        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 10)
+        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _cache.GetAnimatedSpritesAsync(filename, cancellationToken, timeoutSeconds);
+            return _cache.GetAnimatedSpritesAsync(filename, cancellationToken);
         }
 
         public async UniTaskVoid LoadAndApplyTexture(Action<Texture2D> applyTextureAction, string filename, CancellationToken cancellationToken)
         {
-            applyTextureAction(_placeholderTexture);
+            if (_placeholderTexture != null)
+            {
+                applyTextureAction(_placeholderTexture);
+            }
 
             var texture = await GetTextureAsync(filename, cancellationToken);
 
@@ -128,7 +130,10 @@ namespace Fodinae
                 if (!HasAsset(filename))
                 {
                     Debug.LogError($"Failed to load texture for '{filename}'. Applying error texture.");
-                    applyTextureAction(_errorTexture);
+                    if (_errorTexture != null)
+                    {
+                        applyTextureAction(_errorTexture);
+                    }
                 }
             }
         }
@@ -171,12 +176,12 @@ namespace Fodinae
             {
                 var tsm = ServiceLocator.Resolve<ITextureStorageService>();
                 bool tsmHas = tsm != null && tsm.HasTexture(filename);
-                if (tsmHas)
+                if (tsmHas && tsm != null)
                 {
                     var localData = await tsm.GetTextureData(filename);
                     if (localData != null && localData.Length > 0)
                     {
-                        await SaveAssetAsync(filename, localData, null);
+                        await SaveAssetAsync(filename, localData, string.Empty);
                         return localData;
                     }
                 }
@@ -185,13 +190,13 @@ namespace Fodinae
             // 3. Try server network request if connected
             if (isConnected)
             {
-                string etag = HasAsset(filename) ? await GetETagAsync(filename) : null;
+                string? etag = HasAsset(filename) ? await GetETagAsync(filename) : null;
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
                 try
                 {
-                    var result = await GetAssetBytesFromServer(filename, etag, cts.Token);
+                    var result = await GetAssetBytesFromServer(filename, etag ?? string.Empty, cts.Token);
                     if (result != null && result.Length > 0)
                     {
                         return result;
@@ -221,7 +226,7 @@ namespace Fodinae
                     var localData = await tsm.GetTextureData(filename);
                     if (localData != null && localData.Length > 0)
                     {
-                        await SaveAssetAsync(filename, localData, null);
+                        await SaveAssetAsync(filename, localData, string.Empty);
                         return localData;
                     }
                 }
@@ -304,12 +309,12 @@ namespace Fodinae
                     if (assetPacket.Contents.Length == 0 && !string.IsNullOrEmpty(assetPacket.ETag))
                     {
                         var cachedAsset = await GetAssetAsync(assetPacket.Filename).ConfigureAwait(false);
-                        tcs.TrySetResult(cachedAsset);
+                        tcs.TrySetResult(cachedAsset ?? Array.Empty<byte>());
                     }
                     else
                     {
                         var etag = Calculate(assetPacket.Contents);
-                        await SaveAssetAsync(assetPacket.Filename, assetPacket.Contents, etag).ConfigureAwait(false);
+                        await SaveAssetAsync(assetPacket.Filename, assetPacket.Contents, etag ?? string.Empty).ConfigureAwait(false);
                         tcs.TrySetResult(assetPacket.Contents);
                     }
                 }

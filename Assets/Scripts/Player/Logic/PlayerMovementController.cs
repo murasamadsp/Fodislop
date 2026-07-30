@@ -33,8 +33,8 @@ namespace Fodinae.Player.Logic
         public Direction LastDirection => _lastSentDirection ?? Direction.Up;
         public event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
 
-        private Robot _robot;
-        private IPlayerInput _input;
+        private Robot? _robot;
+        private IPlayerInput? _input;
 
         private bool _autoDig = false;
         private bool _aggression = false;
@@ -43,19 +43,19 @@ namespace Fodinae.Player.Logic
         private float _lastDigTime;
         private Direction? _lastSentDirection;
         [Inject]
-        private IWorldDataStorage _storage = null!;
+        private IWorldDataStorage? _storage;
 
         [Inject]
-        private IServerConfig _serverConfig = null!;
+        private IServerConfig? _serverConfig;
 
         [Inject]
-        private INetworkService _networkService = null!;
+        private INetworkService? _networkService;
 
         [Inject]
-        private IMapDataProvider _mapDataProvider = null!;
+        private IMapDataProvider? _mapDataProvider;
 
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
 
         public static PlayerMovementController? LocalPlayer { get; private set; }
         public static event Action<PlayerMovementController>? OnLocalPlayerSpawned;
@@ -118,7 +118,7 @@ namespace Fodinae.Player.Logic
 
         protected void Update()
         {
-            if (_input == null)
+            if (_input == null || (_inputBlocker != null && _inputBlocker.IsInputBlocked))
             {
                 return;
             }
@@ -128,7 +128,7 @@ namespace Fodinae.Player.Logic
 
             if (_input.WantsToToggleAutoDig)
             {
-                NetworkService.Instance.SendAction(new ToggleAutoDigPacket());
+                _networkService?.SendAction(new ToggleAutoDigPacket());
             }
 
             if (_input.WantsToToggleAggression)
@@ -138,32 +138,32 @@ namespace Fodinae.Player.Logic
 
             if (_input.WantsToGeo)
             {
-                NetworkService.Instance.SendAction(new GeoPacket());
+                _networkService?.SendAction(new GeoPacket());
             }
 
             if (_input.WantsToHeal)
             {
-                NetworkService.Instance.SendAction(new HealPacket());
+                _networkService?.SendAction(new HealPacket());
             }
 
             if (_input.WantsToBuildCyan)
             {
-                NetworkService.Instance.SendAction(new BuildCyanPacket());
+                _networkService?.SendAction(new BuildCyanPacket());
             }
 
             if (_input.WantsToBuildGray)
             {
-                NetworkService.Instance.SendAction(new BuildGrayPacket());
+                _networkService?.SendAction(new BuildGrayPacket());
             }
 
             if (_input.WantsToBuildGreen)
             {
-                NetworkService.Instance.SendAction(new BuildGreenPacket());
+                _networkService?.SendAction(new BuildGreenPacket());
             }
 
             if (_input.WantsToBuildWhite)
             {
-                NetworkService.Instance.SendAction(new BuildWhitePacket());
+                _networkService?.SendAction(new BuildWhitePacket());
             }
         }
 
@@ -299,8 +299,8 @@ namespace Fodinae.Player.Logic
                     }
 
                     var currentCellType = storage.GetCell(currentX, currentServerY);
-                    float cooldown = _mapDataProvider.GetMoveCooldown(currentCellType);
-                    if (_input.IsCtrlPressed)
+                    float cooldown = _mapDataProvider != null ? _mapDataProvider.GetMoveCooldown(currentCellType) : 0.2f;
+                    if (_input.IsCtrlPressed && _mapDataProvider != null)
                     {
                         cooldown = _mapDataProvider.GetMoveCooldown(CellType.Empty);
                     }
@@ -344,6 +344,11 @@ namespace Fodinae.Player.Logic
 
                     var layer = storage.CellLayer;
                     if (layer == null)
+                    {
+                        return;
+                    }
+
+                    if (_mapDataProvider == null)
                     {
                         return;
                     }
@@ -398,8 +403,13 @@ namespace Fodinae.Player.Logic
 
         private void HandleDigInput()
         {
+            if (_input == null)
+            {
+                return;
+            }
+
             float digCooldown = _serverConfig != null ? _serverConfig.DigCooldown : 0.2f;
-            if (_input.WantsToDig || Time.time - _lastDigTime < digCooldown)
+            if (!_input.WantsToDig || Time.time - _lastDigTime < digCooldown)
             {
                 return;
             }

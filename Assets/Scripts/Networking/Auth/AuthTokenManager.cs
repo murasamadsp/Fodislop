@@ -9,7 +9,7 @@ namespace Fodinae.Networking.Auth
     {
         private const string PlayerPrefsKey = "AuthToken6";
 
-        public static event Action<string> OnTokenChanged;
+        public static event Action<string>? OnTokenChanged;
 
         public static string LoadToken() => PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
 

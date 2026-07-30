@@ -1,6 +1,7 @@
 #nullable enable
 
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Information;
@@ -18,10 +19,8 @@ namespace Fodinae.Networking.Processors
     {
         public void Process(RobotInfoPacket packet)
         {
-            if (Fodinae.Core.ServiceLocator.Resolve<RobotManager>() != null)
-            {
-                Fodinae.Core.ServiceLocator.Resolve<RobotManager>().UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
-            }
+            var mgr = ServiceLocator.Resolve<IRobotService>();
+            mgr?.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
         }
     }
 }

@@ -9,12 +9,12 @@ namespace Fodinae.World.Terrain
 {
     public class TerrainPrecalculator
     {
-        public Vector3[,] GridVertexOffsets;
-        public float[,] GridShadowValues;
-        public int[,] CellTilingDescriptors;
-        public byte[,] CellReliefMasks;
-        public bool[,] CellIsRelief;
-        public byte[,] CellSameCatMasks;
+        public Vector3[,] GridVertexOffsets { get; private set; } = null!;
+        public float[,] GridShadowValues { get; private set; } = null!;
+        public int[,] CellTilingDescriptors { get; private set; } = null!;
+        public byte[,] CellReliefMasks { get; private set; } = null!;
+        public bool[,] CellIsRelief { get; private set; } = null!;
+        public byte[,] CellSameCatMasks { get; private set; } = null!;
 
         public void EnsureCapacity(int meshWidth, int meshHeight)
         {
@@ -29,8 +29,10 @@ namespace Fodinae.World.Terrain
             }
         }
 
-        public void PrecalculateFull(TerrainCellCache cellCache, int meshWidth, int meshHeight, MapManager mm)
+        public void PrecalculateFull(TerrainCellCache cellCache, int meshWidth, int meshHeight)
         {
+            EnsureCapacity(meshWidth, meshHeight);
+
             int gw = meshWidth + 1;
             int gh = meshHeight + 1;
             for (int x = 0; x < gw; x++)
@@ -50,8 +52,10 @@ namespace Fodinae.World.Terrain
             }
         }
 
-        public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy, MapManager mm)
+        public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy)
         {
+            EnsureCapacity(meshWidth, meshHeight);
+
             int gw = meshWidth + 1;
             int gh = meshHeight + 1;
 
@@ -261,45 +265,54 @@ namespace Fodinae.World.Terrain
             int cy = y + 1;
             var data = cellCache.GetCellData(cx, cy);
 
+            var top = cellCache.GetCellData(cx, cy + 1);
+            var bottom = cellCache.GetCellData(cx, cy - 1);
+            var left = cellCache.GetCellData(cx - 1, cy);
+            var right = cellCache.GetCellData(cx + 1, cy);
+
             if (data.HasTileGroup)
             {
                 byte m = 0;
-                if (cellCache.GetCellData(cx - 1, cy).HasTileGroup && cellCache.GetCellData(cx - 1, cy).TileGroupId == data.TileGroupId)
+                if (left.HasTileGroup && left.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 0;
                 }
 
-                if (cellCache.GetCellData(cx - 1, cy - 1).HasTileGroup && cellCache.GetCellData(cx - 1, cy - 1).TileGroupId == data.TileGroupId)
+                var bottomLeft = cellCache.GetCellData(cx - 1, cy - 1);
+                if (bottomLeft.HasTileGroup && bottomLeft.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 1;
                 }
 
-                if (cellCache.GetCellData(cx, cy - 1).HasTileGroup && cellCache.GetCellData(cx, cy - 1).TileGroupId == data.TileGroupId)
+                if (bottom.HasTileGroup && bottom.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 2;
                 }
 
-                if (cellCache.GetCellData(cx + 1, cy - 1).HasTileGroup && cellCache.GetCellData(cx + 1, cy - 1).TileGroupId == data.TileGroupId)
+                var bottomRight = cellCache.GetCellData(cx + 1, cy - 1);
+                if (bottomRight.HasTileGroup && bottomRight.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 3;
                 }
 
-                if (cellCache.GetCellData(cx + 1, cy).HasTileGroup && cellCache.GetCellData(cx + 1, cy).TileGroupId == data.TileGroupId)
+                if (right.HasTileGroup && right.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 4;
                 }
 
-                if (cellCache.GetCellData(cx + 1, cy + 1).HasTileGroup && cellCache.GetCellData(cx + 1, cy + 1).TileGroupId == data.TileGroupId)
+                var topRight = cellCache.GetCellData(cx + 1, cy + 1);
+                if (topRight.HasTileGroup && topRight.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 5;
                 }
 
-                if (cellCache.GetCellData(cx, cy + 1).HasTileGroup && cellCache.GetCellData(cx, cy + 1).TileGroupId == data.TileGroupId)
+                if (top.HasTileGroup && top.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 6;
                 }
 
-                if (cellCache.GetCellData(cx - 1, cy + 1).HasTileGroup && cellCache.GetCellData(cx - 1, cy + 1).TileGroupId == data.TileGroupId)
+                var topLeft = cellCache.GetCellData(cx - 1, cy + 1);
+                if (topLeft.HasTileGroup && topLeft.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 7;
                 }
@@ -313,7 +326,7 @@ namespace Fodinae.World.Terrain
 
             byte rm = 0;
             bool isR = false;
-            if (cellCache.GetCellData(cx, cy + 1).ReliefGroup >= data.ReliefGroup)
+            if (top.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 1;
             }
@@ -322,7 +335,7 @@ namespace Fodinae.World.Terrain
                 isR = true;
             }
 
-            if (cellCache.GetCellData(cx - 1, cy).ReliefGroup >= data.ReliefGroup)
+            if (left.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 2;
             }
@@ -331,7 +344,7 @@ namespace Fodinae.World.Terrain
                 isR = true;
             }
 
-            if (cellCache.GetCellData(cx, cy - 1).ReliefGroup >= data.ReliefGroup)
+            if (bottom.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 4;
             }
@@ -340,7 +353,7 @@ namespace Fodinae.World.Terrain
                 isR = true;
             }
 
-            if (cellCache.GetCellData(cx + 1, cy).ReliefGroup >= data.ReliefGroup)
+            if (right.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 8;
             }
@@ -353,23 +366,23 @@ namespace Fodinae.World.Terrain
             CellIsRelief[x, y] = isR;
 
             byte sm = 0;
-            if (MapManager.IsRoundableLoose(cellCache.GetCellData(cx, cy + 1).Type))
+            if (MapManager.IsRoundableLoose(top.Type))
             {
                 sm |= 1;
             }
 
-            if (MapManager.IsRoundableLoose(cellCache.GetCellData(cx - 1, cy).Type))
+            if (MapManager.IsRoundableLoose(left.Type))
             {
                 sm |= 2;
             }
 
-            int bt = (int)cellCache.GetCellData(cx, cy - 1).Type;
+            int bt = (int)bottom.Type;
             if (MapManager.IsRoundableLoose((CellType)bt) || (bt < 32 || bt > 35))
             {
                 sm |= 4;
             }
 
-            if (MapManager.IsRoundableLoose(cellCache.GetCellData(cx + 1, cy).Type))
+            if (MapManager.IsRoundableLoose(right.Type))
             {
                 sm |= 8;
             }

@@ -34,9 +34,9 @@ namespace Fodinae.Game
         private readonly ushort _targetBotId;
         private readonly IReadOnlyList<StringPairPacket> _parameters;
 
-        private VFXPool.PooledSlot _slot;
-        private GameObject _gameObject;
-        private SpriteRenderer _spriteRenderer;
+        private VFXPool.PooledSlot? _slot;
+        private GameObject? _gameObject;
+        private SpriteRenderer? _spriteRenderer;
 
         private Color _primaryColor = Color.white;
         private float _speed = 1f;
@@ -48,11 +48,11 @@ namespace Fodinae.Game
         private ushort _attractorY;
         private bool _hasAttractorPosition;
 
-        private Dictionary<string, string> _textureOverrideMap;
+        private Dictionary<string, string>? _textureOverrideMap;
 
-        private float[] _effekseerDynamicInputs;
+        private float[]? _effekseerDynamicInputs;
 
-        private Sprite[] _animationFrames;
+        private Sprite[]? _animationFrames;
         private int _currentFrame;
         private float _frameTimer;
         private float _frameDuration = 0.1f;
@@ -71,7 +71,7 @@ namespace Fodinae.Game
 
         private readonly CancellationTokenSource _cts = new();
 
-        public ServerAudioEvent(AudioPacket packet, VFXPool.PooledSlot slot)
+        public ServerAudioEvent(AudioPacket packet, VFXPool.PooledSlot? slot)
         {
             _effectType = packet.EffectType;
             _sourceX = packet.X;
@@ -350,13 +350,14 @@ namespace Fodinae.Game
 
         private void PlayAudio()
         {
-            if (ServiceLocator.Resolve<IAudioSystem>() == null)
+            var audioSystem = ServiceLocator.Resolve<IAudioSystem>();
+            if (audioSystem == null)
             {
                 return;
             }
 
             string eventName = GetSfxEventName(_effectType);
-            ServiceLocator.Resolve<IAudioSystem>().PlayAt(eventName, _intendedWorldPosition);
+            audioSystem.PlayAt(eventName, _intendedWorldPosition);
         }
 
         private async UniTaskVoid LoadVisualAsync(CancellationToken token)
@@ -371,7 +372,7 @@ namespace Fodinae.Game
                     return;
                 }
 
-                var animData = await loader.GetAnimatedSpritesAsync(filename, timeoutSeconds: 10);
+                var animData = await loader.GetAnimatedSpritesAsync(filename, token);
                 if (token.IsCancellationRequested)
                 {
                     return;

@@ -15,7 +15,7 @@ namespace Fodinae.Player
 {
     public class PlayerInteractionController : MonoBehaviour
     {
-        private Camera _mainCamera;
+        private Camera? _mainCamera;
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
         private IMapDataProvider _mapManager = null!;
@@ -70,6 +70,16 @@ namespace Fodinae.Player
             {
                 Vector2 mousePos = Mouse.current.position.ReadValue();
                 if (IsPointerOverUI(mousePos))
+                {
+                    return;
+                }
+
+                if (_mainCamera == null)
+                {
+                    _mainCamera = Camera.main;
+                }
+
+                if (_mainCamera == null)
                 {
                     return;
                 }

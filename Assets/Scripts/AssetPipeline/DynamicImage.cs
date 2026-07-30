@@ -13,7 +13,7 @@ namespace Fodinae
     [RequireComponent(typeof(Image))]
     public class DynamicImage : MonoBehaviour
     {
-        private Image _image;
+        private Image? _image;
 
         protected void Awake()
         {
@@ -36,7 +36,8 @@ namespace Fodinae
             var cancellationToken = this.GetCancellationTokenOnDestroy();
 
             // Start the loading process and "forget" it. The loader handles the rest.
-            (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).LoadAndApplyTexture(applyAction, assetFilename, cancellationToken).Forget();
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            loader?.LoadAndApplyTexture(applyAction, assetFilename, cancellationToken).Forget();
         }
     }
 }

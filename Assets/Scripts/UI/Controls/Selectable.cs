@@ -8,10 +8,10 @@ namespace Fodinae.UI.Controls
     public class Selectable : BindableElement, INotifyValueChanged<bool>
     {
         private bool _value;
-        private VisualElement _checkedElement;
-        private VisualElement _uncheckedElement;
+        private VisualElement? _checkedElement;
+        private VisualElement? _uncheckedElement;
 
-        public string Group { get; set; }
+        public string? Group { get; set; }
 
         public bool value
         {

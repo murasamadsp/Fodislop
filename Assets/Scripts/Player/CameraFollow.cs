@@ -14,7 +14,7 @@ namespace Fodinae.Player
     {
         [Header("Follow Settings")]
         [SerializeField]
-        private Transform _target;
+        private Transform? _target;
         [SerializeField]
         private float _smoothSpeed = 5f;
         [SerializeField]
@@ -31,18 +31,18 @@ namespace Fodinae.Player
         private float _zoomSmoothness = 8f;
 
         private float _originalZ;
-        private Camera _camera;
+        private Camera? _camera;
         private float _targetZoom;
         private float _currentZoom;
         private float _lastZoom;
-        public event Action<float> OnZoomChanged;
-        private InputAction _scrollAction;
+        public event Action<float>? OnZoomChanged;
+        private InputAction? _scrollAction;
         private bool _scrollEnabled = true;
         private bool _cameraNullLogged;
         private bool _scrollNullLogged;
         private Vector3 _followVelocity;
         [Inject]
-        private IInputBlocker _inputBlocker;
+        private IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {

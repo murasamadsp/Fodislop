@@ -14,9 +14,9 @@ namespace Fodinae.World
     {
         [Header("Materials")]
         [SerializeField]
-        private Material _transitMaterial;
+        private Material? _transitMaterial;
         [SerializeField]
-        private Material _perspectiveMaterial;
+        private Material? _perspectiveMaterial;
 
         [Header("Settings")]
         [SerializeField]
@@ -31,12 +31,12 @@ namespace Fodinae.World
         private const float TRANSIT_HEIGHT = 2f;
         private const float PERSPECTIVE_HEIGHT = 2f;
         private const float TILE_SIZE = 32f;
-        private Mesh _transitMesh;
-        private Mesh _perspectiveMesh;
-        private MeshFilter _transitFilter;
-        private MeshFilter _perspectiveFilter;
-        private MeshRenderer _transitRenderer;
-        private MeshRenderer _perspectiveRenderer;
+        private Mesh? _transitMesh;
+        private Mesh? _perspectiveMesh;
+        private MeshFilter? _transitFilter;
+        private MeshFilter? _perspectiveFilter;
+        private MeshRenderer? _transitRenderer;
+        private MeshRenderer? _perspectiveRenderer;
 
         private readonly Vector2[] _uvTransit = new Vector2[4];
         private readonly Vector2[] _uvPers = new Vector2[4];
@@ -44,7 +44,7 @@ namespace Fodinae.World
         private readonly Vector3[] _verticesPers = new Vector3[4];
         private static readonly int[] Triangles = { 0, 1, 2, 3, 2, 1 };
 
-        private Camera _mainCamera;
+        private Camera? _mainCamera;
         private bool _texturesLoading;
 
 
@@ -143,12 +143,13 @@ namespace Fodinae.World
                 return;
             }
 
-            if (ServiceLocator.Resolve<MapManager>() == null)
+            var mapManager = ServiceLocator.Resolve<MapManager>();
+            if (mapManager == null)
             {
                 return;
             }
 
-            int worldHeight = ServiceLocator.Resolve<MapManager>().WorldHeight;
+            int worldHeight = mapManager.WorldHeight;
             float camX = _mainCamera.transform.position.x;
             float halfScreenW = _mainCamera.orthographicSize * _mainCamera.aspect;
 
@@ -162,6 +163,11 @@ namespace Fodinae.World
 
         private void UpdateTransit(float left, float right, float baseY, float camX)
         {
+            if (_transitMesh == null)
+            {
+                return;
+            }
+
             float uLeft = -(left - (Mathf.Floor(left / TILE_SIZE) * TILE_SIZE)) / TILE_SIZE;
             float uRight = uLeft + ((left - right) / TILE_SIZE);
 
@@ -182,6 +188,11 @@ namespace Fodinae.World
 
         private void UpdatePerspective(float left, float right, float baseY, float camX)
         {
+            if (_perspectiveMesh == null)
+            {
+                return;
+            }
+
             const float PERS_TILE_SIZE = 5f;
             float uLeft = -(left - (Mathf.Floor(left / PERS_TILE_SIZE) * PERS_TILE_SIZE)) / PERS_TILE_SIZE;
             float uRight = uLeft + ((left - right) / PERS_TILE_SIZE);
@@ -208,6 +219,17 @@ namespace Fodinae.World
 
         protected void OnDestroy()
         {
+            if (_transitMesh != null)
+            {
+                Destroy(_transitMesh);
+                _transitMesh = null;
+            }
+
+            if (_perspectiveMesh != null)
+            {
+                Destroy(_perspectiveMesh);
+                _perspectiveMesh = null;
+            }
         }
     }
 }

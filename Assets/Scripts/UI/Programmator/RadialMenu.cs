@@ -15,11 +15,11 @@ namespace Fodinae.UI.Programmator
         private readonly VisualElement _outerRingBg;
         private readonly VisualElement _backButton;
 
-        private int[] _innerIds;
+        private int[] _innerIds = Array.Empty<int>();
         private int _innerCount;
-        private Color[] _innerItemColors;
+        private Color[]? _innerItemColors;
 
-        private int[] _outerIds;
+        private int[] _outerIds = Array.Empty<int>();
         private int _outerCount;
 
         private readonly float _innerRadius = 55f;
@@ -31,9 +31,9 @@ namespace Fodinae.UI.Programmator
         private int _hoveredOuterIndex = -1;
         private Vector2 _centerPosition;
 
-        public event Action<int> OnCategoryClicked; // inner ring item clicked
-        public event Action<int> OnItemClicked;      // outer ring item clicked (actual operator)
-        public event Action OnBackClicked;
+        public event Action<int>? OnCategoryClicked; // inner ring item clicked
+        public event Action<int>? OnItemClicked;      // outer ring item clicked (actual operator)
+        public event Action? OnBackClicked;
 
         public VisualElement Root => _root;
         public bool IsShown => _root.parent != null;

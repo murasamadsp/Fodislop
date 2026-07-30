@@ -21,7 +21,7 @@ namespace Fodinae.Core.Interfaces
         Color GetCellMinimapColor(CellType type);
         void UpdateMovementSpeeds(MovementSpeedPacket packet);
         void LoadWorldInit(WorldInitPacket packet);
-        Action OnWorldInitialized { get; }
-        Action OnWorldDataLoaded { get; }
+        Action? OnWorldInitialized { get; }
+        Action? OnWorldDataLoaded { get; }
     }
 }

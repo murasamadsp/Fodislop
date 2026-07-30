@@ -52,14 +52,14 @@ namespace Fodinae
         }
 
         /// <summary>Retrieve a decoded AudioClip from WAV bytes. Cached after first decode.</summary>
-        public UniTask<AudioClip> GetAudioAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAudioAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve an animated Sprite[] from GIF/WebP. Cached after first decode.</summary>
-        public UniTask<Sprite[]> GetSpritesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -141,17 +141,17 @@ namespace Fodinae
 
             // ── Raw bytes ──
             private byte[]? _bytes;
-            private TaskCompletionSource<byte[]?> _bytesPromise;
+            private TaskCompletionSource<byte[]?>? _bytesPromise;
 
             // ── Derivated formats (lazy, computed on first request) ──
             private Texture2D? _texture;
-            private TaskCompletionSource<Texture2D?> _texturePromise;
+            private TaskCompletionSource<Texture2D?>? _texturePromise;
 
             private AudioClip? _audio;
-            private TaskCompletionSource<AudioClip?> _audioPromise;
+            private TaskCompletionSource<AudioClip?>? _audioPromise;
 
             private Sprite[]? _sprites;
-            private TaskCompletionSource<Sprite[]?> _spritePromise;
+            private TaskCompletionSource<Sprite[]?>? _spritePromise;
 
             // Stored alongside sprites for AnimatedSpriteData lookups
             private float _spriteFps;
@@ -201,7 +201,7 @@ namespace Fodinae
                 {
                     if (_bytes != null)
                     {
-                        return UniTask.FromResult(_bytes);
+                        return UniTask.FromResult<byte[]?>(_bytes);
                     }
 
                     if (_bytesPromise != null)
@@ -216,7 +216,7 @@ namespace Fodinae
                 {
                     if (_bytes != null)
                     {
-                        return UniTask.FromResult(_bytes);
+                        return UniTask.FromResult<byte[]?>(_bytes);
                     }
 
                     if (_bytesPromise != null)
@@ -236,7 +236,7 @@ namespace Fodinae
                 {
                     if (_texture != null)
                     {
-                        return UniTask.FromResult(_texture);
+                        return UniTask.FromResult<Texture2D?>(_texture);
                     }
 
                     if (_texturePromise != null)
@@ -249,7 +249,7 @@ namespace Fodinae
                 {
                     if (_texture != null)
                     {
-                        return UniTask.FromResult(_texture);
+                        return UniTask.FromResult<Texture2D?>(_texture);
                     }
 
                     if (_texturePromise != null)
@@ -257,7 +257,7 @@ namespace Fodinae
                         return AwaitTask(_texturePromise.Task);
                     }
 
-                    _texturePromise = new TaskCompletionSource<Texture2D>();
+                    _texturePromise = new TaskCompletionSource<Texture2D?>();
                 }
 
                 return DecodeTexture(loader);
@@ -269,7 +269,7 @@ namespace Fodinae
                 {
                     if (_audio != null)
                     {
-                        return UniTask.FromResult(_audio);
+                        return UniTask.FromResult<AudioClip?>(_audio);
                     }
 
                     if (_audioPromise != null)
@@ -282,7 +282,7 @@ namespace Fodinae
                 {
                     if (_audio != null)
                     {
-                        return UniTask.FromResult(_audio);
+                        return UniTask.FromResult<AudioClip?>(_audio);
                     }
 
                     if (_audioPromise != null)
@@ -290,7 +290,7 @@ namespace Fodinae
                         return AwaitTask(_audioPromise.Task);
                     }
 
-                    _audioPromise = new TaskCompletionSource<AudioClip>();
+                    _audioPromise = new TaskCompletionSource<AudioClip?>();
                 }
 
                 return DecodeAudio(loader);
@@ -302,7 +302,7 @@ namespace Fodinae
                 {
                     if (_sprites != null)
                     {
-                        return UniTask.FromResult(_sprites);
+                        return UniTask.FromResult<Sprite[]?>(_sprites);
                     }
 
                     if (_spritePromise != null)
@@ -315,7 +315,7 @@ namespace Fodinae
                 {
                     if (_sprites != null)
                     {
-                        return UniTask.FromResult(_sprites);
+                        return UniTask.FromResult<Sprite[]?>(_sprites);
                     }
 
                     if (_spritePromise != null)
@@ -323,7 +323,7 @@ namespace Fodinae
                         return AwaitTask(_spritePromise.Task);
                     }
 
-                    _spritePromise = new TaskCompletionSource<Sprite[]>();
+                    _spritePromise = new TaskCompletionSource<Sprite[]?>();
                 }
 
                 return DecodeSprites(loader);
@@ -358,7 +358,7 @@ namespace Fodinae
                         return AwaitAnimatedSprites(_spritePromise.Task);
                     }
 
-                    _spritePromise = new TaskCompletionSource<Sprite[]>();
+                    _spritePromise = new TaskCompletionSource<Sprite[]?>();
                 }
 
                 return DecodeAndWrapSprites(loader);
@@ -366,14 +366,14 @@ namespace Fodinae
 
             // ── Private Static Methods ──
 
-            private static async UniTask<AnimatedSpriteData> AwaitAnimatedSprites(Task<Sprite[]> task)
+            private static async UniTask<AnimatedSpriteData> AwaitAnimatedSprites(Task<Sprite[]?> task)
             {
                 var frames = await task;
 
                 // NOTE: cache entry will have the correct FPS stored; but since we returned a
                 // promise, the stored values are stale for awaiters. This path is rare (concurrent
                 // first requests) — the primary path is the fast-return above.
-                return new AnimatedSpriteData(frames, 10f, 0);
+                return new AnimatedSpriteData(frames ?? Array.Empty<Sprite>(), 10f, 0);
             }
 
             private static async UniTask<T> AwaitTask<T>(Task<T> task)
@@ -414,7 +414,7 @@ namespace Fodinae
                 }
             }
 
-            private async UniTask<Texture2D?> DecodeTexture(Func<UniTask<byte[]>> loader)
+            private async UniTask<Texture2D?> DecodeTexture(Func<UniTask<byte[]?>> loader)
             {
                 try
                 {
@@ -422,7 +422,7 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailTexture(null);
+                        FailTexture(new Exception("Empty or null bytes"));
                         return null;
                     }
 
@@ -430,7 +430,7 @@ namespace Fodinae
                     await UniTask.SwitchToMainThread();
 
                     var containerType = AnimationContainerDecoder.DetectType(bytes);
-                    Texture2D result;
+                    Texture2D? result;
 
                     if (containerType == AnimationContainerDecoder.ContainerType.GIF)
                     {
@@ -468,7 +468,7 @@ namespace Fodinae
                         }
                     }
 
-                    TaskCompletionSource<Texture2D> texPromise;
+                    TaskCompletionSource<Texture2D?>? texPromise;
                     lock (_lock)
                     {
                         _texture = result;
@@ -490,25 +490,25 @@ namespace Fodinae
             {
                 lock (_lock)
                 {
-                    _texturePromise.TrySetException(ex ?? new Exception("Texture decode failed"));
+                    _texturePromise?.TrySetException(ex ?? new Exception("Texture decode failed"));
                     _texturePromise = null;
                 }
             }
 
-            private async UniTask<AudioClip?> DecodeAudio(Func<UniTask<byte[]>> loader)
+            private async UniTask<AudioClip?> DecodeAudio(Func<UniTask<byte[]?>> loader)
             {
                 try
                 {
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailAudio(null);
+                        FailAudio(new Exception("Empty or null bytes"));
                         return null;
                     }
 
                     UnityEngine.Debug.LogWarning("[AssetCache] WavUtility is deprecated. Decoding wav is not supported.");
-                    AudioClip clip = null;
-                    TaskCompletionSource<AudioClip> audioPromise;
+                    AudioClip? clip = null;
+                    TaskCompletionSource<AudioClip?>? audioPromise;
                     lock (_lock)
                     {
                         _audio = clip;
@@ -530,28 +530,28 @@ namespace Fodinae
             {
                 lock (_lock)
                 {
-                    _audioPromise.TrySetException(ex ?? new Exception("Audio decode failed"));
+                    _audioPromise?.TrySetException(ex ?? new Exception("Audio decode failed"));
                     _audioPromise = null;
                 }
             }
 
-            private async UniTask<AnimatedSpriteData> DecodeAndWrapSprites(Func<UniTask<byte[]>> loader)
+            private async UniTask<AnimatedSpriteData> DecodeAndWrapSprites(Func<UniTask<byte[]?>> loader)
             {
                 var frames = await DecodeSprites(loader);
                 lock (_lock)
                 {
-                    return new AnimatedSpriteData(frames, _spriteFps, _spriteFrameHeight);
+                    return new AnimatedSpriteData(frames ?? Array.Empty<Sprite>(), _spriteFps, _spriteFrameHeight);
                 }
             }
 
-            private async UniTask<Sprite[]?> DecodeSprites(Func<UniTask<byte[]>> loader)
+            private async UniTask<Sprite[]?> DecodeSprites(Func<UniTask<byte[]?>> loader)
             {
                 try
                 {
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailSprites(null);
+                        FailSprites(new Exception("Empty or null bytes"));
                         return null;
                     }
 
@@ -590,7 +590,7 @@ namespace Fodinae
                         result = Array.Empty<Sprite>();
                     }
 
-                    TaskCompletionSource<Sprite[]> spritePromise;
+                    TaskCompletionSource<Sprite[]?>? spritePromise;
                     lock (_lock)
                     {
                         _sprites = result;
@@ -614,7 +614,7 @@ namespace Fodinae
             {
                 lock (_lock)
                 {
-                    _spritePromise.TrySetException(ex ?? new Exception("Sprite decode failed"));
+                    _spritePromise?.TrySetException(ex ?? new Exception("Sprite decode failed"));
                     _spritePromise = null;
                 }
             }

@@ -7,8 +7,8 @@ namespace Fodinae.UI
 {
     public class Tooltip
     {
-        private VisualElement _tooltipElement;
-        private Label _tooltipLabel;
+        private VisualElement? _tooltipElement;
+        private Label? _tooltipLabel;
         private bool _isVisible;
 
         public void Initialize(UIDocument doc)
@@ -30,7 +30,7 @@ namespace Fodinae.UI
 
         public void Show(string text, Vector2 screenPos)
         {
-            if (_tooltipElement == null)
+            if (_tooltipElement == null || _tooltipLabel == null)
             {
                 return;
             }
@@ -64,8 +64,13 @@ namespace Fodinae.UI
             _tooltipElement.style.top = screenPos.y + 12;
         }
 
-        public static void AttachTo(VisualElement element, string text, Tooltip tooltip)
+        public static void AttachTo(VisualElement element, string text, Tooltip? tooltip)
         {
+            if (tooltip == null)
+            {
+                return;
+            }
+
             element.RegisterCallback<MouseEnterEvent>(evt =>
             {
                 var screenPos = evt.mousePosition;

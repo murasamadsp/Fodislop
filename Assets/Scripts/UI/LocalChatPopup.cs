@@ -14,13 +14,13 @@ namespace Fodinae.UI
 {
     public class LocalChatPopup : MonoBehaviour
     {
-        private UIDocument _doc;
-        private VisualElement _overlay;
-        private TextField _inputField;
-        private VisualElement _internalInput;
+        private UIDocument? _doc;
+        private VisualElement? _overlay;
+        private TextField? _inputField;
+        private VisualElement? _internalInput;
         private bool _isOpen = false;
-        private Controls.ChatInputBlinker _blinker;
-        private CancellationTokenSource _idleCts;
+        private Controls.ChatInputBlinker? _blinker;
+        private CancellationTokenSource? _idleCts;
 
         protected void OnDestroy()
         {
@@ -37,7 +37,10 @@ namespace Fodinae.UI
             }
 
             CreateUI();
-            _overlay.style.display = DisplayStyle.None;
+            if (_overlay != null)
+            {
+                _overlay.style.display = DisplayStyle.None;
+            }
         }
 
         private void CreateUI()
@@ -68,7 +71,10 @@ namespace Fodinae.UI
             });
             _inputField.RegisterValueChangedCallback(_ => OnInputChanged());
 
-            _doc.rootVisualElement.Add(_overlay);
+            if (_doc != null && _overlay != null)
+            {
+                _doc.rootVisualElement.Add(_overlay);
+            }
 
             _internalInput = _inputField.Q<VisualElement>(className: "unity-text-field__input");
 
@@ -77,9 +83,12 @@ namespace Fodinae.UI
                 _internalInput.AddToClassList("lchat-internal-input");
             }
 
-            _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
+            if (_inputField != null && _internalInput != null)
+            {
+                _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
+            }
             var uss = Resources.Load<StyleSheet>("chat-input");
-            if (uss != null)
+            if (uss != null && _inputField != null)
             {
                 _inputField.styleSheets.Add(uss);
             }
@@ -87,7 +96,7 @@ namespace Fodinae.UI
             var chatUss = Resources.Load<StyleSheet>("Styles/Chat");
             if (chatUss != null)
             {
-                _overlay.styleSheets.Add(chatUss);
+                _overlay!.styleSheets.Add(chatUss);
             }
         }
 
@@ -124,6 +133,11 @@ namespace Fodinae.UI
 
         private void SendMessage()
         {
+            if (_inputField == null)
+            {
+                return;
+            }
+
             string text = _inputField.value.Trim();
             if (!string.IsNullOrEmpty(text))
             {
@@ -143,15 +157,25 @@ namespace Fodinae.UI
         public void Show()
         {
             _isOpen = true;
-            _overlay.style.display = DisplayStyle.Flex;
-            _inputField.value = string.Empty;
+            if (_overlay != null)
+            {
+                _overlay.style.display = DisplayStyle.Flex;
+            }
+
+            if (_inputField != null)
+            {
+                _inputField.value = string.Empty;
+            }
             FocusAfterDelay().Forget();
         }
 
         private async UniTaskVoid FocusAfterDelay()
         {
             await UniTask.DelayFrame(1);
-            _inputField.Focus();
+            if (_inputField != null)
+            {
+                _inputField.Focus();
+            }
         }
 
         public void Hide()

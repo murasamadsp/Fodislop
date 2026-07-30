@@ -16,19 +16,19 @@ namespace Fodinae.UI
 {
     public class GlobalChatUI : MonoBehaviour
     {
-        private UIDocument _doc;
-        private VisualElement _panel;
-        private ScrollView _scrollView;
-        private TextField _inputField;
-        private VisualElement _internalInput;
-        private Button _sendButton;
-        private Button _colorButton;
-        private VisualElement _colorGrid;
+        private UIDocument? _doc;
+        private VisualElement? _panel;
+        private ScrollView? _scrollView;
+        private TextField? _inputField;
+        private VisualElement? _internalInput;
+        private Button? _sendButton;
+        private Button? _colorButton;
+        private VisualElement? _colorGrid;
         private System.Drawing.Color _currentColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private bool _isOpen = false;
         private const int MAX_MESSAGES = 20;
-        private Controls.ChatInputBlinker _blinker;
-        private CancellationTokenSource _idleCts;
+        private Controls.ChatInputBlinker? _blinker;
+        private CancellationTokenSource? _idleCts;
 
         protected void OnDestroy()
         {
@@ -45,7 +45,10 @@ namespace Fodinae.UI
             }
 
             CreateUI();
-            _panel.style.display = DisplayStyle.None;
+            if (_panel != null)
+            {
+                _panel.style.display = DisplayStyle.None;
+            }
             Networking.NetworkService.Instance?.Send(new QueryChatHistoryPacket("global", 0));
         }
 
@@ -158,7 +161,10 @@ namespace Fodinae.UI
 
             _panel.Add(_colorGrid);
 
-            _doc.rootVisualElement.Add(_panel);
+            if (_doc != null && _panel != null)
+            {
+                _doc.rootVisualElement.Add(_panel);
+            }
 
             _internalInput = _inputField.Q<VisualElement>(className: "unity-text-field__input");
 
@@ -167,22 +173,30 @@ namespace Fodinae.UI
                 _internalInput.AddToClassList("gchat-internal-input");
             }
 
-            _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
+            if (_inputField != null && _internalInput != null)
+            {
+                _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
+            }
             var uss = Resources.Load<StyleSheet>("chat-input");
             if (uss != null)
             {
-                _panel.styleSheets.Add(uss);
+                _panel!.styleSheets.Add(uss);
             }
 
             var chatUss = Resources.Load<StyleSheet>("Styles/Chat");
             if (chatUss != null)
             {
-                _panel.styleSheets.Add(chatUss);
+                _panel!.styleSheets.Add(chatUss);
             }
         }
 
         private void OnSendClicked()
         {
+            if (_inputField == null)
+            {
+                return;
+            }
+
             string text = _inputField.value.Trim();
             if (string.IsNullOrEmpty(text))
             {
@@ -295,16 +309,26 @@ namespace Fodinae.UI
 
         private void ToggleColorGrid()
         {
-            _colorGrid.style.display = _colorGrid.style.display == DisplayStyle.None
-                ? DisplayStyle.Flex
-                : DisplayStyle.None;
+            if (_colorGrid != null)
+            {
+                _colorGrid.style.display = _colorGrid.style.display == DisplayStyle.None
+                    ? DisplayStyle.Flex
+                    : DisplayStyle.None;
+            }
         }
 
         private void SelectColor(System.Drawing.Color color)
         {
             _currentColor = color;
-            _colorButton.style.backgroundColor = new Color(color.R / 255f, color.G / 255f, color.B / 255f);
-            _colorGrid.style.display = DisplayStyle.None;
+            if (_colorButton != null)
+            {
+                _colorButton.style.backgroundColor = new Color(color.R / 255f, color.G / 255f, color.B / 255f);
+            }
+
+            if (_colorGrid != null)
+            {
+                _colorGrid.style.display = DisplayStyle.None;
+            }
             Networking.NetworkService.Instance?.Send(new ChangeChatColorPacket(color));
         }
     }

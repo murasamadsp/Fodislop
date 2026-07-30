@@ -9,7 +9,7 @@ namespace Fodinae.UI
     public class ModalWindowHandler
     {
         private readonly UIDocument _doc;
-        private VisualElement _overlay;
+        private VisualElement? _overlay;
 
         public ModalWindowHandler(UIDocument doc)
         {

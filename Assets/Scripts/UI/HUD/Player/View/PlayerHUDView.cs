@@ -44,7 +44,7 @@ namespace Fodinae.UI.HUD.Player.View
         private bool _isLoaded;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
-        private IVisualElementScheduledItem _skeletonPulse;
+        private IVisualElementScheduledItem? _skeletonPulse;
         private VisualElement? _panel;
         private Button? _bonusButton;
         private VisualElement? _bonusPanel;
@@ -148,7 +148,7 @@ namespace Fodinae.UI.HUD.Player.View
                     return;
                 }
 
-                _crystalTextures.Add(tex);
+                _crystalTextures.Add(tex!);
             }
         }
 
@@ -197,8 +197,11 @@ namespace Fodinae.UI.HUD.Player.View
             }
 
             RebuildCrystalRows();
-            _model.OnStatsChanged += RefreshAll;
-            _isLoaded = _model.Health > 0 || _model.Level > 0;
+            if (_model != null)
+            {
+                _model.OnStatsChanged += RefreshAll;
+                _isLoaded = _model.Health > 0 || _model.Level > 0;
+            }
             if (!_isLoaded)
             {
                 StartSkeletonPulse();
@@ -347,8 +350,8 @@ namespace Fodinae.UI.HUD.Player.View
         private void ToggleBonusPanel()
         {
             _isBonusOpen = !_isBonusOpen;
-            _bonusPanel.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            _bonusButton.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
+            _bonusPanel!.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            _bonusButton!.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
             if (_isBonusOpen)
             {
                 UpdateDailyBonusPanel();
@@ -397,15 +400,15 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (stats.DailyBonusAvailable)
             {
-                _bonusStatusLabel.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
-                _bonusStatusLabel.style.color = Color.green;
-                _bonusClaimButton.style.display = DisplayStyle.Flex;
+                _bonusStatusLabel!.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
+                _bonusStatusLabel!.style.color = Color.green;
+                _bonusClaimButton!.style.display = DisplayStyle.Flex;
             }
             else
             {
-                _bonusStatusLabel.text = "Ежедневный бонус: Нет активных бонусов";
-                _bonusStatusLabel.style.color = Color.gray;
-                _bonusClaimButton.style.display = DisplayStyle.None;
+                _bonusStatusLabel!.text = "Ежедневный бонус: Нет активных бонусов";
+                _bonusStatusLabel!.style.color = Color.gray;
+                _bonusClaimButton!.style.display = DisplayStyle.None;
             }
 
             UpdateStatusPanelPosition();
@@ -468,7 +471,7 @@ namespace Fodinae.UI.HUD.Player.View
                         UpdateStatusLabel(label, kvp.Value);
                     }
 
-                    label.style.color = kvp.Value.Color;
+                    label!.style.color = kvp.Value.Color;
                 }
                 else
                 {
@@ -595,8 +598,8 @@ namespace Fodinae.UI.HUD.Player.View
             }
 
             _currentSkillRow = new VisualElement();
-            _currentSkillRow.AddToClassList("hud-skill-row");
-            _skillContainer.Add(_currentSkillRow);
+            _currentSkillRow!.AddToClassList("hud-skill-row");
+            _skillContainer!.Add(_currentSkillRow!);
             _skillCountInRow = 0;
         }
 
@@ -715,14 +718,14 @@ namespace Fodinae.UI.HUD.Player.View
                 }
 
                 float alpha = Mathf.Lerp(pulseMin, pulseMax, t / pulseDuration);
-                _nicknameLabel.style.opacity = alpha;
-                _levelLabel.style.opacity = alpha;
-                _hpLabel.style.opacity = alpha;
-                _hpBarFill.style.opacity = alpha;
-                _moneyLabel.style.opacity = alpha;
-                _credsLabel.style.opacity = alpha;
-                _geologyLabel.style.opacity = alpha;
-                _basketPercentLabel.style.opacity = alpha;
+                if (_nicknameLabel != null) _nicknameLabel.style.opacity = alpha;
+                if (_levelLabel != null) _levelLabel.style.opacity = alpha;
+                if (_hpLabel != null) _hpLabel.style.opacity = alpha;
+                if (_hpBarFill != null) _hpBarFill.style.opacity = alpha;
+                if (_moneyLabel != null) _moneyLabel.style.opacity = alpha;
+                if (_credsLabel != null) _credsLabel.style.opacity = alpha;
+                if (_geologyLabel != null) _geologyLabel.style.opacity = alpha;
+                if (_basketPercentLabel != null) _basketPercentLabel.style.opacity = alpha;
             }).Every(16);
         }
 
@@ -734,14 +737,14 @@ namespace Fodinae.UI.HUD.Player.View
                 _skeletonPulse = null;
             }
 
-            _nicknameLabel.style.opacity = 1;
-            _levelLabel.style.opacity = 1;
-            _hpLabel.style.opacity = 1;
-            _hpBarFill.style.opacity = 1;
-            _moneyLabel.style.opacity = 1;
-            _credsLabel.style.opacity = 1;
-            _geologyLabel.style.opacity = 1;
-            _basketPercentLabel.style.opacity = 1;
+            if (_nicknameLabel != null) _nicknameLabel.style.opacity = 1;
+            if (_levelLabel != null) _levelLabel.style.opacity = 1;
+            if (_hpLabel != null) _hpLabel.style.opacity = 1;
+            if (_hpBarFill != null) _hpBarFill.style.opacity = 1;
+            if (_moneyLabel != null) _moneyLabel.style.opacity = 1;
+            if (_credsLabel != null) _credsLabel.style.opacity = 1;
+            if (_geologyLabel != null) _geologyLabel.style.opacity = 1;
+            if (_basketPercentLabel != null) _basketPercentLabel.style.opacity = 1;
         }
 
         private void RefreshAll()
@@ -763,23 +766,32 @@ namespace Fodinae.UI.HUD.Player.View
                 StopSkeletonPulse();
             }
 
-            _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
-            _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
-            _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
-            _hpLabel.style.opacity = 1;
+            if (_nicknameLabel != null) _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
+            if (_levelLabel != null) _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
+            if (_hpLabel != null)
+            {
+                _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
+                _hpLabel.style.opacity = 1;
+            }
 
             float pct = stats.HealthPercent;
-            _hpBarFill.style.width = new Length(pct * 100, LengthUnit.Percent);
-            _hpBarFill.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
+            if (_hpBarFill != null)
+            {
+                _hpBarFill!.style.width = new Length(pct * 100, LengthUnit.Percent);
+                _hpBarFill!.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
+            }
 
-            _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
-            _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+            if (_moneyLabel != null) _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
+            if (_credsLabel != null) _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
 
-            _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
-                ? "Геология: 0/0"
-                : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+            if (_geologyLabel != null)
+            {
+                _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
+                    ? "Геология: 0/0"
+                    : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+            }
 
-            _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+            if (_basketPercentLabel != null) _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
             for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
             {
                 _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
@@ -788,7 +800,7 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void RebuildCrystalRows()
         {
-            _basketContainer.Clear();
+            _basketContainer?.Clear();
             _basketCrystalLabels.Clear();
 
             for (int i = 0; i < _crystalTextures.Count; i++)
@@ -1084,19 +1096,21 @@ namespace Fodinae.UI.HUD.Player.View
                 return;
             }
 
-            if (!stats.IsMissionActive)
+            if (stats.IsMissionActive)
             {
-                _missionPanel.style.display = DisplayStyle.None;
+                _missionPanel!.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                _missionPanel!.style.display = DisplayStyle.None;
                 return;
             }
-
-            _missionPanel.style.display = DisplayStyle.Flex;
-            _missionTitleLabel.text = stats.MissionTitle ?? "Миссия";
-            _missionDescLabel.text = stats.MissionDescription ?? string.Empty;
+            _missionTitleLabel!.text = stats.MissionTitle ?? "Миссия";
+            _missionDescLabel!.text = stats.MissionDescription ?? string.Empty;
 
             float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
-            _missionProgressFill.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
-            _missionProgressLabel.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
+            _missionProgressFill!.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
+            _missionProgressLabel!.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
         }
 
         private void CreateProgrammatorButton(VisualElement root, System.Action onClick)

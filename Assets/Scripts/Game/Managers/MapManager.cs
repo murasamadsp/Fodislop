@@ -47,8 +47,8 @@ namespace Fodinae.Game.Managers
             }
         }
 
-        public Action OnWorldInitialized { get; set; }
-        public Action OnWorldDataLoaded { get; set; }
+        public Action? OnWorldInitialized { get; set; }
+        public Action? OnWorldDataLoaded { get; set; }
 
         private static readonly CellConfigurationPacket _fallbackConfig = new CellConfigurationPacket
         {
@@ -61,11 +61,11 @@ namespace Fodinae.Game.Managers
             ReliefGroup = 0,
         };
 
-        private CellConfigurationPacket[] _cellConfigurations;
+        private CellConfigurationPacket[]? _cellConfigurations;
         private Dictionary<CellType, int> _cellToTileGroup = new();
         private Dictionary<CellType, ushort> _cellMoveSpeeds = new();
-        private string _worldCodeName;
-        private string _worldDisplayName;
+        private string _worldCodeName = string.Empty;
+        private string _worldDisplayName = string.Empty;
         private ushort _width;
         private ushort _height;
 

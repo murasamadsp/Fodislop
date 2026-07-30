@@ -16,7 +16,7 @@ namespace Fodinae.Networking.Processors
 {
     public class InventoryProcessor : IPacketProcessor<InventoryPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
     {
-        private static IInventoryModel Model => Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
+        private static IInventoryModel? Model => Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
 
         public void Process(InventoryPacket packet)
         {

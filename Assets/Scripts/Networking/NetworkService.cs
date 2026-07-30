@@ -24,7 +24,7 @@ namespace Fodinae.Networking
 {
     public class NetworkService : MonoBehaviour, INetworkService
     {
-        public static NetworkService Instance { get; private set; }
+        public static NetworkService? Instance { get; private set; }
 
         [Inject]
         private IConnectionService _connectionService = null!;
@@ -62,7 +62,7 @@ namespace Fodinae.Networking
             }
         }
 
-        private PlayerMovementController _cachedPlayerController;
+        private PlayerMovementController? _cachedPlayerController;
 
         public void SendAction(IActionClientPacket action)
         {
@@ -215,8 +215,8 @@ namespace Fodinae.Networking
 
         private class Subscription
         {
-            public Delegate OriginalHandler { get; set; }
-            public Action<object> Wrapper { get; set; }
+            public Delegate OriginalHandler { get; set; } = null!;
+            public Action<object> Wrapper { get; set; } = null!;
         }
     }
 }

@@ -8,7 +8,7 @@ namespace Fodinae.Core
     public static class SharedMaterialCache
     {
         private static readonly Dictionary<Texture2D, Material> _materials = new();
-        private static Shader _shader;
+        private static Shader? _shader;
 
         private static Shader Shader
         {

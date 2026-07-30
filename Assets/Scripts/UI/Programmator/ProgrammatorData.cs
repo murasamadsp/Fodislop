@@ -14,8 +14,8 @@ namespace Fodinae.UI.Programmator
         public const int CELLS_PER_PAGE = COLS * ROWS;
 
         public static List<int> Codes = new(new int[CELLS_PER_PAGE]);
-        public static List<string> Values = new(new string[CELLS_PER_PAGE]);
-        public static List<string> Labels = new(new string[CELLS_PER_PAGE]);
+        public static List<string?> Values = new(new string?[CELLS_PER_PAGE]);
+        public static List<string?> Labels = new(new string?[CELLS_PER_PAGE]);
         public static int PageCount => Codes.Count / CELLS_PER_PAGE;
 
         public static int CurrentPage;
@@ -29,8 +29,8 @@ namespace Fodinae.UI.Programmator
             }
 
             Codes.AddRange(new int[CELLS_PER_PAGE]);
-            Values.AddRange(new string[CELLS_PER_PAGE]);
-            Labels.AddRange(new string[CELLS_PER_PAGE]);
+            Values.AddRange(new string?[CELLS_PER_PAGE]);
+            Labels.AddRange(new string?[CELLS_PER_PAGE]);
         }
 
         public static bool RemoveLastPage()
@@ -56,8 +56,8 @@ namespace Fodinae.UI.Programmator
         private struct UndoSnapshot
         {
             public int[] Codes;
-            public string[] Labels;
-            public string[] Values;
+            public string?[] Labels;
+            public string?[] Values;
         }
 
         private static readonly Stack<UndoSnapshot> _undoStack = new();
@@ -103,8 +103,8 @@ namespace Fodinae.UI.Programmator
             });
             var snap = _undoStack.Pop();
             Codes = new List<int>(snap.Codes);
-            Labels = new List<string>(snap.Labels);
-            Values = new List<string>(snap.Values);
+            Labels = new List<string?>(snap.Labels);
+            Values = new List<string?>(snap.Values);
             return true;
         }
 
@@ -123,8 +123,8 @@ namespace Fodinae.UI.Programmator
             });
             var snap = _redoStack.Pop();
             Codes = new List<int>(snap.Codes);
-            Labels = new List<string>(snap.Labels);
-            Values = new List<string>(snap.Values);
+            Labels = new List<string?>(snap.Labels);
+            Values = new List<string?>(snap.Values);
             return true;
         }
 

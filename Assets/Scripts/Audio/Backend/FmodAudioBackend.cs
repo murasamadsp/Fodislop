@@ -66,7 +66,7 @@ namespace Fodinae.Audio.Backend
                 return true;
             }
 
-            string bankFilePath = null;
+            string? bankFilePath = null;
             var localPath = System.IO.Path.Combine(Application.streamingAssetsPath, "Audio", $"{cleanBankName}.bank");
 
             if (System.IO.File.Exists(localPath))

@@ -24,31 +24,31 @@ namespace Fodinae.UI
         private int _uiSize = 200;
 
         // UI
-        private Text _coordinatesText;
-        private RawImage _minimapImage;
-        private Texture2D _minimapTexture;
-        private GameObject _minimapObj;
-        private GameObject _textObj;
+        private Text? _coordinatesText;
+        private RawImage? _minimapImage;
+        private Texture2D? _minimapTexture;
+        private GameObject? _minimapObj;
+        private GameObject? _textObj;
 
         // World state
-        private PlayerMovementController _player;
+        private PlayerMovementController? _player;
         [Inject]
-        private MapStorage _mapStorage = null!;
+        private MapStorage? _mapStorage = null!;
 
         [Inject]
-        private MapManager _mapManager = null!;
-        private WorldLayer<CellType> _cellLayer;
+        private MapManager? _mapManager = null!;
+        private WorldLayer<CellType>? _cellLayer;
         private int _worldWidth;
         private int _worldHeight;
         private int _chunkSize;
         private int _heightChunks;
 
         // Pixel buffer and cell color cache
-        private Color32[] _pixelColors;
+        private Color32[]? _pixelColors;
         private readonly Dictionary<CellType, Color32> _cellColors = new(256);
 
         // Per-update chunk cache (reused, cleared each frame — allocation-free)
-        private readonly Dictionary<int, CellType[]> _chunkCache = new();
+        private readonly Dictionary<int, CellType[]?> _chunkCache = new();
 
         // Throttle state
         private Vector2Int _lastUpdatePos; public Vector2Int LastUpdatePos => _lastUpdatePos;
@@ -174,6 +174,11 @@ namespace Fodinae.UI
 
         private void CacheCellColors()
         {
+            if (_mapManager == null)
+            {
+                return;
+            }
+
             for (int i = 0; i <= 255; i++)
             {
                 CellType cellType = (CellType)i;
@@ -189,7 +194,17 @@ namespace Fodinae.UI
 
         private void InitializeWorldState()
         {
+            if (_mapStorage == null || _mapManager == null)
+            {
+                return;
+            }
+
             _cellLayer = _mapStorage.CellLayer;
+            if (_cellLayer == null)
+            {
+                return;
+            }
+
             _worldWidth = _mapManager.WorldWidth;
             _worldHeight = _mapManager.WorldHeight;
             _chunkSize = _cellLayer.ChunkSize;
@@ -306,9 +321,14 @@ namespace Fodinae.UI
             const int HALF_SIZE = TEXTURE_SIZE / 2;
             int minX = playerX - HALF_SIZE;
             const int TEX_SIZE = TEXTURE_SIZE;
-            Color32[] colors = _pixelColors;
+            Color32[]? colors = _pixelColors;
+            if (colors == null)
+            {
+                return;
+            }
+
             Dictionary<CellType, Color32> cellColors = _cellColors;
-            Dictionary<int, CellType[]> cache = _chunkCache;
+            Dictionary<int, CellType[]?> cache = _chunkCache;
             cache.Clear();
 
             int index = 0;
@@ -348,10 +368,10 @@ namespace Fodinae.UI
                     int chunkX = serverX / _chunkSize;
                     int chunkIdx = chunkY + (chunkX * _heightChunks);
 
-                    if (!cache.TryGetValue(chunkIdx, out CellType[] chunk))
+                    if (!cache.TryGetValue(chunkIdx, out CellType[]? chunk))
                     {
                         // Don't create missing chunks, don't touch LRU (no cache pollution)
-                        chunk = _cellLayer.GetChunk(chunkIdx, false, false);
+                        chunk = _cellLayer?.GetChunk(chunkIdx, false, false);
                         cache[chunkIdx] = chunk;
                     }
 
@@ -375,8 +395,11 @@ namespace Fodinae.UI
             colors[((cx - 1) * TEX_SIZE) + cx] = MarkerColor;
             colors[((cx + 1) * TEX_SIZE) + cx] = MarkerColor;
 
-            _minimapTexture.SetPixels32(colors);
-            _minimapTexture.Apply(true); // Async GPU upload — non-blocking
+            if (_minimapTexture != null)
+            {
+                _minimapTexture.SetPixels32(colors);
+                _minimapTexture.Apply(true);
+            } // Async GPU upload — non-blocking
         }
 
         private void UpdateCoordinatesText(int x, int y)

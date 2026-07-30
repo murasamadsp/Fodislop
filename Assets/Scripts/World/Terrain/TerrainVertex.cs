@@ -1,37 +1,20 @@
-#nullable enable
-
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace Fodinae.World.Terrain
 {
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
+    [StructLayout(LayoutKind.Sequential)]
     public struct TerrainVertex
     {
-        [System.Runtime.InteropServices.FieldOffset(0)]
-        public Vector3 Position;
+        public Vector3 Position; // 12 bytes (offset 0)
+        public Color32 Color;    // 4 bytes  (offset 12 -> 16 bytes total, aligning UV1/Vector4 to 16-byte boundary)
 
-        [System.Runtime.InteropServices.FieldOffset(12)]
-        public Color Color;
-
-        [System.Runtime.InteropServices.FieldOffset(28)]
-        public Vector2 UV0;
-
-        [System.Runtime.InteropServices.FieldOffset(36)]
-        public Vector4 UV1;   // subAtlasRects
-
-        [System.Runtime.InteropServices.FieldOffset(52)]
-        public Vector4 UV2;   // tileSizeUVs
-
-        [System.Runtime.InteropServices.FieldOffset(68)]
-        public Vector4 UV3;   // worldPositions
-
-        [System.Runtime.InteropServices.FieldOffset(84)]
-        public Vector4 UV4;   // animationData
-
-        [System.Runtime.InteropServices.FieldOffset(100)]
-        public Vector4 UV5;   // packedReliefShadowLocalUV
-
-        [System.Runtime.InteropServices.FieldOffset(116)]
-        public Vector4 UV6;   // glowData (x = cellGlow)
+        public Vector2 UV0;      // 8 bytes  (offset 16)
+        public Vector4 UV1;      // 16 bytes (subAtlasRects)
+        public Vector4 UV2;      // 16 bytes (tileSizeUVs)
+        public Vector4 UV3;      // 16 bytes (worldPositions)
+        public Vector4 UV4;      // 16 bytes (animationData)
+        public Vector4 UV5;      // 16 bytes (packedReliefShadowLocalUV)
+        public Vector4 UV6;      // 16 bytes (glowData)
     }
 }

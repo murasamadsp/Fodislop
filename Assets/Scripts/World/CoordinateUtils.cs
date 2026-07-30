@@ -25,9 +25,10 @@ namespace Fodinae.World
             }
 
             _lastFrame = frame;
-            if (ServiceLocator.Resolve<MapManager>() != null && ServiceLocator.Resolve<MapManager>().WorldHeight > 0)
+            var mm = ServiceLocator.Resolve<MapManager>();
+            if (mm != null && mm.WorldHeight > 0)
             {
-                _cachedHeight = ServiceLocator.Resolve<MapManager>().WorldHeight;
+                _cachedHeight = mm.WorldHeight;
             }
             else
             {

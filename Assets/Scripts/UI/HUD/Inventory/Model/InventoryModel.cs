@@ -19,26 +19,29 @@ namespace Fodinae.UI.HUD.Inventory.Model
         [Inject]
         private INetworkService _networkService = null!;
 
-        private ItemData[] _slots = new ItemData[TOTALSLOTS];
+        private ItemData?[] _slots = new ItemData?[TOTALSLOTS];
 
-        public event Action<int> OnSlotChanged;
+        public event Action<int>? OnSlotChanged;
 
         private int _selectedSlot = -1;
         public int SelectedSlot => _selectedSlot;
         public event Action<int>? OnSlotSelected;
 
-        public ItemData GetSlot(int index) => _slots[index];
-        public void SetSlot(int index, ItemData item)
+        public ItemData? GetSlot(int index) => (index >= 0 && index < _slots.Length) ? _slots[index] : null;
+        public void SetSlot(int index, ItemData? item)
         {
-            _slots[index] = item;
-            OnSlotChanged?.Invoke(index);
-            if (index == _selectedSlot)
+            if (index >= 0 && index < _slots.Length)
             {
-                OnSlotSelected?.Invoke(index);
+                _slots[index] = item;
+                OnSlotChanged?.Invoke(index);
+                if (index == _selectedSlot)
+                {
+                    OnSlotSelected?.Invoke(index);
+                }
             }
         }
 
-        public static bool CanStack(ItemData a, ItemData b)
+        public static bool CanStack(ItemData? a, ItemData? b)
         {
             if (a == null || b == null)
             {

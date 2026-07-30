@@ -12,7 +12,7 @@ namespace Fodinae.World
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {
-        private WorldBackgroundSetup _backgroundSetup;
+        private WorldBackgroundSetup? _backgroundSetup;
 
         protected void Awake()
         {

@@ -66,7 +66,7 @@ namespace Fodinae.UI.Builders
                 gridItems.Add((childElement, row, col, rowSpan, colSpan));
             }
 
-            EventCallback<GeometryChangedEvent> onGeometryChanged = null;
+            EventCallback<GeometryChangedEvent>? onGeometryChanged = null;
             onGeometryChanged = (evt) =>
             {
                 gridRoot.UnregisterCallback<GeometryChangedEvent>(onGeometryChanged);

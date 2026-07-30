@@ -19,7 +19,8 @@ namespace Fodinae.Game.Managers
         public void PlayEffect(AudioPacket packet)
         {
             var vfxType = MapAudioToVFX(packet.EffectType);
-            var slot = ServiceLocator.Resolve<VFXPool>() != null ? ServiceLocator.Resolve<VFXPool>().Acquire(vfxType) : null;
+            var vfxPool = ServiceLocator.Resolve<IVFXService>() as VFXPool;
+            var slot = vfxPool != null ? vfxPool.Acquire(vfxType) : null;
 
             var effect = new ServerAudioEvent(packet, slot);
             _activeEffects.Add(effect);

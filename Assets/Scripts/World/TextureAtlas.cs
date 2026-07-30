@@ -19,11 +19,11 @@ namespace Fodinae.World
         public int CELL_SIZE { get; }
         public int Padding { get; }
 
-        private Texture2D _atlasTexture;
+        private Texture2D? _atlasTexture;
 
-        public Texture2D Texture => _atlasTexture;
+        public Texture2D? Texture => _atlasTexture;
 
-        private Color32[] _atlasPixels;
+        private Color32[]? _atlasPixels;
         private readonly ConcurrentDictionary<CellType, AtlasCell> _cells = new();
         private readonly List<Rectangle> _freeRectangles = new();
         private readonly List<Rectangle> _usedRectangles = new();
@@ -102,9 +102,12 @@ namespace Fodinae.World
                 _placeholderTextures.Clear();
 
                 EnsurePixelBuffer();
-                Array.Clear(_atlasPixels, 0, _atlasPixels.Length);
-                _atlasTexture.SetPixels32(_atlasPixels);
-                _atlasTexture.Apply();
+                if (_atlasPixels != null && _atlasTexture != null)
+                {
+                    Array.Clear(_atlasPixels, 0, _atlasPixels.Length);
+                    _atlasTexture.SetPixels32(_atlasPixels);
+                    _atlasTexture.Apply();
+                }
 
                 _isDirty = false;
             }
@@ -234,12 +237,15 @@ namespace Fodinae.World
                 return;
             }
 
-            _atlasTexture.SetPixels32(_atlasPixels);
-            _atlasTexture.Apply();
+            if (_atlasTexture != null)
+            {
+                _atlasTexture.SetPixels32(_atlasPixels);
+                _atlasTexture.Apply();
+            }
             _isDirty = false;
         }
 
-        public async UniTask<Texture2D> GetAtlasTexture()
+        public async UniTask<Texture2D?> GetAtlasTexture()
         {
             if (_isDirty)
             {
@@ -317,12 +323,20 @@ namespace Fodinae.World
                 await UniTask.SwitchToMainThread();
             }
 
-            _atlasTexture.SetPixels32(_atlasPixels);
-            _atlasTexture.Apply();
+            if (_atlasTexture != null && _atlasPixels != null)
+            {
+                _atlasTexture.SetPixels32(_atlasPixels);
+                _atlasTexture.Apply();
+            }
         }
 
         private void CopyPixelsToAtlasArray(Color32[] sourcePixels, int width, int height, Rectangle destination)
         {
+            if (_atlasPixels == null)
+            {
+                return;
+            }
+
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -378,9 +392,10 @@ namespace Fodinae.World
 
         private static Color GetCellColor(CellType cellType)
         {
-            if (ServiceLocator.Resolve<MapManager>() != null)
+            var mapManager = ServiceLocator.Resolve<MapManager>();
+            if (mapManager != null)
             {
-                var serverColor = ServiceLocator.Resolve<MapManager>().GetCellMinimapColor(cellType);
+                var serverColor = mapManager.GetCellMinimapColor(cellType);
                 if (serverColor.a > 0)
                 {
                     return serverColor;

@@ -27,19 +27,19 @@ namespace Fodinae.UI.Programmator
         private const float Center = 100f;
         private const float RootSize = 200f;
 
-        private readonly VisualElement[] _dirItems = new VisualElement[8];
-        private readonly Label[] _dirLabels = new Label[8];
-        private VisualElement _centerItem;
-        private Label _centerLabel;
+        private readonly VisualElement?[] _dirItems = new VisualElement?[8];
+        private readonly Label?[] _dirLabels = new Label?[8];
+        private VisualElement? _centerItem;
+        private Label? _centerLabel;
 
         // Pre-loaded textures
-        private readonly Texture2D[] _dirClickTex = new Texture2D[8];
-        private readonly Texture2D[] _dirDragTex = new Texture2D[8];
-        private readonly Texture2D[] _centerDragCellTex = new Texture2D[8];
-        private readonly Texture2D[] _centerDragShiftTex = new Texture2D[8];
-        private Texture2D _centerTex;
+        private readonly Texture2D?[] _dirClickTex = new Texture2D?[8];
+        private readonly Texture2D?[] _dirDragTex = new Texture2D?[8];
+        private readonly Texture2D?[] _centerDragCellTex = new Texture2D?[8];
+        private readonly Texture2D?[] _centerDragShiftTex = new Texture2D?[8];
+        private Texture2D? _centerTex;
 
-        public event System.Action<ProgAction> OnOperatorSelected;
+        public event System.Action<ProgAction>? OnOperatorSelected;
 
         // Direction button click → absolute Cell* (compass directions, N→clockwise)
         private static readonly ProgAction[] DirClickOps =
@@ -197,7 +197,7 @@ namespace Fodinae.UI.Programmator
                         _dragTargetDir = _atan2ToDir[raw];
 
                         var ops = CenterDragOps[_dragTargetDir];
-                        Texture2D previewTex;
+                        Texture2D? previewTex;
                         if (dist >= NearFarThresh && ops.shift != ProgAction.Cell)
                         {
                             previewTex = _centerDragShiftTex[_dragTargetDir];
@@ -311,8 +311,12 @@ namespace Fodinae.UI.Programmator
             _dragTargetDir = -1;
         }
 
-        private static void SetItemIcon(VisualElement item, Label label, Texture2D tex, string fallback)
+        private static void SetItemIcon(VisualElement? item, Label? label, Texture2D? tex, string fallback)
         {
+            if (item == null || label == null)
+            {
+                return;
+            }
             // Remove any existing Image child
             for (int i = item.childCount - 1; i >= 0; i--)
             {

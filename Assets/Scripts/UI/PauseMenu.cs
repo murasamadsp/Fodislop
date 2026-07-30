@@ -27,23 +27,23 @@ namespace Fodinae.UI
     {
         public static bool IsMenuOpen { get; private set; }
 
-        private UIDocument _doc;
-        private VisualElement _menuPanel;
-        private VisualElement _mainPage;
-        private VisualElement _settingsPage;
+        private UIDocument? _doc;
+        private VisualElement? _menuPanel;
+        private VisualElement? _mainPage;
+        private VisualElement? _settingsPage;
         private bool _isOpen;
-        private InputAction _escapeAction;
+        private InputAction? _escapeAction;
         private float _originalScale;
-        private Button _fullscreenButton;
-        private Button _simpleGraphicsButton;
-        private Button _headlightButton;
+        private Button? _fullscreenButton;
+        private Button? _simpleGraphicsButton;
+        private Button? _headlightButton;
 
         [Inject]
-        private INetworkService _networkService;
+        private INetworkService _networkService = null!;
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
-        private TerrainRenderer _terrainRenderer;
+        private TerrainRenderer _terrainRenderer = null!;
 
         protected void Start()
         {
@@ -227,7 +227,10 @@ namespace Fodinae.UI
                 {
                     PlayerPrefs.SetFloat("UIScale", v);
                     PlayerPrefs.Save();
-                    _doc.panelSettings.scale = v;
+                    if (_doc != null && _doc.panelSettings != null)
+                    {
+                        _doc.panelSettings.scale = v;
+                    }
                     foreach (var canvas in FindObjectsByType<Canvas>())
                     {
                         canvas.scaleFactor = v;
@@ -370,7 +373,7 @@ namespace Fodinae.UI
                 }
             }
 
-            if (_settingsPage.style.display == DisplayStyle.Flex)
+            if (_settingsPage != null && _settingsPage.style.display == DisplayStyle.Flex)
             {
                 CloseSettings();
                 return;
@@ -390,7 +393,10 @@ namespace Fodinae.UI
         {
             Screen.fullScreen = !Screen.fullScreen;
             Debug.Log($"[PauseMenu] Fullscreen: {Screen.fullScreen}");
-            _fullscreenButton.text = Screen.fullScreen ? "Полный экран" : "Оконный";
+            if (_fullscreenButton != null)
+            {
+                _fullscreenButton.text = Screen.fullScreen ? "Полный экран" : "Оконный";
+            }
         }
 
         private void ToggleSimpleGraphics()
@@ -406,7 +412,10 @@ namespace Fodinae.UI
             terrain.SetSimpleGraphics(newValue);
             PlayerPrefs.SetInt("SimpleGraphics", newValue ? 1 : 0);
             PlayerPrefs.Save();
-            _simpleGraphicsButton.text = newValue ? "Простая" : "Обычная";
+            if (_simpleGraphicsButton != null)
+            {
+                _simpleGraphicsButton.text = newValue ? "Простая" : "Обычная";
+            }
         }
 
         private void ToggleHeadlight()
@@ -437,16 +446,30 @@ namespace Fodinae.UI
 
             PlayerPrefs.SetInt("UseLight2D", newValue ? 1 : 0);
             PlayerPrefs.Save();
-            _headlightButton.text = newValue ? "Вкл" : "Выкл";
+            if (_headlightButton != null)
+            {
+                _headlightButton.text = newValue ? "Вкл" : "Выкл";
+            }
         }
 
         private void OpenMenu()
         {
             _isOpen = true;
             IsMenuOpen = true;
-            _menuPanel.style.display = DisplayStyle.Flex;
-            _mainPage.style.display = DisplayStyle.Flex;
-            _settingsPage.style.display = DisplayStyle.None;
+            if (_menuPanel != null)
+            {
+                _menuPanel.style.display = DisplayStyle.Flex;
+            }
+
+            if (_mainPage != null)
+            {
+                _mainPage.style.display = DisplayStyle.Flex;
+            }
+
+            if (_settingsPage != null)
+            {
+                _settingsPage.style.display = DisplayStyle.None;
+            }
         }
 
         private void CloseMenu()
@@ -454,7 +477,10 @@ namespace Fodinae.UI
             SendClientConfig();
             _isOpen = false;
             IsMenuOpen = false;
-            _menuPanel.style.display = DisplayStyle.None;
+            if (_menuPanel != null)
+            {
+                _menuPanel.style.display = DisplayStyle.None;
+            }
         }
 
         private void SendClientConfig()
@@ -479,14 +505,28 @@ namespace Fodinae.UI
 
         private void OpenSettings()
         {
-            _mainPage.style.display = DisplayStyle.None;
-            _settingsPage.style.display = DisplayStyle.Flex;
+            if (_mainPage != null)
+            {
+                _mainPage.style.display = DisplayStyle.None;
+            }
+
+            if (_settingsPage != null)
+            {
+                _settingsPage.style.display = DisplayStyle.Flex;
+            }
         }
 
         private void CloseSettings()
         {
-            _settingsPage.style.display = DisplayStyle.None;
-            _mainPage.style.display = DisplayStyle.Flex;
+            if (_settingsPage != null)
+            {
+                _settingsPage.style.display = DisplayStyle.None;
+            }
+
+            if (_mainPage != null)
+            {
+                _mainPage.style.display = DisplayStyle.Flex;
+            }
         }
 
         private void QuitGame()
@@ -496,6 +536,11 @@ namespace Fodinae.UI
 
         private void ShowQuitConfirmation()
         {
+            if (_doc == null)
+            {
+                return;
+            }
+
             var root = _doc.rootVisualElement;
 
             var overlay = new VisualElement();

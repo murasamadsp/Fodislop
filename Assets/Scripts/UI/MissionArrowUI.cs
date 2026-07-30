@@ -12,9 +12,9 @@ namespace Fodinae.UI
 {
     public class MissionArrowUI : MonoBehaviour
     {
-        private UIDocument _doc;
-        private VisualElement _arrow;
-        private Camera _camera;
+        private UIDocument? _doc;
+        private VisualElement? _arrow;
+        private Camera? _camera;
         private ushort? _targetX;
         private ushort? _targetY;
         [Inject]
@@ -80,7 +80,10 @@ namespace Fodinae.UI
             _targetX = stats.MissionArrowX;
             _targetY = stats.MissionArrowY;
             Debug.Log($"[MissionArrowUI] Arrow target set: ({_targetX}, {_targetY}), showing element");
-            _arrow.style.display = DisplayStyle.Flex;
+            if (_arrow != null)
+            {
+                _arrow.style.display = DisplayStyle.Flex;
+            }
         }
 
         protected void LateUpdate()
@@ -93,11 +96,16 @@ namespace Fodinae.UI
             var worldPos = CoordinateUtils.ServerToUnityPos(_targetX.Value, _targetY.Value);
             var screenPos = _camera.WorldToScreenPoint(worldPos);
 
+            if (_doc == null || _doc.rootVisualElement == null || _doc.rootVisualElement.panel == null || _arrow == null)
+            {
+                return;
+            }
+
             if (screenPos.z < 0f)
             {
                 if (_arrow.style.display != DisplayStyle.None)
                 {
-                    _arrow.style.display = DisplayStyle.None;
+_arrow!.style.display = DisplayStyle.None;
                 }
 
                 return;

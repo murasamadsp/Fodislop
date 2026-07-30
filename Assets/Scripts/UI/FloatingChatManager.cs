@@ -9,8 +9,8 @@ namespace Fodinae.UI
 {
     public class FloatingChatManager : MonoBehaviour
     {
-        private Camera _camera;
-        private FloatingChatBubble _bubblePrefab;
+        private Camera? _camera;
+        private FloatingChatBubble? _bubblePrefab;
         private readonly System.Collections.Generic.List<FloatingChatBubble> _activeBubbles = new();
 
         protected void Start()
@@ -36,13 +36,19 @@ namespace Fodinae.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
-            var robot = Fodinae.Core.ServiceLocator.Resolve<RobotManager>().GetOrCreateRobot(packet.BotId);
+            var robotManager = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
+            var robot = robotManager?.GetOrCreateRobot(packet.BotId);
             if (robot == null)
             {
                 return;
             }
 
             if (!IsInCameraView(robot.transform.position))
+            {
+                return;
+            }
+
+            if (_bubblePrefab == null)
             {
                 return;
             }

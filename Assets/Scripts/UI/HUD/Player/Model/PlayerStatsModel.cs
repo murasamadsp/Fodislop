@@ -12,7 +12,7 @@ namespace Fodinae.UI.HUD.Player.Model
     {
         private readonly Dictionary<string, StatusLineEntry> _statusLines = new();
 
-        public event Action OnStatusLinesChanged;
+        public event Action? OnStatusLinesChanged;
 
         public IReadOnlyDictionary<string, StatusLineEntry> StatusLines => _statusLines;
 
@@ -71,17 +71,17 @@ namespace Fodinae.UI.HUD.Player.Model
         public ushort? MissionArrowX { get; private set; }
         public ushort? MissionArrowY { get; private set; }
 
-        public event Action OnStatsChanged;
-        public event Action OnHealthChanged;
-        public event Action OnCurrencyChanged;
-        public event Action OnGeologyChanged;
-        public event Action OnLevelChanged;
-        public event Action OnNicknameChanged;
-        public event Action OnBasketChanged;
+        public event Action? OnStatsChanged;
+        public event Action? OnHealthChanged;
+        public event Action? OnCurrencyChanged;
+        public event Action? OnGeologyChanged;
+        public event Action? OnLevelChanged;
+        public event Action? OnNicknameChanged;
+        public event Action? OnBasketChanged;
         public event Action<SkillType, long, long>? OnSkillProgress;
-        public event Action OnDailyBonusChanged;
-        public event Action OnMissionChanged;
-        public event Action OnMissionArrowChanged;
+        public event Action? OnDailyBonusChanged;
+        public event Action? OnMissionChanged;
+        public event Action? OnMissionArrowChanged;
 
         public bool DailyBonusAvailable { get; private set; }
 

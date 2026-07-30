@@ -14,22 +14,22 @@ namespace Fodinae.UI
 {
     public class WorldMapController : MonoBehaviour
     {
-        private CameraFollow _cameraFollow;
-        private PlayerMovementController _player;
-        private TerrainRenderer _terrain;
+        private CameraFollow? _cameraFollow;
+        private PlayerMovementController? _player;
+        private TerrainRenderer? _terrain;
         private WorldMapRenderer? _mapRenderer;
-        private InputAction _mapToggleAction;
+        private InputAction? _mapToggleAction;
 
         private bool _isInMapMode;
         private Vector3 _storedCamPos;
         private float _storedCamZoom;
 
         // HUD elements
-        private Fodinae.UI.HUD.Player.View.PlayerHUDView _playerHud;
-        private Fodinae.UI.HUD.Inventory.View.InventoryView _inventory;
-        private FPSCounter _fps;
-        private MinimapController _minimap;
-        private PauseMenu _pauseMenu;
+        private Fodinae.UI.HUD.Player.View.PlayerHUDView? _playerHud;
+        private Fodinae.UI.HUD.Inventory.View.InventoryView? _inventory;
+        private FPSCounter? _fps;
+        private MinimapController? _minimap;
+        private PauseMenu? _pauseMenu;
 
         protected void Start()
         {
@@ -96,10 +96,13 @@ namespace Fodinae.UI
             }
 
             _isInMapMode = true;
-            _cameraFollow.SetScrollEnabled(false);
+            if (_cameraFollow != null)
+            {
+                _cameraFollow.SetScrollEnabled(false);
+            }
 
             // Store camera state
-            _storedCamPos = _cameraFollow.transform.position;
+            _storedCamPos = _cameraFollow!.transform.position;
             _storedCamZoom = _cameraFollow.GetCurrentZoom();
 
             if (_terrain != null)
@@ -131,7 +134,10 @@ namespace Fodinae.UI
             }
 
             _isInMapMode = false;
-            _cameraFollow.SetScrollEnabled(true);
+            if (_cameraFollow != null)
+            {
+                _cameraFollow.SetScrollEnabled(true);
+            }
 
             if (_mapRenderer != null)
             {

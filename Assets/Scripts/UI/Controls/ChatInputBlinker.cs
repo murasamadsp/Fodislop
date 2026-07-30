@@ -7,7 +7,7 @@ namespace Fodinae.UI.Controls
 {
     public class ChatInputBlinker
     {
-        private IVisualElementScheduledItem _blinkItem;
+        private IVisualElementScheduledItem? _blinkItem;
         private bool _cursorVisible = true;
         private readonly TextField _inputField;
         private readonly VisualElement _internalInput;

@@ -22,12 +22,12 @@ namespace Fodinae
         private IConnectionService _connectionService = null!;
 
         [SerializeField]
-        private Texture2D _loaderTexture;
-        private UIDocument _doc;
-        private VisualElement _mainMenuContainer;
-        private VisualElement _loaderContainer;
+        private Texture2D? _loaderTexture;
+        private UIDocument? _doc;
+        private VisualElement? _mainMenuContainer;
+        private VisualElement? _loaderContainer;
         private bool _hasShownLoader = false;
-        private Button _playButton;
+        private Button? _playButton;
 
         protected void OnEnable()
         {
@@ -80,7 +80,7 @@ namespace Fodinae
                 _doc.panelSettings = ps;
             }
 
-            Debug.Log($"[MainMenu] UI BUILT: rootChildren={root.childCount}, rootLayout={root.layout}, panel={(_doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
+            Debug.Log($"[MainMenu] UI BUILT: rootChildren={root.childCount}, rootLayout={root.layout}, panel={(_doc != null && _doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
         }
 
         protected void OnDisable()
@@ -105,7 +105,7 @@ namespace Fodinae
             _loaderContainer.AddToClassList("mm-loader");
 
             var image = new UnityEngine.UIElements.Image();
-            Texture2D loaderTexture = _loaderTexture;
+            Texture2D? loaderTexture = _loaderTexture;
             if (loaderTexture == null)
             {
                 loaderTexture = CreateSimpleLoaderTexture();

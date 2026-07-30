@@ -34,7 +34,7 @@ namespace Fodinae.Game.Managers
         public event Action<GameState>? OnGameStateChanged;
         public event Action? OnWorldLoaded;
 
-        private GameObject _uiRoot;
+        private GameObject? _uiRoot;
 
         private void Awake()
         {

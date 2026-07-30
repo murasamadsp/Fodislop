@@ -9,7 +9,6 @@ using Fodinae.Networking.Processors;
 using Fodinae.Player;
 using Fodinae.UI;
 using Fodinae.UI.Programmator;
-using Fodinae.UI;
 using Fodinae.UI.Binding;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Connection;

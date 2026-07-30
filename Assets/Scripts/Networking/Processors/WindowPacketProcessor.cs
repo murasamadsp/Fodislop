@@ -5,7 +5,6 @@ using System.Linq;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.UI;
-using Fodinae.UI;
 using Fodinae.UI.Binding;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI;

@@ -219,13 +219,13 @@ namespace Fodinae.World
 
         private class GifInternalDecoder
         {
-            private byte[] _data;
+            private byte[] _data = Array.Empty<byte>();
             private int _pos;
             private int _sw;
             private int _sh;
-            private Color32[] _gt;
-            private Color32[] _cv;
-            private Color32[] _pv;
+            private Color32[] _gt = Array.Empty<Color32>();
+            private Color32[] _cv = Array.Empty<Color32>();
+            private Color32[] _pv = Array.Empty<Color32>();
 
             public GifInternalDecoder(byte[] d)
             {

@@ -33,7 +33,7 @@ namespace Fodinae
         private readonly HashSet<int> _dirtyChunks;
         private readonly HashSet<int> _loadingChunks;
 
-        private FileStream _fileStream;
+        private FileStream? _fileStream;
 
         public WorldLayer(string filePath, int WIDTH_CHUNKS, int HEIGHT_CHUNKS, int CHUNK_SIZE = 32, int maxRamChunks = 1000)
         {
@@ -101,7 +101,7 @@ namespace Fodinae
                 return default;
             }
 
-            T[] chunk = GetChunk(chunkIndex, createIfMissing: false, touchLru: touchLru);
+            T[]? chunk = GetChunk(chunkIndex, createIfMissing: false, touchLru: touchLru);
             return chunk == null ? default : chunk[localIndex];
         }
 
@@ -112,9 +112,9 @@ namespace Fodinae
                 return;
             }
 
-            T[] chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
+            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
 
-            if (!chunk[localIndex].Equals(value))
+            if (chunk != null && !EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
             {
                 chunk[localIndex] = value;
                 MarkDirty(chunkIndex);
@@ -124,7 +124,7 @@ namespace Fodinae
         // --- Core Paging Logic ---
         public T[]? GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
         {
-            if (_loadedChunks.TryGetValue(chunkIndex, out T[] chunk))
+            if (_loadedChunks.TryGetValue(chunkIndex, out T[]? chunk))
             {
                 if (touchLru)
                 {
@@ -167,7 +167,7 @@ namespace Fodinae
             _dirtyChunks.Clear();
             lock (_ioLock)
             {
-                _fileStream.Flush();
+                _fileStream?.Flush();
             }
         }
 
@@ -183,7 +183,7 @@ namespace Fodinae
                     if (_chunkOffsets[i] != -1)
                     {
                         var chunk = LoadChunkFromDisk(i);
-                        if (chunk != null)
+                        if (chunk != null && newLayer._fileStream != null)
                         {
                             newLayer._fileStream.Seek(0, SeekOrigin.End);
                             long newOffset = newLayer._fileStream.Position;
@@ -197,7 +197,7 @@ namespace Fodinae
                 newLayer.SaveOffsetTable();
             }
 
-            _fileStream.Close();
+            _fileStream?.Close();
             File.Replace(tempPath, _filePath, null);
             InitializeFile(); // Re-open
         }
@@ -331,7 +331,7 @@ namespace Fodinae
 
         private async Cysharp.Threading.Tasks.UniTaskVoid LoadChunkAsync(int chunkIndex)
         {
-            T[] chunk = null;
+            T[]? chunk = null;
             try
             {
                 chunk = await Cysharp.Threading.Tasks.UniTask.RunOnThreadPool(() => LoadChunkFromDisk(chunkIndex));
@@ -404,7 +404,7 @@ namespace Fodinae
         private T[]? LoadChunkFromDisk(int index)
         {
             long offset = _chunkOffsets[index];
-            if (offset < 0)
+            if (offset < 0 || _fileStream == null)
             {
                 return null;
             }
@@ -419,6 +419,11 @@ namespace Fodinae
 
         private void SaveChunkToDisk(int index, T[] chunk)
         {
+            if (_fileStream == null)
+            {
+                return;
+            }
+
             lock (_ioLock)
             {
                 _fileStream.Seek(0, SeekOrigin.End);
@@ -488,6 +493,11 @@ namespace Fodinae
 
         private void SaveOffsetTable()
         {
+            if (_fileStream == null)
+            {
+                return;
+            }
+
             _fileStream.Seek(HEADER_SIZE, SeekOrigin.Begin);
             var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
             _fileStream.Write(byteSpan);

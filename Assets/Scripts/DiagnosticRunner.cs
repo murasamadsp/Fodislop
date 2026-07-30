@@ -215,7 +215,7 @@ namespace Fodinae
             Debug.Log($"[Diagnostic] Snapshot -> {LogPath}");
         }
 
-        private static void W(StringBuilder sb, string name, object obj)
+        private static void W(StringBuilder sb, string name, object? obj)
         {
             sb.AppendLine(obj != null
                 ? $"  {name}: OK [{obj.GetType().Name} #{obj.GetHashCode()}]"

@@ -16,13 +16,13 @@ namespace Fodinae.World.Terrain
     [ExecuteAlways]
     public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
     {
-        public static TerrainRenderer Instance { get; private set; }
+        public static TerrainRenderer? Instance { get; private set; }
 
         [Header("Configuration")]
         [SerializeField]
         private float _cellSize = GameConstants.World.CELLSIZE;
         [SerializeField]
-        private Shader _terrainShader;
+        private Shader? _terrainShader;
         [SerializeField]
         private Color _shimmerHighlightColor = Color.white;
         [SerializeField]
@@ -32,20 +32,20 @@ namespace Fodinae.World.Terrain
         [SerializeField]
         private int _viewportPadding = 2;
 
-        private MeshFilter _meshFilter;
-        private MeshRenderer _meshRenderer;
+        private MeshFilter? _meshFilter;
+        private MeshRenderer? _meshRenderer;
 
         [Inject]
-        private IWorldDataStorage _storage = null!;
+        private IWorldDataStorage? _storage;
 
         [Inject]
-        private MapManager _mapManager = null!;
+        private MapManager? _mapManager;
 
         [Inject]
-        private ITextureService _textureService = null!;
+        private ITextureService? _textureService;
 
-        private Mesh _mesh;
-        private Camera _mainCamera;
+        private Mesh? _mesh;
+        private Camera? _mainCamera;
 
         private TerrainCellCache _cellCache = new();
         private TerrainPrecalculator _precalc = new();
@@ -69,7 +69,7 @@ namespace Fodinae.World.Terrain
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
             new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 4),
@@ -98,15 +98,7 @@ namespace Fodinae.World.Terrain
         {
             if (Instance != null && Instance != this)
             {
-                if (Application.isPlaying)
-                {
-                    Destroy(gameObject);
-                }
-                else
-                {
-                    DestroyImmediate(gameObject);
-                }
-
+                DestroyTerrainObject(gameObject);
                 return;
             }
 
@@ -122,12 +114,18 @@ namespace Fodinae.World.Terrain
             {
                 _mesh = new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 };
                 _mesh.MarkDynamic();
-                _meshFilter.mesh = _mesh;
+                if (_meshFilter != null)
+                {
+                    _meshFilter.mesh = _mesh;
+                }
             }
 
-            _meshRenderer.enabled = true;
-            _meshRenderer.sortingLayerName = _sortingLayerName;
-            _meshRenderer.sortingOrder = _sortingOrder;
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = true;
+                _meshRenderer.sortingLayerName = _sortingLayerName;
+                _meshRenderer.sortingOrder = _sortingOrder;
+            }
         }
 
         public void EnsureSubscriptions()
@@ -137,8 +135,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            var wtm = _textureService as WorldTextureManager;
-            if (wtm != null)
+            if (_textureService is WorldTextureManager wtm)
             {
                 wtm.OnTextureLoaded += OnTextureLoaded;
             }
@@ -153,8 +150,7 @@ namespace Fodinae.World.Terrain
 
         protected void OnDestroy()
         {
-            var wtm = _textureService as WorldTextureManager;
-            if (wtm != null)
+            if (_textureService is WorldTextureManager wtm)
             {
                 wtm.OnTextureLoaded -= OnTextureLoaded;
             }
@@ -171,14 +167,8 @@ namespace Fodinae.World.Terrain
 
             if (_mesh != null)
             {
-                if (Application.isPlaying)
-                {
-                    Destroy(_mesh);
-                }
-                else
-                {
-                    DestroyImmediate(_mesh);
-                }
+                DestroyTerrainObject(_mesh);
+                _mesh = null;
             }
 
             CleanupMaterials();
@@ -202,6 +192,17 @@ namespace Fodinae.World.Terrain
 
         private int _diagLogged;
 
+        private void LogDiag(int bit, Func<string> messageFactory)
+        {
+            if ((_diagLogged & bit) != 0)
+            {
+                return;
+            }
+
+            _diagLogged |= bit;
+            Debug.Log(messageFactory());
+        }
+
         private void LogDiag(int bit, string message)
         {
             if ((_diagLogged & bit) != 0)
@@ -215,7 +216,7 @@ namespace Fodinae.World.Terrain
 
         private void OnTextureLoaded(string filename, Texture2D texture)
         {
-            LogDiag(1 << 9, $"[TerrainDiag] first texture arrived: {filename}");
+            LogDiag(1 << 9, () => $"[TerrainDiag] first texture arrived: {filename}");
             if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
             {
                 InitializeShader();
@@ -239,7 +240,7 @@ namespace Fodinae.World.Terrain
 #endif
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
-                LogDiag(1 << 0, $"[TerrainDiag] gate BLOCKED: mapManager={(_mapManager == null ? "NULL" : "ok")}, storage={(_storage == null ? "NULL" : (_storage.IsReady ? "ready" : "NOT_READY"))}");
+                LogDiag(1 << 0, () => $"[TerrainDiag] gate BLOCKED: mapManager={(_mapManager == null ? "NULL" : "ok")}, storage={(_storage == null ? "NULL" : (_storage.IsReady ? "ready" : "NOT_READY"))}");
                 return;
             }
 
@@ -260,7 +261,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
+            LogDiag(1 << 3, () => $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
 
             int targetWidth = Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) + (_viewportPadding * 2);
             int targetHeight = Mathf.CeilToInt((_mainCamera.orthographicSize * 2) / _cellSize) + (_viewportPadding * 2);
@@ -289,8 +290,6 @@ namespace Fodinae.World.Terrain
                 _meshBuilder.EnsureCapacity(_meshWidth, _meshHeight, _cellSize);
                 _backgroundFloodFill.Allocate(_meshWidth, _meshHeight);
 
-                // Размеры меша поменялись — скролл-путь небезопасен (вершины/индексы переаллоцируются),
-                // принудительно идём в полный ребилд.
                 _needsRefresh = true;
             }
 
@@ -309,11 +308,11 @@ namespace Fodinae.World.Terrain
 
         private void UpdateVertexAttributes(int minX, int minY)
         {
-            LogDiag(1 << 4, $"[TerrainDiag] UpdateVertexAttributes min=({minX},{minY}) size={_meshWidth}x{_meshHeight}");
+            LogDiag(1 << 4, () => $"[TerrainDiag] UpdateVertexAttributes min=({minX},{minY}) size={_meshWidth}x{_meshHeight}");
             var wtm = _textureService as WorldTextureManager;
-            if (wtm == null || _mapManager == null)
+            if (wtm == null || _mapManager == null || _storage == null)
             {
-                LogDiag(1 << 5, $"[TerrainDiag] BAIL: wtm={(wtm == null ? "NULL" : "ok")} mapManager={(_mapManager == null ? "NULL" : "ok")}");
+                LogDiag(1 << 5, () => $"[TerrainDiag] BAIL: wtm={(wtm == null ? "NULL" : "ok")} mapManager={(_mapManager == null ? "NULL" : "ok")}");
                 return;
             }
 
@@ -324,7 +323,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            LogDiag(1 << 7, $"[TerrainDiag] atlases: {atlases.Count}");
+            LogDiag(1 << 7, () => $"[TerrainDiag] atlases: {atlases.Count}");
 
             bool materialsChanged = false;
             if (atlases.Count != _lastAtlasCount)
@@ -358,39 +357,38 @@ namespace Fodinae.World.Terrain
 
             wtm.FlushDirtyAtlases();
 
-            // ВАЖНО: инкрементальный скролл-путь (ScrollAndFill/BuildIncremental) сломан
-            // концептуально: он сдвигает вершины в буфере, но не обновляет индексный буфер
-            // меша — индексы указывают на чужие ячейки. Поэтому всегда полный ребилд:
-            // он детерминирован (вершины+индексы+bounds заливаются атомарно).
             try
             {
                 _cellCache.PopulateFull(minX, minY, _storage, _mapManager, wtm, atlases);
-                _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight, _mapManager);
+                _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight);
                 _backgroundFloodFill.ComputeFull(this);
                 _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod);
 
-                _mesh.Clear();
-                _mesh.subMeshCount = atlases.Count;
-                _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
-                _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
-                _mesh.RecalculateBounds();
-                LogDiag(1 << 8, $"[TerrainDiag] BuildFull: verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} bounds={_mesh.bounds}");
-
-                for (int i = 0; i < atlases.Count; i++)
+                if (_mesh != null)
                 {
-                    var atlasTex = atlases[i].Texture;
-                    if (_materials[i].GetTexture("_BaseMap") != atlasTex)
-                    {
-                        var flowMapCoord = wtm.GetFlowMapCoordinate(atlases[i]);
-                        Rect r = flowMapCoord.UVRect;
-                        _materials[i].SetVector("_FlowMapRect", new Vector4(r.x, r.y, r.width, r.height));
-                        _materials[i].SetColor("_ShimmerColor", _shimmerHighlightColor);
-                        _materials[i].SetTexture("_BaseMap", atlasTex);
-                        _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
-                        _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
-                    }
+                    _mesh.Clear();
+                    _mesh.subMeshCount = atlases.Count;
+                    _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+                    _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
+                    _mesh.RecalculateBounds();
+                    LogDiag(1 << 8, () => $"[TerrainDiag] BuildFull: verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} bounds={_mesh.bounds}");
 
-                    _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+                    for (int i = 0; i < atlases.Count; i++)
+                    {
+                        var atlasTex = atlases[i].Texture;
+                        if (_materials[i].GetTexture("_BaseMap") != atlasTex)
+                        {
+                            var flowMapCoord = wtm.GetFlowMapCoordinate(atlases[i]);
+                            Rect r = flowMapCoord.UVRect;
+                            _materials[i].SetVector("_FlowMapRect", new Vector4(r.x, r.y, r.width, r.height));
+                            _materials[i].SetColor("_ShimmerColor", _shimmerHighlightColor);
+                            _materials[i].SetTexture("_BaseMap", atlasTex);
+                            _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
+                            _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
+                        }
+
+                        _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+                    }
                 }
 
                 _needsRefresh = false;
@@ -402,7 +400,7 @@ namespace Fodinae.World.Terrain
             }
 
             bool needReassignMaterials = materialsChanged;
-            if (!needReassignMaterials)
+            if (!needReassignMaterials && _meshRenderer != null)
             {
                 var sharedMats = _meshRenderer.sharedMaterials;
                 if (sharedMats == null || sharedMats.Length != _materials.Length)
@@ -422,7 +420,7 @@ namespace Fodinae.World.Terrain
                 }
             }
 
-            if (needReassignMaterials)
+            if (needReassignMaterials && _meshRenderer != null)
             {
                 _meshRenderer.sharedMaterials = _materials;
             }
@@ -434,18 +432,25 @@ namespace Fodinae.World.Terrain
             {
                 foreach (var mat in _materials)
                 {
-                    if (mat != null)
-                    {
-                        if (Application.isPlaying)
-                        {
-                            Destroy(mat);
-                        }
-                        else
-                        {
-                            DestroyImmediate(mat);
-                        }
-                    }
+                    DestroyTerrainObject(mat);
                 }
+            }
+        }
+
+        private static void DestroyTerrainObject(UnityEngine.Object? obj)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(obj);
+            }
+            else
+            {
+                DestroyImmediate(obj, allowDestroyingAssets: true);
             }
         }
 

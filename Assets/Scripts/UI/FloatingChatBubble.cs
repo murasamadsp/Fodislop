@@ -6,14 +6,14 @@ namespace Fodinae.UI
 {
     public class FloatingChatBubble : MonoBehaviour
     {
-        private TextMesh _textMesh;
-        private MeshRenderer _meshRenderer;
-        private MeshRenderer _bgRenderer;
+        private TextMesh? _textMesh;
+        private MeshRenderer? _meshRenderer;
+        private MeshRenderer? _bgRenderer;
         private float _elapsed;
         private const float DURATION = 5f;
         private const float FLOAT_SPEED = 0.3f;
         private const float FADE_START = 4f;
-        private Camera _cam;
+        private Camera? _cam;
 
         public void Init(string text)
         {
@@ -88,12 +88,12 @@ namespace Fodinae.UI
             _elapsed += Time.deltaTime;
             transform.Translate(0, FLOAT_SPEED * Time.deltaTime, 0);
 
-            if (_cam != null)
+            if (_cam != null && _textMesh != null)
             {
                 _textMesh.characterSize = 0.08f * (_cam.orthographicSize / 10f);
             }
 
-            if (_elapsed >= FADE_START)
+            if (_elapsed >= FADE_START && _textMesh != null)
             {
                 float t = (_elapsed - FADE_START) / (DURATION - FADE_START);
                 Color c = _textMesh.color;

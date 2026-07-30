@@ -23,10 +23,10 @@ namespace Fodinae.UI
 
         private int _texWidth;
         private int _texHeight;
-        private Canvas _canvas;
-        private RawImage _rawImage;
-        private Texture2D _mapTexture;
-        private Color32[] _pixelBuffer;
+        private Canvas? _canvas;
+        private RawImage? _rawImage;
+        private Texture2D? _mapTexture;
+        private Color32[]? _pixelBuffer;
         private Color32[] _cellColorTable = new Color32[256];
         private Color32 _defaultColor = new Color32(48, 48, 48, 255);
 
@@ -35,12 +35,12 @@ namespace Fodinae.UI
         private float _cellsPerPixel = 1f;
 
         [Inject]
-        private IWorldDataStorage _storage = null!;
+        private IWorldDataStorage? _storage;
 
         [Inject]
-        private MapManager _manager = null!;
-        private PlayerMovementController _player;
-        private InputAction _scrollAction;
+        private MapManager? _manager;
+        private PlayerMovementController? _player;
+        private InputAction? _scrollAction;
 
         private bool _isDragging;
         private Vector2 _lastMousePos;
@@ -80,7 +80,7 @@ namespace Fodinae.UI
             _scrollAction.performed += OnScroll;
             _scrollAction.Enable();
 
-            if (!_canvas.gameObject.activeSelf)
+            if (_canvas != null && !_canvas.gameObject.activeSelf)
             {
                 Hide();
             }
@@ -178,7 +178,7 @@ namespace Fodinae.UI
             for (int i = 0; i < 256; i++)
             {
                 CellType type = (CellType)i;
-                Color color = _manager.GetCellMinimapColor(type);
+                Color color = _manager!.GetCellMinimapColor(type);
                 if (color.a < 0.01f)
                 {
                     color = new Color(0.3f, 0.3f, 0.3f);
@@ -196,8 +196,10 @@ namespace Fodinae.UI
             _mapTexture = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
             _mapTexture.filterMode = FilterMode.Point;
             _mapTexture.wrapMode = TextureWrapMode.Clamp;
-            _pixelBuffer = new Color32[_texWidth * _texHeight];
-            _rawImage.texture = _mapTexture;
+            if (_rawImage != null)
+            {
+                _rawImage.texture = _mapTexture;
+            }
         }
 
         private void HandleDrag()
@@ -268,8 +270,8 @@ namespace Fodinae.UI
 
         private void RenderViewport()
         {
-            int worldW = _manager.WorldWidth;
-            int worldH = _manager.WorldHeight;
+            int worldW = _manager!.WorldWidth;
+            int worldH = _manager!.WorldHeight;
             float cp = _cellsPerPixel;
             float cx = _viewCenterX;
             float cy = _viewCenterY;
@@ -277,6 +279,11 @@ namespace Fodinae.UI
             int texH = _texHeight;
 
             Color32 defaultCol = _defaultColor;
+            if (_pixelBuffer == null || _pixelBuffer.Length != texW * texH)
+            {
+                _pixelBuffer = new Color32[texW * texH];
+            }
+
             for (int i = 0; i < _pixelBuffer.Length; i++)
             {
                 _pixelBuffer[i] = defaultCol;
@@ -323,7 +330,7 @@ namespace Fodinae.UI
                         continue;
                     }
 
-                    CellType type = _storage.GetCell(cellX, serverY);
+                    CellType type = _storage!.GetCell(cellX, serverY);
                     Color32 color = _cellColorTable[(byte)type];
 
                     for (int py = pixY_start; py <= pixY_end; py++)
@@ -369,8 +376,11 @@ namespace Fodinae.UI
                 }
             }
 
-            _mapTexture.SetPixels32(_pixelBuffer);
-            _mapTexture.Apply(false);
+            if (_mapTexture != null)
+            {
+                _mapTexture.SetPixels32(_pixelBuffer);
+                _mapTexture.Apply(false);
+            }
         }
 
         private void OnScroll(InputAction.CallbackContext ctx)

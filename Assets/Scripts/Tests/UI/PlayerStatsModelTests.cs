@@ -9,7 +9,7 @@ namespace Fodinae.Tests.UI
     [TestFixture]
     public class PlayerStatsModelTests
     {
-        private PlayerStatsModel _statsModel;
+        private PlayerStatsModel _statsModel = null!;
 
         [SetUp]
         public void SetUp()

@@ -10,11 +10,11 @@ namespace Fodinae.World
     {
         [Header("Background Renderer Settings")]
         [SerializeField]
-        private TerrainRenderer _backgroundRendererPrefab;
+        private TerrainRenderer? _backgroundRendererPrefab;
         [SerializeField]
-        private Transform _backgroundParent;
+        private Transform? _backgroundParent;
 
-        private TerrainRenderer _backgroundRenderer;
+        private TerrainRenderer? _backgroundRenderer;
 
         protected void Awake()
         {
@@ -88,7 +88,7 @@ namespace Fodinae.World
             }
         }
 
-        public TerrainRenderer GetBackgroundRenderer()
+        public TerrainRenderer? GetBackgroundRenderer()
         {
             return _backgroundRenderer;
         }

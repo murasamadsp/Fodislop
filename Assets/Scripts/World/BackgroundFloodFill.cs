@@ -18,13 +18,13 @@ namespace Fodinae.World
     /// </summary>
     public sealed class BackgroundFloodFill
     {
-        private int[] _fbpwGeneration;
+        private int[] _fbpwGeneration = Array.Empty<int>();
         private int _fbpwCurrentGen = 1;
         private readonly List<(int X, int Y)> _fbpwFrontier = new(64);
         private readonly List<(int X, int Y)> _fbpwNextFrontier = new(64);
         private readonly object _fbpwLock = new();
 
-        private CellType[,] _bgMapBuffer;
+        private CellType[,] _bgMapBuffer = new CellType[0, 0];
         private int _width;
         private int _height;
 

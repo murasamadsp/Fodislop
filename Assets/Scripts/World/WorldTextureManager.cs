@@ -33,16 +33,17 @@ namespace Fodinae.World
         private int _cellTextureSize = RenderingConstants.CELL_SIZE;
 
         [System.NonSerialized]
-        public TextureAtlas _currentAtlas;
-        private CellTextureCache _textureCache;
-        private Texture2D _flowMapTexture;
+        public TextureAtlas? _currentAtlas;
+        private CellTextureCache _textureCache = new CellTextureCache();
+        private Texture2D? _flowMapTexture;
         public const CellType FLOW_MAP_CELL_TYPE = (CellType)254;
-        private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests;
-        private List<TextureAtlas> _atlases;
+        private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = new();
+        private List<TextureAtlas> _atlases = new();
 
-        private Texture2D _cachedEmptyTexture;
+        private Texture2D? _cachedEmptyTexture;
 
-        private IAssetLoader _assetLoader;
+        [Inject]
+        private IAssetLoader? _assetLoader;
 
         [Inject]
 
@@ -137,7 +138,7 @@ namespace Fodinae.World
                 FramesPerRow = 1,
                 FrameSize = 12,
             };
-            _textureCache.AddTexture(FLOW_MAP_CELL_TYPE, textureInfo);
+            _textureCache?.AddTexture(FLOW_MAP_CELL_TYPE, textureInfo);
         }
 
         private void EnsureFlowMapInAtlas(TextureAtlas atlas)
@@ -147,19 +148,19 @@ namespace Fodinae.World
                 GenerateFlowMap();
             }
 
-            if (!atlas.ContainsCell(FLOW_MAP_CELL_TYPE))
+            if (_flowMapTexture != null && !atlas.ContainsCell(FLOW_MAP_CELL_TYPE))
             {
                 atlas.TryAddTexture(FLOW_MAP_CELL_TYPE, _flowMapTexture, out _);
                 atlas.CopyTextureToAtlas(FLOW_MAP_CELL_TYPE, _flowMapTexture);
             }
         }
 
+        public event Action<string, Texture2D>? OnTextureLoaded;
+
         private void OnTextureLoadedHandler(string filename, Texture2D texture)
         {
             OnTextureLoaded?.Invoke(filename, texture);
         }
-
-        public event Action<string, Texture2D> OnTextureLoaded;
 
         public void RequestTexture(CellType cellType)
         {
@@ -350,10 +351,14 @@ namespace Fodinae.World
                 return;
             }
 
-            Texture2D texture = null;
+            Texture2D? texture = null;
             try
             {
-                texture = await (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader).GetTextureAsync(filename);
+                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+                if (loader != null)
+                {
+                    texture = await loader.GetTextureAsync(filename);
+                }
             }
             catch (Exception ex)
             {
@@ -412,6 +417,11 @@ namespace Fodinae.World
                 FrameSize = effectiveFrameHeight,
                 ContainerFPS = containerFPS,
             };
+
+            if (_currentAtlas == null)
+            {
+                return;
+            }
 
             if (!_currentAtlas.TryAddTexture(cellType, texture, out var coordinate))
             {
@@ -534,7 +544,7 @@ namespace Fodinae.World
                     FrameSize = _cellTextureSize,
                 };
 
-                if (_currentAtlas.TryAddTexture(cellType, fallbackTexture, out var coordinate))
+                if (_currentAtlas != null && _currentAtlas.TryAddTexture(cellType, fallbackTexture, out var coordinate))
                 {
                     _currentAtlas.CopyTextureToAtlas(cellType, fallbackTexture);
                     _textureCache.AddTexture(cellType, textureInfo);
@@ -664,19 +674,19 @@ namespace Fodinae.World
             return avgColor;
         }
 
-        public Texture2D GetCachedTexture(CellType cellType)
+        public Texture2D? GetCachedTexture(CellType cellType)
         {
             EnsureInitialized();
-            return _textureCache.GetCachedTexture(cellType);
+            return _textureCache?.GetCachedTexture(cellType);
         }
 
         public string GetCacheStats()
         {
             EnsureInitialized();
-            return _textureCache.GetCacheStats();
+            return _textureCache != null ? _textureCache.GetCacheStats() : string.Empty;
         }
 
-        public Texture2D GetEmptyTexture()
+        public Texture2D? GetEmptyTexture()
         {
             EnsureInitialized();
             return _cachedEmptyTexture;

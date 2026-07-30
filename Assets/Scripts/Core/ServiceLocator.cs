@@ -7,7 +7,7 @@ namespace Fodinae.Core
 {
     public static class ServiceLocator
     {
-        private static IObjectResolver _resolver;
+        private static IObjectResolver? _resolver;
 
         public static void Initialize(IObjectResolver resolver)
         {

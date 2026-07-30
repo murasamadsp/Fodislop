@@ -11,9 +11,9 @@ using TMPro;
 using UnityEngine;
 using VContainer;
 
-namespace Fodinae.Game;
-
-public class Robot : MonoBehaviour
+namespace Fodinae.Game
+{
+    public class Robot : MonoBehaviour
 {
     private const string TAG = "[Robot]";
 
@@ -24,15 +24,15 @@ public class Robot : MonoBehaviour
     [SerializeField]
     private byte _clanId;
     [SerializeField]
-    private SpriteRenderer _spriteRenderer;
-    private SpriteRenderer _clanRenderer;
-    private TextMeshPro _nicknameText;
+    private SpriteRenderer? _spriteRenderer;
+    private SpriteRenderer? _clanRenderer;
+    private TextMeshPro? _nicknameText;
     [SerializeField]
-    private string _nickname;
+    private string _nickname = string.Empty;
     [SerializeField]
-    private string _skinPath;
+    private string _skinPath = string.Empty;
     [SerializeField]
-    private string _tailPath;
+    private string _tailPath = string.Empty;
     [SerializeField]
     private float _rotationSpeed = 1080f;
 
@@ -43,7 +43,7 @@ public class Robot : MonoBehaviour
     private const float REFERENCE_MOVE_SPEED = 25f;
 
     private bool _isMetadataLoaded = false;
-    private CancellationTokenSource _cts;
+    private CancellationTokenSource? _cts;
     private float _targetAngle = 0f;
     private float _smoothAngle = 0f;
     private Vector3 _targetPosition;
@@ -58,7 +58,7 @@ public class Robot : MonoBehaviour
     [Inject]
     private IRobotService _robotService = null!;
     private RobotTentacleSegment[]? _tentacles;
-    private GameObject _tailContainer;
+    private GameObject? _tailContainer;
     private Sprite? _skinSprite;
     private Sprite? _clanSprite;
 
@@ -97,7 +97,10 @@ public class Robot : MonoBehaviour
             return;
         }
 
-        LoadClanAsync(_cts.Token).Forget();
+        if (_cts != null)
+        {
+            LoadClanAsync(_cts.Token).Forget();
+        }
     }
 
     public void ClearClanBadge()
@@ -263,6 +266,12 @@ public class Robot : MonoBehaviour
 
     private void CreateTentacles(Texture2D tailTexture)
     {
+        if (_tailContainer == null)
+        {
+            _tailContainer = new GameObject("TailContainer");
+            _tailContainer.transform.SetParent(transform, false);
+        }
+
         ClearTentacles();
         _tentacles = new RobotTentacleSegment[4];
         float[] offsets = { 0f, 1.5f, 3.0f, 4.5f };
@@ -559,8 +568,8 @@ public class Robot : MonoBehaviour
 
     private class RobotTentacleSegment
     {
-        private LineRenderer _line;
-        private MaterialPropertyBlock _propBlock;
+        private LineRenderer? _line;
+        private MaterialPropertyBlock? _propBlock;
         private readonly Vector3[] _positions;
         private readonly Vector3[] _velocities;
         private readonly float _wiggleOffset;
@@ -603,14 +612,14 @@ public class Robot : MonoBehaviour
             {
                 _positions[i] = position;
                 _velocities[i] = Vector3.zero;
-                _line.SetPosition(i, position);
+                _line?.SetPosition(i, position);
             }
         }
 
         public void Update(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
         {
             _positions[0] = rootPosition;
-            _line.SetPosition(0, _positions[0]);
+            _line?.SetPosition(0, _positions[0]);
 
             Vector3 lastPos = rootPosition;
             float angleRad = rotationAngle * Mathf.Deg2Rad;
@@ -633,7 +642,10 @@ public class Robot : MonoBehaviour
 
                 Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0);
 
-                _line.SetPosition(i, _positions[i] + (perpendicular * wiggle));
+                if (_line != null)
+                {
+                    _line.SetPosition(i, _positions[i] + (perpendicular * wiggle));
+                }
 
                 lastPos = _positions[i];
                 targetPos = _positions[i] + (MAX_SEGMENT_DIST * movementFactor * direction);
@@ -651,4 +663,5 @@ public class Robot : MonoBehaviour
             }
         }
     }
+}
 }

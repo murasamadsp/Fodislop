@@ -22,9 +22,9 @@ namespace Fodinae.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService
     {
-        public static ConnectionManager Instance { get; private set; }
+        public static ConnectionManager? Instance { get; private set; }
 
-        public IServerConnection Connection { get; private set; }
+        public IServerConnection? Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;

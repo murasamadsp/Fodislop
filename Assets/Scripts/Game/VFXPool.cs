@@ -28,7 +28,7 @@ namespace Fodinae.Game
         }
 
         [SerializeField]
-        private PoolConfig[] _configs;
+        private PoolConfig[] _configs = Array.Empty<PoolConfig>();
 
         [SerializeField]
         private int _defaultInitialSize = 2;
@@ -208,10 +208,19 @@ namespace Fodinae.Game
 
         private static void ReleaseInternal(SubPool pool, PooledSlot slot, int activeIndex)
         {
-            slot.SpriteRenderer.sprite = null;
-            slot.SpriteRenderer.color = Color.white;
-            slot.SpriteRenderer.enabled = true;
-            slot.GameObject.SetActive(false);
+            if (slot == null)
+            {
+                return;
+            }
+
+            if (slot.SpriteRenderer != null)
+            {
+                slot.SpriteRenderer.sprite = null;
+                slot.SpriteRenderer.color = Color.white;
+                slot.SpriteRenderer.enabled = true;
+            }
+
+            slot.GameObject?.SetActive(false);
             slot.IsManagedExternally = false;
             slot.IsInPool = true;
             pool.Active.RemoveAt(activeIndex);

@@ -327,7 +327,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cb87b91d54411fa4aa13362f66d24252, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.World.SingleMeshTerrainRenderer
+  m_EditorClassIdentifier: 
   _cellSize: 1
   _bufferCells: 2
   _terrainShader: {fileID: 4800000, guid: 943286b1ceedb6e49881652498d6ec13, type: 3}
@@ -416,8 +416,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e7ee9e8630524226aecbf115a9824cba, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.MainMenu
+  m_Name: 
+  m_EditorClassIdentifier: 
   _loaderTexture: {fileID: 2800000, guid: bb2d88d590a7c9241a54276262f96c47, type: 3}
 --- !u!114 &439439806
 MonoBehaviour:
@@ -429,8 +429,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name:
-  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_PanelSettings: {fileID: 11400000, guid: 148e3f3d5f87df248b9f080b890c19b3, type: 2}
   m_ParentUI: {fileID: 0}
   sourceAsset: {fileID: 0}
@@ -579,7 +579,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 61a3010210b760c489e321dcd1eafc27, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.Player.CameraFollow
+  m_EditorClassIdentifier: 
   _target: {fileID: 1000000007}
   _smoothSpeed: 5
   _offset: {x: 0, y: 0}
@@ -742,7 +742,7 @@ PrefabInstance:
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
+  m_SourcePrefab: {fileID: 100100000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
 --- !u!4 &1000000007 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 400000, guid: 99c0097ec72de7d468b0c8f1f419f99a, type: 3}
@@ -809,7 +809,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f97e6a7c6f0d34345a5f1d7d8e9c0b1a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.Game.Managers.MapManager
+  m_EditorClassIdentifier: 
   _isWorldInitialized: 0
 --- !u!114 &1792288506
 MonoBehaviour:
@@ -822,7 +822,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 857c53d34c431384697ffcdaecea4268, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.World.StandaloneWorldInitializer
+  m_EditorClassIdentifier: 
   _enableStandaloneMode: 1
   _testWorldWidth: 128
   _testWorldHeight: 128
@@ -837,7 +837,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f83192ba33a746847a80f0c4b06c1ce7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Scripts.UI.MinimapController
+  m_EditorClassIdentifier: 
 --- !u!1 &2000000000
 GameObject:
   m_ObjectHideFlags: 0

@@ -12,33 +12,33 @@ namespace Fodinae.UI.Programmator
 {
     public class ProgrammatorGrid : MonoBehaviour
     {
-        private UIDocument _doc;
-        private VisualElement _popup;
-        private VisualElement _gridContainer;
-        private VisualElement[,] _cells;
-        private Label[,] _cellLabels;
-        private RadialMenu _radial;
-        private ObserverJoystick _joystick;
+        private UIDocument? _doc;
+        private VisualElement? _popup;
+        private VisualElement? _gridContainer;
+        private VisualElement?[,]? _cells;
+        private Label?[,]? _cellLabels;
+        private RadialMenu? _radial;
+        private ObserverJoystick? _joystick;
         private bool _isOpen;
         private bool _isRunning;
         private bool _radialShown;
         private int _radialCellIndex = -1;
-        private Tooltip _tooltip;
-        private Label _pageLabel;
-        private IntegerField _pageInput;
-        private Button _prevBtn;
-        private Button _nextBtn;
-        private Button _saveBtn;
-        private Button _runBtn;
-        private Button _stopBtn;
-        private VisualElement _panel;
+        private Tooltip? _tooltip;
+        private Label? _pageLabel;
+        private IntegerField? _pageInput;
+        private Button? _prevBtn;
+        private Button? _nextBtn;
+        private Button? _saveBtn;
+        private Button? _runBtn;
+        private Button? _stopBtn;
+        private VisualElement? _panel;
         private bool _hasSelection;
         private int _selStartRow;
         private int _selStartCol;
         private int _selEndRow;
         private int _selEndCol;
         private readonly HashSet<long> _selectedCells = new HashSet<long>();
-        private int[] _clipboardCodes;
+        private int[]? _clipboardCodes;
         private string[]? _clipboardLabels;
         private string[]? _clipboardValues;
         private int _clipboardWidth;
@@ -49,7 +49,7 @@ namespace Fodinae.UI.Programmator
 
         private class ProgramItem
         {
-            public string Name;
+            public string Name = string.Empty;
             public List<int> Codes = new();
             public List<string> Labels = new();
             public List<string> Values = new();
@@ -57,13 +57,13 @@ namespace Fodinae.UI.Programmator
 
         private readonly List<ProgramItem> _programItems = new();
         private int _activeIndex = -1;
-        private VisualElement _programListPanel;
-        private ScrollView _listScroll;
-        private Label _programTitle;
-        private VisualElement _createContainer;
-        private Button _createBtn;
-        private TextField _createInput;
-        private VisualElement _createDialog;
+        private VisualElement? _programListPanel;
+        private ScrollView? _listScroll;
+        private Label? _programTitle;
+        private VisualElement? _createContainer;
+        private Button? _createBtn;
+        private TextField? _createInput;
+        private VisualElement? _createDialog;
 
         public static bool IsOpen { get; private set; }
 
@@ -76,7 +76,7 @@ namespace Fodinae.UI.Programmator
             }
 
             CreateUI();
-            _popup.style.display = DisplayStyle.None;
+            _popup!.style.display = DisplayStyle.None;
 
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
@@ -135,8 +135,8 @@ namespace Fodinae.UI.Programmator
                 if (page >= 0 && page < ProgrammatorData.PageCount && page != ProgrammatorData.CurrentPage)
                 {
                     ClearSelection();
-                    _radial.Hide();
-                    _joystick.Hide();
+                    _radial!.Hide();
+                    _joystick!.Hide();
                     _radialShown = false;
                     ProgrammatorData.CurrentPage = page;
                     RefreshAllCells();
@@ -265,8 +265,8 @@ namespace Fodinae.UI.Programmator
 
                         if (_radialShown)
                         {
-                            _joystick.Hide();
-                            _radial.Hide();
+                            _joystick!.Hide();
+                            _radial!.Hide();
                             _radialShown = false;
                             _radialCellIndex = -1;
                             return;
@@ -296,8 +296,8 @@ namespace Fodinae.UI.Programmator
 
                         if (_radialShown)
                         {
-                            _joystick.Hide();
-                            _radial.Hide();
+                            _joystick!.Hide();
+                            _radial!.Hide();
                             _radialShown = false;
                             _radialCellIndex = -1;
                             return;
@@ -306,7 +306,7 @@ namespace Fodinae.UI.Programmator
                         _radialCellIndex = (row * ProgrammatorData.COLS) + col;
                         ShowCategoryRing();
                         _radialShown = true;
-                        ShowAtCellCenter(_cells[row, col], center => _radial.ShowAt(_doc.rootVisualElement, center));
+                        ShowAtCellCenter(_cells[row, col]!, center => _radial!.ShowAt(_doc!.rootVisualElement, center));
                     });
 
                     var label = new Label();
@@ -332,7 +332,7 @@ namespace Fodinae.UI.Programmator
 
             _programListPanel = new VisualElement();
             _programListPanel.AddToClassList("prog-list-panel");
-            _programListPanel.style.display = DisplayStyle.None;
+            _programListPanel!.style.display = DisplayStyle.None;
 
             var listHeaderRow = new VisualElement();
             listHeaderRow.AddToClassList("prog-list-header-row");
@@ -346,7 +346,7 @@ namespace Fodinae.UI.Programmator
             listCloseBtn.AddToClassList("prog-close-btn");
             listHeaderRow.Add(listCloseBtn);
 
-            _programListPanel.Add(listHeaderRow);
+            _programListPanel!.Add(listHeaderRow);
 
             _listScroll = new ScrollView();
             _listScroll.AddToClassList("prog-list-scroll");
@@ -366,7 +366,7 @@ namespace Fodinae.UI.Programmator
 
             _createDialog = new VisualElement();
             _createDialog.AddToClassList("prog-dialog");
-            _createDialog.style.display = DisplayStyle.None;
+            _createDialog!.style.display = DisplayStyle.None;
 
             var dialogPanel = new VisualElement();
             dialogPanel.AddToClassList("prog-dialog-panel");
@@ -404,7 +404,7 @@ namespace Fodinae.UI.Programmator
             dialogPanel.Add(dialogButtons);
             _createDialog.Add(dialogPanel);
             _popup.Add(_createDialog);
-            _doc.rootVisualElement.Add(_popup);
+            _doc!.rootVisualElement.Add(_popup!);
 
             _radial = new RadialMenu();
             _radial.OnCategoryClicked += OnRadialCategoryClicked;
@@ -437,7 +437,7 @@ namespace Fodinae.UI.Programmator
 
         private void ShowCategoryRing()
         {
-            _joystick.Hide();
+            _joystick!.Hide();
             var cats = ProgrammatorData.CATEGORIES;
             var colors = new Color[cats.Length];
             for (int i = 0; i < cats.Length; i++)
@@ -445,8 +445,8 @@ namespace Fodinae.UI.Programmator
                 colors[i] = ProgrammatorData.CATEGORY_COLORS[cats[i]];
             }
 
-            _radial.SetInnerItems(cats, colors);
-            _radial.ClearOuterItems();
+            _radial!.SetInnerItems(cats, colors);
+            _radial!.ClearOuterItems();
         }
 
         private void PrevPage()
@@ -454,8 +454,8 @@ namespace Fodinae.UI.Programmator
             if (ProgrammatorData.CurrentPage > 0)
             {
                 ClearSelection();
-                _radial.Hide();
-                _joystick.Hide();
+_radial!.Hide();
+            _joystick!.Hide();
                 _radialShown = false;
                 ProgrammatorData.CurrentPage--;
                 RefreshAllCells();
@@ -467,8 +467,8 @@ namespace Fodinae.UI.Programmator
             if (ProgrammatorData.CurrentPage < ProgrammatorData.PageCount - 1)
             {
                 ClearSelection();
-                _radial.Hide();
-                _joystick.Hide();
+                _radial!.Hide();
+                _joystick!.Hide();
                 _radialShown = false;
                 ProgrammatorData.CurrentPage++;
                 RefreshAllCells();
@@ -496,9 +496,9 @@ namespace Fodinae.UI.Programmator
 
         private void UpdatePageLabel()
         {
-            _pageLabel.text = $"Стр. {ProgrammatorData.CurrentPage + 1}/{ProgrammatorData.PageCount}";
-            _prevBtn.SetEnabled(ProgrammatorData.CurrentPage > 0);
-            _nextBtn.SetEnabled(ProgrammatorData.CurrentPage < ProgrammatorData.PageCount - 1);
+            _pageLabel!.text = $"Стр. {ProgrammatorData.CurrentPage + 1}/{ProgrammatorData.PageCount}";
+            _prevBtn!.SetEnabled(ProgrammatorData.CurrentPage > 0);
+            _nextBtn!.SetEnabled(ProgrammatorData.CurrentPage < ProgrammatorData.PageCount - 1);
         }
 
         private void HighlightCell(int row, int col, bool highlight)
@@ -527,7 +527,7 @@ namespace Fodinae.UI.Programmator
 
         private void SetSelectionBorder(int row, int col, bool selected)
         {
-            _cells[row, col].EnableInClassList("prog-cell--selected", selected);
+            _cells[row, col]!.EnableInClassList("prog-cell--selected", selected);
         }
 
         private void RefreshSelectionBorders()
@@ -1307,9 +1307,9 @@ namespace Fodinae.UI.Programmator
         [System.Serializable]
         private class ProgrammatorSave
         {
-            public int[] Codes;
-            public string[]? Labels;
-            public string[]? Values;
+            public int[] Codes = Array.Empty<int>();
+            public string?[] Labels;
+            public string?[] Values;
         }
 
         private string SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
@@ -1329,8 +1329,8 @@ namespace Fodinae.UI.Programmator
         private void ShowProgramList()
         {
             ClearSelection();
-            _joystick.Hide();
-            _radial.Hide();
+            _joystick!.Hide();
+            _radial!.Hide();
             _radialShown = false;
             _radialCellIndex = -1;
             if (_isRunning)
@@ -1338,10 +1338,10 @@ namespace Fodinae.UI.Programmator
                 StopProgram();
             }
 
-            _programTitle.text = "Программатор";
+            _programTitle!.text = "Программатор";
             RefreshProgramList();
             _panel.style.display = DisplayStyle.None;
-            _programListPanel.style.display = DisplayStyle.Flex;
+            _programListPanel!.style.display = DisplayStyle.Flex;
             _activeIndex = -1;
         }
 
@@ -1359,8 +1359,8 @@ namespace Fodinae.UI.Programmator
             _activeIndex = index;
             ProgrammatorData.CurrentPage = 0;
             _programTitle.text = item.Name;
-            _programListPanel.style.display = DisplayStyle.None;
-            _panel.style.display = DisplayStyle.Flex;
+            _programListPanel!.style.display = DisplayStyle.None;
+            _panel!.style.display = DisplayStyle.Flex;
             RefreshAllCells();
         }
 
@@ -1375,8 +1375,8 @@ namespace Fodinae.UI.Programmator
             {
                 var item = _programItems[_activeIndex];
                 item.Codes = new List<int>(ProgrammatorData.Codes);
-                item.Labels = new List<string>(ProgrammatorData.Labels);
-                item.Values = new List<string>(ProgrammatorData.Values);
+                item.Labels = new List<string?>(ProgrammatorData.Labels);
+                item.Values = new List<string?>(ProgrammatorData.Values);
             }
 
             ShowProgramList();
@@ -1404,13 +1404,13 @@ namespace Fodinae.UI.Programmator
         private void ShowCreateInput()
         {
             _createInput.value = $"Программа {_programItems.Count + 1}";
-            _createDialog.style.display = DisplayStyle.Flex;
+            _createDialog!.style.display = DisplayStyle.Flex;
             _createInput.Focus();
         }
 
         private void HideCreateInput()
         {
-            _createDialog.style.display = DisplayStyle.None;
+            _createDialog!.style.display = DisplayStyle.None;
         }
 
         private void DeleteProgram(int index)
@@ -1426,7 +1426,7 @@ namespace Fodinae.UI.Programmator
 
         private void RefreshProgramList()
         {
-            _listScroll.Clear();
+            _listScroll!.Clear();
             for (int i = 0; i < _programItems.Count; i++)
             {
                 int idx = i;
@@ -1484,7 +1484,7 @@ namespace Fodinae.UI.Programmator
             _isRunning = true;
             _runBtn.SetEnabled(false);
             _stopBtn.SetEnabled(true);
-            _panel.AddToClassList("prog-panel--running");
+            _panel!.AddToClassList("prog-panel--running");
             Debug.Log("[Programmator] Program running");
         }
 
@@ -1493,7 +1493,7 @@ namespace Fodinae.UI.Programmator
             _isRunning = false;
             _runBtn.SetEnabled(true);
             _stopBtn.SetEnabled(false);
-            _panel.RemoveFromClassList("prog-panel--running");
+            _panel!.RemoveFromClassList("prog-panel--running");
             Debug.Log("[Programmator] Program stopped");
         }
 
@@ -1503,8 +1503,8 @@ namespace Fodinae.UI.Programmator
                       + (row * ProgrammatorData.COLS) + col;
             int id = ProgrammatorData.Codes[idx];
             var action = (ProgAction)id;
-            var cell = _cells[row, col];
-            var label = _cellLabels[row, col];
+            var cell = _cells[row, col]!;
+            var label = _cellLabels[row, col]!;
 
             var tex = ProgrammatorTextureRegistry.GetTexture(action);
             if (tex != null)
@@ -1540,17 +1540,17 @@ namespace Fodinae.UI.Programmator
             // CAT_OBSERVER uses a joystick instead of the outer ring
             if (categoryId == ProgrammatorData.CAT_OBSERVER)
             {
-                _radial.ClearOuterItems();
-                _joystick.Hide();
+                _radial!.ClearOuterItems();
+                _joystick!.Hide();
                 var cell = _cells[
                     _radialCellIndex / ProgrammatorData.COLS,
-                    _radialCellIndex % ProgrammatorData.COLS];
-                ShowAtCellCenter(cell, center => _joystick.ShowAt(_doc.rootVisualElement, center));
+                    _radialCellIndex % ProgrammatorData.COLS]!;
+                ShowAtCellCenter(cell, center => _joystick!.ShowAt(_doc!.rootVisualElement, center));
                 return;
             }
 
             // Other categories: populate standard outer ring
-            _joystick.Hide();
+            _joystick!.Hide();
 
             if (!ProgrammatorData.CATEGORY_COLORS.TryGetValue(categoryId, out var catColor))
             {
@@ -1563,7 +1563,7 @@ namespace Fodinae.UI.Programmator
                 colors[i] = catColor;
             }
 
-            _radial.SetOuterItems(Array.ConvertAll(ops, op => (int)op), colors);
+            _radial!.SetOuterItems(Array.ConvertAll(ops, op => (int)op), colors);
         }
 
         private void OnJoystickOperatorSelected(ProgAction action)
@@ -1588,8 +1588,8 @@ namespace Fodinae.UI.Programmator
                 UpdatePageLabel();
             }
 
-            _joystick.Hide();
-            _radial.Hide();
+            _joystick!.Hide();
+            _radial!.Hide();
             _radialShown = false;
             _radialCellIndex = -1;
         }
@@ -1617,7 +1617,7 @@ namespace Fodinae.UI.Programmator
                 UpdatePageLabel();
             }
 
-            _radial.Hide();
+             _radial!.Hide();
             _radialShown = false;
             _radialCellIndex = -1;
         }
@@ -1625,8 +1625,8 @@ namespace Fodinae.UI.Programmator
         private void OnRadialBackClicked()
         {
             // Back button — clear outer ring and joystick, keep inner ring visible
-            _radial.ClearOuterItems();
-            _joystick.Hide();
+             _radial!.ClearOuterItems();
+             _joystick!.Hide();
         }
 
         protected void Update()
@@ -1682,8 +1682,8 @@ namespace Fodinae.UI.Programmator
                         UpdateCell(row, col);
                     }
 
-                    _joystick.Hide();
-                    _radial.Hide();
+_joystick!.Hide();
+                _radial!.Hide();
                     _radialShown = false;
                     _radialCellIndex = -1;
                     return;
@@ -1785,7 +1785,7 @@ namespace Fodinae.UI.Programmator
         {
             _isOpen = true;
             IsOpen = true;
-            _popup.style.display = DisplayStyle.Flex;
+            _popup!.style.display = DisplayStyle.Flex;
             ShowProgramList();
         }
 
@@ -1797,16 +1797,16 @@ namespace Fodinae.UI.Programmator
             }
 
             ClearSelection();
-            _joystick.Hide();
-            _radial.Hide();
+            _joystick!.Hide();
+            _radial!.Hide();
             _radialShown = false;
             _radialCellIndex = -1;
             _isOpen = false;
             IsOpen = false;
             HideCreateInput();
-            _programListPanel.style.display = DisplayStyle.None;
+            _programListPanel!.style.display = DisplayStyle.None;
             _panel.style.display = DisplayStyle.None;
-            _popup.style.display = DisplayStyle.None;
+            _popup!.style.display = DisplayStyle.None;
         }
 
         private void RefreshAllCells()

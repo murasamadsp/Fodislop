@@ -34,7 +34,7 @@ namespace Fodinae.World
         [SerializeField]
         private bool _enableDebugLogging = true;
 
-        private MapManager _mapManager;
+        private MapManager? _mapManager;
         private bool _initializationAttempted = false;
         private bool _isInitialized = false;
         private float _startTime;
@@ -97,7 +97,7 @@ namespace Fodinae.World
                 return;
             }
 
-            if (_mapManager.IsWorldInitialized)
+            if (_mapManager != null && _mapManager.IsWorldInitialized)
             {
                 if (_enableDebugLogging)
                 {
@@ -136,7 +136,7 @@ namespace Fodinae.World
 
             _initializationAttempted = true;
 
-            if (_mapManager.IsWorldInitialized)
+            if (_mapManager != null && _mapManager.IsWorldInitialized)
             {
                 if (_enableDebugLogging)
                 {
@@ -163,7 +163,7 @@ namespace Fodinae.World
                     Cells = cellConfigurations,
                 };
 
-                _mapManager.LoadWorldInit(worldInitPacket);
+                _mapManager!.LoadWorldInit(worldInitPacket);
             }
             catch (Exception ex)
             {

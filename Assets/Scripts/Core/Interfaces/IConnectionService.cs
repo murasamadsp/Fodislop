@@ -10,6 +10,6 @@ namespace Fodinae.Core.Interfaces
         bool IsConnected { get; }
         void Connect(bool oldClient = false);
         void Disconnect();
-        event Action<ServerPacket> OnPacketReceived;
+        event Action<ServerPacket>? OnPacketReceived;
     }
 }

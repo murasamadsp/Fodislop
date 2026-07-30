@@ -12,7 +12,7 @@ namespace Fodinae.UI
         private readonly UIDocument _doc;
         private readonly Stack<VisualElement> _stack = new();
 
-        public event Action OnStackEmpty;
+        public event Action? OnStackEmpty;
         public int Count => _stack.Count;
 
         public UIStack(UIDocument doc)

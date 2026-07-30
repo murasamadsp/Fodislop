@@ -27,17 +27,17 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private UIDocument _doc = null!;
         [Inject]
-        private IInventoryModel _model = null!;
+        private IInventoryModel? _model;
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
-        private VisualElement _hotbarContainer = null!;
-        private Button _inventoryButton = null!;
-        private VisualElement _fullInventoryPanel = null!;
+        private VisualElement? _hotbarContainer;
+        private Button? _inventoryButton;
+        private VisualElement? _fullInventoryPanel;
         private bool _isInventoryOpen = false;
 
         // Drag-and-drop
-        private VisualElement _floatingItem = null!;
+        private VisualElement? _floatingItem;
         private int _dragFromSlot = -1;
         private ItemData? _draggedItem;
 
@@ -72,43 +72,43 @@ namespace Fodinae.UI.HUD.Inventory.View
 
             if (Keyboard.current.digit1Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(0);
+                _model!.SelectSlot(0);
             }
             else if (Keyboard.current.digit2Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(1);
+                _model!.SelectSlot(1);
             }
             else if (Keyboard.current.digit3Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(2);
+                _model!.SelectSlot(2);
             }
             else if (Keyboard.current.digit4Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(3);
+                _model!.SelectSlot(3);
             }
             else if (Keyboard.current.digit5Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(4);
+                _model!.SelectSlot(4);
             }
             else if (Keyboard.current.digit6Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(5);
+                _model!.SelectSlot(5);
             }
             else if (Keyboard.current.digit7Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(6);
+                _model!.SelectSlot(6);
             }
             else if (Keyboard.current.digit8Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(7);
+                _model!.SelectSlot(7);
             }
             else if (Keyboard.current.digit9Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(8);
+                _model!.SelectSlot(8);
             }
             else if (Keyboard.current.enterKey.wasPressedThisFrame)
             {
-                _model.UseSelectedItem();
+                _model!.UseSelectedItem();
             }
         }
 
@@ -159,7 +159,7 @@ namespace Fodinae.UI.HUD.Inventory.View
 
             if (slotIndex >= 0)
             {
-                var item = _model.GetSlot(slotIndex);
+                var item = _model!.GetSlot(slotIndex);
                 if (item != null)
                 {
                     _tooltipName.text = item.Name;
@@ -348,7 +348,7 @@ namespace Fodinae.UI.HUD.Inventory.View
                 if (evt.button == 0)
                 {
                     _model.SelectSlot(slotIndex);
-                    var item = _model.GetSlot(slotIndex);
+                    var item = _model!.GetSlot(slotIndex);
 
                     if (item == null)
                     {
@@ -425,7 +425,7 @@ namespace Fodinae.UI.HUD.Inventory.View
             var target = FindSlotUnderMouse(evt.mousePosition);
             if (target >= 0 && target != _dragFromSlot)
             {
-                if (InventoryModel.CanStack(_draggedItem, _model.GetSlot(target)))
+                if (InventoryModel.CanStack(_draggedItem!, _model!.GetSlot(target)))
                 {
                     _model.TryStackSlots(_dragFromSlot, target);
                 }
@@ -470,7 +470,7 @@ namespace Fodinae.UI.HUD.Inventory.View
                 return;
             }
 
-            var item = _model.GetSlot(slotIndex);
+            var item = _model!.GetSlot(slotIndex);
 
             foreach (var cell in _slotElements[slotIndex])
             {
@@ -515,14 +515,14 @@ namespace Fodinae.UI.HUD.Inventory.View
         private void ToggleInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
-            _fullInventoryPanel.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            _fullInventoryPanel!.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         public IInventoryModel GetModel() => _model;
 
         private void ShowContextMenu(Vector2 mousePos, int slotIndex)
         {
-            var item = _model.GetSlot(slotIndex);
+            var item = _model!.GetSlot(slotIndex);
             if (item == null)
             {
                 return;
@@ -538,7 +538,7 @@ namespace Fodinae.UI.HUD.Inventory.View
             AddContextMenuItem("Использовать", () =>
             {
                 _model.SelectSlot(slotIndex);
-                _model.UseSelectedItem();
+                _model!.UseSelectedItem();
                 HideContextMenu();
             });
 

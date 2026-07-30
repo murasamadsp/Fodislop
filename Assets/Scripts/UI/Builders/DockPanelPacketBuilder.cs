@@ -37,11 +37,14 @@ namespace Fodinae.UI.Builders
             parent.style.flexGrow = 0;
 
             var lastChild = children.LastOrDefault(c => c.AttachedProperties == null || c.AttachedProperties.All(p => p.Key != "DockPanel.Dock"));
-            VisualElement current;
-            if (lastChild != null)
-            {
-                current = builder.Build(lastChild);
-                current.style.flexGrow = 1;
+VisualElement? current;
+             if (lastChild != null)
+             {
+                 current = builder.Build(lastChild);
+                 if (current != null)
+                {
+                    current.style.flexGrow = 1;
+                }
             }
             else
             {

@@ -165,7 +165,7 @@ namespace Fodinae.Audio.Backend
         private readonly HashSet<string> _autoLoadedBanks = new();
 
         private async Cysharp.Threading.Tasks.UniTaskVoid LoadBankAndReplayAsync(
-            string eventName, AudioLayer layer, Vector3? worldPosition, GameObject targetGameObject)
+            string eventName, AudioLayer layer, Vector3? worldPosition, GameObject? targetGameObject)
         {
             var bankName = GetFeatureBankName(eventName);
             if (string.IsNullOrEmpty(bankName))

@@ -10,7 +10,7 @@ namespace Fodinae.Core
     {
         private readonly Queue<T> _pool = new();
         private readonly T _prefab;
-        private readonly Transform _parent;
+        private readonly Transform? _parent;
 
         public int CountInactive => _pool.Count;
 

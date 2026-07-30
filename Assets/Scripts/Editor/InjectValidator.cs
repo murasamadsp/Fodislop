@@ -52,7 +52,7 @@ namespace Fodinae.Editor
                         nullInjectFields++;
                     }
 
-                    var mark = isNull ? "NULL !!!" : $"OK [{value.GetType().Name}]";
+                    var mark = value is null ? "NULL !!!" : $"OK [{value.GetType().Name}]";
                     fieldSb.AppendLine($"    {field.FieldType.Name} {field.Name} = {mark}");
                 }
 

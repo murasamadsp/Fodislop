@@ -10,7 +10,7 @@ namespace Fodinae.Player.Input
     {
         [Tooltip("Optional: Drag the Move action from the Input Action asset here. If empty, falls back to direct keyboard polling.")]
         [SerializeField]
-        private InputActionReference _moveActionReference;
+        private InputActionReference? _moveActionReference;
 
         private Vector2 _moveInput;
 

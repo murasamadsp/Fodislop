@@ -19,7 +19,7 @@ namespace Fodinae.Audio.Spatial
     {
         [Tooltip("Имя аудио-события. Можно сменить на лету через SetEvent().")]
         [SerializeField]
-        private string _eventName;
+        private string _eventName = string.Empty;
 
         [Tooltip("Слой.")]
         [SerializeField]
@@ -29,19 +29,20 @@ namespace Fodinae.Audio.Spatial
         [SerializeField]
         [Range(0f, 2f)]
         private float _volume;
-        private AudioPlaybackHandle _handle;
+        private AudioPlaybackHandle? _handle;
 
         /// <summary>Начать проигрывание текущего события с нативной привязкой FMOD к GameObject.</summary>
         public void PlayCurrent()
         {
-            if (string.IsNullOrEmpty(_eventName) || ServiceLocator.Resolve<IAudioSystem>() == null)
+            var audioSystem = ServiceLocator.Resolve<IAudioSystem>();
+            if (string.IsNullOrEmpty(_eventName) || audioSystem == null)
             {
                 return;
             }
 
             Stop();
             float? vol = _volume > 0f ? _volume : null;
-            _handle = ServiceLocator.Resolve<IAudioSystem>().PlayAttached(_eventName, gameObject, _layer, vol);
+            _handle = audioSystem.PlayAttached(_eventName, gameObject, _layer, vol);
         }
 
         /// <summary>Сменить событие на лету (старое останавливается, новое стартует).</summary>
@@ -65,7 +66,7 @@ namespace Fodinae.Audio.Spatial
         public void Stop(float fadeOut = 0f)
         {
             _handle?.Stop(fadeOut);
-            _handle = null;
+            _handle = default;
         }
 
         /// <summary>Играет ли сейчас звук.</summary>

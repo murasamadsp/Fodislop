@@ -49,10 +49,26 @@ namespace Fodinae.Core
             RegisterManager<PacketHandler>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<NetworkService>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GameManager>(builder);
-            RegisterManager<VFXPool>(builder);
-            RegisterManager<PackManager>(builder);
+            RegisterManager<VFXPool>(builder).AsImplementedInterfaces().AsSelf();
+            RegisterManager<PackManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<RobotManager>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<PlayerMovementController>(builder);
+            RegisterManager<TentacleBatchRenderer>(builder);
+            // PlayerMovementController живёт на PrefabInstance объекта Player (тег "Player") в сцене.
+            // RegisterManager<T> через FindAnyObjectByType может не найти его надёжно до инициализации
+            // сцены, что приводит к созданию нового пустого GO без Robot/SpriteRenderer/etc.
+            // Поэтому регистрируем явно через тег.
+            var playerGo = GameObject.FindGameObjectWithTag("Player");
+            var existingPmc = playerGo != null ? playerGo.GetComponent<PlayerMovementController>() : null;
+            if (existingPmc != null)
+            {
+                builder.RegisterInstance(existingPmc);
+                builder.RegisterBuildCallback(resolver => TryInject(resolver, existingPmc));
+            }
+            else
+            {
+                // Фоллбэк: создаём новый GO (offline/тест режим без сцены)
+                builder.RegisterComponentOnNewGameObject<PlayerMovementController>(Lifetime.Singleton);
+            }
             RegisterManager<ServerConfig>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TextureStorageManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder);

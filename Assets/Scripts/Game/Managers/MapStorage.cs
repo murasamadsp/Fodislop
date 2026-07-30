@@ -12,7 +12,7 @@ namespace Fodinae.Game.Managers
 {
     public class MapStorage : IWorldDataStorage
     {
-        private WorldLayer<CellType> _cellLayer;
+        private WorldLayer<CellType>? _cellLayer;
 
         public MapStorage()
         {
@@ -25,7 +25,7 @@ namespace Fodinae.Game.Managers
         private bool _isInitialized;
         private string? _worldCodeName;
 
-        public WorldLayer<CellType> CellLayer => _cellLayer;
+        public WorldLayer<CellType>? CellLayer => _cellLayer;
 
         public bool IsReady => _isInitialized && _cellLayer != null;
 
@@ -78,7 +78,7 @@ namespace Fodinae.Game.Managers
                 string sourcePath = $"{Application.streamingAssetsPath}/WorldMaps/{worldCodeName}_cells.mapb";
                 if (File.Exists(sourcePath))
                 {
-                    string dir = Path.GetDirectoryName(path);
+                    string? dir = Path.GetDirectoryName(path);
                     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     {
                         Directory.CreateDirectory(dir);
@@ -89,8 +89,8 @@ namespace Fodinae.Game.Managers
             }
 #endif
 
-            string directory = Path.GetDirectoryName(path);
-            if (!Directory.Exists(directory))
+            string? directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             {
                 Directory.CreateDirectory(directory);
             }
@@ -102,7 +102,7 @@ namespace Fodinae.Game.Managers
 
         public bool IsInitialized() => _isInitialized;
 
-        public string GetWorldCodeName() => _worldCodeName;
+        public string GetWorldCodeName() => _worldCodeName ?? string.Empty;
 
         public CellType GetCell(int x, int y)
         {

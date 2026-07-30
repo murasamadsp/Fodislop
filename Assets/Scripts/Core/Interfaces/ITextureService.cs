@@ -11,7 +11,7 @@ namespace Fodinae.Core.Interfaces
 {
     public interface ITextureService
     {
-        event Action<string, Texture2D> OnTextureLoaded;
+        event Action<string, Texture2D>? OnTextureLoaded;
         void RequestTexture(CellType cellType);
         AtlasCoordinate GetCellTextureCoordinate(CellType cellType);
         List<TextureAtlas> GetAllAtlases();

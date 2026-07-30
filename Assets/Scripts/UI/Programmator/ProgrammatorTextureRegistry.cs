@@ -10,7 +10,7 @@ namespace Fodinae.UI.Programmator
     {
         private static readonly Dictionary<ProgAction, Texture2D> _cache = new Dictionary<ProgAction, Texture2D>();
 
-        public static Texture2D GetTexture(ProgAction action)
+        public static Texture2D? GetTexture(ProgAction action)
         {
             if (_cache.TryGetValue(action, out var tex))
             {
