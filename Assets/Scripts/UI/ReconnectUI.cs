@@ -25,16 +25,20 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_disconnectOverlay!.parent != null)
+            if (_disconnectOverlay != null && _disconnectOverlay.parent != null)
             {
-                _doc!.rootVisualElement.Remove(_disconnectOverlay);
+                _doc.rootVisualElement.Remove(_disconnectOverlay);
             }
 
-            _reconnectLabel!.text = status;
-            _reconnectStatusSet = true;
-            if (_reconnectOverlay!.parent == null)
+            if (_reconnectLabel != null)
             {
-                _doc!.rootVisualElement.Add(_reconnectOverlay);
+                _reconnectLabel.text = status;
+            }
+
+            _reconnectStatusSet = true;
+            if (_reconnectOverlay != null && _reconnectOverlay.parent == null)
+            {
+                _doc.rootVisualElement.Add(_reconnectOverlay);
             }
         }
 
@@ -45,13 +49,17 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_reconnectOverlay!.parent != null)
+            if (_reconnectOverlay != null && _reconnectOverlay.parent != null)
             {
                 _doc.rootVisualElement.Remove(_reconnectOverlay);
             }
 
-            _disconnectLabel!.text = reason;
-            if (_disconnectOverlay!.parent == null)
+            if (_disconnectLabel != null)
+            {
+                _disconnectLabel.text = reason;
+            }
+
+            if (_disconnectOverlay != null && _disconnectOverlay.parent == null)
             {
                 _doc.rootVisualElement.Add(_disconnectOverlay);
             }
@@ -59,7 +67,7 @@ namespace Fodinae.UI
 
         public void SetStatus(string status)
         {
-            if (_disconnectOverlay!.parent != null)
+            if (_disconnectOverlay != null && _disconnectOverlay.parent != null)
             {
                 return;
             }
@@ -69,7 +77,7 @@ namespace Fodinae.UI
                 _reconnectLabel.text = status;
             }
 
-            if (!_reconnectStatusSet && _doc != null && _reconnectOverlay!.parent == null)
+            if (!_reconnectStatusSet && _doc != null && _reconnectOverlay != null && _reconnectOverlay.parent == null)
             {
                 _doc.rootVisualElement.Add(_reconnectOverlay);
             }
@@ -82,12 +90,12 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_reconnectOverlay!.parent != null)
+            if (_reconnectOverlay != null && _reconnectOverlay.parent != null)
             {
                 _doc.rootVisualElement.Remove(_reconnectOverlay);
             }
 
-            if (_disconnectOverlay!.parent != null)
+            if (_disconnectOverlay != null && _disconnectOverlay.parent != null)
             {
                 _doc.rootVisualElement.Remove(_disconnectOverlay);
             }

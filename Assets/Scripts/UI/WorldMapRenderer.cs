@@ -52,12 +52,14 @@ namespace Fodinae.UI
         private float _playerBlinkTimer;
         private bool _playerBlinkState = true;
 
-        protected void Start()
+        protected void Awake()
         {
-            // WorldMapRenderer is created at runtime by WorldMapController after the
-            // DI startup injection pass — fall back to ServiceLocator when not injected.
             _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
             _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+        }
+
+        protected void Start()
+        {
             _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
             if (_storage == null || _manager == null)
             {
@@ -121,6 +123,16 @@ namespace Fodinae.UI
 
         public void Show()
         {
+            if (_storage == null || _manager == null)
+            {
+                _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
+                _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+                if (_storage == null || _manager == null)
+                {
+                    return;
+                }
+            }
+
             if (_canvas != null)
             {
                 _canvas.gameObject.SetActive(true);
@@ -178,7 +190,7 @@ namespace Fodinae.UI
             for (int i = 0; i < 256; i++)
             {
                 CellType type = (CellType)i;
-                Color color = _manager!.GetCellMinimapColor(type);
+                Color color = _manager?.GetCellMinimapColor(type) ?? new Color(0.3f, 0.3f, 0.3f);
                 if (color.a < 0.01f)
                 {
                     color = new Color(0.3f, 0.3f, 0.3f);
@@ -270,8 +282,13 @@ namespace Fodinae.UI
 
         private void RenderViewport()
         {
-            int worldW = _manager!.WorldWidth;
-            int worldH = _manager!.WorldHeight;
+            if (_manager == null || _storage == null)
+            {
+                return;
+            }
+
+            int worldW = _manager.WorldWidth;
+            int worldH = _manager.WorldHeight;
             float cp = _cellsPerPixel;
             float cx = _viewCenterX;
             float cy = _viewCenterY;
@@ -330,7 +347,7 @@ namespace Fodinae.UI
                         continue;
                     }
 
-                    CellType type = _storage!.GetCell(cellX, serverY);
+                    CellType type = _storage.GetCell(cellX, serverY);
                     Color32 color = _cellColorTable[(byte)type];
 
                     for (int py = pixY_start; py <= pixY_end; py++)

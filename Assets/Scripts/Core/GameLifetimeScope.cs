@@ -148,7 +148,7 @@ namespace Fodinae.Core
                 Debug.Log($"[GameLifetimeScope] Injected {injected} scene MonoBehaviours with [Inject] fields");
 
                 LogInjectionFailures();
-                ValidateStartup();
+                ValidateStartup(resolver);
             });
         }
 
@@ -179,47 +179,47 @@ namespace Fodinae.Core
                 string.Join("\n- ", _injectionFailures));
         }
 
-        private void ValidateStartup()
+        private void ValidateStartup(IObjectResolver resolver)
         {
             var errors = new System.Collections.Generic.List<string>();
             var warnings = new System.Collections.Generic.List<string>();
 
-            if (ServiceLocator.Resolve<IConnectionService>() == null)
+            if (resolver.Resolve<IConnectionService>() == null)
             {
                 errors.Add("ConnectionManager is null after VContainer build");
             }
 
-            if (ServiceLocator.Resolve<INetworkService>() == null)
+            if (resolver.Resolve<INetworkService>() == null)
             {
                 errors.Add("NetworkService is null after VContainer build");
             }
 
-            if (ServiceLocator.Resolve<IInputBlocker>() == null)
+            if (resolver.Resolve<IInputBlocker>() == null)
             {
                 errors.Add("IInputBlocker is null after VContainer build — input blocking will NOT work");
             }
 
-            if (ServiceLocator.Resolve<MapManager>() == null)
+            if (resolver.Resolve<MapManager>() == null)
             {
                 errors.Add("MapManager is null after VContainer build");
             }
 
-            if (ServiceLocator.Resolve<IWorldDataStorage>() == null)
+            if (resolver.Resolve<IWorldDataStorage>() == null)
             {
                 errors.Add("MapStorage is null after VContainer build");
             }
 
-            if (ServiceLocator.Resolve<ITextureService>() == null)
+            if (resolver.Resolve<ITextureService>() == null)
             {
                 errors.Add("WorldTextureManager is null after VContainer build");
             }
 
-            if (ServiceLocator.Resolve<IAudioSystem>() == null)
+            if (resolver.Resolve<IAudioSystem>() == null)
             {
                 errors.Add("AudioSystem is null after VContainer build");
             }
 
-            if (ServiceLocator.Resolve<GameManager>() == null)
+            if (resolver.Resolve<GameManager>() == null)
             {
                 errors.Add("GameManager is null after VContainer build — UI will NOT be created");
             }

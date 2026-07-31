@@ -73,7 +73,11 @@ namespace Fodinae.UI
                 Debug.Log("[MissionArrowUI] Arrow cleared (null target)");
                 _targetX = null;
                 _targetY = null;
-                _arrow.style.display = DisplayStyle.None;
+                if (_arrow != null)
+                {
+                    _arrow.style.display = DisplayStyle.None;
+                }
+
                 return;
             }
 

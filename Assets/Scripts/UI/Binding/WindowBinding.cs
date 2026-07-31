@@ -140,10 +140,10 @@ namespace Fodinae.UI.Binding
             }
 
             // Collect current values from all input controls by name
-            var values = new Dictionary<string, object?>(_inputs.Count);
+            var values = new Dictionary<string, object>(_inputs.Count);
             foreach (var kvp in _inputs)
             {
-                values[kvp.Key] = GetControlValue(kvp.Value);
+                values[kvp.Key] = GetControlValue(kvp.Value) ?? string.Empty;
             }
 
             // Re-evaluate all label templates

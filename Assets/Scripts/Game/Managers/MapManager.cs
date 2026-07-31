@@ -69,21 +69,8 @@ namespace Fodinae.Game.Managers
         private ushort _width;
         private ushort _height;
 
-        private bool _isWorldInitialized;
         private bool _nullConfigWarned;
-        public bool IsWorldInitialized
-        {
-            get => _isWorldInitialized;
-            private set
-            {
-                if (_isWorldInitialized == value)
-                {
-                    return;
-                }
-
-                _isWorldInitialized = value;
-            }
-        }
+        public bool IsWorldInitialized { get; private set; }
 
         public bool IsStandaloneMode { get; set; } = false;
 

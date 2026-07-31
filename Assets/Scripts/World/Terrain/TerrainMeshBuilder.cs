@@ -263,7 +263,7 @@ namespace Fodinae.World.Terrain
                 _vertexBuffer[vIdx + 1].Position = new Vector3(posX + _cellSize, posY, 0);
                 _vertexBuffer[vIdx + 2].Position = new Vector3(posX + _cellSize, posY + _cellSize, 0);
                 _vertexBuffer[vIdx + 3].Position = new Vector3(posX, posY + _cellSize, 0);
-                Color32 clear = new Color32(0, 0, 0, 0);
+                Color clear = Color.clear;
                 _vertexBuffer[vIdx + 0].Color = clear;
                 _vertexBuffer[vIdx + 1].Color = clear;
                 _vertexBuffer[vIdx + 2].Color = clear;

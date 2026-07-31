@@ -21,15 +21,12 @@ namespace Fodinae.UI
         private InputAction? _mapToggleAction;
 
         private bool _isInMapMode;
-        private Vector3 _storedCamPos;
-        private float _storedCamZoom;
 
         // HUD elements
         private Fodinae.UI.HUD.Player.View.PlayerHUDView? _playerHud;
         private Fodinae.UI.HUD.Inventory.View.InventoryView? _inventory;
         private FPSCounter? _fps;
         private MinimapController? _minimap;
-        private PauseMenu? _pauseMenu;
 
         protected void Start()
         {
@@ -40,7 +37,6 @@ namespace Fodinae.UI
             _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>();
             _fps = UnityEngine.Object.FindAnyObjectByType<FPSCounter>();
             _minimap = UnityEngine.Object.FindAnyObjectByType<MinimapController>();
-            _pauseMenu = UnityEngine.Object.FindAnyObjectByType<PauseMenu>();
 
             if (_cameraFollow == null)
             {
@@ -96,14 +92,7 @@ namespace Fodinae.UI
             }
 
             _isInMapMode = true;
-            if (_cameraFollow != null)
-            {
-                _cameraFollow.SetScrollEnabled(false);
-            }
-
-            // Store camera state
-            _storedCamPos = _cameraFollow!.transform.position;
-            _storedCamZoom = _cameraFollow.GetCurrentZoom();
+            _cameraFollow!.SetScrollEnabled(false);
 
             if (_terrain != null)
             {

@@ -39,8 +39,8 @@ namespace Fodinae.UI.Programmator
         private int _selEndCol;
         private readonly HashSet<long> _selectedCells = new HashSet<long>();
         private int[]? _clipboardCodes;
-        private string[]? _clipboardLabels;
-        private string[]? _clipboardValues;
+        private string?[]? _clipboardLabels;
+        private string?[]? _clipboardValues;
         private int _clipboardWidth;
         private int _clipboardHeight;
         private bool _hasClipboard;
@@ -51,8 +51,8 @@ namespace Fodinae.UI.Programmator
         {
             public string Name = string.Empty;
             public List<int> Codes = new();
-            public List<string> Labels = new();
-            public List<string> Values = new();
+            public List<string?> Labels = new();
+            public List<string?> Values = new();
         }
 
         private readonly List<ProgramItem> _programItems = new();
@@ -306,7 +306,7 @@ namespace Fodinae.UI.Programmator
                         _radialCellIndex = (row * ProgrammatorData.COLS) + col;
                         ShowCategoryRing();
                         _radialShown = true;
-                        ShowAtCellCenter(_cells[row, col]!, center => _radial!.ShowAt(_doc!.rootVisualElement, center));
+                        ShowAtCellCenter(_cells![row, col]!, center => _radial!.ShowAt(_doc!.rootVisualElement, center));
                     });
 
                     var label = new Label();
@@ -426,7 +426,7 @@ namespace Fodinae.UI.Programmator
                 return;
             }
 
-            EventCallback<GeometryChangedEvent> callback = null;
+            EventCallback<GeometryChangedEvent>? callback = null;
             callback = _ =>
             {
                 cell.UnregisterCallback(callback);
@@ -454,8 +454,8 @@ namespace Fodinae.UI.Programmator
             if (ProgrammatorData.CurrentPage > 0)
             {
                 ClearSelection();
-_radial!.Hide();
-            _joystick!.Hide();
+                _radial!.Hide();
+                _joystick!.Hide();
                 _radialShown = false;
                 ProgrammatorData.CurrentPage--;
                 RefreshAllCells();
@@ -503,7 +503,7 @@ _radial!.Hide();
 
         private void HighlightCell(int row, int col, bool highlight)
         {
-            _cells[row, col].EnableInClassList("prog-cell--hover", highlight);
+            _cells![row, col]!.EnableInClassList("prog-cell--hover", highlight);
         }
 
         private bool IsSelected(int row, int col)
@@ -527,7 +527,7 @@ _radial!.Hide();
 
         private void SetSelectionBorder(int row, int col, bool selected)
         {
-            _cells[row, col]!.EnableInClassList("prog-cell--selected", selected);
+            _cells![row, col]!.EnableInClassList("prog-cell--selected", selected);
         }
 
         private void RefreshSelectionBorders()
@@ -736,8 +736,8 @@ _radial!.Hide();
             _clipboardWidth = (maxCol - minCol) + 1;
             _clipboardHeight = (maxRow - minRow) + 1;
             _clipboardCodes = new int[_clipboardWidth * _clipboardHeight];
-            _clipboardLabels = new string[_clipboardWidth * _clipboardHeight];
-            _clipboardValues = new string[_clipboardWidth * _clipboardHeight];
+            _clipboardLabels = new string?[_clipboardWidth * _clipboardHeight];
+            _clipboardValues = new string?[_clipboardWidth * _clipboardHeight];
             for (int r = minRow; r <= maxRow; r++)
             {
                 for (int c = minCol; c <= maxCol; c++)
@@ -832,9 +832,9 @@ _radial!.Hide();
                     int dstIdx = (ProgrammatorData.CurrentPage * ProgrammatorData.CELLS_PER_PAGE)
                                  + (targetRow * ProgrammatorData.COLS) + targetCol;
                     int srcIdx = (r * _clipboardWidth) + c;
-                    ProgrammatorData.Codes[dstIdx] = _clipboardCodes[srcIdx];
-                    ProgrammatorData.Labels[dstIdx] = _clipboardLabels[srcIdx];
-                    ProgrammatorData.Values[dstIdx] = _clipboardValues[srcIdx];
+                    ProgrammatorData.Codes[dstIdx] = _clipboardCodes![srcIdx];
+                    ProgrammatorData.Labels[dstIdx] = _clipboardLabels![srcIdx];
+                    ProgrammatorData.Values[dstIdx] = _clipboardValues![srcIdx];
                     UpdateCell(targetRow, targetCol);
                 }
             }
@@ -866,7 +866,7 @@ _radial!.Hide();
                     return;
                 }
 
-                var temp = new Dictionary<long, (int code, string label, string value)>();
+                var temp = new Dictionary<long, (int code, string? label, string? value)>();
                 foreach (long key in _selectedCells)
                 {
                     int idx = (page * cellsPerPage) + (int)key;
@@ -1106,8 +1106,8 @@ _radial!.Hide();
             int width = (maxCol - minCol) + 1;
             int height = (maxRow - minRow) + 1;
             int[] tmpCodes = new int[width * height];
-            string[] tmpLabels = new string[width * height];
-            string[] tmpValues = new string[width * height];
+            string?[] tmpLabels = new string?[width * height];
+            string?[] tmpValues = new string?[width * height];
             for (int r = minRow; r <= maxRow; r++)
             {
                 for (int c = minCol; c <= maxCol; c++)
@@ -1308,8 +1308,8 @@ _radial!.Hide();
         private class ProgrammatorSave
         {
             public int[] Codes = Array.Empty<int>();
-            public string?[] Labels;
-            public string?[] Values;
+            public string?[] Labels = null!;
+            public string?[] Values = null!;
         }
 
         private string SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
@@ -1340,7 +1340,7 @@ _radial!.Hide();
 
             _programTitle!.text = "Программатор";
             RefreshProgramList();
-            _panel.style.display = DisplayStyle.None;
+            _panel!.style.display = DisplayStyle.None;
             _programListPanel!.style.display = DisplayStyle.Flex;
             _activeIndex = -1;
         }
@@ -1354,11 +1354,11 @@ _radial!.Hide();
 
             var item = _programItems[index];
             ProgrammatorData.Codes = new List<int>(item.Codes);
-            ProgrammatorData.Labels = new List<string>(item.Labels);
-            ProgrammatorData.Values = new List<string>(item.Values);
+            ProgrammatorData.Labels = new List<string?>(item.Labels);
+            ProgrammatorData.Values = new List<string?>(item.Values);
             _activeIndex = index;
             ProgrammatorData.CurrentPage = 0;
-            _programTitle.text = item.Name;
+            _programTitle!.text = item.Name;
             _programListPanel!.style.display = DisplayStyle.None;
             _panel!.style.display = DisplayStyle.Flex;
             RefreshAllCells();
@@ -1393,8 +1393,8 @@ _radial!.Hide();
             {
                 Name = name,
                 Codes = new List<int>(new int[ProgrammatorData.CELLS_PER_PAGE]),
-                Labels = new List<string>(new string[ProgrammatorData.CELLS_PER_PAGE]),
-                Values = new List<string>(new string[ProgrammatorData.CELLS_PER_PAGE]),
+                Labels = new List<string?>(new string?[ProgrammatorData.CELLS_PER_PAGE]),
+                Values = new List<string?>(new string?[ProgrammatorData.CELLS_PER_PAGE]),
             };
             _programItems.Add(item);
             HideCreateInput();
@@ -1403,9 +1403,9 @@ _radial!.Hide();
 
         private void ShowCreateInput()
         {
-            _createInput.value = $"Программа {_programItems.Count + 1}";
+            _createInput!.value = $"Программа {_programItems.Count + 1}";
             _createDialog!.style.display = DisplayStyle.Flex;
-            _createInput.Focus();
+            _createInput!.Focus();
         }
 
         private void HideCreateInput()
@@ -1482,8 +1482,8 @@ _radial!.Hide();
         private void RunProgram()
         {
             _isRunning = true;
-            _runBtn.SetEnabled(false);
-            _stopBtn.SetEnabled(true);
+            _runBtn!.SetEnabled(false);
+            _stopBtn!.SetEnabled(true);
             _panel!.AddToClassList("prog-panel--running");
             Debug.Log("[Programmator] Program running");
         }
@@ -1491,8 +1491,8 @@ _radial!.Hide();
         private void StopProgram()
         {
             _isRunning = false;
-            _runBtn.SetEnabled(true);
-            _stopBtn.SetEnabled(false);
+            _runBtn!.SetEnabled(true);
+            _stopBtn!.SetEnabled(false);
             _panel!.RemoveFromClassList("prog-panel--running");
             Debug.Log("[Programmator] Program stopped");
         }
@@ -1503,8 +1503,8 @@ _radial!.Hide();
                       + (row * ProgrammatorData.COLS) + col;
             int id = ProgrammatorData.Codes[idx];
             var action = (ProgAction)id;
-            var cell = _cells[row, col]!;
-            var label = _cellLabels[row, col]!;
+            var cell = _cells![row, col]!;
+            var label = _cellLabels![row, col]!;
 
             var tex = ProgrammatorTextureRegistry.GetTexture(action);
             if (tex != null)
@@ -1542,7 +1542,7 @@ _radial!.Hide();
             {
                 _radial!.ClearOuterItems();
                 _joystick!.Hide();
-                var cell = _cells[
+                var cell = _cells![
                     _radialCellIndex / ProgrammatorData.COLS,
                     _radialCellIndex % ProgrammatorData.COLS]!;
                 ShowAtCellCenter(cell, center => _joystick!.ShowAt(_doc!.rootVisualElement, center));
@@ -1617,7 +1617,7 @@ _radial!.Hide();
                 UpdatePageLabel();
             }
 
-             _radial!.Hide();
+            _radial!.Hide();
             _radialShown = false;
             _radialCellIndex = -1;
         }
@@ -1656,7 +1656,7 @@ _radial!.Hide();
                     return;
                 }
 
-                if (_panel.style.display == DisplayStyle.Flex)
+                if (_panel!.style.display == DisplayStyle.Flex)
                 {
                     CloseProgram();
                     return;
@@ -1682,8 +1682,8 @@ _radial!.Hide();
                         UpdateCell(row, col);
                     }
 
-_joystick!.Hide();
-                _radial!.Hide();
+                    _joystick!.Hide();
+                    _radial!.Hide();
                     _radialShown = false;
                     _radialCellIndex = -1;
                     return;
@@ -1805,7 +1805,7 @@ _joystick!.Hide();
             IsOpen = false;
             HideCreateInput();
             _programListPanel!.style.display = DisplayStyle.None;
-            _panel.style.display = DisplayStyle.None;
+            _panel!.style.display = DisplayStyle.None;
             _popup!.style.display = DisplayStyle.None;
         }
 

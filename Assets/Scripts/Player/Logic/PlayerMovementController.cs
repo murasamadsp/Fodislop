@@ -251,12 +251,6 @@ namespace Fodinae.Player.Logic
                 }
             }
 
-            _serverConfig ??= Fodinae.Core.ServiceLocator.Resolve<IServerConfig>();
-            _mapDataProvider ??= Fodinae.Core.ServiceLocator.Resolve<IMapDataProvider>();
-            _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-            _inputBlocker ??= Fodinae.Core.ServiceLocator.Resolve<Fodinae.Core.Interfaces.IInputBlocker>();
-            _networkService ??= Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
-
             if (_robot is null || _input is null)
             {
                 return;

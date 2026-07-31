@@ -44,8 +44,6 @@ namespace Fodinae.UI.HUD.Inventory.View
         // Context menu
         private VisualElement _contextMenu = null!;
 
-    private int _contextMenuSlot = -1;
-
         // Selection
         private int _lastSelectedSlot = -1;
         private VisualElement _tooltipWrapper = null!;
@@ -347,7 +345,7 @@ namespace Fodinae.UI.HUD.Inventory.View
             {
                 if (evt.button == 0)
                 {
-                    _model.SelectSlot(slotIndex);
+                    _model!.SelectSlot(slotIndex);
                     var item = _model!.GetSlot(slotIndex);
 
                     if (item == null)
@@ -386,7 +384,6 @@ namespace Fodinae.UI.HUD.Inventory.View
                 else if (evt.button == 1)
                 {
                     HideContextMenu();
-                    _contextMenuSlot = slotIndex;
                     ShowContextMenu(evt.mousePosition, slotIndex);
                     evt.StopPropagation();
                 }
@@ -459,8 +456,8 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void UpdateFloatingPosition(Vector2 mousePos)
         {
-            _floatingItem.style.left = mousePos.x - (ICON_SIZE / 2);
-            _floatingItem.style.top = mousePos.y - (ICON_SIZE / 2);
+            _floatingItem!.style.left = mousePos.x - (ICON_SIZE / 2);
+            _floatingItem!.style.top = mousePos.y - (ICON_SIZE / 2);
         }
 
         private void RefreshSlot(int slotIndex)
@@ -518,7 +515,7 @@ namespace Fodinae.UI.HUD.Inventory.View
             _fullInventoryPanel!.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        public IInventoryModel GetModel() => _model;
+        public IInventoryModel? GetModel() => _model;
 
         private void ShowContextMenu(Vector2 mousePos, int slotIndex)
         {
@@ -571,7 +568,6 @@ namespace Fodinae.UI.HUD.Inventory.View
                 _contextMenu = null!;
             }
 
-            _contextMenuSlot = -1;
             _doc?.rootVisualElement.UnregisterCallback<MouseDownEvent>(OnContextMenuOutsideClick);
             _doc?.rootVisualElement.UnregisterCallback<KeyDownEvent>(OnContextMenuEscape);
         }

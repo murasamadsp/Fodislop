@@ -6,11 +6,13 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Networking;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.UI
 {
@@ -29,6 +31,12 @@ namespace Fodinae.UI
         private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker? _blinker;
         private CancellationTokenSource? _idleCts;
+
+        [Inject]
+        private INetworkService _networkService = null!;
+
+        [Inject]
+        private IServerConfig _serverConfig = null!;
 
         protected void OnDestroy()
         {
@@ -49,7 +57,7 @@ namespace Fodinae.UI
             {
                 _panel.style.display = DisplayStyle.None;
             }
-            Networking.NetworkService.Instance?.Send(new QueryChatHistoryPacket("global", 0));
+            _networkService.Send(new QueryChatHistoryPacket("global", 0));
         }
 
         protected void Update()
@@ -108,7 +116,7 @@ namespace Fodinae.UI
             _inputField.selectAllOnFocus = false;
             _inputField.selectAllOnMouseUp = false;
             _inputField.AddToClassList("gchat-input");
-            _inputField.maxLength = Fodinae.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
+            _inputField.maxLength = _serverConfig.MaxGlobalChatLength;
             bottomRow.Add(_inputField);
 
             _inputField.RegisterCallback<FocusEvent>(_ =>
@@ -203,14 +211,13 @@ namespace Fodinae.UI
                 return;
             }
 
-            var chatMaxLen = Fodinae.Core.ServiceLocator.Resolve<IServerConfig>()?.MaxGlobalChatLength ?? 50;
+            var chatMaxLen = _serverConfig.MaxGlobalChatLength;
             if (text.Length > chatMaxLen)
             {
                 text = text.Substring(0, chatMaxLen);
             }
 
-            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
-            networkService?.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
+            _networkService.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
 
             _inputField.value = string.Empty;
             _inputField.Focus();
@@ -329,7 +336,7 @@ namespace Fodinae.UI
             {
                 _colorGrid.style.display = DisplayStyle.None;
             }
-            Networking.NetworkService.Instance?.Send(new ChangeChatColorPacket(color));
+            _networkService.Send(new ChangeChatColorPacket(color));
         }
     }
 }

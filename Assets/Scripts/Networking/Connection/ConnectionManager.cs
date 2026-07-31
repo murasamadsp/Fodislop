@@ -38,6 +38,11 @@ namespace Fodinae.Networking.Connection
         private bool _serverInitiatedDisconnect;
         private string _disconnectReason = string.Empty;
 
+        [Inject]
+        private IWorldDataStorage _worldStorage = null!;
+        [Inject]
+        private GameManager _gameManager = null!;
+
         protected void Awake()
         {
             Instance = this;
@@ -99,7 +104,7 @@ namespace Fodinae.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            Fodinae.Core.ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Connecting);
+            _gameManager?.SetState(Game.Managers.GameState.Connecting);
 
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;
@@ -124,7 +129,7 @@ namespace Fodinae.Networking.Connection
             Connection.Disconnect();
             Connection = null;
 
-            (ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage)?.Dispose();
+            (_worldStorage as MapStorage)?.Dispose();
         }
 
         public void HandleServerDisconnect(string reason)
@@ -133,7 +138,7 @@ namespace Fodinae.Networking.Connection
             _serverInitiatedDisconnect = true;
             _disconnectReason = reason;
             Disconnect();
-            ServiceLocator.Resolve<GameManager>()?.DeauthorizeUI();
+            _gameManager?.DeauthorizeUI();
             ReconnectUI.Instance?.ShowDisconnectReason(reason);
         }
 
@@ -144,7 +149,7 @@ namespace Fodinae.Networking.Connection
             _reconnectCountdown = ReconnectInterval;
             _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
             Disconnect();
-            ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Disconnected);
+            _gameManager?.SetState(Game.Managers.GameState.Disconnected);
             ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
         }
 
@@ -166,20 +171,21 @@ namespace Fodinae.Networking.Connection
             int version = _useOldClient ? 0 : 1;
             string token = AuthTokenManager.LoadToken();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
-            NetworkService.Instance?.Send(new ClientHelloPacket(version, "Windows", 10, "fingerprint", token));
+            var ns = ServiceLocator.Resolve<INetworkService>();
+            ns?.Send(new ClientHelloPacket(version, "Windows", 10, "fingerprint", token));
 
-            NetworkService.Instance?.Send(new OpenHelpClickPacket());
+            ns?.Send(new OpenHelpClickPacket());
         }
 
         private void OnDisconnected()
         {
-            ServiceLocator.Resolve<GameManager>()?.DeauthorizeUI();
+            _gameManager?.DeauthorizeUI();
 
             if (_shouldAutoReconnect && !_serverInitiatedDisconnect)
             {
                 _reconnectCountdown = ReconnectInterval;
                 _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
-                ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Disconnected);
+                _gameManager?.SetState(Game.Managers.GameState.Disconnected);
                 ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
             }
         }

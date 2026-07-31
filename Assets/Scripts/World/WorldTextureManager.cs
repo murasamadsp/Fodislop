@@ -33,12 +33,12 @@ namespace Fodinae.World
         private int _cellTextureSize = RenderingConstants.CELL_SIZE;
 
         [System.NonSerialized]
-        public TextureAtlas? _currentAtlas;
-        private CellTextureCache _textureCache = new CellTextureCache();
+        public TextureAtlas _currentAtlas = null!;
+        private CellTextureCache _textureCache = null!;
         private Texture2D? _flowMapTexture;
         public const CellType FLOW_MAP_CELL_TYPE = (CellType)254;
-        private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = new();
-        private List<TextureAtlas> _atlases = new();
+        private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
+        private List<TextureAtlas> _atlases = null!;
 
         private Texture2D? _cachedEmptyTexture;
 

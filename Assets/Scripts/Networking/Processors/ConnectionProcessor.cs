@@ -1,5 +1,7 @@
 #nullable enable
 
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
 
@@ -9,12 +11,12 @@ namespace Fodinae.Networking.Processors
     {
         public void Process(DisconnectPacket packet)
         {
-            ConnectionManager.Instance?.HandleServerDisconnect(packet.Reason);
+            (ServiceLocator.Resolve<IConnectionService>() as ConnectionManager)?.HandleServerDisconnect(packet.Reason);
         }
 
         public void Process(ReconnectPacket packet)
         {
-            ConnectionManager.Instance?.HandleServerReconnect();
+            (ServiceLocator.Resolve<IConnectionService>() as ConnectionManager)?.HandleServerReconnect();
         }
     }
 }

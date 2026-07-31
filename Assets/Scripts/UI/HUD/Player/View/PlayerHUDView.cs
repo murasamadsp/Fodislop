@@ -148,7 +148,10 @@ namespace Fodinae.UI.HUD.Player.View
                     return;
                 }
 
-                _crystalTextures.Add(tex!);
+                if (tex != null)
+                {
+                    _crystalTextures.Add(tex);
+                }
             }
         }
 
@@ -202,6 +205,7 @@ namespace Fodinae.UI.HUD.Player.View
                 _model.OnStatsChanged += RefreshAll;
                 _isLoaded = _model.Health > 0 || _model.Level > 0;
             }
+
             if (!_isLoaded)
             {
                 StartSkeletonPulse();
@@ -250,7 +254,7 @@ namespace Fodinae.UI.HUD.Player.View
             _levelLabel.AddToClassList("hud-level");
             topRow.Add(_levelLabel);
 
-            var clanButton = new Button(() => NetworkService.Instance?.Send(new OpenClanClickPacket()));
+            var clanButton = new Button(() => _networkService?.Send(new OpenClanClickPacket()));
             clanButton.AddToClassList("hud-clan-button");
             clanButton.tooltip = "Клан";
             topRow.Add(clanButton);
@@ -638,7 +642,7 @@ namespace Fodinae.UI.HUD.Player.View
             barContainer.Add(barFill);
             cell.Add(barContainer);
 
-            _currentSkillRow.Add(cell);
+            _currentSkillRow!.Add(cell);
             _skillCountInRow++;
 
             _skillIcons[skill] = (arrow, barFill);
@@ -663,9 +667,13 @@ namespace Fodinae.UI.HUD.Player.View
 
             _autoDigLabel.text = enabled ? "Копать ✓" : "Копать ✗";
             _autoDigLabel.EnableInClassList("hud-toggle-btn-label", true);
-            _autoDigButton.EnableInClassList("hud-toggle-btn", true);
+            if (_autoDigButton != null)
+            {
+                _autoDigButton.EnableInClassList("hud-toggle-btn", true);
+                _autoDigButton.EnableInClassList("enabled", enabled);
+            }
+
             _autoDigLabel.EnableInClassList("enabled", enabled);
-            _autoDigButton.EnableInClassList("enabled", enabled);
         }
 
         private void ToggleAggression()
@@ -686,7 +694,7 @@ namespace Fodinae.UI.HUD.Player.View
 
             _aggressionLabel.text = enabled ? "Агрессия ✓" : "Агрессия ✗";
             _aggressionLabel.EnableInClassList("enabled", enabled);
-            _aggressionButton.EnableInClassList("enabled", enabled);
+            _aggressionButton?.EnableInClassList("enabled", enabled);
         }
 
         private void StartSkeletonPulse()
@@ -697,7 +705,7 @@ namespace Fodinae.UI.HUD.Player.View
             float t = 0f;
             bool rising = true;
 
-            _skeletonPulse = _panel.schedule.Execute(() =>
+            _skeletonPulse = _panel!.schedule.Execute(() =>
             {
                 if (_panel == null)
                 {
@@ -718,14 +726,45 @@ namespace Fodinae.UI.HUD.Player.View
                 }
 
                 float alpha = Mathf.Lerp(pulseMin, pulseMax, t / pulseDuration);
-                if (_nicknameLabel != null) _nicknameLabel.style.opacity = alpha;
-                if (_levelLabel != null) _levelLabel.style.opacity = alpha;
-                if (_hpLabel != null) _hpLabel.style.opacity = alpha;
-                if (_hpBarFill != null) _hpBarFill.style.opacity = alpha;
-                if (_moneyLabel != null) _moneyLabel.style.opacity = alpha;
-                if (_credsLabel != null) _credsLabel.style.opacity = alpha;
-                if (_geologyLabel != null) _geologyLabel.style.opacity = alpha;
-                if (_basketPercentLabel != null) _basketPercentLabel.style.opacity = alpha;
+                if (_nicknameLabel != null)
+                {
+                    _nicknameLabel.style.opacity = alpha;
+                }
+
+                if (_levelLabel != null)
+                {
+                    _levelLabel.style.opacity = alpha;
+                }
+
+                if (_hpLabel != null)
+                {
+                    _hpLabel.style.opacity = alpha;
+                }
+
+                if (_hpBarFill != null)
+                {
+                    _hpBarFill.style.opacity = alpha;
+                }
+
+                if (_moneyLabel != null)
+                {
+                    _moneyLabel.style.opacity = alpha;
+                }
+
+                if (_credsLabel != null)
+                {
+                    _credsLabel.style.opacity = alpha;
+                }
+
+                if (_geologyLabel != null)
+                {
+                    _geologyLabel.style.opacity = alpha;
+                }
+
+                if (_basketPercentLabel != null)
+                {
+                    _basketPercentLabel.style.opacity = alpha;
+                }
             }).Every(16);
         }
 
@@ -737,14 +776,45 @@ namespace Fodinae.UI.HUD.Player.View
                 _skeletonPulse = null;
             }
 
-            if (_nicknameLabel != null) _nicknameLabel.style.opacity = 1;
-            if (_levelLabel != null) _levelLabel.style.opacity = 1;
-            if (_hpLabel != null) _hpLabel.style.opacity = 1;
-            if (_hpBarFill != null) _hpBarFill.style.opacity = 1;
-            if (_moneyLabel != null) _moneyLabel.style.opacity = 1;
-            if (_credsLabel != null) _credsLabel.style.opacity = 1;
-            if (_geologyLabel != null) _geologyLabel.style.opacity = 1;
-            if (_basketPercentLabel != null) _basketPercentLabel.style.opacity = 1;
+            if (_nicknameLabel != null)
+            {
+                _nicknameLabel.style.opacity = 1;
+            }
+
+            if (_levelLabel != null)
+            {
+                _levelLabel.style.opacity = 1;
+            }
+
+            if (_hpLabel != null)
+            {
+                _hpLabel.style.opacity = 1;
+            }
+
+            if (_hpBarFill != null)
+            {
+                _hpBarFill.style.opacity = 1;
+            }
+
+            if (_moneyLabel != null)
+            {
+                _moneyLabel.style.opacity = 1;
+            }
+
+            if (_credsLabel != null)
+            {
+                _credsLabel.style.opacity = 1;
+            }
+
+            if (_geologyLabel != null)
+            {
+                _geologyLabel.style.opacity = 1;
+            }
+
+            if (_basketPercentLabel != null)
+            {
+                _basketPercentLabel.style.opacity = 1;
+            }
         }
 
         private void RefreshAll()
@@ -766,8 +836,16 @@ namespace Fodinae.UI.HUD.Player.View
                 StopSkeletonPulse();
             }
 
-            if (_nicknameLabel != null) _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
-            if (_levelLabel != null) _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
+            if (_nicknameLabel != null)
+            {
+                _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
+            }
+
+            if (_levelLabel != null)
+            {
+                _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
+            }
+
             if (_hpLabel != null)
             {
                 _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
@@ -781,8 +859,15 @@ namespace Fodinae.UI.HUD.Player.View
                 _hpBarFill!.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
             }
 
-            if (_moneyLabel != null) _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
-            if (_credsLabel != null) _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+            if (_moneyLabel != null)
+            {
+                _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
+            }
+
+            if (_credsLabel != null)
+            {
+                _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+            }
 
             if (_geologyLabel != null)
             {
@@ -791,7 +876,11 @@ namespace Fodinae.UI.HUD.Player.View
                     : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
             }
 
-            if (_basketPercentLabel != null) _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+            if (_basketPercentLabel != null)
+            {
+                _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+            }
+
             for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
             {
                 _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
@@ -800,7 +889,12 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void RebuildCrystalRows()
         {
-            _basketContainer?.Clear();
+            if (_basketContainer == null)
+            {
+                return;
+            }
+
+            _basketContainer.Clear();
             _basketCrystalLabels.Clear();
 
             for (int i = 0; i < _crystalTextures.Count; i++)
@@ -1105,6 +1199,7 @@ namespace Fodinae.UI.HUD.Player.View
                 _missionPanel!.style.display = DisplayStyle.None;
                 return;
             }
+
             _missionTitleLabel!.text = stats.MissionTitle ?? "Миссия";
             _missionDescLabel!.text = stats.MissionDescription ?? string.Empty;
 
