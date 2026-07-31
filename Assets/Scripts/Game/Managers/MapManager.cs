@@ -24,8 +24,6 @@ namespace Fodinae.Game.Managers
         private IRobotService _robotService = null!;
         private IServerAudioService _audioService = null!;
         [Inject]
-
-
         public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
         {
             _worldStorage = worldStorage;

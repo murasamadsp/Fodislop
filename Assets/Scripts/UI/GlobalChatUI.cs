@@ -57,6 +57,7 @@ namespace Fodinae.UI
             {
                 _panel.style.display = DisplayStyle.None;
             }
+
             _networkService.Send(new QueryChatHistoryPacket("global", 0));
         }
 
@@ -185,6 +186,7 @@ namespace Fodinae.UI
             {
                 _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
             }
+
             var uss = Resources.Load<StyleSheet>("chat-input");
             if (uss != null)
             {
@@ -336,6 +338,7 @@ namespace Fodinae.UI
             {
                 _colorGrid.style.display = DisplayStyle.None;
             }
+
             _networkService.Send(new ChangeChatColorPacket(color));
         }
     }

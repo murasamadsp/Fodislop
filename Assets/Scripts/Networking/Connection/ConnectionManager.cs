@@ -36,6 +36,10 @@ namespace Fodinae.Networking.Connection
         private const float ReconnectInterval = 20f;
         private string _reconnectStatus = string.Empty;
         private bool _serverInitiatedDisconnect;
+
+        // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
+        // и для диагностики в ReconnectUI. НЕ УДАЛЯТЬ (см. HandleServerDisconnect).
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052", Justification = "Хранит причину дисконнекта для реконнект-статуса")]
         private string _disconnectReason = string.Empty;
 
         [Inject]

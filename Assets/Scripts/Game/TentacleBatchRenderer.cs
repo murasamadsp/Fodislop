@@ -22,7 +22,6 @@ public class TentacleBatchRenderer : MonoBehaviour
     private const int TRIS_PER_TENTACLE = (POINT_COUNT - 1) * 6;
     private const int INITIAL_CAPACITY = 64;
     private const int SORTING_ORDER = -1;
-    private const float CULL_MARGIN = 3f;
 
     private sealed class TextureChunk
     {
@@ -35,7 +34,6 @@ public class TentacleBatchRenderer : MonoBehaviour
     }
 
     private readonly Dictionary<Texture2D, TextureChunk> _chunks = new();
-    private Camera _camera = null!;
 
     public void Register(Tentacle tentacle, Texture2D texture)
     {
@@ -86,44 +84,6 @@ public class TentacleBatchRenderer : MonoBehaviour
         renderer.sortingOrder = SORTING_ORDER;
 
         return new TextureChunk { Mesh = mesh };
-    }
-
-    private void GetCameraRect(out Vector2 center, out Vector2 half)
-    {
-        if (_camera == null)
-        {
-            _camera = Camera.main;
-        }
-
-        if (_camera == null || !_camera.orthographic)
-        {
-            center = Vector2.zero;
-            half = new Vector2(float.MaxValue, float.MaxValue);
-            return;
-        }
-
-        center = _camera.transform.position;
-        float halfHeight = _camera.orthographicSize;
-        half = new Vector2(halfHeight * _camera.aspect, halfHeight);
-    }
-
-    private static void EnsureCapacity(TextureChunk chunk, int tentacleCount)
-    {
-        int requiredVerts = tentacleCount * VERTS_PER_TENTACLE;
-        if (chunk.Verts.Length >= requiredVerts)
-        {
-            return;
-        }
-
-        int newTentacles = chunk.Verts.Length / VERTS_PER_TENTACLE;
-        while (newTentacles < tentacleCount)
-        {
-            newTentacles *= 2;
-        }
-
-        chunk.Verts = new Vector3[newTentacles * VERTS_PER_TENTACLE];
-        chunk.Uvs = new Vector2[newTentacles * VERTS_PER_TENTACLE];
-        chunk.Tris = new int[newTentacles * TRIS_PER_TENTACLE];
     }
 
     protected void OnDestroy()
