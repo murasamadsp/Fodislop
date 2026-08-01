@@ -82,7 +82,6 @@
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/MotionBlurTag.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/WorldInitProcessor.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/WorldRegistrationBuilder.cs" />
-    <Compile Include="Assets/Scripts/MgGifDecoder/Image.cs" />
     <Compile Include="Assets/Scripts/UI/WorldMapRenderer.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/WorldInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/SystemRegistrationBuilder.cs" />
