@@ -40,196 +40,329 @@
 
 ```text
 Assets/
-  Editor/              # BuildScript.cs (сборка билдов), CsProjFix.cs (csproj постпроцессор), FmodBankBuilder.cs (синк FMOD-банков), MapbConverter.cs (конвертер серверных карт)
-  Plugins/             # Vendored DLL
-    UniTask/           # Vendored UniTask (полный пакет)
-    SharpCompress, ZstdSharp, K4os.Compression.LZ4  # Сжатие
-    NetCoreServer      # Сеть
-    Genumerics, ExtendedNumerics.BigDecimal          # Математика
-    SmartFormat, NCalc, Parlot, ZString              # UI/шаблоны
-    System.*, IsExternalInit                         # Системные заглушки
-  Scenes/              # SampleScene.unity, TextureStorageTestScene.unity
-  Scripts/
-    # Ассет-пайплайн
-    AssetPipeline/
-      ClientAssetLoader.cs        # Загрузка ассетов с сервера/локально
-      PersistentAssetCache.cs     # Стойкий кэш ассетов (ETag, MD5)
-      ETagCalculator.cs           # MD5-хэш для ETag-валидации
-      DynamicImage.cs             # Компонент Image, загружающий спрайты с сервера
-      AssetCache.cs               # RAM-кэш декодированных ассетов
-      AnimatedSpriteData.cs       # Данные анимированного спрайта
-
-    # Аудио
-    Audio/
-      Backend/
-        AudioSystem.cs            # Синглтон-контроллер (Play, PlayAttached, PlaySnapshot, SetGlobalParameter, SetBusVolume)
-        FmodAudioBackend.cs       # Низкоуровневый FMOD API: loadBankFile, AttachInstanceToGameObject, шины, снэпшоты
-      Core/
-        AudioLayer.cs             # Параметры звука: шина (SFXDefault/UIDefault/etc), volume, pitch, IsSpatial
-        AudioPlaybackHandle.cs    # Обёртка над FMOD.Studio.EventInstance (Stop, SetPosition, SetVolume, SetParameter)
-      Spatial/
-        AudioSpatial.cs           # Компонент: нативная привязка 3D-звука к трансформу
-        AudioZone.cs              # Триггерная зона: запускает FMOD Snapshots и выставляет Global Parameters
-        WorldAudioController.cs   # Управление фоновым аудио мира
-
-    # Системная инфраструктура
-    Core/
-      Interfaces/             # IWorldDataStorage, IMapDataProvider, IPlayerInput, IAssetLoader, IAudioSystem, IPlayerStats, IInventoryModel, IConnectionService, INetworkService, IInputBlocker, IRobotService, IPackService, IVFXService, IServerAudioService, IServerConfig
-       DI/
-         IServiceLocator.cs    # Мёртвый интерфейс — удалить
-      ServiceLocator.cs       # Тонкий bridge → VContainer (только Initialize + Resolve)
-      GameLifetimeScope.cs    # LifetimeScope для сцены: регистрация DI + BuildCallback с инжекцией через reflection
-      GameConstants.cs        # Игровые константы
-      ObjectPool.cs           # Пул объектов
-      SharedMaterialCache.cs  # Кэш общих материалов (Sprites/Default по текстуре — используется и TentacleBatchRenderer)
-      GlobalUsings.cs         # Глобальные using'и
-    VContainer/
-      Runtime/                # Vendored VContainer 1.19 (81 файлов)
-
-    # Эффекты (Effekseer)
-    Effekseer/
-      RuntimeEffekseerLoader.cs   # Загрузчик эффектов Effekseer в рантайме
-
-    # Диагностика (runtime)
-    DiagnosticRunner.cs          # F12 — снимок состояния в diagnostic.txt (каждую секунду heartbeat)
-    InjectDiagnostic.cs          # Авто-скан [Inject] полей на старте + F11 для ручного рескана → inject_diagnostic.txt
-
-    # Игровые сущности и менеджеры
-    Game/
-      Pack.cs                     # Игровой предмет (пак на земле)
-      Robot.cs                    # Робот (NPC/игрок в мире)
-      RobotHeadlight.cs           # Фары/освещение робота
-      Tentacle.cs                 # Симуляция щупал хвоста (пружинная цепь)
-      TentacleBatchRenderer.cs    # Батч-рендер всех щупал: 1 меш на текстуру хвоста (1 draw call вместо 4/робота)
-      ServerAudioEvent.cs         # Серверный аудио-эффект (SFXPacket → FMOD + VFX)
-      VFXPool.cs                  # Пул визуальных эффектов
-      Managers/
-        GameManager.cs            # Точка входа: инициализация UI-сцены и подсистем
-        MapManager.cs             # Жизненный цикл мира (WorldInit, MapRegion), конфиги ячеек
-        MapStorage.cs             # Хранилище карты (чанки 32×32), кэш в .mapb
-        RobotManager.cs           # Управление роботами (спавн, движение, деспавн)
-        PackManager.cs            # Управление предметами на земле
-        ServerAudioEventManager.cs # Принимает SFXPacket → запускает FMOD + VFX
-        ItemRegistry.cs           # Реестр предметов: имена, иконки
-        ServerConfig.cs           # Конфигурация с сервера (digCooldown и т.д.)
-
-    # GIF-декодер
-    MgGifDecoder/
-      MgGifDecoder.cs             # GIF-декодер (MG.GIF)
-
-    # Сеть
-    Networking/
-      NetworkService.cs           # Синглтон: подписка/отписка пакетов Subscribe<T>
-      PacketHandler.cs            # Диспетчер пакетов → менеджеры (static IsInputBlocked, TopWindowTag)
-      Processors/                 # WorldInitProcessor, MapRegionProcessor и др.
-      Connection/
-        ConnectionManager.cs      # Синглтон: управление подключением (DummyConnection или TCP, авторизация, реконнект)
-        Client/
-          DummyConnection.cs      # Заглушка для офлайн-режима (пребейкеная карта или генерация)
-          TextureStorageManager.cs # Менеджер хранения текстур на сервере
-
-    # Игрок
-    Player/
-      Interfaces/
-        IPlayerInput.cs           # MoveInput, WantsToDig, WantsToToggleAutoDig, WantsToToggleAggression, IsShiftPressed, SetMovementInput(Vector2)
-      Input/
-        PlayerInputHandler.cs     # Реализация IPlayerInput (New Input System + Keyboard прямая)
-      Logic/
-        PlayerMovementController.cs   # Ввод, движение, копка, автокопка
-        PlayerInteractionController.cs # Обработка кликов и клавиш (копка, использование)
-      CameraFollow.cs               # Следование камеры за игроком
-
-    # UI
+  Editor/                        # Скрипты редактора и билдеры (BuildScript, FmodBankBuilder, MapbConverter)
+    BuildScript.cs               # Сборка билдов
+    CsProjFix.cs                 # csproj постпроцессор
+    FmodBankBuilder.cs           # Синк FMOD-банков
+    MapbConverter.cs             # Конвертер серверных карт
+    SdrOutputEnforcer.cs
+  Effekseer/
+    Resources/
+  Materials/
+    CornerMask.mat
+    SurfaceMaterial.mat
+  Plugins/                       # Vendored DLL (UniTask, NetCoreServer, ZstdSharp, SmartFormat)
+    FMOD/                        # Vendored пакет
+    UniTask/                     # Vendored пакет
+    ExtendedNumerics.BigDecimal.dll
+    Genumerics.dll
+    IsExternalInit.System.Runtime.CompilerServices.dll
+    K4os.Compression.LZ4.dll
+    NCalc.Core.dll
+    NCalc.Sync.signed.dll
+    NetCoreServer.dll
+    Parlot.dll
+    SharpCompress.dll
+    SmartFormat.dll
+    System.Collections.Immutable.dll
+    System.Reflection.Emit.ILGeneration.dll
+    System.Reflection.Emit.Lightweight.dll
+    ZString.dll
+    ZstdSharp.dll
+  Prefabs/                       # Префабы сущностей (Player.prefab)
+    Player.prefab
+  Resources/
+    Programmator/                # 166 ассетов/изображений
+    Skills/                      # Иконки скиллов
+    Styles/                      # USS стили UI
     UI/
-      Builders/
-        PacketUIBuilderFactory.cs # Фабрика UI-билдеров пакетов
-        PacketUIBuilderBase.cs    # Базовый класс билдера
-        PacketUIBuilder.cs        # Базовый интерфейс билдера
-        CanvasPacketBuilder.cs, PanelPacketBuilder.cs, GridPacketBuilder.cs,
-        TextPacketBuilder.cs, TextBoxPacketBuilder.cs, ImagePacketBuilder.cs,
-        SelectablePacketBuilder.cs, SliderPacketBuilder.cs,
-        IntDropdownPacketBuilder.cs, StringDropdownPacketBuilder.cs,
-        ScrollViewerPacketBuilder.cs, LinePacketBuilder.cs, DockPanelPacketBuilder.cs
-      Controls/
-        Selectable.cs             # Кастомный Selectable (UI Toolkit)
-        RegexTextField.cs         # Текстовое поле с валидацией по regex
-        UILine.cs                 # Кастомный VisualElement для линий
-        ChatInputBlinker.cs       # Анимация курсора в поле чата
+      MainMenu.uxml
+    EffekseerSettings.asset
+    GraphicsQualityProfile.asset
+  Scenes/                        # Игровые сцены (MainGame.unity, Tests/TextureStorageTestScene.unity)
+    Tests/                       # Тестовые сцены
+      TextureStorageTestScene.unity
+    MainGame.unity
+  Scripts/
+    AssetPipeline/               # Ассет-пайплайн (ClientAssetLoader, PersistentAssetCache)
+      AnimatedSpriteData.cs
+      AssetCache.cs
+      ClientAssetLoader.cs       # Загрузка ассетов с сервера/локально
+      DynamicImage.cs
+      ETagCalculator.cs
+      PersistentAssetCache.cs    # Стойкий кэш ассетов (ETag, MD5)
+    Audio/                       # Аудио подсистема FMOD
+      Backend/                   # Низкоуровневый FMOD API и AudioSystem
+        AudioSystem.cs           # Синглтон-контроллер аудио
+        FmodAudioBackend.cs      # Низкоуровневый FMOD API
+      Core/                      # Аудио-слои и хендлы воспроизведения
+        AudioLayer.cs
+        AudioPlaybackHandle.cs
+      Spatial/                   # Пространственное 3D-аудио и аудио-зоны
+        AudioSpatial.cs
+        AudioZone.cs
+        WorldAudioController.cs
+    Core/                        # Системная инфраструктура и VContainer LifetimeScope
+      DI/
+        IServiceLocator.cs
+      Interfaces/                # Интерфейсы сервисов
+        IAssetLoader.cs
+        IAudioSystem.cs
+        IConnectionService.cs
+        IInputBlocker.cs
+        IMapDataProvider.cs
+        INetworkService.cs
+        IPackService.cs
+        IPlayerStats.cs
+        IRobotService.cs
+        IServerAudioService.cs
+        IServerConfig.cs
+        ITextureService.cs
+        ITextureStorageService.cs
+        IVFXService.cs
+        IWorldDataStorage.cs
+      GameConstants.cs
+      GameLifetimeScope.cs       # LifetimeScope для сцены: регистрация DI
+      GlobalUsings.cs
+      ObjectPool.cs
+      ServiceLocator.cs
+      SharedMaterialCache.cs
+      TentaclePool.cs
+    Editor/
+      FixPlayerPrefabUtility.cs
+      FixRenderer2DFeaturesUtility.cs
+      GuidTruthDump.cs
+      InjectValidator.cs
+      PostProcessVolumeAssetCreator.cs
+    Effekseer/                   # Эффекты Effekseer
+      RuntimeEffekseerLoader.cs
+    Game/                        # Игровые сущности и менеджеры
+      Managers/                  # Менеджеры игры (MapManager, RobotManager, PackManager)
+        GameManager.cs           # Точка входа в игру
+        ItemRegistry.cs
+        MapManager.cs            # Жизненный цикл мира
+        MapStorage.cs            # Хранилище карты (.mapb)
+        PackManager.cs
+        RobotManager.cs          # Управление роботами
+        ServerAudioEventManager.cs
+        ServerConfig.cs
+      Pack.cs
+      Robot.cs
+      RobotHeadlight.cs
+      ServerAudioEvent.cs
+      Tentacle.cs
+      TentacleBatchRenderer.cs
+      VFXPool.cs
+      VFXType.cs
+    MgGifDecoder/                # GIF-декодер
+    Networking/                  # Сетевой слой и диспетчер пакетов
+      Auth/
+        AuthTokenManager.cs
+      Connection/
+        Client/
+          DummyConnection.cs
+          TextureStorageManager.cs
+        ConnectionManager.cs
+      Processors/
+        AudioPacketProcessor.cs
+        ChatProcessor.cs
+        ClanProcessor.cs
+        ClientConfigProcessor.cs
+        ConnectionProcessor.cs
+        IPacketProcessor.cs
+        InventoryProcessor.cs
+        MapRegionProcessor.cs
+        MissionArrowProcessor.cs
+        MissionProcessor.cs
+        OpenURLProcessor.cs
+        PackProcessor.cs
+        PlayerInfoProcessor.cs
+        PlayerStateProcessor.cs
+        PlayerStatsProcessor.cs
+        RobotInfoProcessor.cs
+        RobotPositionProcessor.cs
+        StatusProcessor.cs
+        WindowPacketProcessor.cs
+        WorldInitProcessor.cs
+      Tests/
+      NetworkService.cs          # Подписка/отписка пакетов
+      PacketHandler.cs           # Диспетчер сетевых пакетов
+    Player/                      # Логика игрока и камера
+      Input/
+        PlayerInputHandler.cs
+      Interfaces/
+        IPlayerInput.cs
+      Logic/
+        PlayerMovementController.cs # Ввод, движение, копка
+      CameraFollow.cs
+      PlayerInteractionController.cs
+      PlayerMovementBoundaryTests.cs
+    Rendering/
+      PostProcessing/
+        Components/
+          BloomComponent.cs
+          ChromaticAberrationComponent.cs
+          ColorGradingComponent.cs
+          EigengrauComponent.cs
+          MotionBlurComponent.cs
+          VignetteComponent.cs
+        MotionBlurTag.cs
+        PostProcessController.cs
+        PostProcessRenderPass.cs
+        PostProcessRendererFeature.cs
+        PostProcessVolumeRegistration.cs
+      GraphicsQualityProfile.cs
+    Tests/
+      Core/
+      UI/
+        InventoryModelTests.cs
+        PlayerStatsModelTests.cs
+      World/
+        CoordinateUtilsTests.cs
+        TileBitmaskConverterTests.cs
+    UI/                          # UI Toolkit контроллеры, окна и программатор
       Binding/
-        WindowBinding.cs          # SmartFormat-привязка данных для окон GUI
-        LogiCalcFormatter.cs      # Форматтер вычислений для SmartFormat
-      Programmator/
-        ProgrammatorData.cs          # Данные программатора
-        ProgrammatorGrid.cs          # Сетка программатора + список программ + save/load (static IsOpen)
-        ProgrammatorTextureRegistry.cs # Реестр текстур программатора
-        RadialMenu.cs                # Радиальное меню программатора
-        ObserverJoystick.cs          # Джойстик для Observer-операторов
-      ChatInput.cs                # Управление фокусом чата (блокировка управления)
-      ClickContextResolver.cs     # Разрешение clickContext-путей в VisualElement
-      FloatingChatBubble.cs       # Всплывающее сообщение над персонажем
-      FloatingChatManager.cs      # Менеджер всплывающих чат-сообщений
-      FPSCounter.cs               # Счётчик FPS (с OnDestroy — уничтожает FPSCanvas)
-      GlobalChatUI.cs             # Глобальный чат (ввод, история)
-      ItemData.cs                 # Данные предмета (тип, количество)
-      UIInputManager.cs           # Менеджер модальных UI-окон
-      HUD/
+        LogiCalcFormatter.cs
+        WindowBinding.cs
+      Builders/                  # UI-билдеры сетевых пакетов
+        CanvasPacketBuilder.cs
+        DockPanelPacketBuilder.cs
+        GridPacketBuilder.cs
+        ImagePacketBuilder.cs
+        IntDropdownPacketBuilder.cs
+        LinePacketBuilder.cs
+        PacketUIBuilder.cs
+        PacketUIBuilderBase.cs
+        PacketUIBuilderFactory.cs
+        PanelPacketBuilder.cs
+        ScrollViewerPacketBuilder.cs
+        SelectablePacketBuilder.cs
+        SliderPacketBuilder.cs
+        StringDropdownPacketBuilder.cs
+        TextBoxPacketBuilder.cs
+        TextPacketBuilder.cs
+      Controls/
+        ChatInputBlinker.cs
+        RegexTextField.cs
+        Selectable.cs
+        UILine.cs
+      HUD/                       # HUD и инвентарь
+        Controllers/
         Inventory/
           Interfaces/
-            IInventoryModel.cs    # Интерфейс инвентаря (в UI/HUD/Inventory/Interfaces/)
+            IInventoryModel.cs
           Model/
-            InventoryModel.cs     # Модель данных инвентаря
-          View/
-            InventoryView.cs      # Окно инвентаря (сетка 9×6 + хотбар)
+            InventoryModel.cs
+            ItemData.cs
           Presenter/
-            InventoryPresenter.cs # Презентер инвентаря
+            InventoryPresenter.cs
+          View/
+            InventoryView.cs
         Player/
           Model/
-            PlayerStatsModel.cs   # Модель статистики игрока
-          View/
-            PlayerHUDView.cs      # HUD игрока
+            PlayerStatsModel.cs
+            StatusLineEntry.cs
           Presenter/
-            PlayerHUDPresenter.cs # Презентер HUD
-      LocalChatPopup.cs           # Popup локального чата
-      MainMenu.cs                 # Главное меню
-      MinimapController.cs        # Контроллер миникарты
-      ModalWindowHandler.cs       # Обработчик модальных окон
-      PauseMenu.cs                # Меню паузы (static IsMenuOpen, ESC через ProgrammatorGrid)
-      StyleApplicator.cs          # Применение стилей к UI-элементам
-      WorldMapController.cs       # Полноэкранная карта мира (управление)
-      WorldMapRenderer.cs         # Рендеринг карты мира (текстура из MapStorage)
-
-    # Мир и рендеринг
-    World/
-      SingleMeshTerrainRenderer.cs  # Один меш на весь террейн, 7 UV-каналов
-      CoordinateUtils.cs            # Прямая конвертация координат 1:1 (сервер↔Unity)
-      FodinaeGizmos.cs              # Визуальные Gizmos отладки мира
-      WorldTextureManager.cs        # Загрузка тайлов в TextureAtlas
-      TextureAtlas.cs               # Упаковка текстур в атлас
-      SurfaceRenderer.cs            # Transit + Perspective поверхности (доп. меши)
-      CellTextureCache.cs           # ConcurrentDictionary-кэш текстур ячеек
-      AtlasCoordinate.cs            # Координаты ячейки в текстурном атласе
-      AnimationContainerDecoder.cs  # Декодинг PNG/GIF/WebP в спрайты
-      WorldBackgroundSetup.cs       # Настройка фона сцены
-      WorldLayer.cs                 # Дисковый стриминг чанков (RLE + LRU кэш)
-      TileMaskConverter.cs          # Битмаски авто-тайлинга
-      SceneSetup.cs                 # Инициализация сцены при старте
-      StandaloneWorldInitializer.cs # Тестовый мир без сервера
-      RenderingConstants.cs         # Константы рендеринга
+            PlayerHUDPresenter.cs
+          View/
+            PlayerHUDView.cs
+      Programmator/
+        ObserverJoystick.cs
+        ProgrammatorData.cs
+        ProgrammatorGrid.cs
+        ProgrammatorTextureRegistry.cs
+        RadialMenu.cs
+      ChatInput.cs
+      ClickContextResolver.cs
+      Dock.cs
+      FPSCounter.cs
+      FloatingChatBubble.cs
+      FloatingChatManager.cs
+      GlobalChatUI.cs
+      LocalChatPopup.cs
+      MainMenu.cs
+      MinimapController.cs
+      MissionArrowUI.cs
+      ModalWindowHandler.cs
+      PauseMenu.cs
+      ReconnectUI.cs
+      StyleApplicator.cs
+      Tooltip.cs
+      UIAnimator.cs
+      UIGizmosController.cs
+      UIInputManager.cs
+      UIStack.cs
+      WorldMapController.cs
+      WorldMapRenderer.cs
+    VContainer/                  # Vendored VContainer 1.19
+    World/                       # Мир и тайловый рендеринг (SingleMeshTerrainRenderer)
       Extensions/
-        WorldLayerTextureExtensions.cs # Расширения WorldLayer для текстур
+        WorldLayerTextureExtensions.cs
+      Lighting/
+        TerrariaLightingEngine.cs
+      Terrain/
+        TerrainCellCache.cs
+        TerrainMeshBuilder.cs
+        TerrainMetadata.cs
+        TerrainPrecalculator.cs
+        TerrainRenderer.cs
+        TerrainVertex.cs
+      AnimationContainerDecoder.cs
+      AtlasCell.cs
+      AtlasCoordinate.cs
+      BackgroundFloodFill.cs
+      CellTextureCache.cs
+      CoordinateUtils.cs
+      FodinaeGizmos.cs
+      Rectangle.cs
+      RenderingConstants.cs
+      SceneSetup.cs
+      SingleMeshTerrainRenderer.cs # Один меш на весь террейн, 7 UV-каналов
+      StandaloneWorldInitializer.cs
+      SurfaceRenderer.cs
+      TextureAtlas.cs
+      TileBitmaskConverter.cs
+      WorldBackgroundSetup.cs
+      WorldLayer.cs
+      WorldTextureManager.cs
+    DiagnosticRunner.cs
+    InjectDiagnostic.cs
+  Settings/                      # URP и Renderer2D конфиги
+    Scenes/
+      URP2DSceneTemplate.unity
+    DefaultVolumeProfile.asset
+    InputSystem_Actions.inputactions
+    Lit2DSceneTemplate.scenetemplate
+    PostProcessVolumeProfile.asset
+    Renderer2D.asset
+    UniversalRP.asset
+    UniversalRenderPipelineGlobalSettings.asset
+  Shaders/                       # URP 2D Шейдеры
+    Lighting/
+      WorldLighting.compute
+    PostProcessing/
+      MotionBlur.compute
+      PostProcess.compute
+      Velocity.shader
+    BackgroundCompositor.shader
+    Terrain.shader
+    WorldObjectWithBackground.shader
+  StreamingAssets/               # FMOD банки и локальные карты
+  TextMesh Pro/                  # TMP шрифты и шейдеры
+  Textures/                      # Текстуры тайлов, сущностей, UI и эффектов
+  UI Toolkit/                    # UI Toolkit темы и PanelSettings
 
-    # Редактор
-    Editor/
-      InjectValidator.cs            # MenuItem для валидации [Inject] полей в Edit Mode
+scripts/                         # Вспомогательные Python и Bash скрипты
+  pre-commit-lint.sh             # Прекоммит-хук: Roslyn-анализаторы
+  setup-hooks.sh
+  update-agents-structure.js     # Авто-обновление структуры в AGENTS.md
 
-  Settings/            # URP и Renderer2D конфиги
-  Textures/            # Cells/, Clan/, Crystals/, Exported/, Items/,
-                       #   Pack/, Skin/, Tail/, UI/, VFX/ — тайлы, UI, экипировка
-  UI Toolkit/          # PanelSettings.asset, темы (.tss)
-
-scripts/
-  inject_analysis.py               # Python-скрипт для статического анализа покрытия [Inject] полей
-  pre-commit-lint.sh               # Прекоммит-хук: Roslyn-анализаторы
+.agents/                         # Правила и навыки для AI-ассистентов Antigravity / Codex
+  skills/
+    fmod-sync/
+      SKILL.md
+    run-linter/
+      SKILL.md
 ```
 
 ## 3. Архитектура систем

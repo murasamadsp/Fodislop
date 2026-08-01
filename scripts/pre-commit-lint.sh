@@ -10,6 +10,14 @@ export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$HOME}"
 echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), HOME=$HOME"
 
+# Step 0: Automatically update section 2 (Project Structure) in AGENTS.md via Node.js
+if [ -f "scripts/update-agents-structure.js" ]; then
+    node scripts/update-agents-structure.js >/dev/null 2>&1 || true
+    if [ -f "AGENTS.md" ]; then
+        git add AGENTS.md 2>/dev/null || true
+    fi
+fi
+
 # Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build
 DEPENDENCIES=(
     "MinesServer.Data.csproj"
