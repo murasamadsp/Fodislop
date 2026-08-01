@@ -137,6 +137,7 @@ namespace Fodinae.Audio.Backend
                 { AudioBusType.Voice,    "bus:/voice" },
                 { AudioBusType.Ambience, "bus:/ambience" },
                 { AudioBusType.UI,       "bus:/ui" },
+                { AudioBusType.Narrative, "bus:/narrative" },
             };
 
             foreach (var kvp in busPaths)

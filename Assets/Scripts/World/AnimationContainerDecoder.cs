@@ -7,7 +7,7 @@ using System.IO;
 using Fodinae.Core;
 using Fodinae.World;
 using Fodinae.World.Terrain;
-using MG.GIF;
+
 using unity.libwebp;
 using unity.libwebp.Interop;
 using UnityEngine;

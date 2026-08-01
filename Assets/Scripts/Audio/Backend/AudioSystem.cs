@@ -32,6 +32,41 @@ namespace Fodinae.Audio.Backend
             ApplySavedBusVolumes();
         }
 
+        private void OnEnable()
+        {
+            AudioSettings.OnAudioConfigurationChanged += OnAudioConfigurationChanged;
+        }
+
+        private void OnDisable()
+        {
+            AudioSettings.OnAudioConfigurationChanged -= OnAudioConfigurationChanged;
+        }
+
+        private void OnAudioConfigurationChanged(bool deviceChanged)
+        {
+            if (deviceChanged)
+            {
+                Debug.Log($"{TAG} Default audio device was changed -> resetting audio backend");
+                ResetBackend();
+            }
+        }
+
+        public void ResetBackend()
+        {
+            try
+            {
+                _backend?.Shutdown();
+                _backend = new FmodAudioBackend();
+                _backend.Initialize(this);
+                ApplySavedBusVolumes();
+                Debug.Log($"{TAG} Audio backend successfully re-initialized after device change.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"{TAG} Error resetting audio backend: {ex.Message}");
+            }
+        }
+
         public float GetBusVolume(AudioBusType type)
         {
             return _backend?.GetBusVolume(type) ?? 1f;
@@ -242,6 +277,7 @@ namespace Fodinae.Audio.Backend
             SetBusVolume(AudioBusType.Voice, PlayerPrefs.GetFloat("Audio_Voice", 1f));
             SetBusVolume(AudioBusType.Ambience, PlayerPrefs.GetFloat("Audio_Ambience", 0.7f));
             SetBusVolume(AudioBusType.UI, PlayerPrefs.GetFloat("Audio_UI", 1f));
+            SetBusVolume(AudioBusType.Narrative, PlayerPrefs.GetFloat("Audio_Narrative", 1f));
         }
     }
 }
