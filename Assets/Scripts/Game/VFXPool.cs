@@ -220,7 +220,11 @@ namespace Fodinae.Game
                 slot.SpriteRenderer.enabled = true;
             }
 
-            slot.GameObject?.SetActive(false);
+            if (slot.GameObject != null)
+            {
+                slot.GameObject.SetActive(false);
+            }
+
             slot.IsManagedExternally = false;
             slot.IsInPool = true;
             pool.Active.RemoveAt(activeIndex);

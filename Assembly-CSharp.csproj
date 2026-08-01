@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
   <!-- Generated file, do not modify, your changes will be overwritten (use AssetPostprocessor.OnGeneratedCSProject) -->
   <PropertyGroup>
     <BaseIntermediateOutputPath>Temp/obj/$(MSBuildProjectName)</BaseIntermediateOutputPath>
@@ -328,7 +328,7 @@
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF-Mobile Overlay.shader" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF-Mobile-2-Pass.shader" />
     <None Include="Assets/Resources/UI/MainMenu.uxml" />
-    <None Include="Assets/Shaders/Lighting/WorldLighting.compute" />
+    <None Include="Assets/Resources/Shaders/Lighting/WorldLighting.compute" />
     <None Include="Assets/Shaders/PostProcessing/MotionBlur.compute" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_Bitmap.shader" />
     <None Include="Assets/Resources/Styles/Inventory.uss" />

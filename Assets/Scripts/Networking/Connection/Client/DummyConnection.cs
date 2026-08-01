@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1051,22 +1052,13 @@ namespace MinesServer.Networking.Connection.Client
             if (UsePrebakedMap)
             {
                 string mapbPath = $"{Application.persistentDataPath}/{PrebakedWorldCodeName}_cells.mapb";
+                EnsurePrebakedMapFile(mapbPath, PrebakedWorldCodeName);
                 (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
                 if (worldWidth > 0 && worldHeight > 0)
                 {
-                    string serverCopy = Path.Combine(Application.temporaryCachePath, $"{PrebakedWorldCodeName}_cells_server.mapb");
-                    try
-                    {
-                        File.Copy(mapbPath, serverCopy, true);
-                    }
-                    catch
-                    {
-                        // ignore copy failures in standalone mode
-                    }
-
                     int wChunks = (worldWidth + 31) / 32;
                     int hChunks = (worldHeight + 31) / 32;
-                    _worldLayer = new WorldLayer<CellType>(serverCopy, wChunks, hChunks, 32, 36);
+                    _worldLayer = new WorldLayer<CellType>(mapbPath, wChunks, hChunks, 32, 36);
                 }
                 else
                 {
@@ -1112,10 +1104,7 @@ namespace MinesServer.Networking.Connection.Client
                     new byte[] { 37, 38, 106 },
                 })));
 
-            if (generated)
-            {
-                SendTestWorldMapData(worldWidth, worldHeight);
-            }
+            SendTestWorldMapData(worldWidth, worldHeight);
 
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
             OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(_mockBotId, 999, 1, "Skin/bee.png", "Tail/default.png", "Darkar25")));
@@ -2010,6 +1999,37 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
+        private static void EnsurePrebakedMapFile(string mapbPath, string worldCodeName)
+        {
+            if (File.Exists(mapbPath))
+            {
+                return;
+            }
+
+            try
+            {
+                string streamingDir = Path.Combine(Application.streamingAssetsPath, "WorldMaps");
+                string streamingMapb = Path.Combine(streamingDir, $"{worldCodeName}_cells.mapb");
+                if (File.Exists(streamingMapb))
+                {
+                    Debug.Log($"[DummyConnection] Copying mapb from StreamingAssets: {streamingMapb} -> {mapbPath}");
+                    File.Copy(streamingMapb, mapbPath, true);
+                    return;
+                }
+
+                string streamingZip = Path.Combine(streamingDir, $"{worldCodeName}_cells.zip");
+                if (File.Exists(streamingZip))
+                {
+                    Debug.Log($"[DummyConnection] Unpacking mapb zip from StreamingAssets: {streamingZip} -> {Application.persistentDataPath}");
+                    ZipFile.ExtractToDirectory(streamingZip, Application.persistentDataPath, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DummyConnection] Failed to unpack prebaked map: {ex.Message}");
+            }
+        }
+
         private static (int width, int height) ReadPrebakedWorldDimensions(string path)
         {
             try
@@ -2054,7 +2074,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         for (int cx = 0; cx < chunkWidth; cx++)
                         {
-                            chunkData[dataIndex++] = _worldLayer != null ? _worldLayer[x + cx, y + cy] : CellType.Empty;
+                            chunkData[dataIndex++] = _worldLayer != null ? _worldLayer.GetCellSync(x + cx, y + cy) : CellType.Empty;
                         }
                     }
 
