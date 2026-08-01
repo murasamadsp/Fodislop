@@ -26,6 +26,11 @@ namespace Fodinae.UI
         private int _onlineProgrammator;
         private float _nextDisplayUpdate;
 
+        public float CurrentFps { get; private set; }
+        public int PingMs => _pingMs;
+        public int OnlinePlayers => _onlinePlayers;
+        public int OnlineProgrammator => _onlineProgrammator;
+
         protected void Awake()
         {
             Canvas canvas = FindAnyObjectByType<Canvas>();
@@ -84,6 +89,7 @@ namespace Fodinae.UI
             _frameIndex = (_frameIndex + 1) % SAMPLE_SIZE;
             float avg = _runningSum / SAMPLE_SIZE;
             float fps = avg > 0f ? 1f / avg : 0f;
+            CurrentFps = fps;
             if (_fpsText != null && Time.unscaledTime >= _nextDisplayUpdate)
             {
                 _nextDisplayUpdate = Time.unscaledTime + 0.25f;

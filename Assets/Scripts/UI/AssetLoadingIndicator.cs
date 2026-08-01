@@ -14,21 +14,23 @@ namespace Fodinae.UI
     public sealed class AssetLoadingIndicator : MonoBehaviour
     {
         private ClientAssetLoader? _assetLoader;
+        private FPSCounter? _fpsCounter;
         private UIDocument? _document;
         private VisualElement? _root;
         private Button? _toggleButton;
         private Label? _buttonLabel;
         private Label? _summaryLabel;
+        private Label? _metricsLabel;
         private Label? _detailsLabel;
         private bool _detailsVisible;
         private float _nextRefreshTime;
 
-        protected void Awake()
+        private void Awake()
         {
             _assetLoader = ServiceLocator.Resolve<ClientAssetLoader>();
         }
 
-        protected void Update()
+        private void Update()
         {
             if (_root == null)
             {
@@ -43,7 +45,7 @@ namespace Fodinae.UI
             }
         }
 
-        protected void OnDestroy()
+        private void OnDestroy()
         {
             _root?.RemoveFromHierarchy();
         }
@@ -51,6 +53,7 @@ namespace Fodinae.UI
         private void TryCreateUI()
         {
             _assetLoader ??= ServiceLocator.Resolve<ClientAssetLoader>();
+            _fpsCounter ??= FindAnyObjectByType<FPSCounter>();
             _document ??= FindAnyObjectByType<UIDocument>();
             if (_assetLoader == null || _document?.rootVisualElement == null)
             {
@@ -76,6 +79,10 @@ namespace Fodinae.UI
             _summaryLabel = new Label();
             _summaryLabel.AddToClassList("asset-status-summary");
             panel.Add(_summaryLabel);
+
+            _metricsLabel = new Label();
+            _metricsLabel.AddToClassList("asset-status-metrics");
+            panel.Add(_metricsLabel);
 
             _detailsLabel = new Label();
             _detailsLabel.AddToClassList("asset-status-details");
@@ -106,7 +113,8 @@ namespace Fodinae.UI
 
         private void Refresh()
         {
-            if (_assetLoader == null || _buttonLabel == null || _summaryLabel == null || _detailsLabel == null)
+            if (_assetLoader == null || _buttonLabel == null || _summaryLabel == null ||
+                _metricsLabel == null || _detailsLabel == null)
             {
                 return;
             }
@@ -120,6 +128,10 @@ namespace Fodinae.UI
             _summaryLabel.text = isLoading
                 ? $"Загрузка ассетов: {pending} активных, {queued} в очереди"
                 : "Загрузка ассетов не выполняется";
+            _metricsLabel.text = $"Версия: {Application.version}\n" +
+                                 $"FPS: {_fpsCounter?.CurrentFps ?? 0f:F1}\n" +
+                                 $"Ping: {_fpsCounter?.PingMs ?? 0} ms\n" +
+                                 $"Online: {_fpsCounter?.OnlinePlayers ?? 0}";
 
             if (!_detailsVisible)
             {

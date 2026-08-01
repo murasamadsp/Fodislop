@@ -262,6 +262,7 @@
     <Compile Include="Assets/Scripts/Networking/Processors/InventoryProcessor.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/Presenter/PlayerHUDPresenter.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/ParentReference.cs" />
+    <Compile Include="Assets/Scripts/UI/AssetLoadingIndicator.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IConnectionService.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/IInjectParameter.cs" />
     <Compile Include="Assets/Scripts/World/AtlasCoordinate.cs" />

@@ -74,10 +74,16 @@
 }
 
 .asset-status-summary,
+.asset-status-metrics,
 .asset-status-details {
     color: white;
     font-size: 12px;
     white-space: normal;
+}
+
+.asset-status-metrics {
+    margin-top: 5px;
+    color: var(--color-text-dim);
 }
 
 .asset-status-details {
