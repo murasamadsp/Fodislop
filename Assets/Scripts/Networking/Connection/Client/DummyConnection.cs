@@ -1114,10 +1114,7 @@ namespace MinesServer.Networking.Connection.Client
                     new byte[] { 37, 38, 106 },
                 })));
 
-            if (generated)
-            {
-                SendTestWorldMapData(worldWidth, worldHeight);
-            }
+            SendTestWorldMapData(worldWidth, worldHeight);
 
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
             OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(_mockBotId, 999, 1, "Skin/bee.png", "Tail/default.png", "Darkar25")));
