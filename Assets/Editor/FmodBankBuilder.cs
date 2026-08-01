@@ -110,7 +110,7 @@ namespace Fodinae.Editor
         /// Resolves the FMOD Studio command-line compiler path for the current OS.
         /// Returns null if the executable cannot be found on either macOS or Windows.
         /// </summary>
-        private static string ResolveFmodStudioCliPath()
+        private static string? ResolveFmodStudioCliPath()
         {
             // macOS default installation path
             const string macos = "/Applications/FMOD Studio.app/Contents/MacOS/fmodstudiocl";

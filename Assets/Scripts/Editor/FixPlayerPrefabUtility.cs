@@ -18,7 +18,7 @@ namespace Fodinae.Editor
                 "Assets/Scripts/Game/Robot.cs",
                 "Assets/Scripts/Player/PlayerInteractionController.cs",
                 "Assets/Scripts/Player/Input/PlayerInputHandler.cs",
-                "Assets/Scripts/Game/RobotHeadlight.cs"
+                "Assets/Scripts/Game/RobotHeadlight.cs",
             };
 
             foreach (var path in scriptPaths)
@@ -26,10 +26,10 @@ namespace Fodinae.Editor
                 AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             }
 
-            AssetDatabase.ImportAsset("Assets/Player.prefab", ImportAssetOptions.ForceUpdate);
+            AssetDatabase.ImportAsset("Assets/Prefabs/Player.prefab", ImportAssetOptions.ForceUpdate);
 
-            // 2. Проверка компонентов на Assets/Player.prefab
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Player.prefab");
+            // 2. Проверка компонентов на Assets/Prefabs/Player.prefab
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Player.prefab");
             if (prefab != null)
             {
                 bool prefabModified = false;
@@ -39,21 +39,25 @@ namespace Fodinae.Editor
                     prefab.AddComponent<Fodinae.Player.Logic.PlayerMovementController>();
                     prefabModified = true;
                 }
+
                 if (prefab.GetComponent<Fodinae.Game.Robot>() == null)
                 {
                     prefab.AddComponent<Fodinae.Game.Robot>();
                     prefabModified = true;
                 }
+
                 if (prefab.GetComponent<Fodinae.Player.PlayerInteractionController>() == null)
                 {
                     prefab.AddComponent<Fodinae.Player.PlayerInteractionController>();
                     prefabModified = true;
                 }
+
                 if (prefab.GetComponent<Fodinae.Player.Input.PlayerInputHandler>() == null)
                 {
                     prefab.AddComponent<Fodinae.Player.Input.PlayerInputHandler>();
                     prefabModified = true;
                 }
+
                 if (prefab.GetComponent<Fodinae.Game.RobotHeadlight>() == null)
                 {
                     prefab.AddComponent<Fodinae.Game.RobotHeadlight>();
@@ -64,7 +68,7 @@ namespace Fodinae.Editor
                 {
                     EditorUtility.SetDirty(prefab);
                     AssetDatabase.SaveAssets();
-                    Debug.Log("[FixPlayerPrefabUtility] Fixed and saved missing components on Assets/Player.prefab");
+                    Debug.Log("[FixPlayerPrefabUtility] Fixed and saved missing components on Assets/Prefabs/Player.prefab");
                 }
             }
 
@@ -82,21 +86,25 @@ namespace Fodinae.Editor
                     playerSceneGo.AddComponent<Fodinae.Player.Logic.PlayerMovementController>();
                     sceneModified = true;
                 }
+
                 if (playerSceneGo.GetComponent<Fodinae.Game.Robot>() == null)
                 {
                     playerSceneGo.AddComponent<Fodinae.Game.Robot>();
                     sceneModified = true;
                 }
+
                 if (playerSceneGo.GetComponent<Fodinae.Player.PlayerInteractionController>() == null)
                 {
                     playerSceneGo.AddComponent<Fodinae.Player.PlayerInteractionController>();
                     sceneModified = true;
                 }
+
                 if (playerSceneGo.GetComponent<Fodinae.Player.Input.PlayerInputHandler>() == null)
                 {
                     playerSceneGo.AddComponent<Fodinae.Player.Input.PlayerInputHandler>();
                     sceneModified = true;
                 }
+
                 if (playerSceneGo.GetComponent<Fodinae.Game.RobotHeadlight>() == null)
                 {
                     playerSceneGo.AddComponent<Fodinae.Game.RobotHeadlight>();

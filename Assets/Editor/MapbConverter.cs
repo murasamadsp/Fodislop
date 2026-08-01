@@ -121,10 +121,9 @@ namespace Fodinae.Editor
 
                 if (cellsFileSize < expectedFileSize)
                 {
-                    EditorUtility.DisplayDialog(
-                        "Warning",
-                        $"Cells file size ({cellsFileSize}) is smaller than expected ({expectedFileSize}). " +
-                        "World dimensions in config may not match actual map size.", "Continue anyway");
+                    string warnMsg = $"Cells file size ({cellsFileSize}) is smaller than expected ({expectedFileSize}). " +
+                        "World dimensions in config may not match actual map size.";
+                    EditorUtility.DisplayDialog("Warning", warnMsg, "Continue anyway");
                 }
 
                 using (FileStream cellsFs = File.OpenRead(cellsPath))
