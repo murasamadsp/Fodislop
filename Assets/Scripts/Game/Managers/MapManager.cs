@@ -67,6 +67,8 @@ namespace Fodinae.Game.Managers
         private ushort _height;
 
         private bool _nullConfigWarned;
+        private float _nextMapFlushTime;
+        private const float DurableMapFlushInterval = 5f;
         public bool IsWorldInitialized { get; private set; }
 
         public bool IsStandaloneMode { get; set; } = false;
@@ -90,6 +92,26 @@ namespace Fodinae.Game.Managers
         protected void OnApplicationQuit()
         {
             (_worldStorage as MapStorage)?.Flush();
+        }
+
+        protected void OnLowMemory()
+        {
+            (_worldStorage as MapStorage)?.Flush();
+        }
+
+        protected void Update()
+        {
+            if (!IsWorldInitialized || Time.unscaledTime < _nextMapFlushTime)
+            {
+                return;
+            }
+
+            _nextMapFlushTime = Time.unscaledTime + DurableMapFlushInterval;
+            var storage = _worldStorage as MapStorage;
+            if (storage?.HasDirtyChunks == true)
+            {
+                storage.Flush();
+            }
         }
 
         public void LoadWorldInit(WorldInitPacket packet)

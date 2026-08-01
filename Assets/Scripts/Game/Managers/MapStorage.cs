@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.IO;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -47,6 +48,7 @@ namespace Fodinae.Game.Managers
         }
 
         public bool IsReady => _isInitialized && _cellLayer != null;
+        public bool HasDirtyChunks => _cellLayer?.HasDirtyChunks == true;
 
         public long Revision { get; private set; }
 
@@ -148,7 +150,22 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
-            _cellLayer.Flush();
+            try
+            {
+                _cellLayer.Flush(flushToDisk: true);
+            }
+            catch (IOException ioEx)
+            {
+                Debug.LogError($"[MapStorage] Map flush failed; dirty chunks were retained: {ioEx.Message}");
+            }
+            catch (UnauthorizedAccessException authEx)
+            {
+                Debug.LogError($"[MapStorage] Map flush access denied; dirty chunks were retained: {authEx.Message}");
+            }
+            catch (ObjectDisposedException disposedEx)
+            {
+                Debug.LogError($"[MapStorage] Map stream was disposed before flush: {disposedEx.Message}");
+            }
         }
 
         public void Dispose()
