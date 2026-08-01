@@ -154,6 +154,7 @@ Assets/
       TentacleBatchRenderer.cs
       VFXPool.cs
       VFXType.cs
+    MgGifDecoder/                # GIF-декодер
     Networking/                  # Сетевой слой и диспетчер пакетов
       Auth/
         AuthTokenManager.cs
