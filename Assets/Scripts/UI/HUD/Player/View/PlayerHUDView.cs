@@ -580,7 +580,7 @@ namespace Fodinae.UI.HUD.Player.View
             _aggressionLabel = new Label("Агрессия ✗");
             _aggressionLabel.AddToClassList("hud-toggle-btn-label");
             _aggressionButton.Add(_aggressionLabel);
-            Tooltip.AttachTo(_aggressionButton, "Робот атакует враждебных существ", _tooltip);
+        Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
 
             root.Add(_aggressionButton);
         }
