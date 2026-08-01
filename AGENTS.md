@@ -271,6 +271,7 @@ Assets/
         ProgrammatorGrid.cs
         ProgrammatorTextureRegistry.cs
         RadialMenu.cs
+      AssetLoadingIndicator.cs
       ChatInput.cs
       ClickContextResolver.cs
       Dock.cs

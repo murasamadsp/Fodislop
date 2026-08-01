@@ -277,7 +277,6 @@ namespace Fodinae.Audio.Backend
             SetBusVolume(AudioBusType.Voice, PlayerPrefs.GetFloat("Audio_Voice", 1f));
             SetBusVolume(AudioBusType.Ambience, PlayerPrefs.GetFloat("Audio_Ambience", 0.7f));
             SetBusVolume(AudioBusType.UI, PlayerPrefs.GetFloat("Audio_UI", 1f));
-            SetBusVolume(AudioBusType.Narrative, PlayerPrefs.GetFloat("Audio_Narrative", 1f));
         }
     }
 }

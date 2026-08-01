@@ -37,6 +37,14 @@ namespace Fodinae
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
         private CancellationTokenSource? _loopCts;
 
+        public int PendingAssetCount => _pendingRequests.Count;
+        public int QueuedAssetCount => _requestQueue.Count;
+
+        public string[] GetPendingAssetNames()
+        {
+            return new List<string>(_pendingRequests.Keys).ToArray();
+        }
+
         private Texture2D? _placeholderTexture;
         private Texture2D? _errorTexture;
 

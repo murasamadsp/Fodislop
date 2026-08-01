@@ -218,7 +218,6 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateAudioSlider("Музыка", AudioBusType.Music, "Audio_Music", 0.5f));
             scrollContainer.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience, "Audio_Ambience", 0.7f));
             scrollContainer.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice, "Audio_Voice", 1f));
-            scrollContainer.Add(CreateAudioSlider("Нарратив", AudioBusType.Narrative, "Audio_Narrative", 1f));
             scrollContainer.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI, "Audio_UI", 1f));
 
             scrollContainer.Add(CreateSlider(
@@ -232,6 +231,7 @@ namespace Fodinae.UI
                     {
                         _doc.panelSettings.scale = v;
                     }
+
                     foreach (var canvas in FindObjectsByType<Canvas>())
                     {
                         canvas.scaleFactor = v;

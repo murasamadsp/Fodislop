@@ -27,9 +27,6 @@ namespace Fodinae.Audio.Core
 
         /// <summary>Звуки интерфейса и системных уведомлений: клики, открытие инвентаря, достижения.</summary>
         UI = 50,
-
-        /// <summary>Нарративные элементы: диктор, сюжетные озвучки.</summary>
-        Narrative = 60,
     }
 
     /// <summary>
@@ -99,15 +96,6 @@ namespace Fodinae.Audio.Core
             Volume = 1f,
             Pitch = 1f,
             IsSpatial = true,
-        };
-
-        /// <summary>Фабрика: нарративный голос.</summary>
-        public static AudioLayer NarrativeDefault() => new()
-        {
-            Bus = AudioBusType.Narrative,
-            Volume = 1f,
-            Pitch = 1f,
-            IsSpatial = false,
         };
     }
 }

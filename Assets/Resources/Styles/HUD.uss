@@ -31,6 +31,60 @@
     right: 10px;
 }
 
+.asset-status-root {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    align-items: flex-end;
+}
+
+.asset-status-button {
+    min-width: 38px;
+    width: auto;
+    height: 28px;
+    padding: 0 8px;
+    background-color: rgba(25, 25, 25, 0.92);
+    border-color: rgba(130, 130, 130, 0.9);
+    border-width: 1px;
+    border-radius: 14px;
+    color: white;
+    -unity-text-align: middle-center;
+}
+
+.asset-status-button:hover,
+.asset-status-button.asset-status-loading {
+    background-color: rgba(70, 70, 70, 0.96);
+    border-color: var(--color-accent);
+}
+
+.asset-status-button-label {
+    color: white;
+    font-size: 12px;
+    -unity-text-align: middle-center;
+}
+
+.asset-status-panel {
+    width: 300px;
+    margin-bottom: 6px;
+    padding: 8px;
+    background-color: rgba(20, 20, 20, 0.96);
+    border-color: rgba(120, 120, 120, 0.9);
+    border-width: 1px;
+    border-radius: 4px;
+}
+
+.asset-status-summary,
+.asset-status-details {
+    color: white;
+    font-size: 12px;
+    white-space: normal;
+}
+
+.asset-status-details {
+    margin-top: 5px;
+    color: var(--color-text-dim);
+}
+
 .hud-button {
     background-color: var(--btn-bg);
     border-color: var(--btn-border);

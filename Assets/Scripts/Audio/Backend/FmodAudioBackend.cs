@@ -29,6 +29,7 @@ namespace Fodinae.Audio.Backend
             _system = system;
             LoadRequiredBanksAsync().Forget();
         }
+
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
         private readonly ConcurrentDictionary<string, FMOD.Studio.Bank> _loadedBanks = new(StringComparer.OrdinalIgnoreCase);
 
@@ -137,7 +138,6 @@ namespace Fodinae.Audio.Backend
                 { AudioBusType.Voice,    "bus:/voice" },
                 { AudioBusType.Ambience, "bus:/ambience" },
                 { AudioBusType.UI,       "bus:/ui" },
-                { AudioBusType.Narrative, "bus:/narrative" },
             };
 
             foreach (var kvp in busPaths)
