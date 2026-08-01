@@ -1,14 +1,16 @@
-using Fodinae.Scripts.Player.Interfaces;
+#nullable enable
+
+using Fodinae.Player.Interfaces;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace Fodinae.Scripts.Player.Input
+namespace Fodinae.Player.Input
 {
     public class PlayerInputHandler : MonoBehaviour, IPlayerInput
     {
         [Tooltip("Optional: Drag the Move action from the Input Action asset here. If empty, falls back to direct keyboard polling.")]
         [SerializeField]
-        private InputActionReference _moveActionReference;
+        private InputActionReference? _moveActionReference;
 
         private Vector2 _moveInput;
 

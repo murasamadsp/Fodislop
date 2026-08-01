@@ -1,4 +1,21 @@
 <Project>
+  <!--
+    Языковой уровень: реальное значение пишет CsProjFix.cs в каждый .csproj (12.0).
+    Здесь — fallback для проектов без собственного тега. Держать в синхронизации с CsProjFix!
+
+    Nullable и code-style enforcement — ТОЛЬКО для нашего кода:
+    vendored-проекты (UniTask, Effekseer, MinesServer.*) собираются как есть, без нашей политики.
+  -->
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor' Or '$(MSBuildProjectName)' == 'Tests' Or '$(MSBuildProjectName)' == 'Tests.Editor'">
+    <Nullable>enable</Nullable>
+    <!-- IDE-правила .editorconfig (naming, IDE0051/52 и т.д.) подхватываются dotnet build, а не только IDE -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
     <!-- Стиль и форматирование -->
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
@@ -32,5 +49,21 @@
   -->
   <ItemGroup>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory).stylecop.json" Link=".stylecop.json" />
+  </ItemGroup>
+
+  <!--
+    Вендоред код: VContainer и MgGifDecoder не трогаем — никаких правок в их файлах.
+    Nullable-предупреждения компилятора (CS8xxx) для этих файлов глушатся через
+    per-item метаданные <NoWarn> — единственный корректный MSBuild-способ без изменения
+    исходников сторонней библиотеки. Не путать с #pragma warning disable (это в коде).
+    При обновлении библиотек эти метаданные продолжают работать.
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
+    <Compile Update="Assets/Scripts/VContainer/**/*.cs">
+      <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8620;CS8625;CS8629;CS8631;CS8669;SA1633;SA1503;SA1107;SA1200;SA1309;SA1310;SA1313;SA1516;SA0001;RCS1075;S108</NoWarn>
+    </Compile>
+    <Compile Update="Assets/Scripts/MgGifDecoder/**/*.cs">
+      <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8620;CS8625;CS8629;CS8631;CS8669;SA1633;SA1200;SA0001</NoWarn>
+    </Compile>
   </ItemGroup>
 </Project>

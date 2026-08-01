@@ -10,8 +10,21 @@ export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$HOME}"
 echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), HOME=$HOME"
 
+# Step 0: Automatically update section 2 (Project Structure) in AGENTS.md via Node.js
+if [ -f "scripts/update-agents-structure.js" ]; then
+    node scripts/update-agents-structure.js >/dev/null 2>&1 || true
+    if [ -f "AGENTS.md" ]; then
+        git add AGENTS.md 2>/dev/null || true
+    fi
+fi
+
 # Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build
 DEPENDENCIES=(
+    "MinesServer.Data.csproj"
+    "MinesServer.Utils.csproj"
+    "MinesServer.Networking.csproj"
+    "MinesServer.Networking.Connection.csproj"
+    "MinesServer.Networking.Connection.Client.csproj"
     "Effekseer.csproj"
     "EffekseerEditor.csproj"
     "Effekseer.URP.csproj"
@@ -53,7 +66,7 @@ for PROJECT_FILE in $PROJECTS; do
     echo "Running full C# Roslyn analyzer check for $PROJECT_NAME..."
 
     # Build sequentially and capture all build output
-    dotnet build "$PROJECT_FILE" -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary > "$LOG_FILE" 2>&1 || true
+    dotnet build "$PROJECT_FILE" --no-dependencies -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary > "$LOG_FILE" 2>&1 || true
 
     if [ -f "$LOG_FILE" ]; then
         BUILD_LOG=$(cat "$LOG_FILE")
@@ -62,8 +75,28 @@ for PROJECT_FILE in $PROJECTS; do
         PROJECT_ERRORS=$(echo "$BUILD_LOG" | grep -E ": error " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || true)
 
         # Only catch warnings in user codebase (Assets/Scripts or Assets/Editor)
-        # Exclude vendored VContainer runtime from linting
-        PROJECT_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" || true)
+        # Exclude vendored VContainer and MgGifDecoder from linting
+        # In CI mode check all codebase warnings, locally check staged files
+        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" | grep -v "Assets/Scripts/MgGifDecoder/" || true)
+        PROJECT_WARNINGS=""
+
+        if [ "$CI" = "true" ]; then
+            PROJECT_WARNINGS="$ALL_WARNINGS"
+        elif [ -n "$ALL_WARNINGS" ]; then
+            STAGED_CS_FILES=$(git diff --cached --name-only --diff-filter=ACM -- '*.cs' | sed 's|/|\\|g' || true)
+            if [ -n "$STAGED_CS_FILES" ]; then
+                while IFS= read -r warning_line; do
+                    WARN_FILE=$(echo "$warning_line" | grep -oE "Assets/[^(:]+" | head -1)
+                    if [ -n "$WARN_FILE" ]; then
+                        ESCAPED=$(echo "$WARN_FILE" | sed 's|/|\\|g')
+                        if echo "$STAGED_CS_FILES" | grep -qF "$ESCAPED"; then
+                            PROJECT_WARNINGS="${PROJECT_WARNINGS}${warning_line}"$'\n'
+                        fi
+                    fi
+                done <<< "$ALL_WARNINGS"
+                PROJECT_WARNINGS=$(echo "$PROJECT_WARNINGS" | sed '/^$/d')
+            fi
+        fi
 
         if [ -n "$PROJECT_ERRORS" ]; then
             echo -e "\n\033[0;31mError: Compilation failed for $PROJECT_NAME in user codebase:\033[0m"

@@ -1,41 +1,42 @@
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.World;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class WorldMapController : MonoBehaviour
     {
-        private CameraFollow _cameraFollow;
-        private PlayerMovementController _player;
-        private SingleMeshTerrainRenderer _terrain;
-        private WorldMapRenderer _mapRenderer;
-        private InputAction _mapToggleAction;
+        private CameraFollow? _cameraFollow;
+        private PlayerMovementController? _player;
+        private TerrainRenderer? _terrain;
+        private WorldMapRenderer? _mapRenderer;
+        private InputAction? _mapToggleAction;
 
         private bool _isInMapMode;
-        private Vector3 _storedCamPos;
-        private float _storedCamZoom;
 
         // HUD elements
-        private Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView _playerHud;
-        private Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView _inventory;
-        private FPSCounter _fps;
-        private MinimapController _minimap;
-        private PauseMenu _pauseMenu;
+        private Fodinae.UI.HUD.Player.View.PlayerHUDView? _playerHud;
+        private Fodinae.UI.HUD.Inventory.View.InventoryView? _inventory;
+        private FPSCounter? _fps;
+        private MinimapController? _minimap;
 
         protected void Start()
         {
-            _cameraFollow = FindAnyObjectByType<CameraFollow>();
-            _player = FindAnyObjectByType<PlayerMovementController>();
-            _terrain = FindAnyObjectByType<SingleMeshTerrainRenderer>();
-            _playerHud = FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Player.View.PlayerHUDView>();
-            _inventory = FindAnyObjectByType<Fodinae.Scripts.UI.HUD.Inventory.View.InventoryView>();
-            _fps = FindAnyObjectByType<FPSCounter>();
-            _minimap = FindAnyObjectByType<MinimapController>();
-            _pauseMenu = FindAnyObjectByType<PauseMenu>();
+            _cameraFollow = UnityEngine.Object.FindAnyObjectByType<CameraFollow>();
+            _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
+            _terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
+            _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
+            _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>();
+            _fps = UnityEngine.Object.FindAnyObjectByType<FPSCounter>();
+            _minimap = UnityEngine.Object.FindAnyObjectByType<MinimapController>();
 
             if (_cameraFollow == null)
             {
@@ -61,7 +62,8 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            if (MapStorage.Instance == null || !MapStorage.Instance.IsReady)
+            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            if (mapStorage == null || !mapStorage.IsReady)
             {
                 return;
             }
@@ -83,17 +85,14 @@ namespace Fodinae.Scripts.UI
                 return;
             }
 
-            if (MapStorage.Instance == null || !MapStorage.Instance.IsReady)
+            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            if (mapStorage == null || !mapStorage.IsReady)
             {
                 return;
             }
 
             _isInMapMode = true;
-            _cameraFollow.SetScrollEnabled(false);
-
-            // Store camera state
-            _storedCamPos = _cameraFollow.transform.position;
-            _storedCamZoom = _cameraFollow.GetCurrentZoom();
+            _cameraFollow!.SetScrollEnabled(false);
 
             if (_terrain != null)
             {
@@ -111,8 +110,8 @@ namespace Fodinae.Scripts.UI
             SetHudVisible(false);
 
             // Center map on player position
-            int CENTER_X = _player != null ? _player.Position.x : MapManager.Instance.WorldWidth / 2;
-            int CENTER_Y = _player != null ? _player.Position.y : MapManager.Instance.WorldHeight / 2;
+            int CENTER_X = _player != null ? _player.Position.x : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldWidth ?? 64) / 2;
+            int CENTER_Y = _player != null ? _player.Position.y : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldHeight ?? 64) / 2;
             _mapRenderer.SetViewCenter(CENTER_X, CENTER_Y);
         }
 
@@ -124,7 +123,10 @@ namespace Fodinae.Scripts.UI
             }
 
             _isInMapMode = false;
-            _cameraFollow.SetScrollEnabled(true);
+            if (_cameraFollow != null)
+            {
+                _cameraFollow.SetScrollEnabled(true);
+            }
 
             if (_mapRenderer != null)
             {

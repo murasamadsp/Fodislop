@@ -1,4 +1,6 @@
-namespace Fodinae.Scripts
+#nullable enable
+
+namespace Fodinae
 {
     public static class GameConstants
     {
@@ -7,14 +9,8 @@ namespace Fodinae.Scripts
             public const int DEFAULT_CHUNK_SIZE = 32;
             public const float CELLSIZE = 1.0f;
 
-            /// <summary>
-            /// Global world darkness factor (0 = normal, 1 = pitch black).
-            /// Hardcoded for all players - not configurable.
-            /// </summary>
-            public const float WORLD_DARKNESS_FACTOR = 0.8f;
         }
 
-        // TODO: обсудить файл
         public static class UI
         {
             public const float MINIMAP_UPDATE_DELAY = 0.033f; // 30 FPS

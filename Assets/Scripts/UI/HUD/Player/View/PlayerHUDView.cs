@@ -1,11 +1,15 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.UI.HUD.Player.Model;
-using Fodinae.Scripts.UI.Programmator;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
+using Fodinae.UI.HUD.Player.Model;
+using Fodinae.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -13,78 +17,79 @@ using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
-namespace Fodinae.Scripts.UI.HUD.Player.View
+namespace Fodinae.UI.HUD.Player.View
 {
     public class PlayerHUDView : MonoBehaviour
     {
-        private const int PANEL_WIDTH = 240;
-        private const int PADDING = 12;
-        private const int LABEL_FONT_SIZE = 14;
-        private const int TITLE_FONT_SIZE = 14;
-        private const int HP_BAR_HEIGHT = 14;
         private const int BTN_SIZE = 50;
-        private const int BONUS_PANEL_WIDTH = 260;
         private const int GAP = 6;
         private const int SKILL_GRID_COLS = 4;
 
-        private Color _panelBgColor = new Color(0.08f, 0.08f, 0.08f, 0.85f);
-        private Color _panelBorderColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-        private Color _separatorColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-        private Color _hpBarBgColor = new Color(0.15f, 0.15f, 0.15f, 1f);
         private Color _hpBarFillColor = new Color(0.2f, 0.8f, 0.2f, 1f);
         private Color _hpBarLowColor = new Color(0.9f, 0.2f, 0.2f, 1f);
-        private Color _textColor = Color.white;
         private Color _accentColor = new Color(0.7f, 0.65f, 0.5f, 1f);
         private Color _accentHoverColor = new Color(0.8f, 0.75f, 0.6f, 1f);
 
-        private UIDocument _doc;
-        private Tooltip _tooltip;
-        private bool _isLoaded;
-        private IVisualElementScheduledItem _skeletonPulse;
-        private VisualElement _panel;
-        private Button _bonusButton;
-        private VisualElement _bonusPanel;
-        private Label _bonusStatusLabel;
-        private Button _bonusClaimButton;
-        private bool _isBonusOpen;
-
-        private Label _nicknameLabel;
-        private Label _levelLabel;
-        private Label _hpLabel;
-        private VisualElement _hpBarFill;
-        private Label _moneyLabel;
-        private Label _credsLabel;
-        private Label _geologyLabel;
-        private Label _basketPercentLabel;
         private readonly List<Texture2D> _crystalTextures = new();
         private readonly List<Label> _basketCrystalLabels = new();
-        private VisualElement _basketContainer;
-        private VisualElement _skillContainer;
         private readonly Dictionary<SkillType, (Label arrow, VisualElement barFill)> _skillIcons = new();
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
-        private Button _autoDigButton;
-        private Label _autoDigLabel;
-        private Button _aggressionButton;
-        private Label _aggressionLabel;
-
-        private VisualElement _currentSkillRow;
-        private int _skillCountInRow = 0;
-        private Button _chatButton;
-        private VisualElement _statusPanel;
         private readonly Dictionary<string, VisualElement> _statusLineElements = new();
+        private readonly Dictionary<string, IVisualElementScheduledItem> _statusSchedules = new();
 
-        private VisualElement _respawnPopup;
-        private VisualElement _buildingsPopup;
-        private VisualElement _faqPopup;
-        private ProgrammatorGrid _programmatorGrid;
+        private UIDocument? _doc;
+        private Tooltip? _tooltip;
+        private bool _isLoaded;
+        [Inject]
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        private IVisualElementScheduledItem? _skeletonPulse;
+        private VisualElement? _panel;
+        private Button? _bonusButton;
+        private VisualElement? _bonusPanel;
+        private Label? _bonusStatusLabel;
+        private Button? _bonusClaimButton;
+        private bool _isBonusOpen;
 
-        private VisualElement _missionPanel;
-        private Label _missionTitleLabel;
-        private Label _missionDescLabel;
-        private VisualElement _missionProgressFill;
-        private Label _missionProgressLabel;
+        private Label? _nicknameLabel;
+        private Label? _levelLabel;
+        private Label? _hpLabel;
+        private VisualElement? _hpBarFill;
+        private Label? _moneyLabel;
+        private Label? _credsLabel;
+        private Label? _geologyLabel;
+        private Label? _basketPercentLabel;
+        private VisualElement? _basketContainer;
+        private VisualElement? _skillContainer;
+        private Button? _autoDigButton;
+        private Label? _autoDigLabel;
+        private Button? _aggressionButton;
+        private Label? _aggressionLabel;
+
+        private VisualElement? _currentSkillRow;
+        private int _skillCountInRow = 0;
+        private Button? _chatButton;
+        private VisualElement? _statusPanel;
+        private VisualElement? _respawnPopup;
+        private VisualElement? _buildingsPopup;
+        private VisualElement? _faqPopup;
+        private ProgrammatorGrid? _programmatorGrid;
+
+        [Inject]
+        private PlayerStatsModel _model = null!;
+        [Inject]
+        private GlobalChatUI _globalChatUI = null!;
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
+        [Inject]
+        private INetworkService _networkService = null!;
+        private VisualElement? _missionPanel;
+        private Label? _missionTitleLabel;
+        private Label? _missionDescLabel;
+        private VisualElement? _missionProgressFill;
+        private Label? _missionProgressLabel;
 
         protected void Start()
         {
@@ -105,13 +110,27 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
         protected void OnDestroy()
         {
-            if (PlayerStatsModel.Instance != null)
+            StopSkeletonPulse();
+            foreach (var schedule in _bounceSchedules.Values)
             {
-                PlayerStatsModel.Instance.OnStatsChanged -= RefreshAll;
-                PlayerStatsModel.Instance.OnSkillProgress -= OnSkillProgress;
-                PlayerStatsModel.Instance.OnDailyBonusChanged -= UpdateDailyBonusPanel;
-                PlayerStatsModel.Instance.OnStatusLinesChanged -= RebuildStatusPanel;
-                PlayerStatsModel.Instance.OnMissionChanged -= UpdateMissionPanel;
+                schedule.Pause();
+            }
+
+            foreach (var schedule in _pulseSchedules.Values)
+            {
+                schedule.Pause();
+            }
+
+            _bounceSchedules.Clear();
+            _pulseSchedules.Clear();
+
+            if (_model != null)
+            {
+                _model.OnStatsChanged -= RefreshAll;
+                _model.OnSkillProgress -= OnSkillProgress;
+                _model.OnDailyBonusChanged -= UpdateDailyBonusPanel;
+                _model.OnStatusLinesChanged -= RebuildStatusPanel;
+                _model.OnMissionChanged -= UpdateMissionPanel;
             }
 
             var player = PlayerMovementController.LocalPlayer;
@@ -121,9 +140,9 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 player.OnAggressionChanged -= UpdateAggressionButton;
             }
 
-            if (GlobalChatUI.Instance != null)
+            if (_globalChatUI != null)
             {
-                GlobalChatUI.Instance.Hide();
+                _globalChatUI.Hide();
             }
         }
 
@@ -138,13 +157,16 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 }
 
                 string name = ct.ToString().ToLowerInvariant();
-                var tex = await ClientAssetLoader.Instance.GetTextureAsync("Crystals/" + name, cancellationToken);
+                var tex = await _assetLoader.GetTextureAsync("Crystals/" + name, cancellationToken);
                 if (cancellationToken.IsCancellationRequested || this == null)
                 {
                     return;
                 }
 
-                _crystalTextures.Add(tex);
+                if (tex != null)
+                {
+                    _crystalTextures.Add(tex);
+                }
             }
         }
 
@@ -170,11 +192,11 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             CreateStatusPanel(_doc.rootVisualElement);
             CreateSkillContainer(_doc.rootVisualElement);
             CreateMissionPanel(_doc.rootVisualElement);
-            if (PlayerStatsModel.Instance != null)
+            if (_model != null)
             {
-                PlayerStatsModel.Instance.OnSkillProgress += OnSkillProgress;
-                PlayerStatsModel.Instance.OnStatusLinesChanged += RebuildStatusPanel;
-                PlayerStatsModel.Instance.OnMissionChanged += UpdateMissionPanel;
+                _model.OnSkillProgress += OnSkillProgress;
+                _model.OnStatusLinesChanged += RebuildStatusPanel;
+                _model.OnMissionChanged += UpdateMissionPanel;
             }
 
             var player = PlayerMovementController.LocalPlayer;
@@ -187,14 +209,18 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 UpdateAggressionButton(player.Aggression);
             }
 
-            if (PlayerStatsModel.Instance != null)
+            if (_model != null)
             {
-                PlayerStatsModel.Instance.OnDailyBonusChanged += UpdateDailyBonusPanel;
+                _model.OnDailyBonusChanged += UpdateDailyBonusPanel;
             }
 
             RebuildCrystalRows();
-            PlayerStatsModel.Instance.OnStatsChanged += RefreshAll;
-            _isLoaded = PlayerStatsModel.Instance.Health > 0 || PlayerStatsModel.Instance.Level > 0;
+            if (_model != null)
+            {
+                _model.OnStatsChanged += RefreshAll;
+                _isLoaded = _model.Health > 0 || _model.Level > 0;
+            }
+
             if (!_isLoaded)
             {
                 StartSkeletonPulse();
@@ -210,7 +236,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             root.RegisterCallback<NavigationMoveEvent>(
                 evt =>
             {
-                if (!PacketHandler.IsInputBlocked)
+                if (_inputBlocker != null && !_inputBlocker.IsInputBlocked)
                 {
                     evt.StopPropagation();
                 }
@@ -219,7 +245,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             root.RegisterCallback<NavigationSubmitEvent>(
                 evt =>
             {
-                if (!PacketHandler.IsInputBlocked && !ChatInput.IsFocused)
+                if ((_inputBlocker == null || !_inputBlocker.IsInputBlocked) && !ChatInput.IsFocused)
                 {
                     evt.StopPropagation();
                 }
@@ -234,7 +260,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
             var topRow = new VisualElement();
             topRow.AddToClassList("hud-title-row");
-            topRow.style.alignItems = Align.Center;
 
             _nicknameLabel = new Label("---");
             _nicknameLabel.AddToClassList("hud-nickname");
@@ -244,24 +269,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _levelLabel.AddToClassList("hud-level");
             topRow.Add(_levelLabel);
 
-            var clanButton = new Button(() => NetworkService.Send(new OpenClanClickPacket()));
-            clanButton.style.width = 15;
-            clanButton.style.height = 15;
-            clanButton.style.flexShrink = 0;
-            clanButton.style.paddingTop = 0;
-            clanButton.style.paddingBottom = 0;
-            clanButton.style.paddingLeft = 0;
-            clanButton.style.paddingRight = 0;
-            clanButton.style.marginLeft = 4;
-            clanButton.style.backgroundColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-            clanButton.style.borderTopWidth = 1;
-            clanButton.style.borderBottomWidth = 1;
-            clanButton.style.borderLeftWidth = 1;
-            clanButton.style.borderRightWidth = 1;
-            clanButton.style.borderTopColor = new Color(0.4f, 0.4f, 0.4f, 1f);
-            clanButton.style.borderBottomColor = new Color(0.4f, 0.4f, 0.4f, 1f);
-            clanButton.style.borderLeftColor = new Color(0.4f, 0.4f, 0.4f, 1f);
-            clanButton.style.borderRightColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+            var clanButton = new Button(() => _networkService?.Send(new OpenClanClickPacket()));
+            clanButton.AddToClassList("hud-clan-button");
             clanButton.tooltip = "Клан";
             topRow.Add(clanButton);
 
@@ -302,7 +311,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
             _basketPercentLabel = new Label("Груз: 0%");
             _basketPercentLabel.AddToClassList("hud-basket");
-            _basketPercentLabel.style.color = _accentColor;
             _panel.Add(_basketPercentLabel);
 
             _basketContainer = new VisualElement();
@@ -318,11 +326,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _bonusButton = new Button(ToggleBonusPanel);
             _bonusButton.text = "Бонусы";
             _bonusButton.AddToClassList("hud-button-accent");
-            _bonusButton.style.position = Position.Absolute;
-            _bonusButton.style.left = 10 + PANEL_WIDTH + GAP;
-            _bonusButton.style.top = 10;
-            _bonusButton.style.width = 90;
-            _bonusButton.style.height = BTN_SIZE;
+            _bonusButton.AddToClassList("hud-bonus-button");
             Tooltip.AttachTo(_bonusButton, "Открыть панель бонусов", _tooltip);
 
             root.Add(_bonusButton);
@@ -332,9 +336,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         {
             _bonusPanel = new VisualElement();
             _bonusPanel.AddToClassList("hud-bonus-panel");
-            _bonusPanel.style.position = Position.Absolute;
-            _bonusPanel.style.left = 10 + PANEL_WIDTH + GAP + 90 + GAP;
-            _bonusPanel.style.top = 10;
 
             var titleRow = new VisualElement();
             titleRow.AddToClassList("hud-title-row");
@@ -368,8 +369,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private void ToggleBonusPanel()
         {
             _isBonusOpen = !_isBonusOpen;
-            _bonusPanel.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            _bonusButton.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
+            _bonusPanel!.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            _bonusButton!.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
             if (_isBonusOpen)
             {
                 UpdateDailyBonusPanel();
@@ -410,7 +411,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 return;
             }
 
-            var stats = PlayerStatsModel.Instance;
+            var stats = _model;
             if (stats == null)
             {
                 return;
@@ -418,15 +419,15 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
             if (stats.DailyBonusAvailable)
             {
-                _bonusStatusLabel.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
-                _bonusStatusLabel.style.color = Color.green;
-                _bonusClaimButton.style.display = DisplayStyle.Flex;
+                _bonusStatusLabel!.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
+                _bonusStatusLabel!.style.color = Color.green;
+                _bonusClaimButton!.style.display = DisplayStyle.Flex;
             }
             else
             {
-                _bonusStatusLabel.text = "Ежедневный бонус: Нет активных бонусов";
-                _bonusStatusLabel.style.color = Color.gray;
-                _bonusClaimButton.style.display = DisplayStyle.None;
+                _bonusStatusLabel!.text = "Ежедневный бонус: Нет активных бонусов";
+                _bonusStatusLabel!.style.color = Color.gray;
+                _bonusClaimButton!.style.display = DisplayStyle.None;
             }
 
             UpdateStatusPanelPosition();
@@ -437,9 +438,6 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _statusPanel = new VisualElement();
             _statusPanel.name = "StatusPanel";
             _statusPanel.AddToClassList("hud-status-panel");
-            _statusPanel.style.position = Position.Absolute;
-            _statusPanel.style.left = 10 + PANEL_WIDTH + GAP;
-            _statusPanel.style.top = 10 + BTN_SIZE + GAP;
             _statusPanel.style.display = DisplayStyle.None;
             root.Add(_statusPanel);
         }
@@ -451,7 +449,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 return;
             }
 
-            var stats = PlayerStatsModel.Instance;
+            var stats = _model;
             if (stats == null)
             {
                 return;
@@ -461,6 +459,12 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             if (currentLines.Count == 0)
             {
                 _statusPanel.style.display = DisplayStyle.None;
+                foreach (var schedule in _statusSchedules.Values)
+                {
+                    schedule.Pause();
+                }
+
+                _statusSchedules.Clear();
                 _statusLineElements.Clear();
                 _statusPanel.Clear();
                 return;
@@ -479,6 +483,12 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             foreach (var key in toRemove)
             {
                 _statusPanel.Remove(_statusLineElements[key]);
+                if (_statusSchedules.TryGetValue(key, out var schedule))
+                {
+                    schedule.Pause();
+                    _statusSchedules.Remove(key);
+                }
+
                 _statusLineElements.Remove(key);
             }
 
@@ -492,7 +502,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                         UpdateStatusLabel(label, kvp.Value);
                     }
 
-                    label.style.color = kvp.Value.Color;
+                    label!.style.color = kvp.Value.Color;
                 }
                 else
                 {
@@ -504,7 +514,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
                     if (kvp.Value.Expiry > 0)
                     {
-                        row.schedule.Execute(() =>
+                        var schedule = row.schedule.Execute(() =>
                         {
                             if (_statusPanel == null || !_statusLineElements.ContainsKey(kvp.Key))
                             {
@@ -519,6 +529,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
                             UpdateStatusLabel(row, entry);
                         }).Every(1000);
+                        _statusSchedules[kvp.Key] = schedule;
                     }
 
                     _statusLineElements[kvp.Key] = row;
@@ -564,7 +575,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
         private void ClaimDailyBonus()
         {
             Debug.Log("[PlayerHUD] ClaimDailyBonus: sending claim request");
-            NetworkService.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
+            var ns = _networkService;
+            ns?.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
         }
 
         private void CreateAutoDigToggle(VisualElement root)
@@ -572,14 +584,14 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _autoDigButton = new Button(ToggleAutoDig);
             _autoDigButton.text = string.Empty;
             _autoDigButton.AddToClassList("hud-button");
-            _autoDigButton.style.position = Position.Absolute;
-            _autoDigButton.style.left = 10;
-            _autoDigButton.style.bottom = 281;
+            _autoDigButton.AddToClassList("hud-toggle-btn");
+            _autoDigButton.AddToClassList("hud-toggle-auto-dig");
 
             _autoDigLabel = new Label("Копать ✗");
-            _autoDigLabel.AddToClassList("hud-button-label");
-            _autoDigLabel.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
+            _autoDigLabel.AddToClassList("hud-toggle-btn-label");
             _autoDigButton.Add(_autoDigLabel);
+
+
             Tooltip.AttachTo(_autoDigButton, "Автоматическое копание блоков", _tooltip);
 
             root.Add(_autoDigButton);
@@ -590,15 +602,12 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _aggressionButton = new Button(ToggleAggression);
             _aggressionButton.text = string.Empty;
             _aggressionButton.AddToClassList("hud-button");
-            _aggressionButton.style.position = Position.Absolute;
-            _aggressionButton.style.left = 10;
-            _aggressionButton.style.bottom = 314;
+            _aggressionButton.AddToClassList("hud-toggle-btn");
+            _aggressionButton.AddToClassList("hud-toggle-aggression");
 
             _aggressionLabel = new Label("Агрессия ✗");
-            _aggressionLabel.AddToClassList("hud-button-label");
-            _aggressionLabel.style.color = new Color(0.9f, 0.3f, 0.3f, 1f);
+            _aggressionLabel.AddToClassList("hud-toggle-btn-label");
             _aggressionButton.Add(_aggressionLabel);
-            // TODO: заменить текст
             Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
 
             root.Add(_aggressionButton);
@@ -621,8 +630,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             }
 
             _currentSkillRow = new VisualElement();
-            _currentSkillRow.AddToClassList("hud-skill-row");
-            _skillContainer.Add(_currentSkillRow);
+            _currentSkillRow!.AddToClassList("hud-skill-row");
+            _skillContainer!.Add(_currentSkillRow!);
             _skillCountInRow = 0;
         }
 
@@ -641,37 +650,27 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             iconColumn.Add(arrow);
 
             var iconImage = new Image();
-            iconImage.style.width = 24;
-            iconImage.style.height = 24;
+            iconImage.AddToClassList("hud-skill-icon-image");
 
             var tex = Resources.Load<Texture2D>($"Skills/{skill}");
             if (tex != null)
             {
                 iconImage.image = tex;
             }
-            else
-            {
-                iconImage.style.backgroundColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-            }
 
             iconColumn.Add(iconImage);
             cell.Add(iconColumn);
 
             var barContainer = new VisualElement();
-            barContainer.style.width = 6;
-            barContainer.style.height = 24;
-            barContainer.style.marginLeft = 2;
-            barContainer.style.flexDirection = FlexDirection.Column;
-            barContainer.style.justifyContent = Justify.FlexEnd;
+            barContainer.AddToClassList("hud-skill-bar-container");
 
             var barFill = new VisualElement();
             barFill.AddToClassList("hud-skill-bar-fill");
-            barFill.style.width = 6;
-            barFill.style.height = 2;
+            barFill.AddToClassList("hud-skill-bar-segment");
             barContainer.Add(barFill);
             cell.Add(barContainer);
 
-            _currentSkillRow.Add(cell);
+            _currentSkillRow!.Add(cell);
             _skillCountInRow++;
 
             _skillIcons[skill] = (arrow, barFill);
@@ -695,12 +694,14 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             }
 
             _autoDigLabel.text = enabled ? "Копать ✓" : "Копать ✗";
-            _autoDigLabel.style.color = enabled
-                ? new Color(0.3f, 0.9f, 0.3f, 1f)
-                : new Color(0.9f, 0.3f, 0.3f, 1f);
-            _autoDigButton.style.backgroundColor = enabled
-                ? new Color(0.05f, 0.15f, 0.05f, 0.85f)
-                : new Color(0.15f, 0.05f, 0.05f, 0.85f);
+            _autoDigLabel.EnableInClassList("hud-toggle-btn-label", true);
+            if (_autoDigButton != null)
+            {
+                _autoDigButton.EnableInClassList("hud-toggle-btn", true);
+                _autoDigButton.EnableInClassList("enabled", enabled);
+            }
+
+            _autoDigLabel.EnableInClassList("enabled", enabled);
         }
 
         private void ToggleAggression()
@@ -720,12 +721,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             }
 
             _aggressionLabel.text = enabled ? "Агрессия ✓" : "Агрессия ✗";
-            _aggressionLabel.style.color = enabled
-                ? new Color(0.3f, 0.9f, 0.3f, 1f)
-                : new Color(0.9f, 0.3f, 0.3f, 1f);
-            _aggressionButton.style.backgroundColor = enabled
-                ? new Color(0.05f, 0.15f, 0.05f, 0.85f)
-                : new Color(0.15f, 0.05f, 0.05f, 0.85f);
+            _aggressionLabel.EnableInClassList("enabled", enabled);
+            _aggressionButton?.EnableInClassList("enabled", enabled);
         }
 
         private void StartSkeletonPulse()
@@ -736,7 +733,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             float t = 0f;
             bool rising = true;
 
-            _skeletonPulse = _panel.schedule.Execute(() =>
+            _skeletonPulse = _panel!.schedule.Execute(() =>
             {
                 if (_panel == null)
                 {
@@ -757,15 +754,46 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 }
 
                 float alpha = Mathf.Lerp(pulseMin, pulseMax, t / pulseDuration);
-                _nicknameLabel.style.opacity = alpha;
-                _levelLabel.style.opacity = alpha;
-                _hpLabel.style.opacity = alpha;
-                _hpBarFill.style.opacity = alpha;
-                _moneyLabel.style.opacity = alpha;
-                _credsLabel.style.opacity = alpha;
-                _geologyLabel.style.opacity = alpha;
-                _basketPercentLabel.style.opacity = alpha;
-            }).Every(16);
+                if (_nicknameLabel != null)
+                {
+                    _nicknameLabel.style.opacity = alpha;
+                }
+
+                if (_levelLabel != null)
+                {
+                    _levelLabel.style.opacity = alpha;
+                }
+
+                if (_hpLabel != null)
+                {
+                    _hpLabel.style.opacity = alpha;
+                }
+
+                if (_hpBarFill != null)
+                {
+                    _hpBarFill.style.opacity = alpha;
+                }
+
+                if (_moneyLabel != null)
+                {
+                    _moneyLabel.style.opacity = alpha;
+                }
+
+                if (_credsLabel != null)
+                {
+                    _credsLabel.style.opacity = alpha;
+                }
+
+                if (_geologyLabel != null)
+                {
+                    _geologyLabel.style.opacity = alpha;
+                }
+
+                if (_basketPercentLabel != null)
+                {
+                    _basketPercentLabel.style.opacity = alpha;
+                }
+            }).Every(33);
         }
 
         private void StopSkeletonPulse()
@@ -776,14 +804,45 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 _skeletonPulse = null;
             }
 
-            _nicknameLabel.style.opacity = 1;
-            _levelLabel.style.opacity = 1;
-            _hpLabel.style.opacity = 1;
-            _hpBarFill.style.opacity = 1;
-            _moneyLabel.style.opacity = 1;
-            _credsLabel.style.opacity = 1;
-            _geologyLabel.style.opacity = 1;
-            _basketPercentLabel.style.opacity = 1;
+            if (_nicknameLabel != null)
+            {
+                _nicknameLabel.style.opacity = 1;
+            }
+
+            if (_levelLabel != null)
+            {
+                _levelLabel.style.opacity = 1;
+            }
+
+            if (_hpLabel != null)
+            {
+                _hpLabel.style.opacity = 1;
+            }
+
+            if (_hpBarFill != null)
+            {
+                _hpBarFill.style.opacity = 1;
+            }
+
+            if (_moneyLabel != null)
+            {
+                _moneyLabel.style.opacity = 1;
+            }
+
+            if (_credsLabel != null)
+            {
+                _credsLabel.style.opacity = 1;
+            }
+
+            if (_geologyLabel != null)
+            {
+                _geologyLabel.style.opacity = 1;
+            }
+
+            if (_basketPercentLabel != null)
+            {
+                _basketPercentLabel.style.opacity = 1;
+            }
         }
 
         private void RefreshAll()
@@ -793,7 +852,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 return;
             }
 
-            var stats = PlayerStatsModel.Instance;
+            var stats = _model;
             if (stats == null)
             {
                 return;
@@ -805,23 +864,51 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 StopSkeletonPulse();
             }
 
-            _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
-            _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
-            _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
-            _hpLabel.style.opacity = 1;
+            if (_nicknameLabel != null)
+            {
+                _nicknameLabel.text = string.IsNullOrEmpty(stats.Nickname) ? "---" : stats.Nickname;
+            }
+
+            if (_levelLabel != null)
+            {
+                _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
+            }
+
+            if (_hpLabel != null)
+            {
+                _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
+                _hpLabel.style.opacity = 1;
+            }
 
             float pct = stats.HealthPercent;
-            _hpBarFill.style.width = new Length(pct * 100, LengthUnit.Percent);
-            _hpBarFill.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
+            if (_hpBarFill != null)
+            {
+                _hpBarFill!.style.width = new Length(pct * 100, LengthUnit.Percent);
+                _hpBarFill!.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
+            }
 
-            _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
-            _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+            if (_moneyLabel != null)
+            {
+                _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
+            }
 
-            _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
-                ? "Геология: 0/0"
-                : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+            if (_credsLabel != null)
+            {
+                _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+            }
 
-            _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+            if (_geologyLabel != null)
+            {
+                _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
+                    ? "Геология: 0/0"
+                    : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+            }
+
+            if (_basketPercentLabel != null)
+            {
+                _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+            }
+
             for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
             {
                 _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
@@ -830,20 +917,21 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
         private void RebuildCrystalRows()
         {
+            if (_basketContainer == null)
+            {
+                return;
+            }
+
             _basketContainer.Clear();
             _basketCrystalLabels.Clear();
 
             for (int i = 0; i < _crystalTextures.Count; i++)
             {
                 var row = new VisualElement();
-                row.style.flexDirection = FlexDirection.Row;
-                row.style.marginBottom = 1;
+                row.AddToClassList("hud-crystal-row");
 
                 var dot = new Image();
-                dot.style.width = 14;
-                dot.style.height = 14;
-                dot.style.marginRight = 6;
-                dot.style.alignSelf = Align.Center;
+                dot.AddToClassList("hud-crystal-dot");
                 if (_crystalTextures[i] != null)
                 {
                     dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
@@ -852,8 +940,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 row.Add(dot);
 
                 var label = new Label("0/0");
-                label.style.fontSize = 11;
-                label.style.color = _textColor;
+                label.AddToClassList("hud-crystal-label");
                 row.Add(label);
 
                 _basketCrystalLabels.Add(label);
@@ -915,7 +1002,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 float offsetY = Mathf.Sin(t * 2f * Mathf.PI) * 3f;
                 arrow.style.translate = new Translate(0, offsetY);
             });
-            item.Every(0);
+            item.Every(33);
 
             _bounceSchedules[skill] = item;
         }
@@ -946,7 +1033,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
                 float pulse = (Mathf.Sin(t * 2f * Mathf.PI * 0.5f) + 1f) * (24f / 20f);
                 barFill.style.height = new Length(Mathf.Min(baseH + pulse, 24f), LengthUnit.Pixel);
             });
-            item.Every(0);
+            item.Every(33);
             _pulseSchedules[skill] = item;
         }
 
@@ -961,12 +1048,10 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
         private void CreateChatButton(VisualElement root)
         {
-            _chatButton = new Button(() => GlobalChatUI.Instance.Toggle());
+            _chatButton = new Button(() => _globalChatUI.Toggle());
             _chatButton.text = "Чат";
             _chatButton.AddToClassList("hud-btn-action");
-            _chatButton.style.left = 10;
-            _chatButton.style.bottom = 248;
-            _chatButton.style.width = 100;
+            _chatButton.AddToClassList("hud-chat-button");
             Tooltip.AttachTo(_chatButton, "Открыть чат", _tooltip);
 
             root.Add(_chatButton);
@@ -994,7 +1079,9 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             popup.AddToClassList("popup-overlay");
 
             var dimmer = new VisualElement();
+            dimmer.pickingMode = PickingMode.Ignore;
             dimmer.AddToClassList("popup-dimmer");
+            dimmer.pickingMode = PickingMode.Ignore;
             popup.Add(dimmer);
 
             var panel = new VisualElement();
@@ -1019,7 +1106,9 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             popup.AddToClassList("popup-overlay");
 
             var dimmer = new VisualElement();
+            dimmer.pickingMode = PickingMode.Ignore;
             dimmer.AddToClassList("popup-dimmer");
+            dimmer.pickingMode = PickingMode.Ignore;
             popup.Add(dimmer);
 
             var panel = new VisualElement();
@@ -1034,7 +1123,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
             var okBtn = new Button(() =>
             {
-                NetworkService.Instance.SendAction(new SuicidePacket());
+                var ns = _networkService;
+                ns?.SendAction(new SuicidePacket());
                 popup.style.display = DisplayStyle.None;
             });
             okBtn.text = "ОК";
@@ -1056,9 +1146,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             var btn = new Button(onClick);
             btn.text = "Респавн";
             btn.AddToClassList("hud-btn-action");
-            btn.style.top = 10;
+            btn.AddToClassList("hud-btn-top-row");
             btn.style.right = 10 + ((100 + 6) * 2);
-            btn.style.width = 100;
             root.Add(btn);
         }
 
@@ -1067,9 +1156,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             var btn = new Button(onClick);
             btn.text = "Мои здания";
             btn.AddToClassList("hud-btn-action");
-            btn.style.top = 10;
+            btn.AddToClassList("hud-btn-top-row");
             btn.style.right = 10 + (100 + 6);
-            btn.style.width = 100;
             root.Add(btn);
         }
 
@@ -1078,9 +1166,8 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             var btn = new Button(onClick);
             btn.text = "FAQ";
             btn.AddToClassList("hud-btn-action");
-            btn.style.top = 10;
+            btn.AddToClassList("hud-btn-top-row");
             btn.style.right = 10;
-            btn.style.width = 100;
             root.Add(btn);
         }
 
@@ -1089,54 +1176,32 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             _missionPanel = new VisualElement();
             _missionPanel.name = "MissionPanel";
             _missionPanel.AddToClassList("hud-mission-panel");
-            _missionPanel.style.position = Position.Absolute;
-            _missionPanel.style.top = 50;
-            _missionPanel.style.left = new Length(50, LengthUnit.Percent);
-            _missionPanel.style.translate = new Translate(new Length(-50, LengthUnit.Percent), 0);
-            _missionPanel.style.minWidth = 300;
-            _missionPanel.style.flexDirection = FlexDirection.Column;
             _missionPanel.style.display = DisplayStyle.None;
 
             _missionTitleLabel = new Label("---");
             _missionTitleLabel.AddToClassList("hud-stat");
-            _missionTitleLabel.style.color = _accentColor;
-            _missionTitleLabel.style.marginBottom = 4;
+            _missionTitleLabel.AddToClassList("hud-mission-title");
             _missionPanel.Add(_missionTitleLabel);
 
             _missionDescLabel = new Label(string.Empty);
             _missionDescLabel.AddToClassList("hud-stat");
             _missionDescLabel.AddToClassList("hud-stat-wrap");
-            _missionDescLabel.style.marginBottom = 8;
+            _missionDescLabel.AddToClassList("hud-mission-desc");
             _missionPanel.Add(_missionDescLabel);
 
             var progressRow = new VisualElement();
-            progressRow.style.flexDirection = FlexDirection.Row;
-            progressRow.style.alignItems = Align.Center;
-            progressRow.style.marginBottom = 4;
+            progressRow.AddToClassList("hud-mission-progress-row");
 
             _missionProgressLabel = new Label("0/0");
             _missionProgressLabel.AddToClassList("hud-stat");
-            _missionProgressLabel.style.marginRight = 8;
-            _missionProgressLabel.style.minWidth = 50;
+            _missionProgressLabel.AddToClassList("hud-mission-progress-label");
             progressRow.Add(_missionProgressLabel);
 
             var barBg = new VisualElement();
-            barBg.style.flexGrow = 1;
-            barBg.style.height = 16;
-            barBg.style.backgroundColor = _hpBarBgColor;
-            barBg.style.borderTopLeftRadius = 3;
-            barBg.style.borderTopRightRadius = 3;
-            barBg.style.borderBottomLeftRadius = 3;
-            barBg.style.borderBottomRightRadius = 3;
+            barBg.AddToClassList("hud-mission-progress-bar");
 
             _missionProgressFill = new VisualElement();
-            _missionProgressFill.style.height = 16;
-            _missionProgressFill.style.width = 0;
-            _missionProgressFill.style.borderTopLeftRadius = 3;
-            _missionProgressFill.style.borderTopRightRadius = 3;
-            _missionProgressFill.style.borderBottomLeftRadius = 3;
-            _missionProgressFill.style.borderBottomRightRadius = 3;
-            _missionProgressFill.style.backgroundColor = new Color(0.7f, 0.7f, 0.2f, 1f);
+            _missionProgressFill.AddToClassList("hud-mission-progress-fill");
             barBg.Add(_missionProgressFill);
 
             progressRow.Add(barBg);
@@ -1147,25 +1212,28 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
 
         private void UpdateMissionPanel()
         {
-            var stats = PlayerStatsModel.Instance;
+            var stats = _model;
             if (stats == null)
             {
                 return;
             }
 
-            if (!stats.IsMissionActive)
+            if (stats.IsMissionActive)
             {
-                _missionPanel.style.display = DisplayStyle.None;
+                _missionPanel!.style.display = DisplayStyle.Flex;
+            }
+            else
+            {
+                _missionPanel!.style.display = DisplayStyle.None;
                 return;
             }
 
-            _missionPanel.style.display = DisplayStyle.Flex;
-            _missionTitleLabel.text = stats.MissionTitle ?? "Миссия";
-            _missionDescLabel.text = stats.MissionDescription ?? string.Empty;
+            _missionTitleLabel!.text = stats.MissionTitle ?? "Миссия";
+            _missionDescLabel!.text = stats.MissionDescription ?? string.Empty;
 
             float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
-            _missionProgressFill.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
-            _missionProgressLabel.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
+            _missionProgressFill!.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
+            _missionProgressLabel!.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
         }
 
         private void CreateProgrammatorButton(VisualElement root, System.Action onClick)
@@ -1173,9 +1241,7 @@ namespace Fodinae.Scripts.UI.HUD.Player.View
             var btn = new Button(onClick);
             btn.text = "Программатор";
             btn.AddToClassList("hud-btn-action");
-            btn.style.left = 10;
-            btn.style.bottom = 215;
-            btn.style.width = 100;
+            btn.AddToClassList("hud-programmator-button");
             root.Add(btn);
         }
     }

@@ -1,7 +1,10 @@
+#nullable enable
+
+using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     /// <summary>
     /// Displays the current frames‑per‑second in the top‑right corner of the screen.
@@ -11,22 +14,25 @@ namespace Fodinae.Scripts.UI
     /// </summary>
     public class FPSCounter : MonoBehaviour
     {
-        public static FPSCounter Instance { get; private set; }
-
         private const int SAMPLE_SIZE = 30;
         private readonly float[] _frameTimes = new float[SAMPLE_SIZE];
         private int _frameIndex;
         private float _runningSum;
 
-        private Text _fpsText;
+        private Text? _fpsText;
+        private Canvas? _ownedCanvas;
         private int _pingMs;
         private int _onlinePlayers;
         private int _onlineProgrammator;
+        private float _nextDisplayUpdate;
+
+        public float CurrentFps { get; private set; }
+        public int PingMs => _pingMs;
+        public int OnlinePlayers => _onlinePlayers;
+        public int OnlineProgrammator => _onlineProgrammator;
 
         protected void Awake()
         {
-            Instance = this;
-
             Canvas canvas = FindAnyObjectByType<Canvas>();
             if (canvas == null)
             {
@@ -34,7 +40,7 @@ namespace Fodinae.Scripts.UI
                 canvas = canvasGO.AddComponent<Canvas>();
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 canvasGO.AddComponent<CanvasScaler>();
-                canvasGO.AddComponent<GraphicRaycaster>();
+                _ownedCanvas = canvas;
             }
 
             GameObject textGO = new GameObject("FPSLabel");
@@ -60,6 +66,21 @@ namespace Fodinae.Scripts.UI
             rt.anchoredPosition = new Vector2(0, -10);
         }
 
+        protected void OnDestroy()
+        {
+            if (_ownedCanvas != null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(_ownedCanvas.gameObject);
+                }
+                else
+                {
+                    DestroyImmediate(_ownedCanvas.gameObject);
+                }
+            }
+        }
+
         protected void Update()
         {
             _runningSum -= _frameTimes[_frameIndex];
@@ -68,7 +89,12 @@ namespace Fodinae.Scripts.UI
             _frameIndex = (_frameIndex + 1) % SAMPLE_SIZE;
             float avg = _runningSum / SAMPLE_SIZE;
             float fps = avg > 0f ? 1f / avg : 0f;
-            _fpsText.text = $"FPS: {fps:F1}  Ping: {_pingMs}ms  Online: {_onlinePlayers}  Prg: {_onlineProgrammator}";
+            CurrentFps = fps;
+            if (_fpsText != null && Time.unscaledTime >= _nextDisplayUpdate)
+            {
+                _nextDisplayUpdate = Time.unscaledTime + 0.25f;
+                _fpsText.text = $"FPS: {fps:F1}  Ping: {_pingMs}ms  Online: {_onlinePlayers}  Prg: {_onlineProgrammator}";
+            }
         }
 
         public void SetPing(int ms) => _pingMs = ms;

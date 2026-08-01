@@ -1,8 +1,10 @@
+#nullable enable
+
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     [UxmlElement]
     public partial class UILine : VisualElement

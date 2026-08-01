@@ -1,59 +1,55 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Networking;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.UI.HUD.Inventory.Interfaces;
+using Fodinae.UI.HUD.Inventory.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
-using Fodinae.Scripts.UI.HUD.Inventory.Interfaces;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using VContainer;
 
-namespace Fodinae.Scripts.UI.HUD.Inventory.View
+namespace Fodinae.UI.HUD.Inventory.View
 {
     public class InventoryView : MonoBehaviour
     {
         private const int HOTBAR_COLS = 9;
-        private const int INVENTORY_ROWS = 6;
         private const int INVENTORY_COLS = 9;
         private const int CELLSIZE = 50;
         private const int CELL_GAP = 10;
         private const int ICON_SIZE = 36;
 
-        private Color _cellBgColor = new Color(0.15f, 0.15f, 0.15f, 1f);
-        private Color _cellBorderColor = new Color(0.4f, 0.4f, 0.4f, 1f);
-        private Color _cellHighlightColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-        private Color _selectedBorderColor = new Color(1f, 0.84f, 0f, 1f);
-        private Color _inventoryButtonColor = new Color(0.7f, 0.65f, 0.5f, 1f);
-        private Color _inventoryButtonHoverColor = new Color(0.8f, 0.75f, 0.6f, 1f);
-        private Color _panelBgColor = new Color(0.08f, 0.08f, 0.08f, 0.85f);
-        private Color _panelBorderColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-        private Color _contextMenuBg = new Color(0.12f, 0.12f, 0.12f, 0.95f);
-
-        private UIDocument _doc;
-        private IInventoryModel _model;
+        private UIDocument _doc = null!;
+        [Inject]
+        private IInventoryModel? _model;
+        [Inject]
+        private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
-        private VisualElement _hotbarContainer;
-        private Button _inventoryButton;
-        private VisualElement _fullInventoryPanel;
+        private VisualElement? _hotbarContainer;
+        private Button? _inventoryButton;
+        private VisualElement? _fullInventoryPanel;
         private bool _isInventoryOpen = false;
 
         // Drag-and-drop
-        private VisualElement _floatingItem;
+        private VisualElement? _floatingItem;
         private int _dragFromSlot = -1;
-        private ItemData _draggedItem;
+        private ItemData? _draggedItem;
 
         // Context menu
-        private VisualElement _contextMenu;
-        private int _contextMenuSlot = -1;
+        private VisualElement _contextMenu = null!;
 
         // Selection
         private int _lastSelectedSlot = -1;
-        private VisualElement _tooltipWrapper;
-        private VisualElement _tooltipBg;
-        private Label _tooltipName;
-        private Label _tooltipDesc;
+        private VisualElement _tooltipWrapper = null!;
+        private VisualElement _tooltipBg = null!;
+        private Label _tooltipName = null!;
+        private Label _tooltipDesc = null!;
 
         protected void Start()
         {
@@ -67,50 +63,50 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 return;
             }
 
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;
             }
 
             if (Keyboard.current.digit1Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(0);
+                _model!.SelectSlot(0);
             }
             else if (Keyboard.current.digit2Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(1);
+                _model!.SelectSlot(1);
             }
             else if (Keyboard.current.digit3Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(2);
+                _model!.SelectSlot(2);
             }
             else if (Keyboard.current.digit4Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(3);
+                _model!.SelectSlot(3);
             }
             else if (Keyboard.current.digit5Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(4);
+                _model!.SelectSlot(4);
             }
             else if (Keyboard.current.digit6Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(5);
+                _model!.SelectSlot(5);
             }
             else if (Keyboard.current.digit7Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(6);
+                _model!.SelectSlot(6);
             }
             else if (Keyboard.current.digit8Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(7);
+                _model!.SelectSlot(7);
             }
             else if (Keyboard.current.digit9Key.wasPressedThisFrame)
             {
-                _model.SelectSlot(8);
+                _model!.SelectSlot(8);
             }
             else if (Keyboard.current.enterKey.wasPressedThisFrame)
             {
-                _model.UseSelectedItem();
+                _model!.UseSelectedItem();
             }
         }
 
@@ -123,7 +119,13 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 return;
             }
 
-            _model = InventoryModel.Instance;
+            _model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
+            if (_model == null)
+            {
+                Debug.LogError("[InventoryUI] IInventoryModel not registered in DI");
+                return;
+            }
+
             _model.OnSlotChanged += RefreshSlot;
             _model.OnSlotSelected += OnModelSlotSelected;
 
@@ -138,14 +140,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             {
                 foreach (var cell in _slotElements[_lastSelectedSlot])
                 {
-                    cell.style.borderTopWidth = 2;
-                    cell.style.borderBottomWidth = 2;
-                    cell.style.borderLeftWidth = 2;
-                    cell.style.borderRightWidth = 2;
-                    cell.style.borderTopColor = _cellBorderColor;
-                    cell.style.borderBottomColor = _cellBorderColor;
-                    cell.style.borderLeftColor = _cellBorderColor;
-                    cell.style.borderRightColor = _cellBorderColor;
+                    cell.RemoveFromClassList("inv-cell--selected");
                 }
             }
 
@@ -156,20 +151,13 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             {
                 foreach (var cell in _slotElements[slotIndex])
                 {
-                    cell.style.borderTopWidth = 3;
-                    cell.style.borderBottomWidth = 3;
-                    cell.style.borderLeftWidth = 3;
-                    cell.style.borderRightWidth = 3;
-                    cell.style.borderTopColor = _selectedBorderColor;
-                    cell.style.borderBottomColor = _selectedBorderColor;
-                    cell.style.borderLeftColor = _selectedBorderColor;
-                    cell.style.borderRightColor = _selectedBorderColor;
+                    cell.AddToClassList("inv-cell--selected");
                 }
             }
 
             if (slotIndex >= 0)
             {
-                var item = _model.GetSlot(slotIndex);
+                var item = _model!.GetSlot(slotIndex);
                 if (item != null)
                 {
                     _tooltipName.text = item.Name;
@@ -185,44 +173,20 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         private void CreateTooltip(VisualElement root)
         {
             _tooltipWrapper = new VisualElement();
-            _tooltipWrapper.style.position = Position.Absolute;
-            _tooltipWrapper.style.left = 0;
-            _tooltipWrapper.style.right = 0;
-            _tooltipWrapper.style.top = 48;
-            _tooltipWrapper.style.height = 36;
-            _tooltipWrapper.style.flexDirection = FlexDirection.Row;
-            _tooltipWrapper.style.justifyContent = Justify.Center;
+            _tooltipWrapper.AddToClassList("inv-tooltip-wrapper");
             _tooltipWrapper.style.display = DisplayStyle.None;
 
             _tooltipBg = new VisualElement();
-            _tooltipBg.style.flexDirection = FlexDirection.Row;
-            _tooltipBg.style.alignItems = Align.Center;
-            _tooltipBg.style.backgroundColor = new Color(0.08f, 0.08f, 0.08f, 0.9f);
-            _tooltipBg.style.borderTopWidth = 2;
-            _tooltipBg.style.borderBottomWidth = 2;
-            _tooltipBg.style.borderLeftWidth = 2;
-            _tooltipBg.style.borderRightWidth = 2;
-            _tooltipBg.style.borderTopColor = _panelBorderColor;
-            _tooltipBg.style.borderBottomColor = _panelBorderColor;
-            _tooltipBg.style.borderLeftColor = _panelBorderColor;
-            _tooltipBg.style.borderRightColor = _panelBorderColor;
-            _tooltipBg.style.paddingLeft = 8;
-            _tooltipBg.style.paddingRight = 8;
-            _tooltipBg.style.paddingTop = 4;
-            _tooltipBg.style.paddingBottom = 4;
+            _tooltipBg.AddToClassList("inv-tooltip-bg");
 
             _tooltipName = new Label();
-            _tooltipName.style.fontSize = 14;
-            _tooltipName.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _tooltipName.style.color = _selectedBorderColor;
-            _tooltipName.style.marginRight = 10;
+            _tooltipName.AddToClassList("inv-tooltip-name");
+            _tooltipBg.Add(_tooltipName);
 
             _tooltipDesc = new Label();
-            _tooltipDesc.style.fontSize = 12;
-            _tooltipDesc.style.color = Color.white;
-
-            _tooltipBg.Add(_tooltipName);
+            _tooltipDesc.AddToClassList("inv-tooltip-desc");
             _tooltipBg.Add(_tooltipDesc);
+
             _tooltipWrapper.Add(_tooltipBg);
             root.Add(_tooltipWrapper);
         }
@@ -230,6 +194,12 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         private void BuildUI()
         {
             var root = _doc.rootVisualElement;
+            var invUss = Resources.Load<StyleSheet>("Styles/Inventory");
+            if (invUss != null)
+            {
+                root.styleSheets.Add(invUss);
+            }
+
             CreateFullInventoryPanel(root);
             CreateHotbar(root);
         }
@@ -238,10 +208,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         {
             _hotbarContainer = new VisualElement();
             _hotbarContainer.name = "HotbarContainer";
-            _hotbarContainer.style.position = Position.Absolute;
-            _hotbarContainer.style.bottom = 10;
-            _hotbarContainer.style.flexDirection = FlexDirection.Row;
-            _hotbarContainer.style.alignItems = Align.Center;
+            _hotbarContainer.AddToClassList("inv-hotbar");
 
             for (int i = 0; i < HOTBAR_COLS; i++)
             {
@@ -265,57 +232,19 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         {
             _fullInventoryPanel = new VisualElement();
             _fullInventoryPanel.name = "FullInventoryPanel";
-            _fullInventoryPanel.style.position = Position.Absolute;
-            _fullInventoryPanel.style.left = 0;
-            _fullInventoryPanel.style.top = 0;
-            _fullInventoryPanel.style.right = 0;
-            _fullInventoryPanel.style.bottom = 0;
-            _fullInventoryPanel.style.justifyContent = Justify.Center;
-            _fullInventoryPanel.style.alignItems = Align.Center;
+            _fullInventoryPanel.AddToClassList("inv-full-panel");
             _fullInventoryPanel.style.display = DisplayStyle.None;
 
             var panelBg = new VisualElement();
             panelBg.name = "PanelBackground";
-            panelBg.style.backgroundColor = _panelBgColor;
-            panelBg.style.borderTopWidth = 4;
-            panelBg.style.borderBottomWidth = 4;
-            panelBg.style.borderLeftWidth = 4;
-            panelBg.style.borderRightWidth = 4;
-            panelBg.style.borderTopColor = _panelBorderColor;
-            panelBg.style.borderBottomColor = _panelBorderColor;
-            panelBg.style.borderLeftColor = _panelBorderColor;
-            panelBg.style.borderRightColor = _panelBorderColor;
-            panelBg.style.paddingTop = 20;
-            panelBg.style.paddingBottom = 20;
-            panelBg.style.paddingLeft = 20;
-            panelBg.style.paddingRight = 20;
-            panelBg.style.flexDirection = FlexDirection.Column;
-            panelBg.style.alignItems = Align.Center;
+            panelBg.AddToClassList("inv-full-bg");
 
             var closeBtn = new Button();
             closeBtn.name = "CloseButton";
-            closeBtn.style.position = Position.Absolute;
-            closeBtn.style.top = 5;
-            closeBtn.style.right = 5;
-            closeBtn.style.width = 24;
-            closeBtn.style.height = 24;
-            closeBtn.style.backgroundColor = Color.clear;
-            closeBtn.style.borderTopWidth = 0;
-            closeBtn.style.borderBottomWidth = 0;
-            closeBtn.style.borderLeftWidth = 0;
-            closeBtn.style.borderRightWidth = 0;
-            closeBtn.style.paddingTop = 0;
-            closeBtn.style.paddingBottom = 0;
-            closeBtn.style.paddingLeft = 0;
-            closeBtn.style.paddingRight = 0;
+            closeBtn.AddToClassList("inv-close-btn");
 
             var closeLabel = new Label("×");
-            closeLabel.style.fontSize = 20;
-            closeLabel.style.color = new Color(0.7f, 0.7f, 0.7f, 1f);
-            closeLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
-            closeLabel.style.alignSelf = Align.Center;
-            closeLabel.style.justifyContent = Justify.Center;
-            closeLabel.style.flexGrow = 1;
+            closeLabel.AddToClassList("inv-close-label");
             closeLabel.pickingMode = PickingMode.Ignore;
             closeBtn.Add(closeLabel);
 
@@ -323,21 +252,14 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             panelBg.Add(closeBtn);
 
             var titleLabel = new Label("Inventory");
-            titleLabel.style.fontSize = 18;
-            titleLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            titleLabel.style.color = Color.white;
-            titleLabel.style.marginBottom = 15;
-            titleLabel.style.alignSelf = Align.FlexStart;
+            titleLabel.AddToClassList("inv-title");
             panelBg.Add(titleLabel);
 
             var inventoryGrid = CreateGrid(9, InventoryModel.TOTALSLOTS - 1, "Inv");
             panelBg.Add(inventoryGrid);
 
             var separator = new VisualElement();
-            separator.style.height = 2;
-            separator.style.backgroundColor = _panelBorderColor;
-            separator.style.marginTop = 15;
-            separator.style.marginBottom = 15;
+            separator.AddToClassList("inv-separator");
             separator.style.width = (INVENTORY_COLS * CELLSIZE) + ((INVENTORY_COLS - 1) * CELL_GAP);
             panelBg.Add(separator);
 
@@ -353,8 +275,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         {
             var grid = new VisualElement();
             grid.name = $"{prefix}_Grid";
-            grid.style.flexDirection = FlexDirection.Column;
-            grid.style.alignItems = Align.Center;
+            grid.AddToClassList("inv-grid");
 
             int slotIndex = fromSlot;
             int cols = (toSlot - fromSlot + 1 > 9) ? INVENTORY_COLS : (toSlot - fromSlot + 1);
@@ -363,7 +284,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             for (int row = 0; row < rows; row++)
             {
                 var rowContainer = new VisualElement();
-                rowContainer.style.flexDirection = FlexDirection.Row;
+                rowContainer.AddToClassList("inv-grid-row");
 
                 for (int col = 0; col < cols && slotIndex <= toSlot; col++, slotIndex++)
                 {
@@ -381,29 +302,12 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             var cell = new VisualElement();
             cell.name = name;
             cell.userData = slotIndex;
-            cell.style.width = CELLSIZE;
-            cell.style.height = CELLSIZE;
-            cell.style.justifyContent = Justify.Center;
-            cell.style.alignItems = Align.Center;
-            cell.style.marginRight = CELL_GAP;
-            cell.style.marginBottom = CELL_GAP;
-            cell.style.backgroundColor = _cellBgColor;
-            cell.style.borderTopWidth = 2;
-            cell.style.borderBottomWidth = 2;
-            cell.style.borderLeftWidth = 2;
-            cell.style.borderRightWidth = 2;
-            cell.style.borderTopColor = _cellBorderColor;
-            cell.style.borderBottomColor = _cellBorderColor;
-            cell.style.borderLeftColor = _cellBorderColor;
-            cell.style.borderRightColor = _cellBorderColor;
+            cell.AddToClassList("inv-cell");
 
             // Иконка-кружок
             var icon = new VisualElement();
             icon.name = "Icon";
-            icon.style.width = ICON_SIZE;
-            icon.style.height = ICON_SIZE;
-            icon.style.alignSelf = Align.Center;
-            icon.style.justifyContent = Justify.Center;
+            icon.AddToClassList("inv-icon");
             icon.style.display = DisplayStyle.None;
             icon.pickingMode = PickingMode.Ignore;
             cell.Add(icon);
@@ -411,11 +315,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             // Количество
             var qtyLabel = new Label();
             qtyLabel.name = "Quantity";
-            qtyLabel.style.position = Position.Absolute;
-            qtyLabel.style.right = 3;
-            qtyLabel.style.bottom = 2;
-            qtyLabel.style.fontSize = 12;
-            qtyLabel.style.color = Color.white;
+            qtyLabel.AddToClassList("inv-qty");
             qtyLabel.style.textShadow = new TextShadow
             {
                 color = Color.black,
@@ -429,14 +329,14 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             {
                 if (_dragFromSlot < 0)
                 {
-                    cell.style.backgroundColor = _cellHighlightColor;
+                    cell.AddToClassList("inv-cell--highlight");
                 }
             });
             cell.RegisterCallback<MouseLeaveEvent>(_ =>
             {
                 if (_dragFromSlot < 0)
                 {
-                    cell.style.backgroundColor = _cellBgColor;
+                    cell.RemoveFromClassList("inv-cell--highlight");
                 }
             });
 
@@ -445,8 +345,8 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             {
                 if (evt.button == 0)
                 {
-                    _model.SelectSlot(slotIndex);
-                    var item = _model.GetSlot(slotIndex);
+                    _model!.SelectSlot(slotIndex);
+                    var item = _model!.GetSlot(slotIndex);
 
                     if (item == null)
                     {
@@ -455,18 +355,12 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
 
                     _dragFromSlot = slotIndex;
                     _draggedItem = item;
-                    cell.style.backgroundColor = _cellBgColor;
+                    cell.RemoveFromClassList("inv-cell--highlight");
 
                     HideContextMenu();
 
                     _floatingItem = new VisualElement();
-                    _floatingItem.style.position = Position.Absolute;
-                    _floatingItem.style.width = ICON_SIZE;
-                    _floatingItem.style.height = ICON_SIZE;
-                    _floatingItem.style.borderTopLeftRadius = ICON_SIZE / 2;
-                    _floatingItem.style.borderTopRightRadius = ICON_SIZE / 2;
-                    _floatingItem.style.borderBottomLeftRadius = ICON_SIZE / 2;
-                    _floatingItem.style.borderBottomRightRadius = ICON_SIZE / 2;
+                    _floatingItem.AddToClassList("inv-floating");
                     if (item.Icon != null)
                     {
                         _floatingItem.style.backgroundImage = new StyleBackground(item.Icon);
@@ -477,7 +371,6 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                         _floatingItem.style.backgroundColor = Color.gray;
                     }
 
-                    _floatingItem.style.opacity = 0.8f;
                     _floatingItem.pickingMode = PickingMode.Ignore;
 
                     var root = _doc.rootVisualElement;
@@ -491,7 +384,6 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 else if (evt.button == 1)
                 {
                     HideContextMenu();
-                    _contextMenuSlot = slotIndex;
                     ShowContextMenu(evt.mousePosition, slotIndex);
                     evt.StopPropagation();
                 }
@@ -530,7 +422,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             var target = FindSlotUnderMouse(evt.mousePosition);
             if (target >= 0 && target != _dragFromSlot)
             {
-                if (InventoryModel.CanStack(_draggedItem, _model.GetSlot(target)))
+                if (InventoryModel.CanStack(_draggedItem!, _model!.GetSlot(target)))
                 {
                     _model.TryStackSlots(_dragFromSlot, target);
                 }
@@ -564,8 +456,8 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
 
         private void UpdateFloatingPosition(Vector2 mousePos)
         {
-            _floatingItem.style.left = mousePos.x - (ICON_SIZE / 2);
-            _floatingItem.style.top = mousePos.y - (ICON_SIZE / 2);
+            _floatingItem!.style.left = mousePos.x - (ICON_SIZE / 2);
+            _floatingItem!.style.top = mousePos.y - (ICON_SIZE / 2);
         }
 
         private void RefreshSlot(int slotIndex)
@@ -575,7 +467,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
                 return;
             }
 
-            var item = _model.GetSlot(slotIndex);
+            var item = _model!.GetSlot(slotIndex);
 
             foreach (var cell in _slotElements[slotIndex])
             {
@@ -610,38 +502,8 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         {
             var btn = new Button();
             btn.name = "InventoryButton";
-            btn.style.width = CELLSIZE;
-            btn.style.height = CELLSIZE;
-            btn.style.marginBottom = CELL_GAP;
-            btn.style.backgroundColor = _inventoryButtonColor;
-            btn.style.borderTopWidth = 2;
-            btn.style.borderBottomWidth = 2;
-            btn.style.borderLeftWidth = 2;
-            btn.style.borderRightWidth = 2;
-            btn.style.borderTopColor = _cellBorderColor;
-            btn.style.borderBottomColor = _cellBorderColor;
-            btn.style.borderLeftColor = _cellBorderColor;
-            btn.style.borderRightColor = _cellBorderColor;
+            btn.AddToClassList("inv-button");
             btn.text = string.Empty;
-            btn.style.paddingTop = 0;
-            btn.style.paddingBottom = 0;
-            btn.style.paddingLeft = 0;
-            btn.style.paddingRight = 0;
-
-            btn.RegisterCallback<MouseEnterEvent>(_ =>
-            {
-                if (btn.enabledSelf)
-                {
-                    btn.style.backgroundColor = _inventoryButtonHoverColor;
-                }
-            });
-            btn.RegisterCallback<MouseLeaveEvent>(_ =>
-            {
-                if (btn.enabledSelf)
-                {
-                    btn.style.backgroundColor = _inventoryButtonColor;
-                }
-            });
 
             btn.clicked += ToggleInventory;
             return btn;
@@ -650,14 +512,14 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         private void ToggleInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
-            _fullInventoryPanel.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            _fullInventoryPanel!.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        public IInventoryModel GetModel() => _model;
+        public IInventoryModel? GetModel() => _model;
 
         private void ShowContextMenu(Vector2 mousePos, int slotIndex)
         {
-            var item = _model.GetSlot(slotIndex);
+            var item = _model!.GetSlot(slotIndex);
             if (item == null)
             {
                 return;
@@ -665,30 +527,15 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
 
             _contextMenu = new VisualElement();
             _contextMenu.name = "ContextMenu";
-            _contextMenu.style.position = Position.Absolute;
+            _contextMenu.AddToClassList("inv-context-menu");
             _contextMenu.style.left = mousePos.x;
             _contextMenu.style.top = mousePos.y;
-            _contextMenu.style.backgroundColor = _contextMenuBg;
-            _contextMenu.style.borderTopWidth = 1;
-            _contextMenu.style.borderBottomWidth = 1;
-            _contextMenu.style.borderLeftWidth = 1;
-            _contextMenu.style.borderRightWidth = 1;
-            _contextMenu.style.borderTopColor = _panelBorderColor;
-            _contextMenu.style.borderBottomColor = _panelBorderColor;
-            _contextMenu.style.borderLeftColor = _panelBorderColor;
-            _contextMenu.style.borderRightColor = _panelBorderColor;
-            _contextMenu.style.paddingTop = 4;
-            _contextMenu.style.paddingBottom = 4;
-            _contextMenu.style.paddingLeft = 0;
-            _contextMenu.style.paddingRight = 0;
-            _contextMenu.style.flexDirection = FlexDirection.Column;
-            _contextMenu.style.minWidth = 160;
             _contextMenu.pickingMode = PickingMode.Position;
 
             AddContextMenuItem("Использовать", () =>
             {
                 _model.SelectSlot(slotIndex);
-                _model.UseSelectedItem();
+                _model!.UseSelectedItem();
                 HideContextMenu();
             });
 
@@ -708,24 +555,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
         {
             var btn = new Button(onClick);
             btn.text = labelText;
-            btn.style.backgroundColor = Color.clear;
-            btn.style.borderTopWidth = 0;
-            btn.style.borderBottomWidth = 0;
-            btn.style.borderLeftWidth = 0;
-            btn.style.borderRightWidth = 0;
-            btn.style.paddingTop = 6;
-            btn.style.paddingBottom = 6;
-            btn.style.paddingLeft = 12;
-            btn.style.paddingRight = 12;
-            btn.style.color = Color.white;
-            btn.style.fontSize = 13;
-            btn.style.unityTextAlign = TextAnchor.MiddleLeft;
-            btn.style.minHeight = 28;
-
-            btn.RegisterCallback<MouseEnterEvent>(_ =>
-                btn.style.backgroundColor = new Color(0.25f, 0.25f, 0.35f, 1f));
-            btn.RegisterCallback<MouseLeaveEvent>(_ =>
-                btn.style.backgroundColor = Color.clear);
+            btn.AddToClassList("inv-context-btn");
 
             _contextMenu.Add(btn);
         }
@@ -735,10 +565,9 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.View
             if (_contextMenu != null)
             {
                 _contextMenu.RemoveFromHierarchy();
-                _contextMenu = null;
+                _contextMenu = null!;
             }
 
-            _contextMenuSlot = -1;
             _doc?.rootVisualElement.UnregisterCallback<MouseDownEvent>(OnContextMenuOutsideClick);
             _doc?.rootVisualElement.UnregisterCallback<KeyDownEvent>(OnContextMenuEscape);
         }

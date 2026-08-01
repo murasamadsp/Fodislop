@@ -1,6 +1,8 @@
-using NUnit.Framework;
-using Fodinae.Scripts.UI.HUD.Inventory.Model;
+#nullable enable
+
+using Fodinae.UI.HUD.Inventory.Model;
 using MinesServer.Data;
+using NUnit.Framework;
 using UnityEngine;
 
 namespace Fodinae.Tests.UI
@@ -8,7 +10,7 @@ namespace Fodinae.Tests.UI
     [TestFixture]
     public class InventoryModelTests
     {
-        private InventoryModel _model;
+        private InventoryModel _model = null!;
 
         [SetUp]
         public void SetUp()
@@ -67,7 +69,7 @@ namespace Fodinae.Tests.UI
 
             Assert.IsTrue(stacked, "TryStackSlots should return true for identical stackable items.");
             Assert.IsNull(_model.GetSlot(0), "From slot should be emptied after stacking.");
-            Assert.AreEqual(35, _model.GetSlot(1).Quantity, "Target slot quantity should be the sum (15 + 20 = 35).");
+            Assert.AreEqual(35, _model.GetSlot(1)?.Quantity, "Target slot quantity should be the sum (15 + 20 = 35).");
         }
 
         [Test]
@@ -82,8 +84,8 @@ namespace Fodinae.Tests.UI
             bool stacked = _model.TryStackSlots(0, 1);
 
             Assert.IsFalse(stacked, "TryStackSlots should return false for different items.");
-            Assert.AreEqual(15, _model.GetSlot(0).Quantity);
-            Assert.AreEqual(1, _model.GetSlot(1).Quantity);
+            Assert.AreEqual(15, _model.GetSlot(0)?.Quantity);
+            Assert.AreEqual(1, _model.GetSlot(1)?.Quantity);
         }
 
         [Test]

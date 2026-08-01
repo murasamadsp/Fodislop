@@ -6,29 +6,30 @@ namespace VContainer.Diagnostics
 {
     public static class DiagnositcsContext
     {
-        static readonly Dictionary<string, DiagnosticsCollector> collectors
+        private static readonly Dictionary<string, DiagnosticsCollector> Collectors
             = new Dictionary<string, DiagnosticsCollector>();
 
         public static event Action<IObjectResolver> OnContainerBuilt;
 
         public static DiagnosticsCollector GetCollector(string name)
         {
-            lock (collectors)
+            lock (Collectors)
             {
-                if (!collectors.TryGetValue(name, out var collector))
+                if (!Collectors.TryGetValue(name, out var collector))
                 {
                     collector = new DiagnosticsCollector(name);
-                    collectors.Add(name, collector);
+                    Collectors.Add(name, collector);
                 }
+
                 return collector;
             }
         }
 
         public static ILookup<string, DiagnosticsInfo> GetGroupedDiagnosticsInfos()
         {
-            lock (collectors)
+            lock (Collectors)
             {
-                return collectors
+                return Collectors
                     .SelectMany(x => x.Value.GetDiagnosticsInfos())
                     .Where(x => x.ResolveInfo.MaxDepth <= 1)
                     .ToLookup(x => x.ScopeName);
@@ -37,9 +38,9 @@ namespace VContainer.Diagnostics
 
         public static IEnumerable<DiagnosticsInfo> GetDiagnosticsInfos()
         {
-            lock (collectors)
+            lock (Collectors)
             {
-                return collectors.SelectMany(x => x.Value.GetDiagnosticsInfos());
+                return Collectors.SelectMany(x => x.Value.GetDiagnosticsInfos());
             }
         }
 
@@ -55,9 +56,9 @@ namespace VContainer.Diagnostics
 
         public static void RemoveCollector(string name)
         {
-            lock (collectors)
+            lock (Collectors)
             {
-                collectors.Remove(name);
+                Collectors.Remove(name);
             }
         }
     }

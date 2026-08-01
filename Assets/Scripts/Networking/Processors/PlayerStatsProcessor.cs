@@ -1,18 +1,17 @@
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI.HUD.Player.Model;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Information;
-using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class PlayerStatsProcessor : IPacketProcessor<LevelPacket>, IPacketProcessor<HealthPacket>, IPacketProcessor<CurrencyPacket>, IPacketProcessor<GeologyPacket>, IPacketProcessor<BasketPacket>, IPacketProcessor<MaxDepthPacket>, IPacketProcessor<DailyBonusStatePacket>, IPacketProcessor<SkillProgressPacket>
     {
-        private static IPlayerStats Stats => PlayerStatsModel.Instance;
-
         public void Process(LevelPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetLevel(packet.Level);
@@ -21,7 +20,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(HealthPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetHealth(packet.Current, packet.Max);
@@ -30,7 +29,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(CurrencyPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetCurrency(packet.Money, packet.Creds);
@@ -39,7 +38,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(GeologyPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetGeology(packet.Current, packet.Max, packet.Cell, packet.Text);
@@ -48,7 +47,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(BasketPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetBasket(packet.Capacity, packet.Contents);
@@ -57,7 +56,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(MaxDepthPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetMaxDepth(packet.Depth);
@@ -66,7 +65,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(DailyBonusStatePacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetDailyBonusAvailable(packet.Enabled);
@@ -75,7 +74,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(SkillProgressPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetSkillProgress(packet.Skill, packet.Current, packet.Max);

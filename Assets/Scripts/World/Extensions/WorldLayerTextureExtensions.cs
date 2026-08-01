@@ -1,12 +1,17 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World.Extensions
+namespace Fodinae.World.Extensions
 {
     /// <summary>
     /// Extension methods for WorldLayer to integrate with WorldTextureManager.
@@ -23,7 +28,13 @@ namespace Fodinae.Scripts.World.Extensions
         public static async UniTask<AtlasCoordinate> GetCellTextureCoordinate(this WorldLayer<CellType> worldLayer, int x, int y)
         {
             var cellType = worldLayer[x, y];
-            return await WorldTextureManager.Instance.GetCellTextureCoordinate(cellType, x, y);
+            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
+            if (manager != null)
+            {
+                return await manager.GetCellTextureCoordinate(cellType, x, y);
+            }
+
+            return AtlasCoordinate.Empty;
         }
 
         /// <summary>
@@ -43,6 +54,12 @@ namespace Fodinae.Scripts.World.Extensions
             var tasks = new List<UniTask<AtlasCoordinate>>();
 
             // Collect all texture requests
+            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
+            if (manager == null)
+            {
+                return coordinates;
+            }
+
             for (int yy = y; yy < y + height; yy++)
             {
                 for (int xx = x; xx < x + width; xx++)
@@ -50,7 +67,7 @@ namespace Fodinae.Scripts.World.Extensions
                     var cellType = worldLayer[xx, yy];
                     if (cellType != CellType.Unloaded && cellType != CellType.Pregener)
                     {
-                        var task = WorldTextureManager.Instance.GetCellTextureCoordinate(cellType, xx, yy);
+                        var task = manager.GetCellTextureCoordinate(cellType, xx, yy);
                         tasks.Add(task);
                         coordinates[new Vector2Int(xx, yy)] = AtlasCoordinate.Empty;
                     }
@@ -108,10 +125,16 @@ namespace Fodinae.Scripts.World.Extensions
             }
 
             // Preload textures for unique cell types
-            var tasks = new List<UniTask>();
+            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
+            if (manager == null)
+            {
+                return;
+            }
+
+            var tasks = new List<UniTask<AtlasCoordinate>>();
             foreach (var cellType in uniqueCellTypes)
             {
-                var task = WorldTextureManager.Instance.GetCellTextureCoordinate(cellType, x, y);
+                var task = manager.GetCellTextureCoordinate(cellType, x, y);
                 tasks.Add(task);
             }
 
@@ -125,7 +148,8 @@ namespace Fodinae.Scripts.World.Extensions
         /// <returns>List of active texture atlases.</returns>
         public static List<TextureAtlas> GetActiveAtlases(this WorldLayer<CellType> worldLayer)
         {
-            return WorldTextureManager.Instance.GetAllAtlases();
+            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
+            return manager?.GetAllAtlases() ?? new List<TextureAtlas>();
         }
 
         /// <summary>
@@ -134,7 +158,8 @@ namespace Fodinae.Scripts.World.Extensions
         /// <param name="worldLayer">The world layer.</param>
         public static void ClearTextureCache(this WorldLayer<CellType> worldLayer)
         {
-            WorldTextureManager.Instance.Clear();
+            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
+            manager?.Clear();
         }
 
         /// <summary>

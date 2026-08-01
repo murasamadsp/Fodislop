@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
+      - 'scripts/**'
+      - '*.csproj'
+      - 'Directory.Build.props'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
+      - 'scripts/**'
+      - '*.csproj'
+      - 'Directory.Build.props'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build-and-lint:
+    name: C# Build & Roslyn Analyzers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj', '**/packages-lock.json') }}
+          restore-keys: nuget-
+
+      - name: Build dependencies
+        run: |
+          for csproj in MinesServer*.csproj Effekseer*.csproj UniTask*.csproj McpUnity*.csproj; do
+            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo || true
+          done
+
+      - name: Build & analyze
+        id: lint
+        run: |
+          chmod +x scripts/pre-commit-lint.sh
+          ./scripts/pre-commit-lint.sh 2>&1 | tee /tmp/lint.log
+
+      - name: Upload log on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-log
+          path: /tmp/lint.log
+          retention-days: 7

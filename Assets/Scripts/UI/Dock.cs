@@ -1,4 +1,6 @@
-namespace Fodinae.Scripts
+#nullable enable
+
+namespace Fodinae
 {
     public enum Dock
     {

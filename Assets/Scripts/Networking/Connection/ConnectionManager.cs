@@ -1,9 +1,13 @@
+#nullable enable
+
 using System;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking.Auth;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Auth;
+using Fodinae.UI;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -12,18 +16,18 @@ using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Shared;
 using UnityEngine;
+using VContainer;
 
-namespace Fodinae.Scripts.Networking.Connection
+namespace Fodinae.Networking.Connection
 {
-    public class ConnectionManager : MonoBehaviour
+    public class ConnectionManager : MonoBehaviour, IConnectionService
     {
-        private static ConnectionManager _instance;
-        public static ConnectionManager Instance => _instance;
-        public static ConnectionManager InstanceIfExists => _instance;
+        public static ConnectionManager? Instance { get; private set; }
 
-        public IServerConnection Connection { get; private set; }
+        public IServerConnection? Connection { get; private set; }
+        public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         private bool _useOldClient;
-        public event Action<ServerPacket> OnPacketReceived;
+        public event Action<ServerPacket>? OnPacketReceived;
 
         private readonly System.Collections.Concurrent.ConcurrentQueue<ServerPacket> _packetQueue = new();
 
@@ -32,31 +36,34 @@ namespace Fodinae.Scripts.Networking.Connection
         private const float ReconnectInterval = 20f;
         private string _reconnectStatus = string.Empty;
         private bool _serverInitiatedDisconnect;
+
+        // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
+        // и для диагностики в ReconnectUI. НЕ УДАЛЯТЬ (см. HandleServerDisconnect).
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052", Justification = "Хранит причину дисконнекта для реконнект-статуса")]
         private string _disconnectReason = string.Empty;
+
+        [Inject]
+        private IWorldDataStorage _worldStorage = null!;
+        [Inject]
+        private GameManager _gameManager = null!;
 
         protected void Awake()
         {
-            Debug.Log("[ConnectionManager] Awake START");
-            _instance = this;
-            gameObject.AddComponent<PacketHandler>();
-            Debug.Log("[ConnectionManager] Awake END");
+            Instance = this;
         }
 
         protected void OnDestroy()
         {
-            if (_instance != this)
-            {
-                return;
-            }
-
             Disconnect();
         }
 
         protected void Update()
         {
             float startTime = Time.realtimeSinceStartup;
+            int processedCount = 0;
             while (_packetQueue.TryDequeue(out var packet))
             {
+                processedCount++;
                 try
                 {
                     OnPacketReceived?.Invoke(packet);
@@ -101,7 +108,7 @@ namespace Fodinae.Scripts.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            Game.Managers.GameManager.InstanceIfExists?.SetState(Game.Managers.GameState.Connecting);
+            _gameManager?.SetState(Game.Managers.GameState.Connecting);
 
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;
@@ -126,7 +133,7 @@ namespace Fodinae.Scripts.Networking.Connection
             Connection.Disconnect();
             Connection = null;
 
-            MapStorage.InstanceIfExists?.Dispose();
+            (_worldStorage as MapStorage)?.Dispose();
         }
 
         public void HandleServerDisconnect(string reason)
@@ -135,7 +142,7 @@ namespace Fodinae.Scripts.Networking.Connection
             _serverInitiatedDisconnect = true;
             _disconnectReason = reason;
             Disconnect();
-            Game.Managers.GameManager.InstanceIfExists?.DeauthorizeUI();
+            _gameManager?.DeauthorizeUI();
             ReconnectUI.Instance?.ShowDisconnectReason(reason);
         }
 
@@ -146,7 +153,7 @@ namespace Fodinae.Scripts.Networking.Connection
             _reconnectCountdown = ReconnectInterval;
             _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
             Disconnect();
-            Game.Managers.GameManager.InstanceIfExists?.SetState(Game.Managers.GameState.Disconnected);
+            _gameManager?.SetState(Game.Managers.GameState.Disconnected);
             ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
         }
 
@@ -168,20 +175,21 @@ namespace Fodinae.Scripts.Networking.Connection
             int version = _useOldClient ? 0 : 1;
             string token = AuthTokenManager.LoadToken();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
-            NetworkService.Send(new ClientHelloPacket(version, "Windows", 10, "fingerprint", token));
+            var ns = ServiceLocator.Resolve<INetworkService>();
+            ns?.Send(new ClientHelloPacket(version, "Windows", 10, "fingerprint", token));
 
-            NetworkService.Send(new OpenHelpClickPacket());
+            ns?.Send(new OpenHelpClickPacket());
         }
 
         private void OnDisconnected()
         {
-            Game.Managers.GameManager.InstanceIfExists?.DeauthorizeUI();
+            _gameManager?.DeauthorizeUI();
 
             if (_shouldAutoReconnect && !_serverInitiatedDisconnect)
             {
                 _reconnectCountdown = ReconnectInterval;
                 _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
-                Game.Managers.GameManager.InstanceIfExists?.SetState(Game.Managers.GameState.Disconnected);
+                _gameManager?.SetState(Game.Managers.GameState.Disconnected);
                 ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
             }
         }

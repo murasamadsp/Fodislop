@@ -1,27 +1,33 @@
+#nullable enable
+
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
-using Fodinae.Scripts.Effekseer;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Effekseer;
+using Fodinae.Game.Managers;
+using Fodinae.Rendering.PostProcessing;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game
+namespace Fodinae.Game
 {
     public class Pack : MonoBehaviour
     {
-        private SpriteRenderer _spriteRenderer;
-        private SpriteRenderer _clanRenderer;
-        private PackType _packType;
+        private SpriteRenderer? _spriteRenderer;
+        private SpriteRenderer? _clanRenderer;
+        private PackType? _packType;
         private byte _variant;
         private byte _linkedClan;
-        private CancellationTokenSource _cts;
-        private Sprite _packSprite;
-        private Sprite _clanSprite;
+        private CancellationTokenSource? _cts;
+        private Sprite? _packSprite;
+        private Sprite? _clanSprite;
 
         private EffekseerHandle _effekseerHandle;
-        private EffekseerEffectAsset _effekseerAsset;
+        private EffekseerEffectAsset? _effekseerAsset;
         private bool _hasEffekseerEffect;
 
         protected void Awake()
@@ -33,6 +39,7 @@ namespace Fodinae.Scripts.Game
             }
 
             var clanGo = new GameObject("ClanIcon");
+            clanGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             clanGo.transform.SetParent(transform);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
@@ -41,6 +48,11 @@ namespace Fodinae.Scripts.Game
 
         public void Initialize(PackType packType, byte variant, byte linkedClan)
         {
+            if (_packType == packType && _variant == variant && _linkedClan == linkedClan && _cts != null)
+            {
+                return;
+            }
+
             // Clean up previous Effekseer effect if any
             StopEffekseerEffect();
 
@@ -72,7 +84,13 @@ namespace Fodinae.Scripts.Game
             string packPath = $"Pack/{packName}/{_variant}";
 
             // 1. Try loading as a texture (existing behavior — static or animated sprite)
-            var packTexture = await ClientAssetLoader.Instance.GetTextureAsync(packPath, token);
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            if (loader == null)
+            {
+                return;
+            }
+
+            var packTexture = await loader.GetTextureAsync(packPath, token);
             if (token.IsCancellationRequested || _spriteRenderer == null)
             {
                 return;
@@ -94,7 +112,7 @@ namespace Fodinae.Scripts.Game
             }
 
             // 2. Texture not found — try loading as Effekseer effect (.efk data)
-            var efkBytes = await ClientAssetLoader.Instance.GetAssetBytesAsync(packPath, timeoutSeconds: 10);
+            var efkBytes = await loader.GetAssetBytesAsync(packPath, timeoutSeconds: 10);
             if (token.IsCancellationRequested || efkBytes == null || efkBytes.Length < 4)
             {
                 return;
@@ -143,7 +161,13 @@ namespace Fodinae.Scripts.Game
                 return;
             }
 
-            var clanTexture = await ClientAssetLoader.Instance.GetTextureAsync($"Clan/{_linkedClan}", token);
+            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            if (loader == null)
+            {
+                return;
+            }
+
+            var clanTexture = await loader.GetTextureAsync($"Clan/{_linkedClan}", token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
             {
                 return;
@@ -180,6 +204,7 @@ namespace Fodinae.Scripts.Game
             {
                 // Effect has finished playing — clean up
                 _hasEffekseerEffect = false;
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
                 _effekseerAsset = null;
 
                 if (_spriteRenderer != null)
@@ -195,6 +220,7 @@ namespace Fodinae.Scripts.Game
             {
                 _effekseerHandle.Stop();
                 _hasEffekseerEffect = false;
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
                 _effekseerAsset = null;
             }
         }

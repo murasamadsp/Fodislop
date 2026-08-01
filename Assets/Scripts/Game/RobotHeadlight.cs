@@ -1,78 +1,67 @@
-using Fodinae.Scripts.Player.Logic;
-using MinesServer.Data;
+#nullable enable
+
+using Fodinae.Player.Logic;
+using Fodinae.World.Lighting;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game
+namespace Fodinae.Game
 {
     public class RobotHeadlight : MonoBehaviour
     {
-        [SerializeField]
-        private float _outerAngle = 60f;
-        [SerializeField]
-        private float _range = 25f;
-        [SerializeField]
-        private float _intensity = 1.0f;
+        [SerializeField, Min(0.1f)]
+        private float _auraRadius = 12f;
+        [SerializeField, Min(0f)]
+        private float _intensity = 1f;
+        [SerializeField, Range(0.5f, 10f), Tooltip("Virtual height above the terrain. Higher values produce shorter shadows.")]
+        private float _auraHeight = 2.5f;
 
-        private float _angleCos;
-        private bool _isEnabled = true;
+        private PlayerMovementController? _player;
+        private bool _headlightEnabled = true;
 
         protected void Awake()
         {
-            _angleCos = Mathf.Cos(_outerAngle * 0.5f * Mathf.Deg2Rad);
-        }
-
-        protected void OnEnable()
-        {
-            _isEnabled = true;
+            _player = GetComponent<PlayerMovementController>()
+                ?? GetComponentInParent<PlayerMovementController>();
         }
 
         protected void OnDisable()
         {
-            _isEnabled = false;
-            Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
+            TerrariaLightingEngine.Instance?.DisablePlayerAura();
         }
 
         protected void OnDestroy()
         {
-            Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
+            TerrariaLightingEngine.Instance?.DisablePlayerAura();
         }
 
         protected void LateUpdate()
         {
-            if (!_isEnabled)
+            if (!_headlightEnabled)
             {
-                Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
                 return;
             }
 
-            var player = PlayerMovementController.LocalPlayer
-                ?? GetComponent<PlayerMovementController>()
-                ?? GetComponentInParent<PlayerMovementController>()
-                ?? FindAnyObjectByType<PlayerMovementController>();
-
-            if (player == null)
+            _player ??= PlayerMovementController.LocalPlayer;
+            var lighting = TerrariaLightingEngine.Instance;
+            if (_player == null || lighting == null)
             {
-                // No active player found in scene — disable global headlight intensity to prevent orphan light spots on map
-                Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
+                lighting?.DisablePlayerAura();
                 return;
             }
 
-            Vector2 dir = player.transform.up;
-            Vector2 pos = (Vector2)player.transform.position + (dir * 0.5f);
-
-            Shader.SetGlobalVector("_HeadlightPos", pos);
-            Shader.SetGlobalVector("_HeadlightDir", dir);
-            Shader.SetGlobalFloat("_HeadlightAngleCos", _angleCos);
-            Shader.SetGlobalFloat("_HeadlightRange", _range);
-            Shader.SetGlobalFloat("_HeadlightIntensity", _intensity);
+            lighting.SetPlayerAura(
+                (Vector2)_player.transform.position,
+                _auraRadius,
+                _intensity,
+                _auraHeight);
         }
 
         public void SetEnabled(bool enabled)
         {
-            _isEnabled = enabled;
+            _headlightEnabled = enabled;
             if (!enabled)
             {
-                Shader.SetGlobalFloat("_HeadlightIntensity", 0f);
+                TerrariaLightingEngine.Instance?.DisablePlayerAura();
             }
         }
     }

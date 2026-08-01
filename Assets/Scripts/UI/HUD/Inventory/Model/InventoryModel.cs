@@ -1,45 +1,47 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Networking;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
 using MinesServer.Networking.Client.Packets.Inventory;
 using UnityEngine;
+using VContainer;
 
-namespace Fodinae.Scripts.UI.HUD.Inventory.Model
+namespace Fodinae.UI.HUD.Inventory.Model
 {
-    public class InventoryModel : Fodinae.Scripts.UI.HUD.Inventory.Interfaces.IInventoryModel
+    public class InventoryModel : Fodinae.UI.HUD.Inventory.Interfaces.IInventoryModel
     {
         public const int HOTBAR_SIZE = 9;
         public const int INVENTORY_SIZE = 6 * 9;
         public const int TOTALSLOTS = HOTBAR_SIZE + INVENTORY_SIZE;
 
-        private static InventoryModel _instance;
-        public static InventoryModel Instance => _instance;
+        [Inject]
+        private INetworkService _networkService = null!;
 
-        public InventoryModel()
-        {
-            _instance = this;
-        }
+        private ItemData?[] _slots = new ItemData?[TOTALSLOTS];
 
-        private ItemData[] _slots = new ItemData[TOTALSLOTS];
-
-        public event Action<int> OnSlotChanged;
+        public event Action<int>? OnSlotChanged;
 
         private int _selectedSlot = -1;
         public int SelectedSlot => _selectedSlot;
-        public event Action<int> OnSlotSelected;
+        public event Action<int>? OnSlotSelected;
 
-        public ItemData GetSlot(int index) => _slots[index];
-        public void SetSlot(int index, ItemData item)
+        public ItemData? GetSlot(int index) => (index >= 0 && index < _slots.Length) ? _slots[index] : null;
+        public void SetSlot(int index, ItemData? item)
         {
-            _slots[index] = item;
-            OnSlotChanged?.Invoke(index);
-            if (index == _selectedSlot)
+            if (index >= 0 && index < _slots.Length)
             {
-                OnSlotSelected?.Invoke(index);
+                _slots[index] = item;
+                OnSlotChanged?.Invoke(index);
+                if (index == _selectedSlot)
+                {
+                    OnSlotSelected?.Invoke(index);
+                }
             }
         }
 
-        public static bool CanStack(ItemData a, ItemData b)
+        public static bool CanStack(ItemData? a, ItemData? b)
         {
             if (a == null || b == null)
             {
@@ -99,22 +101,20 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.Model
             _selectedSlot = index;
             OnSlotSelected?.Invoke(index);
 
-            if (NetworkService.Instance == null)
+            if (_networkService == null)
             {
-                Debug.LogWarning("[InventoryModel] NetworkService.Instance is null, cannot send packet");
+                Debug.LogWarning("[InventoryModel] NetworkService is not injected, cannot send packet");
                 return;
             }
 
             var item = _slots[index];
             if (item != null)
             {
-                Debug.Log($"[InventoryModel] Sending SelectItemPacket: slot={index}, item={item.ItemType}");
-                NetworkService.Send(new SelectItemPacket(item.ItemType));
+                _networkService.Send(new SelectItemPacket(item.ItemType));
             }
             else
             {
-                Debug.Log($"[InventoryModel] Sending DeselectItemPacket (empty slot {index})");
-                NetworkService.Send(new DeselectItemPacket());
+                _networkService.Send(new DeselectItemPacket());
             }
         }
 
@@ -123,13 +123,12 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.Model
             _selectedSlot = -1;
             OnSlotSelected?.Invoke(-1);
 
-            if (NetworkService.Instance == null)
+            if (_networkService == null)
             {
                 return;
             }
 
-            Debug.Log("[InventoryModel] Sending DeselectItemPacket");
-            NetworkService.Send(new DeselectItemPacket());
+            _networkService.Send(new DeselectItemPacket());
         }
 
         public void ClearSelection()
@@ -145,7 +144,7 @@ namespace Fodinae.Scripts.UI.HUD.Inventory.Model
                 return;
             }
 
-            NetworkService.Send(new UseItemPacket());
+            _networkService.Send(new UseItemPacket());
         }
     }
 }

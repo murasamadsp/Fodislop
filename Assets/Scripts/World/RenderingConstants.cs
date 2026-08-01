@@ -1,4 +1,6 @@
-namespace Fodinae.Scripts.World
+#nullable enable
+
+namespace Fodinae.World
 {
     public static class RenderingConstants
     {

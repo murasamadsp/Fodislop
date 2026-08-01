@@ -1,16 +1,20 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.World;
-using MG.GIF;
+using Fodinae.Core;
+using Fodinae.World;
+using Fodinae.World.Terrain;
+
 using unity.libwebp;
 using unity.libwebp.Interop;
 using UnityEngine;
 using WebP;
+using UnityEngine.Rendering;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     public static class AnimationContainerDecoder
     {
@@ -95,9 +99,9 @@ namespace Fodinae.Scripts.World
                 }
 
                 int pos = 12;
+                int width, height;
                 var frameTextures = new List<Texture2D>();
                 var delays = new List<int>();
-                int width = 0, height = 0;
 
                 while (pos <= data.Length - 8)
                 {
@@ -107,8 +111,7 @@ namespace Fodinae.Scripts.World
 
                     if (chunkId == "VP8X")
                     {
-                        width = (data[pos + 4] | (data[pos + 5] << 8) | (data[pos + 6] << 16)) + 1;
-                        height = (data[pos + 7] | (data[pos + 8] << 8) | (data[pos + 9] << 16)) + 1;
+                        // VP8X chunk: width/height already obtained from frameTextures
                     }
                     else if (chunkId == "ANMF")
                     {
@@ -157,7 +160,7 @@ namespace Fodinae.Scripts.World
                         var readable = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false);
                         readable.filterMode = FilterMode.Point;
                         Graphics.CopyTexture(tex, readable);
-                        readable.Apply();
+                        readable.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
                         UnityEngine.Object.Destroy(tex);
                         return new DecodedAnimation
                         {
@@ -187,6 +190,7 @@ namespace Fodinae.Scripts.World
                     totalDelay += delays[i];
                     UnityEngine.Object.Destroy(frameTextures[i]);
                 }
+                atlas.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
 
                 float avgDelay = totalDelay / frameTextures.Count;
                 return new DecodedAnimation
@@ -217,13 +221,13 @@ namespace Fodinae.Scripts.World
 
         private class GifInternalDecoder
         {
-            private byte[] _data;
+            private byte[] _data = Array.Empty<byte>();
             private int _pos;
             private int _sw;
             private int _sh;
-            private Color32[] _gt;
-            private Color32[] _cv;
-            private Color32[] _pv;
+            private Color32[] _gt = Array.Empty<Color32>();
+            private Color32[] _cv = Array.Empty<Color32>();
+            private Color32[] _pv = Array.Empty<Color32>();
 
             public GifInternalDecoder(byte[] d)
             {
@@ -322,7 +326,7 @@ namespace Fodinae.Scripts.World
                         }
 
                         tex.SetPixels32(fl);
-                        tex.Apply();
+                        tex.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
                         fts.Add(tex);
                         dls.Add(dl);
 

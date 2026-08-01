@@ -1,15 +1,14 @@
+#nullable enable
+
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 
-// SA1503/SA1519: допустимо в hot-циклах (FBPW flood fill)
-#pragma warning disable SA1503
-#pragma warning disable SA1519
-
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Frontier-Based Parallel Wavefront (FBPW) flood fill for background map.
@@ -20,13 +19,50 @@ namespace Fodinae.Scripts.World
     /// </summary>
     public sealed class BackgroundFloodFill
     {
-        private int[] _fbpwGeneration;
+        private sealed class PooledFrontier : IDisposable
+        {
+            private static readonly ArrayPool<(int X, int Y)> Pool = ArrayPool<(int X, int Y)>.Shared;
+            private (int X, int Y)[] _items = Pool.Rent(64);
+
+            public int Count { get; private set; }
+
+            public void Add((int X, int Y) item)
+            {
+                if (Count == _items.Length)
+                {
+                    var replacement = Pool.Rent(_items.Length * 2);
+                    Array.Copy(_items, replacement, Count);
+                    Pool.Return(_items);
+                    _items = replacement;
+                }
+
+                _items[Count++] = item;
+            }
+
+            public void AppendTo(List<(int X, int Y)> destination)
+            {
+                for (int i = 0; i < Count; i++)
+                {
+                    destination.Add(_items[i]);
+                }
+            }
+
+            public void Dispose()
+            {
+                Pool.Return(_items);
+                _items = Array.Empty<(int X, int Y)>();
+                Count = 0;
+            }
+        }
+
+        private int[] _fbpwGeneration = Array.Empty<int>();
         private int _fbpwCurrentGen = 1;
         private readonly List<(int X, int Y)> _fbpwFrontier = new(64);
         private readonly List<(int X, int Y)> _fbpwNextFrontier = new(64);
+        private List<(int X, int Y)>[] _columnFrontiers = Array.Empty<List<(int X, int Y)>>();
         private readonly object _fbpwLock = new();
 
-        private CellType[,] _bgMapBuffer;
+        private CellType[,] _bgMapBuffer = new CellType[0, 0];
         private int _width;
         private int _height;
 
@@ -41,6 +77,11 @@ namespace Fodinae.Scripts.World
             _height = height;
             _bgMapBuffer = new CellType[width, height];
             _fbpwGeneration = new int[width * height];
+            _columnFrontiers = new List<(int X, int Y)>[width];
+            for (int x = 0; x < width; x++)
+            {
+                _columnFrontiers[x] = new List<(int X, int Y)>(Math.Min(height, 64));
+            }
             _fbpwCurrentGen = 1;
         }
 
@@ -59,7 +100,8 @@ namespace Fodinae.Scripts.World
 
             Parallel.For(0, w, x =>
             {
-                var localFrontier = new List<(int, int)>(32);
+                List<(int X, int Y)> localFrontier = _columnFrontiers[x];
+                localFrontier.Clear();
                 Span<TypeCount> typeCounts = stackalloc TypeCount[8];
 
                 for (int y = 0; y < h; y++)
@@ -79,9 +121,16 @@ namespace Fodinae.Scripts.World
                         {
                             for (int dx = -1; dx <= 1; dx++)
                             {
-                                if (dx == 0 && dy == 0) continue;
+                                if (dx == 0 && dy == 0)
+                                {
+                                    continue;
+                                }
+
                                 int nx = x + dx, ny = y + dy;
-                                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                                if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                                {
+                                    continue;
+                                }
 
                                 var n = cellCache.GetCell(nx + 1, ny + 1);
                                 if ((n.Properties & CellConfigProperties.Passable) != 0)
@@ -124,14 +173,12 @@ namespace Fodinae.Scripts.World
                     }
                 }
 
-                if (localFrontier.Count > 0)
-                {
-                    lock (_fbpwLock)
-                    {
-                        frontier.AddRange(localFrontier);
-                    }
-                }
             });
+
+            for (int x = 0; x < w; x++)
+            {
+                frontier.AddRange(_columnFrontiers[x]);
+            }
 
             FBPWPropagate(frontier, useParallel: true);
 
@@ -180,7 +227,10 @@ namespace Fodinae.Scripts.World
 
             bool hasXBorder = xLen > 0;
             bool hasYBorder = yLen > 0;
-            if (!hasXBorder && !hasYBorder) return;
+            if (!hasXBorder && !hasYBorder)
+            {
+                return;
+            }
 
             var frontier = _fbpwFrontier;
             frontier.Clear();
@@ -261,9 +311,16 @@ namespace Fodinae.Scripts.World
                 {
                     for (int dx = -1; dx <= 1; dx++)
                     {
-                        if (dx == 0 && dy == 0) continue;
+                        if (dx == 0 && dy == 0)
+                        {
+                            continue;
+                        }
+
                         int nx = x + dx, ny = y + dy;
-                        if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                        if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                        {
+                            continue;
+                        }
 
                         var n = cellCache.GetCell(nx + 1, ny + 1);
                         if ((n.Properties & CellConfigProperties.Passable) != 0)
@@ -311,7 +368,11 @@ namespace Fodinae.Scripts.World
 
         private void FBPWPropagate(List<(int, int)> frontier, bool useParallel = false)
         {
-            if (frontier.Count == 0) return;
+            if (frontier.Count == 0)
+            {
+                return;
+            }
+
             int w = _width, h = _height;
 
             while (frontier.Count > 0)
@@ -328,7 +389,7 @@ namespace Fodinae.Scripts.World
                 if (useParallel)
                 {
                     Parallel.For(0, frontier.Count,
-                        () => new List<(int, int)>(16),
+                        () => new PooledFrontier(),
                         (i, state, local) =>
                         {
                             var (x, y) = frontier[i];
@@ -337,12 +398,28 @@ namespace Fodinae.Scripts.World
                             {
                                 for (int dx = -1; dx <= 1; dx++)
                                 {
-                                    if (dx == 0 && dy == 0) continue;
+                                    if (dx == 0 && dy == 0)
+                                    {
+                                        continue;
+                                    }
+
                                     int nx = x + dx, ny = y + dy;
-                                    if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                                    if (_bgMapBuffer[nx, ny] != CellType.Unloaded) continue;
+                                    if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                                    {
+                                        continue;
+                                    }
+
+                                    if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
+                                    {
+                                        continue;
+                                    }
+
                                     int idx = nx + (ny * w);
-                                    if (Interlocked.CompareExchange(ref _fbpwGeneration[idx], gen, gen - 1) != gen - 1) continue;
+                                    if (Interlocked.CompareExchange(ref _fbpwGeneration[idx], gen, gen - 1) != gen - 1)
+                                    {
+                                        continue;
+                                    }
+
                                     _bgMapBuffer[nx, ny] = bg;
                                     local.Add((nx, ny));
                                 }
@@ -356,9 +433,10 @@ namespace Fodinae.Scripts.World
                             {
                                 lock (_fbpwLock)
                                 {
-                                    _fbpwNextFrontier.AddRange(local);
+                                    local.AppendTo(_fbpwNextFrontier);
                                 }
                             }
+                            local.Dispose();
                         });
                 }
                 else
@@ -370,12 +448,28 @@ namespace Fodinae.Scripts.World
                         {
                             for (int dx = -1; dx <= 1; dx++)
                             {
-                                if (dx == 0 && dy == 0) continue;
+                                if (dx == 0 && dy == 0)
+                                {
+                                    continue;
+                                }
+
                                 int nx = x + dx, ny = y + dy;
-                                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-                                if (_bgMapBuffer[nx, ny] != CellType.Unloaded) continue;
+                                if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                                {
+                                    continue;
+                                }
+
+                                if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
+                                {
+                                    continue;
+                                }
+
                                 int idx = nx + (ny * w);
-                                if (_fbpwGeneration[idx] >= gen) continue;
+                                if (_fbpwGeneration[idx] >= gen)
+                                {
+                                    continue;
+                                }
+
                                 _fbpwGeneration[idx] = gen;
                                 _bgMapBuffer[nx, ny] = bg;
                                 _fbpwNextFrontier.Add((nx, ny));
@@ -384,7 +478,6 @@ namespace Fodinae.Scripts.World
                     }
                 }
 
-                var temp = frontier;
                 frontier.Clear();
                 frontier.AddRange(_fbpwNextFrontier);
                 _fbpwNextFrontier.Clear();
@@ -393,22 +486,35 @@ namespace Fodinae.Scripts.World
 
         private static void Scroll2DArray<T>(T[,] array, int w, int h, int dx, int dy)
         {
-            if (dx == 0 && dy == 0) return;
+            if (dx == 0 && dy == 0)
+            {
+                return;
+            }
+
             if (dx > 0)
             {
                 for (int x = 0; x < w - dx; x++)
                 {
                     if (dy > 0)
                     {
-                        for (int y = 0; y < h - dy; y++) array[x, y] = array[x + dx, y + dy];
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else if (dy < 0)
                     {
-                        for (int y = h - 1; y >= -dy; y--) array[x, y] = array[x + dx, y + dy];
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++) array[x, y] = array[x + dx, y];
+                        for (int y = 0; y < h; y++)
+                        {
+                            array[x, y] = array[x + dx, y];
+                        }
                     }
                 }
             }
@@ -418,15 +524,24 @@ namespace Fodinae.Scripts.World
                 {
                     if (dy > 0)
                     {
-                        for (int y = 0; y < h - dy; y++) array[x, y] = array[x + dx, y + dy];
+                        for (int y = 0; y < h - dy; y++)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else if (dy < 0)
                     {
-                        for (int y = h - 1; y >= -dy; y--) array[x, y] = array[x + dx, y + dy];
+                        for (int y = h - 1; y >= -dy; y--)
+                        {
+                            array[x, y] = array[x + dx, y + dy];
+                        }
                     }
                     else
                     {
-                        for (int y = 0; y < h; y++) array[x, y] = array[x + dx, y];
+                        for (int y = 0; y < h; y++)
+                        {
+                            array[x, y] = array[x + dx, y];
+                        }
                     }
                 }
             }
@@ -435,12 +550,22 @@ namespace Fodinae.Scripts.World
                 if (dy > 0)
                 {
                     for (int y = 0; y < h - dy; y++)
-                        for (int x = 0; x < w; x++) array[x, y] = array[x, y + dy];
+                    {
+                        for (int x = 0; x < w; x++)
+                        {
+                            array[x, y] = array[x, y + dy];
+                        }
+                    }
                 }
                 else if (dy < 0)
                 {
                     for (int y = h - 1; y >= -dy; y--)
-                        for (int x = 0; x < w; x++) array[x, y] = array[x, y + dy];
+                    {
+                        for (int x = 0; x < w; x++)
+                        {
+                            array[x, y] = array[x, y + dy];
+                        }
+                    }
                 }
             }
         }
@@ -454,7 +579,7 @@ namespace Fodinae.Scripts.World
 
     /// <summary>
     /// Interface used by BackgroundFloodFill to read cell data without coupling to the full
-    /// SingleMeshTerrainRenderer cell cache.
+    /// TerrainRenderer cell cache.
     /// </summary>
     public struct CachedCellInfo
     {

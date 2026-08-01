@@ -1,30 +1,58 @@
+#nullable enable
+
+using System;
 using System.IO;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     public class MapStorage : IWorldDataStorage
     {
-        private static MapStorage _instance;
-        public static MapStorage Instance => _instance;
-        public static MapStorage InstanceIfExists => _instance;
+        private WorldLayer<CellType>? _cellLayer;
+        private string? _mapFilePath;
 
-        private WorldLayer<CellType> _cellLayer;
+        private const string MapExtension = ".map";
+        private const string BackupMapSuffix = ".backup.map";
 
         public MapStorage()
         {
-            _instance = this;
+        }
+
+        internal void SetAsPending()
+        {
         }
 
         private bool _isInitialized;
-        private string _worldCodeName;
+        private string? _worldCodeName;
 
-        public WorldLayer<CellType> CellLayer => _cellLayer;
+        public WorldLayer<CellType>? CellLayer => _cellLayer;
+
+        public string MapFilePath => _mapFilePath ?? string.Empty;
+
+        public string BackupMapFilePath
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_worldCodeName))
+                {
+                    return string.Empty;
+                }
+
+                return Path.Combine(Application.persistentDataPath, _worldCodeName + BackupMapSuffix);
+            }
+        }
 
         public bool IsReady => _isInitialized && _cellLayer != null;
+        public bool HasDirtyChunks => _cellLayer?.HasDirtyChunks == true;
+
+        public long Revision { get; private set; }
+
+        public bool IsDisposed { get; private set; }
 
 #if UNITY_EDITOR
         public void EnsureEditorInitialized()
@@ -65,38 +93,44 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            var path = $"{Application.persistentDataPath}/{worldCodeName}_cells.mapb";
-
-#if !UNITY_ANDROID || UNITY_EDITOR
-            if (!File.Exists(path))
+            string path = Path.Combine(Application.persistentDataPath, worldCodeName + MapExtension);
+            try
             {
-                string sourcePath = $"{Application.streamingAssetsPath}/WorldMaps/{worldCodeName}_cells.mapb";
-                if (File.Exists(sourcePath))
+                string? directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 {
-                    string dir = Path.GetDirectoryName(path);
-                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    {
-                        Directory.CreateDirectory(dir);
-                    }
-
-                    File.Copy(sourcePath, path, true);
+                    Directory.CreateDirectory(directory);
                 }
-            }
-#endif
 
-            string directory = Path.GetDirectoryName(path);
-            if (!Directory.Exists(directory))
+                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
+                _mapFilePath = path;
+                _isInitialized = true;
+                IsDisposed = false;
+                Revision++;
+            }
+            catch (IOException ioEx)
             {
-                Directory.CreateDirectory(directory);
+                Debug.LogError($"[MapStorage] Could not open map file '{path}': {ioEx.Message}");
+                _cellLayer = null;
+                _mapFilePath = null;
             }
-
-            _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
-            _isInitialized = true;
+            catch (UnauthorizedAccessException authEx)
+            {
+                Debug.LogError($"[MapStorage] Access denied for map file '{path}': {authEx.Message}");
+                _cellLayer = null;
+                _mapFilePath = null;
+            }
+            catch (OutOfMemoryException)
+            {
+                Debug.LogError($"[MapStorage] Out of memory while opening map file '{path}'.");
+                _cellLayer = null;
+                _mapFilePath = null;
+            }
         }
 
         public bool IsInitialized() => _isInitialized;
 
-        public string GetWorldCodeName() => _worldCodeName;
+        public string GetWorldCodeName() => _worldCodeName ?? string.Empty;
 
         public CellType GetCell(int x, int y)
         {
@@ -112,8 +146,45 @@ namespace Fodinae.Scripts.Game.Managers
         {
             if (_isInitialized && _cellLayer != null)
             {
+                if (_cellLayer.GetCell(x, y, touchLru: false) == type)
+                {
+                    return;
+                }
+
                 _cellLayer[x, y] = type;
-                SingleMeshTerrainRenderer.OnCellChanged(x, y);
+                Revision++;
+                TerrainRenderer.OnCellChanged(x, y);
+            }
+        }
+
+        /// <summary>
+        /// Persists all dirty map chunks immediately.
+        /// The layer normally flushes on chunk eviction and dispose, but the
+        /// application can be paused or terminated while dirty chunks are
+        /// still resident in the RAM cache.
+        /// </summary>
+        public void Flush()
+        {
+            if (_cellLayer == null || !_isInitialized || IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                _cellLayer.Flush(flushToDisk: true);
+            }
+            catch (IOException ioEx)
+            {
+                Debug.LogError($"[MapStorage] Map flush failed; dirty chunks were retained: {ioEx.Message}");
+            }
+            catch (UnauthorizedAccessException authEx)
+            {
+                Debug.LogError($"[MapStorage] Map flush access denied; dirty chunks were retained: {authEx.Message}");
+            }
+            catch (ObjectDisposedException disposedEx)
+            {
+                Debug.LogError($"[MapStorage] Map stream was disposed before flush: {disposedEx.Message}");
             }
         }
 
@@ -123,6 +194,9 @@ namespace Fodinae.Scripts.Game.Managers
             _cellLayer = null;
             _isInitialized = false;
             _worldCodeName = string.Empty;
+            _mapFilePath = null;
+            IsDisposed = true;
+            Revision++;
         }
     }
 }

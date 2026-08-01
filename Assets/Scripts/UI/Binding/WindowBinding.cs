@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Fodinae.UI.Controls;
@@ -141,7 +143,7 @@ namespace Fodinae.UI.Binding
             var values = new Dictionary<string, object>(_inputs.Count);
             foreach (var kvp in _inputs)
             {
-                values[kvp.Key] = GetControlValue(kvp.Value);
+                values[kvp.Key] = GetControlValue(kvp.Value) ?? string.Empty;
             }
 
             // Re-evaluate all label templates
@@ -158,7 +160,7 @@ namespace Fodinae.UI.Binding
             }
         }
 
-        private static object GetControlValue(VisualElement element)
+        private static object? GetControlValue(VisualElement element)
         {
             return element switch
             {

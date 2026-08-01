@@ -1,17 +1,19 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts;
+using Fodinae;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class GridPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not GridPacket gridPkt)
             {
@@ -58,13 +60,13 @@ namespace Fodinae.Scripts.UI.Builders
                     }
                 }
 
-                var childElement = builder.Build(childPacket);
+                var childElement = builder.Build(childPacket)!;
                 childElement.style.alignSelf = Align.FlexStart;
                 gridRoot.Add(childElement);
                 gridItems.Add((childElement, row, col, rowSpan, colSpan));
             }
 
-            EventCallback<GeometryChangedEvent> onGeometryChanged = null;
+            EventCallback<GeometryChangedEvent>? onGeometryChanged = null;
             onGeometryChanged = (evt) =>
             {
                 gridRoot.UnregisterCallback<GeometryChangedEvent>(onGeometryChanged);

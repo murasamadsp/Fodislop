@@ -6,7 +6,7 @@ namespace VContainer.Internal
 {
     public static class InjectorCache
     {
-        static readonly ConcurrentDictionary<Type, IInjector> Injectors = new ConcurrentDictionary<Type, IInjector>();
+        private static readonly ConcurrentDictionary<Type, IInjector> Injectors = new ConcurrentDictionary<Type, IInjector>();
 
         public static IInjector GetOrBuild(Type type)
         {
@@ -25,6 +25,7 @@ namespace VContainer.Internal
                 {
                     return (IInjector)getter.Invoke(null, null);
                 }
+
                 return ReflectionInjector.Build(key);
             });
         }

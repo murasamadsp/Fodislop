@@ -1,8 +1,10 @@
+#nullable enable
+
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     /// <summary>
     /// 8-directional joystick for Observer operators.
@@ -25,19 +27,19 @@ namespace Fodinae.Scripts.UI.Programmator
         private const float Center = 100f;
         private const float RootSize = 200f;
 
-        private readonly VisualElement[] _dirItems = new VisualElement[8];
-        private readonly Label[] _dirLabels = new Label[8];
-        private VisualElement _centerItem;
-        private Label _centerLabel;
+        private readonly VisualElement?[] _dirItems = new VisualElement?[8];
+        private readonly Label?[] _dirLabels = new Label?[8];
+        private VisualElement? _centerItem;
+        private Label? _centerLabel;
 
         // Pre-loaded textures
-        private readonly Texture2D[] _dirClickTex = new Texture2D[8];
-        private readonly Texture2D[] _dirDragTex = new Texture2D[8];
-        private readonly Texture2D[] _centerDragCellTex = new Texture2D[8];
-        private readonly Texture2D[] _centerDragShiftTex = new Texture2D[8];
-        private Texture2D _centerTex;
+        private readonly Texture2D?[] _dirClickTex = new Texture2D?[8];
+        private readonly Texture2D?[] _dirDragTex = new Texture2D?[8];
+        private readonly Texture2D?[] _centerDragCellTex = new Texture2D?[8];
+        private readonly Texture2D?[] _centerDragShiftTex = new Texture2D?[8];
+        private Texture2D? _centerTex;
 
-        public event System.Action<ProgAction> OnOperatorSelected;
+        public event System.Action<ProgAction>? OnOperatorSelected;
 
         // Direction button click → absolute Cell* (compass directions, N→clockwise)
         private static readonly ProgAction[] DirClickOps =
@@ -81,7 +83,9 @@ namespace Fodinae.Scripts.UI.Programmator
         private static readonly ProgAction CenterClickOp = ProgAction.Cell;
 
         private static readonly string[] DirLabels =
-            { "\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196" };
+        {
+            "\u2191", "\u2197", "\u2192", "\u2198", "\u2193", "\u2199", "\u2190", "\u2196",
+        };
 
         // Atan2 round value → our direction index lookup
         // raw: 0=E,1=NE,2=N,3=NW,4=W,5=SW,6=S,7=SE
@@ -105,9 +109,8 @@ namespace Fodinae.Scripts.UI.Programmator
             _centerTex = ProgrammatorTextureRegistry.GetTexture(CenterClickOp);
 
             _root = new VisualElement();
-            _root.style.position = Position.Absolute;
-            _root.style.width = RootSize;
-            _root.style.height = RootSize;
+            RadialMenu.AttachStyles(_root);
+            _root.AddToClassList("prog-joy-root");
             _root.pickingMode = PickingMode.Ignore;
 
             // Direction buttons
@@ -131,6 +134,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 {
                     evt.StopPropagation();
                     BeginDrag(evt.position, idx);
+
                     // Icon stays as Cell* until actual drag movement
                 });
 
@@ -138,17 +142,14 @@ namespace Fodinae.Scripts.UI.Programmator
             }
 
             // Center button
-            float cSize = ItemSize * 1.2f;
-            float cx = Center - (cSize / 2f);
-            float cy = Center - (cSize / 2f);
+            const float cSize = ItemSize * 1.2f;
+            const float cx = Center - (cSize / 2f);
+            const float cy = Center - (cSize / 2f);
 
             var (centerItem, centerLabel) = MakeItem(cx, cy, cSize, "\u25CB");
             _centerItem = centerItem;
             _centerLabel = centerLabel;
-            centerItem.style.borderTopLeftRadius = 20;
-            centerItem.style.borderTopRightRadius = 20;
-            centerItem.style.borderBottomLeftRadius = 20;
-            centerItem.style.borderBottomRightRadius = 20;
+            centerItem.AddToClassList("prog-joy-center");
             centerItem.name = "joy_center";
             WireHover(centerItem);
 
@@ -167,13 +168,17 @@ namespace Fodinae.Scripts.UI.Programmator
             _root.RegisterCallback<PointerMoveEvent>(evt =>
             {
                 if (!_isActive)
+                {
                     return;
+                }
 
                 float dist = Vector2.Distance(evt.position, _pointerStart);
 
                 // One-way drag latch for operator placement decision
                 if (!_isDragging && dist >= DragThresh)
+                {
                     _isDragging = true;
+                }
 
                 if (_activeSource == 8)
                 {
@@ -183,18 +188,28 @@ namespace Fodinae.Scripts.UI.Programmator
                         float dx = evt.position.x - _pointerStart.x;
                         float dy = evt.position.y - _pointerStart.y;
                         float a = Mathf.Atan2(dy, dx);
-                        if (a < 0) a += Mathf.PI * 2f;
+                        if (a < 0)
+                        {
+                            a += Mathf.PI * 2f;
+                        }
+
                         int raw = (int)Mathf.Round(a / (Mathf.PI / 4f)) % 8;
                         _dragTargetDir = _atan2ToDir[raw];
 
                         var ops = CenterDragOps[_dragTargetDir];
-                        Texture2D previewTex;
+                        Texture2D? previewTex;
                         if (dist >= NearFarThresh && ops.shift != ProgAction.Cell)
+                        {
                             previewTex = _centerDragShiftTex[_dragTargetDir];
+                        }
                         else if (ops.cell != ProgAction.Cell && ops.cell != CenterClickOp)
+                        {
                             previewTex = _centerDragCellTex[_dragTargetDir];
+                        }
                         else
+                        {
                             previewTex = null;
+                        }
 
                         SetItemIcon(_centerItem, _centerLabel, previewTex ?? _centerTex, "\u25CB");
                     }
@@ -213,7 +228,9 @@ namespace Fodinae.Scripts.UI.Programmator
             _root.RegisterCallback<PointerUpEvent>(evt =>
             {
                 if (!_isActive)
+                {
                     return;
+                }
 
                 _root.ReleasePointer(evt.pointerId);
 
@@ -225,9 +242,13 @@ namespace Fodinae.Scripts.UI.Programmator
                         var ops = CenterDragOps[_dragTargetDir];
 
                         if (dist >= NearFarThresh && ops.shift != ProgAction.Cell)
+                        {
                             OnOperatorSelected?.Invoke(ops.shift);
+                        }
                         else if (ops.cell != ProgAction.Cell && ops.cell != CenterClickOp)
+                        {
                             OnOperatorSelected?.Invoke(ops.cell);
+                        }
                     }
                     else
                     {
@@ -251,6 +272,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 }
 
                 Reset();
+
                 // Restore center icon
                 SetItemIcon(_centerItem, _centerLabel, _centerTex, "\u25CB");
             });
@@ -289,8 +311,12 @@ namespace Fodinae.Scripts.UI.Programmator
             _dragTargetDir = -1;
         }
 
-        private static void SetItemIcon(VisualElement item, Label label, Texture2D tex, string fallback)
+        private static void SetItemIcon(VisualElement? item, Label? label, Texture2D? tex, string fallback)
         {
+            if (item == null || label == null)
+            {
+                return;
+            }
             // Remove any existing Image child
             for (int i = item.childCount - 1; i >= 0; i--)
             {
@@ -305,11 +331,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 var img = new Image();
                 img.image = tex;
                 img.scaleMode = ScaleMode.ScaleToFit;
-                img.style.position = Position.Absolute;
-                img.style.left = 0;
-                img.style.top = 0;
-                img.style.right = 0;
-                img.style.bottom = 0;
+                img.AddToClassList("prog-radial-fill");
                 img.pickingMode = PickingMode.Ignore;
                 item.Add(img);
                 label.text = string.Empty;
@@ -394,7 +416,9 @@ namespace Fodinae.Scripts.UI.Programmator
         {
             Reset();
             if (_root.parent != null)
+            {
                 _root.RemoveFromHierarchy();
+            }
         }
     }
 }

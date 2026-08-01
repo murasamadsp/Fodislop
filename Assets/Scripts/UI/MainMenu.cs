@@ -1,28 +1,45 @@
+#nullable enable
+
 using System;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Networking.Connection;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.Networking.Connection;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.GUI;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     [RequireComponent(typeof(UIDocument))]
     public class MainMenu : MonoBehaviour
     {
+        [Inject]
+        private IConnectionService _connectionService = null!;
+
         [SerializeField]
-        private Texture2D _loaderTexture;
-        private UIDocument _doc;
-        private VisualElement _mainMenuContainer;
-        private VisualElement _loaderContainer;
+        private Texture2D? _loaderTexture;
+        private UIDocument? _doc;
+        private VisualElement? _mainMenuContainer;
+        private VisualElement? _loaderContainer;
         private bool _hasShownLoader = false;
-        private Button _playButton;
+        private bool _ownsLoaderTexture;
+        private Button? _playButton;
 
         protected void OnEnable()
         {
+            // OnEnable can run repeatedly when the menu object is toggled.
+            // Rebuilding the entire UI tree each time retains old VisualElement
+            // schedules and callbacks until the panel is destroyed.
+            if (_mainMenuContainer != null)
+            {
+                return;
+            }
+
             _doc = GetComponent<UIDocument>();
             if (_doc == null || _doc.rootVisualElement == null)
             {
@@ -31,8 +48,7 @@ namespace Fodinae.Scripts
             }
 
             var root = _doc.rootVisualElement;
-            root.style.justifyContent = Justify.Center;
-            root.style.alignItems = Align.Center;
+            root.AddToClassList("mm-root");
             ShowLoader();
 
             var mainMenuUXML = Resources.Load<VisualTreeAsset>("UI/MainMenu");
@@ -58,11 +74,7 @@ namespace Fodinae.Scripts
 
             root.Add(mainMenu);
 
-            mainMenu.style.position = Position.Absolute;
-            mainMenu.style.left = 0;
-            mainMenu.style.top = 0;
-            mainMenu.style.right = 0;
-            mainMenu.style.bottom = 0;
+            mainMenu.AddToClassList("mm-menu-fill");
             mainMenu.BringToFront();
             if (_loaderContainer != null)
             {
@@ -76,6 +88,8 @@ namespace Fodinae.Scripts
                 _doc.panelSettings = null;
                 _doc.panelSettings = ps;
             }
+
+            Debug.Log($"[MainMenu] UI BUILT: rootChildren={root.childCount}, rootLayout={root.layout}, panel={(_doc != null && _doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
         }
 
         protected void OnDisable()
@@ -94,30 +108,22 @@ namespace Fodinae.Scripts
             }
 
             var root = _doc.rootVisualElement;
-            root.style.width = new Length(100, LengthUnit.Percent);
-            root.style.height = new Length(100, LengthUnit.Percent);
 
             _loaderContainer = new VisualElement();
             _loaderContainer.name = "LoaderContainer";
-            _loaderContainer.style.position = Position.Absolute;
-            _loaderContainer.style.top = 0;
-            _loaderContainer.style.left = 0;
-            _loaderContainer.style.right = 0;
-            _loaderContainer.style.bottom = 0;
-            _loaderContainer.style.alignItems = Align.Stretch;
-            _loaderContainer.style.justifyContent = Justify.Center;
+            _loaderContainer.AddToClassList("mm-loader");
 
             var image = new UnityEngine.UIElements.Image();
-            Texture2D loaderTexture = _loaderTexture;
+            Texture2D? loaderTexture = _loaderTexture;
             if (loaderTexture == null)
             {
-                loaderTexture = CreateSimpleLoaderTexture();
+                _loaderTexture = loaderTexture = CreateSimpleLoaderTexture();
+                _ownsLoaderTexture = true;
                 Debug.LogWarning("[MainMenu] Loader texture not assigned, using placeholder");
             }
 
             image.image = loaderTexture;
-            image.style.width = new Length(100, LengthUnit.Percent);
-            image.style.height = new Length(100, LengthUnit.Percent);
+            image.AddToClassList("mm-loader-image");
             image.scaleMode = ScaleMode.ScaleAndCrop; // покрывает весь элемент, сохраняя пропорции
 
             _loaderContainer.Add(image);
@@ -178,6 +184,15 @@ namespace Fodinae.Scripts
             }
         }
 
+        protected void OnDestroy()
+        {
+            if (_ownsLoaderTexture && _loaderTexture != null)
+            {
+                Destroy(_loaderTexture);
+                _loaderTexture = null;
+            }
+        }
+
         private void HideMenu()
         {
             if (_mainMenuContainer != null)
@@ -191,27 +206,18 @@ namespace Fodinae.Scripts
         {
             Debug.Log("[MainMenu] Play button clicked");
 
-            // Скрываем лоадер
             HideLoader();
-
-            // Скрываем меню с кнопкой
             HideMenu();
 
-            // Выполняем остальную логику
-            if (ConnectionManager.Instance != null && (ConnectionManager.Instance.Connection == null ||
-                ConnectionManager.Instance.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Disconnected))
+            var connectionService = _connectionService ?? (Fodinae.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager);
+            if (connectionService != null && !connectionService.IsConnected)
             {
-                ConnectionManager.Instance.Connect(oldClient: false);
+                connectionService.Connect(oldClient: false);
             }
-        }
-
-        private void OnOldClientButtonClicked()
-        {
-            Debug.Log("[MainMenu] Old client button clicked");
-            RobotManager.ShowDebugVisuals = false;
-            HideLoader();
-            HideMenu();
-            ConnectionManager.Instance.Connect(oldClient: true);
+            else
+            {
+                Debug.LogWarning($"[MainMenu] Cannot connect: connectionService={(connectionService != null ? "ok" : "NULL")}, IsConnected={(connectionService != null ? connectionService.IsConnected.ToString() : "N/A")}");
+            }
         }
     }
 }

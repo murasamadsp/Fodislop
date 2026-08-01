@@ -1,24 +1,35 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
+using VContainer;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
-    [ExecuteAlways]
     [DefaultExecutionOrder(-10000)]
     public class MapManager : MonoBehaviour, IMapDataProvider
     {
-        private static MapManager _instance;
-        public static MapManager Instance => _instance;
-        public static MapManager InstanceIfExists => _instance;
-
-        private Camera _mainCamera;
+        private Camera? _mainCamera;
+        private IWorldDataStorage _worldStorage = null!;
+        private PackManager _packManager = null!;
+        private IRobotService _robotService = null!;
+        private IServerAudioService _audioService = null!;
+        [Inject]
+        public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
+        {
+            _worldStorage = worldStorage;
+            _packManager = packManager;
+            _robotService = robotService;
+            _audioService = audioService;
+        }
 
         public Camera MainCamera
         {
@@ -33,8 +44,8 @@ namespace Fodinae.Scripts.Game.Managers
             }
         }
 
-        public Action OnWorldInitialized { get; set; }
-        public Action OnWorldDataLoaded { get; set; }
+        public Action? OnWorldInitialized { get; set; }
+        public Action? OnWorldDataLoaded { get; set; }
 
         private static readonly CellConfigurationPacket _fallbackConfig = new CellConfigurationPacket
         {
@@ -47,44 +58,68 @@ namespace Fodinae.Scripts.Game.Managers
             ReliefGroup = 0,
         };
 
-        private CellConfigurationPacket[] _cellConfigurations;
+        private CellConfigurationPacket[]? _cellConfigurations;
         private Dictionary<CellType, int> _cellToTileGroup = new();
         private Dictionary<CellType, ushort> _cellMoveSpeeds = new();
-        private string _worldCodeName;
-        private string _worldDisplayName;
+        private string _worldCodeName = string.Empty;
+        private string _worldDisplayName = string.Empty;
         private ushort _width;
         private ushort _height;
 
-        public bool IsWorldInitialized { get; private set; } = false;
+        private bool _nullConfigWarned;
+        private float _nextMapFlushTime;
+        private const float DurableMapFlushInterval = 5f;
+        public bool IsWorldInitialized { get; private set; }
 
         public bool IsStandaloneMode { get; set; } = false;
 
-        protected void Awake()
-        {
-            _instance = this;
-#if UNITY_EDITOR
-            if (!Application.isPlaying && !IsWorldInitialized)
-            {
-                _width = 128;
-                _height = 128;
-                _worldCodeName = "EditorPreview";
-                _worldDisplayName = "Editor Preview";
-            }
-#endif
-        }
-
-        private static IWorldDataStorage WorldStorage => MapStorage.Instance;
+        private IWorldDataStorage WorldStorage => _worldStorage;
 
         protected void OnDestroy()
         {
-            MapStorage.InstanceIfExists?.Dispose();
+            IsWorldInitialized = false;
+            (_worldStorage as MapStorage)?.Dispose();
+        }
+
+        protected void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus)
+            {
+                (_worldStorage as MapStorage)?.Flush();
+            }
+        }
+
+        protected void OnApplicationQuit()
+        {
+            (_worldStorage as MapStorage)?.Flush();
+        }
+
+        protected void OnLowMemory()
+        {
+            (_worldStorage as MapStorage)?.Flush();
+        }
+
+        protected void Update()
+        {
+            if (!IsWorldInitialized || Time.unscaledTime < _nextMapFlushTime)
+            {
+                return;
+            }
+
+            _nextMapFlushTime = Time.unscaledTime + DurableMapFlushInterval;
+            var storage = _worldStorage as MapStorage;
+            if (storage?.HasDirtyChunks == true)
+            {
+                storage.Flush();
+            }
         }
 
         public void LoadWorldInit(WorldInitPacket packet)
         {
-            PackManager.Instance?.ClearAllPacks();
-            RobotManager.InstanceIfExists?.ClearAllRobots();
-            ServerAudioEventManager.InstanceIfExists?.ClearAllEffects();
+            IsWorldInitialized = false;
+            _packManager?.ClearAllPacks();
+            _robotService?.ClearAllRobots();
+            _audioService?.ClearAllEffects();
 
             if (packet == null)
             {
@@ -132,9 +167,10 @@ namespace Fodinae.Scripts.Game.Managers
             var storage = WorldStorage;
             if (storage == null)
             {
-                Debug.LogError("[MapManager] WorldStorage is null — MapStorage.Instance is null");
+                Debug.LogError("[MapManager] WorldStorage is null — IWorldDataStorage not registered");
                 return;
             }
+
 
             storage.InitWorld(packet.CodeName, _width, _height);
 
@@ -144,11 +180,10 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            Debug.Log($"[MapManager] WorldLayer: {storage.CellLayer.WidthChunks}x{storage.CellLayer.HeightChunks} chunks, size={storage.CellLayer.ChunkSize}");
-
             IsWorldInitialized = true;
             OnWorldInitialized?.Invoke();
             OnWorldDataLoaded?.Invoke();
+            Debug.Assert(IsWorldInitialized, "[MapManager] IsWorldInitialized must be true at the end of LoadWorldInit");
         }
 
         public void UpdateMovementSpeeds(MovementSpeedPacket packet)
@@ -183,7 +218,12 @@ namespace Fodinae.Scripts.Game.Managers
         {
             if (_cellConfigurations == null)
             {
-                Debug.LogWarning("[MapManager] GetConfigLength called but _cellConfigurations is null");
+                if (!_nullConfigWarned)
+                {
+                    _nullConfigWarned = true;
+                    Debug.LogWarning("[MapManager] GetConfigLength called but _cellConfigurations is null (показано один раз)");
+                }
+
                 return -1;
             }
 
@@ -296,7 +336,7 @@ namespace Fodinae.Scripts.Game.Managers
 
             Gizmos.color = Color.magenta;
             Gizmos.DrawSphere(Vector3.zero, 0.5f);
-            Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
+            Fodinae.World.FodinaeGizmos.DrawLabel(Vector3.zero, "World Origin (0,0)", Color.magenta);
 
             var storage = WorldStorage;
             if (storage != null && storage.IsReady && storage.CellLayer != null)
@@ -313,13 +353,13 @@ namespace Fodinae.Scripts.Game.Managers
                     float unityY = (cy * chunkSize) + (chunkSize * 0.5f);
                     Vector3 chunkPos = new Vector3((cx * chunkSize) + (chunkSize * 0.5f), unityY, 0);
 
-                    Fodinae.Scripts.World.FodinaeGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f),
+                    Fodinae.World.FodinaeGizmos.DrawSolidRect(chunkPos, new Vector2(chunkSize - 0.2f, chunkSize - 0.2f),
                         new Color(0, 1, 0, 0.02f), new Color(0, 1, 0, 0.1f));
                 }
 
                 Vector3 labelPos = worldCenter + (Vector3.down * ((WorldHeight * 0.5f) + 2f));
                 string stats = $"Chunks: {layer.GetLoadedCount()}/{layer.MaxChunksInMemory} loaded | {layer.GetDirtyCount()} dirty";
-                Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(labelPos, stats, Color.green);
+                Fodinae.World.FodinaeGizmos.DrawLabel(labelPos, stats, Color.green);
 
                 Camera cam = MainCamera;
                 if (cam != null && Application.isPlaying)

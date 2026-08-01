@@ -1,8 +1,12 @@
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Audio.Core;
+#nullable enable
+
+using Fodinae.Audio.Backend;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Spatial
+namespace Fodinae.Audio.Spatial
 {
     /// <summary>
     /// Вешается на любой GameObject чтобы он излучал пространственный звук.
@@ -15,7 +19,7 @@ namespace Fodinae.Scripts.Audio.Spatial
     {
         [Tooltip("Имя аудио-события. Можно сменить на лету через SetEvent().")]
         [SerializeField]
-        private string _eventName;
+        private string _eventName = string.Empty;
 
         [Tooltip("Слой.")]
         [SerializeField]
@@ -25,38 +29,20 @@ namespace Fodinae.Scripts.Audio.Spatial
         [SerializeField]
         [Range(0f, 2f)]
         private float _volume;
-
-        [Tooltip("Играть автоматически при Start().")]
-        [SerializeField]
-        private bool _playOnStart = true;
-
-        private AudioPlaybackHandle _handle;
-
-        private void Start()
-        {
-            if (_playOnStart && !string.IsNullOrEmpty(_eventName))
-            {
-                PlayCurrent();
-            }
-        }
-
-        private void OnDestroy()
-        {
-            _handle?.Stop();
-            _handle = null;
-        }
+        private AudioPlaybackHandle? _handle;
 
         /// <summary>Начать проигрывание текущего события с нативной привязкой FMOD к GameObject.</summary>
         public void PlayCurrent()
         {
-            if (string.IsNullOrEmpty(_eventName) || AudioSystem.Instance == null)
+            var audioSystem = ServiceLocator.Resolve<IAudioSystem>();
+            if (string.IsNullOrEmpty(_eventName) || audioSystem == null)
             {
                 return;
             }
 
             Stop();
             float? vol = _volume > 0f ? _volume : null;
-            _handle = AudioSystem.Instance.PlayAttached(_eventName, gameObject, _layer, vol);
+            _handle = audioSystem.PlayAttached(_eventName, gameObject, _layer, vol);
         }
 
         /// <summary>Сменить событие на лету (старое останавливается, новое стартует).</summary>
@@ -80,7 +66,7 @@ namespace Fodinae.Scripts.Audio.Spatial
         public void Stop(float fadeOut = 0f)
         {
             _handle?.Stop(fadeOut);
-            _handle = null;
+            _handle = default;
         }
 
         /// <summary>Играет ли сейчас звук.</summary>

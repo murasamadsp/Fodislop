@@ -1,16 +1,20 @@
+#nullable enable
+
 using System;
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Player.Logic;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
+using Fodinae.Player.Logic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using VContainer;
 
-namespace Fodinae.Scripts.Player
+namespace Fodinae.Player
 {
     public class CameraFollow : MonoBehaviour
     {
         [Header("Follow Settings")]
         [SerializeField]
-        private Transform _target;
+        private Transform? _target;
         [SerializeField]
         private float _smoothSpeed = 5f;
         [SerializeField]
@@ -27,14 +31,18 @@ namespace Fodinae.Scripts.Player
         private float _zoomSmoothness = 8f;
 
         private float _originalZ;
-        private Camera _camera;
+        private Camera? _camera;
         private float _targetZoom;
         private float _currentZoom;
         private float _lastZoom;
-        public event Action<float> OnZoomChanged;
-        private InputAction _scrollAction;
+        public event Action<float>? OnZoomChanged;
+        private InputAction? _scrollAction;
         private bool _scrollEnabled = true;
+        private bool _cameraNullLogged;
+        private bool _scrollNullLogged;
         private Vector3 _followVelocity;
+        [Inject]
+        private IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {
@@ -60,7 +68,7 @@ namespace Fodinae.Scripts.Player
             _targetZoom = _camera.orthographicSize;
             _currentZoom = _targetZoom;
             _lastZoom = _currentZoom;
-            if (_target == null)
+            if (_target == null || _target == transform)
             {
                 var player = PlayerMovementController.LocalPlayer;
                 if (player != null)
@@ -96,7 +104,7 @@ namespace Fodinae.Scripts.Player
 
         private void HandleZoom()
         {
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker != null && _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -108,13 +116,23 @@ namespace Fodinae.Scripts.Player
 
             if (_camera == null)
             {
-                Debug.LogError("[CameraFollow] Camera is null in HandleZoom!");
+                if (!_cameraNullLogged)
+                {
+                    _cameraNullLogged = true;
+                    Debug.LogError("[CameraFollow] Camera is null in HandleZoom! (показано один раз)");
+                }
+
                 return;
             }
 
             if (_scrollAction == null)
             {
-                Debug.LogError("[CameraFollow] Scroll action is null in HandleZoom!");
+                if (!_scrollNullLogged)
+                {
+                    _scrollNullLogged = true;
+                    Debug.LogError("[CameraFollow] Scroll action is null in HandleZoom! (показано один раз)");
+                }
+
                 return;
             }
 
@@ -147,7 +165,7 @@ namespace Fodinae.Scripts.Player
 
         private void HandleFollow()
         {
-            if (_target == null)
+            if (_target == null || _target == transform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
                 {
@@ -202,7 +220,7 @@ namespace Fodinae.Scripts.Player
                 // Draw target marker
                 Gizmos.DrawWireSphere(_target.position, 0.5f);
 
-                Fodinae.Scripts.World.FodinaeGizmos.DrawLabel(_target.position + (Vector3.up * 0.7f), "Camera Target", Color.yellow);
+                Fodinae.World.FodinaeGizmos.DrawLabel(_target.position + (Vector3.up * 0.7f), "Camera Target", Color.yellow);
             }
 
             // Draw current viewport visualization

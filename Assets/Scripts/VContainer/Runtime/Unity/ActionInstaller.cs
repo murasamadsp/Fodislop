@@ -7,7 +7,7 @@ namespace VContainer.Unity
         public static implicit operator ActionInstaller(Action<IContainerBuilder> installation)
             => new ActionInstaller(installation);
 
-        readonly Action<IContainerBuilder> configuration;
+        private readonly Action<IContainerBuilder> configuration;
 
         public ActionInstaller(Action<IContainerBuilder> configuration)
         {

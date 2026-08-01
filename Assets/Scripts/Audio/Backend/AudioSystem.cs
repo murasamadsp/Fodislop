@@ -1,11 +1,14 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Core.Interfaces;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
+using VContainer;
 
-namespace Fodinae.Scripts.Audio.Backend
+namespace Fodinae.Audio.Backend
 {
     /// <summary>
     /// Точка входа в аудио-домен — синглтон, висящий в DontDestroyOnLoad.
@@ -13,17 +16,56 @@ namespace Fodinae.Scripts.Audio.Backend
     /// Использует FmodAudioBackend для проигрывания FMOD Studio событий.
     /// Все события адресуются по строковому имени, соответствующему FMOD event path без prefix event:/.
     ///
-    /// Пример: Play("sfx/dig") → FMOD event:/sfx/dig
+    /// Пример: Play("sfx/dig") → FMOD event:/sfx/dig.
     /// </summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
     [DefaultExecutionOrder(-10000)]
     public sealed class AudioSystem : MonoBehaviour, IAudioSystem
     {
-        private static AudioSystem _instance;
-        public static AudioSystem Instance => _instance;
-        public static AudioSystem InstanceIfExists => _instance;
         private const string TAG = "[AudioSystem]";
-        private FmodAudioBackend _backend;
+        private FmodAudioBackend _backend = null!;
+
+        private void Awake()
+        {
+            _backend = new FmodAudioBackend();
+            _backend.Initialize(this);
+            ApplySavedBusVolumes();
+        }
+
+        private void OnEnable()
+        {
+            AudioSettings.OnAudioConfigurationChanged += OnAudioConfigurationChanged;
+        }
+
+        private void OnDisable()
+        {
+            AudioSettings.OnAudioConfigurationChanged -= OnAudioConfigurationChanged;
+        }
+
+        private void OnAudioConfigurationChanged(bool deviceChanged)
+        {
+            if (deviceChanged)
+            {
+                Debug.Log($"{TAG} Default audio device was changed -> resetting audio backend");
+                ResetBackend();
+            }
+        }
+
+        public void ResetBackend()
+        {
+            try
+            {
+                _backend?.Shutdown();
+                _backend = new FmodAudioBackend();
+                _backend.Initialize(this);
+                ApplySavedBusVolumes();
+                Debug.Log($"{TAG} Audio backend successfully re-initialized after device change.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"{TAG} Error resetting audio backend: {ex.Message}");
+            }
+        }
 
         public float GetBusVolume(AudioBusType type)
         {
@@ -58,7 +100,7 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести событие по имени с опциональной 3D-позицией.</summary>
-        public AudioPlaybackHandle Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
+        public AudioPlaybackHandle? Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName))
             {
@@ -74,6 +116,14 @@ namespace Fodinae.Scripts.Audio.Backend
             var handle = _backend?.CreateVoice(eventName, layer, worldPosition);
             if (handle == null)
             {
+                // Фиче-банки ("sfx/bz" → банк "sfx") подгружаются на лету по категории
+                // события (часть исходного дизайна аудио-пайплайна) и звук дожимает ретраем.
+                if (TryAutoLoadFeatureBank(eventName))
+                {
+                    LoadBankAndReplayAsync(eventName, layer, worldPosition, null).Forget();
+                    return null;
+                }
+
                 Debug.LogWarning($"{TAG} Failed to play '{eventName}': backend returned null");
             }
 
@@ -81,7 +131,7 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести 3D-событие с нативной привязкой FMOD к GameObject (позиция/поворот следуют автоматически в C++).</summary>
-        public AudioPlaybackHandle PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
+        public AudioPlaybackHandle? PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName) || targetGameObject == null)
             {
@@ -97,14 +147,92 @@ namespace Fodinae.Scripts.Audio.Backend
             var handle = _backend?.CreateVoice(eventName, layer, null, targetGameObject);
             if (handle == null)
             {
+                if (TryAutoLoadFeatureBank(eventName))
+                {
+                    LoadBankAndReplayAsync(eventName, layer, null, targetGameObject).Forget();
+                    return null;
+                }
+
                 Debug.LogWarning($"{TAG} Failed to play attached '{eventName}': backend returned null");
             }
 
             return handle;
         }
 
+        // ─── Фиче-банки по требованию ────────────────────────────────
+
+        /// <summary>Извлекает имя фиче-банка из категории события: "sfx/bz" → "sfx".</summary>
+        private static string? GetFeatureBankName(string eventName)
+        {
+            var name = eventName;
+            if (name.StartsWith("event:/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                name = name.Substring(7);
+            }
+
+            if (name.StartsWith("snapshot:/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return null; // Снэпшоты живут в Master-банке.
+            }
+
+            int slash = name.IndexOf('/');
+            return slash > 0 ? name.Substring(0, slash) : null;
+        }
+
+        /// <summary>Есть ли категория-банк, которую можно подгрузить (и ещё не подгружена).</summary>
+        private bool TryAutoLoadFeatureBank(string eventName)
+        {
+            var bankName = GetFeatureBankName(eventName);
+            if (string.IsNullOrEmpty(bankName))
+            {
+                return false;
+            }
+
+            if (_autoLoadInFlight || _autoLoadedBanks.Contains(bankName))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool _autoLoadInFlight;
+        private readonly HashSet<string> _autoLoadedBanks = new();
+
+        private async Cysharp.Threading.Tasks.UniTaskVoid LoadBankAndReplayAsync(
+            string eventName, AudioLayer layer, Vector3? worldPosition, GameObject? targetGameObject)
+        {
+            var bankName = GetFeatureBankName(eventName);
+            if (string.IsNullOrEmpty(bankName))
+            {
+                return;
+            }
+
+            _autoLoadInFlight = true;
+            try
+            {
+                var ok = await EnsureBankLoadedAsync(bankName);
+                if (!ok)
+                {
+                    // Bank not present in current environment (e.g. offline test mode without FMOD bank assets)
+                    return;
+                }
+
+                _autoLoadedBanks.Add(bankName);
+                var handle = _backend?.CreateVoice(eventName, layer, worldPosition, targetGameObject);
+                if (handle == null)
+                {
+                    Debug.LogWarning($"{TAG} Failed to play '{eventName}' after bank '{bankName}' load");
+                }
+            }
+            finally
+            {
+                _autoLoadInFlight = false;
+            }
+        }
+
         /// <summary>Воспроизвести FMOD Snapshot (например "snapshot:/cave_ambient").</summary>
-        public AudioPlaybackHandle PlaySnapshot(string snapshotPath)
+        public AudioPlaybackHandle? PlaySnapshot(string snapshotPath)
         {
             if (string.IsNullOrEmpty(snapshotPath))
             {
@@ -127,11 +255,11 @@ namespace Fodinae.Scripts.Audio.Backend
         }
 
         /// <summary>Воспроизвести 3D-событие на заданной позиции в мире.</summary>
-        public AudioPlaybackHandle PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null)
+        public AudioPlaybackHandle? PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null)
             => Play(eventName, worldPosition, layer, volume);
 
         /// <summary>Воспроизвести 2D-событие (без пространственного позиционирования).</summary>
-        public AudioPlaybackHandle Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
+        public AudioPlaybackHandle? Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
             => Play(eventName, null, layer, volume);
 
         // ═══════════════════════════════════════════════════════════
@@ -149,30 +277,6 @@ namespace Fodinae.Scripts.Audio.Backend
             SetBusVolume(AudioBusType.Voice, PlayerPrefs.GetFloat("Audio_Voice", 1f));
             SetBusVolume(AudioBusType.Ambience, PlayerPrefs.GetFloat("Audio_Ambience", 0.7f));
             SetBusVolume(AudioBusType.UI, PlayerPrefs.GetFloat("Audio_UI", 1f));
-        }
-
-        private void Awake()
-        {
-            _instance = this;
-            _backend = new FmodAudioBackend();
-            _backend.Initialize(this);
-            ApplySavedBusVolumes();
-        }
-
-        private void OnDestroy()
-        {
-            if (_instance != this)
-            {
-                return;
-            }
-
-            _backend?.Shutdown();
-            _backend = null;
-        }
-
-        private void Update()
-        {
-            _backend?.Update();
         }
     }
 }

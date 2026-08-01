@@ -1,5 +1,8 @@
+#nullable enable
+
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using NUnit.Framework;
-using Fodinae.Scripts.World;
 using UnityEngine;
 
 namespace Fodinae.Tests.World

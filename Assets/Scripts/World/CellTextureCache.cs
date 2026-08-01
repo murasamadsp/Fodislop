@@ -1,10 +1,12 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Manages caching of cell textures for efficient loading and memory management.

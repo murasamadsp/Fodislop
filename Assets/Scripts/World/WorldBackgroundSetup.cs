@@ -1,25 +1,36 @@
+#nullable enable
+
+using Fodinae.World.Terrain;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
-    [ExecuteAlways]
     public class WorldBackgroundSetup : MonoBehaviour
     {
         [Header("Background Renderer Settings")]
         [SerializeField]
-        private SingleMeshTerrainRenderer _backgroundRendererPrefab;
+        private TerrainRenderer? _backgroundRendererPrefab;
         [SerializeField]
-        private Transform _backgroundParent;
+        private Transform? _backgroundParent;
 
-        private SingleMeshTerrainRenderer _backgroundRenderer;
+        private TerrainRenderer? _backgroundRenderer;
 
         protected void Awake()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             SetupBackgroundRenderer();
         }
 
         protected void Update()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
             if (_backgroundRenderer != null)
             {
                 EnsureBackgroundConfiguration();
@@ -28,19 +39,19 @@ namespace Fodinae.Scripts.World
 
         private void SetupBackgroundRenderer()
         {
-            _backgroundRenderer = FindAnyObjectByType<SingleMeshTerrainRenderer>();
+            _backgroundRenderer = FindAnyObjectByType<TerrainRenderer>();
 
             if (_backgroundRenderer == null)
             {
                 if (_backgroundRendererPrefab != null)
                 {
                     _backgroundRenderer = Instantiate(_backgroundRendererPrefab, transform);
-                    _backgroundRenderer.name = "SingleMeshTerrainRenderer";
+                    _backgroundRenderer.name = "TerrainRenderer";
                 }
                 else
                 {
-                    var backgroundGO = new GameObject("SingleMeshTerrainRenderer");
-                    _backgroundRenderer = backgroundGO.AddComponent<SingleMeshTerrainRenderer>();
+                    var backgroundGO = new GameObject("TerrainRenderer");
+                    _backgroundRenderer = backgroundGO.AddComponent<TerrainRenderer>();
 
                     if (_backgroundRenderer.TryGetComponent<MeshRenderer>(out var meshRenderer))
                     {
@@ -85,7 +96,7 @@ namespace Fodinae.Scripts.World
             }
         }
 
-        public SingleMeshTerrainRenderer GetBackgroundRenderer()
+        public TerrainRenderer? GetBackgroundRenderer()
         {
             return _backgroundRenderer;
         }

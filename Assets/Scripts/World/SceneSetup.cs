@@ -1,7 +1,9 @@
-using Fodinae.Scripts.UI;
+#nullable enable
+
+using Fodinae.UI;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     /// <summary>
     /// Scene setup manager that ensures the world background renderer is properly configured.
@@ -10,7 +12,7 @@ namespace Fodinae.Scripts.World
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {
-        private WorldBackgroundSetup _backgroundSetup;
+        private WorldBackgroundSetup? _backgroundSetup;
 
         protected void Awake()
         {

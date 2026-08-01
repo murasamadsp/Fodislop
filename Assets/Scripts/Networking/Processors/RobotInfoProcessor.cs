@@ -1,11 +1,15 @@
-using Fodinae.Scripts.Game.Managers;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     /// <summary>
     /// Decoupled SOLID Processor for Robot Metadata & Position Info Packets.
@@ -15,10 +19,8 @@ namespace Fodinae.Scripts.Networking.Processors
     {
         public void Process(RobotInfoPacket packet)
         {
-            if (RobotManager.Instance != null)
-            {
-                RobotManager.Instance.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
-            }
+            var mgr = ServiceLocator.Resolve<IRobotService>();
+            mgr?.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
         }
     }
 }

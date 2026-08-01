@@ -83,6 +83,7 @@ namespace VContainer
             {
                 AddInterfaceType(interfaceType);
             }
+
             return this;
         }
 
@@ -141,9 +142,12 @@ namespace VContainer
             {
                 throw new VContainerException(interfaceType, $"{ImplementationType} is not assignable from {interfaceType}");
             }
+
             InterfaceTypes = InterfaceTypes ?? new List<Type>();
             if (!InterfaceTypes.Contains(interfaceType))
+            {
                 InterfaceTypes.Add(interfaceType);
+            }
         }
-   }
+    }
 }

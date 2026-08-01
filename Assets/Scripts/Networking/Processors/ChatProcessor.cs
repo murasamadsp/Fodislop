@@ -1,30 +1,32 @@
+#nullable enable
+
 using System.Linq;
-using Fodinae.Scripts.UI;
+using Fodinae.Core;
+using Fodinae.UI;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class ChatProcessor : IPacketProcessor<ChatMessageListPacket>, IPacketProcessor<LocalChatMessagePacket>, IPacketProcessor<ChatMutePacket>, IPacketProcessor<ChatListPacket>
     {
         public void Process(ChatMessageListPacket packet)
         {
-            foreach (var msg in packet.Messages)
+            var globalChat = Fodinae.Core.ServiceLocator.Resolve<GlobalChatUI>();
+            if (globalChat != null)
             {
-                if (GlobalChatUI.Instance != null)
+                foreach (var msg in packet.Messages)
                 {
-                    GlobalChatUI.Instance.AddMessage(msg);
+                    globalChat.AddMessage(msg);
                 }
             }
         }
 
         public void Process(LocalChatMessagePacket packet)
         {
-            if (FloatingChatManager.Instance != null)
-            {
-                FloatingChatManager.Instance.ShowLocalChat(packet);
-            }
+            var floatingChat = Fodinae.Core.ServiceLocator.Resolve<FloatingChatManager>();
+            floatingChat?.ShowLocalChat(packet);
         }
 
         public void Process(ChatMutePacket packet)
@@ -33,7 +35,8 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(ChatListPacket packet)
         {
-            if (GlobalChatUI.Instance == null)
+            var chatUi = Fodinae.Core.ServiceLocator.Resolve<GlobalChatUI>();
+            if (chatUi == null)
             {
                 return;
             }

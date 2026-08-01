@@ -1,13 +1,19 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
+using UnityEngine.Rendering;
 
-namespace Fodinae.Scripts.Networking.Connection.Client
+namespace Fodinae.Networking.Connection.Client
 {
     /// <summary>
     /// Manager for storing and caching textures downloaded from the server or loaded locally.
@@ -15,27 +21,18 @@ namespace Fodinae.Scripts.Networking.Connection.Client
     /// Writes downloaded assets to persistentDataPath to prevent Unity AssetDatabase reloads in Editor.
     /// </summary>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch file and texture loading exceptions to fall back to random texture generation.")]
-    public class TextureStorageManager : MonoBehaviour
+    public class TextureStorageManager : MonoBehaviour, ITextureStorageService
     {
-        private static TextureStorageManager _instance;
-        public static TextureStorageManager Instance => _instance;
-        public static TextureStorageManager InstanceIfExists => _instance;
-
         [SerializeField]
         private bool _enableDebugLogging = false;
 
         [SerializeField]
         private int _fallbackTextureSize = 64;
 
-        protected void Awake()
-        {
-            _instance = this;
-        }
-
         private readonly ConcurrentDictionary<string, Texture2D> _textureCache = new();
         private readonly ConcurrentDictionary<string, string> _resolvedPathsCache = new();
 
-        private string _textureFolderPath;
+        private string? _textureFolderPath;
         private bool _folderInitialized;
 
         /// <summary>
@@ -69,11 +66,19 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 try
                 {
                     var texture = new Texture2D(2, 2);
-                    if (texture.LoadImage(rawData))
+                    if (texture.LoadImage(rawData, markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None))
                     {
                         texture.name = filename;
-                        _textureCache.TryAdd(filename, texture);
-                        return texture;
+                        var storedTexture = _textureCache.GetOrAdd(filename, texture);
+                        if (ReferenceEquals(storedTexture, texture))
+                        {
+                            return texture;
+                        }
+
+                        // Another request won the race while this image was
+                        // decoding. Do not leak the duplicate native texture.
+                        UnityEngine.Object.Destroy(texture);
+                        return storedTexture;
                     }
                     else
                     {
@@ -89,20 +94,18 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             // Fallback: generate fallback texture
             if (_enableDebugLogging)
             {
-                Debug.Log($"[TextureStorageManager] Texture not found, generating fallback: {filename}");
+                Debug.LogWarning($"[TextureStorageManager] Fallback texture created for: {filename}");
             }
 
             var fallback = CreateFallbackTexture(filename);
-            _textureCache.TryAdd(filename, fallback);
-            return fallback;
-        }
+            var cachedFallback = _textureCache.GetOrAdd(filename, fallback);
+            if (ReferenceEquals(cachedFallback, fallback))
+            {
+                return fallback;
+            }
 
-        /// <summary>
-        /// Get a texture by filename synchronously.
-        /// </summary>
-        public Texture2D GetTexture(string filename)
-        {
-            return GetTextureAsync(filename).GetAwaiter().GetResult();
+            UnityEngine.Object.Destroy(fallback);
+            return cachedFallback;
         }
 
         /// <summary>
@@ -110,10 +113,18 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// </summary>
         /// <param name="filename">The texture filename.</param>
         /// <returns>PNG/WEBP bytes, or null if not found.</returns>
-        public async UniTask<byte[]> GetTextureData(string filename)
+        public async UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default)
         {
-            return await LoadTextureFromStorage(filename);
+            var data = await LoadTextureFromStorage(filename);
+            if (data != null)
+            {
+                OnTextureLoaded?.Invoke(filename);
+            }
+
+            return data;
         }
+
+        public event Action<string>? OnTextureLoaded;
 
         /// <summary>
         /// Create a fallback texture and cache it.
@@ -123,7 +134,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             var rawData = GenerateRandomTexture();
             var texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize);
 
-            if (rawData != null && texture.LoadImage(rawData))
+            if (rawData != null && texture.LoadImage(rawData, markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None))
             {
                 texture.name = $"Fallback_{filename}";
                 return texture;
@@ -136,7 +147,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// Load texture file bytes from storage asynchronously.
         /// Searches persistentDataPath first (dynamic downloads), then bundled Assets/Textures (read-only).
         /// </summary>
-        private async UniTask<byte[]> LoadTextureFromStorage(string filename)
+        private async UniTask<byte[]?> LoadTextureFromStorage(string filename)
         {
             try
             {
@@ -158,7 +169,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 {
                     if (_enableDebugLogging)
                     {
-                        Debug.Log($"[TextureStorageManager] Texture file not found: {filename}");
+                        Debug.LogWarning($"[TextureStorageManager] File not found for: {filename}");
                     }
 
                     return null;
@@ -178,7 +189,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             }
         }
 
-        private string ResolveTextureFullPath(string filename)
+        private string? ResolveTextureFullPath(string filename)
         {
             var normalizedFilename = filename.TrimStart('/');
 
@@ -206,40 +217,62 @@ namespace Fodinae.Scripts.Networking.Connection.Client
             return null;
         }
 
-        private static string SearchInFolder(string baseFolder, string filename)
+        private static string? SearchInFolder(string baseFolder, string filename)
         {
-            var fullPath = Path.Combine(baseFolder, filename);
-            if (File.Exists(fullPath))
+            // Walk each path segment case-insensitively so that
+            // "skin/bee.png" finds "Assets/Textures/Skin/bee.png" on macOS
+            // (ClientAssetLoader normalises filenames to lowercase).
+            var segments = filename.Replace('\\', '/').Split('/');
+            string currentDir = baseFolder;
+
+            for (int i = 0; i < segments.Length - 1; i++)
             {
-                return fullPath;
+                string seg = segments[i];
+                string exactSub = Path.Combine(currentDir, seg);
+                if (Directory.Exists(exactSub))
+                {
+                    currentDir = exactSub;
+                }
+                else if (Directory.Exists(currentDir))
+                {
+                    // case-insensitive fallback for macOS
+                    var sub = Directory.GetDirectories(currentDir)
+                        .FirstOrDefault(d => string.Equals(
+                            Path.GetFileName(d), seg,
+                            StringComparison.OrdinalIgnoreCase));
+                    if (sub == null)
+                    {
+                        return null;
+                    }
+
+                    currentDir = sub;
+                }
+                else
+                {
+                    return null;
+                }
             }
 
-            string directory = Path.GetDirectoryName(fullPath);
-            string filenameWithoutExtension = Path.GetFileNameWithoutExtension(fullPath);
+            string leafName = segments[segments.Length - 1];
+            string leafNameWithoutExt = Path.GetFileNameWithoutExtension(leafName);
 
-            if (Directory.Exists(directory))
+            // Exact match first
+            string leafExact = Path.Combine(currentDir, leafName);
+            if (File.Exists(leafExact))
             {
-                var files = Directory.GetFiles(directory, filenameWithoutExtension + ".*")
-                    .Where(f => !f.EndsWith(".meta", StringComparison.OrdinalIgnoreCase) && !f.EndsWith(".asset", StringComparison.OrdinalIgnoreCase))
+                return leafExact;
+            }
+
+            // Wildcard match (any extension), prefer webp -> gif -> png
+            if (Directory.Exists(currentDir))
+            {
+                var files = Directory.GetFiles(currentDir, leafNameWithoutExt + ".*")
+                    .Where(f => !f.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)
+                             && !f.EndsWith(".asset", StringComparison.OrdinalIgnoreCase))
                     .OrderBy(f =>
                     {
                         string ext = Path.GetExtension(f).ToLowerInvariant();
-                        if (ext == ".webp")
-                        {
-                            return 0;
-                        }
-
-                        if (ext == ".gif")
-                        {
-                            return 1;
-                        }
-
-                        if (ext == ".png")
-                        {
-                            return 2;
-                        }
-
-                        return 3;
+                        return ext switch { ".webp" => 0, ".gif" => 1, ".png" => 2, _ => 3 };
                     }).ToArray();
 
                 if (files.Length > 0)
@@ -254,7 +287,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// <summary>
         /// Generate a random texture as fallback.
         /// </summary>
-        private byte[] GenerateRandomTexture()
+        private byte[]? GenerateRandomTexture()
         {
             try
             {
@@ -302,7 +335,7 @@ namespace Fodinae.Scripts.Networking.Connection.Client
                 _textureFolderPath = persistentPath;
                 if (_enableDebugLogging)
                 {
-                    Debug.Log($"[TextureStorageManager] Using texture folder: {_textureFolderPath}");
+                    Debug.Log($"[TextureStorageManager] Initialized texture folder: {persistentPath}");
                 }
 
                 _folderInitialized = true;
@@ -319,15 +352,33 @@ namespace Fodinae.Scripts.Networking.Connection.Client
         /// </summary>
         public void ClearCache()
         {
+            var textures = new HashSet<Texture2D>();
+            foreach (var texture in _textureCache.Values)
+            {
+                if (texture != null)
+                {
+                    textures.Add(texture);
+                }
+            }
+
             _textureCache.Clear();
             _resolvedPathsCache.Clear();
+            foreach (var texture in textures)
+            {
+                UnityEngine.Object.Destroy(texture);
+            }
             if (_enableDebugLogging)
             {
-                Debug.Log("[TextureStorageManager] Texture cache cleared");
+                Debug.Log("[TextureStorageManager] Cache cleared");
             }
         }
 
-        public string GetTextureFolderPath()
+        protected void OnDestroy()
+        {
+            ClearCache();
+        }
+
+        public string? GetTextureFolderPath()
         {
             if (!_folderInitialized)
             {

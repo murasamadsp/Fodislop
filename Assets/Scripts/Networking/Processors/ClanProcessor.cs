@@ -1,21 +1,22 @@
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.Player.Logic;
-using Fodinae.Scripts.UI.HUD.Player.Model;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class ClanProcessor : IPacketProcessor<ShowClanPacket>, IPacketProcessor<HideClanPacket>
     {
-        private static IPlayerStats Stats => PlayerStatsModel.Instance;
-
         public void Process(ShowClanPacket packet)
         {
-            Stats.SetClanId(packet.ClanId);
+            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            stats?.SetClanId(packet.ClanId);
             var player = PlayerMovementController.LocalPlayer;
             if (player != null && player.TryGetComponent<Robot>(out var robot))
             {
@@ -25,10 +26,10 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(HideClanPacket packet)
         {
-            var s = Stats;
-            if (s != null)
+            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            if (stats != null)
             {
-                s.SetClanId(0);
+                stats.SetClanId(0);
             }
 
             var player = PlayerMovementController.LocalPlayer;

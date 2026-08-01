@@ -1,9 +1,111 @@
 /* ═══════════════════════════════════════════════════════════
-   Programmator — стили визуального редактора программ
+   Programmator — стили программатора
    ═══════════════════════════════════════════════════════════ */
 
-/* ─── Popup & Dimmer ─── */
-.programmator-popup {
+.programmator-root {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    background-color: var(--color-panel-bg);
+    border-color: var(--color-panel-border);
+    border-width: var(--panel-border-width);
+    border-radius: 4px;
+    padding: var(--panel-padding);
+}
+
+.programmator-grid {
+    flex-wrap: wrap;
+    background-color: rgba(30, 30, 30, 1);
+    border-color: var(--btn-border);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 4px;
+}
+
+.programmator-cell {
+    width: 40px;
+    height: 40px;
+    background-color: rgba(38, 38, 38, 1);
+    border-color: var(--btn-border);
+    border-width: 1px;
+    border-radius: 2px;
+    margin: 1px;
+    -unity-text-align: middle-center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+}
+
+.programmator-cell:hover {
+    border-color: var(--color-accent);
+}
+
+.programmator-cell.has-operator {
+    background-color: rgba(178, 166, 128, 0.3);
+    color: var(--color-accent);
+}
+
+.programmator-toolbar {
+    flex-direction: row;
+    margin-top: 8px;
+}
+
+/* ─── Радиальное меню ─── */
+
+.prog-radial-root {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+}
+
+.prog-radial-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.prog-radial-item {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background-color: rgba(51, 51, 51, 0.95);
+    border-width: 2px;
+    border-color: rgb(128, 128, 128);
+}
+
+.prog-radial-item-label {
+    color: white;
+    font-size: 8px;
+    -unity-text-align: middle-center;
+    white-space: normal;
+}
+
+.prog-radial-back {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background-color: rgba(38, 38, 38, 0.95);
+    border-width: 2px;
+    border-color: rgb(128, 128, 128);
+}
+
+.prog-radial-back:hover {
+    border-color: rgb(255, 214, 0);
+}
+
+.prog-radial-back-label {
+    color: white;
+    font-size: 18px;
+    -unity-text-align: middle-center;
+}
+
+/* ─── Окно программатора и панели ─── */
+
+.prog-popup {
     position: absolute;
     left: 0;
     top: 0;
@@ -13,7 +115,7 @@
     align-items: center;
 }
 
-.programmator-dimmer {
+.prog-dimmer {
     position: absolute;
     left: 0;
     top: 0;
@@ -22,361 +124,185 @@
     background-color: rgba(0, 0, 0, 0.4);
 }
 
-/* ─── Panel (сетка) ─── */
-.programmator-panel {
+.prog-panel {
     background-color: rgba(20, 20, 20, 0.95);
-    border-color: rgba(89, 89, 89, 1);
     border-width: 2px;
+    border-color: rgb(89, 89, 89);
     padding: 10px;
     flex-direction: column;
-    width: 600px;
+    width: 618px;
     min-height: 520px;
 }
 
-.programmator-panel-running {
-    border-color: rgba(51, 204, 51, 1);
+.prog-panel--running {
+    border-color: rgb(51, 204, 51);
 }
 
-.programmator-panel-paused {
-    border-color: rgba(230, 230, 77, 1);
-}
-
-/* ─── Panel (список программ) ─── */
-.programmator-list-panel {
-    background-color: rgba(20, 20, 20, 0.95);
-    border-color: rgba(89, 89, 89, 1);
-    border-width: 2px;
-    padding: 10px 20px;
+.prog-top {
     flex-direction: column;
-    width: 400px;
-    min-height: 300px;
+    margin-bottom: 10px;
 }
 
-/* ─── Header ─── */
-.programmator-header {
+.prog-header-row {
     flex-direction: row;
     align-items: flex-start;
 }
 
-.programmator-header-top {
-    flex-direction: column;
-    margin-bottom: 10px;
-    flex-grow: 1;
-}
-
-.programmator-header-row {
-    flex-direction: row;
-    margin-bottom: 10px;
-}
-
-.programmator-header-title {
-    font-size: 18px;
-    -unity-font-style: bold;
-    color: var(--color-accent);
-    flex-grow: 1;
-}
-
-/* ─── Toolbar ─── */
-.programmator-toolbar {
+.prog-row {
     flex-direction: row;
     align-items: center;
 }
 
-.programmator-action-row {
+.prog-action-row {
     flex-direction: row;
     align-items: center;
     margin-top: 4px;
 }
 
-/* ─── Toolbar Buttons (22x22, transparent, gray) ─── */
-.programmator-btn-icon {
+.prog-title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: rgb(178, 166, 128);
+}
+
+.prog-grid-row {
+    flex-direction: row;
+    justify-content: center;
+}
+
+/* ─── Кнопки управления ─── */
+
+.prog-ctrl-btn {
     width: 22px;
     height: 22px;
-    background-color: transparent;
-    color: var(--color-text-dim);
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(178, 178, 178);
     font-size: 14px;
     -unity-text-align: middle-center;
     border-width: 0;
     padding: 0 2px;
 }
 
-.programmator-btn-icon:hover {
-    color: white;
-}
-
-.programmator-btn-icon-mr {
-    margin-right: 8px;
-}
-
-/* ─── Action Buttons ─── */
-.programmator-btn-save {
+.prog-close-btn {
     width: 24px;
     height: 24px;
-    background-color: transparent;
-    color: var(--color-text-dim);
-    font-size: 14px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-}
-
-.programmator-btn-save:hover {
-    color: white;
-}
-
-.programmator-btn-run {
-    width: 22px;
-    height: 22px;
-    background-color: rgba(0, 89, 0, 0.3);
-    color: rgba(102, 230, 102, 1);
-    font-size: 12px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-    margin-left: 4px;
-}
-
-.programmator-btn-run:hover {
-    background-color: rgba(0, 128, 0, 0.4);
-}
-
-.programmator-btn-stop {
-    width: 22px;
-    height: 22px;
-    background-color: rgba(89, 0, 0, 0.3);
-    color: rgba(230, 77, 77, 1);
-    font-size: 12px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-}
-
-.programmator-btn-stop:hover {
-    background-color: rgba(128, 0, 0, 0.4);
-}
-
-.programmator-btn-stop:disabled {
-    opacity: 0.4;
-}
-
-.programmator-btn-pause {
-    width: 22px;
-    height: 22px;
-    background-color: rgba(89, 89, 0, 0.3);
-    color: rgba(230, 230, 77, 1);
-    font-size: 12px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-    margin-left: 4px;
-}
-
-.programmator-btn-pause:hover {
-    background-color: rgba(128, 128, 0, 0.4);
-}
-
-.programmator-btn-pause:disabled {
-    opacity: 0.4;
-}
-
-.programmator-btn-step {
-    width: 22px;
-    height: 22px;
-    background-color: rgba(0, 51, 102, 0.3);
-    color: rgba(77, 166, 255, 1);
-    font-size: 11px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-}
-
-.programmator-btn-step:hover {
-    background-color: rgba(0, 77, 153, 0.4);
-}
-
-.programmator-btn-step:disabled {
-    opacity: 0.4;
-}
-
-.programmator-step-group {
-    flex-direction: row;
-    align-items: center;
-    margin-left: 12px;
-}
-
-/* ─── Close Button ─── */
-.programmator-btn-close {
-    width: 24px;
-    height: 24px;
-    background-color: transparent;
-    color: var(--color-text-dim);
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(178, 178, 178);
     font-size: 18px;
     -unity-text-align: middle-center;
     border-width: 0;
     padding: 0;
 }
 
-.programmator-btn-close:hover {
+.prog-close-btn:hover {
     color: white;
 }
 
-/* ─── Page Navigation ─── */
-.programmator-page-label {
+.prog-save-btn {
+    width: 24px;
+    height: 24px;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(178, 178, 178);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+}
+
+.prog-run-btn {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(0, 89, 0, 0.3);
+    color: rgb(102, 229, 102);
     font-size: 12px;
-    color: var(--color-accent);
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+    margin-left: 4px;
+}
+
+.prog-stop-btn {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(89, 0, 0, 0.3);
+    color: rgb(229, 77, 77);
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    border-width: 0;
+    padding: 0;
+}
+
+.prog-del-btn {
+    width: 22px;
+    height: 22px;
+    background-color: rgba(77, 0, 0, 0.3);
+    color: rgb(229, 77, 77);
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0);
+    padding: 0;
+    margin-left: 8px;
+}
+
+/* ─── Пейджер ─── */
+
+.prog-pager-label {
+    font-size: 12px;
+    color: rgb(178, 166, 128);
     min-width: 60px;
     -unity-text-align: middle-center;
     margin-left: 4px;
     margin-right: 4px;
 }
 
-.programmator-page-input {
-    width: 35px;
-    background-color: rgba(30, 30, 30, 1);
-    --unity-cursor-color: rgba(255, 255, 255, 1);
-    color: var(--color-accent);
+.prog-page-input {
+    width: 52px;
+    height: 22px;
+    background-color: rgb(31, 31, 31);
+    color: rgb(178, 166, 128);
+    font-size: 12px;
     -unity-text-align: middle-center;
-    border-width: 1;
+    border-width: 0;
+    margin: 0 4px;
     padding: 0;
 }
 
-.programmator-page-input-inner {
-    background-color: rgba(30, 30, 30, 1);
-    color: var(--color-accent);
+.prog-page-input .unity-text-input {
+    background-color: rgb(31, 31, 31);
+    color: rgb(178, 166, 128);
+    font-size: 12px;
     -unity-text-align: middle-center;
-    border-width: 1;
+    border-width: 0;
     padding: 0;
+    margin: 0;
 }
 
-/* ─── Grid ─── */
-.programmator-grid-scroll {
-}
+/* ─── Сетка ─── */
 
-.programmator-grid-row {
-    flex-direction: row;
-    justify-content: center;
-}
-
-.programmator-grid-container {
+.prog-grid-container {
     flex-direction: row;
     flex-wrap: wrap;
-    justify-content: center;
 }
 
-.programmator-cell {
+.prog-cell {
     width: 32px;
     height: 32px;
-    background-color: rgba(38, 38, 38, 1);
-    border-color: rgba(64, 64, 64, 1);
+    background-color: rgb(38, 38, 38);
     border-width: 1px;
+    border-color: rgb(64, 64, 64);
     margin: 2px;
-    overflow: visible;
 }
 
-/* ─── Cell Input Fields ─── */
-.programmator-cell-text-input {
-    position: absolute;
-    background-color: transparent;
-    --unity-cursor-color: rgba(255, 255, 255, 1);
-    color: rgba(204, 179, 128, 1);
-    border-width: 0;
-    padding: 0;
-    margin: 0;
-    -unity-text-align: middle-center;
-    white-space: nowrap;
-    overflow: visible;
+.prog-cell--hover {
+    border-color: rgb(255, 214, 0);
 }
 
-.programmator-cell-text-input-inner {
-    background-color: transparent;
-    color: rgba(204, 179, 128, 1);
-    font-size: 9px;
-    border-width: 0;
-    padding: 0;
-    margin: 0;
-    -unity-text-align: middle-center;
+.prog-cell--selected {
+    border-color: rgb(51, 128, 255);
 }
 
-.programmator-cell-num-input {
-    position: absolute;
-    background-color: transparent;
-    --unity-cursor-color: rgba(255, 255, 255, 1);
-    color: rgba(204, 179, 128, 1);
-    border-width: 0;
-    padding: 0;
-    margin: 0;
-    -unity-text-align: middle-center;
-    white-space: nowrap;
-    overflow: visible;
-}
-
-.programmator-cell-num-input-inner {
-    background-color: transparent;
-    color: rgba(204, 179, 128, 1);
-    font-size: 9px;
-    border-width: 0;
-    padding: 0;
-    margin: 0;
-    -unity-text-align: middle-center;
-}
-
-/* ─── Cell Input Positions ─── */
-.programmator-cell-input-pos-label  { left: 1px; top: 11px; }
-.programmator-cell-input-pos-goto   { left: 12px; top: 11px; }
-.programmator-cell-input-pos-gosub  { left: 8px; top: 11px; }
-.programmator-cell-input-pos-if     { left: 5px; top: 20px;  }
-.programmator-cell-input-pos-debug  { left: 16px; top: 18px; }
-.programmator-cell-input-pos-var     { left: 1px; top: 6px; }
-.programmator-cell-input-pos-writestate { left: 7px; top: 16px; }
-.programmator-cell-input-pos-readstate  { left: 5px; top: 16px; }
-.programmator-cell-input-pos-state   { left: 7px; top: 18px; }
-.programmator-cell-input-pos-compare { left: 9px; top: 14px; }
-.programmator-cell-input-pos-round   { left: 6px; top: 11px; }
-.programmator-cell-input-pos-setnum  { left: 7px; top: 19px; }
-.programmator-cell-input-pos-varop1  { left: 3px; top: 2px; }
-.programmator-cell-input-pos-varop2  { left: 5px; top: 19px; }
-.programmator-cell-num-pos-var      { left: 1px; top: 20px; }
-.programmator-cell-num-pos-setnum   { left: 2px; top: 2px; }
-
-/* ─── Cell Input Sizes ─── */
-.programmator-cell-input-sz-label  { width: 17px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-goto   { width: 17px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-gosub  { width: 17px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-if     { width: 17px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-debug  { width: 48px; height: 14px; font-size: 9px; }
-.programmator-cell-input-sz-var     { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-writestate { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-readstate  { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-state   { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-compare { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-round   { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-setnum  { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-varop1  { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-input-sz-varop2  { width: 19px; height: 9px; font-size: 9px; }
-.programmator-cell-num-sz-var      { width: 27px; height: 9px; font-size: 9px; }
-.programmator-cell-num-sz-setnum   { width: 27px; height: 9px; font-size: 9px; }
-
-.programmator-cell:hover {
-    border-color: rgba(255, 214, 0, 1);
-}
-
-.programmator-cell-highlighted {
-    border-color: rgba(255, 214, 0, 1);
-}
-
-.programmator-cell-selected {
-    border-color: rgba(51, 128, 255, 1);
-}
-
-.programmator-cell-empty {
-    background-color: rgba(38, 38, 38, 1);
-}
-
-.programmator-cell-unknown {
-    background-color: rgba(77, 26, 26, 1);
-}
-
-.programmator-cell-label {
+.prog-cell-label {
     font-size: 8px;
     color: white;
     -unity-text-align: middle-center;
@@ -388,87 +314,77 @@
     padding: 0;
 }
 
-/* ─── Program List ─── */
-.programmator-list-scroll {
+/* ─── Список программ ─── */
+
+.prog-list-panel {
+    background-color: rgba(20, 20, 20, 0.95);
+    border-width: 2px;
+    border-color: rgb(89, 89, 89);
+    padding: 10px 20px;
+    flex-direction: column;
+    width: 400px;
+    min-height: 300px;
+}
+
+.prog-list-header-row {
+    flex-direction: row;
+    margin-bottom: 10px;
+}
+
+.prog-list-title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: rgb(178, 166, 128);
+    flex-grow: 1;
+}
+
+.prog-list-scroll {
     flex-grow: 1;
     min-height: 200px;
 }
 
-.programmator-list-item {
+.prog-list-row {
     flex-direction: row;
     align-items: center;
     padding: 6px 8px;
-    border-bottom-color: rgba(51, 51, 51, 1);
     border-bottom-width: 1px;
+    border-bottom-color: rgb(51, 51, 51);
 }
 
-.programmator-list-item:hover {
-    background-color: rgba(38, 38, 38, 1);
+.prog-list-row:hover {
+    background-color: rgb(38, 38, 38);
 }
 
-.programmator-list-item-name {
+.prog-list-name {
     flex-grow: 1;
-    color: rgba(204, 204, 204, 1);
+    color: rgb(204, 204, 204);
     font-size: 14px;
     -unity-text-align: middle-left;
 }
 
-.programmator-list-item-delete {
-    width: 22px;
-    height: 22px;
-    background-color: rgba(77, 0, 0, 0.3);
-    color: rgba(230, 77, 77, 1);
-    font-size: 14px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-    margin-left: 8px;
-}
-
-.programmator-list-item-delete:hover {
-    background-color: rgba(128, 0, 0, 0.4);
-}
-
-.programmator-list-item-rename {
-    width: 22px;
-    height: 22px;
-    background-color: transparent;
-    color: var(--color-text-dim);
-    font-size: 14px;
-    -unity-text-align: middle-center;
-    border-width: 0;
-    padding: 0;
-    margin-left: 8px;
-}
-
-.programmator-list-item-rename:hover {
-    color: white;
-}
-
-/* ─── Create Container ─── */
-.programmator-create-container {
+.prog-create-container {
     flex-direction: column;
     margin-top: 10px;
 }
 
-.programmator-create-btn {
+.prog-create-btn {
     width: 100%;
     height: 30px;
-    background-color: rgba(38, 38, 38, 1);
-    color: var(--color-accent);
+    background-color: rgb(38, 38, 38);
+    color: rgb(178, 166, 128);
     font-size: 14px;
     -unity-text-align: middle-center;
-    border-color: rgba(89, 89, 89, 1);
     border-width: 1px;
-    padding: 0;
+    border-color: rgb(89, 89, 89);
 }
 
-.programmator-create-btn:hover {
-    background-color: rgba(51, 51, 51, 1);
+.prog-create-btn:hover {
+    background-color: rgb(51, 51, 51);
 }
 
-/* ─── Create Dialog ─── */
-.programmator-dialog {
+/* ─── Диалог создания программы ─── */
+
+.prog-dialog {
     position: absolute;
     left: 0;
     top: 0;
@@ -478,72 +394,80 @@
     align-items: center;
 }
 
-.programmator-dialog-panel {
+.prog-dialog-panel {
     background-color: rgba(20, 20, 20, 0.95);
-    border-color: rgba(89, 89, 89, 1);
     border-width: 2px;
+    border-color: rgb(89, 89, 89);
     padding: 16px 20px;
     flex-direction: column;
     align-items: stretch;
     width: 350px;
 }
 
-.programmator-dialog-title {
+.prog-dialog-title {
     font-size: 16px;
     -unity-font-style: bold;
-    color: var(--color-accent);
+    color: rgb(178, 166, 128);
     margin-bottom: 12px;
 }
 
-.programmator-dialog-input {
-    background-color: rgba(30, 30, 30, 1);
-    color: rgba(204, 204, 204, 1);
-    border-color: rgba(77, 77, 77, 1);
+.prog-dialog-input {
+    height: 32px;
+    background-color: rgb(31, 31, 31);
+    color: rgb(204, 204, 204);
+    font-size: 14px;
     border-width: 1px;
+    border-color: rgb(77, 77, 77);
+    padding-left: 8px;
     margin-bottom: 16px;
 }
 
-.programmator-dialog-input-inner {
-    background-color: rgba(30, 30, 30, 1);
-    color: rgba(204, 204, 204, 1);
-    --unity-cursor-color: rgba(255, 255, 255, 1);
+.prog-dialog-input .unity-text-input {
+    background-color: rgb(31, 31, 31);
+    color: rgb(204, 204, 204);
     font-size: 14px;
+    border-width: 0;
 }
 
-.programmator-dialog-buttons {
+.prog-dialog-buttons {
     flex-direction: row;
     justify-content: flex-end;
 }
 
-.programmator-dialog-btn-cancel {
+.prog-dialog-cancel {
     height: 30px;
     min-width: 80px;
-    background-color: rgba(38, 38, 38, 1);
-    color: var(--color-text-dim);
+    background-color: rgb(38, 38, 38);
+    color: rgb(178, 178, 178);
     font-size: 14px;
     -unity-text-align: middle-center;
-    border-color: rgba(77, 77, 77, 1);
     border-width: 1px;
-    padding: 0;
+    border-color: rgb(77, 77, 77);
     margin-right: 8px;
 }
 
-.programmator-dialog-btn-cancel:hover {
-    background-color: rgba(51, 51, 51, 1);
-}
-
-.programmator-dialog-btn-confirm {
+.prog-dialog-confirm {
     height: 30px;
     min-width: 80px;
     background-color: rgba(0, 77, 0, 0.3);
-    color: rgba(102, 230, 102, 1);
+    color: rgb(102, 229, 102);
     font-size: 14px;
     -unity-text-align: middle-center;
-    border-color: rgba(51, 128, 51, 1);
     border-width: 1px;
-    padding: 0;
+    border-color: rgb(51, 128, 51);
 }
 
-.programmator-dialog-btn-confirm:hover {
-    background-color: rgba(0, 102, 0, 0.4);
+/* ─── Джойстик Observer ─── */
+
+.prog-joy-root {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+}
+
+.prog-joy-center {
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
 }

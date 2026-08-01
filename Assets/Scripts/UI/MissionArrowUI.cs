@@ -1,17 +1,24 @@
-using Fodinae.Scripts.UI.HUD.Player.Model;
-using Fodinae.Scripts.World;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.UI.HUD.Player.Model;
+using Fodinae.World;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class MissionArrowUI : MonoBehaviour
     {
-        private UIDocument _doc;
-        private VisualElement _arrow;
-        private Camera _camera;
+        private UIDocument? _doc;
+        private VisualElement? _arrow;
+        private Camera? _camera;
         private ushort? _targetX;
         private ushort? _targetY;
+        [Inject]
+        private IPlayerStats _playerStats = null!;
 
         protected void Start()
         {
@@ -28,14 +35,13 @@ namespace Fodinae.Scripts.UI
 
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
-            _arrow.style.position = Position.Absolute;
-            _arrow.style.width = 20;
-            _arrow.style.height = 20;
-            _arrow.style.backgroundColor = new Color(1f, 0.85f, 0f, 0.9f);
+            _arrow.AddToClassList("mission-arrow");
+
+            // Видимость — рантайм-состояние
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);
 
-            var stats = PlayerStatsModel.Instance;
+            var stats = _playerStats as PlayerStatsModel;
             if (stats != null)
             {
                 stats.OnMissionArrowChanged += OnArrowChanged;
@@ -51,29 +57,37 @@ namespace Fodinae.Scripts.UI
 
         protected void OnDestroy()
         {
-            if (PlayerStatsModel.InstanceIfExists != null)
+            var existing = _playerStats as PlayerStatsModel;
+            if (existing != null)
             {
-                PlayerStatsModel.InstanceIfExists.OnMissionArrowChanged -= OnArrowChanged;
+                existing.OnMissionArrowChanged -= OnArrowChanged;
             }
         }
 
         private void OnArrowChanged()
         {
             Debug.Log("[MissionArrowUI] OnArrowChanged fired");
-            var stats = PlayerStatsModel.Instance;
+            var stats = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
             if (stats == null || !stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
             {
                 Debug.Log("[MissionArrowUI] Arrow cleared (null target)");
                 _targetX = null;
                 _targetY = null;
-                _arrow.style.display = DisplayStyle.None;
+                if (_arrow != null)
+                {
+                    _arrow.style.display = DisplayStyle.None;
+                }
+
                 return;
             }
 
             _targetX = stats.MissionArrowX;
             _targetY = stats.MissionArrowY;
             Debug.Log($"[MissionArrowUI] Arrow target set: ({_targetX}, {_targetY}), showing element");
-            _arrow.style.display = DisplayStyle.Flex;
+            if (_arrow != null)
+            {
+                _arrow.style.display = DisplayStyle.Flex;
+            }
         }
 
         protected void LateUpdate()
@@ -86,11 +100,16 @@ namespace Fodinae.Scripts.UI
             var worldPos = CoordinateUtils.ServerToUnityPos(_targetX.Value, _targetY.Value);
             var screenPos = _camera.WorldToScreenPoint(worldPos);
 
+            if (_doc == null || _doc.rootVisualElement == null || _doc.rootVisualElement.panel == null || _arrow == null)
+            {
+                return;
+            }
+
             if (screenPos.z < 0f)
             {
                 if (_arrow.style.display != DisplayStyle.None)
                 {
-                    _arrow.style.display = DisplayStyle.None;
+                    _arrow!.style.display = DisplayStyle.None;
                 }
 
                 return;
@@ -108,8 +127,8 @@ namespace Fodinae.Scripts.UI
             float halfW = _doc.rootVisualElement.resolvedStyle.width / 2f;
             float halfH = _doc.rootVisualElement.resolvedStyle.height / 2f;
 
-            float posX = panelPos.x - _arrow.resolvedStyle.width / 2f;
-            float posY = panelPos.y - _arrow.resolvedStyle.height / 2f;
+            float posX = panelPos.x - (_arrow.resolvedStyle.width / 2f);
+            float posY = panelPos.y - (_arrow.resolvedStyle.height / 2f);
 
             float maxX = _doc.rootVisualElement.resolvedStyle.width - _arrow.resolvedStyle.width;
             float maxY = _doc.rootVisualElement.resolvedStyle.height - _arrow.resolvedStyle.height;
@@ -126,9 +145,9 @@ namespace Fodinae.Scripts.UI
 
                 dir.Normalize();
 
-                float margin = 40f;
-                float clampedX = Mathf.Clamp(panelPos.x, margin, _doc.rootVisualElement.resolvedStyle.width - margin) - _arrow.resolvedStyle.width / 2f;
-                float clampedY = Mathf.Clamp(panelPos.y, margin, _doc.rootVisualElement.resolvedStyle.height - margin) - _arrow.resolvedStyle.height / 2f;
+                const float margin = 40f;
+                float clampedX = Mathf.Clamp(panelPos.x, margin, _doc.rootVisualElement.resolvedStyle.width - margin) - (_arrow.resolvedStyle.width / 2f);
+                float clampedY = Mathf.Clamp(panelPos.y, margin, _doc.rootVisualElement.resolvedStyle.height - margin) - (_arrow.resolvedStyle.height / 2f);
 
                 _arrow.style.left = clampedX;
                 _arrow.style.top = clampedY;

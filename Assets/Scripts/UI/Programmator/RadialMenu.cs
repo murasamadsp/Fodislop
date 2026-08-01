@@ -1,9 +1,11 @@
+#nullable enable
+
 using System;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     public class RadialMenu
     {
@@ -13,13 +15,12 @@ namespace Fodinae.Scripts.UI.Programmator
         private readonly VisualElement _outerRingBg;
         private readonly VisualElement _backButton;
 
-        private int[] _innerIds;
+        private int[] _innerIds = Array.Empty<int>();
         private int _innerCount;
-        private Color[] _innerItemColors;
+        private Color[]? _innerItemColors;
 
-        private int[] _outerIds;
+        private int[] _outerIds = Array.Empty<int>();
         private int _outerCount;
-        private Color[] _outerItemColors;
 
         private readonly float _innerRadius = 55f;
         private readonly float _outerRadius = 100f;
@@ -30,9 +31,9 @@ namespace Fodinae.Scripts.UI.Programmator
         private int _hoveredOuterIndex = -1;
         private Vector2 _centerPosition;
 
-        public event Action<int> OnCategoryClicked; // inner ring item clicked
-        public event Action<int> OnItemClicked;      // outer ring item clicked (actual operator)
-        public event Action OnBackClicked;
+        public event Action<int>? OnCategoryClicked; // inner ring item clicked
+        public event Action<int>? OnItemClicked;      // outer ring item clicked (actual operator)
+        public event Action? OnBackClicked;
 
         public VisualElement Root => _root;
         public bool IsShown => _root.parent != null;
@@ -43,9 +44,8 @@ namespace Fodinae.Scripts.UI.Programmator
         public RadialMenu()
         {
             _root = new VisualElement();
-            _root.style.position = Position.Absolute;
-            _root.style.width = 260;
-            _root.style.height = 260;
+            AttachStyles(_root);
+            _root.AddToClassList("prog-radial-root");
             _root.pickingMode = PickingMode.Ignore;
 
             // Outer ring background — hidden until SetOuterItems()
@@ -54,11 +54,7 @@ namespace Fodinae.Scripts.UI.Programmator
 
             // Outer container for outer ring items
             _outerContainer = new VisualElement();
-            _outerContainer.style.position = Position.Absolute;
-            _outerContainer.style.left = 0;
-            _outerContainer.style.top = 0;
-            _outerContainer.style.right = 0;
-            _outerContainer.style.bottom = 0;
+            _outerContainer.AddToClassList("prog-radial-fill");
             _outerContainer.pickingMode = PickingMode.Ignore;
             _root.Add(_outerContainer);
 
@@ -67,62 +63,36 @@ namespace Fodinae.Scripts.UI.Programmator
 
             // Inner container for inner ring items
             _innerContainer = new VisualElement();
-            _innerContainer.style.position = Position.Absolute;
-            _innerContainer.style.left = 0;
-            _innerContainer.style.top = 0;
-            _innerContainer.style.right = 0;
-            _innerContainer.style.bottom = 0;
+            _innerContainer.AddToClassList("prog-radial-fill");
             _innerContainer.pickingMode = PickingMode.Ignore;
             _root.Add(_innerContainer);
 
             // Back button — centered, hidden by default
             _backButton = new VisualElement();
-            _backButton.style.position = Position.Absolute;
+            _backButton.AddToClassList("prog-radial-back");
             float bbPos = _center - (_itemSize / 2f);
             _backButton.style.left = bbPos;
             _backButton.style.top = bbPos;
-            _backButton.style.width = _itemSize;
-            _backButton.style.height = _itemSize;
-            _backButton.style.borderTopLeftRadius = 18;
-            _backButton.style.borderTopRightRadius = 18;
-            _backButton.style.borderBottomLeftRadius = 18;
-            _backButton.style.borderBottomRightRadius = 18;
-            _backButton.style.backgroundColor = new Color(0.15f, 0.15f, 0.15f, 0.95f);
-            _backButton.style.borderTopWidth = 2;
-            _backButton.style.borderBottomWidth = 2;
-            _backButton.style.borderLeftWidth = 2;
-            _backButton.style.borderRightWidth = 2;
-            _backButton.style.borderTopColor = DefaultBorder;
-            _backButton.style.borderBottomColor = DefaultBorder;
-            _backButton.style.borderLeftColor = DefaultBorder;
-            _backButton.style.borderRightColor = DefaultBorder;
             _backButton.pickingMode = PickingMode.Position;
             _backButton.style.display = DisplayStyle.None;
 
             var backLabel = new Label("\u2190");
-            backLabel.style.color = Color.white;
-            backLabel.style.fontSize = 18;
-            backLabel.style.unityTextAlign = TextAnchor.MiddleCenter;
+            backLabel.AddToClassList("prog-radial-back-label");
             backLabel.pickingMode = PickingMode.Ignore;
             _backButton.Add(backLabel);
 
             _backButton.RegisterCallback<PointerDownEvent>(_ => OnBackClicked?.Invoke());
-            _backButton.RegisterCallback<PointerEnterEvent>(_ =>
-            {
-                _backButton.style.borderTopColor = HoverBorder;
-                _backButton.style.borderBottomColor = HoverBorder;
-                _backButton.style.borderLeftColor = HoverBorder;
-                _backButton.style.borderRightColor = HoverBorder;
-            });
-            _backButton.RegisterCallback<PointerLeaveEvent>(_ =>
-            {
-                _backButton.style.borderTopColor = DefaultBorder;
-                _backButton.style.borderBottomColor = DefaultBorder;
-                _backButton.style.borderLeftColor = DefaultBorder;
-                _backButton.style.borderRightColor = DefaultBorder;
-            });
 
             _root.Add(_backButton);
+        }
+
+        internal static void AttachStyles(VisualElement root)
+        {
+            var uss = Resources.Load<StyleSheet>("Styles/Programmator");
+            if (uss != null)
+            {
+                root.styleSheets.Add(uss);
+            }
         }
 
         /// <summary>
@@ -156,7 +126,7 @@ namespace Fodinae.Scripts.UI.Programmator
             return ring;
         }
 
-        public void SetInnerItems(int[] ids, Color[] colors = null)
+        public void SetInnerItems(int[] ids, Color[]? colors = null)
         {
             _innerContainer.Clear();
             _innerIds = ids ?? Array.Empty<int>();
@@ -186,6 +156,8 @@ namespace Fodinae.Scripts.UI.Programmator
                 item.style.borderLeftWidth = 2;
                 item.style.borderRightWidth = 2;
 
+                item.AddToClassList("prog-radial-item");
+
                 Color borderColor = (colors != null && i < colors.Length) ? colors[i] : DefaultBorder;
                 item.style.borderTopColor = borderColor;
                 item.style.borderBottomColor = borderColor;
@@ -198,10 +170,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 // Categories use negative IDs — show name label
                 string catName = ProgrammatorData.CATEGORY_NAMES.TryGetValue(_innerIds[i], out var cn) ? cn : _innerIds[i].ToString();
                 var label = new Label(catName);
-                label.style.color = Color.white;
-                label.style.fontSize = 8;
-                label.style.unityTextAlign = TextAnchor.MiddleCenter;
-                label.style.whiteSpace = WhiteSpace.Normal;
+                label.AddToClassList("prog-radial-item-label");
                 label.pickingMode = PickingMode.Ignore;
                 item.Add(label);
 
@@ -213,12 +182,11 @@ namespace Fodinae.Scripts.UI.Programmator
             }
         }
 
-        public void SetOuterItems(int[] ids, Color[] colors = null)
+        public void SetOuterItems(int[] ids, Color[]? colors = null)
         {
             _outerContainer.Clear();
             _outerIds = ids ?? Array.Empty<int>();
             _outerCount = _outerIds.Length;
-            _outerItemColors = colors;
 
             for (int i = 0; i < _outerCount; i++)
             {
@@ -243,6 +211,8 @@ namespace Fodinae.Scripts.UI.Programmator
                 item.style.borderLeftWidth = 2;
                 item.style.borderRightWidth = 2;
 
+                item.AddToClassList("prog-radial-item");
+
                 item.pickingMode = PickingMode.Position;
                 item.name = $"radial_outer_{i}";
 
@@ -258,10 +228,7 @@ namespace Fodinae.Scripts.UI.Programmator
                 {
                     string labelText = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? n : id.ToString();
                     var label = new Label(labelText);
-                    label.style.color = Color.white;
-                    label.style.fontSize = 8;
-                    label.style.unityTextAlign = TextAnchor.MiddleCenter;
-                    label.style.whiteSpace = WhiteSpace.Normal;
+                    label.AddToClassList("prog-radial-item-label");
                     label.pickingMode = PickingMode.Ignore;
                     item.Add(label);
                 }
@@ -293,7 +260,11 @@ namespace Fodinae.Scripts.UI.Programmator
             for (int i = 0; i < _innerCount; i++)
             {
                 var item = _innerContainer[i] as VisualElement;
-                if (item == null) continue;
+                if (item == null)
+                {
+                    continue;
+                }
+
                 Color bc = (i == index) ? HoverBorder
                     : (_innerItemColors != null && i < _innerItemColors.Length) ? _innerItemColors[i] : DefaultBorder;
                 item.style.borderTopColor = bc;
@@ -327,7 +298,11 @@ namespace Fodinae.Scripts.UI.Programmator
             for (int i = 0; i < _outerCount; i++)
             {
                 var item = _outerContainer[i] as VisualElement;
-                if (item == null) continue;
+                if (item == null)
+                {
+                    continue;
+                }
+
                 Color bc = (i == index) ? HoverBorder : DefaultBorder;
                 item.style.borderTopColor = bc;
                 item.style.borderBottomColor = bc;

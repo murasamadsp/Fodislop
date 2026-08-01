@@ -1,3 +1,5 @@
+#nullable enable
+
 // Copyright (c) PlaceholderCompany. All rights reserved.
 
 using System;
@@ -5,11 +7,14 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Effekseer;
 using Effekseer.Internal;
-using Fodinae.Scripts;
-using Fodinae.Scripts.World;
+using Fodinae;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Effekseer
+namespace Fodinae.Effekseer
 {
     /// <summary>
     /// Utility for loading Effekseer effects from raw .efk bytes at runtime,
@@ -25,6 +30,10 @@ namespace Fodinae.Scripts.Effekseer
     /// </summary>
     public static class RuntimeEffekseerLoader
     {
+        private static readonly HashSet<EntityId> ActiveRuntimeEffectIds = new();
+
+        public static int ActiveRuntimeEffectCount => ActiveRuntimeEffectIds.Count;
+
         /// <summary>
         /// Load an Effekseer effect from raw .efk bytes, downloading all referenced
         /// textures from the server asset pipeline and populating the asset before
@@ -49,11 +58,11 @@ namespace Fodinae.Scripts.Effekseer
         /// registered in <see cref="EffekseerSystem"/> and ready to play.
         /// Returns null if the .efk data is invalid or loading fails.
         /// </returns>
-        public static async UniTask<EffekseerEffectAsset> LoadEffectAsync(
+        public static async UniTask<EffekseerEffectAsset?> LoadEffectAsync(
             byte[] efkBytes,
             string effectName,
-            Func<string, string> texturePathMapper = null,
-            ClientAssetLoader clientAssetLoader = null,
+            Func<string, string>? texturePathMapper = null,
+            ClientAssetLoader? clientAssetLoader = null,
             int textureTimeoutSeconds = 10)
         {
             if (efkBytes == null || efkBytes.Length < 4)
@@ -68,7 +77,7 @@ namespace Fodinae.Scripts.Effekseer
                 return null;
             }
 
-            var loader = clientAssetLoader ?? ClientAssetLoader.Instance;
+            var loader = clientAssetLoader ?? (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader);
             if (loader == null)
             {
                 Debug.LogError("[RuntimeEffekseerLoader] No ClientAssetLoader available");
@@ -88,50 +97,86 @@ namespace Fodinae.Scripts.Effekseer
             asset.efkBytes = efkBytes;
             asset.name = effectName;
 
-            // ----- 3. Download and assign textures -----
-            var textureResources = new List<EffekseerTextureResource>(resourcePath.TexturePathList.Count);
-            foreach (var rawPath in resourcePath.TexturePathList)
+            try
             {
-                // Apply optional path remapping
-                var serverPath = texturePathMapper?.Invoke(rawPath) ?? rawPath;
-                if (serverPath == null)
+                // ----- 3. Download and assign textures -----
+                var textureResources = new List<EffekseerTextureResource>(resourcePath.TexturePathList.Count);
+                foreach (var rawPath in resourcePath.TexturePathList)
                 {
-                    Debug.LogWarning($"[RuntimeEffekseerLoader] Texture '{rawPath}' skipped by mapper");
-                    continue;
-                }
-
-                var tex = await DownloadTextureAsync(loader, serverPath, textureTimeoutSeconds);
-                if (tex != null)
-                {
-                    textureResources.Add(new EffekseerTextureResource
+                    // Apply optional path remapping
+                    var serverPath = texturePathMapper?.Invoke(rawPath) ?? rawPath;
+                    if (serverPath == null)
                     {
-                        path = rawPath,
-                        texture = tex,
-                    });
+                        Debug.LogWarning($"[RuntimeEffekseerLoader] Texture '{rawPath}' skipped by mapper");
+                        continue;
+                    }
 
-                    Debug.Log($"[RuntimeEffekseerLoader] Loaded texture '{rawPath}' → '{serverPath}' for effect '{effectName}'");
+                    var tex = await DownloadTextureAsync(loader, serverPath, textureTimeoutSeconds);
+                    if (tex != null)
+                    {
+                        textureResources.Add(new EffekseerTextureResource
+                        {
+                            path = rawPath,
+                            texture = tex,
+                        });
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[RuntimeEffekseerLoader] Failed to download texture '{serverPath}' (from '{rawPath}') for effect '{effectName}'");
+                    }
                 }
-                else
+
+                asset.textureResources = textureResources.ToArray();
+
+                // ----- 4. (Optional) Sound, model, material, curve loading -----
+                // Sounds could be loaded via WavUtility + AudioClip.Create
+                // Models/Materials/Curves require their respective ScriptableObject types
+                // For now, these are left empty — the native plugin will skip missing resources.
+
+                // ----- 5. Register in native Effekseer -----
+                // LoadEffect is intentionally called exactly once. Calling asset.LoadEffect()
+                // after this repeats the native resource reload for the same asset.
+                EffekseerSystem.Instance.LoadEffect(asset);
+                ActiveRuntimeEffectIds.Add(asset.GetEntityId());
+                return asset;
+            }
+            catch
+            {
+                // A failed/cancelled load can happen after some textures were already decoded.
+                // Do not leave a half-created ScriptableObject or native effect behind.
+                DestroyEffect(asset);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Releases a runtime-created effect and the standalone textures decoded
+        /// for it. These objects are not assets from the Unity database, so
+        /// unloading the native effect alone does not reclaim their memory.
+        /// </summary>
+        public static void DestroyEffect(EffekseerEffectAsset? asset)
+        {
+            if (asset == null)
+            {
+                return;
+            }
+
+            ActiveRuntimeEffectIds.Remove(asset.GetEntityId());
+
+            var resources = asset.textureResources;
+            if (resources != null)
+            {
+                for (int i = 0; i < resources.Length; i++)
                 {
-                    Debug.LogWarning($"[RuntimeEffekseerLoader] Failed to download texture '{serverPath}' (from '{rawPath}') for effect '{effectName}'");
+                    var texture = resources[i].texture;
+                    if (texture != null)
+                    {
+                        UnityEngine.Object.Destroy(texture);
+                    }
                 }
             }
 
-            asset.textureResources = textureResources.ToArray();
-
-            // ----- 4. (Optional) Sound, model, material, curve loading -----
-            // Sounds could be loaded via WavUtility + AudioClip.Create
-            // Models/Materials/Curves require their respective ScriptableObject types
-            // For now, these are left empty — the native plugin will skip missing resources.
-
-            // ----- 5. Register in native Effekseer -----
-            // This triggers the texture loader callbacks which will find our populated resources
-            // via the effectAssetInLoading → GetTextureFromPath → FindTexture chain.
-            EffekseerSystem.Instance.LoadEffect(asset);
-            asset.LoadEffect();
-
-            Debug.Log($"[RuntimeEffekseerLoader] Effect '{effectName}' loaded with {textureResources.Count} texture(s)");
-            return asset;
+            UnityEngine.Object.Destroy(asset);
         }
 
         /// <summary>
@@ -156,7 +201,7 @@ namespace Fodinae.Scripts.Effekseer
         /// </summary>
         /// <param name="efkBytes">Raw .efk file data.</param>
         /// <returns>Parsed resource paths, or null if parsing fails.</returns>
-        public static EffekseerResourcePath GetResourcePaths(byte[] efkBytes)
+        public static EffekseerResourcePath? GetResourcePaths(byte[] efkBytes)
         {
             var resourcePath = new EffekseerResourcePath();
             if (EffekseerEffectAsset.ReadResourcePath(efkBytes, ref resourcePath))
@@ -170,7 +215,7 @@ namespace Fodinae.Scripts.Effekseer
         /// <summary>
         /// Download a single texture from the server and decode it into a Texture2D.
         /// </summary>
-        private static async UniTask<Texture2D> DownloadTextureAsync(
+        private static async UniTask<Texture2D?> DownloadTextureAsync(
             ClientAssetLoader loader,
             string serverPath,
             int timeoutSeconds)

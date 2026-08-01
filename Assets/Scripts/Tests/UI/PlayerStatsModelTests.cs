@@ -1,5 +1,7 @@
+#nullable enable
+
+using Fodinae.UI.HUD.Player.Model;
 using NUnit.Framework;
-using Fodinae.Scripts.UI.HUD.Player.Model;
 using UnityEngine;
 
 namespace Fodinae.Tests.UI
@@ -7,23 +9,12 @@ namespace Fodinae.Tests.UI
     [TestFixture]
     public class PlayerStatsModelTests
     {
-        private GameObject _go;
-        private PlayerStatsModel _statsModel;
+        private PlayerStatsModel _statsModel = null!;
 
         [SetUp]
         public void SetUp()
         {
-            _go = new GameObject("TestPlayerStatsModel");
-            _statsModel = _go.AddComponent<PlayerStatsModel>();
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            if (_go != null)
-            {
-                Object.DestroyImmediate(_go);
-            }
+            _statsModel = new PlayerStatsModel();
         }
 
         [Test]
@@ -43,7 +34,7 @@ namespace Fodinae.Tests.UI
         public void HealthPercent_ZeroMaxHealth_ReturnsZeroWithoutException()
         {
             _statsModel.SetHealth(0, 0);
-            Assert.AreEqual(0.0f, _statsModel.HealthPercent, "HealthPercent should safely return 0 when max health is 0.");
+            Assert.AreEqual(0.0f, _statsModel.HealthPercent, 0.001f, "HealthPercent should safely return 0 when max health is 0.");
         }
 
         [Test]

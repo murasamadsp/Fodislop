@@ -15,45 +15,52 @@ namespace VContainer.Unity
         {
             ParentType = parentType;
         }
-    }
 
-    partial class LifetimeScope
-    {
-        static readonly List<LifetimeScope> WaitingList = new List<LifetimeScope>();
-
-#if UNITY_2019_3_OR_NEWER
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-#else
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-#endif
-        static void SubscribeSceneEvents()
+        public VContainerParentTypeReferenceNotFound()
+            : base()
         {
-            SceneManager.sceneLoaded -= OnSceneLoaded;
-            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
-        static void EnqueueAwake(LifetimeScope lifetimeScope)
+        public VContainerParentTypeReferenceNotFound(string message)
+            : base(message)
+        {
+        }
+
+        public VContainerParentTypeReferenceNotFound(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
+
+    public partial class LifetimeScope
+    {
+        private static readonly List<LifetimeScope> WaitingList = new List<LifetimeScope>();
+
+        private static void EnqueueAwake(LifetimeScope lifetimeScope)
         {
             WaitingList.Add(lifetimeScope);
         }
 
-        static void CancelAwake(LifetimeScope lifetimeScope)
+        private static void CancelAwake(LifetimeScope lifetimeScope)
         {
             WaitingList.Remove(lifetimeScope);
         }
 
-        static void AwakeWaitingChildren(LifetimeScope awakenParent)
+        private static void AwakeWaitingChildren(LifetimeScope awakenParent)
         {
-            if (WaitingList.Count <= 0) return;
+            if (WaitingList.Count <= 0)
+            {
+                return;
+            }
 
             using (ListPool<LifetimeScope>.Get(out var buffer))
             {
                 for (var i = WaitingList.Count - 1; i >= 0; i--)
                 {
                     var waitingScope = WaitingList[i];
-                    if (waitingScope.parentReference.Type == awakenParent.GetType())
+                    if (waitingScope.ParentReference.Type == awakenParent.GetType())
                     {
-                        waitingScope.parentReference.Object = awakenParent;
+                        waitingScope.ParentReference.Object = awakenParent;
                         WaitingList.RemoveAt(i);
                         buffer.Add(waitingScope);
                     }
@@ -62,30 +69,6 @@ namespace VContainer.Unity
                 foreach (var waitingScope in buffer)
                 {
                     waitingScope.Awake();
-                }
-            }
-        }
-
-        static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            if (WaitingList.Count <= 0)
-                return;
-
-            using (ListPool<LifetimeScope>.Get(out var buffer))
-            {
-                for (var i = WaitingList.Count - 1; i >= 0; i--)
-                {
-                    var waitingScope = WaitingList[i];
-                    if (waitingScope.gameObject.scene == scene)
-                    {
-                        WaitingList.RemoveAt(i);
-                        buffer.Add(waitingScope);
-                    }
-                }
-
-                foreach (var waitingScope in buffer)
-                {
-                    waitingScope.Awake(); // Re-throw if parent not found
                 }
             }
         }

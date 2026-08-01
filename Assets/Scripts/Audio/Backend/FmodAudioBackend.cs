@@ -1,11 +1,16 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Audio.Core;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
+using VContainer;
 
-namespace Fodinae.Scripts.Audio.Backend
+namespace Fodinae.Audio.Backend
 {
     /// <summary>
     /// FMOD Studio аудио-бэкенд с диск-стримингом банков и селективной загрузкой сэмплов в ОЗУ.
@@ -17,7 +22,14 @@ namespace Fodinae.Scripts.Audio.Backend
     /// </summary>
     public sealed class FmodAudioBackend
     {
-        private AudioSystem _system;
+        private AudioSystem _system = null!;
+
+        public void Initialize(AudioSystem system)
+        {
+            _system = system;
+            LoadRequiredBanksAsync().Forget();
+        }
+
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
         private readonly ConcurrentDictionary<string, FMOD.Studio.Bank> _loadedBanks = new(StringComparer.OrdinalIgnoreCase);
 
@@ -26,17 +38,13 @@ namespace Fodinae.Scripts.Audio.Backend
         private static readonly string[] _requiredBanks =
         {
             "Master",
-            "Master.strings"
+            "Master.strings",
         };
 
         private static readonly FMOD.VECTOR ForwardVector = new() { x = 0f, y = 0f, z = 1f };
         private static readonly FMOD.VECTOR UpVector = new() { x = 0f, y = 1f, z = 0f };
 
-        public void Initialize(AudioSystem system)
-        {
-            _system = system;
-            LoadRequiredBanksAsync().Forget();
-        }
+
 
         public async UniTaskVoid LoadRequiredBanksAsync()
         {
@@ -59,23 +67,27 @@ namespace Fodinae.Scripts.Audio.Backend
                 return true;
             }
 
-            string bankFilePath = null;
+            string? bankFilePath = null;
             var localPath = System.IO.Path.Combine(Application.streamingAssetsPath, "Audio", $"{cleanBankName}.bank");
 
             if (System.IO.File.Exists(localPath))
             {
                 bankFilePath = localPath;
             }
-            else if (ClientAssetLoader.Instance != null)
+            else
             {
-                var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
-                try
+                var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+                if (assetLoader != null)
                 {
-                    bankFilePath = await ClientAssetLoader.Instance.GetAssetPathAsync(relativeRemotePath);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"[FmodAudioBackend] Ошибка загрузки банка '{cleanBankName}' с CDN: {ex.Message}");
+                    var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
+                    try
+                    {
+                        bankFilePath = await assetLoader.GetAssetPathAsync(relativeRemotePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[FmodAudioBackend] Ошибка загрузки банка '{cleanBankName}' с CDN: {ex.Message}");
+                    }
                 }
             }
 
@@ -162,7 +174,7 @@ namespace Fodinae.Scripts.Audio.Backend
             }
         }
 
-        public AudioPlaybackHandle CreateVoice(string eventName, AudioLayer layer, Vector3? worldPosition, GameObject targetGameObject = null)
+        public AudioPlaybackHandle? CreateVoice(string eventName, AudioLayer layer, Vector3? worldPosition, GameObject? targetGameObject = null)
         {
             if (string.IsNullOrEmpty(eventName))
             {
@@ -211,7 +223,7 @@ namespace Fodinae.Scripts.Audio.Backend
             return new AudioPlaybackHandle(instance, layer.Bus);
         }
 
-        public AudioPlaybackHandle PlaySnapshot(string snapshotPath)
+        public AudioPlaybackHandle? PlaySnapshot(string snapshotPath)
         {
             string fullPath = snapshotPath.StartsWith("snapshot:/", StringComparison.OrdinalIgnoreCase) || snapshotPath.StartsWith("event:/", StringComparison.OrdinalIgnoreCase)
                 ? snapshotPath

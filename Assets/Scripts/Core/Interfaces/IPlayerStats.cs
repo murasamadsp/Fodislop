@@ -1,13 +1,42 @@
-using System;
-using MinesServer.Data;
+#nullable enable
 
-namespace Fodinae.Scripts.Core.Interfaces
+using System;
+using System.Collections.Generic;
+using MinesServer.Data;
+using UnityEngine;
+
+namespace Fodinae.Core.Interfaces
 {
+    using Fodinae.UI.HUD.Player.Model;
     public interface IPlayerStats
     {
         int Health { get; }
         int MaxHealth { get; }
+        float HealthPercent { get; }
         string Nickname { get; }
+        long Level { get; }
+        long Money { get; }
+        long Creds { get; }
+        int GeologyCurrent { get; }
+        int GeologyMax { get; }
+        string GeologyText { get; }
+        uint BasketCapacity { get; }
+        long[] BasketContents { get; }
+        int BasketMaxPercent { get; }
+        void SetBasket(uint capacity, long[] contents);
+        IReadOnlyDictionary<string, StatusLineEntry> StatusLines { get; }
+        int OnlinePlayers { get; }
+        int OnlineProgrammator { get; }
+        int ClanId { get; }
+        int MaxDepth { get; }
+        int CurrentDepth { get; }
+        bool IsMissionActive { get; }
+        string MissionTitle { get; }
+        string MissionDescription { get; }
+        long MissionProgress { get; }
+        long MissionMaxProgress { get; }
+        bool DailyBonusAvailable { get; }
+
         void SetLevel(long level);
         void SetHealth(int current, int max);
         void SetCurrency(long money, long creds);
@@ -21,12 +50,20 @@ namespace Fodinae.Scripts.Core.Interfaces
         void SetMissionProgress(long current);
         void SetMissionMaxProgress(long max);
         void ClearMission();
-        void SetBasket(uint capacity, long[] contents);
-        void AddStatusLine(string tag, string[] text, UnityEngine.Color color, byte blinkRate, long expiry);
+        void SetOnline(int players, int programmator);
+        void AddStatusLine(string tag, string[] text, Color color, byte blinkRate, long expiry);
         void RemoveStatusLine(string tag);
         void ClearStatusLines();
-        void SetOnline(int players, int programmator);
         event Action OnStatsChanged;
         event Action OnHealthChanged;
+        event Action OnCurrencyChanged;
+        event Action OnGeologyChanged;
+        event Action OnLevelChanged;
+        event Action OnNicknameChanged;
+        event Action OnBasketChanged;
+        event Action<SkillType, long, long> OnSkillProgress;
+        event Action OnDailyBonusChanged;
+        event Action OnMissionChanged;
+        event Action OnStatusLinesChanged;
     }
 }

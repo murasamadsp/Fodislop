@@ -1,9 +1,11 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.IO;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
     public static class ItemRegistry
     {
@@ -17,7 +19,7 @@ namespace Fodinae.Scripts.Game.Managers
 
         public static IEnumerable<ItemType> AllTypes => (ItemType[])System.Enum.GetValues(typeof(ItemType));
 
-        public static Texture2D GetIcon(ItemType type)
+        public static Texture2D? GetIcon(ItemType type)
         {
             if (_iconCache.TryGetValue(type, out var t))
             {
@@ -45,9 +47,28 @@ namespace Fodinae.Scripts.Game.Managers
             }
 
             var tex = new Texture2D(2, 2);
-            tex.LoadImage(File.ReadAllBytes(path));
+            if (!tex.LoadImage(File.ReadAllBytes(path), markNonReadable: true))
+            {
+                Object.Destroy(tex);
+                return null;
+            }
+
             _iconCache[type] = tex;
             return tex;
+        }
+
+        public static void Clear()
+        {
+            foreach (var texture in _iconCache.Values)
+            {
+                if (texture != null)
+                {
+                    Object.Destroy(texture);
+                }
+            }
+
+            _iconCache.Clear();
+            _missingIconWarned.Clear();
         }
     }
 }

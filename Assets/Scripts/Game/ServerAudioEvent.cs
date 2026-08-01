@@ -1,20 +1,24 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.Effekseer;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.World;
+using Fodinae.Audio.Backend;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Effekseer;
+using Fodinae.Game.Managers;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game
+namespace Fodinae.Game
 {
     /// <summary>
     /// Единый контроллер эффекта мира (SFX/VFX).
@@ -30,9 +34,9 @@ namespace Fodinae.Scripts.Game
         private readonly ushort _targetBotId;
         private readonly IReadOnlyList<StringPairPacket> _parameters;
 
-        private VFXPool.PooledSlot _slot;
-        private GameObject _gameObject;
-        private SpriteRenderer _spriteRenderer;
+        private VFXPool.PooledSlot? _slot;
+        private GameObject? _gameObject;
+        private SpriteRenderer? _spriteRenderer;
 
         private Color _primaryColor = Color.white;
         private float _speed = 1f;
@@ -44,11 +48,12 @@ namespace Fodinae.Scripts.Game
         private ushort _attractorY;
         private bool _hasAttractorPosition;
 
-        private Dictionary<string, string> _textureOverrideMap;
+        private Dictionary<string, string>? _textureOverrideMap;
 
-        private float[] _effekseerDynamicInputs;
+        private float[]? _effekseerDynamicInputs;
 
-        private Sprite[] _animationFrames;
+        private Sprite[]? _animationFrames;
+        private Sprite? _ownedStaticSprite;
         private int _currentFrame;
         private float _frameTimer;
         private float _frameDuration = 0.1f;
@@ -63,11 +68,12 @@ namespace Fodinae.Scripts.Game
         private Vector3 _intendedWorldPosition;
 
         private EffekseerHandle _effekseerHandle;
+        private EffekseerEffectAsset? _effekseerAsset;
         private bool _hasEffekseerEffect;
 
         private readonly CancellationTokenSource _cts = new();
 
-        public ServerAudioEvent(AudioPacket packet, VFXPool.PooledSlot slot)
+        public ServerAudioEvent(AudioPacket packet, VFXPool.PooledSlot? slot)
         {
             _effectType = packet.EffectType;
             _sourceX = packet.X;
@@ -133,7 +139,7 @@ namespace Fodinae.Scripts.Game
             {
                 if (_hasSourceBot)
                 {
-                    var sourceBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_sourceBotId);
+                    var sourceBot = ServiceLocator.Resolve<IRobotService>()?.GetOrCreateRobot(_sourceBotId);
                     if (sourceBot != null)
                     {
                         _effekseerHandle.SetLocation(sourceBot.transform.position);
@@ -142,7 +148,7 @@ namespace Fodinae.Scripts.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -311,7 +317,8 @@ namespace Fodinae.Scripts.Game
 
             if (_hasSourceBot)
             {
-                var sourceBot = RobotManager.InstanceIfExists != null ? RobotManager.InstanceIfExists.GetOrCreateRobot(_sourceBotId) : null;
+                var service = ServiceLocator.Resolve<IRobotService>();
+                var sourceBot = service is RobotManager manager ? manager.GetOrCreateRobot(_sourceBotId) : null;
                 pos = sourceBot != null ? sourceBot.transform.position : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
             }
             else
@@ -328,7 +335,7 @@ namespace Fodinae.Scripts.Game
 
             if (_targetBotId != 0 && _gameObject != null)
             {
-                var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
+                var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle + 180f);
@@ -345,13 +352,14 @@ namespace Fodinae.Scripts.Game
 
         private void PlayAudio()
         {
-            if (AudioSystem.Instance == null)
+            var audioSystem = ServiceLocator.Resolve<IAudioSystem>();
+            if (audioSystem == null)
             {
                 return;
             }
 
             string eventName = GetSfxEventName(_effectType);
-            AudioSystem.Instance.PlayAt(eventName, _intendedWorldPosition);
+            audioSystem.PlayAt(eventName, _intendedWorldPosition);
         }
 
         private async UniTaskVoid LoadVisualAsync(CancellationToken token)
@@ -359,14 +367,14 @@ namespace Fodinae.Scripts.Game
             try
             {
                 var filename = $"VFX/{_effectType.ToString().ToLowerInvariant()}";
-                var loader = ClientAssetLoader.Instance;
+                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
                 if (loader == null)
                 {
                     MarkVisualCompleted();
                     return;
                 }
 
-                var animData = await loader.GetAnimatedSpritesAsync(filename, timeoutSeconds: 10);
+                var animData = await loader.GetAnimatedSpritesAsync(filename, token);
                 if (token.IsCancellationRequested)
                 {
                     return;
@@ -397,11 +405,12 @@ namespace Fodinae.Scripts.Game
                 {
                     if (_spriteRenderer != null)
                     {
-                        _spriteRenderer.sprite = Sprite.Create(
+                        _ownedStaticSprite = Sprite.Create(
                             texture,
                             new Rect(0, 0, texture.width, texture.height),
                             new Vector2(0.5f, 0.5f),
                             RenderingConstants.PIXELS_PER_UNIT);
+                        _spriteRenderer.sprite = _ownedStaticSprite;
                     }
 
                     _maxLifetime = 1f;
@@ -445,7 +454,6 @@ namespace Fodinae.Scripts.Game
                     {
                         if (_textureOverrideMap != null && _textureOverrideMap.TryGetValue(path, out var mapped))
                         {
-                            Debug.Log($"[ServerAudioEvent] Remapping texture '{path}' → '{mapped}' for effect '{_effectType}'");
                             return mapped;
                         }
 
@@ -455,6 +463,7 @@ namespace Fodinae.Scripts.Game
 
                 if (token.IsCancellationRequested)
                 {
+                    RuntimeEffekseerLoader.DestroyEffect(effectAsset);
                     return false;
                 }
 
@@ -465,6 +474,7 @@ namespace Fodinae.Scripts.Game
                 }
 
                 _effekseerHandle = EffekseerSystem.PlayEffect(effectAsset, _intendedWorldPosition);
+                _effekseerAsset = effectAsset;
 
                 if (_effekseerDynamicInputs != null)
                 {
@@ -476,7 +486,7 @@ namespace Fodinae.Scripts.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = RobotManager.InstanceIfExists?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -522,6 +532,9 @@ namespace Fodinae.Scripts.Game
             if (_hasEffekseerEffect)
             {
                 _effekseerHandle.Stop();
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
+                _effekseerAsset = null;
+                _hasEffekseerEffect = false;
             }
         }
 
@@ -537,12 +550,21 @@ namespace Fodinae.Scripts.Game
             if (_hasEffekseerEffect)
             {
                 _effekseerHandle.Stop();
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
+                _effekseerAsset = null;
+                _hasEffekseerEffect = false;
             }
 
             if (_slot != null)
             {
-                VFXPool.Instance?.Release(_slot);
+                ServiceLocator.Resolve<VFXPool>()?.Release(_slot);
                 _slot = null;
+            }
+
+            if (_ownedStaticSprite != null)
+            {
+                UnityEngine.Object.Destroy(_ownedStaticSprite);
+                _ownedStaticSprite = null;
             }
 
             _gameObject = null;

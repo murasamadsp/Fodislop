@@ -1,6 +1,8 @@
+#nullable enable
+
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     /// <summary>
     /// Result of decoding an animated sprite file (GIF/WebP).

@@ -1,16 +1,18 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class UIStack
     {
         private readonly UIDocument _doc;
         private readonly Stack<VisualElement> _stack = new();
 
-        public event Action OnStackEmpty;
+        public event Action? OnStackEmpty;
         public int Count => _stack.Count;
 
         public UIStack(UIDocument doc)

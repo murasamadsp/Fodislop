@@ -1,13 +1,15 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
-using Fodinae.Scripts;
+using Fodinae;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class PacketUIBuilderFactory
     {
@@ -30,7 +32,7 @@ namespace Fodinae.Scripts.UI.Builders
             _builders.Add(typeof(StringDropdownPacket), () => new StringDropdownPacketBuilder());
         }
 
-        public PacketUIBuilderBase CreateBuilder(IGUIComponentPacket packet)
+        public PacketUIBuilderBase? CreateBuilder(IGUIComponentPacket packet)
         {
             if (_builders.TryGetValue(packet.GetType(), out var builderFactory))
             {

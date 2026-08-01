@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -6,7 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     public class WorldLayer<T> : IDisposable
         where T : unmanaged
@@ -30,8 +32,9 @@ namespace Fodinae.Scripts
         private readonly LinkedList<int> _lruList;
         private readonly HashSet<int> _dirtyChunks;
         private readonly HashSet<int> _loadingChunks;
+        private bool _disposed;
 
-        private FileStream _fileStream;
+        private FileStream? _fileStream;
 
         public WorldLayer(string filePath, int WIDTH_CHUNKS, int HEIGHT_CHUNKS, int CHUNK_SIZE = 32, int maxRamChunks = 1000)
         {
@@ -91,6 +94,8 @@ namespace Fodinae.Scripts
             return _dirtyChunks.Count;
         }
 
+        public bool HasDirtyChunks => _dirtyChunks.Count > 0;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T GetCell(int x, int y, bool touchLru = true)
         {
@@ -99,7 +104,7 @@ namespace Fodinae.Scripts
                 return default;
             }
 
-            T[] chunk = GetChunk(chunkIndex, createIfMissing: false, touchLru: touchLru);
+            T[]? chunk = GetChunk(chunkIndex, createIfMissing: false, touchLru: touchLru);
             return chunk == null ? default : chunk[localIndex];
         }
 
@@ -110,9 +115,9 @@ namespace Fodinae.Scripts
                 return;
             }
 
-            T[] chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
+            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
 
-            if (!chunk[localIndex].Equals(value))
+            if (chunk != null && !EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
             {
                 chunk[localIndex] = value;
                 MarkDirty(chunkIndex);
@@ -120,9 +125,14 @@ namespace Fodinae.Scripts
         }
 
         // --- Core Paging Logic ---
-        public T[] GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
+        public T[]? GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
         {
-            if (_loadedChunks.TryGetValue(chunkIndex, out T[] chunk))
+            if (_disposed || chunkIndex < 0 || chunkIndex >= _chunkOffsets.Length)
+            {
+                return null;
+            }
+
+            if (_loadedChunks.TryGetValue(chunkIndex, out T[]? chunk))
             {
                 if (touchLru)
                 {
@@ -134,14 +144,32 @@ namespace Fodinae.Scripts
 
             if (createIfMissing)
             {
-                chunk = LoadChunkFromDisk(chunkIndex);
-                if (chunk == null)
+                try
                 {
-                    chunk = new T[_chunkArea];
-                }
+                    chunk = LoadChunkFromDisk(chunkIndex);
+                    if (chunk == null)
+                    {
+                        chunk = new T[_chunkArea];
+                    }
 
-                AddToCache(chunkIndex, chunk);
-                return chunk;
+                    AddToCache(chunkIndex, chunk);
+                    return chunk;
+                }
+                catch (IOException ioEx)
+                {
+                    Debug.LogError($"[WorldLayer] Could not load/create chunk {chunkIndex}: {ioEx.Message}");
+                    return null;
+                }
+                catch (UnauthorizedAccessException authEx)
+                {
+                    Debug.LogError($"[WorldLayer] Access denied for chunk {chunkIndex}: {authEx.Message}");
+                    return null;
+                }
+                catch (OutOfMemoryException)
+                {
+                    Debug.LogError($"[WorldLayer] Out of memory while loading chunk {chunkIndex}. Map update was skipped.");
+                    return null;
+                }
             }
             else
             {
@@ -155,17 +183,32 @@ namespace Fodinae.Scripts
             }
         }
 
-        public void Flush()
+        public void Flush(bool flushToDisk = false)
         {
             foreach (int index in _dirtyChunks)
             {
-                SaveChunkToDisk(index, _loadedChunks[index]);
+                if (_loadedChunks.TryGetValue(index, out T[]? chunk))
+                {
+                    SaveChunkToDisk(index, chunk);
+                }
             }
 
             _dirtyChunks.Clear();
             lock (_ioLock)
             {
-                _fileStream.Flush();
+                if (_fileStream == null)
+                {
+                    return;
+                }
+
+                if (flushToDisk)
+                {
+                    _fileStream.Flush(true);
+                }
+                else
+                {
+                    _fileStream.Flush();
+                }
             }
         }
 
@@ -181,7 +224,7 @@ namespace Fodinae.Scripts
                     if (_chunkOffsets[i] != -1)
                     {
                         var chunk = LoadChunkFromDisk(i);
-                        if (chunk != null)
+                        if (chunk != null && newLayer._fileStream != null)
                         {
                             newLayer._fileStream.Seek(0, SeekOrigin.End);
                             long newOffset = newLayer._fileStream.Position;
@@ -195,7 +238,7 @@ namespace Fodinae.Scripts
                 newLayer.SaveOffsetTable();
             }
 
-            _fileStream.Close();
+            _fileStream?.Close();
             File.Replace(tempPath, _filePath, null);
             InitializeFile(); // Re-open
         }
@@ -223,9 +266,14 @@ namespace Fodinae.Scripts
 
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             try
             {
-                Flush();
+                Flush(flushToDisk: true);
             }
             catch (IOException ioEx)
             {
@@ -248,6 +296,13 @@ namespace Fodinae.Scripts
             {
                 Debug.LogWarning($"[WorldLayer] I/O error closing stream during dispose: {ioEx.Message}");
             }
+
+            _disposed = true;
+            _loadedChunks.Clear();
+            _lruIndexMap.Clear();
+            _lruList.Clear();
+            _dirtyChunks.Clear();
+            _loadingChunks.Clear();
         }
 
         private static void ReadExactly(Stream stream, Span<byte> buffer)
@@ -313,6 +368,36 @@ namespace Fodinae.Scripts
 
             if (!valid)
             {
+                if (_fileStream.Length > 0)
+                {
+                    _fileStream.Dispose();
+                    _fileStream = null;
+
+                    string preservedPath = _filePath + $".corrupt.{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+                    bool preserved = false;
+                    try
+                    {
+                        File.Move(_filePath, preservedPath);
+                        preserved = true;
+                        Debug.LogError($"[WorldLayer] Invalid map file preserved as '{preservedPath}'. A new map file will be created.");
+                    }
+                    catch (IOException ioEx)
+                    {
+                        Debug.LogError($"[WorldLayer] Could not preserve invalid map file '{_filePath}': {ioEx.Message}");
+                    }
+                    catch (UnauthorizedAccessException authEx)
+                    {
+                        Debug.LogError($"[WorldLayer] Could not preserve invalid map file '{_filePath}': {authEx.Message}");
+                    }
+
+                    if (!preserved)
+                    {
+                        throw new IOException($"Invalid map file '{_filePath}' could not be preserved safely.");
+                    }
+
+                    _fileStream = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);
+                }
+
                 Array.Fill(_chunkOffsets, -1);
                 _fileStream.SetLength(0);
                 _fileStream.Seek(0, SeekOrigin.Begin);
@@ -329,7 +414,7 @@ namespace Fodinae.Scripts
 
         private async Cysharp.Threading.Tasks.UniTaskVoid LoadChunkAsync(int chunkIndex)
         {
-            T[] chunk = null;
+            T[]? chunk = null;
             try
             {
                 chunk = await Cysharp.Threading.Tasks.UniTask.RunOnThreadPool(() => LoadChunkFromDisk(chunkIndex));
@@ -342,12 +427,44 @@ namespace Fodinae.Scripts
             {
                 Debug.LogWarning($"[WorldLayer] Stream disposed while loading chunk {chunkIndex}: {disposedEx.Message}");
             }
+            catch (UnauthorizedAccessException authEx)
+            {
+                Debug.LogError($"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
+            }
+            catch (OutOfMemoryException)
+            {
+                Debug.LogError($"[WorldLayer] Out of memory while loading chunk {chunkIndex}.");
+            }
 
             await Cysharp.Threading.Tasks.UniTask.SwitchToMainThread();
 
+            if (_disposed)
+            {
+                _loadingChunks.Remove(chunkIndex);
+                return;
+            }
+
+            // A synchronous request may have filled this slot while the disk
+            // read was in flight. Do not overwrite it and, more importantly,
+            // do not append a second LRU node for the same chunk.
+            if (_loadedChunks.ContainsKey(chunkIndex))
+            {
+                _loadingChunks.Remove(chunkIndex);
+                return;
+            }
+
             if (chunk == null)
             {
-                chunk = new T[_chunkArea];
+                try
+                {
+                    chunk = new T[_chunkArea];
+                }
+                catch (OutOfMemoryException)
+                {
+                    Debug.LogError($"[WorldLayer] Out of memory while allocating chunk {chunkIndex}.");
+                    _loadingChunks.Remove(chunkIndex);
+                    return;
+                }
             }
 
             AddToCache(chunkIndex, chunk);
@@ -356,6 +473,18 @@ namespace Fodinae.Scripts
 
         private void AddToCache(int chunkIndex, T[] chunk)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_lruIndexMap.TryGetValue(chunkIndex, out var existingNode))
+            {
+                _lruList.Remove(existingNode);
+                _lruIndexMap.Remove(chunkIndex);
+                _loadedChunks.Remove(chunkIndex);
+            }
+
             if (_loadedChunks.Count >= _maxChunksInMemory)
             {
                 EvictOldestChunk();
@@ -399,10 +528,10 @@ namespace Fodinae.Scripts
             _dirtyChunks.Add(chunkIndex);
         }
 
-        private T[] LoadChunkFromDisk(int index)
+        private T[]? LoadChunkFromDisk(int index)
         {
             long offset = _chunkOffsets[index];
-            if (offset < 0)
+            if (offset < 0 || _fileStream == null)
             {
                 return null;
             }
@@ -417,6 +546,11 @@ namespace Fodinae.Scripts
 
         private void SaveChunkToDisk(int index, T[] chunk)
         {
+            if (_fileStream == null)
+            {
+                return;
+            }
+
             lock (_ioLock)
             {
                 _fileStream.Seek(0, SeekOrigin.End);
@@ -486,6 +620,11 @@ namespace Fodinae.Scripts
 
         private void SaveOffsetTable()
         {
+            if (_fileStream == null)
+            {
+                return;
+            }
+
             _fileStream.Seek(HEADER_SIZE, SeekOrigin.Begin);
             var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
             _fileStream.Write(byteSpan);

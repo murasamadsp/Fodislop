@@ -1,17 +1,16 @@
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI.HUD.Player.Model;
-using MinesServer.Networking.Server.Packets.Mission;
-using UnityEngine;
+#nullable enable
 
-namespace Fodinae.Scripts.Networking.Processors
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using MinesServer.Networking.Server.Packets.Mission;
+
+namespace Fodinae.Networking.Processors
 {
     public class MissionProcessor : IPacketProcessor<MissionInitPacket>, IPacketProcessor<MissionProgressPacket>
     {
-        private static IPlayerStats Stats => PlayerStatsModel.Instance;
-
         public void Process(MissionInitPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s == null)
             {
                 return;
@@ -28,7 +27,7 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(MissionProgressPacket packet)
         {
-            var s = Stats;
+            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (s == null)
             {
                 return;

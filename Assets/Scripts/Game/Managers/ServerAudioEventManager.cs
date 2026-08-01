@@ -1,26 +1,44 @@
+#nullable enable
+
 using System.Collections.Generic;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
-    public class ServerAudioEventManager : MonoBehaviour
+    public class ServerAudioEventManager : MonoBehaviour, IServerAudioService
     {
-        private static ServerAudioEventManager _instance;
-        public static ServerAudioEventManager Instance => _instance;
-        public static ServerAudioEventManager InstanceIfExists => _instance;
-
         private const string TAG = "[ServerAudioEventManager]";
         private readonly List<ServerAudioEvent> _activeEffects = new();
 
         public void PlayEffect(AudioPacket packet)
         {
-            var slot = VFXPool.Instance != null ? VFXPool.Instance.Acquire(packet.EffectType) : null;
+            var vfxType = MapAudioToVFX(packet.EffectType);
+            var vfxPool = ServiceLocator.Resolve<IVFXService>() as VFXPool;
+            var slot = vfxPool != null ? vfxPool.Acquire(vfxType) : null;
 
             var effect = new ServerAudioEvent(packet, slot);
             _activeEffects.Add(effect);
+        }
+
+        private static VFXType MapAudioToVFX(global::MinesServer.Data.SFX audioType)
+        {
+            // Enum is logically fixed on client, but server can extend it at any time.
+            // Unknown values must NOT be silently dropped — they should flow through
+            // as Custom so client can request/display them by numeric id rather than
+            // treating them as "no effect".
+            return audioType switch
+            {
+                global::MinesServer.Data.SFX.Bz => VFXType.Bz,
+                global::MinesServer.Data.SFX.Destroy => VFXType.Destroy,
+                global::MinesServer.Data.SFX.Death => VFXType.Death,
+                _ => VFXType.Custom,
+            };
         }
 
         public void ClearAllEffects()
@@ -38,18 +56,8 @@ namespace Fodinae.Scripts.Game.Managers
             }
         }
 
-        protected void Awake()
-        {
-            _instance = this;
-        }
-
         protected void OnDestroy()
         {
-            if (_instance != this)
-            {
-                return;
-            }
-
             ClearAllEffects();
         }
 

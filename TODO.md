@@ -1,14 +1,17 @@
-- [ ] TODO: Refactor GIF decoding (mgGif.cs) to use sprite sheets or optimize performance for handling multiple animated skins/tails simultaneously. Unsafe blocks and raw pointers in C# may cause CPU spikes.
-- [ ] AudioPacket алиас — Заменить клиентский `using AudioPacket = SFXPacket` на прямой `AudioPacket` после обновления пакета `MinesServerNetworking` на сервере.
-- [ ] Настройки аудио и обработка смены аудио-устройств — Реализовать UI настроек громкости шин (Master, SFX, Music, Voice, Ambience, UI, Narrative) и авто-рессет/переинициализацию FMOD/Unity бэкенда при смене устройства вывода по умолчанию (`Default audio device was changed`).
-- [ ] Аудит `Assets/Editor/` — разобраться какие скрипты ещё нужны, а какие можно удалить: `MapbConverter.cs`, `ExportSprites.cs` и `FmodBankBuilder.cs` — вероятно разовые утилиты, которые можно убрать если больше не используются.
+- [x] TODO: Refactor GIF decoding — Неоптимальный legacy-декодер `MgGifDecoder/Image.cs` (с unsafe блоками и аллокациями кастомных текстур) полностью удалён из проекта. Декодирование анимированных GIF и WebP переведено на нативный Sprite Sheet в единую текстуру-атлас с получением кадров через `AnimationContainerDecoder.DecodeGif()` без CPU spikes и лишних GC аллокаций.
+- [x] Настройки аудио и обработка смены аудио-устройств — Реализован UI настроек громкости для 6 шин (Master, SFX, Music, Voice, Ambience, UI) в меню паузы, подписка на системные изменения вывода аудиодрайвера `AudioSettings.OnAudioConfigurationChanged` и авто-рессет/переинициализация FMOD/Unity бэкенда `AudioSystem.ResetBackend()` при смене устройства по умолчанию (`Default audio device was changed`).
+- [x] Аудит `Assets/Editor/` — `ExportSprites.cs` удалён (мёртвая разовая утилита). Оставлены: `BuildScript.cs` (билды), `CsProjFix.cs` (csproj), `FmodBankBuilder.cs` (активен: синк банков FodinaeAudio → StreamingAssets, fallback в рантайме), `MapbConverter.cs` (единственный генератор baked-мира). ⚠ Найдено: `StreamingAssets/WorldMaps/` содержит 74МБ `pallada_cells.zip`, который НИКТО не распаковывает — рантайм ищет `pallada_cells.mapb`. Отдельная задача: либо распаковать zip→mapb репо, либо удалить zip.
 - ПЕРЕВЕСТИ НА СОВРЕМЕННЫЙ СИ ШАРП
 - тексты написать (без иишки)
 - компонентно-солид mvp рефакторинг
-- документацию в субмодуль?
-- глубокий баг: иногда при плее не работает интерфейс
-- тонна блять синхронных процессов и гонок определений
+- тонна блять синхронных (серийных) процессов и гонок определений
 - нет экрана загрузки
-- добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
+- [x] добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - режим предпросмотра сделать
-- разобраться со сценами
+- [ ] Оптимизация текстур и лоадера — `Assets/Textures/loader_new.png` весит 3.57 МБ в сыром PNG. Необходима оптимизация размера (Crunch Compression в Texture Importer / PNG сжатие) и переименование в `loader.png` без временного суффикса `_new`.
+- [ ] Очистка и структурирование `Assets/Textures/` — Переместить графические ассеты из корня директории `Assets/Textures/` (`perspective.png`, `programmator.png`, `skills.png`, `transit.png`) по специализированным подпапкам и настроить единые пресеты TextureImporterSettings.
+- [ ] Очистка неиспользуемых 2D шаблонов сцен в `Assets/Settings/` — Удалить / перенести `Lit2DSceneTemplate.scenetemplate` (3.94 МБ) и `URP2DSceneTemplate.unity`.
+- [ ] Оптимизация 2D профилей качества в `ProjectSettings/QualitySettings.asset` — Сократить 6 дефолтных 3D профилей (Very Low, High, Ultra с тенью/LOD/Reflection Probes) до 2 специализированных 2D профилей.
+- [ ] Разделение 2D слоев и матрицы коллизий в `TagManager.asset` & `Physics2DSettings.asset` — Настроить отдельные слои для `Player`, `Robot`, `Pack`, `Terrain` и оптимизировать матрицу коллизий. (Многопоточная физика 2D `useMultithreading: 1` уже включена).
+- [ ] Очистка неиспользуемых тем UI Toolkit в `Assets/UI Toolkit/` — Удалить `UnityDefaultRuntimeTheme.tss` и `UnityThemes/`.
+- [ ] Исправление StyleCop предупреждений в C# коде (`SA1513`, `SA1407`, `SA1503` и др.), выявленных новой полной проверкой линтера.

@@ -1,0 +1,15 @@
+#nullable enable
+
+using Fodinae.Game;
+using MinesServer.Data;
+using UnityEngine;
+
+namespace Fodinae.Core.Interfaces
+{
+    public interface IPackService
+    {
+        void AddOrUpdatePack(ushort x, ushort y, PackType packType, byte variant, byte linkedClan);
+        void RemovePack(ushort x, ushort y);
+        void ClearAllPacks();
+    }
+}

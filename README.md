@@ -8,7 +8,7 @@
 git clone https://github.com/MinesReborn/Fodinae.git
 ```
 
-Открой через **Unity Hub** → `Open` → выбери папку. Unity сам подтянет зависимости. Открой `Assets/Scenes/SampleScene.unity` и жми **Play**. Нет сервера? Включится автономный режим.
+Открой через **Unity Hub** → `Open` → выбери папку. Unity сам подтянет зависимости. Открой `Assets/Scenes/MainGame.unity` и жми **Play**. Нет сервера? Включится автономный режим.
 
 ## Что уже есть
 
@@ -27,7 +27,7 @@ git clone https://github.com/MinesReborn/Fodinae.git
 
 ## Технологии
 
-**Unity 6** (6000.2.10f1), URP 2D, UI Toolkit, FMOD Studio, UniTask, Effekseer.  
+**Unity 6** (6000.5.0f1), URP 2D, UI Toolkit, FMOD Studio, UniTask, Effekseer.  
 Сеть: Git-пакеты [MinesServerNetworking](https://github.com/MinesReborn/MinesServerNetworking).  
 
 Подробнее для разработчиков — в [**`AGENTS.md`**](AGENTS.md).

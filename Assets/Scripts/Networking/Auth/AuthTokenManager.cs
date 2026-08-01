@@ -1,13 +1,15 @@
+#nullable enable
+
 using System;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Auth
+namespace Fodinae.Networking.Auth
 {
     public static class AuthTokenManager
     {
         private const string PlayerPrefsKey = "AuthToken6";
 
-        public static event Action<string> OnTokenChanged;
+        public static event Action<string>? OnTokenChanged;
 
         public static string LoadToken() => PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
 

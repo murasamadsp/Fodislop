@@ -1,39 +1,17 @@
-using Fodinae.Scripts.Core;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI
+namespace Fodinae.UI
 {
     public class FloatingChatManager : MonoBehaviour
     {
-        private static FloatingChatManager _instance;
-        public static FloatingChatManager Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = FindAnyObjectByType<FloatingChatManager>();
-                }
-
-                return _instance;
-            }
-        }
-
-        private Camera _camera;
-        private FloatingChatBubble _bubblePrefab;
+        private Camera? _camera;
+        private FloatingChatBubble? _bubblePrefab;
         private readonly System.Collections.Generic.List<FloatingChatBubble> _activeBubbles = new();
-
-        protected void Awake()
-        {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            _instance = this;
-        }
 
         protected void Start()
         {
@@ -58,13 +36,19 @@ namespace Fodinae.Scripts.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
-            var robot = Game.Managers.RobotManager.Instance.GetOrCreateRobot(packet.BotId);
+            var robotManager = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
+            var robot = robotManager?.GetOrCreateRobot(packet.BotId);
             if (robot == null)
             {
                 return;
             }
 
             if (!IsInCameraView(robot.transform.position))
+            {
+                return;
+            }
+
+            if (_bubblePrefab == null)
             {
                 return;
             }

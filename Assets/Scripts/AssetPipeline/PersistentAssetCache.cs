@@ -1,15 +1,17 @@
+#nullable enable
+
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Fodinae.Scripts
+namespace Fodinae
 {
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any I/O failure without crashing the asset loading pipeline.")]
     public static class PersistentAssetCache
     {
-        private static string _cachePath;
+        private static string _cachePath = string.Empty;
         private static bool _isInitialized = false;
 
         static PersistentAssetCache()
@@ -21,7 +23,7 @@ namespace Fodinae.Scripts
         //  Public API
         // ═══════════════════════════════════════════════════════════
 
-        public static byte[] GetAsset(string filename)
+        public static byte[]? GetAsset(string filename)
         {
             try
             {
@@ -48,7 +50,7 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static async Task<byte[]> GetAssetAsync(string filename)
+        public static async Task<byte[]?> GetAssetAsync(string filename)
         {
             try
             {
@@ -102,10 +104,8 @@ namespace Fodinae.Scripts
                     Directory.CreateDirectory(directory);
                 }
 
-                File.WriteAllBytes(assetPath, data);
-                File.WriteAllText(etagPath, etag ?? string.Empty);
-
-                Debug.Log($"[PersistentAssetCache] Successfully saved asset: {filename}");
+                WriteAtomically(assetPath, data);
+                WriteAtomically(etagPath, etag ?? string.Empty);
             }
             catch (Exception ex)
             {
@@ -141,10 +141,8 @@ namespace Fodinae.Scripts
                     Directory.CreateDirectory(directory);
                 }
 
-                await File.WriteAllBytesAsync(assetPath, data);
-                await File.WriteAllTextAsync(etagPath, etag ?? string.Empty);
-
-                Debug.Log($"[PersistentAssetCache] Successfully saved asset: {filename}");
+                await WriteAtomicallyAsync(assetPath, data);
+                await WriteAtomicallyAsync(etagPath, etag ?? string.Empty);
             }
             catch (Exception ex)
             {
@@ -153,7 +151,7 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static string GetETag(string filename)
+        public static string? GetETag(string filename)
         {
             try
             {
@@ -180,7 +178,7 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static async Task<string> GetETagAsync(string filename)
+        public static async Task<string?> GetETagAsync(string filename)
         {
             try
             {
@@ -295,8 +293,77 @@ namespace Fodinae.Scripts
             }
         }
 
-        public static string GetAssetPath(string filename) => Path.Combine(_cachePath, filename.TrimStart('/'));
+        public static string GetAssetPath(string filename)
+        {
+            InitializeCachePath();
 
-        private static string GetETagPath(string filename) => Path.Combine(_cachePath, filename.TrimStart('/') + ".etag");
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                throw new ArgumentException("Asset filename cannot be empty.", nameof(filename));
+            }
+
+            var relative = filename.Replace('\\', '/').TrimStart('/');
+            var fullPath = Path.GetFullPath(Path.Combine(_cachePath, relative));
+            var cacheRoot = Path.GetFullPath(_cachePath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+            if (!fullPath.StartsWith(cacheRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Asset filename escapes the persistent cache directory.", nameof(filename));
+            }
+
+            return fullPath;
+        }
+
+        private static string GetETagPath(string filename) => GetAssetPath(filename) + ".etag";
+
+        private static void WriteAtomically(string path, byte[] data)
+        {
+            var temporaryPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.WriteAllBytes(temporaryPath, data);
+                ReplaceFile(temporaryPath, path);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private static void WriteAtomically(string path, string value) => WriteAtomically(path, System.Text.Encoding.UTF8.GetBytes(value));
+
+        private static async Task WriteAtomicallyAsync(string path, byte[] data)
+        {
+            var temporaryPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                await File.WriteAllBytesAsync(temporaryPath, data);
+                ReplaceFile(temporaryPath, path);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private static Task WriteAtomicallyAsync(string path, string value) =>
+            WriteAtomicallyAsync(path, System.Text.Encoding.UTF8.GetBytes(value));
+
+        private static void ReplaceFile(string temporaryPath, string destinationPath)
+        {
+            if (File.Exists(destinationPath))
+            {
+                File.Replace(temporaryPath, destinationPath, null);
+                return;
+            }
+
+            File.Move(temporaryPath, destinationPath);
+        }
     }
 }

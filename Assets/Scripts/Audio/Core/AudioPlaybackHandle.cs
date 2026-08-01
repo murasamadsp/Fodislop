@@ -1,7 +1,9 @@
+#nullable enable
+
 using System;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Audio.Core
+namespace Fodinae.Audio.Core
 {
     /// <summary>
     /// Хендл активного проигрывания — возвращается методом AudioSystem.Play().

@@ -3,12 +3,12 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Unity
 {
-    sealed class ExistingComponentProvider : IInstanceProvider
+    internal sealed class ExistingComponentProvider : IInstanceProvider
     {
-        readonly object instance;
-        readonly IInjector injector;
-        readonly IReadOnlyList<IInjectParameter> customParameters;
-        readonly bool dontDestroyOnLoad;
+        private readonly object instance;
+        private readonly IInjector injector;
+        private readonly IReadOnlyList<IInjectParameter> customParameters;
+        private readonly bool dontDestroyOnLoad;
 
         public ExistingComponentProvider(
             object instance,
@@ -34,10 +34,12 @@ namespace VContainer.Unity
                 }
                 else
                 {
-                    throw new VContainerException(instance.GetType(),
+                    throw new VContainerException(
+                        instance.GetType(),
                         $"Cannot apply `DontDestroyOnLoad`. {instance.GetType().Name} is not a UnityEngine.Object");
                 }
             }
+
             return instance;
         }
     }

@@ -1,18 +1,22 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     public class SurfaceRenderer : MonoBehaviour
     {
         [Header("Materials")]
         [SerializeField]
-        private Material _transitMaterial;
+        private Material? _transitMaterial;
         [SerializeField]
-        private Material _perspectiveMaterial;
+        private Material? _perspectiveMaterial;
 
         [Header("Settings")]
         [SerializeField]
@@ -27,14 +31,14 @@ namespace Fodinae.Scripts.World
         private const float TRANSIT_HEIGHT = 2f;
         private const float PERSPECTIVE_HEIGHT = 2f;
         private const float TILE_SIZE = 32f;
-        private const float PERSPECTIVE_OFFSET = 32f;
-
-        private Mesh _transitMesh;
-        private Mesh _perspectiveMesh;
-        private MeshFilter _transitFilter;
-        private MeshFilter _perspectiveFilter;
-        private MeshRenderer _transitRenderer;
-        private MeshRenderer _perspectiveRenderer;
+        private Mesh? _transitMesh;
+        private Mesh? _perspectiveMesh;
+        private MeshFilter? _transitFilter;
+        private MeshFilter? _perspectiveFilter;
+        private MeshRenderer? _transitRenderer;
+        private MeshRenderer? _perspectiveRenderer;
+        private bool _ownsTransitMaterial;
+        private bool _ownsPerspectiveMaterial;
 
         private readonly Vector2[] _uvTransit = new Vector2[4];
         private readonly Vector2[] _uvPers = new Vector2[4];
@@ -42,8 +46,12 @@ namespace Fodinae.Scripts.World
         private readonly Vector3[] _verticesPers = new Vector3[4];
         private static readonly int[] Triangles = { 0, 1, 2, 3, 2, 1 };
 
-        private Camera _mainCamera;
+        private Camera? _mainCamera;
         private bool _texturesLoading;
+        private float _lastCameraX = float.NaN;
+        private float _lastCameraOrthoSize = float.NaN;
+        private float _lastCameraAspect = float.NaN;
+        private int _lastWorldHeight = int.MinValue;
 
 
         protected void Start()
@@ -77,15 +85,19 @@ namespace Fodinae.Scripts.World
             if (_transitMaterial == null)
             {
                 _transitMaterial = CreateDefaultMaterial();
+                _ownsTransitMaterial = true;
             }
 
             if (_perspectiveMaterial == null)
             {
                 _perspectiveMaterial = CreateDefaultMaterial();
+                _ownsPerspectiveMaterial = true;
             }
 
-            _transitRenderer.material = _transitMaterial;
-            _perspectiveRenderer.material = _perspectiveMaterial;
+            // These materials are owned by the component. Using .material
+            // would ask Unity to instantiate another material per renderer.
+            _transitRenderer.sharedMaterial = _transitMaterial;
+            _perspectiveRenderer.sharedMaterial = _perspectiveMaterial;
 
             LoadTexturesAsync().Forget();
         }
@@ -108,7 +120,7 @@ namespace Fodinae.Scripts.World
 
             try
             {
-                var loader = ClientAssetLoader.Instance;
+                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
                 if (loader != null)
                 {
                     var transitTex = await loader.GetTextureAsync(_transitTexturePath);
@@ -141,14 +153,30 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
-            if (MapManager.Instance == null)
+            var mapManager = ServiceLocator.Resolve<MapManager>();
+            if (mapManager == null)
             {
                 return;
             }
 
-            int worldHeight = MapManager.Instance.WorldHeight;
+            int worldHeight = mapManager.WorldHeight;
             float camX = _mainCamera.transform.position.x;
-            float halfScreenW = _mainCamera.orthographicSize * _mainCamera.aspect;
+            float cameraOrthoSize = _mainCamera.orthographicSize;
+            float cameraAspect = _mainCamera.aspect;
+            if (Mathf.Approximately(_lastCameraX, camX) &&
+                Mathf.Approximately(_lastCameraOrthoSize, cameraOrthoSize) &&
+                Mathf.Approximately(_lastCameraAspect, cameraAspect) &&
+                _lastWorldHeight == worldHeight)
+            {
+                return;
+            }
+
+            _lastCameraX = camX;
+            _lastCameraOrthoSize = cameraOrthoSize;
+            _lastCameraAspect = cameraAspect;
+            _lastWorldHeight = worldHeight;
+
+            float halfScreenW = cameraOrthoSize * cameraAspect;
 
             float left = camX - halfScreenW;
             float right = camX + halfScreenW;
@@ -160,6 +188,11 @@ namespace Fodinae.Scripts.World
 
         private void UpdateTransit(float left, float right, float baseY, float camX)
         {
+            if (_transitMesh == null)
+            {
+                return;
+            }
+
             float uLeft = -(left - (Mathf.Floor(left / TILE_SIZE) * TILE_SIZE)) / TILE_SIZE;
             float uRight = uLeft + ((left - right) / TILE_SIZE);
 
@@ -180,6 +213,11 @@ namespace Fodinae.Scripts.World
 
         private void UpdatePerspective(float left, float right, float baseY, float camX)
         {
+            if (_perspectiveMesh == null)
+            {
+                return;
+            }
+
             const float PERS_TILE_SIZE = 5f;
             float uLeft = -(left - (Mathf.Floor(left / PERS_TILE_SIZE) * PERS_TILE_SIZE)) / PERS_TILE_SIZE;
             float uRight = uLeft + ((left - right) / PERS_TILE_SIZE);
@@ -206,6 +244,29 @@ namespace Fodinae.Scripts.World
 
         protected void OnDestroy()
         {
+            if (_transitMesh != null)
+            {
+                Destroy(_transitMesh);
+                _transitMesh = null;
+            }
+
+            if (_perspectiveMesh != null)
+            {
+                Destroy(_perspectiveMesh);
+                _perspectiveMesh = null;
+            }
+
+            if (_ownsTransitMaterial && _transitMaterial != null)
+            {
+                Destroy(_transitMaterial);
+                _transitMaterial = null;
+            }
+
+            if (_ownsPerspectiveMaterial && _perspectiveMaterial != null)
+            {
+                Destroy(_perspectiveMaterial);
+                _perspectiveMaterial = null;
+            }
         }
     }
 }

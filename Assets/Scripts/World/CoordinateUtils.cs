@@ -1,7 +1,10 @@
-using Fodinae.Scripts.Game.Managers;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Game.Managers;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
     public static class CoordinateUtils
     {
@@ -22,9 +25,10 @@ namespace Fodinae.Scripts.World
             }
 
             _lastFrame = frame;
-            if (MapManager.Instance != null && MapManager.Instance.WorldHeight > 0)
+            var mm = ServiceLocator.Resolve<MapManager>();
+            if (mm != null && mm.WorldHeight > 0)
             {
-                _cachedHeight = MapManager.Instance.WorldHeight;
+                _cachedHeight = mm.WorldHeight;
             }
             else
             {

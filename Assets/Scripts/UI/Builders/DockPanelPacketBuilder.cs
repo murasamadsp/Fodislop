@@ -1,17 +1,19 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts;
+using Fodinae;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class DockPanelPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not DockPanelPacket dpp)
             {
@@ -35,11 +37,14 @@ namespace Fodinae.Scripts.UI.Builders
             parent.style.flexGrow = 0;
 
             var lastChild = children.LastOrDefault(c => c.AttachedProperties == null || c.AttachedProperties.All(p => p.Key != "DockPanel.Dock"));
-            VisualElement current;
+            VisualElement? current;
             if (lastChild != null)
             {
                 current = builder.Build(lastChild);
-                current.style.flexGrow = 1;
+                if (current != null)
+                {
+                    current.style.flexGrow = 1;
+                }
             }
             else
             {
@@ -53,7 +58,7 @@ namespace Fodinae.Scripts.UI.Builders
                     continue;
                 }
 
-                var childElement = builder.Build(childPacket);
+                var childElement = builder.Build(childPacket)!;
                 var dock = Dock.Left;
                 var dockProp = childPacket.AttachedProperties?.FirstOrDefault(p => p.Key == "DockPanel.Dock");
                 if (dockProp != null)

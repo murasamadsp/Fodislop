@@ -121,3 +121,196 @@
 .inventory-context-item:hover {
     background-color: var(--btn-hover);
 }
+
+/* ─── Сетка и ячейки ─── */
+
+.inv-grid {
+    flex-direction: column;
+    align-items: center;
+}
+
+.inv-grid-row {
+    flex-direction: row;
+}
+
+.inv-cell {
+    width: 50px;
+    height: 50px;
+    justify-content: center;
+    align-items: center;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    background-color: rgb(38, 38, 38);
+    border-width: 2px;
+    border-color: rgb(102, 102, 102);
+}
+
+.inv-cell--selected {
+    border-width: 3px;
+    border-color: rgb(255, 214, 0);
+}
+
+.inv-cell--highlight {
+    background-color: rgb(89, 89, 89);
+}
+
+.inv-icon {
+    width: 36px;
+    height: 36px;
+    align-self: center;
+    justify-content: center;
+}
+
+.inv-qty {
+    position: absolute;
+    right: 3px;
+    bottom: 2px;
+    font-size: 12px;
+    color: white;
+}
+
+.inv-floating {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    opacity: 0.8;
+}
+
+/* ─── Кнопка инвентаря ─── */
+
+.inv-button {
+    width: 50px;
+    height: 50px;
+    margin-bottom: 10px;
+    background-color: rgb(178, 166, 128);
+    border-width: 2px;
+    border-color: rgb(102, 102, 102);
+    padding: 0;
+}
+
+.inv-button:hover {
+    background-color: rgb(204, 191, 153);
+}
+
+/* ─── Хотбар и полная панель ─── */
+
+.inv-hotbar {
+    position: absolute;
+    bottom: 10px;
+    flex-direction: row;
+    align-items: center;
+}
+
+.inv-full-panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.inv-full-bg {
+    background-color: rgba(20, 20, 20, 0.85);
+    border-width: 4px;
+    border-color: rgb(89, 89, 89);
+    padding: 20px;
+    flex-direction: column;
+    align-items: center;
+}
+
+.inv-close-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 24px;
+    height: 24px;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    padding: 0;
+}
+
+.inv-close-label {
+    font-size: 20px;
+    color: rgb(178, 178, 178);
+    -unity-text-align: middle-center;
+    align-self: center;
+    justify-content: center;
+    flex-grow: 1;
+}
+
+.inv-title {
+    font-size: 18px;
+    -unity-font-style: bold;
+    color: white;
+    margin-bottom: 15px;
+    align-self: flex-start;
+}
+
+.inv-separator {
+    height: 2px;
+    background-color: rgb(89, 89, 89);
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+/* ─── Тултип выбранного предмета ─── */
+
+.inv-tooltip-wrapper {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 48px;
+    height: 36px;
+    flex-direction: row;
+    justify-content: center;
+}
+
+.inv-tooltip-bg {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(20, 20, 20, 0.9);
+    border-width: 2px;
+    border-color: rgb(89, 89, 89);
+    padding: 4px 8px;
+}
+
+.inv-tooltip-name {
+    font-size: 14px;
+    -unity-font-style: bold;
+    color: rgb(255, 214, 0);
+    margin-right: 10px;
+}
+
+.inv-tooltip-desc {
+    font-size: 12px;
+    color: white;
+}
+
+/* ─── Контекстное меню ─── */
+
+.inv-context-menu {
+    position: absolute;
+    background-color: rgba(31, 31, 31, 0.95);
+    border-width: 1px;
+    border-color: rgb(89, 89, 89);
+    padding: 4px 0;
+    flex-direction: column;
+    min-width: 160px;
+}
+
+.inv-context-btn {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    padding: 6px 12px;
+    color: white;
+    font-size: 13px;
+    -unity-text-align: middle-left;
+    min-height: 28px;
+}
+
+.inv-context-btn:hover {
+    background-color: rgb(64, 64, 89);
+}

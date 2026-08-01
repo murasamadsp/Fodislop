@@ -1,183 +1,109 @@
+#nullable enable
+
 using System;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Networking.Connection;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Connection;
+using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
-    /// <summary>
-    /// Handles standalone world initialization when no server connection is available
-    /// Automatically creates a test world to enable terrain rendering in standalone mode.
-    /// </summary>
     [RequireComponent(typeof(MapManager))]
-    [ExecuteAlways]
     public class StandaloneWorldInitializer : MonoBehaviour
     {
         [Header("Standalone Configuration")]
-        [Tooltip("Enable automatic standalone world creation")]
         [SerializeField]
         private bool _enableStandaloneMode = true;
 
-        [Tooltip("Test world dimensions")]
         [SerializeField]
         private int _testWorldWidth = 128;
 
         [SerializeField]
         private int _testWorldHeight = 128;
 
-        [Tooltip("Test world name")]
         [SerializeField]
         private string _testWorldName = "Standalone_Test_World";
 
-        [Tooltip("Check interval for initialization timeout")]
         [SerializeField]
         private float _checkInterval = 2.0f;
 
         [Header("Debug Settings")]
-        [Tooltip("Enable detailed logging")]
         [SerializeField]
         private bool _enableDebugLogging = true;
 
-        private MapManager _mapManager;
-        private float _lastCheckTime = 0f;
+        private MapManager? _mapManager;
         private bool _initializationAttempted = false;
         private bool _isInitialized = false;
+        private float _startTime;
 
-        /// <summary>
-        /// Force standalone initialization (for debugging).
-        /// </summary>
+        [ContextMenu("Force Standalone Initialization")]
         public void ForceStandaloneInitialization()
         {
-            Debug.Log("[StandaloneWorldInitializer] Force standalone initialization triggered");
             _initializationAttempted = false;
             _isInitialized = false;
-            _lastCheckTime = 0f;
-            enabled = true;
-            CancelInvoke(nameof(CheckInitializationTimeout));
-            Invoke(nameof(CheckInitializationTimeout), 0.1f);
-        }
-
-        /// <summary>
-        /// Get current initialization status.
-        /// </summary>
-        public string GetInitializationStatus()
-        {
-            if (!_enableStandaloneMode)
-            {
-                return "Standalone mode disabled";
-            }
-
-            if (_isInitialized)
-            {
-                return "Initialized successfully";
-            }
-
-            if (_initializationAttempted)
-            {
-                return "Initialization attempted";
-            }
-
-            return "Waiting for timeout";
-        }
-
-        /// <summary>
-        /// Check if standalone initialization is enabled and ready.
-        /// </summary>
-        public bool IsReady()
-        {
-            return _enableStandaloneMode && (_isInitialized || (MapStorage.Instance?.IsReady ?? false));
+            AttemptStandaloneInitialization();
         }
 
         protected void Awake()
         {
-            if (!_enableStandaloneMode)
+            if (!Application.isPlaying)
             {
-                return;
-            }
-
-            _mapManager = GetComponent<MapManager>();
-            if (_mapManager == null)
-            {
-                Debug.LogError("[StandaloneWorldInitializer] MapManager not found");
                 enabled = false;
                 return;
             }
 
-            if (Application.isPlaying)
+            _mapManager = GetComponent<MapManager>();
+            if (_enableDebugLogging)
             {
-                Debug.Log($"[StandaloneWorldInitializer] Initialized with test world: {_testWorldName} ({_testWorldWidth}x{_testWorldHeight})");
-            }
-        }
-
-        protected void Start()
-        {
-            if (!_enableStandaloneMode)
-            {
-                return;
+                Debug.Log("[StandaloneWorldInitializer] AWAKE CALLED");
             }
 
-            if (!Application.isPlaying)
+            if (!enabled)
             {
-                AttemptStandaloneInitialization();
-                return;
-            }
-
-            // For Play mode, trigger faster standalone check if we are disconnected
-            var cm = ConnectionManager.InstanceIfExists;
-            if (cm == null || cm.Connection == null ||
-                cm.Connection.ConnectionStatus != MinesServer.Networking.Shared.ConnectionStatus.Connected)
-            {
-                if (_enableDebugLogging)
-                {
-                    Debug.Log("[StandaloneWorldInitializer] Offline detected on Start, scheduling immediate standalone init");
-                }
-
-                Invoke(nameof(AttemptStandaloneInitialization), 0.5f);
-            }
-        }
-
-        protected void Update()
-        {
-            if (!_enableStandaloneMode || _isInitialized || !_initializationAttempted)
-            {
-                return;
-            }
-
-            // Check if MapStorage is ready after our initialization attempt
-            if (MapStorage.Instance != null && MapStorage.Instance.IsReady)
-            {
-                _isInitialized = true;
-                if (Application.isPlaying)
-                {
-                    Debug.Log("[StandaloneWorldInitializer] Standalone world initialization successful!");
-
-                    // Trigger MapManager events to notify other systems
-                    _mapManager.OnWorldInitialized?.Invoke();
-                    _mapManager.OnWorldDataLoaded?.Invoke();
-                }
-
-                enabled = false; // Disable further checks
+                enabled = true;
             }
         }
 
         protected void OnEnable()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
+            if (_enableDebugLogging)
+            {
+                Debug.Log("[StandaloneWorldInitializer] ONENABLE CALLED");
+            }
+
             if (!_enableStandaloneMode)
             {
                 return;
             }
 
-            if (Application.isPlaying)
+            _startTime = Time.time;
+            InvokeRepeating(nameof(CheckInitializationTimeout), _checkInterval, _checkInterval);
+        }
+
+        protected void Start()
+        {
+            if (!Application.isPlaying)
             {
-                // Start the initialization check process
-                InvokeRepeating(nameof(CheckInitializationTimeout), _checkInterval, _checkInterval);
+                return;
+            }
+
+            if (_enableDebugLogging)
+            {
+                Debug.Log("[StandaloneWorldInitializer] START CALLED");
             }
         }
 
         protected void OnDisable()
         {
-            CancelInvoke(nameof(CheckInitializationTimeout));
+            CancelInvoke();
         }
 
         private void CheckInitializationTimeout()
@@ -187,12 +113,11 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
-            // Check if MapManager has been initialized by server packets
-            if (_mapManager.IsWorldInitialized)
+            if (_mapManager != null && _mapManager.IsWorldInitialized)
             {
                 if (_enableDebugLogging)
                 {
-                    Debug.Log("[StandaloneWorldInitializer] World already initialized by server, skipping standalone mode");
+                    Debug.Log("[StandaloneWorldInitializer] World already initialized, skipping standalone mode");
                 }
 
                 _isInitialized = true;
@@ -200,8 +125,19 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
-            // Check if enough time has passed without server initialization
-            if (Time.time - _lastCheckTime >= _checkInterval * 3) // Wait 6 seconds before attempting standalone init
+            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
+            if (cm != null && cm.Connection != null &&
+                cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected)
+            {
+                if (_enableDebugLogging)
+                {
+                    Debug.Log("[StandaloneWorldInitializer] Server connected, waiting for world data");
+                }
+
+                return;
+            }
+
+            if (Time.time - _startTime >= _checkInterval * 3)
             {
                 AttemptStandaloneInitialization();
             }
@@ -211,24 +147,28 @@ namespace Fodinae.Scripts.World
         {
             if (_initializationAttempted)
             {
-                if (_enableDebugLogging)
-                {
-                    Debug.LogWarning("[StandaloneWorldInitializer] Initialization already attempted, skipping");
-                }
-
                 return;
             }
 
             _initializationAttempted = true;
 
+            if (_mapManager != null && _mapManager.IsWorldInitialized)
+            {
+                if (_enableDebugLogging)
+                {
+                    Debug.Log("[StandaloneWorldInitializer] World already initialized, aborting standalone init");
+                }
+
+                return;
+            }
+
             if (_enableDebugLogging)
             {
-                Debug.Log($"[StandaloneWorldInitializer] Attempting standalone world initialization: {_testWorldName}");
+                Debug.Log($"[StandaloneWorldInitializer] Attempting standalone world: {_testWorldName}");
             }
 
             try
             {
-                // Create a mock WorldInitPacket for the test world
                 var cellConfigurations = CreateTestCellConfigurations();
                 var worldInitPacket = new WorldInitPacket
                 {
@@ -239,118 +179,60 @@ namespace Fodinae.Scripts.World
                     Cells = cellConfigurations,
                 };
 
-                // Use MapManager to initialize the world
-                _mapManager.LoadWorldInit(worldInitPacket);
-
-                if (_enableDebugLogging)
-                {
-                    Debug.Log($"[StandaloneWorldInitializer] Successfully created standalone world: {_testWorldName}");
-                }
+                _mapManager!.LoadWorldInit(worldInitPacket);
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[StandaloneWorldInitializer] Failed to create standalone world: {ex.Message}");
-                Debug.LogError($"[StandaloneWorldInitializer] Exception details: {ex.StackTrace}");
             }
         }
 
         private static CellConfigurationPacket[] CreateTestCellConfigurations()
         {
-            // Create basic cell configurations for testing
-            // This provides minimal configuration for common cell types
-            var configurations = new CellConfigurationPacket[256]; // Standard CellType enum size
+            var configurations = new CellConfigurationPacket[256];
 
             for (int i = 0; i < configurations.Length; i++)
             {
                 configurations[i] = new CellConfigurationPacket
                 {
-                    Animation = 0, // No animation
+                    Animation = 0,
                     AnimationSpeed = 0,
-                    Color = unchecked((int)0x00000000), // Transparent default instead of white
+                    Color = 0,
                     FrameOffset = 0,
                     Properties = 0,
+                    ReliefGroup = 0,
+                    Distortion = 0,
                 };
             }
 
-            // Configure some common cell types with specific properties
-            // Grass (CellType.Grass = 1)
-            if (configurations.Length > 1)
-            {
-                configurations[1] = new CellConfigurationPacket
-                {
-                    Animation = 0,
-                    AnimationSpeed = 0,
-                    Color = unchecked((int)0xFF00FF00), // Green
-                    FrameOffset = 0,
-                    Properties = 0,
-                };
-            }
+            const CellConfigProperties ROAD_PROPS = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties SAND_BOULDER_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
 
-            // Dirt (CellType.Dirt = 2)
-            if (configurations.Length > 2)
-            {
-                configurations[2] = new CellConfigurationPacket
-                {
-                    Animation = 0,
-                    AnimationSpeed = 0,
-                    Color = unchecked((int)0xFF8B4513), // Brown
-                    FrameOffset = 0,
-                    Properties = 0,
-                };
-            }
-
-            // Stone (CellType.Stone = 3)
-            if (configurations.Length > 3)
-            {
-                configurations[3] = new CellConfigurationPacket
-                {
-                    Animation = 0,
-                    AnimationSpeed = 0,
-                    Color = unchecked((int)0xFF808080), // Gray
-                    FrameOffset = 0,
-                    Properties = 0,
-                };
-            }
+            SetConfig(configurations, CellType.Empty, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.Road, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.BuildingRoad, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.GoldenRoad, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.PolymerRoad, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.VolcanoBackground, ROAD_PROPS, 0);
+            SetConfig(configurations, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1);
+            SetConfig(configurations, CellType.Boulder1, SAND_BOULDER_PROPS, 1);
+            SetConfig(configurations, CellType.WhiteSand, SAND_BOULDER_PROPS, 1);
 
             return configurations;
         }
 
-        /// <summary>
-        /// Trigger OnWorldDataLoaded event to notify terrain renderer
-        /// This is CRITICAL for terrain rendering to start.
-        /// </summary>
-        private static void TriggerWorldDataLoaded()
+        private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup)
         {
-            if (MapManager.Instance != null)
+            configs[(int)type] = new CellConfigurationPacket
             {
-                Debug.Log("StandaloneWorldInitializer: Triggering OnWorldDataLoaded event");
-                MapManager.Instance.OnWorldDataLoaded?.Invoke();
-                Debug.Log("StandaloneWorldInitializer: OnWorldDataLoaded event triggered successfully");
-            }
-            else
-            {
-                Debug.LogError("StandaloneWorldInitializer: MapManager not available to trigger OnWorldDataLoaded");
-            }
-        }
-
-        /// <summary>
-        /// Handle OnWorldDataLoaded event from MapManager
-        /// This ensures proper coordination with WorldBackgroundRenderer.
-        /// </summary>
-        private static void OnWorldDataLoaded()
-        {
-            Debug.Log("StandaloneWorldInitializer: World data loaded, notifying renderer");
-
-            // Notify renderer that world is ready
-            var renderer = FindAnyObjectByType<SingleMeshTerrainRenderer>();
-            if (renderer != null)
-            {
-                Debug.Log("StandaloneWorldInitializer: Notified WorldBackgroundRenderer of world readiness");
-            }
-            else
-            {
-                Debug.LogWarning("StandaloneWorldInitializer: WorldBackgroundRenderer not found for notification");
-            }
+                Animation = 0,
+                AnimationSpeed = 0,
+                Color = 0,
+                FrameOffset = 0,
+                Properties = props,
+                ReliefGroup = reliefGroup,
+                Distortion = 0,
+            };
         }
     }
 }

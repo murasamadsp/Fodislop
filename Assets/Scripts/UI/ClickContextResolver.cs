@@ -1,3 +1,6 @@
+#nullable enable
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.UI.Controls;
@@ -19,7 +22,7 @@ namespace Fodinae.UI
         /// <param name="windowRoot">The root VisualElement of the window.</param>
         /// <param name="clickContext">The click context path string (e.g. "../../0/0/2").</param>
         /// <returns>The root element from which to traverse for input controls.</returns>
-        public static VisualElement ResolveRoot(VisualElement clickedElement, VisualElement windowRoot, string clickContext)
+        public static VisualElement? ResolveRoot(VisualElement clickedElement, VisualElement windowRoot, string? clickContext)
         {
             if (string.IsNullOrEmpty(clickContext))
             {
@@ -77,8 +80,13 @@ namespace Fodinae.UI
         /// </summary>
         /// <param name="root">The root element to traverse.</param>
         /// <returns>Array of StringPairPacket with input names and their current values.</returns>
-        public static StringPairPacket[] CollectInputValues(VisualElement root)
+        public static StringPairPacket[] CollectInputValues(VisualElement? root)
         {
+            if (root == null)
+            {
+                return Array.Empty<StringPairPacket>();
+            }
+
             var result = new List<StringPairPacket>();
             CollectRecursive(root, result);
             return result.ToArray();

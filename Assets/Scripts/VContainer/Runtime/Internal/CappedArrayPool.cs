@@ -2,15 +2,15 @@ using System;
 
 namespace VContainer.Internal
 {
-    sealed class CappedArrayPool<T>
+    internal sealed class CappedArrayPool<T>
     {
         internal const int InitialBucketSize = 4;
 
         public static readonly CappedArrayPool<T> Shared8Limit = new CappedArrayPool<T>(8);
 
-        readonly T[][][] buckets;
-        readonly object syncRoot = new object();
-        readonly int[] tails;
+        private readonly T[][][] buckets;
+        private readonly object syncRoot = new object();
+        private readonly int[] tails;
 
         internal CappedArrayPool(int maxLength)
         {
@@ -24,6 +24,7 @@ namespace VContainer.Internal
                 {
                     buckets[i][j] = new T[arrayLength];
                 }
+
                 tails[i] = 0;
             }
         }
@@ -31,10 +32,14 @@ namespace VContainer.Internal
         public T[] Rent(int length)
         {
             if (length <= 0)
+            {
                 return Array.Empty<T>();
+            }
 
             if (length > buckets.Length)
+            {
                 return new T[length]; // Not supported
+            }
 
             var i = length - 1;
 
@@ -62,14 +67,18 @@ namespace VContainer.Internal
         public void Return(T[] array)
         {
             if (array.Length <= 0 || array.Length > buckets.Length)
+            {
                 return;
+            }
 
             var i = array.Length - 1;
             lock (syncRoot)
             {
                 Array.Clear(array, 0, array.Length);
                 if (tails[i] > 0)
+                {
                     tails[i] -= 1;
+                }
             }
         }
     }

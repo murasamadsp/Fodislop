@@ -1,15 +1,15 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Networking.Processors;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.Player;
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.Programmator;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.Game.Managers;
+using Fodinae.Networking.Processors;
+using Fodinae.Player;
 using Fodinae.UI;
+using Fodinae.UI.Programmator;
 using Fodinae.UI.Binding;
-using VContainer;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -29,16 +29,14 @@ using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UIElements;
+using VContainer;
 
-namespace Fodinae.Scripts.Networking
+namespace Fodinae.Networking
 {
-    #pragma warning disable CS0649
-    public partial class PacketHandler : MonoBehaviour
+    public partial class PacketHandler : MonoBehaviour, IInputBlocker
     {
-        public static PacketHandler Instance { get; private set; }
-
-        public static bool IsInputBlocked => Instance != null && (Instance._windowProcessor.HasOpenWindows || Instance._windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen);
-        public static string TopWindowTag => Instance?._windowProcessor.TopWindowTag;
+        public bool IsInputBlocked => _windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen);
+        public string? TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
 
         private static readonly WorldInitProcessor WorldInit = new();
         private static readonly RobotInfoProcessor RobotInfo = new();
@@ -60,30 +58,30 @@ namespace Fodinae.Scripts.Networking
         private static readonly MissionArrowProcessor MissionArrow = new();
         private readonly WindowPacketProcessor _windowProcessor = new();
         private bool _isInitialized;
+        private bool _isSubscribed;
 
-        private INetworkService _networkService;
+        [Inject]
+        private INetworkService _networkService = null!;
+        [Inject]
+        private IWorldDataStorage _mapStorageInterface = null!;
+        [Inject]
+        private GameManager _gameManager = null!;
+        [Inject]
+        private IMapDataProvider _mapDataProvider = null!;
+        private MapStorage? MapStorage => _mapStorageInterface as MapStorage;
 
         protected virtual void Awake()
         {
-            if (Instance != null && Instance != this)
+            if (_mapDataProvider == null)
             {
-                Destroy(gameObject);
+                Debug.LogError("[PacketHandler] FATAL: IMapDataProvider is not injected — PacketHandler cannot function. World will not render.");
                 return;
             }
 
-            Instance = this;
-            Debug.Log("[PacketHandler] Starting initialization...");
-
-            // Verify Dependencies
-            if (MapManager.Instance is null)
+            var mapStorage = MapStorage;
+            if (mapStorage == null)
             {
-                Debug.LogError("[PacketHandler] MapManager not found - cannot process world initialization");
-                return;
-            }
-
-            if (MapStorage.Instance == null)
-            {
-                Debug.LogError("[PacketHandler] MapStorage not found - cannot process map data");
+                Debug.LogError("[PacketHandler] FATAL: MapStorage not found at Awake — PacketHandler cannot function. World will not render.");
                 return;
             }
 
@@ -94,16 +92,13 @@ namespace Fodinae.Scripts.Networking
                 _windowProcessor.Initialize(uiDocument, mwh);
             }
 
-            // Subscribe to events via NetworkService
             TrySubscribeToNetworkService();
 
-            var mm = MapManager.Instance;
-            if (mm != null)
+            if (_mapDataProvider is MapManager concreteMM)
             {
-                mm.OnWorldInitialized += OnWorldInitialized;
+                concreteMM.OnWorldInitialized += OnWorldInitialized;
             }
 
-            Debug.Log("[PacketHandler] Initialization complete - ready to receive packets");
             _isInitialized = true;
         }
 
@@ -114,13 +109,7 @@ namespace Fodinae.Scripts.Networking
 
         private void TrySubscribeToNetworkService()
         {
-            if (_networkService != null)
-            {
-                return;
-            }
-
-            _networkService = NetworkService.Instance;
-            if (_networkService == null)
+            if (_isSubscribed || _networkService == null)
             {
                 return;
             }
@@ -174,11 +163,13 @@ namespace Fodinae.Scripts.Networking
             _networkService.Subscribe<OpenURLPacket>(OpenURL.Process);
             _networkService.Subscribe<ClientConfigPacket>(ClientConfig.Process);
             _networkService.Subscribe<MissionArrowPacket>(MissionArrow.Process);
+
+            _isSubscribed = true;
         }
 
         protected virtual void OnDestroy()
         {
-            if (!_isInitialized)
+            if (!_isInitialized || !_isSubscribed)
             {
                 return;
             }
@@ -236,25 +227,26 @@ namespace Fodinae.Scripts.Networking
                 _networkService.Unsubscribe<MissionArrowPacket>(MissionArrow.Process);
             }
 
-            // Close modal and any open windows
-            _windowProcessor.Dispose();
+            _isSubscribed = false;
 
-            var mm = MapManager.InstanceIfExists;
-            if (mm != null)
+            if (_windowProcessor != null)
             {
-                mm.OnWorldInitialized -= OnWorldInitialized;
+                _windowProcessor.Dispose();
             }
 
-            Debug.Log("[PacketHandler] Destroyed");
+            if (_mapDataProvider is MapManager concreteMM)
+            {
+                concreteMM.OnWorldInitialized -= OnWorldInitialized;
+            }
         }
 
         private void OnWorldInitialized()
         {
-            Debug.Log("[PacketHandler] World initialized event received from MapManager");
-            if (GameManager.Instance != null)
+            var gm = _gameManager;
+            if (gm != null)
             {
-                GameManager.Instance.SetState(GameState.InGame);
-                GameManager.Instance.NotifyWorldLoaded();
+                gm.SetState(GameState.InGame);
+                gm.NotifyWorldLoaded();
             }
         }
 
@@ -269,13 +261,11 @@ namespace Fodinae.Scripts.Networking
 
             Auth.AuthTokenManager.SaveToken(newToken);
 
-            var gm = GameManager.Instance;
+            var gm = _gameManager;
             if (gm != null)
             {
                 gm.AuthorizeUI();
             }
-
-            Debug.Log($"[Auth] Token received and saved, length={newToken.Length}");
         }
     }
 }

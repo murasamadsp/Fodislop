@@ -1,18 +1,22 @@
-using Fodinae.Scripts.Networking.Connection;
+#nullable enable
+
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class ConnectionProcessor : IPacketProcessor<DisconnectPacket>, IPacketProcessor<ReconnectPacket>
     {
         public void Process(DisconnectPacket packet)
         {
-            ConnectionManager.Instance?.HandleServerDisconnect(packet.Reason);
+            (ServiceLocator.Resolve<IConnectionService>() as ConnectionManager)?.HandleServerDisconnect(packet.Reason);
         }
 
         public void Process(ReconnectPacket packet)
         {
-            ConnectionManager.Instance?.HandleServerReconnect();
+            (ServiceLocator.Resolve<IConnectionService>() as ConnectionManager)?.HandleServerReconnect();
         }
     }
 }

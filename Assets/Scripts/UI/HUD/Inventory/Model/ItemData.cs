@@ -1,16 +1,18 @@
+#nullable enable
+
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI.HUD.Inventory.Model
+namespace Fodinae.UI.HUD.Inventory.Model
 {
     public class ItemData
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public Color IconColor { get; set; }
         public int Quantity { get; set; }
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
         public ItemType ItemType { get; set; }
-        public Texture2D Icon { get; set; }
+        public Texture2D? Icon { get; set; }
 
         public ItemData(string name, Color iconColor, int quantity)
         {

@@ -1,5 +1,7 @@
+#nullable enable
+
+using Fodinae;
 using NUnit.Framework;
-using Fodinae.Scripts;
 
 namespace Fodinae.Tests.World
 {

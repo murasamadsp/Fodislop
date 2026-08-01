@@ -1,12 +1,14 @@
+#nullable enable
+
 using System.Collections.Generic;
+using Fodinae.Audio.Core;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Information;
-using Fodinae.Scripts.Audio.Backend;
-using Fodinae.Scripts.Audio.Core;
-using Fodinae.Scripts.World;
 using UnityEngine;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     public class ClientConfigProcessor : IPacketProcessor<ClientConfigPacket>
     {
@@ -22,8 +24,8 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(ClientConfigPacket packet)
         {
-            Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, renderer={packet.Renderer}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
-            var audio = AudioSystem.Instance;
+            Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
+            var audio = Fodinae.Core.ServiceLocator.Resolve<IAudioSystem>();
             if (audio != null)
             {
                 float masterVol = packet.SoundConfig.Master / 255f;
@@ -40,18 +42,6 @@ namespace Fodinae.Scripts.Networking.Processors
                         PlayerPrefs.SetFloat($"Audio_{bus}", vol);
                     }
                 }
-            }
-
-            var terrain = SingleMeshTerrainRenderer.Instance;
-            if (terrain != null)
-            {
-                bool simple = packet.Renderer switch
-                {
-                    RendererMode.Simplified => true,
-                    _ => false,
-                };
-                terrain.SetSimpleGraphics(simple);
-                PlayerPrefs.SetInt("SimpleGraphics", simple ? 1 : 0);
             }
 
             PlayerPrefs.Save();

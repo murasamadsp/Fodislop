@@ -1,3 +1,5 @@
+#nullable enable
+
 using System.Text.RegularExpressions;
 using UnityEngine.UIElements;
 
@@ -6,8 +8,8 @@ namespace Fodinae.UI.Controls
     public class RegexTextField : TextField
     {
         private int _lastCursorIndex;
-        private string _lastValidValue;
-        private string _regex;
+        private string _lastValidValue = string.Empty;
+        private string _regex = string.Empty;
         public string Regex
         {
             get => _regex;
@@ -27,7 +29,7 @@ namespace Fodinae.UI.Controls
             RegisterCallback<KeyDownEvent>(evt => _lastCursorIndex = cursorIndex);
         }
 
-        private string _defaultValue;
+        private string _defaultValue = string.Empty;
         public string DefaultValue
         {
             get => _defaultValue;

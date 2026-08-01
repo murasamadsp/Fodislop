@@ -1,7 +1,9 @@
+#nullable enable
+
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Scripts.Core.Interfaces;
-using Fodinae.Scripts.UI;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.UI;
 using Fodinae.UI.Binding;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -10,7 +12,7 @@ using MinesServer.Networking.Server.Packets.GUI.Components;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.Networking.Processors
+namespace Fodinae.Networking.Processors
 {
     /// <summary>
     /// Decoupled SOLID Processor for dynamic server WPF windows and element click contexts.
@@ -18,12 +20,12 @@ namespace Fodinae.Scripts.Networking.Processors
     /// </summary>
     public class WindowPacketProcessor : IPacketProcessor<OpenWindowPacket>, IPacketProcessor<CloseWindowPacket>, IInputBlocker
     {
-        private UIDocument _uiDocument;
-        private ModalWindowHandler _modalWindowHandler;
+        private UIDocument _uiDocument = null!;
+        private ModalWindowHandler _modalWindowHandler = null!;
         private readonly List<(string tag, VisualElement root, WindowBinding binding, List<VisualElement> clickableElements)> _openWindows = new();
 
         public bool HasOpenWindows => _openWindows.Count > 0;
-        public string TopWindowTag => _openWindows.Count > 0 ? _openWindows[^1].tag : null;
+        public string? TopWindowTag => _openWindows.Count > 0 ? _openWindows[^1].tag : null;
         public bool IsModalShowing => _modalWindowHandler?.IsShowing == true;
         bool IInputBlocker.IsInputBlocked => HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen;
 
@@ -35,6 +37,12 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(OpenWindowPacket packet)
         {
+            if (packet == null)
+            {
+                Debug.LogError("[WindowPacketProcessor] Process OpenWindowPacket: packet is null");
+                return;
+            }
+
             Debug.Log($"[WindowPacketProcessor] Opening window '{packet.WindowTag}'");
 
             if (_uiDocument == null)
@@ -49,6 +57,11 @@ namespace Fodinae.Scripts.Networking.Processors
 
             var builder = new PacketUIBuilder();
             var element = builder.Build(packet.Content);
+            if (element == null)
+            {
+                Debug.LogError("[WindowPacketProcessor] Cannot open window: builder returned null element");
+                return;
+            }
 
             element.style.width = packet.Width;
             element.style.height = packet.Height;
@@ -58,7 +71,16 @@ namespace Fodinae.Scripts.Networking.Processors
             element.style.translate = new Translate(new Length(-50, LengthUnit.Percent), new Length(-50, LengthUnit.Percent));
 
             _uiDocument.rootVisualElement.Add(element);
-            UIInputManager.Instance.PushModal(element);
+
+            var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
+            if (uiInputManager != null)
+            {
+                uiInputManager.PushModal(element);
+            }
+            else
+            {
+                Debug.LogWarning("[WindowPacketProcessor] UIInputManager not resolved — modal stack NOT updated");
+            }
 
             var binding = new WindowBinding();
             binding.Bind(element);
@@ -69,8 +91,6 @@ namespace Fodinae.Scripts.Networking.Processors
 
         public void Process(CloseWindowPacket packet)
         {
-            Debug.Log("[WindowPacketProcessor] Closing top window");
-
             if (_openWindows.Count == 0)
             {
                 return;
@@ -78,7 +98,12 @@ namespace Fodinae.Scripts.Networking.Processors
 
             var (_, root, binding, _) = _openWindows[^1];
             binding.Dispose();
-            UIInputManager.Instance.PopModal(root);
+
+            var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
+            if (uiInputManager != null)
+            {
+                uiInputManager.PopModal(root);
+            }
 
             if (_uiDocument != null)
             {
@@ -146,7 +171,8 @@ namespace Fodinae.Scripts.Networking.Processors
             var inputRoot = ClickContextResolver.ResolveRoot(clickedElement, windowRoot, clickContext);
             var inputValues = ClickContextResolver.CollectInputValues(inputRoot);
 
-            NetworkService.Send(new ElementClickPacket(windowTag, elementIndex, inputValues));
+            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
+            networkService?.Send(new ElementClickPacket(windowTag, elementIndex, inputValues));
         }
 
         public void Dispose()

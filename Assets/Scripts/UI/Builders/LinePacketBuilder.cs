@@ -1,15 +1,17 @@
-using Fodinae.Scripts.UI;
-using Fodinae.Scripts.UI.Builders;
+#nullable enable
+
+using Fodinae.UI;
+using Fodinae.UI.Builders;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class LinePacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not LinePacket linePkt)
             {

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    sealed class ReflectionInjector : IInjector
+    internal sealed class ReflectionInjector : IInjector
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ReflectionInjector Build(Type type)
@@ -14,9 +14,9 @@ namespace VContainer.Internal
             return new ReflectionInjector(injectTypeInfo);
         }
 
-        readonly InjectTypeInfo injectTypeInfo;
+        private readonly InjectTypeInfo injectTypeInfo;
 
-        ReflectionInjector(InjectTypeInfo injectTypeInfo)
+        private ReflectionInjector(InjectTypeInfo injectTypeInfo)
         {
             this.injectTypeInfo = injectTypeInfo;
         }
@@ -47,6 +47,7 @@ namespace VContainer.Internal
                         parameters,
                         key);
                 }
+
                 var instance = injectTypeInfo.InjectConstructor.ConstructorInfo.Invoke(parameterValues);
                 Inject(instance, resolver, parameters);
                 return instance;
@@ -61,10 +62,12 @@ namespace VContainer.Internal
             }
         }
 
-        void InjectFields(object obj, IObjectResolver resolver, IReadOnlyList<IInjectParameter> parameters)
+        private void InjectFields(object obj, IObjectResolver resolver, IReadOnlyList<IInjectParameter> parameters)
         {
             if (injectTypeInfo.InjectFields == null)
+            {
                 return;
+            }
 
             foreach (var x in injectTypeInfo.InjectFields)
             {
@@ -73,10 +76,12 @@ namespace VContainer.Internal
             }
         }
 
-        void InjectProperties(object obj, IObjectResolver resolver, IReadOnlyList<IInjectParameter> parameters)
+        private void InjectProperties(object obj, IObjectResolver resolver, IReadOnlyList<IInjectParameter> parameters)
         {
             if (injectTypeInfo.InjectProperties == null)
+            {
                 return;
+            }
 
             foreach (var x in injectTypeInfo.InjectProperties)
             {
@@ -85,10 +90,12 @@ namespace VContainer.Internal
             }
         }
 
-        void InjectMethods(object obj, IObjectResolver resolver, IReadOnlyList<IInjectParameter> parameters)
+        private void InjectMethods(object obj, IObjectResolver resolver, IReadOnlyList<IInjectParameter> parameters)
         {
             if (injectTypeInfo.InjectMethods == null)
+            {
                 return;
+            }
 
             foreach (var method in injectTypeInfo.InjectMethods)
             {
@@ -108,6 +115,7 @@ namespace VContainer.Internal
                             parameters,
                             key);
                     }
+
                     method.MethodInfo.Invoke(obj, parameterValues);
                 }
                 catch (VContainerException ex)

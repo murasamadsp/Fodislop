@@ -1,55 +1,34 @@
+#nullable enable
+
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts.Game.Managers;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using MinesServer.Data;
 using UnityEngine;
+using UnityEngine.Rendering;
 
-namespace Fodinae.Scripts.World
+namespace Fodinae.World
 {
-    /// <summary>
-    /// Represents a rectangle in the texture atlas.
-    /// </summary>
-    public struct Rectangle
-    {
-        public int X;
-        public int Y;
-        public int Width;
-        public int Height;
-
-        public Rectangle(int x, int y, int width, int height)
-        {
-            X = x;
-            Y = y;
-            Width = width;
-            Height = height;
-        }
-    }
-
-    internal struct AtlasCell
-    {
-        public CellType CellType;
-        public Rectangle Rectangle;
-        public AtlasCoordinate BaseCoordinate;
-    }
-
     public class TextureAtlas : IDisposable
     {
         public int Size { get; }
         public int CELL_SIZE { get; }
         public int Padding { get; }
 
-        private Texture2D _atlasTexture;
+        private Texture2D? _atlasTexture;
 
-        public Texture2D Texture => _atlasTexture;
+        public Texture2D? Texture => _atlasTexture;
 
-        private Color32[] _atlasPixels;
+        private Color32[]? _atlasPixels;
         private readonly ConcurrentDictionary<CellType, AtlasCell> _cells = new();
         private readonly List<Rectangle> _freeRectangles = new();
         private readonly List<Rectangle> _usedRectangles = new();
         private readonly Dictionary<CellType, Texture2D> _placeholderTextures = new();
+        private readonly HashSet<CellType> _dirtyCells = new();
 
         private bool _isDirty = false;
 
@@ -67,14 +46,42 @@ namespace Fodinae.Scripts.World
             _atlasTexture.filterMode = FilterMode.Point;
             _atlasTexture.wrapMode = TextureWrapMode.Clamp;
 
-            _atlasTexture.SetPixels32(new Color32[size * size]);
-            _atlasTexture.Apply();
+            // The CPU fallback needs an initialized pixel store. On platforms
+            // with GPU texture copies, every occupied rectangle is uploaded
+            // directly and allocating a full-size zero buffer here only adds
+            // a large startup memory spike (64 MiB for a 4096² atlas).
+            if (SystemInfo.copyTextureSupport == CopyTextureSupport.None)
+            {
+                _atlasTexture.SetPixels32(new Color32[size * size]);
+                _atlasTexture.Apply(false, false);
+            }
 
             _freeRectangles.Add(new Rectangle(0, 0, size, size));
         }
 
         public void Dispose()
         {
+            foreach (var placeholder in _placeholderTextures.Values)
+            {
+                if (placeholder == null)
+                {
+                    continue;
+                }
+
+                if (Application.isPlaying)
+                {
+                    UnityEngine.Object.Destroy(placeholder);
+                }
+                else
+                {
+                    UnityEngine.Object.DestroyImmediate(placeholder);
+                }
+            }
+
+            _placeholderTextures.Clear();
+            _cells.Clear();
+            _dirtyCells.Clear();
+
             if (_atlasTexture != null)
             {
                 if (Application.isPlaying)
@@ -105,6 +112,7 @@ namespace Fodinae.Scripts.World
             lock (_lock)
             {
                 _cells.Clear();
+                _dirtyCells.Clear();
                 _usedRectangles.Clear();
                 _freeRectangles.Clear();
                 _freeRectangles.Add(new Rectangle(0, 0, Size, Size));
@@ -124,9 +132,12 @@ namespace Fodinae.Scripts.World
                 _placeholderTextures.Clear();
 
                 EnsurePixelBuffer();
-                Array.Clear(_atlasPixels, 0, _atlasPixels.Length);
-                _atlasTexture.SetPixels32(_atlasPixels);
-                _atlasTexture.Apply();
+                if (_atlasPixels != null && _atlasTexture != null)
+                {
+                    Array.Clear(_atlasPixels, 0, _atlasPixels.Length);
+                    _atlasTexture.SetPixels32(_atlasPixels);
+                    _atlasTexture.Apply();
+                }
 
                 _isDirty = false;
             }
@@ -159,19 +170,13 @@ namespace Fodinae.Scripts.World
                 return AtlasCoordinate.Empty;
             }
 
-            // The cell's sub-atlas is packed at cell.Rectangle.X, cell.Rectangle.Y
             int subAtlasX = cell.Rectangle.X;
             int subAtlasY = cell.Rectangle.Y;
             int subAtlasWidth = cell.Rectangle.Width;
             int subAtlasHeight = cell.Rectangle.Height;
 
-            // Use the central constant for tile size
             const int TERRAIN_TILE_SIZE = RenderingConstants.CELL_SIZE;
-
-            // How many tiles fit in the SUB-ATLAS width and height
             int tilesPerRow = subAtlasWidth / TERRAIN_TILE_SIZE;
-
-            // If frameHeightPixels is provided, it defines the wrapping boundary for animations
             int effectiveSubAtlasHeight = frameHeightPixels > 0 ? frameHeightPixels : subAtlasHeight;
             int tilesPerColumn = effectiveSubAtlasHeight / TERRAIN_TILE_SIZE;
 
@@ -185,25 +190,19 @@ namespace Fodinae.Scripts.World
                 tilesPerColumn = 1;
             }
 
-            // Calculate wrapped position within the SUB-ATLAS (or frame)
             int wrappedX = ((globalX % tilesPerRow) + tilesPerRow) % tilesPerRow;
-
-            // Invert Y wrapping for bottom-to-top texture sampling with top-to-bottom server coords
             int wrappedY = (tilesPerColumn - 1) - (((globalY % tilesPerColumn) + tilesPerColumn) % tilesPerColumn);
 
-            // Calculate the absolute atlas position by adding the sub-atlas base position
             int atlasX = subAtlasX + (wrappedX * TERRAIN_TILE_SIZE);
-
-            // Add frame offset: subAtlasY + wrapped cell offset + current frame offset
             int atlasY = subAtlasY + (wrappedY * TERRAIN_TILE_SIZE) + (frameIndex * (frameHeightPixels > 0 ? frameHeightPixels : 0));
 
             return new AtlasCoordinate(
                 atlasX,
                 atlasY,
-                TERRAIN_TILE_SIZE,  // We only want to render one tile
                 TERRAIN_TILE_SIZE,
-                Size,             // Full atlas width
-                Size);            // Full atlas height
+                TERRAIN_TILE_SIZE,
+                Size,
+                Size);
         }
 
         public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY)
@@ -217,8 +216,6 @@ namespace Fodinae.Scripts.World
 
             lock (_lock)
             {
-                // Pack the ENTIRE texture size.
-                // Add Padding to the requested width/height to ensure space between textures.
                 var bestFit = FindBestFit(texture.width, texture.height);
                 if (bestFit == null)
                 {
@@ -238,12 +235,11 @@ namespace Fodinae.Scripts.World
                         Size),
                 };
 
-                // When adding to _usedRectangles and splitting, we must include the Padding
-                // so the next FindBestFit doesn't overlap with the padded area.
                 Rectangle rectWithPadding = new Rectangle(bestFit.Value.X, bestFit.Value.Y, bestFit.Value.Width + Padding, bestFit.Value.Height + Padding);
                 _usedRectangles.Add(rectWithPadding);
                 SplitFreeRectangles(rectWithPadding);
                 _cells.TryAdd(cellType, atlasCell);
+                _dirtyCells.Add(cellType);
                 _isDirty = true;
 
                 coordinate = atlasCell.BaseCoordinate;
@@ -251,12 +247,6 @@ namespace Fodinae.Scripts.World
             }
         }
 
-        /// <summary>
-        /// After TryAddTexture, copies the texture's pixel data into the internal _atlasPixels buffer
-        /// at the position where TryAddTexture placed it. Keeps _atlasPixels incrementally in sync
-        /// without re-reading all existing textures via GetPixels32.
-        /// Must be called on the main thread after TryAddTexture for the same cellType.
-        /// </summary>
         public void CopyTextureToAtlas(CellType cellType, Texture2D texture)
         {
             if (!_cells.TryGetValue(cellType, out var cell))
@@ -265,31 +255,88 @@ namespace Fodinae.Scripts.World
                 return;
             }
 
-            EnsurePixelBuffer();
             var rect = cell.Rectangle;
-            var sourcePixels = texture.GetPixels32();
-            CopyPixelsToAtlasArray(sourcePixels, texture.width, texture.height, rect);
+            if (SystemInfo.copyTextureSupport == CopyTextureSupport.None)
+            {
+                EnsurePixelBuffer();
+                var sourcePixels = texture.GetPixels32();
+                CopyPixelsToAtlasArray(sourcePixels, texture.width, texture.height, rect);
+            }
+            lock (_lock)
+            {
+                _dirtyCells.Add(cellType);
+                _isDirty = true;
+            }
         }
 
-        /// <summary>
-        /// Synchronously uploads the current _atlasPixels to the GPU texture via SetPixels32 + Apply.
-        /// Unlike UpdateAtlasTexture, this does NOT re-read any source textures — it relies on
-        /// CopyTextureToAtlas having been called to keep _atlasPixels in sync incrementally.
-        /// Must be called on the main thread.
-        /// </summary>
         public void SyncApply()
         {
-            if (!_isDirty || _atlasPixels == null)
+            if (!_isDirty || _atlasTexture == null)
             {
                 return;
             }
 
-            _atlasTexture.SetPixels32(_atlasPixels);
-            _atlasTexture.Apply();
-            _isDirty = false;
+            List<(CellType type, Texture2D texture, Rectangle rect)> dirtyTextures = new();
+            lock (_lock)
+            {
+                foreach (CellType type in _dirtyCells)
+                {
+                    if (_cells.TryGetValue(type, out AtlasCell cell))
+                    {
+                        Texture2D? texture = GetBaseTexture(type);
+                        if (texture != null)
+                        {
+                            dirtyTextures.Add((type, texture, cell.Rectangle));
+                        }
+                    }
+                }
+            }
+
+            bool uploadedDirectly = dirtyTextures.Count > 0 &&
+                SystemInfo.copyTextureSupport != CopyTextureSupport.None;
+            if (uploadedDirectly)
+            {
+                try
+                {
+                    foreach (var (_, texture, rect) in dirtyTextures)
+                    {
+                        Graphics.CopyTexture(
+                            texture, 0, 0, 0, 0, texture.width, texture.height,
+                            _atlasTexture, 0, 0, rect.X, rect.Y);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Some platforms reject CopyTexture for a format pair even
+                    // when the device advertises support. The CPU buffer is
+                    // kept as a safe compatibility fallback.
+                    uploadedDirectly = false;
+                }
+            }
+
+            if (!uploadedDirectly)
+            {
+                if (_atlasPixels == null)
+                {
+                    return;
+                }
+
+                _atlasTexture.SetPixels32(_atlasPixels);
+                _atlasTexture.Apply(false, false);
+            }
+
+            lock (_lock)
+            {
+                foreach (var (type, _, _) in dirtyTextures)
+                {
+                    _dirtyCells.Remove(type);
+                }
+
+                _isDirty = _dirtyCells.Count > 0;
+            }
         }
 
-        public async UniTask<Texture2D> GetAtlasTexture()
+        public async UniTask<Texture2D?> GetAtlasTexture()
         {
             if (_isDirty)
             {
@@ -333,24 +380,41 @@ namespace Fodinae.Scripts.World
 
             lock (_lock)
             {
+                _dirtyCells.Clear();
                 _isDirty = false;
             }
         }
 
         private async UniTask CopyTexturesToAtlas(List<(Texture2D texture, Rectangle rect)> textures)
         {
+            if (SystemInfo.copyTextureSupport != CopyTextureSupport.None)
+            {
+                await UniTask.SwitchToMainThread();
+                if (_atlasTexture != null)
+                {
+                    foreach (var (texture, rect) in textures)
+                    {
+                        Graphics.CopyTexture(
+                            texture, 0, 0, 0, 0, texture.width, texture.height,
+                            _atlasTexture, 0, 0, rect.X, rect.Y);
+                    }
+                }
+
+                return;
+            }
+
             const int BATCH_SIZE = 10;
 
             EnsurePixelBuffer();
 
             for (int i = 0; i < textures.Count; i += BATCH_SIZE)
             {
-                var batch = textures.Skip(i).Take(BATCH_SIZE).ToList();
+                int batchEnd = Math.Min(i + BATCH_SIZE, textures.Count);
+                var pixelDataList = new List<(Color32[] pixels, int width, int height, Rectangle rect)>(batchEnd - i);
 
-                var pixelDataList = new List<(Color32[] pixels, int width, int height, Rectangle rect)>();
-
-                foreach (var (tex, rect) in batch)
+                for (int textureIndex = i; textureIndex < batchEnd; textureIndex++)
                 {
+                    var (tex, rect) = textures[textureIndex];
                     if (tex != null)
                     {
                         pixelDataList.Add((tex.GetPixels32(), tex.width, tex.height, rect));
@@ -367,13 +431,20 @@ namespace Fodinae.Scripts.World
                 await UniTask.SwitchToMainThread();
             }
 
-            _atlasTexture.SetPixels32(_atlasPixels);
-            _atlasTexture.Apply();
+            if (_atlasTexture != null && _atlasPixels != null)
+            {
+                _atlasTexture.SetPixels32(_atlasPixels);
+                _atlasTexture.Apply();
+            }
         }
 
         private void CopyPixelsToAtlasArray(Color32[] sourcePixels, int width, int height, Rectangle destination)
         {
-            // Copy the ENTIRE texture size
+            if (_atlasPixels == null)
+            {
+                return;
+            }
+
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -393,9 +464,10 @@ namespace Fodinae.Scripts.World
 
         private Texture2D GetBaseTexture(CellType cellType)
         {
-            if (WorldTextureManager.Instance != null)
+            var textureService = ServiceLocator.Resolve<ITextureService>();
+            if (textureService is WorldTextureManager manager)
             {
-                var cachedTexture = WorldTextureManager.Instance.GetCachedTexture(cellType);
+                var cachedTexture = manager.GetCachedTexture(cellType);
                 if (cachedTexture != null)
                 {
                     return cachedTexture;
@@ -421,16 +493,17 @@ namespace Fodinae.Scripts.World
             }
 
             texture.SetPixels(pixels);
-            texture.Apply();
+            texture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
             _placeholderTextures[cellType] = texture;
             return texture;
         }
 
         private static Color GetCellColor(CellType cellType)
         {
-            if (MapManager.Instance != null)
+            var mapManager = ServiceLocator.Resolve<MapManager>();
+            if (mapManager != null)
             {
-                var serverColor = MapManager.Instance.GetCellMinimapColor(cellType);
+                var serverColor = mapManager.GetCellMinimapColor(cellType);
                 if (serverColor.a > 0)
                 {
                     return serverColor;

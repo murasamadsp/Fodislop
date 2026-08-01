@@ -1,14 +1,16 @@
+#nullable enable
+
 using System.Collections.Generic;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Scripts.UI.Programmator
+namespace Fodinae.UI.Programmator
 {
     public static class ProgrammatorTextureRegistry
     {
         private static readonly Dictionary<ProgAction, Texture2D> _cache = new Dictionary<ProgAction, Texture2D>();
 
-        public static Texture2D GetTexture(ProgAction action)
+        public static Texture2D? GetTexture(ProgAction action)
         {
             if (_cache.TryGetValue(action, out var tex))
             {

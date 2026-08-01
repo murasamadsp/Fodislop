@@ -1,17 +1,21 @@
+#nullable enable
+
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Scripts;
+using Fodinae;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual; // Corrected using directive for ImagePacket
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class ImagePacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not ImagePacket imagePacket)
             {
@@ -36,12 +40,13 @@ namespace Fodinae.Scripts.UI.Builders
 
         private static void LoadImage(VisualElement element, string uri, CancellationToken token)
         {
-            Fodinae.Scripts.ClientAssetLoader.Instance.LoadAndApplyTexture(
+            var loader = Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            loader?.LoadAndApplyTexture(
                 (texture) =>
             {
-                if (element != null)
+                if (element != null && texture != null)
                 {
-                    element.style.backgroundImage = new StyleBackground(texture); // Set StyleBackground directly
+                    element.style.backgroundImage = new StyleBackground(texture);
                 }
             }, uri, token).Forget();
         }

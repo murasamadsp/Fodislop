@@ -1,24 +1,23 @@
+#nullable enable
+
 using System.Collections.Generic;
-using Fodinae.Scripts.Game;
-using Fodinae.Scripts.Core;
-using Fodinae.Scripts.World;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
+using Fodinae.Game;
+using Fodinae.World;
+using Fodinae.World.Terrain;
 using UnityEngine;
+using VContainer;
 
-namespace Fodinae.Scripts.Game.Managers
+namespace Fodinae.Game.Managers
 {
-    public class RobotManager : MonoBehaviour
+    public class RobotManager : MonoBehaviour, IRobotService
     {
-        private static RobotManager _instance;
-        public static RobotManager Instance => _instance;
-        public static RobotManager InstanceIfExists => _instance;
-
         private const string TAG = "[RobotManager]";
         private Dictionary<uint, Robot> _robots = new();
 
-        protected void Awake()
-        {
-            _instance = this;
-        }
+        [Inject]
+        private IObjectResolver _resolver = null!;
 
         public static bool ShowDebugVisuals { get; set; }
 
@@ -32,8 +31,29 @@ namespace Fodinae.Scripts.Game.Managers
                 return;
             }
 
-            if (_robots.ContainsKey(robot.BotId))
+            // Same instance re-registered (e.g. Start() + Initialize()) — idempotent.
+            uint? staleKey = null;
+            foreach (var kvp in _robots)
             {
+                if (ReferenceEquals(kvp.Value, robot) && kvp.Key != robot.BotId)
+                {
+                    staleKey = kvp.Key;
+                    break;
+                }
+            }
+
+            if (staleKey.HasValue)
+            {
+                _robots.Remove(staleKey.Value);
+            }
+
+            if (_robots.TryGetValue(robot.BotId, out var existing))
+            {
+                if (ReferenceEquals(existing, robot))
+                {
+                    return;
+                }
+
                 Debug.LogWarning($"{TAG} Robot {robot.BotId} already registered, overwriting");
             }
 
@@ -71,6 +91,10 @@ namespace Fodinae.Scripts.Game.Managers
             {
                 robot = robotGo.AddComponent<Robot>();
             }
+
+            // Runtime-created components never reach GameLifetimeScope's startup
+            // injection scan — inject explicitly so Robot's [Inject] fields are filled.
+            _resolver?.Inject(robot);
 
             robot.Initialize(botId);
             _robots[botId] = robot;

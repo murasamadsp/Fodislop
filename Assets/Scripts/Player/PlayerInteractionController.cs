@@ -1,58 +1,35 @@
-using Fodinae.Scripts.Networking;
-using Fodinae.Scripts.Game.Managers;
-using Fodinae.Scripts.UI;
+#nullable enable
+
+using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.UIElements;
+using VContainer;
 
-namespace Fodinae.Scripts.Player
+namespace Fodinae.Player
 {
     public class PlayerInteractionController : MonoBehaviour
     {
-        private const string TAG = "[PlayerInteraction]";
-        private Camera _mainCamera;
+        private Camera? _mainCamera;
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
+        [Inject]
+        private IMapDataProvider _mapManager = null!;
+        [Inject]
+        private INetworkService _networkService = null!;
+        [Inject]
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {
             _mainCamera = Camera.main;
-            _cachedAllKeys = Keyboard.current.allKeys;
-        }
-
-        protected void Start()
-        {
-            var docs = FindObjectsByType<UIDocument>();
-            foreach (var doc in docs)
+            if (Keyboard.current != null)
             {
-                if (doc.rootVisualElement == null) continue;
-                doc.rootVisualElement.RegisterCallback<PointerDownEvent>(evt =>
-                {
-                    if (evt.button != 0) return;
-                    if (PacketHandler.IsInputBlocked) return;
-                    if (ChatInput.IsFocused) return;
-
-                    var target = evt.target as VisualElement;
-                    if (target == null) return;
-
-                    // TemplateContainer = empty UXML background, root = empty panel space
-                    if (target is TemplateContainer || target == doc.rootVisualElement)
-                    {
-                        Vector2 mousePos = Mouse.current.position.ReadValue();
-                        Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
-
-                        int unityX = Mathf.FloorToInt(worldPos.x);
-                        int unityY = Mathf.FloorToInt(worldPos.y);
-
-                        if (MapManager.Instance != null && NetworkService.Instance != null)
-                        {
-                            ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
-                            ushort serverY = (ushort)Mathf.Clamp(MapManager.Instance.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
-                            NetworkService.Instance.SendAction(new ClickCellPacket(serverX, serverY));
-                        }
-                    }
-                });
+                _cachedAllKeys = Keyboard.current.allKeys;
             }
         }
 
@@ -63,7 +40,88 @@ namespace Fodinae.Scripts.Player
                 _mainCamera = Camera.main;
             }
 
+            if (_mainCamera == null)
+            {
+                return;
+            }
+
+            HandleMouseClick();
             HandleKeyboardInput();
+        }
+
+        private void HandleMouseClick()
+        {
+            if (Mouse.current == null)
+            {
+                return;
+            }
+
+            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
+            {
+                return;
+            }
+
+            if (ChatInput.IsFocused)
+            {
+                return;
+            }
+
+            if (Mouse.current.leftButton.wasPressedThisFrame)
+            {
+                Vector2 mousePos = Mouse.current.position.ReadValue();
+                if (IsPointerOverUI(mousePos))
+                {
+                    return;
+                }
+
+                if (_mainCamera == null)
+                {
+                    _mainCamera = Camera.main;
+                }
+
+                if (_mainCamera == null)
+                {
+                    return;
+                }
+
+                Vector3 worldPos = _mainCamera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, -_mainCamera.transform.position.z));
+
+                int unityX = Mathf.FloorToInt(worldPos.x);
+                int unityY = Mathf.FloorToInt(worldPos.y);
+
+                if (_mapManager != null && _networkService != null)
+                {
+                    ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
+                    ushort serverY = (ushort)Mathf.Clamp(_mapManager.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
+
+                    _networkService.SendAction(new ClickCellPacket(serverX, serverY));
+                }
+            }
+        }
+
+        // Клик по миру шлётся только если указатель не над UI-элементом.
+        // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
+        private static bool IsPointerOverUI(Vector2 mousePos)
+        {
+            var docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
+            foreach (var doc in docs)
+            {
+                var root = doc.rootVisualElement;
+                if (root?.panel == null)
+                {
+                    continue;
+                }
+
+                // Input System gives bottom-left origin; UI Toolkit panels expect top-left.
+                var panelPos = new Vector2(mousePos.x, Screen.height - mousePos.y);
+                var picked = root.panel.Pick(panelPos);
+                if (picked != null && picked != root && picked is not TemplateContainer)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void HandleKeyboardInput()
@@ -73,7 +131,7 @@ namespace Fodinae.Scripts.Player
                 return;
             }
 
-            if (PacketHandler.IsInputBlocked)
+            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -97,9 +155,9 @@ namespace Fodinae.Scripts.Player
                         bool alt = Keyboard.current.altKey.isPressed;
                         bool shift = Keyboard.current.shiftKey.isPressed;
 
-                        if (NetworkService.Instance != null)
+                        if (_networkService != null)
                         {
-                            NetworkService.Instance.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
+                            _networkService.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
                         }
                     }
                 }
@@ -156,7 +214,7 @@ namespace Fodinae.Scripts.Player
                 Key.Digit8 => (byte)'8',
                 Key.Digit9 => (byte)'9',
 
-                _ => 0
+                _ => 0,
             };
         }
     }

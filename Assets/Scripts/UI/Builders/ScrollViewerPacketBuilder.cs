@@ -1,13 +1,15 @@
-using Fodinae.Scripts;
+#nullable enable
+
+using Fodinae;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Scripts.UI.Builders
+namespace Fodinae.UI.Builders
 {
     public class ScrollViewerPacketBuilder : PacketUIBuilderBase
     {
-        public override VisualElement Build(IGUIComponentPacket packet, PacketUIBuilder builder)
+        public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)
         {
             if (packet is not ScrollViewerPacket scrollPkt)
             {
@@ -22,7 +24,7 @@ namespace Fodinae.Scripts.UI.Builders
 
             foreach (var childPacket in scrollPkt.Children)
             {
-                var childElement = builder.Build(childPacket);
+                var childElement = builder.Build(childPacket)!;
                 scrollView.contentContainer.Add(childElement);
             }
 
