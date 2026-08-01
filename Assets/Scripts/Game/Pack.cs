@@ -7,6 +7,7 @@ using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
@@ -38,6 +39,7 @@ namespace Fodinae.Game
             }
 
             var clanGo = new GameObject("ClanIcon");
+            clanGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             clanGo.transform.SetParent(transform);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();

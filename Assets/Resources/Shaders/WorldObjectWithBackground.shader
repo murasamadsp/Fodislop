@@ -54,9 +54,19 @@ Shader "Custom/WorldObjectWithBackground"
                 float _CheckBackground;
             CBUFFER_END
 
+            sampler2D _WorldLightTexture;
+            float4 _WorldLightRect;
+
+            float3 GetTerrariaLightColor(float2 worldPos)
+            {
+                float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
+                return tex2D(_WorldLightTexture, lightUV).rgb;
+            }
+
             Varyings vert(Attributes input)
             {
                 Varyings output;
+                float4 worldPos = mul(UNITY_MATRIX_M, input.positionOS);
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.bgUV = TRANSFORM_TEX(input.bgUV, _BackgroundTex);
@@ -66,19 +76,20 @@ Shader "Custom/WorldObjectWithBackground"
             half4 frag(Varyings input) : SV_Target
             {
                 half4 mainColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                float3 lightColor = GetTerrariaLightColor(input.positionCS.xy);
 
                 #if _CHECK_BACKGROUND_ON
                 half4 bgColor = SAMPLE_TEXTURE2D(_BackgroundTex, sampler_BackgroundTex, input.bgUV);
 
                 if (mainColor.a < _Cutoff)
                 {
-                    return bgColor;
+                    return half4(bgColor.rgb * lightColor, bgColor.a);
                 }
 
-                half3 finalColor = lerp(bgColor.rgb, mainColor.rgb, mainColor.a);
+                half3 finalColor = lerp(bgColor.rgb, mainColor.rgb, mainColor.a) * lightColor;
                 return half4(finalColor, 1.0);
                 #else
-                return mainColor;
+                return half4(mainColor.rgb * lightColor, mainColor.a);
                 #endif
             }
             ENDHLSL

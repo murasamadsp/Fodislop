@@ -501,6 +501,9 @@ InitTestScene*.unity*
 /[Aa]ssets/Plugins/FMOD/Cache/*
 /[Aa]ssets/StreamingAssets/**/*.bank
 /[Aa]ssets/StreamingAssets/**/*.bank.meta
+# Распакованный кэш карт — генерируется из *.zip при первом запуске
+/[Aa]ssets/StreamingAssets/WorldMaps/*.mapb
+/[Aa]ssets/StreamingAssets/WorldMaps/*.mapb.meta
 fmod_editor.log
 
 # macOS system files

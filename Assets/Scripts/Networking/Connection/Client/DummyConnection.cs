@@ -1878,14 +1878,15 @@ namespace MinesServer.Networking.Connection.Client
 
             const CellConfigProperties ROAD_PROPS = CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow;
             const CellConfigProperties SAND_BOULDER_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties ARTIFICIAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties ARTIFICIAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing;
             const CellConfigProperties ROCK_CRYSTAL_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties GLOWING_CRYSTAL_PROPS = ROCK_CRYSTAL_PROPS | CellConfigProperties.Glowing;
             const CellConfigProperties INDESTRUCTIBLE_PROPS = CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
-            const CellConfigProperties BOX_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow;
+            const CellConfigProperties BOX_PROPS = CellConfigProperties.Breakable | CellConfigProperties.DropsShadow | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing;
 
             // === ROADS: ReliefGroup = 0 ===
-            SetConfig(configs, CellType.BuildingRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
-            SetConfig(configs, CellType.VolcanoBackground, ROAD_PROPS, 0);
+            SetConfig(configs, CellType.BuildingRoad, ROAD_PROPS | CellConfigProperties.Glowing, 0, color: unchecked((int)0xFFCCCCCC));
+            SetConfig(configs, CellType.VolcanoBackground, ROAD_PROPS | CellConfigProperties.Glowing, 0);
             SetConfig(configs, CellType.Empty, ROAD_PROPS, 0, color: unchecked((int)0xFF808080));
             SetConfig(configs, CellType.Road, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCCCC));
             SetConfig(configs, CellType.GoldenRoad, ROAD_PROPS, 0, color: unchecked((int)0xFFCCCC00));
@@ -1911,9 +1912,9 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
             SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
             SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
-            SetConfig(configs, CellType.DeepMagmaBoulder, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.DeepMagmaBoulder, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1);
             SetConfig(configs, CellType.MilitaryBlockSand, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.Lava, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFF4500),
+            SetConfig(configs, CellType.Lava, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFFFF4500),
                 animation: (CellAnimationType)4, animationSpeed: 10, frameOffset: 0, distortion: (CellDistortionType)0);
             SetConfig(configs, CellType.Boulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
             SetConfig(configs, CellType.Boulder2, SAND_BOULDER_PROPS, 1);
@@ -1924,10 +1925,13 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
 
             // === ACIDS (keep existing animations): ReliefGroup = 1 ===
-            SetConfig(configs, CellType.GrayAcid, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00FF00),
+            SetConfig(configs, CellType.GrayAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF00FF00),
                 animation: CellAnimationType.Blinking, animationSpeed: 5, frameOffset: 1);
-            SetConfig(configs, CellType.PurpleAcid, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF800080),
+            SetConfig(configs, CellType.PurpleAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF800080),
                 animation: CellAnimationType.Shimmer, animationSpeed: 50, frameOffset: 1);
+            SetConfig(configs, CellType.PassiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF8A2BE2));
+            SetConfig(configs, CellType.LivingActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF66FF22));
+            SetConfig(configs, CellType.CorrosiveActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF9AFF22));
 
             // === ARTIFICIAL: ReliefGroup = 2 ===
             SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513));
@@ -1943,27 +1947,40 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666));
 
             // === ROCKS & CRYSTALS: ReliefGroup = 3 ===
-            SetConfig(configs, CellType.XGreen, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.XBlue, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.XRed, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.XCyan, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.XViolet, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D));
+            SetConfig(configs, CellType.XBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
+            SetConfig(configs, CellType.XRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920));
+            SetConfig(configs, CellType.XCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
+            SetConfig(configs, CellType.XViolet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
             SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.DeepTurquoiseRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.DeepRainbowRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.DeepTurquoiseRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
+            SetConfig(configs, CellType.DeepRainbowRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6));
             SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3);
             SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.Green, ROCK_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00));
-            SetConfig(configs, CellType.Red, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.Blue, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.Violet, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.White, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.Cyan, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.Green, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00));
+            SetConfig(configs, CellType.Red, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920));
+            SetConfig(configs, CellType.Blue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
+            SetConfig(configs, CellType.Violet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
+            SetConfig(configs, CellType.White, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF));
+            SetConfig(configs, CellType.Cyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
             SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.AcidRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.AcidRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
             SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3);
             SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3);
             SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3);
+
+            // === LIVING CRYSTALS & SPECIAL LUMINOUS MINERALS ===
+            SetConfig(configs, CellType.AliveCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
+            SetConfig(configs, CellType.AliveRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920));
+            SetConfig(configs, CellType.AliveViol, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
+            SetConfig(configs, CellType.AliveNigger, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF802EB8));
+            SetConfig(configs, CellType.AliveWhite, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF));
+            SetConfig(configs, CellType.AliveRainbow, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6));
+            SetConfig(configs, CellType.AliveBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
+            SetConfig(configs, CellType.Pearl, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF));
+            SetConfig(configs, CellType.DeepLazuriteSand, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
+            SetConfig(configs, CellType.SuperRainbow, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6));
+            SetConfig(configs, CellType.HypnoRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
 
             // === INDESTRUCTIBLE ROCKS: ReliefGroup = 4 (NO Breakable!) ===
             SetConfig(configs, CellType.NiggerRock, INDESTRUCTIBLE_PROPS, 4);
@@ -1971,8 +1988,8 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.RedRock, INDESTRUCTIBLE_PROPS, 4);
 
             // === GATE & TELEPORT BLOCK (passable but not roads) ===
-            SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow, 0);
-            SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow, 0);
+            SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
+            SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
 
             return configs;
         }

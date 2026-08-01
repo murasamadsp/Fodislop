@@ -42,6 +42,8 @@ namespace Fodinae.World
 
         private Texture2D? _cachedEmptyTexture;
 
+        public uint TextureRevision { get; private set; }
+
         [Inject]
         private IAssetLoader? _assetLoader;
 
@@ -448,6 +450,7 @@ namespace Fodinae.World
 
             _currentAtlas.CopyTextureToAtlas(cellType, texture);
             _textureCache.AddTexture(cellType, textureInfo);
+            TextureRevision++;
             OnTextureLoaded?.Invoke($"Cells/{(int)cellType}.png", texture);
         }
 
@@ -514,6 +517,7 @@ namespace Fodinae.World
             GenerateFlowMap();
             EnsureFlowMapInAtlas(_currentAtlas);
             _cachedEmptyTexture = null;
+            TextureRevision++;
         }
 
         private void CreateFallbackTexture(CellType cellType, int globalX, int globalY)

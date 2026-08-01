@@ -9,6 +9,7 @@ using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Networking.Connection.Client;
 using Fodinae.Player.Logic;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Inventory.Interfaces;
 using Fodinae.UI.HUD.Inventory.Model;
@@ -16,6 +17,7 @@ using Fodinae.UI.HUD.Inventory.View;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.UI.HUD.Player.View;
 using Fodinae.World;
+using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
@@ -75,6 +77,8 @@ namespace Fodinae.Core
             RegisterManager<UIInputManager>(builder);
             RegisterManager<FPSCounter>(builder);
             RegisterManager<FloatingChatManager>(builder);
+            RegisterManager<PostProcessController>(builder);
+            RegisterManager<TerrariaLightingEngine>(builder);
 
             builder.RegisterBuildCallback(resolver =>
             {
@@ -103,6 +107,7 @@ namespace Fodinae.Core
                 resolver.Resolve<FPSCounter>();
                 resolver.Resolve<FloatingChatManager>();
                 resolver.Resolve<IInputBlocker>();
+                resolver.Resolve<PostProcessController>();
 
                 foreach (var terrain in FindObjectsByType<TerrainRenderer>())
                 {

@@ -252,11 +252,7 @@ namespace Fodinae.World.Terrain
                 }
             }
 
-            bool hasC = (bl.Properties & CellConfigProperties.DropsShadow) != 0 || (br.Properties & CellConfigProperties.DropsShadow) != 0 ||
-                        (tl.Properties & CellConfigProperties.DropsShadow) != 0 || (tr.Properties & CellConfigProperties.DropsShadow) != 0;
-            bool hasR = (bl.Properties & CellConfigProperties.ReceivesShadow) != 0 || (br.Properties & CellConfigProperties.ReceivesShadow) != 0 ||
-                        (tl.Properties & CellConfigProperties.ReceivesShadow) != 0 || (tr.Properties & CellConfigProperties.ReceivesShadow) != 0;
-            GridShadowValues[x, y] = (hasC && hasR) ? 0.7f : 0.0f;
+            GridShadowValues[x, y] = 0.0f;
         }
 
         private void CalculateCellNode(TerrainCellCache cellCache, int x, int y)

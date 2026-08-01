@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using TMPro;
@@ -131,6 +132,11 @@ namespace Fodinae.Game
             _spriteRenderer = GetComponent<SpriteRenderer>();
         }
 
+        if (!IsLocalPlayer && !TryGetComponent<MotionBlurTag>(out _))
+        {
+            gameObject.AddComponent<MotionBlurTag>();
+        }
+
         transform.localScale = Vector3.one;
         _targetPosition = transform.position;
         _serverPosition = transform.position;
@@ -146,6 +152,11 @@ namespace Fodinae.Game
         InitializeVisualElements();
     }
 
+    protected void OnEnable()
+    {
+        ApplyWorldUiLayer();
+    }
+
     private void InitializeVisualElements()
     {
         _tailContainer = new GameObject("TailContainer");
@@ -153,6 +164,7 @@ namespace Fodinae.Game
         _tailContainer.transform.localPosition = Vector3.zero;
 
         var textGo = new GameObject("Nickname");
+        textGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
         textGo.transform.SetParent(transform);
         _nicknameText = textGo.AddComponent<TextMeshPro>();
         _nicknameText.alignment = TextAlignmentOptions.Center;
@@ -165,10 +177,37 @@ namespace Fodinae.Game
         textRenderer.sortingOrder = 100;
 
         var clanGo = new GameObject("ClanIcon");
+        clanGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
         clanGo.transform.SetParent(transform);
         _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
         _clanRenderer.sortingOrder = 100;
         _clanRenderer.transform.localScale = Vector3.one * 0.8f;
+
+    }
+
+    private void ApplyWorldUiLayer()
+    {
+        int uiLayer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
+
+        if (_nicknameText == null)
+        {
+            _nicknameText = transform.Find("Nickname")?.GetComponent<TextMeshPro>();
+        }
+
+        if (_clanRenderer == null)
+        {
+            _clanRenderer = transform.Find("ClanIcon")?.GetComponent<SpriteRenderer>();
+        }
+
+        if (_nicknameText != null)
+        {
+            _nicknameText.gameObject.layer = uiLayer;
+        }
+
+        if (_clanRenderer != null)
+        {
+            _clanRenderer.gameObject.layer = uiLayer;
+        }
     }
 
     protected void Start()

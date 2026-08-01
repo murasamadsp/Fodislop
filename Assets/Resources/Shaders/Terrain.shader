@@ -75,11 +75,19 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             CBUFFER_END
 
             float _DarknessFactor;
-            float4 _HeadlightPos;
-            float4 _HeadlightDir;
-            float _HeadlightAngleCos;
-            float _HeadlightRange;
-            float _HeadlightIntensity;
+            sampler2D _WorldLightTexture;
+            float4 _WorldLightRect;
+
+            float3 GetTerrariaLightColor(float2 worldPos)
+            {
+                float3 lightColor = float3(1.0, 1.0, 1.0);
+                if (_UseLight2D > 0.5)
+                {
+                    float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
+                    lightColor = tex2D(_WorldLightTexture, lightUV).rgb;
+                }
+                return lightColor;
+            }
 
             float3 RgbToHsv(float3 c)
             {
@@ -231,42 +239,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float speed = input.animData.y;
                 float offset = input.animData.z;
 
-                if (_SimpleGraphics < 0.5)
-                {
-                    float textureType = input.packedData.x;
-                    float reliefMaskVal = input.packedData.y;
-
-                    if (textureType > 0.5)
-                    {
-                        float val = 15.0 - reliefMaskVal;
-                        float4 bits = frac(val * float4(0.5, 0.25, 0.125, 0.0625));
-                        bool4 isCliff = bits >= 0.5;
-
-                        float u = input.packedData.z;
-                        float v = input.packedData.w;
-                        float uvMinus = u - v;
-                        float uvPlus = u + v;
-
-                        bool isTop    = (uvPlus > 0.0) && (uvMinus < 0.0);
-                        bool isLeft   = (uvPlus < 0.0) && (uvMinus < 0.0);
-                        bool isBottom = (uvMinus > 0.0) && (uvPlus < 0.0);
-                        bool isRight  = (uvPlus > 0.0) && (uvMinus > 0.0);
-
-                        bool activeCliff = (isTop && isCliff.x) || (isLeft && isCliff.y) || (isBottom && isCliff.z) || (isRight && isCliff.w);
-
-                        if (activeCliff)
-                        {
-                            float maxUV2 = max(u * u, v * v);
-                            float grad = 1.0 - maxUV2;
-                            finalRgb *= (grad * grad * grad);
-                        }
-                    }
-                    else
-                    {
-                        float shadowVal = input.packedData.y;
-                        finalRgb *= (1.0 - shadowVal * shadowVal);
-                    }
-                }
+                // Relief connectivity remains mesh metadata, but it must not
+                // paint synthetic triangular shadows over the source texture.
+                // All terrain darkening comes from the world light texture.
 
                 if (animType == 1) // Blinking
                 {
@@ -301,31 +276,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalRgb = HsvToRgb(hsv);
                 }
 
-                float darkness = _DarknessFactor;
                 float finalAlpha = 1.0;
-                if (_UseLight2D > 0.5)
-                {
-                    float2 pixelPos = input.worldPosition.xy;
-                    float2 toLight = pixelPos - _HeadlightPos.xy;
-                    float dist = length(toLight);
-                    float2 dir = toLight / (dist + 0.0001);
-                    float cosAngle = dot(dir, _HeadlightDir.xy);
-                    float angleAtten = smoothstep(_HeadlightAngleCos, 1.0, cosAngle);
-                    float distAtten = 1.0 - smoothstep(0.0, _HeadlightRange, dist);
-                    float attenuation = angleAtten * distAtten;
-                    darkness *= (1.0 - attenuation * _HeadlightIntensity);
-                }
                 float4 glowFlags = input.glowData;
                 int iflags = int(round(glowFlags.z));
-                bool hasGlow = (iflags & 1) != 0;
                 bool isRoundable = (iflags & 2) != 0;
-                if (hasGlow)
-                {
-                    float2 toMagma = input.worldPosition.xy - glowFlags.xy;
-                    float dist = length(toMagma);
-                    float glowAtten = 1.0 - smoothstep(0.0, 1.8, dist);
-                    darkness *= (1.0 - glowAtten);
-                }
                 if (isRoundable)
                 {
                     int sameMask = int(round(glowFlags.w));
@@ -364,9 +318,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     alpha = lerp(alpha, 1.0, cornerExclude);
                     finalAlpha *= alpha;
                 }
-                finalRgb *= (1.0 - darkness);
+                float3 lightColor = GetTerrariaLightColor(input.worldPosition.xy);
+                float3 litRgb = finalRgb * lightColor;
+                if (finalAlpha < 0.99 && finalAlpha > 0.01)
+                {
+                    litRgb /= max(finalAlpha, 0.15);
+                }
 
-                return half4(finalRgb, finalAlpha);
+                return half4(litRgb, finalAlpha);
             }
             ENDHLSL
         }
@@ -426,11 +385,19 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             CBUFFER_END
 
             float _DarknessFactor;
-            float4 _HeadlightPos;
-            float4 _HeadlightDir;
-            float _HeadlightAngleCos;
-            float _HeadlightRange;
-            float _HeadlightIntensity;
+            sampler2D _WorldLightTexture;
+            float4 _WorldLightRect;
+
+            float3 GetTerrariaLightColor(float2 worldPos)
+            {
+                float3 lightColor = float3(1.0, 1.0, 1.0);
+                if (_UseLight2D > 0.5)
+                {
+                    float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
+                    lightColor = tex2D(_WorldLightTexture, lightUV).rgb;
+                }
+                return lightColor;
+            }
 
             float3 RgbToHsv(float3 c)
             {
@@ -582,42 +549,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float speed = input.animData.y;
                 float offset = input.animData.z;
 
-                if (_SimpleGraphics < 0.5)
-                {
-                    float textureType = input.packedData.x;
-                    float reliefMaskVal = input.packedData.y;
-
-                    if (textureType > 0.5)
-                    {
-                        float val = 15.0 - reliefMaskVal;
-                        float4 bits = frac(val * float4(0.5, 0.25, 0.125, 0.0625));
-                        bool4 isCliff = bits >= 0.5;
-
-                        float u = input.packedData.z;
-                        float v = input.packedData.w;
-                        float uvMinus = u - v;
-                        float uvPlus = u + v;
-
-                        bool isTop    = (uvPlus > 0.0) && (uvMinus < 0.0);
-                        bool isLeft   = (uvPlus < 0.0) && (uvMinus < 0.0);
-                        bool isBottom = (uvMinus > 0.0) && (uvPlus < 0.0);
-                        bool isRight  = (uvPlus > 0.0) && (uvMinus > 0.0);
-
-                        bool activeCliff = (isTop && isCliff.x) || (isLeft && isCliff.y) || (isBottom && isCliff.z) || (isRight && isCliff.w);
-
-                        if (activeCliff)
-                        {
-                            float maxUV2 = max(u * u, v * v);
-                            float grad = 1.0 - maxUV2;
-                            finalRgb *= (grad * grad * grad);
-                        }
-                    }
-                    else
-                    {
-                        float shadowVal = input.packedData.y;
-                        finalRgb *= (1.0 - shadowVal * shadowVal);
-                    }
-                }
+                // Relief connectivity remains mesh metadata, but it must not
+                // paint synthetic triangular shadows over the source texture.
+                // All terrain darkening comes from the world light texture.
 
                 if (animType == 1) // Blinking
                 {
@@ -652,31 +586,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalRgb = HsvToRgb(hsv);
                 }
 
-                float darkness = _DarknessFactor;
                 float finalAlpha = 1.0;
-                if (_UseLight2D > 0.5)
-                {
-                    float2 pixelPos = input.worldPosition.xy;
-                    float2 toLight = pixelPos - _HeadlightPos.xy;
-                    float dist = length(toLight);
-                    float2 dir = toLight / (dist + 0.0001);
-                    float cosAngle = dot(dir, _HeadlightDir.xy);
-                    float angleAtten = smoothstep(_HeadlightAngleCos, 1.0, cosAngle);
-                    float distAtten = 1.0 - smoothstep(0.0, _HeadlightRange, dist);
-                    float attenuation = angleAtten * distAtten;
-                    darkness *= (1.0 - attenuation * _HeadlightIntensity);
-                }
                 float4 glowFlags = input.glowData;
                 int iflags = int(round(glowFlags.z));
-                bool hasGlow = (iflags & 1) != 0;
                 bool isRoundable = (iflags & 2) != 0;
-                if (hasGlow)
-                {
-                    float2 toMagma = input.worldPosition.xy - glowFlags.xy;
-                    float dist = length(toMagma);
-                    float glowAtten = 1.0 - smoothstep(0.0, 1.8, dist);
-                    darkness *= (1.0 - glowAtten);
-                }
                 if (isRoundable)
                 {
                     int sameMask = int(round(glowFlags.w));
@@ -715,9 +628,168 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     alpha = lerp(alpha, 1.0, cornerExclude);
                     finalAlpha *= alpha;
                 }
-                finalRgb *= (1.0 - darkness);
+                float3 lightColor = GetTerrariaLightColor(input.worldPosition.xy);
+                float3 litRgb = finalRgb * lightColor;
+                if (finalAlpha < 0.99 && finalAlpha > 0.01)
+                {
+                    litRgb /= max(finalAlpha, 0.15);
+                }
 
-                return half4(finalRgb, finalAlpha);
+                return half4(litRgb, finalAlpha);
+            }
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "OcclusionCoverage"
+            Tags { "LightMode" = "FodinaeOcclusionCoverage" }
+
+            Blend One One
+            BlendOp Max
+            ColorMask R
+            ZWrite Off
+            ZTest Always
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex CoverageVert
+            #pragma fragment CoverageFrag
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            struct CoverageAttributes
+            {
+                float4 positionOS   : POSITION;
+                float2 uv           : TEXCOORD0;
+                float4 color        : COLOR;
+                float4 subAtlasRect : TEXCOORD1;
+                float4 tileSizeUV   : TEXCOORD2;
+                float4 worldPosAttr : TEXCOORD3;
+                float4 animData     : TEXCOORD4;
+                float4 glowAttr     : TEXCOORD6;
+            };
+
+            struct CoverageVaryings
+            {
+                float4 positionCS   : SV_POSITION;
+                float2 uv           : TEXCOORD0;
+                float4 color        : COLOR;
+                float4 subAtlasRect : TEXCOORD1;
+                float4 tileSizeUV   : TEXCOORD2;
+                float4 worldPos     : TEXCOORD3;
+                float4 animData     : TEXCOORD4;
+                float4 glowData     : TEXCOORD5;
+            };
+
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+
+            CoverageVaryings CoverageVert(CoverageAttributes input)
+            {
+                CoverageVaryings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = input.uv;
+                output.color = input.color;
+                output.subAtlasRect = input.subAtlasRect;
+                output.tileSizeUV = input.tileSizeUV;
+                output.worldPos = input.worldPosAttr;
+                output.animData = input.animData;
+                output.glowData = input.glowAttr;
+                return output;
+            }
+
+            half4 CoverageFrag(CoverageVaryings input) : SV_Target
+            {
+                float castsShadow = step(0.5, input.animData.w);
+                if (castsShadow < 0.5 || input.worldPos.w > 1.5 || input.color.a < 0.05)
+                {
+                    return 0.0;
+                }
+
+                if (input.subAtlasRect.z < 0.0001 || input.tileSizeUV.x <= 0.0)
+                {
+                    return half4(castsShadow * input.color.a, 0.0, 0.0, 1.0);
+                }
+
+                float2 baseUV = input.subAtlasRect.xy;
+                float2 subAtlasSizeUV = input.subAtlasRect.zw;
+                float2 tileSizeUV = input.tileSizeUV.xy;
+                float2 tilesCount = max(ceil(subAtlasSizeUV / tileSizeUV - 0.0001), 1.0);
+                float2 gridPosition = floor(input.worldPos.xy + 0.001);
+                float2 wrapped;
+                bool isTiling = fmod(input.worldPos.w, 2.0) > 0.5;
+                const float EPS = 0.0001;
+
+                float variantY = fmod(abs(gridPosition.y), tilesCount.y);
+                wrapped.y = floor(tilesCount.y - EPS - variantY);
+                wrapped.x = isTiling
+                    ? floor(input.worldPos.z + EPS)
+                    : floor(fmod(abs(gridPosition.x), tilesCount.x) + EPS);
+                wrapped = clamp(wrapped, 0.0, tilesCount - 1.0);
+
+                float2 tileOffsetUV = wrapped * tileSizeUV;
+                float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
+                float2 quadUV = clamp(input.uv, EPS, 1.0 - EPS);
+                float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
+
+                // Coverage deliberately uses animation frame zero. Lighting
+                // must not rebuild or shimmer whenever a visual frame changes.
+                half textureAlpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV).a;
+                if (textureAlpha < 0.05)
+                {
+                    return 0.0;
+                }
+
+                // Preserve the actual atlas alpha. A binary cutoff turns
+                // translucent details into a solid square in the SDF and
+                // prevents them from producing proportional soft shadows.
+                float coverage = textureAlpha;
+                int flags = int(round(input.glowData.z));
+                if ((flags & 2) != 0)
+                {
+                    int sameMask = int(round(input.glowData.w));
+                    float4 bits = frac(sameMask * float4(0.5, 0.25, 0.125, 0.0625));
+                    bool4 hasSame = bits >= 0.5;
+                    float2 p = input.uv - 0.5;
+                    float rTL = (hasSame.x || hasSame.y) ? 0.0 : 0.5;
+                    float rTR = (hasSame.x || hasSame.w) ? 0.0 : 0.5;
+                    float rBL = (hasSame.z || hasSame.y) ? 0.0 : 0.5;
+                    float rBR = (hasSame.z || hasSame.w) ? 0.0 : 0.5;
+                    float distanceFromCenter = length(p);
+                    float antialias = min(fwidth(distanceFromCenter), 1.0 / 16.0);
+                    float roundCoverage = 1.0 - smoothstep(
+                        0.51 - antialias,
+                        0.51 + antialias,
+                        distanceFromCenter);
+
+                    if (rTL < 0.25)
+                    {
+                        roundCoverage = max(roundCoverage,
+                            smoothstep(-antialias, 0.0, -p.x) * smoothstep(-antialias, 0.0, p.y));
+                    }
+                    if (rTR < 0.25)
+                    {
+                        roundCoverage = max(roundCoverage,
+                            smoothstep(-antialias, 0.0, p.x) * smoothstep(-antialias, 0.0, p.y));
+                    }
+                    if (rBL < 0.25)
+                    {
+                        roundCoverage = max(roundCoverage,
+                            smoothstep(-antialias, 0.0, -p.x) * smoothstep(-antialias, 0.0, -p.y));
+                    }
+                    if (rBR < 0.25)
+                    {
+                        roundCoverage = max(roundCoverage,
+                            smoothstep(-antialias, 0.0, p.x) * smoothstep(-antialias, 0.0, -p.y));
+                    }
+
+                    float cornerDistance = abs(abs(p.x) - abs(p.y));
+                    float cornerExclude = smoothstep(0.4, 0.5, cornerDistance);
+                    roundCoverage = lerp(roundCoverage, 1.0, cornerExclude);
+                    coverage *= roundCoverage;
+                }
+
+                return half4(saturate(coverage * castsShadow * input.color.a), 0.0, 0.0, 1.0);
             }
             ENDHLSL
         }

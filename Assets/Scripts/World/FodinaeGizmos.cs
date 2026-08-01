@@ -11,6 +11,26 @@ namespace Fodinae.World
     /// </summary>
     public static class FodinaeGizmos
     {
+        private static GUIStyle? _labelStyle;
+
+        private static GUIStyle LabelStyle
+        {
+            get
+            {
+                if (_labelStyle == null)
+                {
+                    _labelStyle = new GUIStyle
+                    {
+                        fontSize = 12,
+                        fontStyle = FontStyle.Bold,
+                        alignment = TextAnchor.MiddleCenter,
+                    };
+                }
+
+                return _labelStyle;
+            }
+        }
+
         public static void DrawCircle(Vector3 center, float radius, Color color, float thickness = 2f)
         {
             Handles.color = color;
@@ -19,13 +39,8 @@ namespace Fodinae.World
 
         public static void DrawLabel(Vector3 position, string text, Color color)
         {
-            GUIStyle style = new GUIStyle();
-            style.normal.textColor = color;
-            style.fontSize = 12;
-            style.fontStyle = FontStyle.Bold;
-            style.alignment = TextAnchor.MiddleCenter;
-
-            Handles.Label(position, text, style);
+            LabelStyle.normal.textColor = color;
+            Handles.Label(position, text, LabelStyle);
         }
 
         public static void DrawLine(Vector3 start, Vector3 end, Color color, float thickness = 1f)
@@ -36,8 +51,8 @@ namespace Fodinae.World
 
         public static void DrawBounds(Vector3 center, Vector2 size, Color color)
         {
-            Gizmos.color = color;
-            Gizmos.DrawWireCube(center, new Vector3(size.x, size.y, 0.1f));
+            Handles.color = color;
+            Handles.DrawWireCube(center, new Vector3(size.x, size.y, 0.1f));
         }
 
         public static void DrawGrid(Vector3 origin, int width, int height, float cellSize, Color color)
@@ -56,14 +71,23 @@ namespace Fodinae.World
 
         public static void DrawArrow(Vector3 pos, Vector3 direction, Color color, float length = 1f, float arrowHeadLength = 0.25f, float arrowHeadAngle = 20f)
         {
+            if (direction == Vector3.zero)
+            {
+                return;
+            }
+
+            Vector3 dir = direction.normalized;
+            Vector3 end = pos + (dir * length);
+
             Handles.color = color;
-            Vector3 end = pos + (direction * length);
             Handles.DrawLine(pos, end);
 
-            Vector3 right = Quaternion.LookRotation(direction, Vector3.forward) * Quaternion.Euler(0, 180 + arrowHeadAngle, 0) * Vector3.forward;
-            Vector3 left = Quaternion.LookRotation(direction, Vector3.forward) * Quaternion.Euler(0, 180 - arrowHeadAngle, 0) * Vector3.forward;
-            Handles.DrawLine(end, end + (right * arrowHeadLength));
-            Handles.DrawLine(end, end + (left * arrowHeadLength));
+            // 2D-наконечник: поворачиваем «хвост» стрелки в ±angle вокруг оси Z (плоскость XY)
+            Vector3 headBase = -dir * arrowHeadLength;
+            Vector3 right = Quaternion.Euler(0, 0, arrowHeadAngle) * headBase;
+            Vector3 left = Quaternion.Euler(0, 0, -arrowHeadAngle) * headBase;
+            Handles.DrawLine(end, end + right);
+            Handles.DrawLine(end, end + left);
         }
 
         public static void DrawDottedLine(Vector3 start, Vector3 end, Color color, float dashSize = 2f)

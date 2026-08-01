@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.World.Lighting;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VContainer;
@@ -16,6 +17,10 @@ namespace Fodinae.World.Terrain
     [ExecuteAlways]
     public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
     {
+        private const int TerrainRegionAnchorCells = 8;
+        private const int DimensionAllocationQuantum = 32;
+        private const float DimensionShrinkDelay = 0.4f;
+
         public static TerrainRenderer? Instance { get; private set; }
 
         [Header("Configuration")]
@@ -58,6 +63,9 @@ namespace Fodinae.World.Terrain
         private Vector2Int _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
         private int _meshWidth;
         private int _meshHeight;
+        private int _lastRequestedWidth;
+        private int _lastRequestedHeight;
+        private float _lastViewportSizeChangeTime;
         private bool _isInitialized = false;
         private bool _subscribedEvents = false;
         private bool _needsRefresh = false;
@@ -88,10 +96,29 @@ namespace Fodinae.World.Terrain
 
         public static void OnCellChanged(int x, int y)
         {
-            if (Instance != null)
+            Instance?.HandleCellChanged(x, y);
+        }
+
+        private void HandleCellChanged(int serverX, int serverY)
+        {
+            if (_mapManager == null || _lastGridPos.x == int.MinValue)
             {
-                Instance._needsRefresh = true;
+                _needsRefresh = true;
+                return;
             }
+
+            int unityY = Mathf.FloorToInt(CoordinateUtils.ServerToUnityY(serverY, _mapManager.WorldHeight));
+            bool affectsCachedTerrain =
+                serverX >= _lastGridPos.x - 1 &&
+                serverX <= _lastGridPos.x + _meshWidth &&
+                unityY >= _lastGridPos.y - 1 &&
+                unityY <= _lastGridPos.y + _meshHeight;
+            if (affectsCachedTerrain)
+            {
+                _needsRefresh = true;
+            }
+
+            TerrariaLightingEngine.Instance?.InvalidateCell(serverX, unityY);
         }
 
         protected void Awake()
@@ -104,7 +131,7 @@ namespace Fodinae.World.Terrain
 
             Instance = this;
             _targetSimpleGraphics = PlayerPrefs.GetInt("SimpleGraphics", 0) == 1 ? 1f : 0f;
-            _targetUseLight2D = PlayerPrefs.GetInt("UseLight2D", 0) == 1 ? 1f : 0f;
+            _targetUseLight2D = PlayerPrefs.GetInt("UseLight2D", 1) == 1 ? 1f : 0f;
             InitializeShader();
 
             _meshFilter = GetComponent<MeshFilter>();
@@ -222,12 +249,14 @@ namespace Fodinae.World.Terrain
                 InitializeShader();
                 _cellCache.ClearCaches();
                 _needsRefresh = true;
+                TerrariaLightingEngine.Instance?.InvalidateStaticCache();
             }
         }
 
         private void OnWorldDataLoaded()
         {
             _needsRefresh = true;
+            TerrariaLightingEngine.Instance?.InvalidateStaticCache();
         }
 
         protected void LateUpdate()
@@ -263,20 +292,51 @@ namespace Fodinae.World.Terrain
 
             LogDiag(1 << 3, () => $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
 
-            int targetWidth = Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) + (_viewportPadding * 2);
-            int targetHeight = Mathf.CeilToInt((_mainCamera.orthographicSize * 2) / _cellSize) + (_viewportPadding * 2);
-
-            targetWidth = Mathf.Clamp(targetWidth, 2, 256);
-            targetHeight = Mathf.Clamp(targetHeight, 2, 256);
-            if (targetWidth % 2 != 0)
+            TerrariaLightingEngine? lightingEngine = null;
+            int effectiveViewportPadding = _viewportPadding;
+            if (_targetUseLight2D > 0.5f)
             {
-                targetWidth++;
+                lightingEngine = TerrariaLightingEngine.Instance;
+                if (lightingEngine == null)
+                {
+                    lightingEngine = gameObject.AddComponent<TerrariaLightingEngine>();
+                }
+
+                effectiveViewportPadding = Mathf.Max(
+                    effectiveViewportPadding,
+                    lightingEngine.RequiredTerrainPadding + TerrainRegionAnchorCells);
             }
 
-            if (targetHeight % 2 != 0)
+            int requestedWidth = Mathf.Clamp(
+                Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) +
+                    (effectiveViewportPadding * 2),
+                2,
+                256);
+            int requestedHeight = Mathf.Clamp(
+                Mathf.CeilToInt((_mainCamera.orthographicSize * 2) / _cellSize) +
+                    (effectiveViewportPadding * 2),
+                2,
+                256);
+            if (requestedWidth != _lastRequestedWidth || requestedHeight != _lastRequestedHeight)
             {
-                targetHeight++;
+                _lastRequestedWidth = requestedWidth;
+                _lastRequestedHeight = requestedHeight;
+                _lastViewportSizeChangeTime = Time.unscaledTime;
             }
+
+            bool viewportSizeSettled =
+                !Application.isPlaying ||
+                Time.unscaledTime - _lastViewportSizeChangeTime >= DimensionShrinkDelay;
+            int targetWidth = SelectCachedDimension(
+                requestedWidth,
+                _meshWidth,
+                _isInitialized,
+                viewportSizeSettled);
+            int targetHeight = SelectCachedDimension(
+                requestedHeight,
+                _meshHeight,
+                _isInitialized,
+                viewportSizeSettled);
 
             bool dimensionsChanged = targetWidth != _meshWidth || targetHeight != _meshHeight;
             if (dimensionsChanged || !_isInitialized)
@@ -294,15 +354,110 @@ namespace Fodinae.World.Terrain
             }
 
             Vector3 camPos = _mainCamera.transform.position;
-            Vector2Int currentGridPos = new Vector2Int(
+            Vector2Int desiredGridPos = new Vector2Int(
                 Mathf.FloorToInt(camPos.x / _cellSize) - (_meshWidth / 2),
                 Mathf.FloorToInt(camPos.y / _cellSize) - (_meshHeight / 2));
+            int regionAnchor = Mathf.Clamp(
+                TerrainRegionAnchorCells,
+                1,
+                Mathf.Max(1, effectiveViewportPadding));
+            Vector2Int currentGridPos = new Vector2Int(
+                SnapRegionCoordinate(desiredGridPos.x, regionAnchor),
+                SnapRegionCoordinate(desiredGridPos.y, regionAnchor));
 
             if (currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged)
             {
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
+            }
+
+            if (_targetUseLight2D > 0.5f)
+            {
+                lightingEngine!.UpdateLighting(
+                    currentGridPos.x,
+                    currentGridPos.y,
+                    _meshWidth,
+                    _meshHeight,
+                    _storage,
+                    _mapManager);
+            }
+        }
+
+        private static int SnapRegionCoordinate(int coordinate, int anchor)
+        {
+            return Mathf.FloorToInt(coordinate / (float)anchor) * anchor;
+        }
+
+        private static int SelectCachedDimension(
+            int requested,
+            int current,
+            bool initialized,
+            bool viewportSizeSettled)
+        {
+            int allocationSteps = Mathf.CeilToInt(requested / (float)DimensionAllocationQuantum);
+            int allocated = Mathf.Min(256, allocationSteps * DimensionAllocationQuantum);
+            if (!initialized || requested > current)
+            {
+                return allocated;
+            }
+
+            return viewportSizeSettled && current - requested >= DimensionAllocationQuantum
+                ? allocated
+                : current;
+        }
+
+        public bool RenderLightingCoverage(RenderTexture target, Vector4 worldRect)
+        {
+            if (_mesh == null || _materials.Length == 0 || !target.IsCreated())
+            {
+                return false;
+            }
+
+            CommandBuffer commandBuffer = CommandBufferPool.Get("Fodinae Terrain Coverage");
+            try
+            {
+                commandBuffer.SetRenderTarget(target);
+                commandBuffer.ClearRenderTarget(clearDepth: false, clearColor: true, backgroundColor: Color.clear);
+
+                Matrix4x4 view = Matrix4x4.identity;
+                Matrix4x4 projection = Matrix4x4.Ortho(
+                    worldRect.x,
+                    worldRect.x + worldRect.z,
+                    worldRect.y,
+                    worldRect.y + worldRect.w,
+                    -100f,
+                    100f);
+                commandBuffer.SetViewProjectionMatrices(
+                    view,
+                    GL.GetGPUProjectionMatrix(projection, renderIntoTexture: true));
+
+                bool drewCoverage = false;
+                int subMeshCount = Mathf.Min(_mesh.subMeshCount, _materials.Length);
+                for (int subMeshIndex = 0; subMeshIndex < subMeshCount; subMeshIndex++)
+                {
+                    Material material = _materials[subMeshIndex];
+                    int coveragePass = material.FindPass("OcclusionCoverage");
+                    if (coveragePass < 0)
+                    {
+                        continue;
+                    }
+
+                    commandBuffer.DrawMesh(
+                        _mesh,
+                        transform.localToWorldMatrix,
+                        material,
+                        subMeshIndex,
+                        coveragePass);
+                    drewCoverage = true;
+                }
+
+                Graphics.ExecuteCommandBuffer(commandBuffer);
+                return drewCoverage;
+            }
+            finally
+            {
+                CommandBufferPool.Release(commandBuffer);
             }
         }
 
@@ -359,7 +514,22 @@ namespace Fodinae.World.Terrain
 
             try
             {
-                _cellCache.PopulateFull(minX, minY, _storage, _mapManager, wtm, atlases);
+                int cacheDeltaX = (minX - 1) - _cellCache.CacheMinX;
+                int cacheDeltaY = (minY - 1) - _cellCache.CacheMinY;
+                bool canScrollCache =
+                    !_needsRefresh &&
+                    _cellCache.CacheMinX != int.MinValue &&
+                    Mathf.Abs(cacheDeltaX) < _cellCache.CacheWidth &&
+                    Mathf.Abs(cacheDeltaY) < _cellCache.CacheHeight;
+                if (canScrollCache)
+                {
+                    _cellCache.ScrollAndFill(cacheDeltaX, cacheDeltaY, _storage, _mapManager, wtm, atlases);
+                }
+                else
+                {
+                    _cellCache.PopulateFull(minX, minY, _storage, _mapManager, wtm, atlases);
+                }
+
                 _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight);
                 _backgroundFloodFill.ComputeFull(this);
                 _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod);
@@ -383,9 +553,10 @@ namespace Fodinae.World.Terrain
                             _materials[i].SetVector("_FlowMapRect", new Vector4(r.x, r.y, r.width, r.height));
                             _materials[i].SetColor("_ShimmerColor", _shimmerHighlightColor);
                             _materials[i].SetTexture("_BaseMap", atlasTex);
-                            _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
-                            _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
                         }
+
+                        _materials[i].SetFloat("_SimpleGraphics", _targetSimpleGraphics);
+                        _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
 
                         _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                     }

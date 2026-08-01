@@ -408,7 +408,14 @@ namespace Fodinae.World.Terrain
                 animOffset = (seed % 6283) / 1000f;
             }
 
-            Vector4 animDataVec = new Vector4((float)data.Animation, (float)data.AnimationSpeed, animOffset, 0f);
+            bool castsLightingShadow =
+                !isBackground &&
+                (data.Properties & CellConfigProperties.DropsShadow) != 0;
+            Vector4 animDataVec = new(
+                (float)data.Animation,
+                data.AnimationSpeed,
+                animOffset,
+                castsLightingShadow ? 1f : 0f);
             Vector4 tileSizeVec = new Vector4(data.UVTileSize, data.UVTileSize, (float)data.AnimationFrameCount, data.FrameHeightTiles);
             Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 

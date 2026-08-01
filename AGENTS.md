@@ -13,7 +13,7 @@
 
 ### 1.1 Стандарты C# 12 и Архитектурные Правила
 
-1. **File-Scoped Namespaces**: Все файлы используют `namespace Fodinae.Domain;` вместо вложенных фигурных скобок.
+1. **Namespaces**: File-scoped namespace (`namespace Fodinae.Domain;`) используется для обычных C#-типов. **Исключение:** любой Unity-сериализуемый тип, наследующий `MonoBehaviour` или `ScriptableObject` (включая `ScriptableRendererFeature` и `VolumeComponent`), обязан использовать block namespace `namespace Fodinae.Domain { ... }`. В Unity `6000.5.0f1` file-scoped namespace для таких типов может успешно пройти Roslyn-компиляцию, но оставить `MonoScript.GetClass() == null`, что приводит к `None (Script)` и `No script asset`.
 2. **Nullable Reference Types**: Глобально включен `#nullable enable`. Все поля, свойства и параметры явно размечаются (`string?`, `null!`).
 3. **Primary Constructors & Record Structs**: Легковесные структуры и хендлы используют `readonly record struct` и первичные конструкторы.
 4. **Collection Expressions**: Использование `[]` вместо `new List<T>()` или `new T[]`.
@@ -27,7 +27,6 @@
 2. **Легковесный сетевой поток данных**: Сервер передает клиенту только чистые координаты и идентификаторы состояний (где стоят роботы, какие предметные паки лежат, какие ячейки попадают в радиус прорисовки, какие звуки вызваны).
 3. **Ленивая однократная загрузка тяжелых ассетов (On-Demand Fetching)**: При первом появлении ранее неизвестного объекта (новый блок, скин робота, иконка пака, аудио-банк) клиент запрашивает бинарные ассеты (текстуры, спрайты, `.bank`) с CDN/сервера один раз.
 4. **Кэширование и локальный рендер**: Все полученные ассеты сохраняются в стойком дисковом кэше `PersistentAssetCache` (с ETag/MD5 валидацией) и ОЗУ (`CellTextureCache`, `AssetCache`). В дальнейшем клиент выполняет тяжелый рендеринг исключительно из локального кэша без повторных сетевых запросов.
-
 
 ## 2. Структура проекта
 
@@ -242,6 +241,7 @@ scripts/
 2. **`BuildCallback`** (после построения контейнера):
    - Инициализирует `ServiceLocator.Initialize(resolver)`.
    - Явно резолвит все сервисы для принудительной инстанциации (ConnectionManager → NetworkService → MapManager → PacketHandler → ... → FloatingChatManager).
+   - `RegisterComponentOnNewGameObject<T>` ленивый: одной регистрации недостаточно. Каждый критический runtime-компонент без гарантированного потребителя обязан явно резолвиться здесь. В частности, `PostProcessController` должен быть разрешён до первого кадра, иначе custom post-process работает, но `UI` остаётся в Main Camera и получает bloom/eigengrau/color grading.
    - Инжектит `SingleMeshTerrainRenderer` и вызывает `EnsureSubscriptions()`.
    - **Сканирует ВСЕ активные MonoBehaviour** в сцене через reflection, находит те что имеют `[VContainer.InjectAttribute]` на полях, и вызывает `resolver.Inject(mb)`.
    - Вызывает `ValidateStartup()`.
@@ -250,7 +250,7 @@ scripts/
 #### Таблица регистрации сервисов
 
 | Регистрация | Интерфейсы | Тип |
-|---|---|---|
+| --- | --- | --- |
 | `RegisterInstance(MapStorage)` | `IWorldDataStorage` | Синглтон |
 | `RegisterInstance(InventoryModel)` | `IInventoryModel` | Синглтон |
 | `RegisterInstance(PlayerStatsModel)` | `IPlayerStats` | Синглтон |
@@ -327,6 +327,7 @@ public static T Resolve<T>() where T : class
 Аудио-домен построен полностью идиоматично под **FMOD Studio C++ Engine**.
 
 **Архитектура:**
+
 ```
 Audio/
   Core/                         # Ядро и типы
@@ -342,6 +343,7 @@ Audio/
 ```
 
 **FMOD интеграция (MMO & Zero-RAM Waste):**
+
 1. Банки `.bank` скачиваются с игрового CDN через `ClientAssetLoader.GetAssetPathAsync` (ETag-кеширование на диск)
 2. Загрузка в FMOD выполняется через `loadBankFile` с дискового пути (без напрасного дублирования банков в RAM)
 3. **Нативное 3D-позиционирование**: `FMODUnity.RuntimeManager.AttachInstanceToGameObject()` транслирует координаты и повороты объектов на C++ стороне FMOD без C#-поллинга в кадрах.
@@ -351,6 +353,7 @@ Audio/
 7. 6 шин FMOD мапятся на `AudioBusType` (bus:/, bus:/sfx, bus:/music, bus:/voice, bus:/ambience, bus:/ui).
 
 **Примеры использования:**
+
 ```csharp
 AudioSystem.Instance.Play2D("ui/click");
 AudioSystem.Instance.PlayAttached("robot_engine", gameObject);
@@ -393,6 +396,7 @@ AudioSystem.Instance.SetBusVolume(AudioBusType.SFX, 0.8f);
 Программатор — визуальный редактор алгоритмов поведения робота. Открывается через кнопку в HUD игрока (`PlayerHUDView.cs:988`). `static bool IsOpen` проверяется `PacketHandler.IsInputBlocked` и `PauseMenu` для блокировки ESC.
 
 **Навигация:**
+
 ```
 HUD [Программатор]
   ↓ Show()
@@ -405,7 +409,7 @@ HUD [Программатор]
 **Компоненты:**
 
 | Компонент | Файл | Назначение |
-|---|---|---|
+| --- | --- | --- |
 | `ProgrammatorGrid` | `ProgrammatorGrid.cs` | Главный UI: список программ, сетка, сохранение, run/stop |
 | `ProgrammatorData` | `ProgrammatorData.cs` | Статические данные: Codes/Labels/Values, категории, имена операторов, undo/redo |
 | `ProgrammatorTextureRegistry` | `ProgrammatorTextureRegistry.cs` | Загрузка текстур операторов из `Resources/Programmator/{id}` |
@@ -413,6 +417,7 @@ HUD [Программатор]
 | `ObserverJoystick` | `ObserverJoystick.cs` | 8-направленный джойстик для операторов Observer (drag-to-shift) |
 
 **Структура UI сетки (`ProgrammatorGrid.cs`):**
+
 ```
 _popup (absolute, fullscreen, center)
   dimmer
@@ -434,6 +439,7 @@ _popup (absolute, fullscreen, center)
 ```
 
 **Ключевые детали реализации:**
+
 - **Список программ сессионный**: `List<ProgramItem> _programItems` в памяти. Создание/удаление без сохранения на диск.
 - `ProgramItem` содержит `Name`, `Codes/Labels/Values` как `List<>`
 - При открытии программы → данные копируются в статический `ProgrammatorData`, при закрытии — копируются обратно
@@ -457,9 +463,29 @@ _popup (absolute, fullscreen, center)
 
 ### Unity & YAML
 
-- **Прямое редактирование**: Предпочтительно редактирование `.prefab` и `.unity` как текстовых YAML-файлов.
+- **Прямое редактирование запрещено**: Никогда не изменять `.prefab`, `.unity` и `.asset` как текстовый YAML. Все изменения ссылок, GUID, renderer features, сцен и sub-assets выполнять только через Unity Editor API (`SerializedObject`, `AssetDatabase`, `EditorSceneManager`) или вручную в Inspector.
 - **Мета-файлы**: У каждого ассета ДОЛЖЕН быть `.meta` файл. При перемещении/удалении через CLI — обрабатывать оба.
 - **GUID**: Не ломайте связи между ассетами, сохраняйте GUID.
+- **Unity script assets**: У класса, наследующего `MonoBehaviour`/`ScriptableObject`, имя файла обязано совпадать с именем класса. После создания или переименования проверять в Unity Editor не только сборку, но и `MonoScript.GetClass()`/Inspector: `dotnet build` не проверяет регистрацию ScriptAsset.
+- **Volume Profile**: `VolumeProfile.Add<T>()` создаёт объект только в памяти. При создании профиля editor-скриптом каждый новый `VolumeComponent` обязательно сохранять через `AssetDatabase.AddObjectToAsset(component, profile)` до `AssetDatabase.SaveAssets()`. Иначе профиль сериализует `{fileID: 0}`, и настройки исчезают.
+- **Custom post-processing (URP 2D)**: `PostProcessRendererFeature` обрабатывает только базовую камеру. World-space интерфейс (`Robot` nickname/clan badge, pack clan badge, chat bubble) использует Unity layer `UI`: он исключён из culling mask базовой камеры и рисуется отдельной `WorldUICamera` типа Overlay без post-processing. UI Toolkit/Screen Space Overlay рисуется ещё позже. `PostProcessController` обязательно принудительно резолвится в `GameLifetimeScope.BuildCallback` и восстанавливает camera stack только при нарушении инварианта. Не возвращать world-space UI на слой мира и не запускать custom pass для overlay-камер.
+- **HDR rendering vs HDR display**: внутренний `UniversalRenderPipelineAsset.supportsHDR` обязан оставаться включённым — он сохраняет диапазон lighting/bloom до composite. При этом `PlayerSettings.allowHDRDisplaySupport` и `useHDRDisplay` выключены через `SdrOutputEnforcer`, потому что игра использует стабильный SDR output. Не пытаться отключить 10-bit/HDR Display через выключение внутреннего HDR URP: комбинация `supportsHDR=0` с активным HDR display вызывает переключения gamut и кислотные тона. Поскольку built-in URP post-processing выключен, `PostProcess.compute` сам сжимает HDR highlights единым RGB-множителем перед Eigengrau: значения `<= 1` остаются строго неизменными, чтобы tonemap не осветлял AO/тени, а значения `> 1` не клипались независимо по каналам и не теряли hue.
+- **Renderer feature uniqueness**: в `Renderer2D.asset` должна существовать ровно одна активная `PostProcessRendererFeature`. Дубликат выполняет весь compute-pass повторно. `PostProcessVolumeAssetCreator` удаляет дубликаты через Editor API; не добавлять вторую feature для диагностики и не исправлять список вручную в YAML.
+- **Motion Blur**: velocity-буфер строится внутри `PostProcessRenderPass` только для активных `MotionBlurTag` на удалённых `Robot`. Локальный игрок отсекается повторно через `Robot.IsLocalPlayer`; не подключать отдельный `VelocityBufferRendererFeature` и не применять blur ко всему кадру. Velocity-pass обязан явно задавать GPU view/projection matrices и реальную `sprite.texture` через `_VelocitySpriteTexture`: нельзя полагаться на implicit `_MainTex`, иначе Metal может взять белый fallback и превратить прозрачный sprite rect в движущуюся капсулу. Смещение ограничивается в физических пикселях, teleport delta сбрасывается, а compute накапливает только samples с согласованной velocity, чтобы не размазывать фон внутри маски робота.
+- **Eigengrau**: единственная настройка силы — `intensity`. `noiseScale` означает размер зерна в физических пикселях, `darknessThreshold` — предел воспринимаемой яркости, `animationSpeed` — частоту обновления зерна. Не добавлять второй `strength` и не использовать крупный/скроллящийся noise-pattern.
+- **Terrain material**: relief/connectivity metadata разрешено использовать для топологии и выбора тайлов, но не для поквадрантного затемнения текстуры. Не возвращать в `Terrain.shader` маску на основе `u-v`/`u+v` и кубический `finalRgb *= grad³`: она рисует видимые тёмные треугольники/ромбы внутри клетки. Затемнение террейна выполняется только через `_WorldLightTexture`.
+- **World lighting**: `TerrariaLightingEngine` не распространяет свет CPU-sweep'ами по клеткам. Соседние emissive-клетки сворачиваются в постоянные world-anchored кластеры 2×2, а per-tile списки ограничивают compute только источниками, пересекающими culling tile. Размер кластера нельзя динамически менять по числу видимых emissive-клеток: переход порога перестраивает все источники и вызывает резкий скачок освещения при движении. При превышении лимита сохраняются ближайшие к центру cached region кластеры с детерминированным tie-break по world key. Никогда не возвращать глобальный цикл `каждый пиксель × все источники`: сотни светящихся клеток делают его непригодным даже для мощных GPU. Единственный источник истины для emission — серверный `CellConfigProperties.Glowing`; клиент не должен угадывать свечение по `CellType`, имени или legacy-списку. Для офлайн-режима `DummyConnection.CreateTestCellConfigurations()` обязан выставлять тот же флаг на нужных типах. Terrain mesh расширяется на `RequiredTerrainPadding = viewport + максимальный радиус света + safe border`; lighting engine не должен добавлять второй скрытый margin поверх уже расширенного mesh. Преобразование Unity Y в server Y всегда получает явный `MapManager.WorldHeight`. Ambient добавляется ровно один раз в compute-шейдере.
+- **Terrain/lighting cache movement**: terrain window привязан к мировой сетке шагом 8 клеток и получает отдельный padding под это смещение. При переходе окна `TerrainCellCache.ScrollAndFill` сохраняет пересечение и загружает только новые полосы; не возвращать `PopulateFull` на каждую клетку движения камеры. Изменение карты инвалидирует terrain и static lighting только когда клетка пересекает текущий cached region; глобальный `MapStorage.Revision` нельзя использовать для пересборки viewport, потому что сетевой `MapRegionPacket` меняет множество далёких клеток. Новый регион, смена world data и загрузка видимой cell texture по-прежнему выполняют полную корректную инвалидацию.
+- **Zoom cache hysteresis**: плавный `CameraFollow` не должен менять размеры terrain/lightmap ресурсов каждый кадр. `TerrainRenderer` выделяет ширину/высоту квантами по 32 клетки, растёт только при выходе viewport за текущую capacity, а уменьшает cache один раз через 0.4 секунды после стабилизации zoom. Не возвращать точное `ceil(camera.orthographicSize)` как немедленный размер mesh: это вызывает повторные allocation, full mesh build, coverage и SDF на каждом кадре zoom.
+- **Lighting visibility и высота**: плоский grid-DDA удалён — он создавал бесконечные прямоугольные тоннели за блоками. Height-aware SDF cone tracing интегрирует оптическую толщину по трассе вместо выбора единственного самого тёмного sample через `min()`: полностью непрозрачный блок перекрывает direct light, а PNG alpha пропускает его пропорционально. Высота отвечает только за длину тени, cone radius — только за penumbra, coverage/density — только за пропускание. Не лечить форму тени одновременным ослаблением этих трёх независимых параметров. Emissive-кластеры привязаны к абсолютным world-cell координатам, иначе zoom вызывает blinking.
+- **Receiver self-skip**: cone trace может пропустить coverage только внутри исходной клетки receiver, чтобы поверхность не затеняла сама себя. Нельзя продолжать skip по всей связной непрозрачной массе: тогда соседние вплотную блоки не накапливают optical depth и свет проходит сквозь стены. После выхода ray из `receiverCell` любой следующий opaque/alpha sample снова поглощает свет.
+- **Lighting reconstruction**: базовая мягкость получается из SDF/cone tracing; separable edge-aware `FilterLighting` выполняет только финальную реконструкцию direct light. AO хранится в alpha lightmap во время двух filter-pass и не вычисляется повторно для каждого tap; ambient и AO нельзя размывать вместе с direct-shadow visibility. Фильтр сравнивает coverage центрального и соседнего texel и не переносит свет через границу окклюдера. Настройки `Shadow Filter Strength` и `Shadow Filter Occlusion Sharpness` сериализованы на `TerrariaLightingEngine`. Eigengrau не является частью lighting reconstruction и не изменяется при исправлении теней.
+- **GPU coverage, Metal Y и SDF cache**: единственный источник формы окклюдера — pass `OcclusionCoverage` в `Terrain.shader`, отрисованный тем же mesh/material. Он повторяет реальные UV, autotile transforms, непрерывный PNG alpha и roundable `finalAlpha`; запрещено возвращать CPU-чтение сырого alpha-канала. `GL.GetGPUProjectionMatrix(..., renderIntoTexture: true)` меняет Y-ориентацию rasterized RenderTexture на Metal/D3D-подобных API, тогда как compute/world lightmap остаётся в world order. Поэтому все чтения coverage и SDF обязаны проходить через `ToOcclusionGrid` с `_OcclusionYFlip = SystemInfo.graphicsUVStartsAtTop`; иначе тени возникают в зеркальных пустых местах. Никогда не пытаться исправлять такой spatial mismatch коэффициентами — сначала проверить `Debug View = Occlusion`. Coverage хранится в R8 с 8 texel/cell; SDF использует только достаточно плотную alpha-часть как hard seed, а более прозрачные texel учитываются трассировкой непрерывно. JFA строится в `InitializeSdfSeeds → JumpFloodSdf → FinalizeSdf` и кешируется по региону, revision карты/атласа и lighting-настройкам.
+- **Animated terrain и lighting**: тип анимации тайла не меняет его окклюзию/светопроницаемость и не запускает искусственную анимацию emission в lighting engine. Анимация текстуры выполняется только `Terrain.shader`; emission статичен, пока отдельные данные источника явно не зададут иное поведение.
+- **Emission policy**: не добавлять клиентские allow/deny-листы для отдельных типов. Обычные `Rock`, `RedRock`, `NiggerRock`, `LivingBlackRock`, пески и валуны не светятся потому, что сервер/Dummy не выставляет им `Glowing`. Живки, кристаллы, building/artificial blocks, boxes, lava/magma и все acid/slime-варианты светятся только при наличии этого флага. Цвет можно брать из серверного `CellConfigurationPacket.Color`, но сам факт emission — исключительно из `Properties`.
+- **Lighting tuning и диагностика**: высоты света/окклюдера, cone tracing, реконструкция и AO сериализованы на `TerrariaLightingEngine`. `Debug View = Ambient Occlusion` показывает AO, `Occlusion` — настоящий GPU coverage, `Direct Light` — источники без ambient/AO. Использовать эти режимы для проверки геометрии до composite.
+- **Lighting quality**: профили `Low / Medium / High / Ultra` меняют разрешение lightmap, лимит источников, максимум SDF cone-tracing шагов и частоту обновления. Они не меняют художественные коэффициенты AO/света. `Ultra` использует 8 texel/cell, размер до 2048 и 64 шага; не возвращать скрытый cap 512, который при расширенном mesh давал около 4 texel/cell и видимую пикселизацию. Профиль хранится в `PlayerPrefs` под ключом `WorldLightingQuality`. Единственный источник профилей — `TerrariaLightingEngine.ApplyQualityPreset`.
+- **Terrain normals**: normal map / Lambert для террейна пока не реализованы. Текущий этап отвечает за распространение света, лучевые тени и AO; normal atlas будет отдельным последующим слоем и не должен подменять raymarched visibility.
 
 ### C# и Код
 
@@ -522,7 +548,7 @@ _popup (absolute, fullscreen, center)
 Проект использует 5 Roslyn-анализаторов:
 
 | Анализатор | Префикс | Зона ответственности |
-|---|---|---|
+| --- | --- | --- |
 | `StyleCop.Analyzers` | `SA` | Стиль, форматирование, именование |
 | `Microsoft.CodeAnalysis.NetAnalyzers` | `CA` | Корректность, надёжность, безопасность |
 | `Roslynator.Analyzers` | `RCS` | Упрощение кода, dead code |
@@ -536,6 +562,7 @@ dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -n
 ```
 
 Вывод содержит предупреждения вида:
+
 ```
 MapManager.cs(42,13): warning SA1300: ...
 WorldLayer.cs(88,5): warning CA1031: ...
@@ -561,3 +588,5 @@ MapStorage.cs(15,1): warning S3903: ...
 - Никогда не делать ленивых решений, фоллбеков и т.п. — скупой платит дважды.
 - Запускать проверки (билды, линтеры) реже — это может серьёзно нагружать систему.
 - **НЕ добавлять фичи без явного запроса**. Если пользователь спрашивает про отсутствие чего-либо — уточнить что именно нужно, а не добавлять самовольно.
+
+ЗАПРЕЩЕНО МЕНЯТЬ ВРУЧНУЮ ПРЕФАБЫ, АССЕТЫ И СЦЕНЫ - ЭТО ГАРАНТИРОВАННАЯ СМЕРТЬ ПРОЕКТА.

@@ -150,7 +150,8 @@ PlayerSettings:
   tvOSBundleVersion: 1.0
   bundleVersion: 1.0
   preloadedAssets:
-  - {fileID: 11400000, guid: 53c90228e1f4d1342b6eac03bfc67ba9, type: 2}
+  - {fileID: 0}
+  - {fileID: 11400000, guid: 0943917d1442141808cb89199939a52c, type: 2}
   metroInputSource: 0
   wsaTransparentSwapchain: 0
   xboxOneDisableKinectGpuReservation: 1
@@ -159,8 +160,8 @@ PlayerSettings:
     enable360StereoCapture: 0
   enableFrameTimingStats: 0
   enableOpenGLProfilerGPURecorders: 1
-  allowHDRDisplaySupport: 1
-  useHDRDisplay: 1
+  allowHDRDisplaySupport: 0
+  useHDRDisplay: 0
   hdrBitDepth: 0
   m_ColorGamuts: 00000000
   targetPixelDensity: 30

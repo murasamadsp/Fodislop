@@ -15,7 +15,7 @@ MonoBehaviour:
   drawInSceneView: 1
   renderAsPostProcessingStack: 0
   MaintainGammaColorInLinearSpace: 1
-  RendererType: 1
+  RendererType: 0
   effectInstances: 8192
   maxSquares: 8192
   isRightEffekseerHandledCoordinateSystem: 0

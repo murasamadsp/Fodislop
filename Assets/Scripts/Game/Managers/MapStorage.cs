@@ -29,6 +29,8 @@ namespace Fodinae.Game.Managers
 
         public bool IsReady => _isInitialized && _cellLayer != null;
 
+        public long Revision { get; private set; }
+
         public bool IsDisposed { get; private set; }
 
 #if UNITY_EDITOR
@@ -98,6 +100,7 @@ namespace Fodinae.Game.Managers
             _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
             _isInitialized = true;
             IsDisposed = false;
+            Revision++;
         }
 
         public bool IsInitialized() => _isInitialized;
@@ -118,7 +121,13 @@ namespace Fodinae.Game.Managers
         {
             if (_isInitialized && _cellLayer != null)
             {
+                if (_cellLayer.GetCell(x, y, touchLru: false) == type)
+                {
+                    return;
+                }
+
                 _cellLayer[x, y] = type;
+                Revision++;
                 TerrainRenderer.OnCellChanged(x, y);
             }
         }
@@ -130,6 +139,7 @@ namespace Fodinae.Game.Managers
             _isInitialized = false;
             _worldCodeName = string.Empty;
             IsDisposed = true;
+            Revision++;
         }
     }
 }

@@ -10,8 +10,10 @@ using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI.Programmator;
 using Fodinae.World;
+using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Connection.Client;
@@ -117,7 +119,7 @@ namespace Fodinae.UI
 
         private static bool IsHeadlightOn()
         {
-            return PlayerPrefs.GetInt("UseLight2D", 0) == 1;
+            return PlayerPrefs.GetInt("UseLight2D", 1) == 1;
         }
 
         private void CreateMenu(VisualElement root)
@@ -301,7 +303,41 @@ namespace Fodinae.UI
             _simpleGraphicsButton.AddToClassList("pause-btn");
             scrollContainer.Add(_simpleGraphicsButton);
 
-            scrollContainer.Add(CreateLabel("Фары"));
+            var lightingEngine = TerrariaLightingEngine.Instance
+                ?? FindAnyObjectByType<TerrariaLightingEngine>();
+            if (lightingEngine != null)
+            {
+                var lightingQualityNames = new List<string>
+                {
+                    "Низкое",
+                    "Среднее",
+                    "Высокое",
+                    "Ультра"
+                };
+                var lightingQuality = new DropdownField(
+                    "Качество освещения",
+                    lightingQualityNames,
+                    (int)lightingEngine.Quality);
+                lightingQuality.RegisterValueChangedCallback(_ =>
+                {
+                    lightingEngine.SetQuality((TerrariaLightingEngine.QualityPreset)lightingQuality.index);
+                });
+                scrollContainer.Add(lightingQuality);
+            }
+
+            scrollContainer.Add(CreateLabel("Постобработка"));
+
+            if (PostProcessController.Instance != null)
+            {
+                var pp = PostProcessController.Instance;
+                scrollContainer.Add(CreateSlider("Свечение (Bloom)", pp.BloomIntensity, v => pp.BloomIntensity = v, 0f, 5f));
+                scrollContainer.Add(CreateSlider("Виньетка", pp.VignetteIntensity, v => pp.VignetteIntensity = v, 0f, 1f));
+                scrollContainer.Add(CreateSlider("Хроматическая аберрация", pp.ChromaticAberrationIntensity, v => pp.ChromaticAberrationIntensity = v, 0f, 1f));
+                scrollContainer.Add(CreateSlider("Зернистость (Eigengrau)", pp.EigengrauIntensity, v => pp.EigengrauIntensity = v, 0f, 1f));
+                scrollContainer.Add(CreateSlider("Размытие движения", pp.MotionBlurIntensity, v => pp.MotionBlurIntensity = v, 0f, 1f));
+            }
+
+            scrollContainer.Add(CreateLabel("Аура игрока"));
 
             _headlightButton = new Button(ToggleHeadlight);
             _headlightButton.text = IsHeadlightOn() ? "Вкл" : "Выкл";
@@ -423,7 +459,7 @@ namespace Fodinae.UI
 
         private void ToggleHeadlight()
         {
-            bool current = PlayerPrefs.GetInt("UseLight2D", 0) == 1;
+            bool current = PlayerPrefs.GetInt("UseLight2D", 1) == 1;
             bool newValue = !current;
 
             var terrain = _terrainRenderer;

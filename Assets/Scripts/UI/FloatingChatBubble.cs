@@ -1,6 +1,7 @@
 #nullable enable
 
 using UnityEngine;
+using Fodinae.Rendering.PostProcessing;
 
 namespace Fodinae.UI
 {
@@ -19,6 +20,7 @@ namespace Fodinae.UI
         {
             _cam = Camera.main;
             _elapsed = 0f;
+            gameObject.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
 
             if (_textMesh == null)
             {
@@ -27,6 +29,7 @@ namespace Fodinae.UI
                 _meshRenderer.sortingOrder = 300;
 
                 var bgGo = new GameObject("ChatBubbleBG");
+                bgGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
                 bgGo.transform.SetParent(transform, false);
                 bgGo.transform.localPosition = new Vector3(0, 0, 0.01f);
                 bgGo.AddComponent<MeshFilter>();

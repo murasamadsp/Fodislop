@@ -1,0 +1,44 @@
+#pragma kernel MotionBlurDirectional
+
+Texture2D<float4> _InputTex;
+Texture2D<float4> _VelocityTex;
+RWTexture2D<float4> _OutputTex;
+
+SamplerState sampler_LinearClamp;
+
+float4 _ScreenSize; // x=width, y=height, z=1/width, w=1/height
+float _MotionBlurIntensity;
+int _MotionBlurMaxSamples;
+
+[numthreads(8, 8, 1)]
+void MotionBlurDirectional(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_ScreenSize.x || id.y >= (uint)_ScreenSize.y) return;
+
+    float2 uv = (id.xy + 0.5) * _ScreenSize.zw;
+    float4 originalColor = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0);
+
+    if (_MotionBlurIntensity <= 0.001 || _MotionBlurMaxSamples <= 1)
+    {
+        _OutputTex[id.xy] = originalColor;
+        return;
+    }
+
+    float2 vel = _VelocityTex.SampleLevel(sampler_LinearClamp, uv, 0).xy * _MotionBlurIntensity;
+    if (length(vel) <= 0.0001)
+    {
+        _OutputTex[id.xy] = originalColor;
+        return;
+    }
+
+    float3 accumulated = originalColor.rgb;
+    int samples = clamp(_MotionBlurMaxSamples, 2, 32);
+
+    for (int i = 1; i < samples; i++)
+    {
+        float2 sampleUV = clamp(uv - vel * ((float)i / (float)samples), float2(0, 0), float2(1, 1));
+        accumulated += _InputTex.SampleLevel(sampler_LinearClamp, sampleUV, 0).rgb;
+    }
+
+    _OutputTex[id.xy] = float4(accumulated / (float)samples, originalColor.a);
+}
