@@ -65,4 +65,3 @@ jobs:
           name: build-log
           path: /tmp/lint.log
           retention-days: 7
-

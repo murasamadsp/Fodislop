@@ -15,4 +15,3 @@
 - [ ] Разделение 2D слоев и матрицы коллизий в `TagManager.asset` & `Physics2DSettings.asset` — Настроить отдельные слои для `Player`, `Robot`, `Pack`, `Terrain` и оптимизировать матрицу коллизий. (Многопоточная физика 2D `useMultithreading: 1` уже включена).
 - [ ] Очистка неиспользуемых тем UI Toolkit в `Assets/UI Toolkit/` — Удалить `UnityDefaultRuntimeTheme.tss` и `UnityThemes/`.
 - [ ] Исправление StyleCop предупреждений в C# коде (`SA1513`, `SA1407`, `SA1503` и др.), выявленных новой полной проверкой линтера.
-
