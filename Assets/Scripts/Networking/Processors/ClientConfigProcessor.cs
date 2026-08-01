@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using Fodinae.Audio.Core;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Information;
 using UnityEngine;
@@ -25,7 +24,7 @@ namespace Fodinae.Networking.Processors
 
         public void Process(ClientConfigPacket packet)
         {
-            Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, renderer={packet.Renderer}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
+            Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
             var audio = Fodinae.Core.ServiceLocator.Resolve<IAudioSystem>();
             if (audio != null)
             {
@@ -43,18 +42,6 @@ namespace Fodinae.Networking.Processors
                         PlayerPrefs.SetFloat($"Audio_{bus}", vol);
                     }
                 }
-            }
-
-            var terrain = TerrainRenderer.Instance;
-            if (terrain != null)
-            {
-                bool simple = packet.Renderer switch
-                {
-                    RendererMode.Simplified => true,
-                    _ => false,
-                };
-                terrain.SetSimpleGraphics(simple);
-                PlayerPrefs.SetInt("SimpleGraphics", simple ? 1 : 0);
             }
 
             PlayerPrefs.Save();

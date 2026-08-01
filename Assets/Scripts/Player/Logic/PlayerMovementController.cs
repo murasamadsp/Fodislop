@@ -222,6 +222,16 @@ namespace Fodinae.Player.Logic
 
         public event Action<bool>? OnCollisionChanged;
 
+        internal static bool IsWithinWorldBounds(Vector2Int position, int worldWidth, int worldHeight)
+        {
+            return worldWidth > 0 &&
+                   worldHeight > 0 &&
+                   position.x >= 0 &&
+                   position.x < worldWidth &&
+                   position.y >= 0 &&
+                   position.y < worldHeight;
+        }
+
         public void UpdateServerPosition(Vector2Int position)
         {
             Vector2Int oldPos = Position;
@@ -350,7 +360,7 @@ namespace Fodinae.Player.Logic
                     int mapWidth = _mapDataProvider.WorldWidth;
                     int mapHeight = _mapDataProvider.WorldHeight;
 
-                    if (targetServerXInt < 0 || targetServerXInt >= mapWidth || targetServerYInt < 0 || targetServerYInt >= mapHeight)
+                    if (!IsWithinWorldBounds(new Vector2Int(targetServerXInt, targetServerYInt), mapWidth, mapHeight))
                     {
                         return;
                     }

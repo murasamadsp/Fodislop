@@ -67,8 +67,8 @@ Assets/
     # Системная инфраструктура
     Core/
       Interfaces/             # IWorldDataStorage, IMapDataProvider, IPlayerInput, IAssetLoader, IAudioSystem, IPlayerStats, IInventoryModel, IConnectionService, INetworkService, IInputBlocker, IRobotService, IPackService, IVFXService, IServerAudioService, IServerConfig
-      DI/
-        IServiceLocator.cs    # Интерфейс IServiceLocator (не используется — мёртвый код, не удалять)
+       DI/
+         IServiceLocator.cs    # Мёртвый интерфейс — удалить
       ServiceLocator.cs       # Тонкий bridge → VContainer (только Initialize + Resolve)
       GameLifetimeScope.cs    # LifetimeScope для сцены: регистрация DI + BuildCallback с инжекцией через reflection
       GameConstants.cs        # Игровые константы

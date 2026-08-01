@@ -7,9 +7,7 @@ using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-#if UNITY_6000_0_OR_NEWER
 using UnityEngine.Rendering.RenderGraphModule;
-#endif
 
 namespace Fodinae.Rendering.PostProcessing;
 
@@ -54,6 +52,21 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
 
     private static readonly int MotionBlurIntensityID = Shader.PropertyToID("_MotionBlurIntensity");
     private static readonly int MotionBlurMaxSamplesID = Shader.PropertyToID("_MotionBlurMaxSamples");
+    private static readonly string[] BloomDownNames =
+    {
+        "_PPBloomDown_0",
+        "_PPBloomDown_1",
+        "_PPBloomDown_2",
+        "_PPBloomDown_3",
+        "_PPBloomDown_4",
+    };
+    private static readonly string[] BloomUpNames =
+    {
+        "_PPBloomUp_0",
+        "_PPBloomUp_1",
+        "_PPBloomUp_2",
+        "_PPBloomUp_3",
+    };
 
     private readonly ComputeShader _postProcessCS;
     private readonly Material? _velocityMaterial;
@@ -61,6 +74,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
     private readonly int _kernelDownsample;
     private readonly int _kernelUpsample;
     private readonly int _kernelComposite;
+    private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[5];
+    private readonly TextureHandle[] _bloomUpTextures = new TextureHandle[4];
 
     public PostProcessRenderPass(ComputeShader postProcessCS, Shader? velocityShader)
     {
@@ -99,6 +114,20 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
         return renderer != null && renderer.enabled && renderer.sprite != null;
     }
 
+    private static bool HasRemoteRobotRenderers()
+    {
+        IReadOnlyList<MotionBlurTag> tags = MotionBlurTag.ActiveTags;
+        for (int i = 0; i < tags.Count; i++)
+        {
+            if (TryGetRemoteRobotRenderer(tags[i], out _))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static Vector2 CalculateUvVelocity(MotionBlurTag tag, Camera camera)
     {
         float screenHeightWorld = camera.orthographic
@@ -124,212 +153,211 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
             pixelVelocity.y / Mathf.Max(camera.pixelHeight, 1));
     }
 
-#if !UNITY_6000_0_OR_NEWER
-    private RTHandle? _intermediateColorRT;
-    private RTHandle? _bloomPrefilterRT;
-    private RTHandle? _velocityRT;
-    private readonly RTHandle[] _bloomDownPyramid = new RTHandle[5];
-    private readonly RTHandle[] _bloomUpPyramid = new RTHandle[5];
+    /* Legacy ScriptableRenderPass path removed from compilation: this project targets Unity 6 Render Graph only.
+        private RTHandle? _intermediateColorRT;
+        private RTHandle? _bloomPrefilterRT;
+        private RTHandle? _velocityRT;
+        private readonly RTHandle[] _bloomDownPyramid = new RTHandle[5];
+        private readonly RTHandle[] _bloomUpPyramid = new RTHandle[5];
 
-    public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-    {
-        if (renderingData.cameraData.renderType != CameraRenderType.Base ||
-            renderingData.cameraData.camera.cameraType != CameraType.Game ||
-            renderingData.cameraData.camera != Camera.main)
+        public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            return;
-        }
-
-        var stack = VolumeManager.instance.stack;
-        var bloom = stack.GetComponent<BloomComponent>();
-        var vignette = stack.GetComponent<VignetteComponent>();
-        var ca = stack.GetComponent<ChromaticAberrationComponent>();
-        var cg = stack.GetComponent<ColorGradingComponent>();
-        var eigengrau = stack.GetComponent<EigengrauComponent>();
-        var mb = stack.GetComponent<MotionBlurComponent>();
-
-        bool bloomActive = bloom != null && bloom.active && bloom.IsActive();
-        bool vignetteActive = vignette != null && vignette.active && vignette.IsActive();
-        bool caActive = ca != null && ca.active && ca.IsActive();
-        bool cgActive = cg != null && cg.active && cg.IsActive();
-        bool eigengrauActive = eigengrau != null && eigengrau.active && eigengrau.IsActive();
-        bool mbActive = mb != null && mb.active && mb.IsActive();
-
-        if (!bloomActive && !vignetteActive && !caActive && !cgActive && !eigengrauActive && !mbActive)
-        {
-            return;
-        }
-
-        var cmd = CommandBufferPool.Get(PASS_NAME);
-        cmd.Clear();
-
-        var desc = renderingData.cameraData.cameraTargetDescriptor;
-        desc.depthBufferBits = 0;
-        desc.msaaSamples = 1;
-        desc.bindMS = false;
-        desc.enableRandomWrite = true;
-
-        RenderingUtils.ReAllocIfNeeded(ref _intermediateColorRT, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_PPIntermediateColor");
-        RenderingUtils.ReAllocIfNeeded(ref _bloomPrefilterRT, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_PPBloomPrefilter");
-
-        int width = desc.width;
-        int height = desc.height;
-
-        if (mbActive && _velocityMaterial != null)
-        {
-            var velocityDesc = desc;
-            velocityDesc.enableRandomWrite = false;
-            velocityDesc.graphicsFormat = GraphicsFormat.R16G16_SFloat;
-            RenderingUtils.ReAllocIfNeeded(
-                ref _velocityRT,
-                velocityDesc,
-                FilterMode.Point,
-                TextureWrapMode.Clamp,
-                name: "_PPRobotVelocity");
-
-            cmd.SetRenderTarget(_velocityRT);
-            cmd.ClearRenderTarget(false, true, Color.clear);
-            cmd.SetViewProjectionMatrices(
-                renderingData.cameraData.camera.worldToCameraMatrix,
-                GL.GetGPUProjectionMatrix(renderingData.cameraData.camera.projectionMatrix, true));
-            IReadOnlyList<MotionBlurTag> tags = MotionBlurTag.ActiveTags;
-            for (int i = 0; i < tags.Count; i++)
+            if (renderingData.cameraData.renderType != CameraRenderType.Base ||
+                renderingData.cameraData.camera.cameraType != CameraType.Game ||
+                renderingData.cameraData.camera != Camera.main)
             {
-                var tag = tags[i];
-                if (!TryGetRemoteRobotRenderer(tag, out var spriteRenderer))
+                return;
+            }
+
+            var stack = VolumeManager.instance.stack;
+            var bloom = stack.GetComponent<BloomComponent>();
+            var vignette = stack.GetComponent<VignetteComponent>();
+            var ca = stack.GetComponent<ChromaticAberrationComponent>();
+            var cg = stack.GetComponent<ColorGradingComponent>();
+            var eigengrau = stack.GetComponent<EigengrauComponent>();
+            var mb = stack.GetComponent<MotionBlurComponent>();
+
+            bool bloomActive = bloom != null && bloom.active && bloom.IsActive();
+            bool vignetteActive = vignette != null && vignette.active && vignette.IsActive();
+            bool caActive = ca != null && ca.active && ca.IsActive();
+            bool cgActive = cg != null && cg.active && cg.IsActive();
+            bool eigengrauActive = eigengrau != null && eigengrau.active && eigengrau.IsActive();
+            bool mbActive = mb != null && mb.active && mb.IsActive();
+
+            if (!bloomActive && !vignetteActive && !caActive && !cgActive && !eigengrauActive && !mbActive)
+            {
+                return;
+            }
+
+            var cmd = CommandBufferPool.Get(PASS_NAME);
+            cmd.Clear();
+
+            var desc = renderingData.cameraData.cameraTargetDescriptor;
+            desc.depthBufferBits = 0;
+            desc.msaaSamples = 1;
+            desc.bindMS = false;
+            desc.enableRandomWrite = true;
+
+            RenderingUtils.ReAllocIfNeeded(ref _intermediateColorRT, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_PPIntermediateColor");
+            RenderingUtils.ReAllocIfNeeded(ref _bloomPrefilterRT, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_PPBloomPrefilter");
+
+            int width = desc.width;
+            int height = desc.height;
+
+            if (mbActive && _velocityMaterial != null)
+            {
+                var velocityDesc = desc;
+                velocityDesc.enableRandomWrite = false;
+                velocityDesc.graphicsFormat = GraphicsFormat.R16G16_SFloat;
+                RenderingUtils.ReAllocIfNeeded(
+                    ref _velocityRT,
+                    velocityDesc,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    name: "_PPRobotVelocity");
+
+                cmd.SetRenderTarget(_velocityRT);
+                cmd.ClearRenderTarget(false, true, Color.clear);
+                cmd.SetViewProjectionMatrices(
+                    renderingData.cameraData.camera.worldToCameraMatrix,
+                    GL.GetGPUProjectionMatrix(renderingData.cameraData.camera.projectionMatrix, true));
+                IReadOnlyList<MotionBlurTag> tags = MotionBlurTag.ActiveTags;
+                for (int i = 0; i < tags.Count; i++)
                 {
-                    continue;
+                    var tag = tags[i];
+                    if (!TryGetRemoteRobotRenderer(tag, out var spriteRenderer))
+                    {
+                        continue;
+                    }
+
+                    Vector2 uvVelocity = CalculateUvVelocity(tag, renderingData.cameraData.camera);
+                    cmd.SetGlobalVector(VelocityPropID, new Vector4(uvVelocity.x, uvVelocity.y, 0f, 0f));
+                    cmd.SetGlobalTexture(VelocitySpriteTextureID, spriteRenderer.sprite.texture);
+                    cmd.DrawRenderer(spriteRenderer, _velocityMaterial, 0, 0);
+                }
+            }
+
+            cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
+
+            if (bloomActive)
+            {
+                cmd.SetComputeFloatParam(_postProcessCS, BloomThresholdID, bloom.threshold.value);
+                cmd.SetComputeFloatParam(_postProcessCS, BloomScatterID, bloom.scatter.value);
+                cmd.SetComputeVectorParam(_postProcessCS, BloomTintID, bloom.tint.value);
+                cmd.SetComputeFloatParam(_postProcessCS, BloomIntensityID, bloom.intensity.value);
+
+                cmd.SetComputeTextureParam(_postProcessCS, _kernelPrefilter, InputTexID, renderingData.cameraData.renderer.cameraColorTargetHandle);
+                cmd.SetComputeTextureParam(_postProcessCS, _kernelPrefilter, DestTexID, _bloomPrefilterRT);
+                cmd.DispatchCompute(_postProcessCS, _kernelPrefilter, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+
+                int dw = width;
+                int dh = height;
+                int sourceWidth = width;
+                int sourceHeight = height;
+
+                RTHandle currentSrc = _bloomPrefilterRT;
+                for (int i = 0; i < 5; i++)
+                {
+                    dw = Mathf.Max(1, dw / 2);
+                    dh = Mathf.Max(1, dh / 2);
+
+                    var levelDesc = desc;
+                    levelDesc.width = dw;
+                    levelDesc.height = dh;
+
+                    RenderingUtils.ReAllocIfNeeded(ref _bloomDownPyramid[i], levelDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: BloomDownNames[i]);
+                    RenderingUtils.ReAllocIfNeeded(ref _bloomUpPyramid[i], levelDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: BloomUpNames[i]);
+
+                    cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(dw, dh, 1f / dw, 1f / dh));
+                    cmd.SetComputeVectorParam(
+                        _postProcessCS,
+                        SourceTexelSizeID,
+                        new Vector4(1f / sourceWidth, 1f / sourceHeight, sourceWidth, sourceHeight));
+                    cmd.SetComputeTextureParam(_postProcessCS, _kernelDownsample, SourceTexID, currentSrc);
+                    cmd.SetComputeTextureParam(_postProcessCS, _kernelDownsample, DestTexID, _bloomDownPyramid[i]);
+                    cmd.DispatchCompute(_postProcessCS, _kernelDownsample, Mathf.CeilToInt(dw / 8f), Mathf.CeilToInt(dh / 8f), 1);
+
+                    currentSrc = _bloomDownPyramid[i];
+                    sourceWidth = dw;
+                    sourceHeight = dh;
                 }
 
-                Vector2 uvVelocity = CalculateUvVelocity(tag, renderingData.cameraData.camera);
-                cmd.SetGlobalVector(VelocityPropID, new Vector4(uvVelocity.x, uvVelocity.y, 0f, 0f));
-                cmd.SetGlobalTexture(VelocitySpriteTextureID, spriteRenderer.sprite.texture);
-                cmd.DrawRenderer(spriteRenderer, _velocityMaterial, 0, 0);
+                RTHandle currentUp = _bloomDownPyramid[4];
+                for (int i = 3; i >= 0; i--)
+                {
+                    int uw = _bloomDownPyramid[i].rt.width;
+                    int uh = _bloomDownPyramid[i].rt.height;
+
+                    cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(uw, uh, 1f / uw, 1f / uh));
+                    cmd.SetComputeVectorParam(
+                        _postProcessCS,
+                        SourceTexelSizeID,
+                        new Vector4(1f / currentUp.rt.width, 1f / currentUp.rt.height, currentUp.rt.width, currentUp.rt.height));
+                    cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, SourceTexID, currentUp);
+                    cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, BaseTexID, _bloomDownPyramid[i]);
+                    cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, DestTexID, _bloomUpPyramid[i]);
+                    cmd.DispatchCompute(_postProcessCS, _kernelUpsample, Mathf.CeilToInt(uw / 8f), Mathf.CeilToInt(uh / 8f), 1);
+
+                    currentUp = _bloomUpPyramid[i];
+                }
+
+                cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, BloomTexID, currentUp);
             }
-        }
-
-        cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
-
-        if (bloomActive)
-        {
-            cmd.SetComputeFloatParam(_postProcessCS, BloomThresholdID, bloom.threshold.value);
-            cmd.SetComputeFloatParam(_postProcessCS, BloomScatterID, bloom.scatter.value);
-            cmd.SetComputeVectorParam(_postProcessCS, BloomTintID, bloom.tint.value);
-            cmd.SetComputeFloatParam(_postProcessCS, BloomIntensityID, bloom.intensity.value);
-
-            cmd.SetComputeTextureParam(_postProcessCS, _kernelPrefilter, InputTexID, renderingData.cameraData.renderer.cameraColorTargetHandle);
-            cmd.SetComputeTextureParam(_postProcessCS, _kernelPrefilter, DestTexID, _bloomPrefilterRT);
-            cmd.DispatchCompute(_postProcessCS, _kernelPrefilter, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-
-            int dw = width;
-            int dh = height;
-            int sourceWidth = width;
-            int sourceHeight = height;
-
-            RTHandle currentSrc = _bloomPrefilterRT;
-            for (int i = 0; i < 5; i++)
+            else
             {
-                dw = Mathf.Max(1, dw / 2);
-                dh = Mathf.Max(1, dh / 2);
-
-                var levelDesc = desc;
-                levelDesc.width = dw;
-                levelDesc.height = dh;
-
-                RenderingUtils.ReAllocIfNeeded(ref _bloomDownPyramid[i], levelDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: $"_PPBloomDown_{i}");
-                RenderingUtils.ReAllocIfNeeded(ref _bloomUpPyramid[i], levelDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: $"_PPBloomUp_{i}");
-
-                cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(dw, dh, 1f / dw, 1f / dh));
-                cmd.SetComputeVectorParam(
-                    _postProcessCS,
-                    SourceTexelSizeID,
-                    new Vector4(1f / sourceWidth, 1f / sourceHeight, sourceWidth, sourceHeight));
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelDownsample, SourceTexID, currentSrc);
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelDownsample, DestTexID, _bloomDownPyramid[i]);
-                cmd.DispatchCompute(_postProcessCS, _kernelDownsample, Mathf.CeilToInt(dw / 8f), Mathf.CeilToInt(dh / 8f), 1);
-
-                currentSrc = _bloomDownPyramid[i];
-                sourceWidth = dw;
-                sourceHeight = dh;
+                cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, BloomTexID, Texture2D.blackTexture);
             }
 
-            RTHandle currentUp = _bloomDownPyramid[4];
-            for (int i = 3; i >= 0; i--)
+            cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
+
+            cmd.SetComputeFloatParam(_postProcessCS, VignetteIntensityID, vignetteActive ? vignette.intensity.value : 0f);
+            if (vignetteActive)
             {
-                int uw = _bloomDownPyramid[i].rt.width;
-                int uh = _bloomDownPyramid[i].rt.height;
-
-                cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(uw, uh, 1f / uw, 1f / uh));
-                cmd.SetComputeVectorParam(
-                    _postProcessCS,
-                    SourceTexelSizeID,
-                    new Vector4(1f / currentUp.rt.width, 1f / currentUp.rt.height, currentUp.rt.width, currentUp.rt.height));
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, SourceTexID, currentUp);
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, BaseTexID, _bloomDownPyramid[i]);
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, DestTexID, _bloomUpPyramid[i]);
-                cmd.DispatchCompute(_postProcessCS, _kernelUpsample, Mathf.CeilToInt(uw / 8f), Mathf.CeilToInt(uh / 8f), 1);
-
-                currentUp = _bloomUpPyramid[i];
+                cmd.SetComputeVectorParam(_postProcessCS, VignetteColorID, vignette.color.value);
+                cmd.SetComputeFloatParam(_postProcessCS, VignetteSmoothnessID, vignette.smoothness.value);
+                cmd.SetComputeVectorParam(_postProcessCS, VignetteCenterID, vignette.center.value);
             }
 
-            cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, BloomTexID, currentUp);
+            cmd.SetComputeFloatParam(_postProcessCS, ChromaticAberrationIntensityID, caActive ? ca.intensity.value : 0f);
+
+            cmd.SetComputeFloatParam(_postProcessCS, ExposureID, cgActive ? cg.exposure.value : 0f);
+            cmd.SetComputeVectorParam(_postProcessCS, ColorFilterID, cgActive ? cg.colorFilter.value : Color.white);
+            cmd.SetComputeFloatParam(_postProcessCS, ContrastID, cgActive ? cg.contrast.value : 0f);
+            cmd.SetComputeFloatParam(_postProcessCS, SaturationID, cgActive ? cg.saturation.value : 1f);
+
+            cmd.SetComputeFloatParam(_postProcessCS, EigengrauIntensityID, eigengrauActive && eigengrau != null ? eigengrau.intensity.value : 0f);
+            if (eigengrauActive && eigengrau != null)
+            {
+                cmd.SetComputeVectorParam(_postProcessCS, EigengrauColorID, eigengrau.color.value);
+                cmd.SetComputeFloatParam(_postProcessCS, EigengrauDarknessThresholdID, eigengrau.darknessThreshold.value);
+                cmd.SetComputeFloatParam(_postProcessCS, EigengrauNoiseScaleID, eigengrau.noiseScale.value);
+                cmd.SetComputeFloatParam(_postProcessCS, EigengrauAnimationSpeedID, eigengrau.animationSpeed.value);
+                cmd.SetComputeFloatParam(_postProcessCS, TimeID, Time.time);
+            }
+
+            cmd.SetComputeFloatParam(_postProcessCS, MotionBlurIntensityID, mbActive ? mb.intensity.value : 0f);
+            cmd.SetComputeIntParam(_postProcessCS, MotionBlurMaxSamplesID, mbActive ? mb.maxSamples.value : 8);
+
+            cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, InputTexID, renderingData.cameraData.renderer.cameraColorTargetHandle);
+            cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, OutputTexID, _intermediateColorRT);
+            if (mbActive && _velocityRT != null && _velocityMaterial != null)
+            {
+                cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, VelocityTexID, _velocityRT);
+            }
+            else
+            {
+                cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, VelocityTexID, Texture2D.blackTexture);
+            }
+
+            cmd.DispatchCompute(_postProcessCS, _kernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+
+            cmd.Blit(_intermediateColorRT, renderingData.cameraData.renderer.cameraColorTargetHandle);
+
+            context.ExecuteCommandBuffer(cmd);
+            CommandBufferPool.Release(cmd);
         }
-        else
-        {
-            cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, BloomTexID, Texture2D.blackTexture);
-        }
+    */
 
-        cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
-
-        cmd.SetComputeFloatParam(_postProcessCS, VignetteIntensityID, vignetteActive ? vignette.intensity.value : 0f);
-        if (vignetteActive)
-        {
-            cmd.SetComputeVectorParam(_postProcessCS, VignetteColorID, vignette.color.value);
-            cmd.SetComputeFloatParam(_postProcessCS, VignetteSmoothnessID, vignette.smoothness.value);
-            cmd.SetComputeVectorParam(_postProcessCS, VignetteCenterID, vignette.center.value);
-        }
-
-        cmd.SetComputeFloatParam(_postProcessCS, ChromaticAberrationIntensityID, caActive ? ca.intensity.value : 0f);
-
-        cmd.SetComputeFloatParam(_postProcessCS, ExposureID, cgActive ? cg.exposure.value : 0f);
-        cmd.SetComputeVectorParam(_postProcessCS, ColorFilterID, cgActive ? cg.colorFilter.value : Color.white);
-        cmd.SetComputeFloatParam(_postProcessCS, ContrastID, cgActive ? cg.contrast.value : 0f);
-        cmd.SetComputeFloatParam(_postProcessCS, SaturationID, cgActive ? cg.saturation.value : 1f);
-
-        cmd.SetComputeFloatParam(_postProcessCS, EigengrauIntensityID, eigengrauActive && eigengrau != null ? eigengrau.intensity.value : 0f);
-        if (eigengrauActive && eigengrau != null)
-        {
-            cmd.SetComputeVectorParam(_postProcessCS, EigengrauColorID, eigengrau.color.value);
-            cmd.SetComputeFloatParam(_postProcessCS, EigengrauDarknessThresholdID, eigengrau.darknessThreshold.value);
-            cmd.SetComputeFloatParam(_postProcessCS, EigengrauNoiseScaleID, eigengrau.noiseScale.value);
-            cmd.SetComputeFloatParam(_postProcessCS, EigengrauAnimationSpeedID, eigengrau.animationSpeed.value);
-            cmd.SetComputeFloatParam(_postProcessCS, TimeID, Time.time);
-        }
-
-        cmd.SetComputeFloatParam(_postProcessCS, MotionBlurIntensityID, mbActive ? mb.intensity.value : 0f);
-        cmd.SetComputeIntParam(_postProcessCS, MotionBlurMaxSamplesID, mbActive ? mb.maxSamples.value : 8);
-
-        cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, InputTexID, renderingData.cameraData.renderer.cameraColorTargetHandle);
-        cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, OutputTexID, _intermediateColorRT);
-        if (mbActive && _velocityRT != null && _velocityMaterial != null)
-        {
-            cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, VelocityTexID, _velocityRT);
-        }
-        else
-        {
-            cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, VelocityTexID, Texture2D.blackTexture);
-        }
-
-        cmd.DispatchCompute(_postProcessCS, _kernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-
-        cmd.Blit(_intermediateColorRT, renderingData.cameraData.renderer.cameraColorTargetHandle);
-
-        context.ExecuteCommandBuffer(cmd);
-        CommandBufferPool.Release(cmd);
-    }
-#endif
-
-#if UNITY_6000_0_OR_NEWER
     private class PassData
     {
         public ComputeShader postProcessCS = null!;
@@ -341,8 +369,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
         public TextureHandle colorTexture;
         public TextureHandle intermediateTexture;
         public TextureHandle bloomPrefilterTexture;
-        public TextureHandle[] bloomDownTextures = new TextureHandle[5];
-        public TextureHandle[] bloomUpTextures = new TextureHandle[4];
+        public TextureHandle[] bloomDownTextures = null!;
+        public TextureHandle[] bloomUpTextures = null!;
         public TextureHandle velocityTexture;
         public RenderTextureDescriptor descriptor;
         public Camera camera = null!;
@@ -430,8 +458,6 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
             FilterMode.Bilinear);
 
         TextureHandle bloomPrefilterTexture = default;
-        var bloomDownTextures = new TextureHandle[5];
-        var bloomUpTextures = new TextureHandle[4];
         if (bloomActive)
         {
             bloomPrefilterTexture = UniversalRenderer.CreateRenderGraphTexture(
@@ -442,30 +468,35 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
                 FilterMode.Bilinear);
 
             var bloomDesc = desc;
-            for (int i = 0; i < bloomDownTextures.Length; i++)
+            for (int i = 0; i < _bloomDownTextures.Length; i++)
             {
                 bloomDesc.width = Mathf.Max(1, bloomDesc.width / 2);
                 bloomDesc.height = Mathf.Max(1, bloomDesc.height / 2);
-                bloomDownTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
+                _bloomDownTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
                     renderGraph,
                     bloomDesc,
-                    $"_PPBloomDown_{i}",
+                    BloomDownNames[i],
                     true,
                     FilterMode.Bilinear);
 
-                if (i < bloomUpTextures.Length)
+                if (i < _bloomUpTextures.Length)
                 {
-                    bloomUpTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
+                    _bloomUpTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
                         renderGraph,
                         bloomDesc,
-                        $"_PPBloomUp_{i}",
+                        BloomUpNames[i],
                         true,
                         FilterMode.Bilinear);
                 }
             }
         }
 
-        bool renderRobotVelocity = mbActive && _velocityMaterial != null;
+        // Motion blur stays enabled in the volume profile, but do not allocate
+        // and clear a full-screen velocity target when there is no remote
+        // robot that can contribute to it.
+        bool renderRobotVelocity = mbActive &&
+                                   _velocityMaterial != null &&
+                                   HasRemoteRobotRenderers();
         TextureHandle velocityTexture = default;
         if (renderRobotVelocity)
         {
@@ -491,14 +522,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
             passData.colorTexture = activeColor;
             passData.intermediateTexture = intermediateTexture;
             passData.bloomPrefilterTexture = bloomPrefilterTexture;
-            for (int i = 0; i < bloomDownTextures.Length; i++)
-            {
-                passData.bloomDownTextures[i] = bloomDownTextures[i];
-            }
-            for (int i = 0; i < bloomUpTextures.Length; i++)
-            {
-                passData.bloomUpTextures[i] = bloomUpTextures[i];
-            }
+            passData.bloomDownTextures = _bloomDownTextures;
+            passData.bloomUpTextures = _bloomUpTextures;
             passData.descriptor = desc;
             passData.camera = cameraData.camera;
             passData.velocityMaterial = _velocityMaterial;
@@ -729,20 +754,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
             });
         }
     }
-#endif
-
     public void Dispose()
     {
-#if !UNITY_6000_0_OR_NEWER
-        _intermediateColorRT?.Release();
-        _bloomPrefilterRT?.Release();
-        _velocityRT?.Release();
-        for (int i = 0; i < 5; i++)
-        {
-            _bloomDownPyramid[i]?.Release();
-            _bloomUpPyramid[i]?.Release();
-        }
-#endif
         if (_velocityMaterial != null)
         {
             CoreUtils.Destroy(_velocityMaterial);

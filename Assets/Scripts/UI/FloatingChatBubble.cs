@@ -1,6 +1,7 @@
 #nullable enable
 
 using UnityEngine;
+using Fodinae.Core;
 using Fodinae.Rendering.PostProcessing;
 
 namespace Fodinae.UI
@@ -10,6 +11,9 @@ namespace Fodinae.UI
         private TextMesh? _textMesh;
         private MeshRenderer? _meshRenderer;
         private MeshRenderer? _bgRenderer;
+        private MeshFilter? _bgFilter;
+        private Mesh? _bgMesh;
+        private MaterialPropertyBlock? _bgPropertyBlock;
         private float _elapsed;
         private const float DURATION = 5f;
         private const float FLOAT_SPEED = 0.3f;
@@ -32,11 +36,12 @@ namespace Fodinae.UI
                 bgGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
                 bgGo.transform.SetParent(transform, false);
                 bgGo.transform.localPosition = new Vector3(0, 0, 0.01f);
-                bgGo.AddComponent<MeshFilter>();
+                _bgFilter = bgGo.AddComponent<MeshFilter>();
                 _bgRenderer = bgGo.AddComponent<MeshRenderer>();
                 _bgRenderer.sortingOrder = 299;
-                _bgRenderer.material = new Material(Shader.Find("Sprites/Default"));
-                _bgRenderer.material.color = new Color(0, 0, 0, 0.5f);
+                _bgRenderer.sharedMaterial = SharedMaterialCache.GetForTexture(Texture2D.whiteTexture);
+                _bgPropertyBlock = new MaterialPropertyBlock();
+                SetBackgroundAlpha(0.5f);
             }
 
             _textMesh.text = text;
@@ -65,25 +70,35 @@ namespace Fodinae.UI
             float w = Mathf.Max(textWidth, 1.5f) + 0.4f;
             const float h = 0.3f;
 
-            var mesh = new Mesh();
-            Vector3[] vertices = new Vector3[]
+            _bgMesh ??= new Mesh { name = "ChatBubbleBackground" };
+            Vector3[] vertices =
             {
                 new Vector3(-w / 2, -h / 2, 0),
                 new Vector3(w / 2, -h / 2, 0),
                 new Vector3(-w / 2, h / 2, 0),
                 new Vector3(w / 2, h / 2, 0),
             };
-            mesh.vertices = vertices;
-            mesh.triangles = new int[] { 0, 1, 2, 2, 1, 3 };
-            mesh.uv = new Vector2[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one };
-            mesh.RecalculateBounds();
+            _bgMesh.vertices = vertices;
+            _bgMesh.triangles = new[] { 0, 1, 2, 2, 1, 3 };
+            _bgMesh.uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one };
+            _bgMesh.RecalculateBounds();
 
-            var filter = _bgRenderer.GetComponent<MeshFilter>();
-            if (filter != null)
+            if (_bgFilter != null)
             {
-                Object.Destroy(filter.sharedMesh);
-                filter.mesh = mesh;
+                _bgFilter.sharedMesh = _bgMesh;
             }
+        }
+
+        private void SetBackgroundAlpha(float alpha)
+        {
+            if (_bgRenderer == null)
+            {
+                return;
+            }
+
+            _bgPropertyBlock ??= new MaterialPropertyBlock();
+            _bgPropertyBlock.SetColor("_Color", new Color(0f, 0f, 0f, alpha));
+            _bgRenderer.SetPropertyBlock(_bgPropertyBlock);
         }
 
         protected void Update()
@@ -102,12 +117,7 @@ namespace Fodinae.UI
                 Color c = _textMesh.color;
                 c.a = Mathf.Lerp(1f, 0f, t);
                 _textMesh.color = c;
-                if (_bgRenderer != null)
-                {
-                    Color bgC = _bgRenderer.material.color;
-                    bgC.a = Mathf.Lerp(0.5f, 0f, t);
-                    _bgRenderer.material.color = bgC;
-                }
+                SetBackgroundAlpha(Mathf.Lerp(0.5f, 0f, t));
             }
 
             if (_elapsed >= DURATION)
@@ -126,20 +136,19 @@ namespace Fodinae.UI
                 _textMesh.color = c;
             }
 
-            if (_bgRenderer != null)
-            {
-                var bgC = _bgRenderer.material.color;
-                bgC.a = 0.5f;
-                _bgRenderer.material.color = bgC;
-            }
+            SetBackgroundAlpha(0.5f);
         }
 
         protected void OnDestroy()
         {
             if (_bgRenderer != null)
             {
-                Destroy(_bgRenderer.material);
                 Destroy(_bgRenderer.gameObject);
+            }
+
+            if (_bgMesh != null)
+            {
+                Destroy(_bgMesh);
             }
         }
     }

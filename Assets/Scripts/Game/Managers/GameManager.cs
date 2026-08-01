@@ -43,6 +43,9 @@ namespace Fodinae.Game.Managers
 
         private void OnDestroy()
         {
+            SharedMaterialCache.Clear();
+            ItemRegistry.Clear();
+
             if (_uiRoot != null)
             {
                 Destroy(_uiRoot);

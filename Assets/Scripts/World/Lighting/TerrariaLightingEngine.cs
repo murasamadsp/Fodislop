@@ -5,11 +5,13 @@ using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Rendering;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.World.Lighting;
 
@@ -38,7 +40,8 @@ public class TerrariaLightingEngine : MonoBehaviour
     private const int TileRangeStride = sizeof(int) * 2;
     private const int TileIndexStride = sizeof(int);
     private const int CoveragePixelsPerCell = 8;
-    private const int LightingCacheAnchorCells = 4;
+    private const int LightingCacheAnchorCells = 8;
+    private const int LightingRegionPaddingCells = 16;
     private const int StaticLightClusterSize = 2;
     private static readonly Vector3 LuminanceWeights = new(0.2126f, 0.7152f, 0.0722f);
 
@@ -64,6 +67,7 @@ public class TerrariaLightingEngine : MonoBehaviour
     private static readonly int LightTileWorldSizeId = Shader.PropertyToID("_LightTileWorldSize");
     private static readonly int GridSizeId = Shader.PropertyToID("_GridSize");
     private static readonly int OcclusionSizeId = Shader.PropertyToID("_OcclusionSize");
+    private static readonly int OcclusionGridScaleId = Shader.PropertyToID("_OcclusionGridScale");
     private static readonly int OcclusionYFlipId = Shader.PropertyToID("_OcclusionYFlip");
     private static readonly int OutputSizeId = Shader.PropertyToID("_OutputSize");
     private static readonly int WorldRectId = Shader.PropertyToID("_WorldRect");
@@ -166,6 +170,8 @@ public class TerrariaLightingEngine : MonoBehaviour
     [Header("Quality")]
     [SerializeField]
     private QualityPreset _quality = QualityPreset.Ultra;
+    [SerializeField]
+    private GraphicsQualityProfile? _graphicsProfile;
 
     [Header("Light tuning")]
     [SerializeField, Tooltip("Base light present even when no direct light reaches the pixel.")]
@@ -283,6 +289,8 @@ public class TerrariaLightingEngine : MonoBehaviour
 
     public QualityPreset Quality => _quality;
 
+    public int StableRegionPaddingCells => LightingRegionPaddingCells;
+
     public int RequiredTerrainPadding
     {
         get
@@ -295,7 +303,7 @@ public class TerrariaLightingEngine : MonoBehaviour
                 (_playerAuraRadius + _shadowSoftness) / cellSize);
             return Mathf.Max(
                 1,
-                Mathf.Max(staticPadding, playerPadding) + _lightSafeBorder + LightingCacheAnchorCells);
+                Mathf.Max(staticPadding, playerPadding) + _lightSafeBorder);
         }
     }
 
@@ -308,6 +316,7 @@ public class TerrariaLightingEngine : MonoBehaviour
         }
 
         s_instance = this;
+        _graphicsProfile ??= Resources.Load<GraphicsQualityProfile>("GraphicsQualityProfile");
         int savedQuality = PlayerPrefs.GetInt(QualityPreferenceKey, (int)QualityPreset.Ultra);
         ApplyQualityPreset((QualityPreset)Mathf.Clamp(savedQuality, 0, (int)QualityPreset.Ultra), save: false);
         LoadComputeShader();
@@ -412,18 +421,27 @@ public class TerrariaLightingEngine : MonoBehaviour
             return;
         }
 
-        int gridMinX = SnapLightingRegion(visibleMinX + LightingCacheAnchorCells);
-        int gridMinY = SnapLightingRegion(visibleMinY + LightingCacheAnchorCells);
-        int gridWidth = Mathf.Max(2, visibleWidth - (LightingCacheAnchorCells * 2));
-        int gridHeight = Mathf.Max(2, visibleHeight - (LightingCacheAnchorCells * 2));
-        Vector4 visibleRegion = new(gridMinX, gridMinY, gridWidth, gridHeight);
-        bool regionChanged = visibleRegion != _lastVisibleRegion;
+        // Keep a stable lighting region around the viewport. The old code
+        // snapped this rectangle to an 8-cell grid and rebuilt coverage/SDF
+        // every time the camera crossed that grid boundary. The region now
+        // has an explicit safe zone and only recenters when the viewport is
+        // close to leaving it.
+        Vector4 lightingRegion = GetStableLightingRegion(
+            visibleMinX,
+            visibleMinY,
+            visibleWidth,
+            visibleHeight);
+        int gridMinX = Mathf.RoundToInt(lightingRegion.x);
+        int gridMinY = Mathf.RoundToInt(lightingRegion.y);
+        int gridWidth = Mathf.RoundToInt(lightingRegion.z);
+        int gridHeight = Mathf.RoundToInt(lightingRegion.w);
+        bool regionChanged = lightingRegion != _lastVisibleRegion;
         if (Application.isPlaying && !regionChanged && Time.unscaledTime < _nextUpdateTime)
         {
             return;
         }
 
-        _lastVisibleRegion = visibleRegion;
+        _lastVisibleRegion = lightingRegion;
         _nextUpdateTime = Time.unscaledTime + (1f / _qualitySettings.UpdatesPerSecond);
 
         if (!LoadComputeShader())
@@ -535,6 +553,13 @@ public class TerrariaLightingEngine : MonoBehaviour
         _lightingCompute.SetTexture(_kernel, SdfTextureId, _sdfTexture);
         _lightingCompute.SetInts(GridSizeId, gridWidth, gridHeight);
         _lightingCompute.SetInts(OcclusionSizeId, _occlusionWidth, _occlusionHeight);
+        _lightingCompute.SetVector(
+            OcclusionGridScaleId,
+            new Vector4(
+                _occlusionWidth / (float)Mathf.Max(gridWidth, 1),
+                _occlusionHeight / (float)Mathf.Max(gridHeight, 1),
+                0f,
+                0f));
         _lightingCompute.SetInt(OcclusionYFlipId, SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         _lightingCompute.SetInts(OutputSizeId, _outputWidth, _outputHeight);
         _lightingCompute.SetVector(WorldRectId, worldRect);
@@ -567,6 +592,52 @@ public class TerrariaLightingEngine : MonoBehaviour
     private static int SnapLightingRegion(int coordinate)
     {
         return Mathf.FloorToInt(coordinate / (float)LightingCacheAnchorCells) * LightingCacheAnchorCells;
+    }
+
+    private Vector4 GetStableLightingRegion(
+        int visibleMinX,
+        int visibleMinY,
+        int visibleWidth,
+        int visibleHeight)
+    {
+        int visibleMaxX = visibleMinX + visibleWidth;
+        int visibleMaxY = visibleMinY + visibleHeight;
+
+        if (!float.IsNaN(_lastVisibleRegion.x))
+        {
+            int currentMinX = Mathf.RoundToInt(_lastVisibleRegion.x);
+            int currentMinY = Mathf.RoundToInt(_lastVisibleRegion.y);
+            int currentMaxX = currentMinX + Mathf.RoundToInt(_lastVisibleRegion.z);
+            int currentMaxY = currentMinY + Mathf.RoundToInt(_lastVisibleRegion.w);
+            int safeMargin = Mathf.Min(
+                LightingRegionPaddingCells,
+                Mathf.Max(2, Mathf.Min(
+                    Mathf.RoundToInt(_lastVisibleRegion.z),
+                    Mathf.RoundToInt(_lastVisibleRegion.w)) / 4));
+
+            if (visibleMinX >= currentMinX + safeMargin &&
+                visibleMaxX <= currentMaxX - safeMargin &&
+                visibleMinY >= currentMinY + safeMargin &&
+                visibleMaxY <= currentMaxY - safeMargin)
+            {
+                return _lastVisibleRegion;
+            }
+        }
+
+        int paddedMinX = SnapLightingRegion(visibleMinX - LightingRegionPaddingCells);
+        int paddedMinY = SnapLightingRegion(visibleMinY - LightingRegionPaddingCells);
+        int paddedMaxX = Mathf.CeilToInt(
+            (visibleMaxX + LightingRegionPaddingCells) / (float)LightingCacheAnchorCells) *
+            LightingCacheAnchorCells;
+        int paddedMaxY = Mathf.CeilToInt(
+            (visibleMaxY + LightingRegionPaddingCells) / (float)LightingCacheAnchorCells) *
+            LightingCacheAnchorCells;
+
+        return new Vector4(
+            paddedMinX,
+            paddedMinY,
+            Mathf.Max(2, paddedMaxX - paddedMinX),
+            Mathf.Max(2, paddedMaxY - paddedMinY));
     }
 
     private bool CanDispatchLighting()
@@ -957,13 +1028,28 @@ public class TerrariaLightingEngine : MonoBehaviour
     private void ApplyQualityPreset(QualityPreset quality, bool save)
     {
         _quality = quality;
-        _qualitySettings = quality switch
+        ApplyUnityQualityLevel(quality);
+        if (_graphicsProfile != null)
         {
-            QualityPreset.Low => new QualitySettings(1, 512, 128, 20, 20f),
-            QualityPreset.Medium => new QualitySettings(2, 768, 256, 28, 24f),
-            QualityPreset.High => new QualitySettings(4, 1536, 512, 40, 30f),
-            _ => new QualitySettings(8, 2048, 1024, 64, 30f),
-        };
+            GraphicsQualitySettings profileSettings = _graphicsProfile.Get((GraphicsQualityTier)quality);
+            _qualitySettings = new QualitySettings(
+                profileSettings.LightingPixelsPerCell,
+                profileSettings.LightingMaximumTextureDimension,
+                profileSettings.LightingMaximumLightCount,
+                profileSettings.LightingMaximumRaySteps,
+                profileSettings.LightingUpdatesPerSecond);
+            ApplyUnityRenderingSettings(profileSettings);
+        }
+        else
+        {
+            _qualitySettings = quality switch
+            {
+                QualityPreset.Low => new QualitySettings(1, 512, 128, 20, 20f),
+                QualityPreset.Medium => new QualitySettings(2, 768, 256, 28, 24f),
+                QualityPreset.High => new QualitySettings(4, 1536, 512, 40, 30f),
+                _ => new QualitySettings(8, 2048, 1024, 64, 30f),
+            };
+        }
 
         _nextUpdateTime = 0f;
         _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
@@ -974,6 +1060,28 @@ public class TerrariaLightingEngine : MonoBehaviour
         {
             PlayerPrefs.SetInt(QualityPreferenceKey, (int)_quality);
             PlayerPrefs.Save();
+        }
+    }
+
+    private static void ApplyUnityQualityLevel(QualityPreset quality)
+    {
+        string targetName = quality.ToString();
+        string[] qualityNames = UnityEngine.QualitySettings.names;
+        int qualityIndex = Array.IndexOf(qualityNames, targetName);
+        if (qualityIndex >= 0 && UnityEngine.QualitySettings.GetQualityLevel() != qualityIndex)
+        {
+            UnityEngine.QualitySettings.SetQualityLevel(qualityIndex, applyExpensiveChanges: true);
+        }
+    }
+
+    private static void ApplyUnityRenderingSettings(GraphicsQualitySettings settings)
+    {
+        UnityEngine.QualitySettings.vSyncCount = Mathf.Clamp(settings.VSyncCount, 0, 4);
+        UnityEngine.QualitySettings.antiAliasing = Mathf.Clamp(settings.AntiAliasing, 0, 8);
+
+        if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)
+        {
+            urp.renderScale = Mathf.Clamp(settings.RenderScale, 0.5f, 1f);
         }
     }
 

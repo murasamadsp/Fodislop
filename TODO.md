@@ -8,5 +8,11 @@
 - нет экрана загрузки
 - добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - режим предпросмотра сделать
-- разобраться со сценами
-- тег система не идеальна. сделать ревью
+- [ ] Оптимизация текстур и лоадера — `Assets/Textures/loader_new.png` весит 3.57 МБ в сыром PNG. Необходима оптимизация размера (Crunch Compression в Texture Importer / PNG сжатие) и переименование в `loader.png` без временного суффикса `_new`.
+- [ ] Очистка и структурирование `Assets/Textures/` — Переместить графические ассеты из корня директории `Assets/Textures/` (`perspective.png`, `programmator.png`, `skills.png`, `transit.png`) по специализированным подпапкам и настроить единые пресеты TextureImporterSettings.
+- [ ] Очистка неиспользуемых 2D шаблонов сцен в `Assets/Settings/` — Удалить / перенести `Lit2DSceneTemplate.scenetemplate` (3.94 МБ) и `URP2DSceneTemplate.unity`.
+- [ ] Оптимизация 2D профилей качества в `ProjectSettings/QualitySettings.asset` — Сократить 6 дефолтных 3D профилей (Very Low, High, Ultra с тенью/LOD/Reflection Probes) до 2 специализированных 2D профилей.
+- [ ] Разделение 2D слоев и матрицы коллизий в `TagManager.asset` & `Physics2DSettings.asset` — Настроить отдельные слои для `Player`, `Robot`, `Pack`, `Terrain` и оптимизировать матрицу коллизий. (Многопоточная физика 2D `useMultithreading: 1` уже включена).
+- [ ] Очистка неиспользуемых тем UI Toolkit в `Assets/UI Toolkit/` — Удалить `UnityDefaultRuntimeTheme.tss` и `UnityThemes/`.
+- [ ] Исправление StyleCop предупреждений в C# коде (`SA1513`, `SA1407`, `SA1503` и др.), выявленных новой полной проверкой линтера.
+

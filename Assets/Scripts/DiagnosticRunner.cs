@@ -12,113 +12,87 @@ using Fodinae.Player.Logic;
 using Fodinae.UI;
 using Fodinae.World;
 using Fodinae.World.Terrain;
+using Effekseer;
+using Fodinae.Effekseer;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Profiling;
 
 namespace Fodinae
 {
     public class DiagnosticRunner : MonoBehaviour
     {
         private static readonly string LogPath = Path.Combine(Application.dataPath, "..", "diagnostic.txt");
+        private static readonly string MemoryLogPath = Path.Combine(Application.dataPath, "..", "memory_growth.txt");
+        private float _nextMemorySampleTime;
 
-        private float _lastHeartbeat;
-        private Vector2Int _lastPlayerPos;
-        private int _robotCount;
-        private float _lastRobotMoveTime;
-        private Vector3 _lastRobotPos;
-        private int _heartbeatIndex;
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void EnsureCreated()
+        {
+            File.WriteAllText(MemoryLogPath, string.Empty);
+
+            if (FindAnyObjectByType<DiagnosticRunner>() != null)
+            {
+                return;
+            }
+
+            var go = new GameObject("FodinaeDiagnostics");
+            DontDestroyOnLoad(go);
+            go.AddComponent<DiagnosticRunner>();
+        }
 
         protected void Update()
         {
+            if (Time.unscaledTime >= _nextMemorySampleTime)
+            {
+                _nextMemorySampleTime = Time.unscaledTime + 5f;
+                WriteMemorySample();
+            }
+
             if (Keyboard.current != null && Keyboard.current.f12Key.wasPressedThisFrame)
             {
                 WriteSnapshot();
                 return;
             }
+        }
 
-            if (Time.time - _lastHeartbeat < 1f)
-            {
-                return;
-            }
-
-            _lastHeartbeat = Time.time;
-            _heartbeatIndex++;
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"--- HEARTBEAT #{_heartbeatIndex} frame={Time.frameCount} t={Time.time:F1}s delta={Time.deltaTime:F4}s ---");
-
-            var mm = ServiceLocator.Resolve<MapManager>();
-            sb.AppendLine($"  MapManager: {(mm != null ? $"Init={mm.IsWorldInitialized} '{mm.WorldCodeName}'" : "NULL")}");
-
+        private static void WriteMemorySample()
+        {
             var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            sb.AppendLine($"  MapStorage: {(ms != null ? $"Ready={ms.IsReady} Disposed={ms.IsDisposed}" : "NULL")}");
+            string line =
+                $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
+                $"allocated={Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):F1}MB " +
+                $"reserved={Profiler.GetTotalReservedMemoryLong() / (1024f * 1024f):F1}MB " +
+                $"graphics={Profiler.GetAllocatedMemoryForGraphicsDriver() / (1024f * 1024f):F1}MB " +
+                $"mono={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1}MB " +
+                $"gc={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1}MB " +
+                $"tex={Resources.FindObjectsOfTypeAll<Texture2D>().Length} " +
+                $"rt={Resources.FindObjectsOfTypeAll<RenderTexture>().Length} " +
+                $"mesh={Resources.FindObjectsOfTypeAll<Mesh>().Length} " +
+                $"effekseer={Resources.FindObjectsOfTypeAll<EffekseerEffectAsset>().Length} " +
+                $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
+                $"chunks={(ms?.CellLayer?.GetLoadedCount() ?? 0)}\n";
 
-            var player = PlayerMovementController.LocalPlayer;
-            if (player != null)
-            {
-                sb.AppendLine($"  Player: Pos={player.Position} GO_active={player.gameObject.activeInHierarchy} GO_selfactive={player.isActiveAndEnabled}");
-                if (player.Position != _lastPlayerPos)
-                {
-                    sb.AppendLine($"  Player MOVED {_lastPlayerPos} -> {player.Position}");
-                    _lastPlayerPos = player.Position;
-                }
-            }
-            else
-            {
-                sb.AppendLine("  Player: NULL");
-            }
-
-            var blocker = ServiceLocator.Resolve<IInputBlocker>();
-            sb.AppendLine($"  Input: Blocked={(blocker != null ? blocker.IsInputBlocked : (bool?)null)} Chat={ChatInput.IsFocused} KB={Keyboard.current != null}");
-
-            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (cm != null)
-            {
-                var conn = cm.Connection;
-                sb.AppendLine($"  Connection: Connected={cm.IsConnected} Status={(conn != null ? conn.ConnectionStatus.ToString() : "NULL")}");
-            }
-
-            var robots = FindObjectsByType<Robot>(FindObjectsInactive.Exclude);
-            if (robots.Length != _robotCount)
-            {
-                sb.AppendLine($"  Robots: {_robotCount} -> {robots.Length}");
-                _robotCount = robots.Length;
-            }
-
-            foreach (var r in robots)
-            {
-                if (r.IsLocalPlayer)
-                {
-                    continue;
-                }
-
-                if (r.transform.position != _lastRobotPos)
-                {
-                    _lastRobotPos = r.transform.position;
-                    _lastRobotMoveTime = Time.time;
-                }
-            }
-
-            if (Time.time - _lastRobotMoveTime > 5f && robots.Length > 1)
-            {
-                sb.AppendLine($"  WARNING: No robot movement for {Time.time - _lastRobotMoveTime:F1}s");
-            }
-
-            var terrain = FindAnyObjectByType<TerrainRenderer>();
-            sb.AppendLine($"  Terrain: {(terrain != null ? $"Active={terrain.gameObject.activeInHierarchy} Enabled={terrain.enabled}" : "NULL")}");
-
-            var cam = Camera.main;
-            sb.AppendLine($"  Camera: {(cam != null ? $"Active={cam.gameObject.activeInHierarchy} Pos={cam.transform.position}" : "NULL")}");
-
-            sb.AppendLine($"  TimeScale={Time.timeScale} framerate={1f / Time.deltaTime:F0}");
-
-            File.AppendAllText(LogPath, sb.ToString());
+            File.AppendAllText(MemoryLogPath, line);
         }
 
         private void WriteSnapshot()
         {
             var sb = new StringBuilder();
             sb.AppendLine($"=== SNAPSHOT frame={Time.frameCount} time={Time.time:F2}s ===");
+
+            sb.AppendLine("\n[MEMORY]");
+            sb.AppendLine($"  TotalAllocated={Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):F1} MB");
+            sb.AppendLine($"  TotalReserved={Profiler.GetTotalReservedMemoryLong() / (1024f * 1024f):F1} MB");
+            sb.AppendLine($"  GraphicsDriver={Profiler.GetAllocatedMemoryForGraphicsDriver() / (1024f * 1024f):F1} MB");
+            sb.AppendLine($"  MonoUsed={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1} MB");
+            sb.AppendLine($"  MonoHeap={Profiler.GetMonoHeapSizeLong() / (1024f * 1024f):F1} MB");
+            sb.AppendLine($"  GCHeap={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1} MB");
+            sb.AppendLine($"  TextureObjects={Resources.FindObjectsOfTypeAll<Texture2D>().Length}");
+            sb.AppendLine($"  RenderTextureObjects={Resources.FindObjectsOfTypeAll<RenderTexture>().Length}");
+            sb.AppendLine($"  MeshObjects={Resources.FindObjectsOfTypeAll<Mesh>().Length}");
+            sb.AppendLine($"  EffekseerAssets={Resources.FindObjectsOfTypeAll<EffekseerEffectAsset>().Length}");
+            sb.AppendLine($"  ActiveRuntimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount}");
 
             sb.AppendLine("\n[SERVICES]");
             W(sb, "IWorldDataStorage", ServiceLocator.Resolve<IWorldDataStorage>());
@@ -139,6 +113,10 @@ namespace Fodinae
             sb.AppendLine(ms != null
                 ? $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}"
                 : "  NULL");
+            if (ms?.CellLayer != null)
+            {
+                sb.AppendLine($"  CellChunks loaded={ms.CellLayer.GetLoadedCount()} dirty={ms.CellLayer.GetDirtyCount()} max={ms.CellLayer.MaxChunksInMemory}");
+            }
             var mm = ServiceLocator.Resolve<MapManager>();
             sb.AppendLine(mm != null
                 ? $"  Initialized={mm.IsWorldInitialized} '{mm.WorldCodeName}' {mm.WorldWidth}x{mm.WorldHeight} Hash={mm.GetHashCode()}"

@@ -53,6 +53,7 @@ namespace Fodinae.Game
         private float[]? _effekseerDynamicInputs;
 
         private Sprite[]? _animationFrames;
+        private Sprite? _ownedStaticSprite;
         private int _currentFrame;
         private float _frameTimer;
         private float _frameDuration = 0.1f;
@@ -67,6 +68,7 @@ namespace Fodinae.Game
         private Vector3 _intendedWorldPosition;
 
         private EffekseerHandle _effekseerHandle;
+        private EffekseerEffectAsset? _effekseerAsset;
         private bool _hasEffekseerEffect;
 
         private readonly CancellationTokenSource _cts = new();
@@ -403,11 +405,12 @@ namespace Fodinae.Game
                 {
                     if (_spriteRenderer != null)
                     {
-                        _spriteRenderer.sprite = Sprite.Create(
+                        _ownedStaticSprite = Sprite.Create(
                             texture,
                             new Rect(0, 0, texture.width, texture.height),
                             new Vector2(0.5f, 0.5f),
                             RenderingConstants.PIXELS_PER_UNIT);
+                        _spriteRenderer.sprite = _ownedStaticSprite;
                     }
 
                     _maxLifetime = 1f;
@@ -460,6 +463,7 @@ namespace Fodinae.Game
 
                 if (token.IsCancellationRequested)
                 {
+                    RuntimeEffekseerLoader.DestroyEffect(effectAsset);
                     return false;
                 }
 
@@ -470,6 +474,7 @@ namespace Fodinae.Game
                 }
 
                 _effekseerHandle = EffekseerSystem.PlayEffect(effectAsset, _intendedWorldPosition);
+                _effekseerAsset = effectAsset;
 
                 if (_effekseerDynamicInputs != null)
                 {
@@ -527,6 +532,9 @@ namespace Fodinae.Game
             if (_hasEffekseerEffect)
             {
                 _effekseerHandle.Stop();
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
+                _effekseerAsset = null;
+                _hasEffekseerEffect = false;
             }
         }
 
@@ -542,12 +550,21 @@ namespace Fodinae.Game
             if (_hasEffekseerEffect)
             {
                 _effekseerHandle.Stop();
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
+                _effekseerAsset = null;
+                _hasEffekseerEffect = false;
             }
 
             if (_slot != null)
             {
                 ServiceLocator.Resolve<VFXPool>()?.Release(_slot);
                 _slot = null;
+            }
+
+            if (_ownedStaticSprite != null)
+            {
+                UnityEngine.Object.Destroy(_ownedStaticSprite);
+                _ownedStaticSprite = null;
             }
 
             _gameObject = null;

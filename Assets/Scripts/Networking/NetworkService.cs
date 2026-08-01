@@ -30,7 +30,9 @@ namespace Fodinae.Networking
         private IConnectionService _connectionService = null!;
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
+        private readonly Dictionary<Type, Subscription[]> _subscriberSnapshots = new();
         private readonly object _subscribersLock = new();
+        private bool _connectionSubscribed;
 
         protected void Awake()
         {
@@ -39,19 +41,48 @@ namespace Fodinae.Networking
 
         protected void OnEnable()
         {
-            if (_connectionService != null)
-            {
-                _connectionService.OnPacketReceived -= OnPacketReceived;
-                _connectionService.OnPacketReceived += OnPacketReceived;
-            }
+            EnsureConnectionSubscription();
         }
 
         protected void OnDisable()
         {
-            if (_connectionService != null)
+            UnsubscribeFromConnection();
+        }
+
+        protected void OnDestroy()
+        {
+            UnsubscribeFromConnection();
+            if (Instance == this)
             {
-                _connectionService.OnPacketReceived -= OnPacketReceived;
+                Instance = null;
             }
+        }
+
+        /// <summary>
+        /// Binds the packet stream after VContainer injection. Unity may call
+        /// OnEnable before [Inject] has populated the connection field.
+        /// </summary>
+        public void EnsureConnectionSubscription()
+        {
+            if (_connectionSubscribed || _connectionService == null)
+            {
+                return;
+            }
+
+            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _connectionService.OnPacketReceived += OnPacketReceived;
+            _connectionSubscribed = true;
+        }
+
+        private void UnsubscribeFromConnection()
+        {
+            if (!_connectionSubscribed || _connectionService == null)
+            {
+                return;
+            }
+
+            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _connectionSubscribed = false;
         }
 
         public bool IsConnected
@@ -134,6 +165,7 @@ namespace Fodinae.Networking
                     OriginalHandler = handler,
                     Wrapper = obj => handler((T)obj),
                 });
+                _subscriberSnapshots[type] = handlers.ToArray();
             }
         }
 
@@ -145,6 +177,7 @@ namespace Fodinae.Networking
                 if (_subscribers.TryGetValue(type, out var handlers))
                 {
                     handlers.RemoveAll(s => s.OriginalHandler == (Delegate)handler);
+                    _subscriberSnapshots[type] = handlers.ToArray();
                 }
             }
         }
@@ -188,18 +221,18 @@ namespace Fodinae.Networking
 
             var packetType = packet.GetType();
 
-            List<Subscription> handlers;
+            Subscription[] handlers;
             lock (_subscribersLock)
             {
-                if (!_subscribers.TryGetValue(packetType, out var h))
+                if (!_subscriberSnapshots.TryGetValue(packetType, out var snapshot))
                 {
                     return;
                 }
 
-                handlers = new List<Subscription>(h);
+                handlers = snapshot;
             }
 
-            for (int i = handlers.Count - 1; i >= 0; i--)
+            for (int i = handlers.Length - 1; i >= 0; i--)
             {
                 try
                 {

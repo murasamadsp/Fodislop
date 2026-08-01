@@ -24,6 +24,7 @@ namespace Fodinae.UI
         private int _pingMs;
         private int _onlinePlayers;
         private int _onlineProgrammator;
+        private float _nextDisplayUpdate;
 
         protected void Awake()
         {
@@ -34,7 +35,6 @@ namespace Fodinae.UI
                 canvas = canvasGO.AddComponent<Canvas>();
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 canvasGO.AddComponent<CanvasScaler>();
-                canvasGO.AddComponent<GraphicRaycaster>();
                 _ownedCanvas = canvas;
             }
 
@@ -84,8 +84,9 @@ namespace Fodinae.UI
             _frameIndex = (_frameIndex + 1) % SAMPLE_SIZE;
             float avg = _runningSum / SAMPLE_SIZE;
             float fps = avg > 0f ? 1f / avg : 0f;
-            if (_fpsText != null)
+            if (_fpsText != null && Time.unscaledTime >= _nextDisplayUpdate)
             {
+                _nextDisplayUpdate = Time.unscaledTime + 0.25f;
                 _fpsText.text = $"FPS: {fps:F1}  Ping: {_pingMs}ms  Online: {_onlinePlayers}  Prg: {_onlineProgrammator}";
             }
         }

@@ -489,7 +489,10 @@ InitTestScene*.unity*
 *.user
 *.userprefs
 
-*.txt
+# Diagnostic runtime logs
+diagnostic.txt
+memory_growth.txt
+
 # AI tools files
 .omo/
 .commandcode/
@@ -501,6 +504,9 @@ InitTestScene*.unity*
 /[Aa]ssets/Plugins/FMOD/Cache/*
 /[Aa]ssets/StreamingAssets/**/*.bank
 /[Aa]ssets/StreamingAssets/**/*.bank.meta
+/FodinaeAudio/.cache/
+/FodinaeAudio/.unsaved/
+/FodinaeAudio/.user/
 # Распакованный кэш карт — генерируется из *.zip при первом запуске
 /[Aa]ssets/StreamingAssets/WorldMaps/*.mapb
 /[Aa]ssets/StreamingAssets/WorldMaps/*.mapb.meta

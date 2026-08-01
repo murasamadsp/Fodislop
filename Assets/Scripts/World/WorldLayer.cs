@@ -32,6 +32,7 @@ namespace Fodinae
         private readonly LinkedList<int> _lruList;
         private readonly HashSet<int> _dirtyChunks;
         private readonly HashSet<int> _loadingChunks;
+        private bool _disposed;
 
         private FileStream? _fileStream;
 
@@ -124,6 +125,11 @@ namespace Fodinae
         // --- Core Paging Logic ---
         public T[]? GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
         {
+            if (_disposed)
+            {
+                return null;
+            }
+
             if (_loadedChunks.TryGetValue(chunkIndex, out T[]? chunk))
             {
                 if (touchLru)
@@ -225,6 +231,11 @@ namespace Fodinae
 
         public void Dispose()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             try
             {
                 Flush();
@@ -250,6 +261,13 @@ namespace Fodinae
             {
                 Debug.LogWarning($"[WorldLayer] I/O error closing stream during dispose: {ioEx.Message}");
             }
+
+            _disposed = true;
+            _loadedChunks.Clear();
+            _lruIndexMap.Clear();
+            _lruList.Clear();
+            _dirtyChunks.Clear();
+            _loadingChunks.Clear();
         }
 
         private static void ReadExactly(Stream stream, Span<byte> buffer)
@@ -347,6 +365,21 @@ namespace Fodinae
 
             await Cysharp.Threading.Tasks.UniTask.SwitchToMainThread();
 
+            if (_disposed)
+            {
+                _loadingChunks.Remove(chunkIndex);
+                return;
+            }
+
+            // A synchronous request may have filled this slot while the disk
+            // read was in flight. Do not overwrite it and, more importantly,
+            // do not append a second LRU node for the same chunk.
+            if (_loadedChunks.ContainsKey(chunkIndex))
+            {
+                _loadingChunks.Remove(chunkIndex);
+                return;
+            }
+
             if (chunk == null)
             {
                 chunk = new T[_chunkArea];
@@ -358,6 +391,18 @@ namespace Fodinae
 
         private void AddToCache(int chunkIndex, T[] chunk)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (_lruIndexMap.TryGetValue(chunkIndex, out var existingNode))
+            {
+                _lruList.Remove(existingNode);
+                _lruIndexMap.Remove(chunkIndex);
+                _loadedChunks.Remove(chunkIndex);
+            }
+
             if (_loadedChunks.Count >= _maxChunksInMemory)
             {
                 EvictOldestChunk();

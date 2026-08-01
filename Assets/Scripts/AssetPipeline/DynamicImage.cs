@@ -14,6 +14,7 @@ namespace Fodinae
     public class DynamicImage : MonoBehaviour
     {
         private Image? _image;
+        private Sprite? _runtimeSprite;
 
         protected void Awake()
         {
@@ -27,7 +28,14 @@ namespace Fodinae
             {
                 if (this != null && _image != null && texture != null)
                 {
+                    if (_runtimeSprite != null)
+                    {
+                        Destroy(_runtimeSprite);
+                        _runtimeSprite = null;
+                    }
+
                     var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                    _runtimeSprite = sprite;
                     _image.sprite = sprite;
                 }
             };
@@ -38,6 +46,15 @@ namespace Fodinae
             // Start the loading process and "forget" it. The loader handles the rest.
             var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
             loader?.LoadAndApplyTexture(applyAction, assetFilename, cancellationToken).Forget();
+        }
+
+        protected void OnDestroy()
+        {
+            if (_runtimeSprite != null)
+            {
+                Destroy(_runtimeSprite);
+                _runtimeSprite = null;
+            }
         }
     }
 }

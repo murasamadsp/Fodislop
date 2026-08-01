@@ -14,7 +14,6 @@ using VContainer;
 
 namespace Fodinae.Game.Managers
 {
-    [ExecuteAlways]
     [DefaultExecutionOrder(-10000)]
     public class MapManager : MonoBehaviour, IMapDataProvider
     {
@@ -71,19 +70,6 @@ namespace Fodinae.Game.Managers
         public bool IsWorldInitialized { get; private set; }
 
         public bool IsStandaloneMode { get; set; } = false;
-
-        protected void Awake()
-        {
-#if UNITY_EDITOR
-            if (!Application.isPlaying && !IsWorldInitialized)
-            {
-                _width = 128;
-                _height = 128;
-                _worldCodeName = "EditorPreview";
-                _worldDisplayName = "Editor Preview";
-            }
-#endif
-        }
 
         private IWorldDataStorage WorldStorage => _worldStorage;
 

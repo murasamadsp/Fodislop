@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'Assets/Scripts/**'
       - 'Assets/Editor/**'
@@ -12,7 +12,7 @@ on:
       - 'scripts/pre-commit-lint.sh'
       - '*.csproj'
   pull_request:
-    branches: [main]
+    branches: [main, master]
     paths:
       - 'Assets/Scripts/**'
       - 'Assets/Editor/**'
@@ -49,7 +49,7 @@ jobs:
       - name: Build dependencies
         run: |
           for csproj in Effekseer*.csproj UniTask*.csproj McpUnity*.csproj; do
-            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo 2>/dev/null || true
+            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo
           done
 
       - name: Build & analyze
@@ -57,16 +57,12 @@ jobs:
         run: |
           chmod +x scripts/pre-commit-lint.sh
           ./scripts/pre-commit-lint.sh 2>&1 | tee /tmp/lint.log
-        continue-on-error: true
 
       - name: Upload log on failure
-        if: steps.lint.outcome == 'failure'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: /tmp/lint.log
           retention-days: 7
 
-      - name: Fail if lint failed
-        if: steps.lint.outcome == 'failure'
-        run: exit 1

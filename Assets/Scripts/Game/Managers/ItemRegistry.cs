@@ -47,9 +47,28 @@ namespace Fodinae.Game.Managers
             }
 
             var tex = new Texture2D(2, 2);
-            tex.LoadImage(File.ReadAllBytes(path));
+            if (!tex.LoadImage(File.ReadAllBytes(path), markNonReadable: true))
+            {
+                Object.Destroy(tex);
+                return null;
+            }
+
             _iconCache[type] = tex;
             return tex;
+        }
+
+        public static void Clear()
+        {
+            foreach (var texture in _iconCache.Values)
+            {
+                if (texture != null)
+                {
+                    Object.Destroy(texture);
+                }
+            }
+
+            _iconCache.Clear();
+            _missingIconWarned.Clear();
         }
     }
 }

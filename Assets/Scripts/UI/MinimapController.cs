@@ -119,7 +119,10 @@ namespace Fodinae.UI
                 if (_ready)
                 {
                     UpdateCoordinatesText(_player.Position.x, _player.Position.y);
-                    RefreshTexture(_player.Position.x, _player.Position.y);
+                    if (_isVisible)
+                    {
+                        RefreshTexture(_player.Position.x, _player.Position.y);
+                    }
                 }
             }
         }
@@ -168,7 +171,10 @@ namespace Fodinae.UI
             if (_player != null)
             {
                 UpdateCoordinatesText(_player.Position.x, _player.Position.y);
-                RefreshTexture(_player.Position.x, _player.Position.y);
+                if (_isVisible)
+                {
+                    RefreshTexture(_player.Position.x, _player.Position.y);
+                }
             }
         }
 
@@ -227,7 +233,6 @@ namespace Fodinae.UI
             // Draw above the world, but below the UI Toolkit HUD and its modal panels.
             canvas.sortingOrder = -1;
             canvasObj.AddComponent<CanvasScaler>();
-            canvasObj.AddComponent<GraphicRaycaster>();
 
             // Minimap image
             _minimapObj = new GameObject("Minimap");
@@ -293,6 +298,11 @@ namespace Fodinae.UI
 
         private void OnPlayerMoved(Vector2Int oldPos, Vector2Int newPos)
         {
+            if (!isActiveAndEnabled)
+            {
+                return;
+            }
+
             if (!_ready)
             {
                 TryInitialize();
@@ -305,6 +315,11 @@ namespace Fodinae.UI
             if (_player != null)
             {
                 UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+            }
+
+            if (!_isVisible)
+            {
+                return;
             }
 
             float now = Time.time;
@@ -398,7 +413,11 @@ namespace Fodinae.UI
             if (_minimapTexture != null)
             {
                 _minimapTexture.SetPixels32(colors);
-                _minimapTexture.Apply(true);
+                // Keep the texture readable: this texture is updated again on
+                // every throttled player movement. Passing true discards the
+                // CPU copy and makes the next SetPixels32 fail/force a costly
+                // reallocation.
+                _minimapTexture.Apply(false);
             } // Async GPU upload — non-blocking
         }
 
@@ -412,7 +431,7 @@ namespace Fodinae.UI
 
         public void ForceRefresh()
         {
-            if (_player != null && _ready)
+            if (isActiveAndEnabled && _player != null && _ready && _isVisible)
             {
                 RefreshTexture(_player.Position.x, _player.Position.y);
             }
@@ -437,6 +456,12 @@ namespace Fodinae.UI
         {
             _isVisible = !_isVisible;
             SetVisible(_isVisible);
+            if (_isVisible && _player != null && _ready)
+            {
+                _lastUpdateTime = Time.time;
+                _lastUpdatePos = _player.Position;
+                RefreshTexture(_player.Position.x, _player.Position.y);
+            }
             PlayerPrefs.SetInt(_togglePrefKey, _isVisible ? 1 : 0);
             PlayerPrefs.Save();
         }

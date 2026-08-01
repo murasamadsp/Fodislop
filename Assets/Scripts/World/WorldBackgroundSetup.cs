@@ -5,7 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.World
 {
-    [ExecuteAlways]
     public class WorldBackgroundSetup : MonoBehaviour
     {
         [Header("Background Renderer Settings")]
@@ -18,11 +17,20 @@ namespace Fodinae.World
 
         protected void Awake()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             SetupBackgroundRenderer();
         }
 
         protected void Update()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
             if (_backgroundRenderer != null)
             {
                 EnsureBackgroundConfiguration();

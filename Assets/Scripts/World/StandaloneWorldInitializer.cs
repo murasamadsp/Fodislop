@@ -49,6 +49,12 @@ namespace Fodinae.World
 
         protected void Awake()
         {
+            if (!Application.isPlaying)
+            {
+                enabled = false;
+                return;
+            }
+
             _mapManager = GetComponent<MapManager>();
             if (_enableDebugLogging)
             {
@@ -63,6 +69,11 @@ namespace Fodinae.World
 
         protected void OnEnable()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             if (_enableDebugLogging)
             {
                 Debug.Log("[StandaloneWorldInitializer] ONENABLE CALLED");
@@ -79,6 +90,11 @@ namespace Fodinae.World
 
         protected void Start()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             if (_enableDebugLogging)
             {
                 Debug.Log("[StandaloneWorldInitializer] START CALLED");

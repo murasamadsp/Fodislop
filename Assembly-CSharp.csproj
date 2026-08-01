@@ -240,7 +240,6 @@
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/Components/MotionBlurComponent.cs" />
     <Compile Include="Assets/Scripts/World/Terrain/TerrainVertex.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/IAsyncStartable.cs" />
-    <Compile Include="Assets/Scripts/Rendering/PostProcessing/FodinaeEffekseerRenderPassFeature.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Diagnostics/ResolveInfo.cs" />
     <Compile Include="Assets/Scripts/World/CoordinateUtils.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IRobotService.cs" />
@@ -259,6 +258,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Registry.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Diagnostics/DiagnosticsContext.cs" />
     <Compile Include="Assets/Scripts/UI/Controls/Selectable.cs" />
+    <Compile Include="Assets/Scripts/Rendering/GraphicsQualityProfile.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/SystemInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/InventoryProcessor.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/Presenter/PlayerHUDPresenter.cs" />
@@ -298,7 +298,6 @@
     <Compile Include="Assets/Scripts/UI/MissionArrowUI.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/ChatProcessor.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IVFXService.cs" />
-    <Compile Include="Assets/Scripts/Rendering/PostProcessing/VelocityBufferRendererFeature.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/PacketUIBuilderFactory.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IMapDataProvider.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Diagnostics/DiagnosticsInfo.cs" />
@@ -316,7 +315,6 @@
     <Compile Include="Assets/Scripts/UI/Tooltip.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/View/PlayerHUDView.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/INetworkService.cs" />
-    <Compile Include="Assets/Scripts/Rendering/PostProcessing/VelocityBufferRenderPass.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/EntryPointExceptionHandler.cs" />
     <Compile Include="Assets/Scripts/UI/Controls/ChatInputBlinker.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/DisposeLoopItem.cs" />

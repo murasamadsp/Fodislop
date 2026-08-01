@@ -27,10 +27,19 @@ namespace Fodinae
         private VisualElement? _mainMenuContainer;
         private VisualElement? _loaderContainer;
         private bool _hasShownLoader = false;
+        private bool _ownsLoaderTexture;
         private Button? _playButton;
 
         protected void OnEnable()
         {
+            // OnEnable can run repeatedly when the menu object is toggled.
+            // Rebuilding the entire UI tree each time retains old VisualElement
+            // schedules and callbacks until the panel is destroyed.
+            if (_mainMenuContainer != null)
+            {
+                return;
+            }
+
             _doc = GetComponent<UIDocument>();
             if (_doc == null || _doc.rootVisualElement == null)
             {
@@ -108,7 +117,8 @@ namespace Fodinae
             Texture2D? loaderTexture = _loaderTexture;
             if (loaderTexture == null)
             {
-                loaderTexture = CreateSimpleLoaderTexture();
+                _loaderTexture = loaderTexture = CreateSimpleLoaderTexture();
+                _ownsLoaderTexture = true;
                 Debug.LogWarning("[MainMenu] Loader texture not assigned, using placeholder");
             }
 
@@ -171,6 +181,15 @@ namespace Fodinae
                 _loaderContainer.RemoveFromHierarchy();
                 _hasShownLoader = false;
                 Debug.Log("[MainMenu] Loader hidden");
+            }
+        }
+
+        protected void OnDestroy()
+        {
+            if (_ownsLoaderTexture && _loaderTexture != null)
+            {
+                Destroy(_loaderTexture);
+                _loaderTexture = null;
             }
         }
 

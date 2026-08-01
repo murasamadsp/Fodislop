@@ -20,6 +20,7 @@ using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Utilities;
 using UnityEngine;
+using UnityEngine.Rendering;
 using VContainer;
 
 namespace Fodinae
@@ -30,8 +31,6 @@ namespace Fodinae
     [DefaultExecutionOrder(-10000)]
     public class ClientAssetLoader : MonoBehaviour, IAssetLoader
     {
-        public event Action<string, Texture2D>? OnTextureLoaded;
-
         private readonly AssetCache _cache = new(LoadBytesFromServerInternal);
 
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
@@ -48,12 +47,12 @@ namespace Fodinae
         {
             _placeholderTexture = new Texture2D(1, 1);
             _placeholderTexture.SetPixel(0, 0, Color.gray);
-            _placeholderTexture.Apply();
+            _placeholderTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
             _placeholderTexture.name = "Placeholder_Texture";
 
             _errorTexture = new Texture2D(1, 1);
             _errorTexture.SetPixel(0, 0, Color.red);
-            _errorTexture.Apply();
+            _errorTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
             _errorTexture.name = "Error_Texture";
 
             _loopCts = new CancellationTokenSource();
@@ -64,6 +63,20 @@ namespace Fodinae
         {
             _loopCts?.Cancel();
             _loopCts?.Dispose();
+            _cache.Clear();
+
+            if (_placeholderTexture != null)
+            {
+                Destroy(_placeholderTexture);
+                _placeholderTexture = null;
+            }
+
+            if (_errorTexture != null)
+            {
+                Destroy(_errorTexture);
+                _errorTexture = null;
+            }
+
             if (_connectionService is ConnectionManager cm)
             {
                 cm.OnPacketReceived -= OnPacketReceived;
@@ -84,12 +97,7 @@ namespace Fodinae
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            var texture = await _cache.GetTextureAsync(filename, cancellationToken);
-            if (texture != null)
-            {
-                OnTextureLoaded?.Invoke(filename, texture);
-            }
-            return texture;
+            return await _cache.GetTextureAsync(filename, cancellationToken);
         }
 
         public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)

@@ -27,6 +27,7 @@ RWTexture2D<float4> _LightFilterOutput;
 
 int2 _GridSize;
 int2 _OcclusionSize;
+float2 _OcclusionGridScale;
 int _OcclusionYFlip;
 int2 _SdfSize;
 int _SdfJumpStep;
@@ -185,9 +186,8 @@ float TraceHeightAwareVisibility(float2 worldPosition, float2 lightPosition, flo
 float LoadDetailedOpacity(float2 gridPosition)
 {
     gridPosition = ToOcclusionGrid(gridPosition);
-    float2 occlusionScale = float2(_OcclusionSize) / float2(_GridSize);
     int2 texel = clamp(
-        int2(floor(gridPosition * occlusionScale)),
+        int2(floor(gridPosition * _OcclusionGridScale)),
         int2(0, 0),
         _OcclusionSize - 1);
     return _OcclusionTexture.Load(int3(texel, 0));
@@ -196,8 +196,7 @@ float LoadDetailedOpacity(float2 gridPosition)
 float SampleOpacity(float2 gridPosition)
 {
     gridPosition = ToOcclusionGrid(gridPosition);
-    float2 occlusionScale = float2(_OcclusionSize) / float2(_GridSize);
-    float2 texelPosition = gridPosition * occlusionScale - 0.5;
+    float2 texelPosition = gridPosition * _OcclusionGridScale - 0.5;
     int2 baseTexel = int2(floor(texelPosition));
     float2 blend = frac(texelPosition);
 

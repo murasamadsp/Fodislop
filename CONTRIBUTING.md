@@ -1,13 +1,13 @@
 # Разработка Fodinae
 
 ## Быстрый старт
-1. **Unity**: Версия `6000.2.10f1` (Unity 6).
-2. **Сцена**: [SampleScene.unity](file:///Users/murasama/Projects/games/Fodislop/Assets/Scenes/SampleScene.unity). Зависимости подтянутся автоматически при открытии.
+1. **Unity**: Версия `6000.5.0f1` (Unity 6).
+2. **Сцена**: [MainGame.unity](Assets/Scenes/MainGame.unity). Зависимости подтянутся автоматически при открытии.
 
 ## Основные правила
-* **Инструкции**: Обязательно следуйте [AGENTS.md](file:///Users/murasama/Projects/games/Fodislop/AGENTS.md).
+* **Инструкции**: Обязательно следуйте [AGENTS.md](AGENTS.md).
 * **Ассеты**: Каждому файлу в `Assets/` нужна `.meta`-пара. Не ломайте GUID существующих ассетов.
-* **Логика**: Менеджеры реализуются как синглтоны. Помните про инверсию Y (Unity Y = WorldHeight - 1 - Server Y).
+* **Логика**: Архитектура использует VContainer DI (см. `AGENTS.md`). Помните про инверсию Y (Unity Y = WorldHeight - 1 - Server Y).
 
 ## Коммиты и PR
 * **Формат**: Коммиты и ветки с префиксами (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`). Один коммит — одно изменение.

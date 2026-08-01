@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -17,7 +18,7 @@ namespace Fodinae.UI
     {
         [Header("Rendering")]
         [SerializeField]
-        private float _renderInterval = 0.033f;
+        private float _renderInterval = 0.1f;
         [SerializeField]
         private float _dragSpeed = 0.5f;
 
@@ -29,6 +30,10 @@ namespace Fodinae.UI
         private Color32[]? _pixelBuffer;
         private Color32[] _cellColorTable = new Color32[256];
         private Color32 _defaultColor = new Color32(48, 48, 48, 255);
+        private WorldLayer<CellType>? _cellLayer;
+        private int _chunkSize = 32;
+        private int _heightChunks;
+        private readonly Dictionary<int, CellType[]?> _chunkCache = new();
 
         private float _viewCenterX;
         private float _viewCenterY;
@@ -47,6 +52,8 @@ namespace Fodinae.UI
         private Vector2Int _lastPlayerPos;
         private float _lastRenderTime;
         private bool _initialRenderDone;
+        private bool _renderRequested;
+        private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
 
         private float _playerBlinkTimer;
@@ -74,6 +81,13 @@ namespace Fodinae.UI
 
             int w = _manager.WorldWidth;
             int h = _manager.WorldHeight;
+            if (_storage is MapStorage mapStorage && mapStorage.CellLayer != null)
+            {
+                _cellLayer = mapStorage.CellLayer;
+                _chunkSize = _cellLayer.ChunkSize;
+                _heightChunks = _cellLayer.HeightChunks;
+            }
+
             _cellsPerPixel = Mathf.Max((float)w / _texWidth, (float)h / _texHeight, 0.05f);
             _viewCenterX = w / 2f;
             _viewCenterY = h / 2f;
@@ -118,6 +132,7 @@ namespace Fodinae.UI
             {
                 _playerBlinkTimer = 0f;
                 _playerBlinkState = !_playerBlinkState;
+                _renderRequested = true;
             }
         }
 
@@ -141,6 +156,8 @@ namespace Fodinae.UI
             enabled = true;
             _lastRenderTime = -1f;
             _initialRenderDone = false;
+            _renderRequested = true;
+            _lastRenderedStorageRevision = -1;
             _followPlayer = true;
             _playerBlinkState = true;
             _playerBlinkTimer = 0f;
@@ -158,6 +175,12 @@ namespace Fodinae.UI
 
         public void SetViewCenter(float worldX, float worldY)
         {
+            if (!Mathf.Approximately(_viewCenterX, worldX) ||
+                !Mathf.Approximately(_viewCenterY, worldY))
+            {
+                _renderRequested = true;
+            }
+
             _viewCenterX = worldX;
             _viewCenterY = worldY;
         }
@@ -165,16 +188,16 @@ namespace Fodinae.UI
         private void CreateCanvas()
         {
             _canvas = new GameObject("MapCanvas").AddComponent<Canvas>();
+            _canvas.transform.SetParent(transform, false);
             _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             _canvas.sortingOrder = 100;
             _canvas.gameObject.AddComponent<CanvasScaler>();
-            _canvas.gameObject.AddComponent<GraphicRaycaster>();
 
             var go = new GameObject("MapRawImage");
             go.transform.SetParent(_canvas.transform, false);
             _rawImage = go.AddComponent<RawImage>();
             _rawImage.color = Color.white;
-            _rawImage.raycastTarget = true;
+            _rawImage.raycastTarget = false;
 
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = Vector2.zero;
@@ -182,7 +205,6 @@ namespace Fodinae.UI
             rt.sizeDelta = Vector2.zero;
             rt.anchoredPosition = Vector2.zero;
 
-            DontDestroyOnLoad(_canvas.gameObject);
         }
 
         private void InitColorTable()
@@ -241,6 +263,7 @@ namespace Fodinae.UI
                 {
                     _viewCenterX -= delta.x * _cellsPerPixel * _dragSpeed;
                     _viewCenterY -= delta.y * _cellsPerPixel * _dragSpeed;
+                    _renderRequested = true;
                 }
             }
         }
@@ -265,11 +288,23 @@ namespace Fodinae.UI
             {
                 _viewCenterX = pos.x;
                 _viewCenterY = pos.y;
+                _renderRequested = true;
             }
         }
 
         private void HandleQueuedRender()
         {
+            if (_storage is MapStorage mapStorage &&
+                mapStorage.Revision != _lastRenderedStorageRevision)
+            {
+                _renderRequested = true;
+            }
+
+            if (!_renderRequested)
+            {
+                return;
+            }
+
             if (_initialRenderDone && Time.time - _lastRenderTime < _renderInterval)
             {
                 return;
@@ -306,58 +341,31 @@ namespace Fodinae.UI
                 _pixelBuffer[i] = defaultCol;
             }
 
-            float leftWorld = cx - (texW * 0.5f * cp);
-            float rightWorld = cx + (texW * 0.5f * cp);
-            float bottomWorld = cy - (texH * 0.5f * cp);
-            float topWorld = cy + (texH * 0.5f * cp);
-
-            int minCellX = Mathf.Max(0, Mathf.FloorToInt(leftWorld));
-            int maxCellX = Mathf.Min(worldW - 1, Mathf.CeilToInt(rightWorld));
-            int minCellY = Mathf.Max(0, Mathf.FloorToInt(bottomWorld));
-            int maxCellY = Mathf.Min(worldH - 1, Mathf.CeilToInt(topWorld));
-
-            for (int cellY = minCellY; cellY <= maxCellY; cellY++)
+            // Sample from screen pixels instead of iterating over every world
+            // cell. When zoomed out, the old implementation walked the entire
+            // world and then painted the same pixel many times. A 10k x 10k
+            // world could therefore trigger 100 million GetCell calls for a
+            // texture that contains only ~500k pixels.
+            _chunkCache.Clear();
+            for (int py = 0; py < texH; py++)
             {
-                // In Server coordinates Y=0 is surface (top of world), Y increases downward.
-                // In Texture2D py=0 is bottom of screen, py=texH-1 is top of screen.
-                float pixelY_top = ((cy - cellY) / cp) + (texH * 0.5f);
-                float pixelY_bottom = ((cy - (cellY + 1f)) / cp) + (texH * 0.5f);
+                int rowStart = py * texW;
+                float worldY = cy - ((py + 0.5f - (texH * 0.5f)) * cp);
+                int serverY = Mathf.FloorToInt(worldY);
 
-                int pixY_start = Mathf.Clamp(Mathf.RoundToInt(pixelY_bottom), 0, texH - 1);
-                int pixY_end = Mathf.Clamp(Mathf.RoundToInt(pixelY_top), 0, texH - 1);
-                if (pixY_start >= texH || pixY_end < 0)
+                for (int px = 0; px < texW; px++)
                 {
-                    continue;
-                }
+                    float worldX = cx + ((px + 0.5f - (texW * 0.5f)) * cp);
+                    int serverX = Mathf.FloorToInt(worldX);
+                    Color32 color = _defaultColor;
 
-                int serverY = cellY;
-
-                for (int cellX = minCellX; cellX <= maxCellX; cellX++)
-                {
-                    float worldX_left = cellX;
-                    float worldX_right = cellX + 1f;
-
-                    float pixelX_left = ((worldX_left - cx) / cp) + (texW * 0.5f);
-                    float pixelX_right = ((worldX_right - cx) / cp) + (texW * 0.5f);
-
-                    int pixX_start = Mathf.Clamp(Mathf.RoundToInt(pixelX_left), 0, texW - 1);
-                    int pixX_end = Mathf.Clamp(Mathf.RoundToInt(pixelX_right), 0, texW - 1);
-                    if (pixX_start >= texW || pixX_end < 0)
+                    if (serverX >= 0 && serverX < worldW && serverY >= 0 && serverY < worldH)
                     {
-                        continue;
+                        CellType type = GetCell(serverX, serverY);
+                        color = _cellColorTable[(byte)type];
                     }
 
-                    CellType type = _storage.GetCell(cellX, serverY);
-                    Color32 color = _cellColorTable[(byte)type];
-
-                    for (int py = pixY_start; py <= pixY_end; py++)
-                    {
-                        int rowStart = py * texW;
-                        for (int px = pixX_start; px <= pixX_end; px++)
-                        {
-                            _pixelBuffer[rowStart + px] = color;
-                        }
-                    }
+                    _pixelBuffer[rowStart + px] = color;
                 }
             }
 
@@ -365,7 +373,12 @@ namespace Fodinae.UI
             {
                 Vector2Int playerPos = _player.Position;
 
-                if (playerPos.x >= minCellX && playerPos.x <= maxCellX && playerPos.y >= minCellY && playerPos.y <= maxCellY)
+                float visibleLeft = cx - (texW * 0.5f * cp);
+                float visibleRight = cx + (texW * 0.5f * cp);
+                float visibleBottom = cy - (texH * 0.5f * cp);
+                float visibleTop = cy + (texH * 0.5f * cp);
+                if (playerPos.x + 1f >= visibleLeft && playerPos.x <= visibleRight &&
+                    playerPos.y + 1f >= visibleBottom && playerPos.y <= visibleTop)
                 {
                     float worldX_left = playerPos.x;
                     float worldX_right = playerPos.x + 1f;
@@ -398,6 +411,35 @@ namespace Fodinae.UI
                 _mapTexture.SetPixels32(_pixelBuffer);
                 _mapTexture.Apply(false);
             }
+
+            _renderRequested = false;
+            _lastRenderedStorageRevision = (_storage as MapStorage)?.Revision ?? -1;
+        }
+
+        private CellType GetCell(int serverX, int serverY)
+        {
+            if (_cellLayer == null || _chunkSize <= 0 || _heightChunks <= 0)
+            {
+                return _storage?.GetCell(serverX, serverY) ?? CellType.Unloaded;
+            }
+
+            int chunkX = serverX / _chunkSize;
+            int chunkY = serverY / _chunkSize;
+            int chunkIndex = chunkY + (chunkX * _heightChunks);
+            if (!_chunkCache.TryGetValue(chunkIndex, out CellType[]? chunk))
+            {
+                chunk = _cellLayer.GetChunk(chunkIndex, createIfMissing: false, touchLru: false);
+                _chunkCache[chunkIndex] = chunk;
+            }
+
+            if (chunk == null)
+            {
+                return CellType.Unloaded;
+            }
+
+            int localX = serverX % _chunkSize;
+            int localY = serverY % _chunkSize;
+            return chunk[localY + (localX * _chunkSize)];
         }
 
         private void OnScroll(InputAction.CallbackContext ctx)
@@ -415,6 +457,7 @@ namespace Fodinae.UI
 
             _cellsPerPixel *= 1f - (delta * 0.1f);
             _cellsPerPixel = Mathf.Clamp(_cellsPerPixel, 0.02f, 10f);
+            _renderRequested = true;
         }
     }
 }

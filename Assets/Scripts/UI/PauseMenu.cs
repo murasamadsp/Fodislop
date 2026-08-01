@@ -37,7 +37,6 @@ namespace Fodinae.UI
         private InputAction? _escapeAction;
         private float _originalScale;
         private Button? _fullscreenButton;
-        private Button? _simpleGraphicsButton;
         private Button? _headlightButton;
 
         [Inject]
@@ -110,11 +109,6 @@ namespace Fodinae.UI
             container.Add(slider);
 
             return container;
-        }
-
-        private static bool IsSimpleGraphics()
-        {
-            return PlayerPrefs.GetInt("SimpleGraphics", 0) == 1;
         }
 
         private static bool IsHeadlightOn()
@@ -298,32 +292,37 @@ namespace Fodinae.UI
 
             scrollContainer.Add(CreateLabel("Графика"));
 
-            _simpleGraphicsButton = new Button(ToggleSimpleGraphics);
-            _simpleGraphicsButton.text = IsSimpleGraphics() ? "Простая" : "Обычная";
-            _simpleGraphicsButton.AddToClassList("pause-btn");
-            scrollContainer.Add(_simpleGraphicsButton);
-
-            var lightingEngine = TerrariaLightingEngine.Instance
-                ?? FindAnyObjectByType<TerrariaLightingEngine>();
-            if (lightingEngine != null)
+            var lightingQualityNames = new List<string>
             {
-                var lightingQualityNames = new List<string>
+                "Низкое",
+                "Среднее",
+                "Высокое",
+                "Ультра"
+            };
+            var savedQuality = Mathf.Clamp(
+                PlayerPrefs.GetInt("WorldLightingQuality", (int)TerrariaLightingEngine.QualityPreset.Ultra),
+                0,
+                lightingQualityNames.Count - 1);
+            var lightingQuality = new DropdownField(
+                "Общее качество графики",
+                lightingQualityNames,
+                savedQuality);
+            lightingQuality.RegisterValueChangedCallback(_ =>
+            {
+                var engine = TerrariaLightingEngine.Instance
+                    ?? FindAnyObjectByType<TerrariaLightingEngine>();
+                if (engine == null)
                 {
-                    "Низкое",
-                    "Среднее",
-                    "Высокое",
-                    "Ультра"
-                };
-                var lightingQuality = new DropdownField(
-                    "Качество освещения",
-                    lightingQualityNames,
-                    (int)lightingEngine.Quality);
-                lightingQuality.RegisterValueChangedCallback(_ =>
-                {
-                    lightingEngine.SetQuality((TerrariaLightingEngine.QualityPreset)lightingQuality.index);
-                });
-                scrollContainer.Add(lightingQuality);
-            }
+                    Debug.LogWarning("[PauseMenu] Graphics quality selected before lighting engine initialization");
+                    return;
+                }
+
+                var quality = (TerrariaLightingEngine.QualityPreset)lightingQuality.index;
+                engine.SetQuality(quality);
+                PlayerPrefs.SetInt("WorldLightingQuality", (int)quality);
+                PlayerPrefs.Save();
+            });
+            scrollContainer.Add(lightingQuality);
 
             scrollContainer.Add(CreateLabel("Постобработка"));
 
@@ -438,25 +437,6 @@ namespace Fodinae.UI
             }
         }
 
-        private void ToggleSimpleGraphics()
-        {
-            var terrain = _terrainRenderer;
-            if (terrain == null)
-            {
-                return;
-            }
-
-            bool current = PlayerPrefs.GetInt("SimpleGraphics", 0) == 1;
-            bool newValue = !current;
-            terrain.SetSimpleGraphics(newValue);
-            PlayerPrefs.SetInt("SimpleGraphics", newValue ? 1 : 0);
-            PlayerPrefs.Save();
-            if (_simpleGraphicsButton != null)
-            {
-                _simpleGraphicsButton.text = newValue ? "Простая" : "Обычная";
-            }
-        }
-
         private void ToggleHeadlight()
         {
             bool current = PlayerPrefs.GetInt("UseLight2D", 1) == 1;
@@ -533,7 +513,6 @@ namespace Fodinae.UI
             context.Add(new StringPairPacket("voice_volume", ((byte)((_audioSystem?.GetBusVolume(AudioBusType.Voice) ?? PlayerPrefs.GetFloat("Audio_Voice", 1f)) * 255)).ToString()));
             context.Add(new StringPairPacket("ui_volume", ((byte)((_audioSystem?.GetBusVolume(AudioBusType.UI) ?? PlayerPrefs.GetFloat("Audio_UI", 1f)) * 255)).ToString()));
 
-            context.Add(new StringPairPacket("renderer", IsSimpleGraphics() ? "Simplified" : "Default"));
             context.Add(new StringPairPacket("headlight", IsHeadlightOn() ? "true" : "false"));
             context.Add(new StringPairPacket("ui_scale", PlayerPrefs.GetFloat("UIScale", 1f).ToString("F2")));
 

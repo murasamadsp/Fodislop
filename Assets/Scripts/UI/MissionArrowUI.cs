@@ -109,7 +109,7 @@ namespace Fodinae.UI
             {
                 if (_arrow.style.display != DisplayStyle.None)
                 {
-_arrow!.style.display = DisplayStyle.None;
+                    _arrow!.style.display = DisplayStyle.None;
                 }
 
                 return;

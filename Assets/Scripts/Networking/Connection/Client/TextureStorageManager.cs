@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
@@ -10,6 +11,7 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Fodinae.Networking.Connection.Client
 {
@@ -64,11 +66,19 @@ namespace Fodinae.Networking.Connection.Client
                 try
                 {
                     var texture = new Texture2D(2, 2);
-                    if (texture.LoadImage(rawData))
+                    if (texture.LoadImage(rawData, markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None))
                     {
                         texture.name = filename;
-                        _textureCache.TryAdd(filename, texture);
-                        return texture;
+                        var storedTexture = _textureCache.GetOrAdd(filename, texture);
+                        if (ReferenceEquals(storedTexture, texture))
+                        {
+                            return texture;
+                        }
+
+                        // Another request won the race while this image was
+                        // decoding. Do not leak the duplicate native texture.
+                        UnityEngine.Object.Destroy(texture);
+                        return storedTexture;
                     }
                     else
                     {
@@ -88,16 +98,14 @@ namespace Fodinae.Networking.Connection.Client
             }
 
             var fallback = CreateFallbackTexture(filename);
-            _textureCache.TryAdd(filename, fallback);
-            return fallback;
-        }
+            var cachedFallback = _textureCache.GetOrAdd(filename, fallback);
+            if (ReferenceEquals(cachedFallback, fallback))
+            {
+                return fallback;
+            }
 
-        /// <summary>
-        /// Get a texture by filename synchronously.
-        /// </summary>
-        public Texture2D GetTexture(string filename)
-        {
-            return GetTextureAsync(filename).GetAwaiter().GetResult();
+            UnityEngine.Object.Destroy(fallback);
+            return cachedFallback;
         }
 
         /// <summary>
@@ -126,7 +134,7 @@ namespace Fodinae.Networking.Connection.Client
             var rawData = GenerateRandomTexture();
             var texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize);
 
-            if (rawData != null && texture.LoadImage(rawData))
+            if (rawData != null && texture.LoadImage(rawData, markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None))
             {
                 texture.name = $"Fallback_{filename}";
                 return texture;
@@ -344,12 +352,30 @@ namespace Fodinae.Networking.Connection.Client
         /// </summary>
         public void ClearCache()
         {
+            var textures = new HashSet<Texture2D>();
+            foreach (var texture in _textureCache.Values)
+            {
+                if (texture != null)
+                {
+                    textures.Add(texture);
+                }
+            }
+
             _textureCache.Clear();
             _resolvedPathsCache.Clear();
+            foreach (var texture in textures)
+            {
+                UnityEngine.Object.Destroy(texture);
+            }
             if (_enableDebugLogging)
             {
                 Debug.Log("[TextureStorageManager] Cache cleared");
             }
+        }
+
+        protected void OnDestroy()
+        {
+            ClearCache();
         }
 
         public string? GetTextureFolderPath()

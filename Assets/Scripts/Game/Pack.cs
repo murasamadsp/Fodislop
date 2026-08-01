@@ -48,6 +48,11 @@ namespace Fodinae.Game
 
         public void Initialize(PackType packType, byte variant, byte linkedClan)
         {
+            if (_packType == packType && _variant == variant && _linkedClan == linkedClan && _cts != null)
+            {
+                return;
+            }
+
             // Clean up previous Effekseer effect if any
             StopEffekseerEffect();
 
@@ -199,6 +204,7 @@ namespace Fodinae.Game
             {
                 // Effect has finished playing — clean up
                 _hasEffekseerEffect = false;
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
                 _effekseerAsset = null;
 
                 if (_spriteRenderer != null)
@@ -214,6 +220,7 @@ namespace Fodinae.Game
             {
                 _effekseerHandle.Stop();
                 _hasEffekseerEffect = false;
+                RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
                 _effekseerAsset = null;
             }
         }

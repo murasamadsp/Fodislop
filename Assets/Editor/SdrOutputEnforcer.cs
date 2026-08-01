@@ -71,7 +71,12 @@ internal static class SdrOutputEnforcer
             Debug.Log("[Rendering] Internal HDR enabled for lighting; HDR display output disabled for stable SDR presentation.");
         }
 
-        AssetDatabase.SaveAssets();
-        EditorApplication.ExecuteMenuItem("File/Save Project");
+        // Saving the whole project on every editor domain reload forces a
+        // repeated serialization/import cycle and makes editor memory climb
+        // even when no HDR setting changed.
+        if (changed)
+        {
+            AssetDatabase.SaveAssets();
+        }
     }
 }

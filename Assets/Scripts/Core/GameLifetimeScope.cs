@@ -77,6 +77,7 @@ namespace Fodinae.Core
             RegisterManager<UIInputManager>(builder);
             RegisterManager<FPSCounter>(builder);
             RegisterManager<FloatingChatManager>(builder);
+            RegisterManager<DiagnosticRunner>(builder);
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
 
@@ -85,7 +86,8 @@ namespace Fodinae.Core
                 ServiceLocator.Initialize(resolver);
 
                 resolver.Resolve<ConnectionManager>();
-                resolver.Resolve<NetworkService>();
+                var networkService = resolver.Resolve<NetworkService>();
+                networkService.EnsureConnectionSubscription();
                 resolver.Resolve<MapManager>();
                 resolver.Resolve<PacketHandler>();
                 resolver.Resolve<IAssetLoader>();
@@ -106,6 +108,7 @@ namespace Fodinae.Core
                 resolver.Resolve<GlobalChatUI>();
                 resolver.Resolve<FPSCounter>();
                 resolver.Resolve<FloatingChatManager>();
+                resolver.Resolve<DiagnosticRunner>();
                 resolver.Resolve<IInputBlocker>();
                 resolver.Resolve<PostProcessController>();
 
@@ -188,6 +191,11 @@ namespace Fodinae.Core
         {
             var errors = new System.Collections.Generic.List<string>();
             var warnings = new System.Collections.Generic.List<string>();
+
+            if (_injectionFailures.Count > 0)
+            {
+                errors.Add($"{_injectionFailures.Count} dependency injection failure(s) occurred during startup");
+            }
 
             if (resolver.Resolve<IConnectionService>() == null)
             {
@@ -272,7 +280,7 @@ namespace Fodinae.Core
 
             foreach (var type in criticalTypes)
             {
-                var instance = UnityEngine.Object.FindAnyObjectByType(type);
+                var instance = UnityEngine.Object.FindAnyObjectByType(type, FindObjectsInactive.Include);
                 if (instance == null)
                 {
                     continue;

@@ -38,6 +38,7 @@ namespace Fodinae.UI.HUD.Player.View
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
         private readonly Dictionary<string, VisualElement> _statusLineElements = new();
+        private readonly Dictionary<string, IVisualElementScheduledItem> _statusSchedules = new();
 
         private UIDocument? _doc;
         private Tooltip? _tooltip;
@@ -109,6 +110,20 @@ namespace Fodinae.UI.HUD.Player.View
 
         protected void OnDestroy()
         {
+            StopSkeletonPulse();
+            foreach (var schedule in _bounceSchedules.Values)
+            {
+                schedule.Pause();
+            }
+
+            foreach (var schedule in _pulseSchedules.Values)
+            {
+                schedule.Pause();
+            }
+
+            _bounceSchedules.Clear();
+            _pulseSchedules.Clear();
+
             if (_model != null)
             {
                 _model.OnStatsChanged -= RefreshAll;
@@ -444,6 +459,12 @@ namespace Fodinae.UI.HUD.Player.View
             if (currentLines.Count == 0)
             {
                 _statusPanel.style.display = DisplayStyle.None;
+                foreach (var schedule in _statusSchedules.Values)
+                {
+                    schedule.Pause();
+                }
+
+                _statusSchedules.Clear();
                 _statusLineElements.Clear();
                 _statusPanel.Clear();
                 return;
@@ -462,6 +483,12 @@ namespace Fodinae.UI.HUD.Player.View
             foreach (var key in toRemove)
             {
                 _statusPanel.Remove(_statusLineElements[key]);
+                if (_statusSchedules.TryGetValue(key, out var schedule))
+                {
+                    schedule.Pause();
+                    _statusSchedules.Remove(key);
+                }
+
                 _statusLineElements.Remove(key);
             }
 
@@ -487,7 +514,7 @@ namespace Fodinae.UI.HUD.Player.View
 
                     if (kvp.Value.Expiry > 0)
                     {
-                        row.schedule.Execute(() =>
+                        var schedule = row.schedule.Execute(() =>
                         {
                             if (_statusPanel == null || !_statusLineElements.ContainsKey(kvp.Key))
                             {
@@ -502,6 +529,7 @@ namespace Fodinae.UI.HUD.Player.View
 
                             UpdateStatusLabel(row, entry);
                         }).Every(1000);
+                        _statusSchedules[kvp.Key] = schedule;
                     }
 
                     _statusLineElements[kvp.Key] = row;
@@ -580,7 +608,7 @@ namespace Fodinae.UI.HUD.Player.View
             _aggressionLabel = new Label("Агрессия ✗");
             _aggressionLabel.AddToClassList("hud-toggle-btn-label");
             _aggressionButton.Add(_aggressionLabel);
-        Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
+            Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
 
             root.Add(_aggressionButton);
         }
@@ -765,7 +793,7 @@ namespace Fodinae.UI.HUD.Player.View
                 {
                     _basketPercentLabel.style.opacity = alpha;
                 }
-            }).Every(16);
+            }).Every(33);
         }
 
         private void StopSkeletonPulse()
@@ -974,7 +1002,7 @@ namespace Fodinae.UI.HUD.Player.View
                 float offsetY = Mathf.Sin(t * 2f * Mathf.PI) * 3f;
                 arrow.style.translate = new Translate(0, offsetY);
             });
-            item.Every(0);
+            item.Every(33);
 
             _bounceSchedules[skill] = item;
         }
@@ -1005,7 +1033,7 @@ namespace Fodinae.UI.HUD.Player.View
                 float pulse = (Mathf.Sin(t * 2f * Mathf.PI * 0.5f) + 1f) * (24f / 20f);
                 barFill.style.height = new Length(Mathf.Min(baseH + pulse, 24f), LengthUnit.Pixel);
             });
-            item.Every(0);
+            item.Every(33);
             _pulseSchedules[skill] = item;
         }
 

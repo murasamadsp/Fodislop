@@ -37,6 +37,8 @@ namespace Fodinae.World
         private MeshFilter? _perspectiveFilter;
         private MeshRenderer? _transitRenderer;
         private MeshRenderer? _perspectiveRenderer;
+        private bool _ownsTransitMaterial;
+        private bool _ownsPerspectiveMaterial;
 
         private readonly Vector2[] _uvTransit = new Vector2[4];
         private readonly Vector2[] _uvPers = new Vector2[4];
@@ -46,6 +48,10 @@ namespace Fodinae.World
 
         private Camera? _mainCamera;
         private bool _texturesLoading;
+        private float _lastCameraX = float.NaN;
+        private float _lastCameraOrthoSize = float.NaN;
+        private float _lastCameraAspect = float.NaN;
+        private int _lastWorldHeight = int.MinValue;
 
 
         protected void Start()
@@ -79,15 +85,19 @@ namespace Fodinae.World
             if (_transitMaterial == null)
             {
                 _transitMaterial = CreateDefaultMaterial();
+                _ownsTransitMaterial = true;
             }
 
             if (_perspectiveMaterial == null)
             {
                 _perspectiveMaterial = CreateDefaultMaterial();
+                _ownsPerspectiveMaterial = true;
             }
 
-            _transitRenderer.material = _transitMaterial;
-            _perspectiveRenderer.material = _perspectiveMaterial;
+            // These materials are owned by the component. Using .material
+            // would ask Unity to instantiate another material per renderer.
+            _transitRenderer.sharedMaterial = _transitMaterial;
+            _perspectiveRenderer.sharedMaterial = _perspectiveMaterial;
 
             LoadTexturesAsync().Forget();
         }
@@ -151,7 +161,22 @@ namespace Fodinae.World
 
             int worldHeight = mapManager.WorldHeight;
             float camX = _mainCamera.transform.position.x;
-            float halfScreenW = _mainCamera.orthographicSize * _mainCamera.aspect;
+            float cameraOrthoSize = _mainCamera.orthographicSize;
+            float cameraAspect = _mainCamera.aspect;
+            if (Mathf.Approximately(_lastCameraX, camX) &&
+                Mathf.Approximately(_lastCameraOrthoSize, cameraOrthoSize) &&
+                Mathf.Approximately(_lastCameraAspect, cameraAspect) &&
+                _lastWorldHeight == worldHeight)
+            {
+                return;
+            }
+
+            _lastCameraX = camX;
+            _lastCameraOrthoSize = cameraOrthoSize;
+            _lastCameraAspect = cameraAspect;
+            _lastWorldHeight = worldHeight;
+
+            float halfScreenW = cameraOrthoSize * cameraAspect;
 
             float left = camX - halfScreenW;
             float right = camX + halfScreenW;
@@ -229,6 +254,18 @@ namespace Fodinae.World
             {
                 Destroy(_perspectiveMesh);
                 _perspectiveMesh = null;
+            }
+
+            if (_ownsTransitMaterial && _transitMaterial != null)
+            {
+                Destroy(_transitMaterial);
+                _transitMaterial = null;
+            }
+
+            if (_ownsPerspectiveMaterial && _perspectiveMaterial != null)
+            {
+                Destroy(_perspectiveMaterial);
+                _perspectiveMaterial = null;
             }
         }
     }

@@ -12,6 +12,7 @@ using unity.libwebp;
 using unity.libwebp.Interop;
 using UnityEngine;
 using WebP;
+using UnityEngine.Rendering;
 
 namespace Fodinae.World
 {
@@ -159,7 +160,7 @@ namespace Fodinae.World
                         var readable = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false);
                         readable.filterMode = FilterMode.Point;
                         Graphics.CopyTexture(tex, readable);
-                        readable.Apply();
+                        readable.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
                         UnityEngine.Object.Destroy(tex);
                         return new DecodedAnimation
                         {
@@ -189,6 +190,7 @@ namespace Fodinae.World
                     totalDelay += delays[i];
                     UnityEngine.Object.Destroy(frameTextures[i]);
                 }
+                atlas.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
 
                 float avgDelay = totalDelay / frameTextures.Count;
                 return new DecodedAnimation
@@ -324,7 +326,7 @@ namespace Fodinae.World
                         }
 
                         tex.SetPixels32(fl);
-                        tex.Apply();
+                        tex.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
                         fts.Add(tex);
                         dls.Add(dl);
 

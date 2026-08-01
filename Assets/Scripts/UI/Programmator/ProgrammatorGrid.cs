@@ -1625,8 +1625,8 @@ namespace Fodinae.UI.Programmator
         private void OnRadialBackClicked()
         {
             // Back button — clear outer ring and joystick, keep inner ring visible
-             _radial!.ClearOuterItems();
-             _joystick!.Hide();
+            _radial!.ClearOuterItems();
+            _joystick!.Hide();
         }
 
         protected void Update()
