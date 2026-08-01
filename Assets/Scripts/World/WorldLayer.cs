@@ -108,6 +108,17 @@ namespace Fodinae
             return chunk == null ? default : chunk[localIndex];
         }
 
+        public T GetCellSync(int x, int y, bool touchLru = true)
+        {
+            if (!GetChunkIndexAndLocal(x, y, out int chunkIndex, out int localIndex))
+            {
+                return default;
+            }
+
+            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: touchLru);
+            return chunk == null ? default : chunk[localIndex];
+        }
+
         public void SetCell(int x, int y, T value)
         {
             if (!GetChunkIndexAndLocal(x, y, out int chunkIndex, out int localIndex))

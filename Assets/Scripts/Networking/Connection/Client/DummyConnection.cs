@@ -2074,7 +2074,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         for (int cx = 0; cx < chunkWidth; cx++)
                         {
-                            chunkData[dataIndex++] = _worldLayer != null ? _worldLayer[x + cx, y + cy] : CellType.Empty;
+                            chunkData[dataIndex++] = _worldLayer != null ? _worldLayer.GetCellSync(x + cx, y + cy) : CellType.Empty;
                         }
                     }
 
