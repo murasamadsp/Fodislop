@@ -297,7 +297,7 @@ namespace Fodinae.UI
                 "Низкое",
                 "Среднее",
                 "Высокое",
-                "Ультра"
+                "Ультра",
             };
             var savedQuality = Mathf.Clamp(
                 PlayerPrefs.GetInt("WorldLightingQuality", (int)TerrariaLightingEngine.QualityPreset.Ultra),

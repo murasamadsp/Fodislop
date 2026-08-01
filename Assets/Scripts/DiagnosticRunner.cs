@@ -52,7 +52,6 @@ namespace Fodinae
             if (Keyboard.current != null && Keyboard.current.f12Key.wasPressedThisFrame)
             {
                 WriteSnapshot();
-                return;
             }
         }
 
@@ -71,7 +70,7 @@ namespace Fodinae
                 $"mesh={Resources.FindObjectsOfTypeAll<Mesh>().Length} " +
                 $"effekseer={Resources.FindObjectsOfTypeAll<EffekseerEffectAsset>().Length} " +
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
-                $"chunks={(ms?.CellLayer?.GetLoadedCount() ?? 0)}\n";
+                $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0}\n";
 
             File.AppendAllText(MemoryLogPath, line);
         }

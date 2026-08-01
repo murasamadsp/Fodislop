@@ -219,14 +219,8 @@ namespace Fodinae.Editor
                 AssetDatabase.Refresh();
 
                 long outputSize = new FileInfo(outputPath).Length;
-                EditorUtility.DisplayDialog(
-                    "Success",
-                    $"Converted successfully!\n\n" +
-                    $"Output: {outputPath}\n" +
-                    $"Size: {FormatBytes(outputSize)}\n" +
-                    $"Chunks: {totalChunks}\n" +
-                    $"Chunk size: {_chunkSize}x{_chunkSize}",
-                    "OK");
+                string successMsg = $"Converted successfully!\n\nOutput: {outputPath}\nSize: {FormatBytes(outputSize)}\nChunks: {totalChunks}\nChunk size: {_chunkSize}x{_chunkSize}";
+                EditorUtility.DisplayDialog("Success", successMsg, "OK");
             }
             catch (Exception ex)
             {
