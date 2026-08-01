@@ -374,14 +374,25 @@ namespace Fodinae
                     _fileStream = null;
 
                     string preservedPath = _filePath + $".corrupt.{DateTime.UtcNow:yyyyMMddHHmmssfff}";
+                    bool preserved = false;
                     try
                     {
                         File.Move(_filePath, preservedPath);
+                        preserved = true;
                         Debug.LogError($"[WorldLayer] Invalid map file preserved as '{preservedPath}'. A new map file will be created.");
                     }
                     catch (IOException ioEx)
                     {
                         Debug.LogError($"[WorldLayer] Could not preserve invalid map file '{_filePath}': {ioEx.Message}");
+                    }
+                    catch (UnauthorizedAccessException authEx)
+                    {
+                        Debug.LogError($"[WorldLayer] Could not preserve invalid map file '{_filePath}': {authEx.Message}");
+                    }
+
+                    if (!preserved)
+                    {
+                        throw new IOException($"Invalid map file '{_filePath}' could not be preserved safely.");
                     }
 
                     _fileStream = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096);

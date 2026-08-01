@@ -94,18 +94,38 @@ namespace Fodinae.Game.Managers
             }
 
             string path = Path.Combine(Application.persistentDataPath, worldCodeName + MapExtension);
-            _mapFilePath = path;
-
-            string? directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            try
             {
-                Directory.CreateDirectory(directory);
-            }
+                string? directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
 
-            _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
-            _isInitialized = true;
-            IsDisposed = false;
-            Revision++;
+                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
+                _mapFilePath = path;
+                _isInitialized = true;
+                IsDisposed = false;
+                Revision++;
+            }
+            catch (IOException ioEx)
+            {
+                Debug.LogError($"[MapStorage] Could not open map file '{path}': {ioEx.Message}");
+                _cellLayer = null;
+                _mapFilePath = null;
+            }
+            catch (UnauthorizedAccessException authEx)
+            {
+                Debug.LogError($"[MapStorage] Access denied for map file '{path}': {authEx.Message}");
+                _cellLayer = null;
+                _mapFilePath = null;
+            }
+            catch (OutOfMemoryException)
+            {
+                Debug.LogError($"[MapStorage] Out of memory while opening map file '{path}'.");
+                _cellLayer = null;
+                _mapFilePath = null;
+            }
         }
 
         public bool IsInitialized() => _isInitialized;
