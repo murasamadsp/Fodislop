@@ -13,6 +13,10 @@ namespace Fodinae.Game.Managers
     public class MapStorage : IWorldDataStorage
     {
         private WorldLayer<CellType>? _cellLayer;
+        private string? _mapFilePath;
+
+        private const string MapExtension = ".map";
+        private const string BackupMapSuffix = ".backup.map";
 
         public MapStorage()
         {
@@ -26,6 +30,21 @@ namespace Fodinae.Game.Managers
         private string? _worldCodeName;
 
         public WorldLayer<CellType>? CellLayer => _cellLayer;
+
+        public string MapFilePath => _mapFilePath ?? string.Empty;
+
+        public string BackupMapFilePath
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_worldCodeName))
+                {
+                    return string.Empty;
+                }
+
+                return Path.Combine(Application.persistentDataPath, _worldCodeName + BackupMapSuffix);
+            }
+        }
 
         public bool IsReady => _isInitialized && _cellLayer != null;
 
@@ -72,24 +91,8 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
-            var path = $"{Application.persistentDataPath}/{worldCodeName}_cells.mapb";
-
-#if !UNITY_ANDROID || UNITY_EDITOR
-            if (!File.Exists(path))
-            {
-                string sourcePath = $"{Application.streamingAssetsPath}/WorldMaps/{worldCodeName}_cells.mapb";
-                if (File.Exists(sourcePath))
-                {
-                    string? dir = Path.GetDirectoryName(path);
-                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    {
-                        Directory.CreateDirectory(dir);
-                    }
-
-                    File.Copy(sourcePath, path, true);
-                }
-            }
-#endif
+            string path = Path.Combine(Application.persistentDataPath, worldCodeName + MapExtension);
+            _mapFilePath = path;
 
             string? directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -154,6 +157,7 @@ namespace Fodinae.Game.Managers
             _cellLayer = null;
             _isInitialized = false;
             _worldCodeName = string.Empty;
+            _mapFilePath = null;
             IsDisposed = true;
             Revision++;
         }
