@@ -1056,19 +1056,9 @@ namespace MinesServer.Networking.Connection.Client
                 (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
                 if (worldWidth > 0 && worldHeight > 0)
                 {
-                    string serverCopy = Path.Combine(Application.temporaryCachePath, $"{PrebakedWorldCodeName}_cells_server.mapb");
-                    try
-                    {
-                        File.Copy(mapbPath, serverCopy, true);
-                    }
-                    catch
-                    {
-                        // ignore copy failures in standalone mode
-                    }
-
                     int wChunks = (worldWidth + 31) / 32;
                     int hChunks = (worldHeight + 31) / 32;
-                    _worldLayer = new WorldLayer<CellType>(serverCopy, wChunks, hChunks, 32, 36);
+                    _worldLayer = new WorldLayer<CellType>(mapbPath, wChunks, hChunks, 32, 36);
                 }
                 else
                 {
