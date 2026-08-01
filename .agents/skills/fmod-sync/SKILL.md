@@ -3,15 +3,30 @@ name: fmod-sync
 description: Синхронизация и компиляция звуковых банков FMOD Studio в StreamingAssets
 ---
 
-# FMOD Bank Sync Skill (Синхронизация звука)
+# FMOD Studio Bank Build & Audio Backend Pipeline
 
-Используйте этот навык при изменении аудио-событий или банков в проекте FMOD Studio (`FodinaeAudio`).
+Навык взаимодействия с аудиосистемой FMOD Studio (`FodinaeAudio`), бинарными банками и CLI-компиляцией.
 
-## Порядок действий
-1. Запустите автоматическую утилиту `FmodBankBuilder.cs` через меню Unity или из билдера.
-2. Проверьте, что собраны аудио-банки:
-   - `Master.bank`
-   - `Master.strings.bank`
-   - `SFX.bank`
-3. Убедитесь, что скомпилированные `.bank` файлы скопированы в `Assets/StreamingAssets/Audio/`.
-4. Проверьте работоспособность `AudioSystem.cs` при воспроизведении 3D-звука и событий SFX.
+## 1. Автоматическая компиляция банков через FmodBankBuilder
+
+Редакторский скрипт `FmodBankBuilder.cs` компилирует проект `FodinaeAudio/FodinaeAudio.fspro` в бинарники `.bank`:
+
+* **macOS CLI**: `/Applications/FMOD Studio.app/Contents/MacOS/fmodstudiocl`
+* **Windows CLI**: `C:\Program Files (x86)\FMOD SoundSystem\FMOD Studio\fmodstudiocl.exe`
+
+Вызов компилятора:
+```bash
+"/Applications/FMOD Studio.app/Contents/MacOS/fmodstudiocl" build "/path/to/FodinaeAudio/FodinaeAudio.fspro"
+```
+
+## 2. Результат сборки и целевые пути
+
+Скомпилированные банки должны быть перенесены в `Assets/StreamingAssets/Audio/`:
+- `Master.bank` — топовые шины вывода и лимитеры
+- `Master.strings.bank` — таблица GUID и имён FMOD событий
+- `SFX.bank` — пространственные 3D-звуки, эмбиенс и UI эффекты
+
+## 3. Обработка ошибок бэкенда
+При вызове `AudioSystem.cs`:
+* Для смены устройства вывода слушайте системные события FMOD и вызывайте `AudioSystem.Instance.ResetBackend()`.
+* Шины вывода: `SFXDefault`, `UIDefault`, `MusicDefault`.
