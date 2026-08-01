@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1051,6 +1052,7 @@ namespace MinesServer.Networking.Connection.Client
             if (UsePrebakedMap)
             {
                 string mapbPath = $"{Application.persistentDataPath}/{PrebakedWorldCodeName}_cells.mapb";
+                EnsurePrebakedMapFile(mapbPath, PrebakedWorldCodeName);
                 (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
                 if (worldWidth > 0 && worldHeight > 0)
                 {
@@ -2008,6 +2010,37 @@ namespace MinesServer.Networking.Connection.Client
                 FrameOffset = frameOffset,
                 Distortion = distortion,
             };
+        }
+
+        private static void EnsurePrebakedMapFile(string mapbPath, string worldCodeName)
+        {
+            if (File.Exists(mapbPath))
+            {
+                return;
+            }
+
+            try
+            {
+                string streamingDir = Path.Combine(Application.streamingAssetsPath, "WorldMaps");
+                string streamingMapb = Path.Combine(streamingDir, $"{worldCodeName}_cells.mapb");
+                if (File.Exists(streamingMapb))
+                {
+                    Debug.Log($"[DummyConnection] Copying mapb from StreamingAssets: {streamingMapb} -> {mapbPath}");
+                    File.Copy(streamingMapb, mapbPath, true);
+                    return;
+                }
+
+                string streamingZip = Path.Combine(streamingDir, $"{worldCodeName}_cells.zip");
+                if (File.Exists(streamingZip))
+                {
+                    Debug.Log($"[DummyConnection] Unpacking mapb zip from StreamingAssets: {streamingZip} -> {Application.persistentDataPath}");
+                    ZipFile.ExtractToDirectory(streamingZip, Application.persistentDataPath, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DummyConnection] Failed to unpack prebaked map: {ex.Message}");
+            }
         }
 
         private static (int width, int height) ReadPrebakedWorldDimensions(string path)
