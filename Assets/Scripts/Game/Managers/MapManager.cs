@@ -79,6 +79,19 @@ namespace Fodinae.Game.Managers
             (_worldStorage as MapStorage)?.Dispose();
         }
 
+        protected void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus)
+            {
+                (_worldStorage as MapStorage)?.Flush();
+            }
+        }
+
+        protected void OnApplicationQuit()
+        {
+            (_worldStorage as MapStorage)?.Flush();
+        }
+
         public void LoadWorldInit(WorldInitPacket packet)
         {
             IsWorldInitialized = false;

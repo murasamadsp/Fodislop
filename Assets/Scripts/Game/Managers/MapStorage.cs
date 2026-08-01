@@ -132,6 +132,22 @@ namespace Fodinae.Game.Managers
             }
         }
 
+        /// <summary>
+        /// Persists all dirty map chunks immediately.
+        /// The layer normally flushes on chunk eviction and dispose, but the
+        /// application can be paused or terminated while dirty chunks are
+        /// still resident in the RAM cache.
+        /// </summary>
+        public void Flush()
+        {
+            if (_cellLayer == null || !_isInitialized || IsDisposed)
+            {
+                return;
+            }
+
+            _cellLayer.Flush();
+        }
+
         public void Dispose()
         {
             _cellLayer?.Dispose();

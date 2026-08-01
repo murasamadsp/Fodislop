@@ -4,23 +4,21 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'Assets/Scripts/**'
-      - 'Assets/Editor/**'
-      - 'Assets/Resources/**'
-      - 'Packages/manifest.json'
-      - 'Packages/packages-lock.json'
-      - 'scripts/pre-commit-lint.sh'
+      - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
+      - 'scripts/**'
       - '*.csproj'
+      - 'Directory.Build.props'
   pull_request:
     branches: [main, master]
     paths:
-      - 'Assets/Scripts/**'
-      - 'Assets/Editor/**'
-      - 'Assets/Resources/**'
-      - 'Packages/manifest.json'
-      - 'Packages/packages-lock.json'
-      - 'scripts/pre-commit-lint.sh'
+      - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
+      - 'scripts/**'
       - '*.csproj'
+      - 'Directory.Build.props'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -48,8 +46,8 @@ jobs:
 
       - name: Build dependencies
         run: |
-          for csproj in Effekseer*.csproj UniTask*.csproj McpUnity*.csproj; do
-            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo
+          for csproj in MinesServer*.csproj Effekseer*.csproj UniTask*.csproj McpUnity*.csproj; do
+            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo || true
           done
 
       - name: Build & analyze

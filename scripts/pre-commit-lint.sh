@@ -12,6 +12,11 @@ echo "Environment: CI=${CI:-false}, OS=$(uname -s), HOME=$HOME"
 
 # Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build
 DEPENDENCIES=(
+    "MinesServer.Data.csproj"
+    "MinesServer.Utils.csproj"
+    "MinesServer.Networking.csproj"
+    "MinesServer.Networking.Connection.csproj"
+    "MinesServer.Networking.Connection.Client.csproj"
     "Effekseer.csproj"
     "EffekseerEditor.csproj"
     "Effekseer.URP.csproj"
