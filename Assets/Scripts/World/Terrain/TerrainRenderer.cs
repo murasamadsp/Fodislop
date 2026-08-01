@@ -58,7 +58,6 @@ namespace Fodinae.World.Terrain
         private BackgroundFloodFill _backgroundFloodFill = new();
 
         private Material[] _materials = Array.Empty<Material>();
-        private int[] _coveragePasses = Array.Empty<int>();
         private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
 
         private Vector2Int _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
@@ -489,7 +488,7 @@ namespace Fodinae.World.Terrain
                 for (int subMeshIndex = 0; subMeshIndex < subMeshCount; subMeshIndex++)
                 {
                     Material material = _materials[subMeshIndex];
-                    int coveragePass = _coveragePasses[subMeshIndex];
+                    int coveragePass = material.FindPass("OcclusionCoverage");
                     if (coveragePass < 0)
                     {
                         continue;
@@ -549,13 +548,11 @@ namespace Fodinae.World.Terrain
                 CleanupMaterials();
                 _subMeshIndices = new List<int>[atlases.Count];
                 _materials = new Material[atlases.Count];
-                _coveragePasses = new int[atlases.Count];
                 int estimatedPerAtlas = (_meshWidth * _meshHeight * 2 * 6 / atlases.Count) + 16;
                 for (int i = 0; i < atlases.Count; i++)
                 {
                     _subMeshIndices[i] = new List<int>(estimatedPerAtlas);
                     _materials[i] = new Material(_terrainShader);
-                    _coveragePasses[i] = _materials[i].FindPass("OcclusionCoverage");
                 }
 
                 materialsChanged = true;
