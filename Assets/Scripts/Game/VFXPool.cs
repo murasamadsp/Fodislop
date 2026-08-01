@@ -224,6 +224,7 @@ namespace Fodinae.Game
             {
                 slot.GameObject.SetActive(false);
             }
+
             slot.IsManagedExternally = false;
             slot.IsInPool = true;
             pool.Active.RemoveAt(activeIndex);
