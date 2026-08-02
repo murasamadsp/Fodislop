@@ -40,7 +40,7 @@ namespace Fodinae.Networking.Connection.Client
         /// </summary>
         /// <param name="filename">The texture filename (e.g. "cells/1.png", "clan/4.png").</param>
         /// <returns>Loaded Texture2D, or fallback texture if loading failed.</returns>
-        public async UniTask<Texture2D> GetTextureAsync(string filename)
+        public async UniTask<Texture2D?> GetTextureAsync(string filename)
         {
             if (string.IsNullOrEmpty(filename))
             {
@@ -49,7 +49,7 @@ namespace Fodinae.Networking.Connection.Client
                     Debug.LogWarning("[TextureStorageManager] Requested texture with null or empty filename");
                 }
 
-                return CreateFallbackTexture("empty");
+                return GetOrCreateFallbackTexture("empty");
             }
 
             // Return cached texture if available
@@ -91,21 +91,16 @@ namespace Fodinae.Networking.Connection.Client
                 }
             }
 
-            // Fallback: generate fallback texture
+            // This is an intentional visual fallback for a missing or corrupt
+            // optional texture asset. The high-variance image makes the bad
+            // asset obvious while keeping renderers alive; it never replaces
+            // map state, cell configuration, or any other gameplay data.
             if (_enableDebugLogging)
             {
                 Debug.LogWarning($"[TextureStorageManager] Fallback texture created for: {filename}");
             }
 
-            var fallback = CreateFallbackTexture(filename);
-            var cachedFallback = _textureCache.GetOrAdd(filename, fallback);
-            if (ReferenceEquals(cachedFallback, fallback))
-            {
-                return fallback;
-            }
-
-            UnityEngine.Object.Destroy(fallback);
-            return cachedFallback;
+            return GetOrCreateFallbackTexture(filename);
         }
 
         /// <summary>
@@ -126,18 +121,43 @@ namespace Fodinae.Networking.Connection.Client
 
         public event Action<string>? OnTextureLoaded;
 
+        private Texture2D GetOrCreateFallbackTexture(string cacheKey)
+        {
+            if (_textureCache.TryGetValue(cacheKey, out Texture2D? cachedTexture) &&
+                cachedTexture != null)
+            {
+                return cachedTexture;
+            }
+
+            Texture2D fallback = CreateFallbackTexture(cacheKey);
+            Texture2D cachedFallback = _textureCache.GetOrAdd(cacheKey, fallback);
+            if (ReferenceEquals(cachedFallback, fallback))
+            {
+                return fallback;
+            }
+
+            UnityEngine.Object.Destroy(fallback);
+            return cachedFallback;
+        }
+
         /// <summary>
-        /// Create a fallback texture and cache it.
+        /// Creates a deliberately conspicuous renderer-safe placeholder for an
+        /// unavailable texture asset. This fallback is local visual diagnostics
+        /// only and is cached exactly like a successfully decoded texture.
         /// </summary>
         private Texture2D CreateFallbackTexture(string filename)
         {
-            var rawData = GenerateRandomTexture();
-            var texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize);
-
-            if (rawData != null && texture.LoadImage(rawData, markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None))
+            byte[]? rawData = GenerateRandomTexture();
+            var texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize)
             {
-                texture.name = $"Fallback_{filename}";
-                return texture;
+                name = $"Fallback_{filename}",
+            };
+
+            if (rawData != null)
+            {
+                texture.LoadImage(
+                    rawData,
+                    markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None);
             }
 
             return texture;
@@ -285,32 +305,40 @@ namespace Fodinae.Networking.Connection.Client
         }
 
         /// <summary>
-        /// Generate a random texture as fallback.
+        /// Generates the random pixels used by the legitimate missing-texture
+        /// placeholder. Randomness prevents the fallback from being mistaken
+        /// for authored terrain or a successfully downloaded asset.
         /// </summary>
         private byte[]? GenerateRandomTexture()
         {
+            Texture2D? texture = null;
             try
             {
-                var texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize);
-
+                texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize);
                 var colors = new Color[_fallbackTextureSize * _fallbackTextureSize];
                 for (int i = 0; i < colors.Length; i++)
                 {
-                    colors[i] = new Color(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value);
+                    colors[i] = new Color(
+                        UnityEngine.Random.value,
+                        UnityEngine.Random.value,
+                        UnityEngine.Random.value);
                 }
 
                 texture.SetPixels(colors);
                 texture.Apply();
-
-                var pngData = ImageConversion.EncodeToPNG(texture);
-                UnityEngine.Object.Destroy(texture);
-
-                return pngData;
+                return ImageConversion.EncodeToPNG(texture);
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[TextureStorageManager] Failed to generate random texture: {ex.Message}");
                 return null;
+            }
+            finally
+            {
+                if (texture != null)
+                {
+                    UnityEngine.Object.Destroy(texture);
+                }
             }
         }
 
@@ -367,6 +395,7 @@ namespace Fodinae.Networking.Connection.Client
             {
                 UnityEngine.Object.Destroy(texture);
             }
+
             if (_enableDebugLogging)
             {
                 Debug.Log("[TextureStorageManager] Cache cleared");

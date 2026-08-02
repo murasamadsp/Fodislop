@@ -133,6 +133,7 @@ namespace MinesServer.Networking.Connection.Client
         private static readonly System.Random _rng = new();
 
         private WorldLayer<CellType>? _worldLayer;
+        private readonly HashSet<int> _sentMapChunks = new();
         private CellConfigurationPacket[]? _cellConfigs;
         private long[] _basketContents = new long[6];
         private readonly Stack<CellType> _geoStack = new();
@@ -162,33 +163,6 @@ namespace MinesServer.Networking.Connection.Client
         private int _activeMissionId = -1;
         private long _missionProgress;
         private readonly bool[] _missionCompleted = new bool[_missions.Length];
-
-        private static readonly CellType[] _allCellTypes = new CellType[]
-        {
-            CellType.Unloaded, CellType.Pregener,
-            CellType.BuildingRoad, CellType.Gate, CellType.VolcanoBackground,
-            CellType.BackgroundWithLightTraces, CellType.BackgroundWithHeavyTraces,
-            CellType.Road, CellType.GoldenRoad, CellType.BuildingDoor, CellType.BuildingCorner, CellType.PolymerRoad,
-            CellType.BlackBoulder1, CellType.BlackBoulder2, CellType.BlackBoulder3,
-            CellType.MetalBoulder1, CellType.MetalBoulder2, CellType.MetalBoulder3,
-            CellType.QuadBlock, CellType.Support,
-            CellType.AliveCyan, CellType.AliveRed, CellType.AliveViol, CellType.AliveNigger, CellType.AliveWhite, CellType.AliveRainbow,
-            CellType.WhiteSand, CellType.DarkWhiteSand, CellType.RustySand, CellType.DarkRustySand,
-            CellType.BlackSand, CellType.DarkBlackSand, CellType.GrayAcid, CellType.PurpleAcid,
-            CellType.Pearl, CellType.DeepLazuriteSand, CellType.DeepMagmaBoulder,
-            CellType.XGreen, CellType.XBlue, CellType.XRed, CellType.XCyan, CellType.XViolet,
-            CellType.DeepObsidianRock, CellType.DeepTurquoiseRock, CellType.DeepRainbowRock, CellType.DeepStripedRock,
-            CellType.MilitaryBlockFrame, CellType.MilitaryBlock, CellType.MilitaryBlockSand, CellType.TeleportBlock,
-            CellType.PassiveAcid, CellType.SuperRainbow, CellType.Skull, CellType.Box,
-            CellType.Lava, CellType.Boulder1, CellType.Boulder2, CellType.Boulder3,
-            CellType.LivingActiveAcid, CellType.CorrosiveActiveAcid,
-            CellType.BlueSand, CellType.DarkBlueSand, CellType.YellowSand, CellType.DarkYellowSand,
-            CellType.GreenBlock, CellType.YellowBlock, CellType.Rock, CellType.FedBlock, CellType.RedBlock, CellType.BuildingWall,
-            CellType.Green, CellType.Red, CellType.Blue, CellType.Violet, CellType.White, CellType.Cyan,
-            CellType.HeavyRock, CellType.NiggerRock, CellType.LivingBlackRock,
-            CellType.AliveBlue, CellType.RedRock, CellType.AcidRock, CellType.HypnoRock,
-            CellType.GoldenRock, CellType.DeepRock, CellType.GRock,
-        };
 
         public void Connect()
         {
@@ -237,6 +211,7 @@ namespace MinesServer.Networking.Connection.Client
         private async UniTaskVoid UpdatePosition()
         {
             await UniTask.Delay(200);
+            SendMapChunksAround(_x, _y);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
         }
 
@@ -317,10 +292,9 @@ namespace MinesServer.Networking.Connection.Client
                         return;
                     }
 
-                    var storage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-                    if (storage?.CellLayer != null && storage.IsReady)
+                    if (_worldLayer != null)
                     {
-                        var cellType = storage.GetCell(move.X, move.Y);
+                        CellType cellType = GetServerCell(move.X, move.Y);
                         var cellConfig = Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
@@ -371,19 +345,18 @@ namespace MinesServer.Networking.Connection.Client
                         new AudioPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
                     })));
 
-                    var storage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-                    if (storage?.CellLayer != null && storage.IsReady)
+                    if (_worldLayer != null)
                     {
-                        var cellType = storage.GetCell(cellX, cellY);
+                        CellType cellType = GetServerCell(cellX, cellY);
                         if (cellType == CellType.Empty)
                         {
                             return;
                         }
                     }
 
-                    if (storage?.CellLayer != null && storage.IsReady)
+                    if (_worldLayer != null)
                     {
-                        var cellType = storage.GetCell(cellX, cellY);
+                        CellType cellType = GetServerCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
                         var mm = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
@@ -394,7 +367,7 @@ namespace MinesServer.Networking.Connection.Client
                             return;
                         }
 
-                        storage.SetCell(cellX, cellY, CellType.Empty);
+                        SetServerCell(cellX, cellY, CellType.Empty);
 
                         if (crystalIdx >= 0)
                         {
@@ -437,6 +410,7 @@ namespace MinesServer.Networking.Connection.Client
                     _health = 500;
                     _pathCts?.Cancel();
 
+                    SendMapChunksAround(_x, _y);
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
                     OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
@@ -458,10 +432,9 @@ namespace MinesServer.Networking.Connection.Client
                     ushort fx = (ushort)(_x + frontOffset.x);
                     ushort fy = (ushort)(_y + frontOffset.y);
 
-                    var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-                    if (storage?.CellLayer != null && storage.IsReady)
+                    if (_worldLayer != null)
                     {
-                        var cellType = storage.GetCell(fx, fy);
+                        CellType cellType = GetServerCell(fx, fy);
                         var mm = ServiceLocator.Resolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
@@ -469,7 +442,7 @@ namespace MinesServer.Networking.Connection.Client
                         if (cellType != CellType.Empty && isBreakable)
                         {
                             _geoStack.Push(cellType);
-                            storage.SetCell(fx, fy, CellType.Empty);
+                            SetServerCell(fx, fy, CellType.Empty);
                             OnReceived?.Invoke(new ServerPacket(new GeologyPacket(_geoStack.Count, 10, cellType, cellType.ToString())));
                             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                             {
@@ -480,7 +453,7 @@ namespace MinesServer.Networking.Connection.Client
                         else if (_geoStack.Count > 0)
                         {
                             var placeType = _geoStack.Pop();
-                            storage.SetCell(fx, fy, placeType);
+                            SetServerCell(fx, fy, placeType);
                             OnReceived?.Invoke(new ServerPacket(new GeologyPacket(_geoStack.Count, 10, placeType, placeType.ToString())));
                             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                             {
@@ -503,10 +476,10 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is BuildGrayPacket)
                 {
                     var front = GetFrontCell();
-                    var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-                    if (storage?.CellLayer != null && storage.IsReady && storage.GetCell(front.X, front.Y) == CellType.Road)
+                    if (_worldLayer != null &&
+                        GetServerCell(front.X, front.Y) == CellType.Road)
                     {
-                        storage.SetCell(front.X, front.Y, CellType.Empty);
+                        SetServerCell(front.X, front.Y, CellType.Empty);
                         OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(front.X, front.Y, 0, 0, new[] { CellType.Empty }) })));
                     }
                     else
@@ -1045,57 +1018,35 @@ namespace MinesServer.Networking.Connection.Client
             _worldLayer?.Dispose();
             _worldLayer = null;
 
-            int worldWidth;
-            int worldHeight;
-            bool generated = false;
-
-            if (UsePrebakedMap)
+            string? mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
+            if (string.IsNullOrEmpty(mapbPath) || !File.Exists(mapbPath))
             {
-                string mapbPath = $"{Application.persistentDataPath}/{PrebakedWorldCodeName}_cells.mapb";
-                EnsurePrebakedMapFile(mapbPath, PrebakedWorldCodeName);
-                (worldWidth, worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
-                if (worldWidth > 0 && worldHeight > 0)
-                {
-                    int wChunks = (worldWidth + 31) / 32;
-                    int hChunks = (worldHeight + 31) / 32;
-                    _worldLayer = new WorldLayer<CellType>(mapbPath, wChunks, hChunks, 32, 36);
-                }
-                else
-                {
-                    worldWidth = 500;
-                    worldHeight = 500;
-                    generated = true;
-                }
-            }
-            else
-            {
-                worldWidth = 500;
-                worldHeight = 500;
-                generated = true;
+                Debug.LogError($"[DummyConnection] Prebaked map file for '{PrebakedWorldCodeName}' not found! Fail-fast without fallbacks.");
+                TriggerDisconnect($"Prebaked map file for '{PrebakedWorldCodeName}' not found");
+                return;
             }
 
-            if (generated)
+            (int worldWidth, int worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
+            if (worldWidth <= 0 || worldHeight <= 0)
             {
-                string tmpPath = Path.Combine(Application.temporaryCachePath, "test_cells.mapb");
-                int wChunks = (worldWidth + 31) / 32;
-                int hChunks = (worldHeight + 31) / 32;
-                _worldLayer = new WorldLayer<CellType>(tmpPath, wChunks, hChunks, 32, 36);
-
-                var testData = CreateTestMapData(worldWidth, worldHeight);
-                for (int y = 0; y < worldHeight; y++)
-                {
-                    for (int x = 0; x < worldWidth; x++)
-                    {
-                        _worldLayer[x, y] = testData[x, y];
-                    }
-                }
+                Debug.LogError($"[DummyConnection] Prebaked map file '{mapbPath}' has invalid dimensions ({worldWidth}x{worldHeight}). Fail-fast!");
+                TriggerDisconnect("Invalid prebaked map dimensions");
+                return;
             }
 
-            string worldCodeName = generated ? "generated" : PrebakedWorldCodeName;
-            string worldDisplayName = generated ? "Generated" : "Pallada";
+            int widthChunks = (worldWidth + 31) / 32;
+            int heightChunks = (worldHeight + 31) / 32;
+            _worldLayer = new WorldLayer<CellType>(
+                mapbPath,
+                widthChunks,
+                heightChunks,
+                32,
+                36);
+            _sentMapChunks.Clear();
+
             OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
-                worldCodeName,
-                worldDisplayName,
+                PrebakedWorldCodeName,
+                "Pallada",
                 (ushort)worldWidth,
                 (ushort)worldHeight,
                 _cellConfigs,
@@ -1104,16 +1055,15 @@ namespace MinesServer.Networking.Connection.Client
                     new byte[] { 37, 38, 106 },
                 })));
 
-            SendTestWorldMapData(worldWidth, worldHeight);
-
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
             OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(_mockBotId, 999, 1, "Skin/bee.png", "Tail/default.png", "Darkar25")));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
             HandleRobotInfoMock(_mockBotId).Forget();
-            RunCircularBots(10).Forget();
+            RunCircularBots(0).Forget();
             _x = 25;
             _y = 50;
+            SendMapChunksAround(_x, _y);
             OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
             OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
             OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
@@ -1999,34 +1949,136 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
-        private static void EnsurePrebakedMapFile(string mapbPath, string worldCodeName)
+        private static string? GetProjectServerMapFile(string worldCodeName)
         {
-            if (File.Exists(mapbPath))
+            string streamingDirectory = Path.Combine(
+                Application.streamingAssetsPath,
+                "WorldMaps");
+            string projectMapPath = Path.Combine(
+                streamingDirectory,
+                $"{worldCodeName}_cells.mapb");
+            if (File.Exists(projectMapPath))
             {
-                return;
+                return projectMapPath;
+            }
+
+            string projectArchivePath = Path.Combine(
+                streamingDirectory,
+                $"{worldCodeName}_cells.zip");
+            if (!File.Exists(projectArchivePath))
+            {
+                return null;
             }
 
             try
             {
-                string streamingDir = Path.Combine(Application.streamingAssetsPath, "WorldMaps");
-                string streamingMapb = Path.Combine(streamingDir, $"{worldCodeName}_cells.mapb");
-                if (File.Exists(streamingMapb))
+                string serverCacheDirectory = Path.Combine(
+                    Application.temporaryCachePath,
+                    "DummyServerMaps");
+                Directory.CreateDirectory(serverCacheDirectory);
+                string serverMapPath = Path.Combine(
+                    serverCacheDirectory,
+                    $"{worldCodeName}_cells.mapb");
+                using ZipArchive archive = ZipFile.OpenRead(projectArchivePath);
+                ZipArchiveEntry? mapEntry = archive.GetEntry($"{worldCodeName}_cells.mapb");
+                if (mapEntry == null)
                 {
-                    Debug.Log($"[DummyConnection] Copying mapb from StreamingAssets: {streamingMapb} -> {mapbPath}");
-                    File.Copy(streamingMapb, mapbPath, true);
-                    return;
+                    Debug.LogError(
+                        $"[DummyConnection] Project server archive '{projectArchivePath}' " +
+                        $"does not contain '{worldCodeName}_cells.mapb'.");
+                    return null;
                 }
 
-                string streamingZip = Path.Combine(streamingDir, $"{worldCodeName}_cells.zip");
-                if (File.Exists(streamingZip))
+                var cachedInfo = new FileInfo(serverMapPath);
+                if (!cachedInfo.Exists ||
+                    cachedInfo.Length != mapEntry.Length ||
+                    cachedInfo.LastWriteTimeUtc != mapEntry.LastWriteTime.UtcDateTime)
                 {
-                    Debug.Log($"[DummyConnection] Unpacking mapb zip from StreamingAssets: {streamingZip} -> {Application.persistentDataPath}");
-                    ZipFile.ExtractToDirectory(streamingZip, Application.persistentDataPath, true);
+                    mapEntry.ExtractToFile(serverMapPath, overwrite: true);
                 }
+
+                return serverMapPath;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[DummyConnection] Failed to unpack prebaked map: {ex.Message}");
+                Debug.LogError(
+                    $"[DummyConnection] Failed to open project server map: {ex.Message}");
+                return null;
+            }
+        }
+
+        private void SendMapChunksAround(ushort serverX, ushort serverY)
+        {
+            const int ChunkSize = 32;
+            const int StreamingRadiusChunks = 4;
+            if (_worldLayer == null)
+            {
+                return;
+            }
+
+            int centerChunkX = serverX / ChunkSize;
+            int centerChunkY = serverY / ChunkSize;
+            int minimumChunkX = Math.Max(0, centerChunkX - StreamingRadiusChunks);
+            int maximumChunkX = Math.Min(
+                _worldLayer.WidthChunks - 1,
+                centerChunkX + StreamingRadiusChunks);
+            int minimumChunkY = Math.Max(0, centerChunkY - StreamingRadiusChunks);
+            int maximumChunkY = Math.Min(
+                _worldLayer.HeightChunks - 1,
+                centerChunkY + StreamingRadiusChunks);
+            for (int chunkX = minimumChunkX; chunkX <= maximumChunkX; chunkX++)
+            {
+                for (int chunkY = minimumChunkY; chunkY <= maximumChunkY; chunkY++)
+                {
+                    int chunkIndex = chunkY + (chunkX * _worldLayer.HeightChunks);
+                    if (_sentMapChunks.Contains(chunkIndex))
+                    {
+                        continue;
+                    }
+
+                    CellType[]? source = _worldLayer.GetChunk(
+                        chunkIndex,
+                        createIfMissing: true,
+                        touchLru: true);
+                    if (source == null)
+                    {
+                        continue;
+                    }
+
+                    var payload = new CellType[ChunkSize * ChunkSize];
+                    for (int localY = 0; localY < ChunkSize; localY++)
+                    {
+                        for (int localX = 0; localX < ChunkSize; localX++)
+                        {
+                            payload[(localY * ChunkSize) + localX] =
+                                source[localY + (localX * ChunkSize)];
+                        }
+                    }
+
+                    _sentMapChunks.Add(chunkIndex);
+                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                    {
+                        new MapRegionPacket(
+                            (ushort)(chunkX * ChunkSize),
+                            (ushort)(chunkY * ChunkSize),
+                            ChunkSize - 1,
+                            ChunkSize - 1,
+                            payload),
+                    })));
+                }
+            }
+        }
+
+        private CellType GetServerCell(ushort serverX, ushort serverY)
+        {
+            return _worldLayer?.GetCellSync(serverX, serverY) ?? CellType.Unloaded;
+        }
+
+        private void SetServerCell(ushort serverX, ushort serverY, CellType type)
+        {
+            if (_worldLayer != null)
+            {
+                _worldLayer[serverX, serverY] = type;
             }
         }
 
@@ -2054,124 +2106,6 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             return (0, 0);
-        }
-
-        /// <summary>
-        /// Send test world map data using MapRegionPackets.
-        /// </summary>
-        private void SendTestWorldMapData(int testWorldWidth, int testWorldHeight)
-        {
-            const int CHUNK_SIZE = 32;
-            for (int y = 0; y < testWorldHeight; y += CHUNK_SIZE)
-            {
-                for (int x = 0; x < testWorldWidth; x += CHUNK_SIZE)
-                {
-                    int chunkWidth = Math.Min(CHUNK_SIZE, testWorldWidth - x);
-                    int chunkHeight = Math.Min(CHUNK_SIZE, testWorldHeight - y);
-                    var chunkData = new CellType[chunkWidth * chunkHeight];
-                    int dataIndex = 0;
-                    for (int cy = 0; cy < chunkHeight; cy++)
-                    {
-                        for (int cx = 0; cx < chunkWidth; cx++)
-                        {
-                            chunkData[dataIndex++] = _worldLayer != null ? _worldLayer.GetCellSync(x + cx, y + cy) : CellType.Empty;
-                        }
-                    }
-
-                    var mapRegionPacket = new MapRegionPacket
-                    {
-                        X = (ushort)x,
-                        Y = (ushort)y,
-                        Width = (byte)(chunkWidth - 1),
-                        Height = (byte)(chunkHeight - 1),
-                        Payload = chunkData,
-                    };
-                    var hbPacket = new HBPacket(new IHBPacket[] { mapRegionPacket });
-                    OnReceived?.Invoke(new ServerPacket(hbPacket));
-                }
-            }
-        }
-
-        /// <summary>
-        /// Create test map data with various cell types for renderer testing.
-        /// </summary>
-        private static CellType[,] CreateTestMapData(int width, int height)
-        {
-            var map = new CellType[width, height];
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    map[x, y] = CellType.Empty;
-                }
-            }
-
-            const int GALLERY_X = 5;
-            const int GALLERY_Y = 5;
-            int squaresPerRow = (width - GALLERY_X) / 15;
-
-            for (int i = 0; i < _allCellTypes.Length; i++)
-            {
-                int row = i / squaresPerRow;
-                int col = i % squaresPerRow;
-                int startX = GALLERY_X + (col * 15);
-                int startY = GALLERY_Y + (row * 15);
-
-                for (int dx = 0; dx < 10; dx++)
-                {
-                    for (int dy = 0; dy < 10; dy++)
-                    {
-                        map[startX + dx, startY + dy] = _allCellTypes[i];
-                    }
-                }
-            }
-
-            // Clear BuildingDoor square (index 9) for tiling test
-            // Square starts at (140, 5), 10×10
-            for (int dx = 0; dx < 10; dx++)
-            {
-                for (int dy = 0; dy < 10; dy++)
-                {
-                    map[140 + dx, 5 + dy] = CellType.Empty;
-                }
-            }
-
-            int lastGalleryRow = (_allCellTypes.Length - 1) / squaresPerRow;
-            int tilingStartY = GALLERY_Y + ((lastGalleryRow + 1) * 15) + 5;
-            const int TILING_START_X = GALLERY_X;
-            int tilingPerRow = (width - TILING_START_X) / 4;
-
-            for (int variant = 0; variant < 256; variant++)
-            {
-                int tRow = variant / tilingPerRow;
-                int tCol = variant % tilingPerRow;
-                int bx = TILING_START_X + (tCol * 4);
-                int by = tilingStartY + (tRow * 4);
-
-                for (int dy = 0; dy < 3; dy++)
-                {
-                    for (int dx = 0; dx < 3; dx++)
-                    {
-                        if (dx == 1 && dy == 1)
-                        {
-                            map[bx + dx, by + dy] = CellType.BuildingDoor;
-                            continue;
-                        }
-
-                        int bitIdx = (dy * 3) + dx;
-                        if (bitIdx > 4)
-                        {
-                            bitIdx--;
-                        }
-
-                        map[bx + dx, by + dy] = ((variant >> bitIdx) & 1) == 1
-                            ? CellType.BuildingDoor
-                            : CellType.Empty;
-                    }
-                }
-            }
-
-            return map;
         }
 
         private async UniTaskVoid HandleRobotInfoMock(ushort botId)
@@ -2327,37 +2261,35 @@ namespace MinesServer.Networking.Connection.Client
 
         private void TryBuild(ushort x, ushort y, CellType placeType)
         {
-            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (storage?.CellLayer == null || !storage.IsReady)
+            if (_worldLayer == null)
             {
                 return;
             }
 
-            var current = storage.GetCell(x, y);
+            CellType current = GetServerCell(x, y);
             if (current != CellType.Empty && current != CellType.Road)
             {
                 return;
             }
 
-            storage.SetCell(x, y, placeType);
+            SetServerCell(x, y, placeType);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { placeType }) })));
         }
 
         private void TryUpgradeBuild(ushort x, ushort y, params (CellType From, CellType To)[] upgrades)
         {
-            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (storage?.CellLayer == null || !storage.IsReady)
+            if (_worldLayer == null)
             {
                 return;
             }
 
-            var current = storage.GetCell(x, y);
+            CellType current = GetServerCell(x, y);
 
             for (int i = 0; i < upgrades.Length; i++)
             {
                 if (current == upgrades[i].From || (current == CellType.Road && i == 0 && upgrades[i].From == CellType.Empty))
                 {
-                    storage.SetCell(x, y, upgrades[i].To);
+                    SetServerCell(x, y, upgrades[i].To);
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { upgrades[i].To }) })));
                     return;
                 }
@@ -2366,8 +2298,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private List<(ushort X, ushort Y)> FindPath(ushort startX, ushort startY, ushort targetX, ushort targetY)
         {
-            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (storage?.CellLayer == null || !storage.IsReady)
+            if (_worldLayer == null)
             {
                 return new List<(ushort, ushort)>();
             }
@@ -2406,7 +2337,7 @@ namespace MinesServer.Networking.Connection.Client
                         continue;
                     }
 
-                    var cellType = storage.GetCell((ushort)nx, (ushort)ny);
+                    CellType cellType = GetServerCell((ushort)nx, (ushort)ny);
                     var cellConfig = ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
                     bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
                     if (!isPassable)
@@ -2458,6 +2389,7 @@ namespace MinesServer.Networking.Connection.Client
                     prevX = nextX;
                     prevY = nextY;
 
+                    SendMapChunksAround(_x, _y);
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
                         new RobotPositionPacket(_mockBotId, _x, _y, (byte)dir),

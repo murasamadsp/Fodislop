@@ -12,6 +12,7 @@ namespace Fodinae.Core.Interfaces
         long Revision { get; }
         WorldLayer<CellType>? CellLayer { get; }
         void SetCell(int x, int y, CellType type);
+        void SetRegion(int startX, int startY, int width, int height, CellType[] cells);
         CellType GetCell(int x, int y);
         void InitWorld(string worldCodeName, int width, int height);
         void Dispose();

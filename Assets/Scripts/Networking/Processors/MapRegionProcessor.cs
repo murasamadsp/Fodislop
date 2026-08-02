@@ -17,17 +17,12 @@ namespace Fodinae.Networking.Processors
                 return;
             }
 
-            int index = 0;
-            for (int y = 0; y <= packet.Height; y++)
-            {
-                for (int x = 0; x <= packet.Width; x++)
-                {
-                    if (index < packet.Payload.Length)
-                    {
-                        storage.SetCell(packet.X + x, packet.Y + y, packet.Payload[index++]);
-                    }
-                }
-            }
+            storage.SetRegion(
+                packet.X,
+                packet.Y,
+                packet.Width + 1,
+                packet.Height + 1,
+                packet.Payload);
         }
     }
 }

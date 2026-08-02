@@ -29,7 +29,8 @@ namespace Fodinae.UI
     {
         public static bool IsMenuOpen { get; private set; }
 
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private VisualElement? _menuPanel;
         private VisualElement? _mainPage;
         private VisualElement? _settingsPage;
@@ -55,13 +56,6 @@ namespace Fodinae.UI
             _escapeAction = new InputAction("Escape", binding: "<Keyboard>/escape");
             _escapeAction.performed += _ => ToggleMenu();
             _escapeAction.Enable();
-
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                Debug.LogError("[PauseMenu] UIDocument не найден");
-                return;
-            }
 
             if (_doc.panelSettings == null)
             {
@@ -99,13 +93,23 @@ namespace Fodinae.UI
             var container = new VisualElement();
             container.AddToClassList("pause-slider-container");
 
-            var label = new Label(labelText);
+            var label = new Label();
             label.AddToClassList("pause-slider-label");
             container.Add(label);
 
             var slider = new Slider(min, max);
             slider.value = initialValue;
-            slider.RegisterValueChangedCallback(evt => onChange(evt.newValue));
+            void UpdateLabel(float value)
+            {
+                label.text = $"{labelText}: {value:F2}";
+            }
+
+            UpdateLabel(initialValue);
+            slider.RegisterValueChangedCallback(evt =>
+            {
+                UpdateLabel(evt.newValue);
+                onChange(evt.newValue);
+            });
             container.Add(slider);
 
             return container;
@@ -272,44 +276,58 @@ namespace Fodinae.UI
                 }
             }
 
-            var resOptions = new System.Collections.Generic.List<string>();
-            foreach (var res in uniqueResolutions)
+            var resolutionButton = new Button();
+            void UpdateResolutionButton()
             {
-                resOptions.Add($"{res.width} x {res.height}");
+                resolutionButton.text = uniqueResolutions.Count == 0
+                    ? "Разрешения недоступны"
+                    : $"Разрешение: {uniqueResolutions[currentResIndex].width} x " +
+                      uniqueResolutions[currentResIndex].height;
             }
 
-            var resDropdown = new DropdownField(resOptions, currentResIndex);
-            resDropdown.RegisterValueChangedCallback(evt =>
+            resolutionButton.clicked += () =>
             {
-                var index = resDropdown.index;
-                if (index >= 0 && index < uniqueResolutions.Count)
+                if (uniqueResolutions.Count > 0)
                 {
-                    var res = uniqueResolutions[index];
-                    Screen.SetResolution(res.width, res.height, Screen.fullScreen);
-                    Debug.Log($"[PauseMenu] Resolution: {res.width}x{res.height}");
+                    currentResIndex = (currentResIndex + 1) % uniqueResolutions.Count;
+                    var resolution = uniqueResolutions[currentResIndex];
+                    Screen.SetResolution(
+                        resolution.width,
+                        resolution.height,
+                        Screen.fullScreen);
+                    Debug.Log(
+                        $"[PauseMenu] Resolution: {resolution.width}x{resolution.height}");
+                    UpdateResolutionButton();
                 }
-            });
-            scrollContainer.Add(resDropdown);
+            };
+            resolutionButton.SetEnabled(uniqueResolutions.Count > 0);
+            resolutionButton.AddToClassList("pause-btn");
+            UpdateResolutionButton();
+            scrollContainer.Add(resolutionButton);
 
             scrollContainer.Add(CreateLabel("Графика"));
 
-            var lightingQualityNames = new List<string>
-            {
+            string[] lightingQualityNames =
+            [
                 "Низкое",
                 "Среднее",
                 "Высокое",
                 "Ультра",
-            };
-            var savedQuality = Mathf.Clamp(
+            ];
+            int savedQuality = Mathf.Clamp(
                 PlayerPrefs.GetInt("WorldLightingQuality", (int)TerrariaLightingEngine.QualityPreset.Ultra),
                 0,
-                lightingQualityNames.Count - 1);
-            var lightingQuality = new DropdownField(
-                "Общее качество графики",
-                lightingQualityNames,
-                savedQuality);
-            lightingQuality.RegisterValueChangedCallback(_ =>
+                lightingQualityNames.Length - 1);
+            var lightingQuality = new Button();
+            void UpdateLightingQualityButton()
             {
+                lightingQuality.text =
+                    $"Общее качество графики: {lightingQualityNames[savedQuality]}";
+            }
+
+            lightingQuality.clicked += () =>
+            {
+                savedQuality = (savedQuality + 1) % lightingQualityNames.Length;
                 var engine = TerrariaLightingEngine.Instance
                     ?? FindAnyObjectByType<TerrariaLightingEngine>();
                 if (engine == null)
@@ -318,12 +336,233 @@ namespace Fodinae.UI
                     return;
                 }
 
-                var quality = (TerrariaLightingEngine.QualityPreset)lightingQuality.index;
+                var quality = (TerrariaLightingEngine.QualityPreset)savedQuality;
                 engine.SetQuality(quality);
                 PlayerPrefs.SetInt("WorldLightingQuality", (int)quality);
                 PlayerPrefs.Save();
-            });
+                UpdateLightingQualityButton();
+            };
+            lightingQuality.AddToClassList("pause-btn");
+            UpdateLightingQualityButton();
             scrollContainer.Add(lightingQuality);
+
+            var ambientOcclusionToggle = new Toggle("Ambient Occlusion (AO)")
+            {
+                value = PlayerPrefs.GetInt(
+                    TerrariaLightingEngine.AmbientOcclusionPreferenceKey,
+                    1) == 1,
+            };
+            ambientOcclusionToggle.RegisterValueChangedCallback(evt =>
+            {
+                var engine = TerrariaLightingEngine.Instance
+                    ?? FindAnyObjectByType<TerrariaLightingEngine>();
+                if (engine != null)
+                {
+                    engine.SetAmbientOcclusionEnabled(evt.newValue);
+                    return;
+                }
+
+                PlayerPrefs.SetInt(
+                    TerrariaLightingEngine.AmbientOcclusionPreferenceKey,
+                    evt.newValue ? 1 : 0);
+                PlayerPrefs.Save();
+            });
+            scrollContainer.Add(ambientOcclusionToggle);
+
+            var globalIlluminationToggle = new Toggle("Глобальное освещение (GI)")
+            {
+                value = PlayerPrefs.GetInt(
+                    TerrariaLightingEngine.GlobalIlluminationPreferenceKey,
+                    1) == 1,
+            };
+            globalIlluminationToggle.RegisterValueChangedCallback(evt =>
+            {
+                var engine = TerrariaLightingEngine.Instance
+                    ?? FindAnyObjectByType<TerrariaLightingEngine>();
+                if (engine != null)
+                {
+                    engine.SetGlobalIlluminationEnabled(evt.newValue);
+                    return;
+                }
+
+                PlayerPrefs.SetInt(
+                    TerrariaLightingEngine.GlobalIlluminationPreferenceKey,
+                    evt.newValue ? 1 : 0);
+                PlayerPrefs.Save();
+            });
+            scrollContainer.Add(globalIlluminationToggle);
+
+            void ApplyLightingSetting(
+                string preferenceKey,
+                float value,
+                System.Action<TerrariaLightingEngine, float> apply)
+            {
+                TerrariaLightingEngine? engine = TerrariaLightingEngine.Instance
+                    ?? FindAnyObjectByType<TerrariaLightingEngine>();
+                if (engine != null)
+                {
+                    apply(engine, value);
+                    return;
+                }
+
+                PlayerPrefs.SetFloat(preferenceKey, value);
+                PlayerPrefs.Save();
+            }
+
+            scrollContainer.Add(CreateLabel("Параметры освещения"));
+            scrollContainer.Add(CreateSlider(
+                "Яркость окружения",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.AmbientIntensityPreferenceKey,
+                    0.9f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.AmbientIntensityPreferenceKey,
+                    value,
+                    static (engine, setting) => engine.SetAmbientIntensity(setting)),
+                0f,
+                2f));
+            scrollContainer.Add(CreateSlider(
+                "Мощность излучения",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.EmissionScalePreferenceKey,
+                    8f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.EmissionScalePreferenceKey,
+                    value,
+                    static (engine, setting) => engine.SetEmissionScale(setting)),
+                0.1f,
+                16f));
+            scrollContainer.Add(CreateSlider(
+                "Поглощение пустой средой",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.EmptyExtinctionPreferenceKey,
+                    1f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.EmptyExtinctionPreferenceKey,
+                    value,
+                    static (engine, setting) =>
+                        engine.SetEmptyExtinctionMultiplier(setting)),
+                0f,
+                4f));
+            scrollContainer.Add(CreateSlider(
+                "Поглощение блоками",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.SolidExtinctionPreferenceKey,
+                    1f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.SolidExtinctionPreferenceKey,
+                    value,
+                    static (engine, setting) =>
+                        engine.SetSolidExtinctionMultiplier(setting)),
+                0.25f,
+                4f));
+            scrollContainer.Add(CreateSlider(
+                "Сила GI bounce",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.BounceStrengthPreferenceKey,
+                    0.3f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.BounceStrengthPreferenceKey,
+                    value,
+                    static (engine, setting) => engine.SetBounceStrength(setting)),
+                0f,
+                2f));
+            scrollContainer.Add(CreateSlider(
+                "Радиус AO",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.AmbientOcclusionRadiusPreferenceKey,
+                    2f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.AmbientOcclusionRadiusPreferenceKey,
+                    value,
+                    static (engine, setting) =>
+                        engine.SetAmbientOcclusionRadius(setting)),
+                0.5f,
+                8f));
+            scrollContainer.Add(CreateSlider(
+                "Сила AO",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.AmbientOcclusionStrengthPreferenceKey,
+                    1.5f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.AmbientOcclusionStrengthPreferenceKey,
+                    value,
+                    static (engine, setting) =>
+                        engine.SetAmbientOcclusionStrength(setting)),
+                0.1f,
+                8f));
+            scrollContainer.Add(CreateSlider(
+                "Физический радиус источника",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.EmitterRadiusPreferenceKey,
+                    1f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.EmitterRadiusPreferenceKey,
+                    value,
+                    static (engine, setting) => engine.SetDynamicEmitterRadius(setting)),
+                0.1f,
+                2f));
+            scrollContainer.Add(CreateSlider(
+                "Максимум светового множителя",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.MaximumMultiplierPreferenceKey,
+                    1f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.MaximumMultiplierPreferenceKey,
+                    value,
+                    static (engine, setting) =>
+                        engine.SetMaximumLightMultiplier(setting)),
+                0.5f,
+                4f));
+            scrollContainer.Add(CreateSlider(
+                "Дистанция debug transmittance",
+                PlayerPrefs.GetFloat(
+                    TerrariaLightingEngine.TransmittanceDistancePreferenceKey,
+                    10f),
+                value => ApplyLightingSetting(
+                    TerrariaLightingEngine.TransmittanceDistancePreferenceKey,
+                    value,
+                    static (engine, setting) =>
+                        engine.SetTransmittanceDebugDistance(setting)),
+                2f,
+                32f));
+
+            string[] lightingDebugNames =
+            [
+                "Итоговый свет",
+                "Occupancy",
+                "Albedo",
+                "Emission",
+                "Local transmittance",
+                "Direct",
+                "GI bounce",
+                "Ambient Occlusion",
+            ];
+            int activeDebugView = (int)(TerrariaLightingEngine.Instance?.ActiveDebugView ??
+                TerrariaLightingEngine.DebugView.Composite);
+            var lightingDebugView = new Button();
+            void UpdateLightingDebugButton()
+            {
+                lightingDebugView.text =
+                    $"Отладка освещения: {lightingDebugNames[activeDebugView]}";
+            }
+
+            lightingDebugView.clicked += () =>
+            {
+                activeDebugView = (activeDebugView + 1) % lightingDebugNames.Length;
+                var engine = TerrariaLightingEngine.Instance
+                    ?? FindAnyObjectByType<TerrariaLightingEngine>();
+                if (engine != null)
+                {
+                    engine.SetDebugView(
+                        (TerrariaLightingEngine.DebugView)activeDebugView);
+                }
+
+                UpdateLightingDebugButton();
+            };
+            lightingDebugView.AddToClassList("pause-btn");
+            UpdateLightingDebugButton();
+            scrollContainer.Add(lightingDebugView);
 
             scrollContainer.Add(CreateLabel("Постобработка"));
 

@@ -74,19 +74,32 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float _UseLight2D;
             CBUFFER_END
 
-            sampler2D _WorldLightTexture;
+            Texture2D<float4> _WorldLightTexture;
+            SamplerState sampler_WorldLightTexture;
             float4 _WorldLightRect;
+            float4 _WorldLightTextureSize;
+            int _WorldLightDebugView;
 
             float3 GetTerrariaLightColor(float2 worldPos)
             {
-                float3 lightColor = float3(1.0, 1.0, 1.0);
-                if (_UseLight2D > 0.5)
+                if (_UseLight2D <= 0.5)
                 {
-                    float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
-                    if (all(lightUV >= 0.0) && all(lightUV <= 1.0))
-                        lightColor = tex2D(_WorldLightTexture, lightUV).rgb;
+                    return float3(1.0, 1.0, 1.0);
                 }
-                return lightColor;
+
+                float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
+                if (_WorldLightDebugView != 0)
+                {
+                    int2 debugPixel = clamp(
+                        int2(lightUV * _WorldLightTextureSize.xy),
+                        int2(0, 0),
+                        int2(_WorldLightTextureSize.xy) - 1);
+                    return _WorldLightTexture.Load(int3(debugPixel, 0)).rgb;
+                }
+
+                return _WorldLightTexture.Sample(
+                    sampler_WorldLightTexture,
+                    lightUV).rgb;
             }
 
             float3 RgbToHsv(float3 c)
@@ -131,12 +144,25 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             half4 frag (Varyings input) : SV_Target
             {
+                if (_WorldLightDebugView != 0)
+                {
+                    return half4(
+                        GetTerrariaLightColor(input.worldPosition.xy),
+                        1.0);
+                }
+
                 // TBDR: no discard anywhere in this shader — transparent output instead.
                 // discard kills Hidden Surface Removal on Apple GPUs; alpha-0 blending is visually identical.
                 if (input.worldPos.w > 1.5) return half4(0.0, 0.0, 0.0, 0.0);
                 if (input.subAtlasRect.z < 0.0001)
                 {
-                    return input.color;
+                    if (input.color.a < 0.05)
+                    {
+                        return half4(0.0, 0.0, 0.0, 0.0);
+                    }
+
+                    float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
+                    return half4(input.color.rgb * worldLight, input.color.a);
                 }
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
@@ -152,7 +178,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (subAtlasSizeUV.x <= 0 || tileSizeUV.x <= 0)
                 {
                     if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
-                    return input.color;
+                    float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
+                    return half4(input.color.rgb * worldLight, input.color.a);
                 }
 
                 float frameCount = input.tileSizeUV.z;
@@ -308,155 +335,125 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         }
         Pass
         {
-            Name "OcclusionCoverage"
-            Tags { "LightMode" = "FodinaeOcclusionCoverage" }
+            Name "LightingMaterialField"
+            Tags { "LightMode" = "FodinaeLightingMaterialField" }
 
             Blend One One
             BlendOp Max
-            ColorMask R
             ZWrite Off
             ZTest Always
             Cull Off
 
             HLSLPROGRAM
-            #pragma vertex CoverageVert
-            #pragma fragment CoverageFrag
+            #pragma target 4.5
+            #pragma vertex MaterialFieldVert
+            #pragma fragment MaterialFieldFrag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            struct CoverageAttributes
+            struct MaterialFieldAttributes
             {
                 float4 positionOS   : POSITION;
                 float2 uv           : TEXCOORD0;
                 float4 color        : COLOR;
-                float4 subAtlasRect : TEXCOORD1;
-                float4 tileSizeUV   : TEXCOORD2;
                 float4 worldPosAttr : TEXCOORD3;
                 float4 animData     : TEXCOORD4;
                 float4 glowAttr     : TEXCOORD6;
             };
 
-            struct CoverageVaryings
+            struct MaterialFieldVaryings
             {
                 float4 positionCS   : SV_POSITION;
                 float2 uv           : TEXCOORD0;
                 float4 color        : COLOR;
-                float4 subAtlasRect : TEXCOORD1;
-                float4 tileSizeUV   : TEXCOORD2;
-                float4 worldPos     : TEXCOORD3;
-                float4 animData     : TEXCOORD4;
-                float4 glowData     : TEXCOORD5;
+                float4 worldPos     : TEXCOORD1;
+                float4 animData     : TEXCOORD2;
+                float4 glowData     : TEXCOORD3;
+                nointerpolation float isForeground : TEXCOORD4;
             };
 
-            TEXTURE2D(_BaseMap);
-            SAMPLER(sampler_BaseMap);
-
-            CoverageVaryings CoverageVert(CoverageAttributes input)
+            struct MaterialFieldOutput
             {
-                CoverageVaryings output;
+                half4 material : SV_Target0;
+                half4 emission : SV_Target1;
+            };
+
+            MaterialFieldVaryings MaterialFieldVert(MaterialFieldAttributes input)
+            {
+                MaterialFieldVaryings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = input.uv;
                 output.color = input.color;
-                output.subAtlasRect = input.subAtlasRect;
-                output.tileSizeUV = input.tileSizeUV;
                 output.worldPos = input.worldPosAttr;
                 output.animData = input.animData;
                 output.glowData = input.glowAttr;
+                output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 return output;
             }
 
-            half4 CoverageFrag(CoverageVaryings input) : SV_Target
+            float PhysicalContour(
+                float2 uv,
+                int solidBoundaryMask,
+                int solidDiagonalMask)
             {
-                float castsShadow = step(0.5, input.animData.w);
-                if (castsShadow < 0.5 || input.worldPos.w > 1.5 || input.color.a < 0.05)
-                {
-                    return 0.0;
-                }
+                float4 connected = frac(solidBoundaryMask * float4(0.5, 0.25, 0.125, 0.0625));
+                bool top = connected.x >= 0.5;
+                bool left = connected.y >= 0.5;
+                bool bottom = connected.z >= 0.5;
+                bool right = connected.w >= 0.5;
+                float2 p = uv - 0.5;
+                float antialias = min(fwidth(length(p)), 1.0 / 16.0);
+                float contour = 1.0 - smoothstep(0.5 - antialias, 0.5 + antialias, length(p));
+                contour = (top || left) && p.x <= 0.0 && p.y >= 0.0 ? 1.0 : contour;
+                contour = (top || right) && p.x >= 0.0 && p.y >= 0.0 ? 1.0 : contour;
+                contour = (bottom || left) && p.x <= 0.0 && p.y <= 0.0 ? 1.0 : contour;
+                contour = (bottom || right) && p.x >= 0.0 && p.y <= 0.0 ? 1.0 : contour;
+                float4 diagonal = frac(
+                    solidDiagonalMask * float4(0.5, 0.25, 0.125, 0.0625));
+                contour = diagonal.x >= 0.5 && p.x <= 0.0 && p.y >= 0.0
+                    ? 1.0
+                    : contour;
+                contour = diagonal.y >= 0.5 && p.x >= 0.0 && p.y >= 0.0
+                    ? 1.0
+                    : contour;
+                contour = diagonal.z >= 0.5 && p.x <= 0.0 && p.y <= 0.0
+                    ? 1.0
+                    : contour;
+                contour = diagonal.w >= 0.5 && p.x >= 0.0 && p.y <= 0.0
+                    ? 1.0
+                    : contour;
+                return contour;
+            }
 
-                if (input.subAtlasRect.z < 0.0001 || input.tileSizeUV.x <= 0.0)
-                {
-                    return half4(castsShadow * input.color.a, 0.0, 0.0, 1.0);
-                }
-
-                float2 baseUV = input.subAtlasRect.xy;
-                float2 subAtlasSizeUV = input.subAtlasRect.zw;
-                float2 tileSizeUV = input.tileSizeUV.xy;
-                float2 tilesCount = max(ceil(subAtlasSizeUV / tileSizeUV - 0.0001), 1.0);
-                float2 gridPosition = floor(input.worldPos.xy + 0.001);
-                float2 wrapped;
-                bool isTiling = fmod(input.worldPos.w, 2.0) > 0.5;
-                const float EPS = 0.0001;
-
-                float variantY = fmod(abs(gridPosition.y), tilesCount.y);
-                wrapped.y = floor(tilesCount.y - EPS - variantY);
-                wrapped.x = isTiling
-                    ? floor(input.worldPos.z + EPS)
-                    : floor(fmod(abs(gridPosition.x), tilesCount.x) + EPS);
-                wrapped = clamp(wrapped, 0.0, tilesCount - 1.0);
-
-                float2 tileOffsetUV = wrapped * tileSizeUV;
-                float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
-                float2 quadUV = clamp(input.uv, EPS, 1.0 - EPS);
-                float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
-
-                // Coverage deliberately uses animation frame zero. Lighting
-                // must not rebuild or shimmer whenever a visual frame changes.
-                half textureAlpha = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV).a;
-                if (textureAlpha < 0.05)
-                {
-                    return 0.0;
-                }
-
-                // Preserve the actual atlas alpha. A binary cutoff turns
-                // translucent details into a solid square in the SDF and
-                // prevents them from producing proportional soft shadows.
-                float coverage = textureAlpha;
-                int flags = int(round(input.glowData.z));
-                if ((flags & 2) != 0)
-                {
-                    int sameMask = int(round(input.glowData.w));
-                    float4 bits = frac(sameMask * float4(0.5, 0.25, 0.125, 0.0625));
-                    bool4 hasSame = bits >= 0.5;
-                    float2 p = input.uv - 0.5;
-                    float rTL = (hasSame.x || hasSame.y) ? 0.0 : 0.5;
-                    float rTR = (hasSame.x || hasSame.w) ? 0.0 : 0.5;
-                    float rBL = (hasSame.z || hasSame.y) ? 0.0 : 0.5;
-                    float rBR = (hasSame.z || hasSame.w) ? 0.0 : 0.5;
-                    float distanceFromCenter = length(p);
-                    float antialias = min(fwidth(distanceFromCenter), 1.0 / 16.0);
-                    float roundCoverage = 1.0 - smoothstep(
-                        0.51 - antialias,
-                        0.51 + antialias,
-                        distanceFromCenter);
-
-                    if (rTL < 0.25)
-                    {
-                        roundCoverage = max(roundCoverage,
-                            smoothstep(-antialias, 0.0, -p.x) * smoothstep(-antialias, 0.0, p.y));
-                    }
-                    if (rTR < 0.25)
-                    {
-                        roundCoverage = max(roundCoverage,
-                            smoothstep(-antialias, 0.0, p.x) * smoothstep(-antialias, 0.0, p.y));
-                    }
-                    if (rBL < 0.25)
-                    {
-                        roundCoverage = max(roundCoverage,
-                            smoothstep(-antialias, 0.0, -p.x) * smoothstep(-antialias, 0.0, -p.y));
-                    }
-                    if (rBR < 0.25)
-                    {
-                        roundCoverage = max(roundCoverage,
-                            smoothstep(-antialias, 0.0, p.x) * smoothstep(-antialias, 0.0, -p.y));
-                    }
-
-                    float cornerDistance = abs(abs(p.x) - abs(p.y));
-                    float cornerExclude = smoothstep(0.4, 0.5, cornerDistance);
-                    roundCoverage = lerp(roundCoverage, 1.0, cornerExclude);
-                    coverage *= roundCoverage;
-                }
-
-                return half4(saturate(coverage * castsShadow * input.color.a), 0.0, 0.0, 1.0);
+            MaterialFieldOutput MaterialFieldFrag(MaterialFieldVaryings input)
+            {
+                MaterialFieldOutput output;
+                float isForeground = input.isForeground;
+                uint packedColor = (uint)round(input.glowData.x);
+                float3 surfaceAlbedo = float3(
+                    packedColor & 255u,
+                    (packedColor >> 8) & 255u,
+                    (packedColor >> 16) & 255u) / 255.0;
+                uint lightingFlags = (uint)floor(input.glowData.y + 0.0001);
+                int solidBoundaryMask = int(lightingFlags & 15u);
+                int solidDiagonalMask = (int(round(input.glowData.z)) >> 2) & 15;
+                float emissionStrength = (lightingFlags & 16u) != 0u
+                    ? saturate(frac(input.glowData.y) * 4.0)
+                    : 0.0;
+                bool hasRoundedPhysicalContour = (lightingFlags & 32u) != 0u;
+                float occupancy = step(0.5, input.animData.w) * isForeground;
+                occupancy *= hasRoundedPhysicalContour
+                    ? PhysicalContour(
+                        input.uv,
+                        solidBoundaryMask,
+                        solidDiagonalMask)
+                    : 1.0;
+                float surface = step(0.05, input.color.a) * isForeground;
+                output.material = half4(surfaceAlbedo * surface, occupancy);
+                output.emission = half4(
+                    surfaceAlbedo * emissionStrength * surface,
+                    emissionStrength * surface);
+                return output;
             }
             ENDHLSL
         }

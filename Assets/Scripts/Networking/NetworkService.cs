@@ -208,8 +208,10 @@ namespace Fodinae.Networking
                     Dispatch(innerPacket);
                 }
             }
-
-            Dispatch(payload);
+            else
+            {
+                Dispatch(payload);
+            }
         }
 
         private void Dispatch(object packet)

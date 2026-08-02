@@ -69,7 +69,8 @@ namespace Fodinae.Game.Managers
 
             if (botId != 0 && botId == LocalPlayerBotId)
             {
-                var playerObj = GameObject.FindGameObjectWithTag("Player");
+                var pmc = Fodinae.Player.Logic.PlayerMovementController.LocalPlayer;
+                var playerObj = pmc != null ? pmc.gameObject : GameObject.FindGameObjectWithTag("Player");
                 if (playerObj != null)
                 {
                     robot = playerObj.GetComponent<Robot>();
