@@ -14,7 +14,8 @@ namespace Fodinae.World.Terrain
         public int[,] CellTilingDescriptors { get; private set; } = null!;
         public byte[,] CellReliefMasks { get; private set; } = null!;
         public bool[,] CellIsRelief { get; private set; } = null!;
-        public byte[,] CellSameCatMasks { get; private set; } = null!;
+        public byte[,] CellVisualBlendMasks { get; private set; } = null!;
+        public byte[,] CellSolidBoundaryMasks { get; private set; } = null!;
 
         public void EnsureCapacity(int meshWidth, int meshHeight)
         {
@@ -25,7 +26,8 @@ namespace Fodinae.World.Terrain
                 CellTilingDescriptors = new int[meshWidth, meshHeight];
                 CellReliefMasks = new byte[meshWidth, meshHeight];
                 CellIsRelief = new bool[meshWidth, meshHeight];
-                CellSameCatMasks = new byte[meshWidth, meshHeight];
+                CellVisualBlendMasks = new byte[meshWidth, meshHeight];
+                CellSolidBoundaryMasks = new byte[meshWidth, meshHeight];
             }
         }
 
@@ -64,7 +66,8 @@ namespace Fodinae.World.Terrain
             TerrainCellCache.Scroll2DArray(CellTilingDescriptors, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellReliefMasks, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellIsRelief, meshWidth, meshHeight, dx, dy);
-            TerrainCellCache.Scroll2DArray(CellSameCatMasks, meshWidth, meshHeight, dx, dy);
+            TerrainCellCache.Scroll2DArray(CellVisualBlendMasks, meshWidth, meshHeight, dx, dy);
+            TerrainCellCache.Scroll2DArray(CellSolidBoundaryMasks, meshWidth, meshHeight, dx, dy);
 
             int vxStart = 0, vxLen = 0, vyStart = 0, vyLen = 0;
             if (dx > 0)
@@ -293,6 +296,10 @@ namespace Fodinae.World.Terrain
             var bottom = cellCache.GetCellData(cx, cy - 1);
             var left = cellCache.GetCellData(cx - 1, cy);
             var right = cellCache.GetCellData(cx + 1, cy);
+            var bottomLeft = cellCache.GetCellData(cx - 1, cy - 1);
+            var bottomRight = cellCache.GetCellData(cx + 1, cy - 1);
+            var topRight = cellCache.GetCellData(cx + 1, cy + 1);
+            var topLeft = cellCache.GetCellData(cx - 1, cy + 1);
 
             if (data.HasTileGroup)
             {
@@ -302,7 +309,6 @@ namespace Fodinae.World.Terrain
                     m |= 1 << 0;
                 }
 
-                var bottomLeft = cellCache.GetCellData(cx - 1, cy - 1);
                 if (bottomLeft.HasTileGroup && bottomLeft.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 1;
@@ -313,7 +319,6 @@ namespace Fodinae.World.Terrain
                     m |= 1 << 2;
                 }
 
-                var bottomRight = cellCache.GetCellData(cx + 1, cy - 1);
                 if (bottomRight.HasTileGroup && bottomRight.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 3;
@@ -324,7 +329,6 @@ namespace Fodinae.World.Terrain
                     m |= 1 << 4;
                 }
 
-                var topRight = cellCache.GetCellData(cx + 1, cy + 1);
                 if (topRight.HasTileGroup && topRight.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 5;
@@ -335,7 +339,6 @@ namespace Fodinae.World.Terrain
                     m |= 1 << 6;
                 }
 
-                var topLeft = cellCache.GetCellData(cx - 1, cy + 1);
                 if (topLeft.HasTileGroup && topLeft.TileGroupId == data.TileGroupId)
                 {
                     m |= 1 << 7;
@@ -411,7 +414,50 @@ namespace Fodinae.World.Terrain
                 sm |= 8;
             }
 
-            CellSameCatMasks[x, y] = sm;
+            CellVisualBlendMasks[x, y] = sm;
+
+            byte solidMask = 0;
+            if ((top.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 1;
+            }
+
+            if ((left.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 2;
+            }
+
+            if ((bottom.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 4;
+            }
+
+            if ((right.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 8;
+            }
+
+            if ((topLeft.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 16;
+            }
+
+            if ((topRight.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 32;
+            }
+
+            if ((bottomLeft.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 64;
+            }
+
+            if ((bottomRight.Properties & CellConfigProperties.DropsShadow) != 0)
+            {
+                solidMask |= 128;
+            }
+
+            CellSolidBoundaryMasks[x, y] = solidMask;
         }
     }
 }

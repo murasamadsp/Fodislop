@@ -81,14 +81,6 @@ namespace Fodinae
                 _loaderContainer.pickingMode = PickingMode.Ignore;
             }
 
-            // UI Toolkit иногда не регистрирует ивенты при старте — форсируем пересоздание панэли
-            if (_doc != null && _doc.panelSettings != null)
-            {
-                var ps = _doc.panelSettings;
-                _doc.panelSettings = null;
-                _doc.panelSettings = ps;
-            }
-
             Debug.Log($"[MainMenu] UI BUILT: rootChildren={root.childCount}, rootLayout={root.layout}, panel={(_doc != null && _doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
         }
 

@@ -15,8 +15,13 @@ namespace Fodinae.World.Terrain
     {
         private TerrainVertex[] _vertexBuffer = Array.Empty<TerrainVertex>();
         private float _cellSize;
-        private static readonly HashSet<CellType> GlowingCellTypes = new() { CellType.Lava };
-
+        private static readonly Vector2[] _localUVsBuffer =
+        {
+            new(-0.70710678f, -0.70710678f),
+            new(0.70710678f, -0.70710678f),
+            new(0.70710678f, 0.70710678f),
+            new(-0.70710678f, 0.70710678f),
+        };
         public TerrainVertex[] VertexBuffer => _vertexBuffer;
 
         public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
@@ -51,38 +56,8 @@ namespace Fodinae.World.Terrain
         private void FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int worldWidth, int worldHeight, bool isBackground, ref int vIdx, List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod)
         {
-            if (unityY >= worldHeight)
+            if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
             {
-                float posX = x * _cellSize;
-                float posY = y * _cellSize;
-                _vertexBuffer[vIdx + 0].Position = new Vector3(posX, posY, 0);
-                _vertexBuffer[vIdx + 1].Position = new Vector3(posX + _cellSize, posY, 0);
-                _vertexBuffer[vIdx + 2].Position = new Vector3(posX + _cellSize, posY + _cellSize, 0);
-                _vertexBuffer[vIdx + 3].Position = new Vector3(posX, posY + _cellSize, 0);
-                Color clear = Color.clear;
-                _vertexBuffer[vIdx + 0].Color = clear;
-                _vertexBuffer[vIdx + 1].Color = clear;
-                _vertexBuffer[vIdx + 2].Color = clear;
-                _vertexBuffer[vIdx + 3].Color = clear;
-                Vector4 clearUV3 = new Vector4(x, y, 0, 0);
-                _vertexBuffer[vIdx + 0].UV3 = clearUV3;
-                _vertexBuffer[vIdx + 1].UV3 = clearUV3;
-                _vertexBuffer[vIdx + 2].UV3 = clearUV3;
-                _vertexBuffer[vIdx + 3].UV3 = clearUV3;
-                Vector4 clearUV6 = Vector4.zero;
-                _vertexBuffer[vIdx + 0].UV6 = clearUV6;
-                _vertexBuffer[vIdx + 1].UV6 = clearUV6;
-                _vertexBuffer[vIdx + 2].UV6 = clearUV6;
-                _vertexBuffer[vIdx + 3].UV6 = clearUV6;
-
-                var toSubMesh = subMeshIndices[0];
-                toSubMesh.Add(vIdx + 0);
-                toSubMesh.Add(vIdx + 3);
-                toSubMesh.Add(vIdx + 2);
-                toSubMesh.Add(vIdx + 2);
-                toSubMesh.Add(vIdx + 1);
-                toSubMesh.Add(vIdx + 0);
-
                 vIdx += 4;
                 return;
             }
@@ -93,30 +68,10 @@ namespace Fodinae.World.Terrain
 
             CachedCellData ccd = cellCache.GetCellData(cx, cy);
             CellType cellFgType = ccd.Type;
-
-            float glowX = 0f, glowY = 0f, glowZ = 0f;
-            bool isGlowSource = GlowingCellTypes.Contains(cellFgType);
-
-            if (isGlowSource)
+            if (cellFgType == CellType.Unloaded)
             {
-                glowX = gridX + 0.5f;
-                glowY = unityY + 0.5f;
-                glowZ = 1f;
-            }
-            else
-            {
-                for (int dy = -1; dy <= 1 && glowZ == 0f; dy++)
-                {
-                    for (int dx = -1; dx <= 1 && glowZ == 0f; dx++)
-                    {
-                        if ((dx != 0 || dy != 0) && GlowingCellTypes.Contains(cellCache.GetCellData(cx + dx, cy + dy).Type))
-                        {
-                            glowX = gridX + dx + 0.5f;
-                            glowY = unityY + dy + 0.5f;
-                            glowZ = 1f;
-                        }
-                    }
-                }
+                vIdx += 4;
+                return;
             }
 
             CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
@@ -235,31 +190,56 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx].UV2 = tileSizeVec;
             _vertexBuffer[vIdx].UV3 = worldPosVec;
             _vertexBuffer[vIdx].UV4 = animDataVec;
-            _vertexBuffer[vIdx].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv00, anchor0.x, anchor0.y);
+            bool isGlowing = (data.Properties & CellConfigProperties.Glowing) != 0;
+            Color materialColor = data.MinimapColor.maxColorComponent > 0.05f
+                ? data.MinimapColor
+                : new Color(0.5f, 0.5f, 0.5f, 1f);
+            Color32 materialColor32 = materialColor;
+            int packedLightingColor = materialColor32.r |
+                (materialColor32.g << 8) |
+                (materialColor32.b << 16);
+
+            _vertexBuffer[vIdx].UV5 = new Vector4(
+                textureType,
+                isRelief ? reliefMask : sv00,
+                _localUVsBuffer[0].x,
+                _localUVsBuffer[0].y);
 
             _vertexBuffer[vIdx + 1].Color = color;
             _vertexBuffer[vIdx + 1].UV1 = atlasRect;
             _vertexBuffer[vIdx + 1].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 1].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 1].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 1].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv10, anchor1.x, anchor1.y);
+            _vertexBuffer[vIdx + 1].UV5 = new Vector4(
+                textureType,
+                isRelief ? reliefMask : sv10,
+                _localUVsBuffer[1].x,
+                _localUVsBuffer[1].y);
 
             _vertexBuffer[vIdx + 2].Color = color;
             _vertexBuffer[vIdx + 2].UV1 = atlasRect;
             _vertexBuffer[vIdx + 2].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 2].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 2].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 2].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv11, anchor2.x, anchor2.y);
+            _vertexBuffer[vIdx + 2].UV5 = new Vector4(
+                textureType,
+                isRelief ? reliefMask : sv11,
+                _localUVsBuffer[2].x,
+                _localUVsBuffer[2].y);
 
             _vertexBuffer[vIdx + 3].Color = color;
             _vertexBuffer[vIdx + 3].UV1 = atlasRect;
             _vertexBuffer[vIdx + 3].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 3].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 3].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 3].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv01, anchor3.x, anchor3.y);
+            _vertexBuffer[vIdx + 3].UV5 = new Vector4(
+                textureType,
+                isRelief ? reliefMask : sv01,
+                _localUVsBuffer[3].x,
+                _localUVsBuffer[3].y);
 
             float glowFlags = 0f;
-            if (glowZ > 0.5f)
+            if (isGlowing)
             {
                 glowFlags += 1f;
             }
@@ -269,8 +249,26 @@ namespace Fodinae.World.Terrain
                 glowFlags += 2f;
             }
 
-            float sameCatMask = isSameCell ? precalc.CellSameCatMasks[x, y] : 0f;
-            Vector4 glowVec = new Vector4(glowX, glowY, glowFlags, sameCatMask);
+            float visualBlendMask = isSameCell ? precalc.CellVisualBlendMasks[x, y] : 0f;
+            byte solidConnectivityMask = isSameCell
+                ? precalc.CellSolidBoundaryMasks[x, y]
+                : (byte)0;
+            float solidBoundaryMask = solidConnectivityMask & 15;
+            float solidDiagonalMask = solidConnectivityMask >> 4;
+            bool hasRoundedPhysicalContour =
+                !isBackground && MapManager.IsRoundableLoose(cellFgType);
+            float emissionPower = isGlowing
+                ? Mathf.Max(1f / byte.MaxValue, materialColor.a)
+                : 0f;
+            float packedLightingFlags = solidBoundaryMask +
+                (isGlowing ? 16f : 0f) +
+                (hasRoundedPhysicalContour ? 32f : 0f) +
+                (emissionPower * 0.25f);
+            Vector4 glowVec = new Vector4(
+                packedLightingColor,
+                packedLightingFlags,
+                glowFlags + (solidDiagonalMask * 4f),
+                visualBlendMask);
             _vertexBuffer[vIdx + 0].UV6 = glowVec;
             _vertexBuffer[vIdx + 1].UV6 = glowVec;
             _vertexBuffer[vIdx + 2].UV6 = glowVec;

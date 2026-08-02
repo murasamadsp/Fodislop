@@ -1,465 +1,485 @@
-#pragma kernel CSMain
-#pragma kernel FilterLighting
-#pragma kernel InitializeSdfSeeds
-#pragma kernel JumpFloodSdf
-#pragma kernel FinalizeSdf
+#pragma kernel SolveCascade
+#pragma kernel ResolveDirect
+#pragma kernel SolveDiffuseBounce
+#pragma kernel CompositeLighting
 
-#define MAX_RAY_STEPS 64
+#define PI2 6.28318530718
+#define MAX_INTERVAL_STEPS 64
 
-struct LightData
-{
-    float4 positionRadius;
-    float4 colorIntensity;
-};
-
-Texture2D<float> _OcclusionTexture;
-Texture2D<float2> _SdfSeedInput;
-RWTexture2D<float2> _SdfSeedOutput;
-RWTexture2D<float> _SdfOutput;
-Texture2D<float> _SdfTexture;
-Texture2D<float4> _StaticLightingTexture;
-StructuredBuffer<LightData> _Lights;
-StructuredBuffer<int2> _LightTileRanges;
-StructuredBuffer<int> _LightTileIndices;
+Texture2D<float4> _MaterialField;
+Texture2D<float4> _EmissionField;
+RWStructuredBuffer<uint3> _RadianceAtlas;
+RWTexture2D<float4> _DirectTexture;
+Texture2D<float4> _DirectInput;
+RWTexture2D<float4> _BounceTexture;
+Texture2D<float4> _BounceInput;
 RWTexture2D<float4> _Result;
-Texture2D<float4> _LightFilterInput;
-RWTexture2D<float4> _LightFilterOutput;
 
-int2 _GridSize;
-int2 _OcclusionSize;
-float2 _OcclusionGridScale;
-int _OcclusionYFlip;
-int2 _SdfSize;
-int _SdfJumpStep;
-int2 _OutputSize;
-int2 _LightTileGridSize;
-int _MaxRaySteps;
-int _DebugView;
-int _LightingPassMode;
+int2 _FieldSize;
+int2 _BounceSize;
 float4 _WorldRect;
 float4 _AmbientColor;
-float _CellSize;
-float _LightTileWorldSize;
-float _AoStrength;
-float _AttenuationFactor;
+float4 _EmptyExtinctionRgb;
+float4 _SolidExtinctionRgb;
 float _MinimumTransmission;
-float _OpaqueOcclusionThreshold;
-float _RaymarchedShadowStrength;
-float _ShadowSoftness;
-float _OccluderHeight;
-float _ShadowHeightSoftness;
-float _ShadowDensity;
-float _MinimumTraceStep;
-float _MaximumTraceStep;
-float _SdfSolidThreshold;
-float _CornerSealRadius;
-float _CoveragePixelsPerCell;
-int2 _LightFilterDirection;
-float _LightFilterStrength;
-float _LightFilterOcclusionSharpness;
-float _AoCardinalDistance;
-float _AoDiagonalDistance;
-float _AoFarDistance;
-float _AoFarWeight;
-float _AoSolidInteriorWeight;
-float _AoBoundaryWeight;
+float _BounceStrength;
+float _EmissionScale;
+float _MaximumLightMultiplier;
+float _CellSize;
+float _AmbientOcclusionRadiusCells;
+float _AmbientOcclusionStrength;
+float _TransmittanceDebugDistanceCells;
+int _DebugView;
+int _MaterialYFlip;
+int _MaximumIntervalSteps;
+int _EnableAmbientOcclusion;
+int _EnableGlobalIllumination;
+
+int _CascadeOffset;
+int2 _CascadeProbeSize;
+int _CascadeProbeSpacing;
+int _CascadeDirectionCount;
+float2 _CascadeInterval;
+int _FarCascadeOffset;
+int2 _FarCascadeProbeSize;
+int _FarCascadeProbeSpacing;
+int _FarCascadeDirectionCount;
+int _HasFarCascade;
+int _CascadeEntryCount;
+int _CascadeDispatchRowWidth;
 
 SamplerState sampler_LinearClamp;
 
-float LoadDetailedOpacity(float2 gridPosition);
-
-float2 ToOcclusionGrid(float2 gridPosition)
+uint2 PackRadiance(float3 radiance, float nearSolidPath)
 {
-    // Rasterizing into a RenderTexture flips Y on Metal/D3D-like APIs, while
-    // compute thread coordinates remain unflipped. Keep the lightmap in world
-    // order and compensate only when reading rasterized terrain coverage.
-    if (_OcclusionYFlip != 0)
+    return uint2(
+        f32tof16(radiance.r) | (f32tof16(radiance.g) << 16),
+        f32tof16(radiance.b) | (f32tof16(nearSolidPath) << 16));
+}
+
+float3 UnpackRadiance(uint2 packedRadiance)
+{
+    return float3(
+        f16tof32(packedRadiance.x & 0xffff),
+        f16tof32(packedRadiance.x >> 16),
+        f16tof32(packedRadiance.y & 0xffff));
+}
+
+float UnpackNearSolidPath(uint2 packedRadiance)
+{
+    return f16tof32(packedRadiance.y >> 16);
+}
+
+uint PackPath(float2 pathLength)
+{
+    return f32tof16(pathLength.x) | (f32tof16(pathLength.y) << 16);
+}
+
+uint3 PackInterval(float3 radiance, float nearSolidPath, float2 pathLength)
+{
+    uint2 packedRadiance = PackRadiance(radiance, nearSolidPath);
+    return uint3(packedRadiance, PackPath(pathLength));
+}
+
+float2 UnpackPath(uint3 packedInterval)
+{
+    return float2(
+        f16tof32(packedInterval.z & 0xffff),
+        f16tof32(packedInterval.z >> 16));
+}
+
+float3 Transmission(float2 pathLength)
+{
+    float3 opticalDepth =
+        _EmptyExtinctionRgb.rgb * pathLength.x +
+        _SolidExtinctionRgb.rgb * pathLength.y;
+    return exp(-opticalDepth);
+}
+
+float Max3(float3 value)
+{
+    return max(value.x, max(value.y, value.z));
+}
+
+float2 OutputUv(float2 pixelPosition)
+{
+    return saturate(pixelPosition / float2(_FieldSize));
+}
+
+float2 MaterialUv(float2 pixelPosition)
+{
+    float2 uv = OutputUv(pixelPosition);
+    if (_MaterialYFlip != 0)
     {
-        gridPosition.y = float(_GridSize.y) - gridPosition.y;
+        uv.y = 1.0 - uv.y;
     }
 
-    return gridPosition;
+    return uv;
 }
 
-float SampleSdf(float2 gridPosition)
+float SampleOccupancy(float2 pixelPosition, float mipLevel)
 {
-    gridPosition = ToOcclusionGrid(gridPosition);
-    float2 uv = saturate(gridPosition / float2(_GridSize));
-    return _SdfTexture.SampleLevel(sampler_LinearClamp, uv, 0);
+    return _MaterialField.SampleLevel(
+        sampler_LinearClamp,
+        MaterialUv(pixelPosition),
+        mipLevel).a;
 }
 
-float TraceHeightAwareVisibility(float2 worldPosition, float2 lightPosition, float lightHeight)
+float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
 {
-    float2 worldRay = lightPosition - worldPosition;
-    float distanceSquared = dot(worldRay, worldRay);
-    float inverseLightDistance = rsqrt(max(distanceSquared, 1.0e-8));
-    float lightDistance = distanceSquared * inverseLightDistance;
-    float2 rayDirection = worldRay * inverseLightDistance;
-    float minimumStep = max(_MinimumTraceStep * _CellSize, _CellSize / max(_CoveragePixelsPerCell, 1.0));
-    float maximumStep = max(minimumStep, _MaximumTraceStep * _CellSize);
-    float detailRadius = 0.75 / max(_CoveragePixelsPerCell, 1.0);
-    float travel = minimumStep;
-    float opticalDepth = 0.0;
-    float2 startGrid = (worldPosition - _WorldRect.xy) / _CellSize;
-    int2 receiverCell = int2(floor(startGrid));
-    bool insideReceiverMass =
-        LoadDetailedOpacity(startGrid) >= max(_OpaqueOcclusionThreshold, 0.1);
+    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
+    return length(rayDirection * cellsPerPixel * pathLengthInPixels);
+}
+
+float4 SampleEmission(float2 pixelPosition, float mipLevel)
+{
+    return _EmissionField.SampleLevel(
+        sampler_LinearClamp,
+        MaterialUv(pixelPosition),
+        mipLevel);
+}
+
+[numthreads(64, 1, 1)]
+void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint localIndex = dispatchId.x + dispatchId.y * (uint)_CascadeDispatchRowWidth;
+    if (localIndex >= (uint)_CascadeEntryCount)
+    {
+        return;
+    }
+
+    uint directionIndex = localIndex % (uint)_CascadeDirectionCount;
+    uint probeIndex = localIndex / (uint)_CascadeDirectionCount;
+    int2 probe = int2(
+        probeIndex % (uint)_CascadeProbeSize.x,
+        probeIndex / (uint)_CascadeProbeSize.x);
+    float2 origin = (float2(probe) + 0.5) * _CascadeProbeSpacing;
+    float intervalLength = max(_CascadeInterval.y - _CascadeInterval.x, 1.0);
+    int stepCount = clamp(
+        int(ceil(intervalLength)),
+        1,
+        min(_MaximumIntervalSteps, MAX_INTERVAL_STEPS));
+    float stepLength = intervalLength / float(stepCount);
+    float2 pathLength = 0.0;
+    float nearSolidPath = 0.0;
+    float3 radiance = 0.0;
+    float2 regionCellCount = _WorldRect.zw / _CellSize;
+    int2 receiverCell = int2(floor(origin * regionCellCount / float2(_FieldSize)));
+    bool startsInSolid = SampleOccupancy(origin, 0.0) >= 0.5;
+    float angle = (float(directionIndex) + 0.5) * PI2 /
+        float(_CascadeDirectionCount);
+    float raySine;
+    float rayCosine;
+    sincos(angle, raySine, rayCosine);
+    float2 rayDirection = float2(rayCosine, raySine);
+    float physicalStepLength = PathLengthInCells(rayDirection, stepLength);
+    float samplingMip = max(0.0, log2(max(stepLength, 1.0)));
 
     [loop]
-    for (int stepIndex = 0; stepIndex < MAX_RAY_STEPS; stepIndex++)
+    for (int stepIndex = 0; stepIndex < MAX_INTERVAL_STEPS; stepIndex++)
     {
-        float visibility = exp2(-max(_ShadowDensity, 0.0) * opticalDepth);
-        if (stepIndex >= _MaxRaySteps || travel >= lightDistance || visibility <= _MinimumTransmission)
+        float3 currentTransmission = Transmission(pathLength);
+        if (stepIndex >= stepCount || Max3(currentTransmission) <= _MinimumTransmission)
         {
             break;
         }
 
-        float normalizedTravel = saturate(travel / lightDistance);
-        float2 sampleWorldPosition = worldPosition + rayDirection * travel;
-        float2 sampleGridPosition = (sampleWorldPosition - _WorldRect.xy) / _CellSize;
-        float coverage = LoadDetailedOpacity(sampleGridPosition);
-
-        if (insideReceiverMass)
+        float travel = _CascadeInterval.x + (float(stepIndex) + 0.5) * stepLength;
+        float2 samplePosition = origin + rayDirection * travel;
+        bool outside = any(samplePosition < 0.0) ||
+            any(samplePosition >= float2(_FieldSize));
+        if (outside)
         {
-            int2 sampleCell = int2(floor(sampleGridPosition));
-            if (all(sampleCell == receiverCell))
-            {
-                travel += minimumStep;
-                continue;
-            }
-
-            insideReceiverMass = false;
-        }
-
-        float sdfDistance = SampleSdf(sampleGridPosition);
-        float cornerDistance = 1.0e4;
-        float cornerCoverage = 0.0;
-        float cornerRadius = max(_CornerSealRadius, 0.0);
-        float2 cornerVertex = floor(sampleGridPosition + 0.5);
-        float2 fromCornerVertex = abs(sampleGridPosition - cornerVertex);
-        float cornerChebyshevDistance = max(fromCornerVertex.x, fromCornerVertex.y);
-        bool cornerInsideGrid = all(cornerVertex > 0.0) && all(cornerVertex < float2(_GridSize));
-        if (cornerRadius > 0.0 && cornerInsideGrid &&
-            cornerChebyshevDistance <= sdfDistance + cornerRadius)
-        {
-            float southWest = LoadDetailedOpacity(cornerVertex + float2(-0.5, -0.5));
-            float southEast = LoadDetailedOpacity(cornerVertex + float2(0.5, -0.5));
-            float northWest = LoadDetailedOpacity(cornerVertex + float2(-0.5, 0.5));
-            float northEast = LoadDetailedOpacity(cornerVertex + float2(0.5, 0.5));
-            float diagonalPairCoverage = max(
-                min(southWest, northEast),
-                min(southEast, northWest));
-            float diagonalSeal = step(saturate(_SdfSolidThreshold), diagonalPairCoverage);
-            cornerDistance = lerp(
-                cornerDistance,
-                max(cornerChebyshevDistance - cornerRadius, 0.0),
-                diagonalSeal);
-            cornerCoverage = diagonalSeal *
-                (1.0 - smoothstep(0.0, cornerRadius, cornerChebyshevDistance));
-        }
-
-        sdfDistance = min(sdfDistance, cornerDistance);
-        coverage = max(coverage, cornerCoverage);
-        float rayHeight = max(lightHeight, 0.01) * normalizedTravel;
-        float heightVisibility = smoothstep(
-            _OccluderHeight - max(_ShadowHeightSoftness, 0.001),
-            _OccluderHeight + max(_ShadowHeightSoftness, 0.001),
-            rayHeight);
-        float coneRadius = max(
-            detailRadius,
-            max(_ShadowSoftness, 0.001) * normalizedTravel);
-        float edgeDistance = max(sdfDistance - detailRadius, 0.0);
-        float silhouetteOcclusion = 1.0 - smoothstep(0.0, coneRadius, edgeDistance);
-        float localOcclusion = max(coverage, silhouetteOcclusion) * (1.0 - heightVisibility);
-
-        // Integrate optical thickness instead of keeping the darkest single
-        // SDF sample. This removes detached fragments, preserves continuous
-        // texture alpha and makes a thick blocker stronger than a thin edge.
-        float sphereStep = clamp(sdfDistance * _CellSize * 0.75, minimumStep, maximumStep);
-        opticalDepth += saturate(localOcclusion) * (sphereStep / max(_CellSize, 1.0e-5));
-        travel += sphereStep;
-    }
-
-    return saturate(exp2(-max(_ShadowDensity, 0.0) * opticalDepth));
-}
-
-float LoadDetailedOpacity(float2 gridPosition)
-{
-    gridPosition = ToOcclusionGrid(gridPosition);
-    int2 texel = clamp(
-        int2(floor(gridPosition * _OcclusionGridScale)),
-        int2(0, 0),
-        _OcclusionSize - 1);
-    return _OcclusionTexture.Load(int3(texel, 0));
-}
-
-float SampleOpacity(float2 gridPosition)
-{
-    gridPosition = ToOcclusionGrid(gridPosition);
-    float2 texelPosition = gridPosition * _OcclusionGridScale - 0.5;
-    int2 baseTexel = int2(floor(texelPosition));
-    float2 blend = frac(texelPosition);
-
-    int2 maximumTexel = _OcclusionSize - 1;
-    float bottomLeft = _OcclusionTexture.Load(int3(clamp(baseTexel, int2(0, 0), maximumTexel), 0));
-    float bottomRight = _OcclusionTexture.Load(int3(clamp(baseTexel + int2(1, 0), int2(0, 0), maximumTexel), 0));
-    float topLeft = _OcclusionTexture.Load(int3(clamp(baseTexel + int2(0, 1), int2(0, 0), maximumTexel), 0));
-    float topRight = _OcclusionTexture.Load(int3(clamp(baseTexel + int2(1, 1), int2(0, 0), maximumTexel), 0));
-    return lerp(lerp(bottomLeft, bottomRight, blend.x), lerp(topLeft, topRight, blend.x), blend.y);
-}
-
-float CalculateAmbientOcclusion(float2 gridPosition)
-{
-    float center = SampleOpacity(gridPosition);
-
-    float cardinal =
-        SampleOpacity(gridPosition + float2(_AoCardinalDistance, 0.0)) +
-        SampleOpacity(gridPosition + float2(-_AoCardinalDistance, 0.0)) +
-        SampleOpacity(gridPosition + float2(0.0, _AoCardinalDistance)) +
-        SampleOpacity(gridPosition + float2(0.0, -_AoCardinalDistance));
-
-    float diagonal =
-        SampleOpacity(gridPosition + float2(_AoDiagonalDistance, _AoDiagonalDistance)) +
-        SampleOpacity(gridPosition + float2(-_AoDiagonalDistance, _AoDiagonalDistance)) +
-        SampleOpacity(gridPosition + float2(_AoDiagonalDistance, -_AoDiagonalDistance)) +
-        SampleOpacity(gridPosition + float2(-_AoDiagonalDistance, -_AoDiagonalDistance));
-
-    float surroundingOcclusion = (cardinal + (diagonal * 0.7)) / 6.8;
-    float farOcclusion = 0.25 * (
-        SampleOpacity(gridPosition + float2(_AoFarDistance, 0.0)) +
-        SampleOpacity(gridPosition + float2(-_AoFarDistance, 0.0)) +
-        SampleOpacity(gridPosition + float2(0.0, _AoFarDistance)) +
-        SampleOpacity(gridPosition + float2(0.0, -_AoFarDistance)));
-
-    float farWeight = saturate(_AoFarWeight);
-    float openCavity = (1.0 - center) * lerp(surroundingOcclusion, farOcclusion, farWeight);
-    float solidInterior = center * surroundingOcclusion * _AoSolidInteriorWeight;
-    float openBoundary = (1.0 - center) * abs(center - surroundingOcclusion) * _AoBoundaryWeight;
-    float occlusion = saturate(max(openCavity, solidInterior) + openBoundary);
-    return saturate(1.0 - (occlusion * _AoStrength));
-}
-
-[numthreads(8, 8, 1)]
-void CSMain(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (dispatchId.x >= (uint)_OutputSize.x || dispatchId.y >= (uint)_OutputSize.y)
-    {
-        return;
-    }
-
-    float2 uv = (float2(dispatchId.xy) + 0.5) / float2(_OutputSize);
-    float2 worldPosition = _WorldRect.xy + (uv * _WorldRect.zw);
-    float2 gridPosition = (worldPosition - _WorldRect.xy) / _CellSize;
-    float4 staticLighting = _LightingPassMode == 0
-        ? float4(0.0, 0.0, 0.0, CalculateAmbientOcclusion(gridPosition))
-        : _StaticLightingTexture.Load(int3(dispatchId.xy, 0));
-    float ao = staticLighting.a;
-
-    if (_LightingPassMode != 0 && _DebugView == 1)
-    {
-        _Result[dispatchId.xy] = float4(ao.xxx, ao);
-        return;
-    }
-
-    if (_LightingPassMode != 0 && _DebugView == 2)
-    {
-        float opacity = SampleOpacity(gridPosition);
-        _Result[dispatchId.xy] = float4(opacity.xxx, ao);
-        return;
-    }
-
-    float3 directLight = 0.0;
-    int2 lightTile = clamp(
-        int2(floor((worldPosition - _WorldRect.xy) / _LightTileWorldSize)),
-        int2(0, 0),
-        _LightTileGridSize - 1);
-    int lightTileIndex = lightTile.y * _LightTileGridSize.x + lightTile.x;
-    int2 lightRange = _LightTileRanges[lightTileIndex];
-
-    [loop]
-    for (int localLightIndex = 0; localLightIndex < lightRange.y; localLightIndex++)
-    {
-        int lightIndex = _LightTileIndices[lightRange.x + localLightIndex];
-        LightData light = _Lights[lightIndex];
-        float2 toLight = light.positionRadius.xy - worldPosition;
-        float distanceToLight = length(toLight);
-        float radius = max(light.positionRadius.w, 0.001);
-        if (distanceToLight >= radius)
-        {
+            pathLength.x += physicalStepLength;
             continue;
         }
 
-        float normalizedDistance = saturate(distanceToLight / radius);
-        float rangeFade = 1.0 - normalizedDistance;
-        rangeFade = rangeFade * rangeFade * (3.0 - (2.0 * rangeFade));
-        float inverseSquareAttenuation = rcp(1.0 + (_AttenuationFactor * normalizedDistance * normalizedDistance));
-        float falloff = inverseSquareAttenuation * rangeFade;
-
-        float visibility = 1.0;
-        if (_RaymarchedShadowStrength > 0.001)
-        {
-            float tracedVisibility = TraceHeightAwareVisibility(
-                worldPosition,
-                light.positionRadius.xy,
-                light.positionRadius.z);
-            visibility = lerp(1.0, tracedVisibility, saturate(_RaymarchedShadowStrength));
-        }
-
-        directLight += light.colorIntensity.rgb * light.colorIntensity.a * falloff * visibility;
+        int2 sampleCell = int2(floor(
+            samplePosition * regionCellCount / float2(_FieldSize)));
+        bool insideReceiverCell = startsInSolid && all(sampleCell == receiverCell);
+        float occupancy = insideReceiverCell
+            ? 0.0
+            : saturate(SampleOccupancy(samplePosition, samplingMip));
+        float4 emission = SampleEmission(samplePosition, samplingMip);
+        float3 emittedRadiance =
+            max(emission.rgb, 0.0) * physicalStepLength * _EmissionScale;
+        radiance += currentTransmission * emittedRadiance;
+        pathLength += float2(1.0 - occupancy, occupancy) * physicalStepLength;
+        float sampleDistanceCells = PathLengthInCells(rayDirection, travel);
+        float nearSampleWeight = saturate(
+            ((_AmbientOcclusionRadiusCells - sampleDistanceCells) /
+            max(physicalStepLength, 0.0001)) + 0.5);
+        nearSolidPath += occupancy * physicalStepLength * nearSampleWeight;
     }
 
-    if (_LightingPassMode == 0)
+    if (_HasFarCascade != 0)
     {
-        // Static direct light and AO are cached until terrain, atlas, region or
-        // lighting settings change. Ambient is composed only in the dynamic pass.
-        _Result[dispatchId.xy] = float4(clamp(directLight, 0.0, 4.0), ao);
+        // Every cascade stores the next contiguous radial interval from the
+        // same receiver position. Interpolate the coarser probe field at this
+        // probe's position; offsetting the lookup to the near interval end
+        // would apply the far cascade's interval start twice and leave gaps.
+        float2 farProbePosition = origin / float(_FarCascadeProbeSpacing) - 0.5;
+        int2 farProbeBase = int2(floor(farProbePosition));
+        float2 farProbeBlend = frac(farProbePosition);
+        uint directionBranchCount = clamp(
+            (uint)_FarCascadeDirectionCount / (uint)_CascadeDirectionCount,
+            1u,
+            4u);
+        uint farDirectionBase = directionIndex * directionBranchCount;
+        float3 farRadiance = 0.0;
+        float2 farPathLength = 0.0;
+        float farNearSolidPath = 0.0;
+
+        [loop]
+        for (uint farDirectionBranch = 0u; farDirectionBranch < directionBranchCount;
+            farDirectionBranch++)
+        {
+            uint farDirection = (farDirectionBase + farDirectionBranch) %
+                (uint)_FarCascadeDirectionCount;
+
+            [unroll]
+            for (int farY = 0; farY < 2; farY++)
+            {
+                [unroll]
+                for (int farX = 0; farX < 2; farX++)
+                {
+                    int2 farProbe = clamp(
+                        farProbeBase + int2(farX, farY),
+                        int2(0, 0),
+                        _FarCascadeProbeSize - 1);
+                    int farIndex = _FarCascadeOffset +
+                        (farProbe.y * _FarCascadeProbeSize.x + farProbe.x) *
+                        _FarCascadeDirectionCount + (int)farDirection;
+                    float probeWeight =
+                        (farX == 0 ? 1.0 - farProbeBlend.x : farProbeBlend.x) *
+                        (farY == 0 ? 1.0 - farProbeBlend.y : farProbeBlend.y) /
+                        float(directionBranchCount);
+                    uint3 farPackedInterval = _RadianceAtlas[farIndex];
+                    farRadiance +=
+                        UnpackRadiance(farPackedInterval.xy) * probeWeight;
+                    farNearSolidPath +=
+                        UnpackNearSolidPath(farPackedInterval.xy) * probeWeight;
+                    farPathLength += UnpackPath(farPackedInterval) * probeWeight;
+                }
+            }
+        }
+
+        radiance += Transmission(pathLength) * farRadiance;
+        pathLength += farPathLength;
+        nearSolidPath += farNearSolidPath;
+    }
+
+    int atlasIndex = _CascadeOffset + (int)localIndex;
+    _RadianceAtlas[atlasIndex] = PackInterval(
+        radiance,
+        nearSolidPath,
+        pathLength);
+}
+
+[numthreads(8, 8, 1)]
+void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (any(dispatchId.xy >= (uint2)_FieldSize))
+    {
         return;
     }
 
-    float3 combinedDirectLight = staticLighting.rgb + directLight;
-    float3 lighting = (_AmbientColor.rgb + combinedDirectLight) * ao;
+    int2 pixel = int2(dispatchId.xy);
+    int probeIndex = pixel.y * _FieldSize.x + pixel.x;
+    float3 radiance = 0.0;
+    float visibility = 0.0;
+
+    if (_DebugView == 4)
+    {
+        float3 localTransmission = 0.0;
+        float2 origin = float2(pixel) + 0.5;
+        float2 regionCellCount = _WorldRect.zw / _CellSize;
+        int2 receiverCell = int2(floor(
+            origin * regionCellCount / float2(_FieldSize)));
+        bool startsInSolid = SampleOccupancy(origin, 0.0) >= 0.5;
+
+        [loop]
+        for (int debugDirection = 0; debugDirection < 32; debugDirection++)
+        {
+            float debugAngle = (float(debugDirection) + 0.5) * PI2 / 32.0;
+            float debugSine;
+            float debugCosine;
+            sincos(debugAngle, debugSine, debugCosine);
+            float2 debugRay = float2(debugCosine, debugSine);
+            float pixelsPerCell = length(float2(_FieldSize) / regionCellCount * debugRay);
+            float debugStepPixels =
+                (_TransmittanceDebugDistanceCells * pixelsPerCell) / 16.0;
+            float debugStepCells = PathLengthInCells(debugRay, debugStepPixels);
+            float2 debugPath = 0.0;
+
+            [unroll]
+            for (int debugStep = 0; debugStep < 16; debugStep++)
+            {
+                float2 samplePosition = origin + debugRay *
+                    ((float(debugStep) + 0.5) * debugStepPixels);
+                if (any(samplePosition < 0.0) ||
+                    any(samplePosition >= float2(_FieldSize)))
+                {
+                    debugPath.x += debugStepCells;
+                    continue;
+                }
+
+                int2 sampleCell = int2(floor(
+                    samplePosition * regionCellCount / float2(_FieldSize)));
+                bool insideReceiverCell =
+                    startsInSolid && all(sampleCell == receiverCell);
+                float occupancy = insideReceiverCell
+                    ? 0.0
+                    : saturate(SampleOccupancy(samplePosition, 0.0));
+                debugPath += float2(1.0 - occupancy, occupancy) * debugStepCells;
+            }
+
+            localTransmission += Transmission(debugPath);
+        }
+
+        _DirectTexture[pixel] = float4(localTransmission / 32.0, 1.0);
+        return;
+    }
+
+    [unroll]
+    for (int direction = 0; direction < 4; direction++)
+    {
+        int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
+        uint3 packedInterval = _RadianceAtlas[atlasIndex];
+        radiance += UnpackRadiance(packedInterval.xy);
+        float nearSolidPath = UnpackNearSolidPath(packedInterval.xy);
+        float normalizedOcclusion = nearSolidPath /
+            max(_AmbientOcclusionRadiusCells, 0.0001);
+        visibility += exp(-_AmbientOcclusionStrength * normalizedOcclusion);
+    }
+
+    float3 directOutput = radiance * 0.25;
+    float ambientOcclusion = _EnableAmbientOcclusion != 0
+        ? saturate(visibility * 0.25)
+        : 1.0;
+    _DirectTexture[pixel] = float4(directOutput, ambientOcclusion);
+}
+
+[numthreads(8, 8, 1)]
+void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (any(dispatchId.xy >= (uint2)_BounceSize))
+    {
+        return;
+    }
+
+    int2 pixel = int2(dispatchId.xy);
+    if (_EnableGlobalIllumination == 0)
+    {
+        _BounceTexture[pixel] = 0.0;
+        return;
+    }
+
+    float2 fieldPosition = (float2(pixel) + 0.5) * float2(_FieldSize) / float2(_BounceSize);
+    float3 bounced = 0.0;
+    float weight = 0.0;
+    float directionRotation = frac(
+        (float(pixel.x) * 0.06711056) +
+        (float(pixel.y) * 0.00583715)) * (PI2 / 16.0);
+
+    [unroll]
+    for (int direction = 0; direction < 16; direction++)
+    {
+        float angle =
+            ((float(direction) + 0.5) * PI2 / 16.0) + directionRotation;
+        float raySine;
+        float rayCosine;
+        sincos(angle, raySine, rayCosine);
+        float2 rayDirection = float2(rayCosine, raySine);
+        float2 pathLength = 0.0;
+        float physicalStepLength = PathLengthInCells(rayDirection, 2.0);
+
+        [unroll]
+        for (int stepIndex = 1; stepIndex <= 8; stepIndex++)
+        {
+            float2 samplePosition = fieldPosition + rayDirection * (float(stepIndex) * 2.0);
+            if (any(samplePosition < 0.0) || any(samplePosition >= float2(_FieldSize)))
+            {
+                break;
+            }
+
+            float4 material = _MaterialField.SampleLevel(sampler_LinearClamp, MaterialUv(samplePosition), 0);
+            float3 incident = _DirectInput.SampleLevel(sampler_LinearClamp, OutputUv(samplePosition), 0).rgb;
+            float sampleWeight = material.a / float(stepIndex * stepIndex);
+            bounced += Transmission(pathLength) * incident * material.rgb * sampleWeight;
+            weight += sampleWeight;
+            pathLength += float2(1.0 - material.a, material.a) * physicalStepLength;
+            if (material.a >= 0.95)
+            {
+                break;
+            }
+        }
+    }
+
+    _BounceTexture[pixel] = float4(bounced / max(weight, 1.0) * _BounceStrength, 1.0);
+}
+
+[numthreads(8, 8, 1)]
+void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (any(dispatchId.xy >= (uint2)_FieldSize))
+    {
+        return;
+    }
+
+    int2 pixel = int2(dispatchId.xy);
+    float2 uv = (float2(pixel) + 0.5) / float2(_FieldSize);
+    int2 materialPixel = pixel;
+    if (_MaterialYFlip != 0)
+    {
+        materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
+    }
+
+    float4 material = _MaterialField.Load(int3(materialPixel, 0));
+    float4 emission = _EmissionField.Load(int3(materialPixel, 0));
+    if (_DebugView == 1)
+    {
+        _Result[pixel] = float4(material.aaa, 1.0);
+        return;
+    }
+
+    if (_DebugView == 2)
+    {
+        _Result[pixel] = float4(material.rgb, 1.0);
+        return;
+    }
 
     if (_DebugView == 3)
     {
-        lighting = combinedDirectLight;
-    }
-
-    // Keep AO in alpha so the two reconstruction passes can isolate direct
-    // light without evaluating the AO neighbourhood again for every tap.
-    _Result[dispatchId.xy] = float4(clamp(lighting, 0.0, 4.0), ao);
-}
-
-[numthreads(8, 8, 1)]
-void FilterLighting(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (dispatchId.x >= (uint)_OutputSize.x || dispatchId.y >= (uint)_OutputSize.y)
-    {
+        _Result[pixel] = float4(emission.rgb, 1.0);
         return;
     }
 
-    int2 centerPixel = int2(dispatchId.xy);
-    float4 centerLighting = _LightFilterInput.Load(int3(centerPixel, 0));
-    float2 centerUv = (float2(centerPixel) + 0.5) / float2(_OutputSize);
-    float2 centerGridPosition = centerUv * float2(_GridSize);
-    float centerOpacity = SampleOpacity(centerGridPosition);
-    float centerAo = centerLighting.a;
-    float3 centerDirect = max(
-        centerLighting.rgb / max(centerAo, 1.0e-4) - _AmbientColor.rgb,
-        0.0);
+    float4 direct = _DirectInput.Load(int3(pixel, 0));
+    float3 bounce = _EnableGlobalIllumination != 0
+        ? _BounceInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb
+        : 0.0;
+    float ao = direct.a;
+    float3 result = (_AmbientColor.rgb * ao) + direct.rgb + bounce;
 
-    // Five-tap Gaussian reconstruction removes discrete visibility bands.
-    // Occlusion similarity prevents the filter from carrying light through
-    // the boundary between open and opaque cells.
-    float3 accumulatedDirect = 0.0;
-    float accumulatedWeight = 0.0;
-
-    [unroll]
-    for (int tap = -2; tap <= 2; tap++)
+    if (_DebugView == 4)
     {
-        int2 samplePixel = clamp(
-            centerPixel + (_LightFilterDirection * tap),
-            int2(0, 0),
-            _OutputSize - 1);
-        float2 sampleUv = (float2(samplePixel) + 0.5) / float2(_OutputSize);
-        float2 sampleGridPosition = sampleUv * float2(_GridSize);
-        float sampleOpacity = SampleOpacity(sampleGridPosition);
-        float4 sampleLightingAndAo = _LightFilterInput.Load(int3(samplePixel, 0));
-        float sampleAo = sampleLightingAndAo.a;
-        float3 sampleLighting = sampleLightingAndAo.rgb;
-        float3 sampleDirect = max(
-            sampleLighting / max(sampleAo, 1.0e-4) - _AmbientColor.rgb,
-            0.0);
-        float edgeWeight = exp2(
-            -abs(sampleOpacity - centerOpacity) * max(_LightFilterOcclusionSharpness, 0.0));
-        int absoluteTap = abs(tap);
-        float spatialWeight = absoluteTap == 0 ? 6.0 : (absoluteTap == 1 ? 4.0 : 1.0);
-        float weight = spatialWeight * edgeWeight;
-        accumulatedDirect += sampleDirect * weight;
-        accumulatedWeight += weight;
+        result = direct.rgb;
+    }
+    else if (_DebugView == 5)
+    {
+        result = direct.rgb;
+    }
+    else if (_DebugView == 6)
+    {
+        result = bounce;
+    }
+    else if (_DebugView == 7)
+    {
+        result = ao.xxx;
     }
 
-    float3 filteredDirect = accumulatedDirect / max(accumulatedWeight, 1.0e-5);
-    float3 reconstructedDirect = lerp(
-        centerDirect,
-        filteredDirect,
-        saturate(_LightFilterStrength));
-    _LightFilterOutput[centerPixel] = float4(
-        (_AmbientColor.rgb + reconstructedDirect) * centerAo,
-        centerLighting.a);
-}
-
-[numthreads(8, 8, 1)]
-void InitializeSdfSeeds(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (dispatchId.x >= (uint)_SdfSize.x || dispatchId.y >= (uint)_SdfSize.y)
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float coverage = _OcclusionTexture.Load(int3(pixel, 0));
-    _SdfSeedOutput[pixel] = coverage >= saturate(_SdfSolidThreshold)
-        ? float2(pixel)
-        : float2(-1.0, -1.0);
-}
-
-[numthreads(8, 8, 1)]
-void JumpFloodSdf(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (dispatchId.x >= (uint)_SdfSize.x || dispatchId.y >= (uint)_SdfSize.y)
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float2 bestSeed = _SdfSeedInput.Load(int3(pixel, 0));
-    float bestDistanceSquared = bestSeed.x >= 0.0
-        ? dot(bestSeed - float2(pixel), bestSeed - float2(pixel))
-        : 1.0e30;
-
-    [unroll]
-    for (int offsetY = -1; offsetY <= 1; offsetY++)
-    {
-        [unroll]
-        for (int offsetX = -1; offsetX <= 1; offsetX++)
-        {
-            int2 candidatePixel = pixel + int2(offsetX, offsetY) * _SdfJumpStep;
-            if (any(candidatePixel < 0) || any(candidatePixel >= _SdfSize))
-            {
-                continue;
-            }
-
-            float2 candidateSeed = _SdfSeedInput.Load(int3(candidatePixel, 0));
-            if (candidateSeed.x < 0.0)
-            {
-                continue;
-            }
-
-            float2 toSeed = candidateSeed - float2(pixel);
-            float candidateDistanceSquared = dot(toSeed, toSeed);
-            if (candidateDistanceSquared < bestDistanceSquared)
-            {
-                bestDistanceSquared = candidateDistanceSquared;
-                bestSeed = candidateSeed;
-            }
-        }
-    }
-
-    _SdfSeedOutput[pixel] = bestSeed;
-}
-
-[numthreads(8, 8, 1)]
-void FinalizeSdf(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (dispatchId.x >= (uint)_SdfSize.x || dispatchId.y >= (uint)_SdfSize.y)
-    {
-        return;
-    }
-
-    int2 pixel = int2(dispatchId.xy);
-    float2 seed = _SdfSeedInput.Load(int3(pixel, 0));
-    float distanceInPixels = seed.x >= 0.0
-        ? length(seed - float2(pixel))
-        : length(float2(_SdfSize));
-    _SdfOutput[pixel] = distanceInPixels / max(_CoveragePixelsPerCell, 1.0);
+    _Result[pixel] = float4(
+        clamp(result, 0.0, max(_MaximumLightMultiplier, 0.0001)),
+        ao);
 }

@@ -144,16 +144,53 @@ namespace Fodinae.Game.Managers
 
         public void SetCell(int x, int y, CellType type)
         {
-            if (_isInitialized && _cellLayer != null)
+            if (!_isInitialized || _cellLayer == null ||
+                _cellLayer.GetCellSync(x, y, touchLru: true) == type)
             {
-                if (_cellLayer.GetCell(x, y, touchLru: false) == type)
-                {
-                    return;
-                }
+                return;
+            }
 
-                _cellLayer[x, y] = type;
+            _cellLayer[x, y] = type;
+            Revision++;
+            TerrainRenderer.OnCellChanged(x, y);
+        }
+
+        public void SetRegion(
+            int startX,
+            int startY,
+            int width,
+            int height,
+            CellType[] cells)
+        {
+            if (!_isInitialized || _cellLayer == null ||
+                width <= 0 || height <= 0 || cells.Length < width * height)
+            {
+                return;
+            }
+
+            bool changed = false;
+            int index = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int worldX = startX + x;
+                    int worldY = startY + y;
+                    CellType type = cells[index++];
+                    if (_cellLayer.GetCellSync(worldX, worldY, touchLru: true) == type)
+                    {
+                        continue;
+                    }
+
+                    _cellLayer[worldX, worldY] = type;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
                 Revision++;
-                TerrainRenderer.OnCellChanged(x, y);
+                TerrainRenderer.OnRegionChanged(startX, startY, width, height);
             }
         }
 

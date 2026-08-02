@@ -3,6 +3,7 @@
 using Fodinae.Networking.Connection;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.UI
 {
@@ -11,7 +12,8 @@ namespace Fodinae.UI
         private static ReconnectUI? _instance;
         public static ReconnectUI? Instance => _instance;
 
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private VisualElement? _reconnectOverlay;
         private VisualElement? _disconnectOverlay;
         private Label? _reconnectLabel;

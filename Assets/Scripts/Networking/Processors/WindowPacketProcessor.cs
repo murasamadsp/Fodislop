@@ -45,16 +45,6 @@ namespace Fodinae.Networking.Processors
 
             Debug.Log($"[WindowPacketProcessor] Opening window '{packet.WindowTag}'");
 
-            if (_uiDocument == null)
-            {
-                _uiDocument = Object.FindAnyObjectByType<UIDocument>();
-                if (_uiDocument == null)
-                {
-                    Debug.LogError("[WindowPacketProcessor] Cannot open window: UIDocument not found");
-                    return;
-                }
-            }
-
             var builder = new PacketUIBuilder();
             var element = builder.Build(packet.Content);
             if (element == null)
@@ -105,10 +95,7 @@ namespace Fodinae.Networking.Processors
                 uiInputManager.PopModal(root);
             }
 
-            if (_uiDocument != null)
-            {
-                _uiDocument.rootVisualElement.Remove(root);
-            }
+            _uiDocument.rootVisualElement.Remove(root);
 
             _openWindows.RemoveAt(_openWindows.Count - 1);
         }
@@ -117,17 +104,7 @@ namespace Fodinae.Networking.Processors
         {
             Debug.Log("[WindowPacketProcessor] Handling ModalWindowPacket");
 
-            if (_uiDocument == null)
-            {
-                _uiDocument = Object.FindAnyObjectByType<UIDocument>();
-            }
-
-            if (_modalWindowHandler == null && _uiDocument != null)
-            {
-                _modalWindowHandler = new ModalWindowHandler(_uiDocument);
-            }
-
-            _modalWindowHandler?.Show(packet);
+            _modalWindowHandler.Show(packet);
         }
 
         private List<VisualElement> RegisterClickableElements(VisualElement windowRoot, string windowTag)
@@ -182,10 +159,7 @@ namespace Fodinae.Networking.Processors
             foreach (var (_, root, binding, _) in _openWindows)
             {
                 binding.Dispose();
-                if (_uiDocument != null)
-                {
-                    _uiDocument.rootVisualElement.Remove(root);
-                }
+                _uiDocument.rootVisualElement.Remove(root);
             }
 
             _openWindows.Clear();

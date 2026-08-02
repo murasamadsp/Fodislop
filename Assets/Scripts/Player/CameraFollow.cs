@@ -81,6 +81,7 @@ namespace Fodinae.Player
                 }
             }
 
+            SnapToTarget();
             InitializeInput();
         }
 
@@ -188,7 +189,30 @@ namespace Fodinae.Player
             transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref _followVelocity, smoothTime, float.PositiveInfinity, Time.deltaTime);
         }
 
-        public void SetTarget(Transform newTarget) => _target = newTarget;
+        public void SnapToTarget()
+        {
+            if (_target == null || _target == transform)
+            {
+                if (PlayerMovementController.LocalPlayer != null)
+                {
+                    _target = PlayerMovementController.LocalPlayer.transform;
+                }
+            }
+
+            if (_target != null && _target != transform)
+            {
+                Vector3 targetPosition = _target.position + new Vector3(_offset.x, _offset.y, 0f);
+                transform.position = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
+                _followVelocity = Vector3.zero;
+            }
+        }
+
+        public void SetTarget(Transform newTarget)
+        {
+            _target = newTarget;
+            SnapToTarget();
+        }
+
         public void SetZoom(float zoomLevel)
         {
             if (_camera != null)

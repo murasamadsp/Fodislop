@@ -2,8 +2,10 @@
 
 using System.IO;
 using System.Text;
+using Effekseer;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Effekseer;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
@@ -11,9 +13,8 @@ using Fodinae.Networking.Connection;
 using Fodinae.Player.Logic;
 using Fodinae.UI;
 using Fodinae.World;
+using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
-using Effekseer;
-using Fodinae.Effekseer;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Profiling;
@@ -58,6 +59,7 @@ namespace Fodinae
         private static void WriteMemorySample()
         {
             var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            var lighting = TerrariaLightingEngine.Instance;
             string line =
                 $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
                 $"allocated={Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):F1}MB " +
@@ -65,12 +67,11 @@ namespace Fodinae
                 $"graphics={Profiler.GetAllocatedMemoryForGraphicsDriver() / (1024f * 1024f):F1}MB " +
                 $"mono={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1}MB " +
                 $"gc={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1}MB " +
-                $"tex={Resources.FindObjectsOfTypeAll<Texture2D>().Length} " +
-                $"rt={Resources.FindObjectsOfTypeAll<RenderTexture>().Length} " +
-                $"mesh={Resources.FindObjectsOfTypeAll<Mesh>().Length} " +
-                $"effekseer={Resources.FindObjectsOfTypeAll<EffekseerEffectAsset>().Length} " +
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
-                $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0}\n";
+                $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0} " +
+                $"lightingSolves={lighting?.SolveCount ?? 0} " +
+                $"lightingField={lighting?.FieldWidth ?? 0}x{lighting?.FieldHeight ?? 0} " +
+                $"lightingAtlas={lighting?.AtlasEntryCount ?? 0}\n";
 
             File.AppendAllText(MemoryLogPath, line);
         }
@@ -116,6 +117,7 @@ namespace Fodinae
             {
                 sb.AppendLine($"  CellChunks loaded={ms.CellLayer.GetLoadedCount()} dirty={ms.CellLayer.GetDirtyCount()} max={ms.CellLayer.MaxChunksInMemory}");
             }
+
             var mm = ServiceLocator.Resolve<MapManager>();
             sb.AppendLine(mm != null
                 ? $"  Initialized={mm.IsWorldInitialized} '{mm.WorldCodeName}' {mm.WorldWidth}x{mm.WorldHeight} Hash={mm.GetHashCode()}"
