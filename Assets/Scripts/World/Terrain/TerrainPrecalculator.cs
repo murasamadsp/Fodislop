@@ -207,55 +207,83 @@ namespace Fodinae.World.Terrain
             var bl = cellCache.GetCellData(x, y);
             var br = cellCache.GetCellData(cx, y);
 
-            if (tl.Distortion == CellDistortionType.Block || tr.Distortion == CellDistortionType.Block ||
-                bl.Distortion == CellDistortionType.Block || br.Distortion == CellDistortionType.Block)
+            int worldX = cellCache.CacheMinX + x;
+            int worldY = cellCache.CacheMinY + y;
+            float rx = RandXd(worldX, worldY) / 16f;
+            float ry = RandYd(worldX, worldY) / 16f;
+
+            if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
+            {
+                GridVertexOffsets[x, y] = new Vector3(rx - 3f / 16f, ry - 3f / 16f, 0);
+            }
+            else if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))
             {
                 GridVertexOffsets[x, y] = Vector3.zero;
             }
+            else if (worldY == 0 || (IsCause(tl) && IsCause(br)) || (IsCause(tr) && IsCause(bl)))
+            {
+                GridVertexOffsets[x, y] = Vector3.zero;
+            }
+            else if (IsCause(tl) && IsCause(tr))
+            {
+                GridVertexOffsets[x, y] = new Vector3(0, ry, 0);
+            }
+            else if (IsCause(tl) && IsCause(bl))
+            {
+                GridVertexOffsets[x, y] = new Vector3(-rx, 0, 0);
+            }
+            else if (IsCause(tr) && IsCause(br))
+            {
+                GridVertexOffsets[x, y] = new Vector3(rx, 0, 0);
+            }
+            else if (IsCause(bl) && IsCause(br))
+            {
+                GridVertexOffsets[x, y] = new Vector3(0, -ry, 0);
+            }
+            else if (IsCause(tl))
+            {
+                GridVertexOffsets[x, y] = new Vector3(-rx, ry, 0);
+            }
+            else if (IsCause(tr))
+            {
+                GridVertexOffsets[x, y] = new Vector3(rx, ry, 0);
+            }
+            else if (IsCause(bl))
+            {
+                GridVertexOffsets[x, y] = new Vector3(-rx, -ry, 0);
+            }
+            else if (IsCause(br))
+            {
+                GridVertexOffsets[x, y] = new Vector3(rx, -ry, 0);
+            }
             else
             {
-                int xSign = 0, ySign = 0;
-                if (bl.Distortion == CellDistortionType.Cause)
-                {
-                    xSign -= 1;
-                    ySign += 1;
-                }
-
-                if (br.Distortion == CellDistortionType.Cause)
-                {
-                    xSign += 1;
-                    ySign += 1;
-                }
-
-                if (tl.Distortion == CellDistortionType.Cause)
-                {
-                    xSign -= 1;
-                    ySign -= 1;
-                }
-
-                if (tr.Distortion == CellDistortionType.Cause)
-                {
-                    xSign += 1;
-                    ySign -= 1;
-                }
-
-                if (xSign == 0 && ySign == 0)
-                {
-                    GridVertexOffsets[x, y] = Vector3.zero;
-                }
-                else
-                {
-                    uint seed = (uint)(((cellCache.CacheMinX + cx) * 374761397) + ((cellCache.CacheMinY + cy) * 668265263));
-                    seed = (seed ^ (seed >> 13)) * 1274126177;
-                    seed = seed ^ (seed >> 16);
-                    float r = ((seed % 4) + 1) * 0.0625f;
-                    uint seed2 = seed * 2654435761u;
-                    float ry = ((seed2 % 4) + 1) * 0.0625f;
-                    GridVertexOffsets[x, y] = new Vector3(xSign > 0 ? r : (xSign < 0 ? -r : 0), ySign > 0 ? ry : (ySign < 0 ? -ry : 0), 0);
-                }
+                GridVertexOffsets[x, y] = Vector3.zero;
             }
 
             GridShadowValues[x, y] = 0.0f;
+        }
+
+        private static bool IsCause(CachedCellData data)
+        {
+            return data.Distortion == CellDistortionType.Cause;
+        }
+
+        private static bool IsBlock(CachedCellData data)
+        {
+            return data.Distortion == CellDistortionType.Block;
+        }
+
+        private static float RandXd(int x, int y)
+        {
+            int num = (5 * x + 11 * y) * (13 * x + 7 * y) % 3221;
+            return num * num % 7;
+        }
+
+        private static float RandYd(int x, int y)
+        {
+            int num = (17 * x + 19 * y) * (23 * x + 37 * y) % 3469;
+            return num * num % 7;
         }
 
         private void CalculateCellNode(TerrainCellCache cellCache, int x, int y)

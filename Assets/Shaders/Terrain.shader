@@ -217,13 +217,35 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 wrapped = clamp(wrapped, 0.0, tilesCount - 1.0);
                 float2 tileOffsetUV = wrapped * tileSizeUV;
                 float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
-                float2 quadUV = clamp(input.uv, EPS, 1.0 - EPS);
+                float2 quadUV = input.uv;
+                int animTypeEarly = (int)(input.animData.x + 0.5);
+                bool isScrollAnimated = animTypeEarly == 4;
+                if (input.packedData.x > 0.5)
+                {
+                    float2 anchoredUV = input.packedData.zw;
+                    bool outsideX = anchoredUV.x < 0.0 || anchoredUV.x > 1.0;
+                    bool outsideY = anchoredUV.y < 0.0 || anchoredUV.y > 1.0;
+                    if (isScrollAnimated)
+                    {
+                        quadUV.x = outsideX ? frac(anchoredUV.x) : anchoredUV.x;
+                        quadUV.y = anchoredUV.y;
+                    }
+                    else
+                    {
+                        quadUV = (outsideX || outsideY) ? frac(anchoredUV) : anchoredUV;
+                    }
+                }
+
+                quadUV.x = clamp(quadUV.x, EPS, 1.0 - EPS);
+                if (!isScrollAnimated || input.packedData.x <= 0.5)
+                {
+                    quadUV.y = clamp(quadUV.y, EPS, 1.0 - EPS);
+                }
 
                 float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
                 finalUV.y += animOffsetUV;
 
-                int animTypeEarly = (int)(input.animData.x + 0.5);
-                if (animTypeEarly == 4)
+                if (isScrollAnimated)
                 {
                     float speed = input.animData.y;
                     if (speed <= 0) speed = 5;

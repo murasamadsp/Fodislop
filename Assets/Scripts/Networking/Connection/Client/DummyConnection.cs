@@ -1832,99 +1832,99 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.PolymerRoad, ROAD_PROPS, 0);
 
             // === BOX: ReliefGroup = 0 ===
-            SetConfig(configs, CellType.Box, BOX_PROPS, 0);
+            SetConfig(configs, CellType.Box, BOX_PROPS, 0, distortion: CellDistortionType.Block);
 
             // === SANDS & BOULDERS: ReliefGroup = 1 ===
-            SetConfig(configs, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
-            SetConfig(configs, CellType.BlackBoulder2, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.BlackBoulder3, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.MetalBoulder1, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.MetalBoulder2, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.MetalBoulder3, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.WhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFFF00));
-            SetConfig(configs, CellType.DarkWhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCCCC00));
-            SetConfig(configs, CellType.RustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCD853F));
-            SetConfig(configs, CellType.DarkRustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF8B4513));
-            SetConfig(configs, CellType.BlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF2F2F2F));
-            SetConfig(configs, CellType.DarkBlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF1A1A1A));
-            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1));
-            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
-            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
-            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
-            SetConfig(configs, CellType.DeepMagmaBoulder, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1);
-            SetConfig(configs, CellType.MilitaryBlockSand, SAND_BOULDER_PROPS, 1);
+            SetConfig(configs, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.BlackBoulder2, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.BlackBoulder3, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.MetalBoulder1, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.MetalBoulder2, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.MetalBoulder3, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.WhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFFF00), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkWhiteSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCCCC00), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.RustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFCD853F), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkRustySand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF8B4513), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.BlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF2F2F2F), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkBlackSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF1A1A1A), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepMagmaBoulder, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.MilitaryBlockSand, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
             SetConfig(configs, CellType.Lava, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFFFF4500),
-                animation: (CellAnimationType)4, animationSpeed: 10, frameOffset: 0, distortion: (CellDistortionType)0);
-            SetConfig(configs, CellType.Boulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000));
-            SetConfig(configs, CellType.Boulder2, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.Boulder3, SAND_BOULDER_PROPS, 1);
-            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1));
-            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B));
-            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700));
-            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B));
+                animation: (CellAnimationType)4, animationSpeed: 10, frameOffset: 0, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Boulder1, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF000000), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Boulder2, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Boulder3, SAND_BOULDER_PROPS, 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.BlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF4169E1), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkBlueSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFF00008B), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.YellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFFFD700), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DarkYellowSand, SAND_BOULDER_PROPS, 1, color: unchecked((int)0xFFB8860B), distortion: CellDistortionType.Cause);
 
             // === ACIDS (keep existing animations): ReliefGroup = 1 ===
             SetConfig(configs, CellType.GrayAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF00FF00),
-                animation: CellAnimationType.Blinking, animationSpeed: 5, frameOffset: 1);
+                animation: CellAnimationType.Blinking, animationSpeed: 5, frameOffset: 1, distortion: CellDistortionType.Cause);
             SetConfig(configs, CellType.PurpleAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF800080),
-                animation: CellAnimationType.Shimmer, animationSpeed: 50, frameOffset: 1);
-            SetConfig(configs, CellType.PassiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF8A2BE2));
-            SetConfig(configs, CellType.LivingActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF66FF22));
-            SetConfig(configs, CellType.CorrosiveActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF9AFF22));
+                animation: CellAnimationType.Shimmer, animationSpeed: 50, frameOffset: 1, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.PassiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF8A2BE2), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.LivingActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF66FF22), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.CorrosiveActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF9AFF22), distortion: CellDistortionType.Cause);
 
             // === ARTIFICIAL: ReliefGroup = 2 ===
-            SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513));
-            SetConfig(configs, CellType.BuildingCorner, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF555555));
-            SetConfig(configs, CellType.QuadBlock, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.Support, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.MilitaryBlockFrame, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.MilitaryBlock, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.GreenBlock, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.YellowBlock, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.FedBlock, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2);
-            SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666));
+            SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513), distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.BuildingCorner, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF555555), distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.QuadBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.Support, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.MilitaryBlockFrame, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.MilitaryBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.GreenBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.YellowBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.FedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
 
             // === ROCKS & CRYSTALS: ReliefGroup = 3 ===
-            SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D));
-            SetConfig(configs, CellType.XBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
-            SetConfig(configs, CellType.XRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920));
-            SetConfig(configs, CellType.XCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
-            SetConfig(configs, CellType.XViolet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
-            SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.DeepTurquoiseRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
-            SetConfig(configs, CellType.DeepRainbowRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6));
-            SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.Green, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00));
-            SetConfig(configs, CellType.Red, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920));
-            SetConfig(configs, CellType.Blue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
-            SetConfig(configs, CellType.Violet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
-            SetConfig(configs, CellType.White, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF));
-            SetConfig(configs, CellType.Cyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
-            SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.AcidRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
-            SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3);
-            SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3);
+            SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.XBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.XRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.XCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.XViolet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepObsidianRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepTurquoiseRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepRainbowRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepStripedRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Rock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Green, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF00), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Red, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Blue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Violet, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.White, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Cyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.HeavyRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AcidRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.GoldenRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.GRock, ROCK_CRYSTAL_PROPS, 3, distortion: CellDistortionType.Cause);
 
             // === LIVING CRYSTALS & SPECIAL LUMINOUS MINERALS ===
-            SetConfig(configs, CellType.AliveCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF));
-            SetConfig(configs, CellType.AliveRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920));
-            SetConfig(configs, CellType.AliveViol, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
-            SetConfig(configs, CellType.AliveNigger, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF802EB8));
-            SetConfig(configs, CellType.AliveWhite, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF));
-            SetConfig(configs, CellType.AliveRainbow, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6));
-            SetConfig(configs, CellType.AliveBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
-            SetConfig(configs, CellType.Pearl, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF));
-            SetConfig(configs, CellType.DeepLazuriteSand, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF));
+            SetConfig(configs, CellType.AliveCyan, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF20C7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AliveRed, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF2920), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AliveViol, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AliveNigger, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF802EB8), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AliveWhite, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AliveRainbow, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.AliveBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.Pearl, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFF2F7FF), distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.DeepLazuriteSand, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);
             SetConfig(configs, CellType.SuperRainbow, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFFF59E6));
-            SetConfig(configs, CellType.HypnoRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB));
+            SetConfig(configs, CellType.HypnoRock, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFFBF20EB), distortion: CellDistortionType.Cause);
 
             // === INDESTRUCTIBLE ROCKS: ReliefGroup = 4 (NO Breakable!) ===
-            SetConfig(configs, CellType.NiggerRock, INDESTRUCTIBLE_PROPS, 4);
-            SetConfig(configs, CellType.LivingBlackRock, INDESTRUCTIBLE_PROPS, 4);
-            SetConfig(configs, CellType.RedRock, INDESTRUCTIBLE_PROPS, 4);
+            SetConfig(configs, CellType.NiggerRock, INDESTRUCTIBLE_PROPS, 4, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.LivingBlackRock, INDESTRUCTIBLE_PROPS, 4, distortion: CellDistortionType.Cause);
+            SetConfig(configs, CellType.RedRock, INDESTRUCTIBLE_PROPS, 4, distortion: CellDistortionType.Cause);
 
             // === GATE & TELEPORT BLOCK (passable but not roads) ===
             SetConfig(configs, CellType.Gate, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);

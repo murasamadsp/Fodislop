@@ -105,6 +105,13 @@ namespace Fodinae.World.Terrain
             Vector3 off01 = precalc.GridVertexOffsets[x, y + 1];
             Vector3 off11 = precalc.GridVertexOffsets[x + 1, y + 1];
 
+            bool isAnchored = off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero;
+            float anchorFlag = isAnchored ? 1f : 0f;
+            Vector2 anchor0 = new Vector2(off00.x, off00.y);
+            Vector2 anchor1 = new Vector2(1f + off10.x, off10.y);
+            Vector2 anchor2 = new Vector2(1f + off11.x, 1f + off11.y);
+            Vector2 anchor3 = new Vector2(off01.x, 1f + off01.y);
+
             _vertexBuffer[vIdx + 0].Position = new Vector3(lx, ly, zOffset) + off00;
             _vertexBuffer[vIdx + 1].Position = new Vector3(lx + _cellSize, ly, zOffset) + off10;
             _vertexBuffer[vIdx + 2].Position = new Vector3(lx + _cellSize, ly + _cellSize, zOffset) + off11;
@@ -172,7 +179,6 @@ namespace Fodinae.World.Terrain
 
             bool isRelief = isSameCell && precalc.CellIsRelief[x, y];
             byte reliefMask = isSameCell ? precalc.CellReliefMasks[x, y] : (byte)0;
-            float textureType = isRelief ? 1.0f : 0.0f;
 
             float sv00 = precalc.GridShadowValues[x, y];
             float sv10 = precalc.GridShadowValues[x + 1, y];
