@@ -16,7 +16,8 @@ namespace Fodinae.UI
 {
     public class LocalChatPopup : MonoBehaviour
     {
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private VisualElement? _overlay;
         private TextField? _inputField;
         private VisualElement? _internalInput;
@@ -38,12 +39,6 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                return;
-            }
-
             CreateUI();
             if (_overlay != null)
             {
@@ -95,6 +90,7 @@ namespace Fodinae.UI
             {
                 _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
             }
+
             var uss = Resources.Load<StyleSheet>("chat-input");
             if (uss != null && _inputField != null)
             {
@@ -173,6 +169,7 @@ namespace Fodinae.UI
             {
                 _inputField.value = string.Empty;
             }
+
             FocusAfterDelay().Forget();
         }
 

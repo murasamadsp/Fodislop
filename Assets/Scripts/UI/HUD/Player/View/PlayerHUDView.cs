@@ -40,7 +40,8 @@ namespace Fodinae.UI.HUD.Player.View
         private readonly Dictionary<string, VisualElement> _statusLineElements = new();
         private readonly Dictionary<string, IVisualElementScheduledItem> _statusSchedules = new();
 
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private Tooltip? _tooltip;
         private bool _isLoaded;
         [Inject]
@@ -172,13 +173,6 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void InitializeHUD()
         {
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                Debug.LogError("[PlayerHUD] UIDocument не найден на сцене");
-                return;
-            }
-
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
 
@@ -1063,6 +1057,7 @@ namespace Fodinae.UI.HUD.Player.View
             _buildingsPopup = CreatePopup("Мои здания");
             _faqPopup = CreatePopup("FAQ");
             _programmatorGrid = gameObject.AddComponent<ProgrammatorGrid>();
+            Fodinae.Core.ServiceLocator.Inject(_programmatorGrid);
             root.Add(_respawnPopup);
             root.Add(_buildingsPopup);
             root.Add(_faqPopup);

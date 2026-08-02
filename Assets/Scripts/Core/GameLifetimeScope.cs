@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae;
 using Fodinae.Audio.Backend;
 using Fodinae.Core.Interfaces;
@@ -20,6 +21,7 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
 
@@ -32,6 +34,16 @@ namespace Fodinae.Core
 
         protected override void Configure(IContainerBuilder builder)
         {
+            UIDocument? uiDocument = FindAnyObjectByType<UIDocument>(
+                FindObjectsInactive.Include);
+            if (uiDocument == null || uiDocument.panelSettings == null)
+            {
+                throw new InvalidOperationException(
+                    "The scene must contain one UIDocument with PanelSettings before UI services are registered.");
+            }
+
+            builder.RegisterInstance(uiDocument);
+
             var newStorage = new MapStorage();
             newStorage.SetAsPending();
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
@@ -96,6 +108,7 @@ namespace Fodinae.Core
                 resolver.Resolve<IAudioSystem>();
                 resolver.Resolve<GameManager>();
                 resolver.Resolve<ServerConfig>();
+                resolver.Resolve<TerrariaLightingEngine>();
                 resolver.Resolve<TextureStorageManager>();
                 resolver.Resolve<WorldTextureManager>();
                 resolver.Resolve<ServerAudioEventManager>();
@@ -133,24 +146,14 @@ namespace Fodinae.Core
                         continue;
                     }
 
-                    var type = mb.GetType();
-                    var fields = type.GetFields(
-                        System.Reflection.BindingFlags.Instance |
-                        System.Reflection.BindingFlags.NonPublic |
-                        System.Reflection.BindingFlags.Public);
-                    bool hasInject = false;
-                    foreach (var f in fields)
+                    var ns = mb.GetType().Namespace;
+                    if (ns != null && (ns.StartsWith("UnityEngine") || ns.StartsWith("System") || ns.StartsWith("Unity.")))
                     {
-                        if (System.Attribute.IsDefined(f, typeof(VContainer.InjectAttribute)))
-                        {
-                            hasInject = true;
-                            break;
-                        }
+                        continue;
                     }
 
-                    if (hasInject)
+                    if (TryInject(resolver, mb))
                     {
-                        TryInject(resolver, mb);
                         injected++;
                     }
                 }
@@ -237,6 +240,11 @@ namespace Fodinae.Core
             if (resolver.Resolve<GameManager>() == null)
             {
                 errors.Add("GameManager is null after VContainer build — UI will NOT be created");
+            }
+
+            if (resolver.Resolve<UIDocument>() == null)
+            {
+                errors.Add("UIDocument is null after VContainer build — UI will NOT be created");
             }
 
             var terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();

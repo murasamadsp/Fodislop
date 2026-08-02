@@ -25,6 +25,7 @@ namespace Fodinae.UI.HUD.Inventory.View
         private const int CELL_GAP = 10;
         private const int ICON_SIZE = 36;
 
+        [Inject]
         private UIDocument _doc = null!;
         [Inject]
         private IInventoryModel? _model;
@@ -54,6 +55,15 @@ namespace Fodinae.UI.HUD.Inventory.View
         protected void Start()
         {
             InitializeInventory();
+        }
+
+        protected void OnDestroy()
+        {
+            if (_model != null)
+            {
+                _model.OnSlotChanged -= RefreshSlot;
+                _model.OnSlotSelected -= OnModelSlotSelected;
+            }
         }
 
         protected void Update()
@@ -112,13 +122,6 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void InitializeInventory()
         {
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                Debug.LogError("[InventoryUI] UIDocument not found on scene");
-                return;
-            }
-
             _model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
             if (_model == null)
             {

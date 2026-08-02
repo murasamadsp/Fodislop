@@ -18,7 +18,8 @@ namespace Fodinae.UI
 {
     public class GlobalChatUI : MonoBehaviour
     {
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private VisualElement? _panel;
         private ScrollView? _scrollView;
         private TextField? _inputField;
@@ -46,12 +47,6 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                return;
-            }
-
             CreateUI();
             if (_panel != null)
             {

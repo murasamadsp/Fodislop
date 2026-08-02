@@ -517,7 +517,7 @@ namespace Fodinae
 
         private void EvictOldestChunk()
         {
-            if (_lruList.Count == 0)
+            if (_lruList.Count == 0 || _lruList.Last == null)
             {
                 return;
             }
@@ -541,14 +541,19 @@ namespace Fodinae
 
         private T[]? LoadChunkFromDisk(int index)
         {
-            long offset = _chunkOffsets[index];
-            if (offset < 0 || _fileStream == null)
+            if (index < 0 || index >= _chunkOffsets.Length)
             {
                 return null;
             }
 
             lock (_ioLock)
             {
+                long offset = _chunkOffsets[index];
+                if (offset < 0 || _fileStream == null)
+                {
+                    return null;
+                }
+
                 _fileStream.Seek(offset, SeekOrigin.Begin);
                 using var reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, true);
                 return ReadChunkRLE(reader);

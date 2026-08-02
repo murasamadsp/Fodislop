@@ -73,7 +73,7 @@ namespace Fodinae.Networking.Connection
                     Debug.LogError($"[ConnectionManager] Error processing packet: {ex.Message}\n{ex.StackTrace}");
                 }
 
-                if ((Time.realtimeSinceStartup - startTime) * 1000f > 10f)
+                if (processedCount >= 250 || (Time.realtimeSinceStartup - startTime) * 1000f > 33f)
                 {
                     break;
                 }

@@ -8,8 +8,8 @@ using Fodinae.Game.Managers;
 using Fodinae.Networking.Processors;
 using Fodinae.Player;
 using Fodinae.UI;
-using Fodinae.UI.Programmator;
 using Fodinae.UI.Binding;
+using Fodinae.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
@@ -68,6 +68,8 @@ namespace Fodinae.Networking
         private GameManager _gameManager = null!;
         [Inject]
         private IMapDataProvider _mapDataProvider = null!;
+        [Inject]
+        private UIDocument _uiDocument = null!;
         private MapStorage? MapStorage => _mapStorageInterface as MapStorage;
 
         protected virtual void Awake()
@@ -85,12 +87,8 @@ namespace Fodinae.Networking
                 return;
             }
 
-            var uiDocument = FindAnyObjectByType<UIDocument>();
-            if (uiDocument != null)
-            {
-                var mwh = new ModalWindowHandler(uiDocument);
-                _windowProcessor.Initialize(uiDocument, mwh);
-            }
+            var modalWindowHandler = new ModalWindowHandler(_uiDocument);
+            _windowProcessor.Initialize(_uiDocument, modalWindowHandler);
 
             TrySubscribeToNetworkService();
 

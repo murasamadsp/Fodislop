@@ -12,7 +12,8 @@ namespace Fodinae.UI
 {
     public class MissionArrowUI : MonoBehaviour
     {
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private VisualElement? _arrow;
         private Camera? _camera;
         private ushort? _targetX;
@@ -22,15 +23,6 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            Debug.Log("[MissionArrowUI] Start() called");
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                Debug.LogWarning("[MissionArrowUI] UIDocument not found, disabling");
-                enabled = false;
-                return;
-            }
-
             _camera = Camera.main;
 
             _arrow = new VisualElement();

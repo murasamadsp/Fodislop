@@ -7,12 +7,14 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.UI.Programmator
 {
     public class ProgrammatorGrid : MonoBehaviour
     {
-        private UIDocument? _doc;
+        [Inject]
+        private UIDocument _doc = null!;
         private VisualElement? _popup;
         private VisualElement? _gridContainer;
         private VisualElement?[,]? _cells;
@@ -69,12 +71,6 @@ namespace Fodinae.UI.Programmator
 
         protected void Start()
         {
-            _doc = FindAnyObjectByType<UIDocument>();
-            if (_doc == null)
-            {
-                return;
-            }
-
             CreateUI();
             _popup!.style.display = DisplayStyle.None;
 

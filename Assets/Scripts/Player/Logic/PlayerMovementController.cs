@@ -237,7 +237,13 @@ namespace Fodinae.Player.Logic
             Vector2Int oldPos = Position;
             Position = position;
 
-            int worldHeight = _mapDataProvider != null ? _mapDataProvider.WorldHeight : 128;
+            if (_mapDataProvider == null)
+            {
+                Debug.LogError("[PlayerMovementController] Cannot update server position: MapDataProvider is null!");
+                return;
+            }
+
+            int worldHeight = _mapDataProvider.WorldHeight;
             Vector3 targetWorldPos = CoordinateUtils.ServerToUnityPos(position.x, position.y, worldHeight, transform.position.z);
             transform.position = targetWorldPos;
             if (_robot is not null)
