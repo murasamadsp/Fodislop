@@ -214,14 +214,15 @@ namespace Fodinae.World
             SetConfig(configurations, CellType.GoldenRoad, ROAD_PROPS, 0);
             SetConfig(configurations, CellType.PolymerRoad, ROAD_PROPS, 0);
             SetConfig(configurations, CellType.VolcanoBackground, ROAD_PROPS, 0);
-            SetConfig(configurations, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1);
-            SetConfig(configurations, CellType.Boulder1, SAND_BOULDER_PROPS, 1);
-            SetConfig(configurations, CellType.WhiteSand, SAND_BOULDER_PROPS, 1);
+            SetConfig(configurations, CellType.BlackBoulder1, SAND_BOULDER_PROPS, 1, CellDistortionType.Cause);
+            SetConfig(configurations, CellType.Boulder1, SAND_BOULDER_PROPS, 1, CellDistortionType.Cause);
+            SetConfig(configurations, CellType.WhiteSand, SAND_BOULDER_PROPS, 1, CellDistortionType.Cause);
 
             return configurations;
         }
 
-        private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup)
+        private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
+            CellDistortionType distortion = CellDistortionType.Neutral)
         {
             configs[(int)type] = new CellConfigurationPacket
             {
@@ -231,7 +232,7 @@ namespace Fodinae.World
                 FrameOffset = 0,
                 Properties = props,
                 ReliefGroup = reliefGroup,
-                Distortion = 0,
+                Distortion = distortion,
             };
         }
     }

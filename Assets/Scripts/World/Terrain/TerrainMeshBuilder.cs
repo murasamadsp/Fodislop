@@ -15,13 +15,6 @@ namespace Fodinae.World.Terrain
     {
         private TerrainVertex[] _vertexBuffer = Array.Empty<TerrainVertex>();
         private float _cellSize;
-        private static readonly Vector2[] _localUVsBuffer =
-        {
-            new(-0.70710678f, -0.70710678f),
-            new(0.70710678f, -0.70710678f),
-            new(0.70710678f, 0.70710678f),
-            new(-0.70710678f, 0.70710678f),
-        };
         private static readonly HashSet<CellType> GlowingCellTypes = new() { CellType.Lava };
 
         public TerrainVertex[] VertexBuffer => _vertexBuffer;
@@ -157,6 +150,13 @@ namespace Fodinae.World.Terrain
             Vector3 off01 = precalc.GridVertexOffsets[x, y + 1];
             Vector3 off11 = precalc.GridVertexOffsets[x + 1, y + 1];
 
+            bool isAnchored = off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero;
+            float anchorFlag = isAnchored ? 1f : 0f;
+            Vector2 anchor0 = new Vector2(off00.x, off00.y);
+            Vector2 anchor1 = new Vector2(1f + off10.x, off10.y);
+            Vector2 anchor2 = new Vector2(1f + off11.x, 1f + off11.y);
+            Vector2 anchor3 = new Vector2(off01.x, 1f + off01.y);
+
             _vertexBuffer[vIdx + 0].Position = new Vector3(lx, ly, zOffset) + off00;
             _vertexBuffer[vIdx + 1].Position = new Vector3(lx + _cellSize, ly, zOffset) + off10;
             _vertexBuffer[vIdx + 2].Position = new Vector3(lx + _cellSize, ly + _cellSize, zOffset) + off11;
@@ -224,7 +224,6 @@ namespace Fodinae.World.Terrain
 
             bool isRelief = isSameCell && precalc.CellIsRelief[x, y];
             byte reliefMask = isSameCell ? precalc.CellReliefMasks[x, y] : (byte)0;
-            float textureType = isRelief ? 1.0f : 0.0f;
 
             float sv00 = precalc.GridShadowValues[x, y];
             float sv10 = precalc.GridShadowValues[x + 1, y];
@@ -236,28 +235,28 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx].UV2 = tileSizeVec;
             _vertexBuffer[vIdx].UV3 = worldPosVec;
             _vertexBuffer[vIdx].UV4 = animDataVec;
-            _vertexBuffer[vIdx].UV5 = new Vector4(textureType, isRelief ? reliefMask : sv00, _localUVsBuffer[0].x, _localUVsBuffer[0].y);
+            _vertexBuffer[vIdx].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv00, anchor0.x, anchor0.y);
 
             _vertexBuffer[vIdx + 1].Color = color;
             _vertexBuffer[vIdx + 1].UV1 = atlasRect;
             _vertexBuffer[vIdx + 1].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 1].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 1].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 1].UV5 = new Vector4(textureType, isRelief ? reliefMask : sv10, _localUVsBuffer[1].x, _localUVsBuffer[1].y);
+            _vertexBuffer[vIdx + 1].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv10, anchor1.x, anchor1.y);
 
             _vertexBuffer[vIdx + 2].Color = color;
             _vertexBuffer[vIdx + 2].UV1 = atlasRect;
             _vertexBuffer[vIdx + 2].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 2].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 2].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 2].UV5 = new Vector4(textureType, isRelief ? reliefMask : sv11, _localUVsBuffer[2].x, _localUVsBuffer[2].y);
+            _vertexBuffer[vIdx + 2].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv11, anchor2.x, anchor2.y);
 
             _vertexBuffer[vIdx + 3].Color = color;
             _vertexBuffer[vIdx + 3].UV1 = atlasRect;
             _vertexBuffer[vIdx + 3].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 3].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 3].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 3].UV5 = new Vector4(textureType, isRelief ? reliefMask : sv01, _localUVsBuffer[3].x, _localUVsBuffer[3].y);
+            _vertexBuffer[vIdx + 3].UV5 = new Vector4(anchorFlag, isRelief ? reliefMask : sv01, anchor3.x, anchor3.y);
 
             float glowFlags = 0f;
             if (glowZ > 0.5f)
