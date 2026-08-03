@@ -143,6 +143,39 @@ float4 SampleEmission(float2 pixelPosition, float mipLevel)
     return emission;
 }
 
+float4 SampleAutomaticSurfaceNormal(float2 pixelPosition)
+{
+    float occupancyLeft = SampleOccupancy(pixelPosition - float2(1.0, 0.0), 0.0);
+    float occupancyRight = SampleOccupancy(pixelPosition + float2(1.0, 0.0), 0.0);
+    float occupancyDown = SampleOccupancy(pixelPosition - float2(0.0, 1.0), 0.0);
+    float occupancyUp = SampleOccupancy(pixelPosition + float2(0.0, 1.0), 0.0);
+    float2 occupancyGradient = float2(
+        occupancyRight - occupancyLeft,
+        occupancyUp - occupancyDown);
+    float gradientLength = length(occupancyGradient);
+    float strength = saturate(gradientLength * 2.0);
+    float3 surfaceNormal = float3(0.0, 0.0, 0.0);
+    if (gradientLength > 0.05)
+    {
+        surfaceNormal = float3(-occupancyGradient / gradientLength, 0.0);
+    }
+
+    return float4(surfaceNormal, strength);
+}
+
+float SurfaceLambert(
+    float4 normalData,
+    float2 lightDirection)
+{
+    float3 surfaceNormal = normalData.xyz;
+    float normalStrength = saturate(normalData.w);
+    float directionalResponse = saturate(dot(
+        surfaceNormal,
+        float3(lightDirection, 0.0)));
+    float normalMask = step(0.001, normalStrength);
+    return lerp(1.0, directionalResponse, normalStrength * normalMask);
+}
+
 [numthreads(64, 1, 1)]
 void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
 {
@@ -400,12 +433,20 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
+    float4 normalData = SampleAutomaticSurfaceNormal(float2(pixel) + 0.5);
+
     [unroll]
     for (int direction = 0; direction < 4; direction++)
     {
         int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
         uint3 packedInterval = _RadianceAtlas[atlasIndex];
-        radiance += UnpackRadiance(packedInterval.xy);
+        float angle = (float(direction) + 0.5) * PI2 / 4.0;
+        float raySine;
+        float rayCosine;
+        sincos(angle, raySine, rayCosine);
+        radiance += UnpackRadiance(packedInterval.xy) * SurfaceLambert(
+            normalData,
+            float2(rayCosine, raySine));
     }
 
     float3 directOutput = radiance * 0.25;
@@ -429,6 +470,7 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
 
     float2 fieldPosition = (float2(pixel) + 0.5) * float2(_FieldSize) / float2(_BounceSize);
     float3 bounced = 0.0;
+    float4 normalData = SampleAutomaticSurfaceNormal(fieldPosition);
     const float directionWeight = 1.0 / 16.0;
 
     [unroll]
@@ -464,7 +506,11 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
             float distanceWeight = 1.0 / float(stepIndex * stepIndex);
             float sampleWeight = material.a * physicalStepLength *
                 distanceWeight * directionWeight;
-            bounced += Transmission(pathLength) * incident * material.rgb * sampleWeight;
+            float receiverLambert = SurfaceLambert(
+                normalData,
+                -rayDirection);
+            bounced += Transmission(pathLength) * incident * material.rgb *
+                sampleWeight * receiverLambert;
             pathLength += float2(1.0 - material.a, material.a) * physicalStepLength;
             if (material.a >= 0.95)
             {

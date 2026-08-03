@@ -37,6 +37,7 @@
 - [ ] Разделить static и dynamic lighting: кэшировать static terrain radiance, а перемещаемые Robot sources считать в отдельном малом dynamic field. Движение источника не должно пересобирать весь static cascade.
 - [ ] Selective emission bloom: использовать отдельную emission mask для bloom, сохранив terrain/albedo без дополнительного пересвета. Работать на half-resolution.
 - [ ] Surface-gradient lighting: получить дешёвый локальный surface gradient из occupancy/albedo для ощущения объёма без normal map и дополнительных текстур. Не менять физическое поглощение.
+- [x] Автоматические surface normals из occupancy: normal response вычисляется в `WorldLighting.compute` без отдельного MRT/NormalField; влияет только на direct и diffuse bounce.
 - [ ] Стабильный blue-noise dithering для низкоразрешённых AO/soft-shadow границ. Не использовать temporal noise и не менять детерминированный Contact AO.
 - [ ] Профилировать Ultra отдельно: проверить стоимость `LightingPixelsPerCell=8`, field до `2048`, cascade steps `64` и diffuse bounce перед изменением значений профиля.
 
