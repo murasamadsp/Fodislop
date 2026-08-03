@@ -30,7 +30,7 @@ namespace Fodinae.Player.Logic
 
         public uint BotId { get; private set; }
         public Vector2Int Position { get; private set; }
-        public Direction LastDirection => _lastSentDirection ?? Direction.Up;
+        public Direction LastDirection => _lastSentDirection ?? Direction.Down;
         public event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
 
         private Robot? _robot;
@@ -79,13 +79,6 @@ namespace Fodinae.Player.Logic
 
             _input = GetComponent<IPlayerInput>() ?? gameObject.AddComponent<PlayerInputHandler>();
 
-            if (!TryGetComponent<RobotHeadlight>(out var headlight))
-            {
-                headlight = gameObject.AddComponent<RobotHeadlight>();
-            }
-
-            bool useLight2D = PlayerPrefs.GetInt("UseLight2D", 1) == 1;
-            headlight.SetEnabled(useLight2D);
         }
 
         protected void OnDestroy()
@@ -424,7 +417,7 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            Direction dir = _lastSentDirection ?? Direction.Up;
+            Direction dir = _lastSentDirection ?? Direction.Down;
             Vector2Int digOffset = dir switch
             {
                 Direction.Down => new Vector2Int(0, 1),

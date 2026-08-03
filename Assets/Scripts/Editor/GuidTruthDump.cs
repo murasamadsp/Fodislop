@@ -19,7 +19,6 @@ namespace Fodinae.Editor
                 "ea1ef0b5d60544e3b4923a071c651690", // Robot
                 "4f9b8c7d6e5a4b3c2d1e0f9a8b7c6d5e", // PlayerInteractionController
                 "309b32c6878a84474a1b2376baed4735", // PlayerInputHandler
-                "7d01101e153d8b846858b2936a854cc6", // RobotHeadlight
             };
 
             foreach (var g in guids)
@@ -34,7 +33,6 @@ namespace Fodinae.Editor
                 "Assets/Scripts/Game/Robot.cs",
                 "Assets/Scripts/Player/PlayerInteractionController.cs",
                 "Assets/Scripts/Player/Input/PlayerInputHandler.cs",
-                "Assets/Scripts/Game/RobotHeadlight.cs",
             };
 
             foreach (var p in paths)
@@ -44,7 +42,7 @@ namespace Fodinae.Editor
                 sb.AppendLine($"[GUIDTRUTH] path {p} -> guid {g}, asset={(main == null ? "NULL" : main.GetType().FullName)}");
             }
 
-            var prefab = AssetDatabase.LoadMainAssetAtPath("Assets/Player.prefab") as GameObject;
+            var prefab = AssetDatabase.LoadMainAssetAtPath("Assets/Prefabs/Player.prefab") as GameObject;
             if (prefab == null)
             {
                 sb.AppendLine("[GUIDTRUTH] Player.prefab LOAD FAILED");

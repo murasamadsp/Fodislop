@@ -7,6 +7,7 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
+using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using TMPro;
 using UnityEngine;
@@ -17,6 +18,13 @@ namespace Fodinae.Game
     public class Robot : MonoBehaviour
     {
         private const string TAG = "[Robot]";
+        private static int _nextDynamicLightId;
+        public const string DynamicLightRadiusPreferenceKey = "WorldLightingDynamicRadius";
+        public const string DynamicLightIntensityPreferenceKey = "WorldLightingDynamicIntensity";
+        public const string DynamicLightEdgeSoftnessPreferenceKey = "WorldLightingDynamicEdgeSoftness";
+        public const string DynamicLightColorRPreferenceKey = "WorldLightingDynamicColorR";
+        public const string DynamicLightColorGPreferenceKey = "WorldLightingDynamicColorG";
+        public const string DynamicLightColorBPreferenceKey = "WorldLightingDynamicColorB";
 
         [SerializeField]
         private uint _botId;
@@ -36,6 +44,26 @@ namespace Fodinae.Game
         private string _tailPath = string.Empty;
         [SerializeField]
         private float _rotationSpeed = 1080f;
+        [Header("Dynamic Emission")]
+        [SerializeField]
+        [Tooltip("Разрешает Robot регистрировать dynamic emission source в TerrariaLightingEngine.")]
+        private bool _emitsDynamicLight = true;
+        [SerializeField]
+        [Min(0.1f)]
+        [Tooltip("Радиус dynamic emission в физических клетках.")]
+        private float _dynamicLightRadius = 8f;
+        [SerializeField]
+        [Range(0f, 4f)]
+        [Tooltip("Интенсивность dynamic emission. HDR-значение выше 1 усиливает источник.")]
+        private float _dynamicLightIntensity = 1.25f;
+        [SerializeField]
+        [Range(0.05f, 1f)]
+        [Tooltip("Доля радиуса, занятая мягким затуханием dynamic light. 1 — полностью плавный профиль без жёсткого диска.")]
+        private float _dynamicLightEdgeSoftness = 0.65f;
+        [SerializeField]
+        [ColorUsage(showAlpha: false, hdr: true)]
+        [Tooltip("HDR-цвет dynamic emission источника Robot.")]
+        private Color _dynamicLightColor = Color.white;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
@@ -62,6 +90,12 @@ namespace Fodinae.Game
         private GameObject? _tailContainer;
         private Sprite? _skinSprite;
         private Sprite? _clanSprite;
+        private bool _dynamicLightEnabled;
+        private int _dynamicLightId;
+        private float _inspectorDynamicLightRadius;
+        private float _inspectorDynamicLightIntensity;
+        private float _inspectorDynamicLightEdgeSoftness;
+        private Color _inspectorDynamicLightColor;
 
         public uint BotId => _botId;
         public int PlayerId => _playerId;
@@ -69,6 +103,14 @@ namespace Fodinae.Game
         public string Nickname => _nickname;
         public bool IsMetadataLoaded => _isMetadataLoaded;
         public bool IsLocalPlayer => gameObject.CompareTag("Player");
+
+        public float DynamicLightRadius => _dynamicLightRadius;
+
+        public float DynamicLightIntensity => _dynamicLightIntensity;
+
+        public float DynamicLightEdgeSoftness => _dynamicLightEdgeSoftness;
+
+        public Color DynamicLightColor => _dynamicLightColor;
 
         /// <summary>
         /// The logical facing angle in Unity degrees (raw <c>_targetAngle</c>),
@@ -127,6 +169,39 @@ namespace Fodinae.Game
 
         protected void Awake()
         {
+            _dynamicLightId = Interlocked.Increment(ref _nextDynamicLightId);
+            _inspectorDynamicLightRadius = _dynamicLightRadius;
+            _inspectorDynamicLightIntensity = _dynamicLightIntensity;
+            _inspectorDynamicLightEdgeSoftness = _dynamicLightEdgeSoftness;
+            _inspectorDynamicLightColor = _dynamicLightColor;
+            // Dynamic emission is a property of this Robot source. The old
+            // UseLight2D preference used to force a second, player-only path
+            // here; terrain lighting now owns the global lighting toggle.
+            _dynamicLightEnabled = _emitsDynamicLight;
+            if (IsLocalPlayer)
+            {
+                _dynamicLightRadius = PlayerPrefs.GetFloat(
+                    DynamicLightRadiusPreferenceKey,
+                    _dynamicLightRadius);
+                _dynamicLightIntensity = Mathf.Clamp(
+                    PlayerPrefs.GetFloat(
+                        DynamicLightIntensityPreferenceKey,
+                        _dynamicLightIntensity),
+                    0f,
+                    4f);
+                _dynamicLightEdgeSoftness = Mathf.Clamp(
+                    PlayerPrefs.GetFloat(
+                        DynamicLightEdgeSoftnessPreferenceKey,
+                        _dynamicLightEdgeSoftness),
+                    0.05f,
+                    1f);
+                _dynamicLightColor = new Color(
+                    PlayerPrefs.GetFloat(DynamicLightColorRPreferenceKey, _dynamicLightColor.r),
+                    PlayerPrefs.GetFloat(DynamicLightColorGPreferenceKey, _dynamicLightColor.g),
+                    PlayerPrefs.GetFloat(DynamicLightColorBPreferenceKey, _dynamicLightColor.b),
+                    1f);
+            }
+
             if (_spriteRenderer == null)
             {
                 _spriteRenderer = GetComponent<SpriteRenderer>();
@@ -182,7 +257,6 @@ namespace Fodinae.Game
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
             _clanRenderer.sortingOrder = 100;
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
-
         }
 
         private void ApplyWorldUiLayer()
@@ -301,6 +375,98 @@ namespace Fodinae.Game
             UpdateTentacles(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime);
 
             UpdateLabelsPosition();
+            UpdateDynamicLight();
+        }
+
+        private void UpdateDynamicLight()
+        {
+            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            if (!_dynamicLightEnabled || lighting == null)
+            {
+                lighting?.RemoveDynamicLight(_dynamicLightId);
+                return;
+            }
+
+            lighting.SetDynamicLight(
+                _dynamicLightId,
+                new Vector2(_targetPosition.x, _targetPosition.y),
+                _dynamicLightRadius,
+                _dynamicLightColor,
+                _dynamicLightIntensity,
+                _dynamicLightEdgeSoftness);
+        }
+
+        protected void OnDisable()
+        {
+            TerrariaLightingEngine.Instance?.RemoveDynamicLight(_dynamicLightId);
+        }
+
+        public void SetDynamicLightRadius(float radius)
+        {
+            _dynamicLightRadius = Mathf.Clamp(radius, 1f, 16f);
+            if (IsLocalPlayer)
+            {
+                PlayerPrefs.SetFloat(DynamicLightRadiusPreferenceKey, _dynamicLightRadius);
+                PlayerPrefs.Save();
+            }
+        }
+
+        public void SetDynamicLightIntensity(float intensity)
+        {
+            _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
+            if (IsLocalPlayer)
+            {
+                PlayerPrefs.SetFloat(DynamicLightIntensityPreferenceKey, _dynamicLightIntensity);
+                PlayerPrefs.Save();
+            }
+        }
+
+        public void SetDynamicLightEdgeSoftness(float softness)
+        {
+            _dynamicLightEdgeSoftness = Mathf.Clamp(softness, 0.05f, 1f);
+            if (IsLocalPlayer)
+            {
+                PlayerPrefs.SetFloat(
+                    DynamicLightEdgeSoftnessPreferenceKey,
+                    _dynamicLightEdgeSoftness);
+                PlayerPrefs.Save();
+            }
+        }
+
+        public void SetDynamicLightColor(Color color)
+        {
+            _dynamicLightColor = new Color(
+                Mathf.Max(0f, color.r),
+                Mathf.Max(0f, color.g),
+                Mathf.Max(0f, color.b),
+                1f);
+            if (IsLocalPlayer)
+            {
+                PlayerPrefs.SetFloat(DynamicLightColorRPreferenceKey, _dynamicLightColor.r);
+                PlayerPrefs.SetFloat(DynamicLightColorGPreferenceKey, _dynamicLightColor.g);
+                PlayerPrefs.SetFloat(DynamicLightColorBPreferenceKey, _dynamicLightColor.b);
+                PlayerPrefs.Save();
+            }
+        }
+
+        public void ResetDynamicLightPreferences()
+        {
+            if (!IsLocalPlayer)
+            {
+                return;
+            }
+
+            PlayerPrefs.DeleteKey(DynamicLightRadiusPreferenceKey);
+            PlayerPrefs.DeleteKey(DynamicLightIntensityPreferenceKey);
+            PlayerPrefs.DeleteKey(DynamicLightEdgeSoftnessPreferenceKey);
+            PlayerPrefs.DeleteKey(DynamicLightColorRPreferenceKey);
+            PlayerPrefs.DeleteKey(DynamicLightColorGPreferenceKey);
+            PlayerPrefs.DeleteKey(DynamicLightColorBPreferenceKey);
+            PlayerPrefs.Save();
+            _dynamicLightRadius = _inspectorDynamicLightRadius;
+            _dynamicLightIntensity = _inspectorDynamicLightIntensity;
+            _dynamicLightEdgeSoftness = _inspectorDynamicLightEdgeSoftness;
+            _dynamicLightColor = _inspectorDynamicLightColor;
         }
 
         private void CreateTentacles(Texture2D tailTexture)

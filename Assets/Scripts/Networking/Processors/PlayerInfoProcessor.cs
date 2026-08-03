@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
@@ -49,10 +50,10 @@ namespace Fodinae.Networking.Processors
 
         public void Process(TeleportPacket packet)
         {
-            var player = PlayerMovementController.LocalPlayer ?? Object.FindAnyObjectByType<PlayerMovementController>();
+            var player = PlayerMovementController.LocalPlayer;
             if (player == null)
             {
-                return;
+                throw new InvalidOperationException("[PlayerInfoProcessor] Teleport received before local player was spawned");
             }
 
             player.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));

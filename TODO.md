@@ -15,3 +15,15 @@
 - [ ] Разделение 2D слоев и матрицы коллизий в `TagManager.asset` & `Physics2DSettings.asset` — Настроить отдельные слои для `Player`, `Robot`, `Pack`, `Terrain` и оптимизировать матрицу коллизий. (Многопоточная физика 2D `useMultithreading: 1` уже включена).
 - [ ] Очистка неиспользуемых тем UI Toolkit в `Assets/UI Toolkit/` — Удалить `UnityDefaultRuntimeTheme.tss` и `UnityThemes/`.
 - [ ] Исправление StyleCop предупреждений в C# коде (`SA1513`, `SA1407`, `SA1503` и др.), выявленных новой полной проверкой линтера.
+
+## Lighting / HDR rendering follow-up
+
+- [ ] Разделить diffuse lighting и emission в финальной композиции: `albedo * (ambient + direct + bounce) + emission`; emission не должен усиливать базовую terrain-текстуру.
+- [ ] Откалибровать физические единицы radiance, extinction и emission для блоков и динамических источников; убрать случайные усилители и скрытые коэффициенты.
+- [ ] Довести display-referred HDR pipeline до production-уровня: проверить HDR camera target, linear workflow, output transform и отсутствие обхода post-process.
+- [ ] Проверить ACES tone mapping на реальных HDR-сценах: dark preservation, highlight shoulder, насыщенные красные/синие источники и отсутствие цветового клиппинга.
+- [ ] Добавить в Unity Volume Profile рабочие настройки tone mapping: enable, exposure, white point и при необходимости shoulder/contrast; проверить фактические значения в runtime diagnostics.
+- [ ] Разделить художественную яркость texture/albedo, diffuse irradiance, emission и bloom threshold; художническая текстура должна сохранять вид при нейтральном свете.
+- [ ] Сделать отдельные визуальные тест-сцены/кейсы: голый блок, цветной источник, HDR emission, соседний albedo, 1–3 клетки extinction, AO и bounce.
+- [ ] Проверить производительность HDR/post-process и lighting в Unity Profiler и GPU timing: стабильный frame time, без периодических полных mip/cascade rebuild и CPU↔GPU sync.
+- [ ] Удалить диагностический `Enable Final Lighting Clamp` после завершения калибровки или оставить только как явно помеченный debug-инструмент.

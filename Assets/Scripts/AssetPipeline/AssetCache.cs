@@ -547,7 +547,12 @@ namespace Fodinae
                 // NOTE: cache entry will have the correct FPS stored; but since we returned a
                 // promise, the stored values are stale for awaiters. This path is rare (concurrent
                 // first requests) — the primary path is the fast-return above.
-                return new AnimatedSpriteData(frames ?? Array.Empty<Sprite>(), 10f, 0);
+                if (frames == null)
+                {
+                    throw new InvalidOperationException("Sprite frames were not decoded (null).");
+                }
+
+                return new AnimatedSpriteData(frames, 10f, 0);
             }
 
             private static async UniTask<T> AwaitTask<T>(Task<T> task)
@@ -596,8 +601,9 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailTexture(new Exception("Empty or null bytes"));
-                        return null;
+                        var emptyEx = new InvalidOperationException($"Empty or null bytes for texture '{_filename}'.");
+                        FailTexture(emptyEx);
+                        throw emptyEx;
                     }
 
                     // Decode on the main thread (Unity API requirement)
@@ -692,8 +698,9 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailAudio(new Exception("Empty or null bytes"));
-                        return null;
+                        var emptyEx = new InvalidOperationException($"Empty or null bytes for audio '{_filename}'.");
+                        FailAudio(emptyEx);
+                        throw emptyEx;
                     }
 
                     UnityEngine.Debug.LogWarning("[AssetCache] WavUtility is deprecated. Decoding wav is not supported.");
@@ -706,9 +713,10 @@ namespace Fodinae
                         _audioPromise = null;
                     }
 
-                    audioPromise?.TrySetResult(clip);
+                    var unsupportedEx = new NotSupportedException($"WAV decoding is not supported for '{_filename}'.");
+                    audioPromise?.TrySetException(unsupportedEx);
                     ReleaseRawBytes();
-                    return clip;
+                    throw unsupportedEx;
                 }
                 catch (Exception ex)
                 {
@@ -732,7 +740,12 @@ namespace Fodinae
                 var frames = await DecodeSprites(loader);
                 lock (_lock)
                 {
-                    return new AnimatedSpriteData(frames ?? Array.Empty<Sprite>(), _spriteFps, _spriteFrameHeight);
+                    if (frames == null)
+                    {
+                        throw new InvalidOperationException("Sprite frames were not decoded (null).");
+                    }
+
+                    return new AnimatedSpriteData(frames, _spriteFps, _spriteFrameHeight);
                 }
             }
 
@@ -783,8 +796,9 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailSprites(new Exception("Empty or null bytes"));
-                        return null;
+                        var emptyEx = new InvalidOperationException($"Empty or null bytes for sprites '{_filename}'.");
+                        FailSprites(emptyEx);
+                        throw emptyEx;
                     }
 
                     // Decode GIF/WebP on the main thread
@@ -807,7 +821,7 @@ namespace Fodinae
                     }
 
                     Sprite[] result;
-                    float fps = 10f;
+                    float fps;
                     int frameHeight = 0;
 
                     if (anim.Atlas != null && anim.FrameCount > 0)
@@ -821,7 +835,7 @@ namespace Fodinae
                     }
                     else
                     {
-                        result = Array.Empty<Sprite>();
+                        throw new InvalidOperationException($"Unknown or empty animation container for '{_filename}'.");
                     }
 
                     TaskCompletionSource<Sprite[]?>? spritePromise;

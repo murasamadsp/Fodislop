@@ -22,7 +22,14 @@ namespace Fodinae.Rendering.PostProcessing
         [Tooltip("Color saturation. One is neutral, zero is grayscale.")]
         public ClampedFloatParameter saturation = new(1f, 0f, 2f);
 
-        public bool IsActive() => exposure.value != 0f ||
+        [Tooltip("Enable display-referred HDR tone mapping.")]
+        public BoolParameter toneMapping = new(true);
+
+        [Tooltip("HDR luminance mapped to display white. Higher values preserve more highlight range.")]
+        public ClampedFloatParameter toneMappingWhitePoint = new(1f, 0.25f, 8f);
+
+        public bool IsActive() => toneMapping.value ||
+                                 exposure.value != 0f ||
                                  colorFilter.value != Color.white ||
                                  contrast.value != 0f ||
                                  saturation.value != 1f;

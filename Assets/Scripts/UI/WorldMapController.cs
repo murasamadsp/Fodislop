@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -110,9 +111,13 @@ namespace Fodinae.UI
             SetHudVisible(false);
 
             // Center map on player position
-            int CENTER_X = _player != null ? _player.Position.x : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldWidth ?? 64) / 2;
-            int CENTER_Y = _player != null ? _player.Position.y : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldHeight ?? 64) / 2;
-            _mapRenderer.SetViewCenter(CENTER_X, CENTER_Y);
+            var player = _player;
+            if (player == null)
+            {
+                throw new InvalidOperationException("[WorldMapController] Cannot enter map mode: local player is not spawned");
+            }
+
+            _mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
         }
 
         private void ExitMapMode()

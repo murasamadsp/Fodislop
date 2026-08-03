@@ -17,28 +17,40 @@ namespace Fodinae.Rendering
     public struct GraphicsQualitySettings
     {
         [Min(1)]
+        [Tooltip("Количество lighting-пикселей на одну физическую клетку. Выше — точнее и дороже.")]
         public int LightingPixelsPerCell;
         [Min(128)]
+        [Tooltip("Максимальный размер lighting field в пикселях.")]
         public int LightingMaximumTextureDimension;
         [Min(1)]
+        [Tooltip("Максимальное число dynamic light sources, загружаемых в GPU buffer.")]
         public int LightingMaximumLightCount;
         [Min(1)]
+        [Tooltip("Максимальное число шагов одного cascade interval.")]
         public int LightingMaximumRaySteps;
         [Min(1f)]
+        [Tooltip("Максимальная частота lighting solve. Изменение геометрии всё равно обрабатывается сразу.")]
         public float LightingUpdatesPerSecond;
         [ColorUsage(showAlpha: false, hdr: true)]
+        [Tooltip("Legacy/profile base empty extinction. Фактическое значение задаётся на WorldLighting.")]
         public Color EmptyExtinctionRgb;
         [ColorUsage(showAlpha: false, hdr: true)]
+        [Tooltip("Legacy/profile base solid extinction. Фактическое значение задаётся на WorldLighting.")]
         public Color SolidExtinctionRgb;
         [Range(0f, 2f)]
+        [Tooltip("Legacy/profile bounce value. Рабочая настройка diffuse bounce находится на WorldLighting.")]
         public float BounceStrength;
         [Min(128)]
+        [Tooltip("Бюджет radiance cascade atlas.")]
         public int LightingCascadeAtlasLimit;
         [Range(0.5f, 1f)]
+        [Tooltip("URP render scale для данного quality tier.")]
         public float RenderScale;
         [Range(0, 4)]
+        [Tooltip("Количество вертикальных синхронизаций.")]
         public int VSyncCount;
         [Range(0, 8)]
+        [Tooltip("MSAA sample count для данного quality tier.")]
         public int AntiAliasing;
 
         public GraphicsQualitySettings(
@@ -78,9 +90,9 @@ namespace Fodinae.Rendering
         [SerializeField]
         private GraphicsQualitySettings _medium = new(2, 768, 256, 28, 60f, lightingCascadeAtlasLimit: 768);
         [SerializeField]
-        private GraphicsQualitySettings _high = new(2, 1024, 512, 40, 60f, lightingCascadeAtlasLimit: 1024);
+        private GraphicsQualitySettings _high = new(4, 1536, 512, 40, 60f, lightingCascadeAtlasLimit: 1536);
         [SerializeField]
-        private GraphicsQualitySettings _ultra = new(4, 1536, 1024, 64, 60f, lightingCascadeAtlasLimit: 1536);
+        private GraphicsQualitySettings _ultra = new(8, 2048, 1024, 64, 30f, lightingCascadeAtlasLimit: 2048);
 
         public GraphicsQualitySettings Get(GraphicsQualityTier tier)
         {
@@ -92,36 +104,32 @@ namespace Fodinae.Rendering
                 _ => _ultra,
             };
 
-            ApplyRadianceCascadeDefaults(ref settings, tier);
+            Validate(settings, tier);
             return settings;
         }
 
-        private static void ApplyRadianceCascadeDefaults(
-            ref GraphicsQualitySettings settings,
-            GraphicsQualityTier tier)
+        private static void Validate(GraphicsQualitySettings settings, GraphicsQualityTier tier)
         {
-            (settings.LightingPixelsPerCell, settings.LightingMaximumTextureDimension) = tier switch
+            if (settings.LightingPixelsPerCell < 1 ||
+                settings.LightingMaximumTextureDimension < 128 ||
+                settings.LightingMaximumLightCount < 1 ||
+                settings.LightingMaximumRaySteps < 1 ||
+                settings.LightingUpdatesPerSecond <= 0f ||
+                settings.LightingCascadeAtlasLimit < 128 ||
+                settings.BounceStrength is < 0f or > 2f ||
+                settings.RenderScale is < 0.5f or > 1f ||
+                settings.VSyncCount is < 0 or > 4 ||
+                settings.AntiAliasing is < 0 or > 8)
             {
-                GraphicsQualityTier.Low => (1, 512),
-                GraphicsQualityTier.Medium => (2, 768),
-                GraphicsQualityTier.High => (2, 1024),
-                _ => (4, 1536),
-            };
-            settings.LightingCascadeAtlasLimit = settings.LightingMaximumTextureDimension;
-            settings.LightingUpdatesPerSecond = 60f;
-            if (settings.EmptyExtinctionRgb.maxColorComponent <= 0f)
-            {
-                settings.EmptyExtinctionRgb = new Color(0.015f, 0.012f, 0.009f, 1f);
+                throw new InvalidOperationException(
+                    $"Graphics quality profile '{tier}' contains invalid quality settings.");
             }
 
-            if (settings.SolidExtinctionRgb.maxColorComponent <= 0f)
+            if (settings.EmptyExtinctionRgb.maxColorComponent <= 0f ||
+                settings.SolidExtinctionRgb.maxColorComponent <= 0f)
             {
-                settings.SolidExtinctionRgb = new Color(4.5f, 4.25f, 4f, 1f);
-            }
-
-            if (settings.BounceStrength <= 0f)
-            {
-                settings.BounceStrength = 0.3f;
+                throw new InvalidOperationException(
+                    $"Graphics quality profile '{tier}' is missing explicit extinction values.");
             }
         }
     }

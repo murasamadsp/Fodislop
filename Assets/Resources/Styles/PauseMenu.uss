@@ -32,6 +32,12 @@
     max-height: 85%;
 }
 
+.pause-settings {
+    width: 380px;
+    height: 85%;
+    min-height: 0;
+}
+
 .pause-title {
     font-size: 18px;
     -unity-font-style: bold;
@@ -53,7 +59,8 @@
 
 .pause-scroll {
     width: 100%;
-    max-height: 400px;
+    flex-grow: 1;
+    min-height: 0;
 }
 
 .pause-confirm-overlay {

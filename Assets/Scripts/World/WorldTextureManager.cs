@@ -134,7 +134,6 @@ namespace Fodinae.World
 
             _flowMapTexture.SetPixels(pixels);
             _flowMapTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-
         }
 
         public event Action<string, Texture2D>? OnTextureLoaded;
@@ -280,9 +279,12 @@ namespace Fodinae.World
                 }
 
                 await UniTask.SwitchToMainThread();
-                return _textureCache.TryGetTexture(cellType, out _)
-                    ? GetCellTextureCoordinateSync(cellType, globalX, globalY)
-                    : AtlasCoordinate.Empty;
+                if (_textureCache.TryGetTexture(cellType, out textureInfo))
+                {
+                    return GetCellTextureCoordinateSync(cellType, globalX, globalY);
+                }
+
+                throw new InvalidOperationException($"Failed to load texture for cell type {cellType} (joined racing request).");
             }
 
             try
@@ -295,28 +297,19 @@ namespace Fodinae.World
                 {
                     return GetCellTextureCoordinateSync(cellType, globalX, globalY);
                 }
+
+                throw new InvalidOperationException($"Failed to load texture for cell type {cellType}: texture is not cached after load");
             }
             catch (Exception ex)
             {
                 await UniTask.SwitchToMainThread();
-                Debug.LogError($"Failed to load texture for cell type {cellType}: {ex.Message}");
                 request.SetResult(false);
-
-                CreateFallbackTexture(cellType, globalX, globalY);
-
-                if (_textureCache.TryGetTexture(cellType, out textureInfo))
-                {
-                    return GetCellTextureCoordinateSync(cellType, globalX, globalY);
-                }
-
-                return AtlasCoordinate.Empty;
+                throw new InvalidOperationException($"Failed to load texture for cell type {cellType}: {ex.Message}", ex);
             }
             finally
             {
                 _pendingRequests.TryRemove(cellType, out _);
             }
-
-            return AtlasCoordinate.Empty;
         }
 
         private async UniTask LoadTexture(CellType cellType)
@@ -524,169 +517,6 @@ namespace Fodinae.World
             GenerateFlowMap();
             _cachedEmptyTexture = null;
             TextureRevision++;
-        }
-
-        private void CreateFallbackTexture(CellType cellType, int globalX, int globalY)
-        {
-            try
-            {
-                Color dominantColor = GetDominantBackgroundColor(globalX, globalY);
-
-                var fallbackTexture = new Texture2D(_cellTextureSize, _cellTextureSize);
-                var pixels = new Color[_cellTextureSize * _cellTextureSize];
-
-                for (int i = 0; i < pixels.Length; i++)
-                {
-                    pixels[i] = dominantColor;
-                }
-
-                fallbackTexture.SetPixels(pixels);
-                fallbackTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-
-                var textureInfo = new CellTextureInfo
-                {
-                    CellType = cellType,
-                    BaseTexture = fallbackTexture,
-                    HasVariations = false,
-                    VariationCount = 1,
-                    AnimationFrames = 1,
-                    FramesPerRow = 1,
-                    FrameSize = _cellTextureSize,
-                };
-
-                if (_currentAtlas != null && _currentAtlas.TryAddTexture(cellType, fallbackTexture, out var coordinate))
-                {
-                    _currentAtlas.CopyTextureToAtlas(cellType, fallbackTexture);
-                    _textureCache.AddTexture(cellType, textureInfo);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Failed to create fallback texture for cell type {cellType}: {ex.Message}");
-            }
-        }
-
-        private Color GetDominantBackgroundColor(int globalX, int globalY)
-        {
-            Span<Color> backgroundColors = stackalloc Color[24];
-            int backgroundColorCount = 0;
-            const int radius = 2;
-
-            for (int dx = -radius; dx <= radius; dx++)
-            {
-                for (int dy = -radius; dy <= radius; dy++)
-                {
-                    if (dx == 0 && dy == 0)
-                    {
-                        continue;
-                    }
-
-                    CellType neighborType = GetCellTypeAt(globalX + dx, globalY + dy);
-
-                    if (neighborType == CellType.Empty || neighborType == CellType.Road)
-                    {
-                        Color cellColor = GetCellBackgroundColor(neighborType);
-
-                        int weight = Mathf.Max(0, radius - Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) + 1);
-                        for (int w = 0; w < weight && backgroundColorCount < backgroundColors.Length; w++)
-                        {
-                            backgroundColors[backgroundColorCount++] = cellColor;
-                        }
-                    }
-                }
-            }
-
-            if (backgroundColorCount > 0)
-            {
-                return GetMostFrequentColor(backgroundColors[..backgroundColorCount]);
-            }
-
-            return GetCellBackgroundColor(CellType.Empty);
-        }
-
-        private static CellType GetCellTypeAt(int x, int y)
-        {
-            var storage = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (storage?.CellLayer != null)
-            {
-                try
-                {
-                    return storage.GetCell(x, y);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"GetCellTypeAt error: {ex.Message}");
-                }
-            }
-
-            return CellType.Empty;
-        }
-
-        private static Color GetCellBackgroundColor(CellType cellType)
-        {
-            switch (cellType)
-            {
-                case CellType.Empty:
-                    return new Color(0.2f, 0.2f, 0.2f, 1f);
-                case CellType.Road:
-                    return new Color(0.8f, 0.7f, 0.5f, 1f);
-                case CellType.WhiteSand:
-                    return new Color(0.95f, 0.9f, 0.7f, 1f);
-                case CellType.GrayAcid:
-                    return new Color(0.6f, 0.8f, 0.6f, 1f);
-                default:
-                    return new Color(0.2f, 0.2f, 0.2f, 1f);
-            }
-        }
-
-        private static Color GetMostFrequentColor(ReadOnlySpan<Color> colors)
-        {
-            if (colors.Length == 0)
-            {
-                return new Color(0.2f, 0.2f, 0.2f);
-            }
-
-            Span<Color> groupColors = stackalloc Color[24];
-            Span<Color> groupSums = stackalloc Color[24];
-            Span<int> groupCounts = stackalloc int[24];
-            int groupCount = 0;
-            const float tolerance = 0.1f;
-
-            foreach (var color in colors)
-            {
-                bool added = false;
-                for (int groupIndex = 0; groupIndex < groupCount; groupIndex++)
-                {
-                    var existingColor = groupColors[groupIndex];
-                    if (Mathf.Abs(color.r - existingColor.r) < tolerance &&
-                        Mathf.Abs(color.g - existingColor.g) < tolerance &&
-                        Mathf.Abs(color.b - existingColor.b) < tolerance)
-                    {
-                        groupSums[groupIndex] += color;
-                        groupCounts[groupIndex]++;
-                        added = true;
-                        break;
-                    }
-                }
-
-                if (!added)
-                {
-                    groupColors[groupCount] = color;
-                    groupSums[groupCount] = color;
-                    groupCounts[groupCount++] = 1;
-                }
-            }
-
-            int mostFrequentGroup = 0;
-            for (int groupIndex = 1; groupIndex < groupCount; groupIndex++)
-            {
-                if (groupCounts[groupIndex] > groupCounts[mostFrequentGroup])
-                {
-                    mostFrequentGroup = groupIndex;
-                }
-            }
-
-            return groupSums[mostFrequentGroup] / groupCounts[mostFrequentGroup];
         }
 
         public Texture2D? GetCachedTexture(CellType cellType)

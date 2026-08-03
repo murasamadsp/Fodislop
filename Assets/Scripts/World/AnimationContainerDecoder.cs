@@ -74,7 +74,6 @@ namespace Fodinae.World
             return frames;
         }
 
-        [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Decoding external data can throw various exceptions; we want to fail gracefully.")]
         public static DecodedAnimation DecodeGif(byte[] data)
         {
             try
@@ -84,18 +83,17 @@ namespace Fodinae.World
             catch (Exception e)
             {
                 Debug.LogError($"[AnimationContainerDecoder] GIF decode failed: {e.Message}\n{e.StackTrace}");
-                return default;
+                throw new InvalidOperationException($"GIF decode failed: {e.Message}", e);
             }
         }
 
-        [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Decoding external data can throw various exceptions; we want to fail gracefully.")]
         public static DecodedAnimation DecodeWebP(byte[] data)
         {
             try
             {
                 if (data == null || data.Length <= 12)
                 {
-                    return default;
+                    throw new InvalidOperationException("WebP data is empty or too short");
                 }
 
                 int pos = 12;
@@ -190,6 +188,7 @@ namespace Fodinae.World
                     totalDelay += delays[i];
                     UnityEngine.Object.Destroy(frameTextures[i]);
                 }
+
                 atlas.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
 
                 float avgDelay = totalDelay / frameTextures.Count;
@@ -204,7 +203,7 @@ namespace Fodinae.World
             catch (Exception e)
             {
                 Debug.LogError($"[AnimationContainerDecoder] WebP decode failed: {e.Message}");
-                return default;
+                throw new InvalidOperationException($"WebP decode failed: {e.Message}", e);
             }
         }
 
@@ -236,9 +235,9 @@ namespace Fodinae.World
 
             public DecodedAnimation Decode()
             {
-                if (this._data[0] != 'G' || this._data[1] != 'I' || this._data[2] != 'F')
+                if (this._data.Length < 3 || this._data[0] != 'G' || this._data[1] != 'I' || this._data[2] != 'F')
                 {
-                    return default;
+                    throw new InvalidOperationException("GIF data is missing the GIF header");
                 }
 
                 this._pos = 6;

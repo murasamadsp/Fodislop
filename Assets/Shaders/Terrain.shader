@@ -491,7 +491,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     ? saturate(frac(input.glowData.y) * 4.0)
                     : 0.0;
                 bool hasRoundedPhysicalContour = (lightingFlags & 32u) != 0u;
-                float occupancy = step(0.5, input.animData.w) * isForeground;
+                bool isPhysicalMass = (lightingFlags & 64u) != 0u;
+                float occupancy = isPhysicalMass ? isForeground : 0.0;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
                         input.uv,

@@ -1,4 +1,7 @@
+#nullable enable
+
 #if UNITY_EDITOR
+using System;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -18,7 +21,6 @@ namespace Fodinae.Editor
                 "Assets/Scripts/Game/Robot.cs",
                 "Assets/Scripts/Player/PlayerInteractionController.cs",
                 "Assets/Scripts/Player/Input/PlayerInputHandler.cs",
-                "Assets/Scripts/Game/RobotHeadlight.cs",
             };
 
             foreach (var path in scriptPaths)
@@ -26,60 +28,71 @@ namespace Fodinae.Editor
                 AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             }
 
-            AssetDatabase.ImportAsset("Assets/Prefabs/Player.prefab", ImportAssetOptions.ForceUpdate);
-
             // 2. Проверка компонентов на Assets/Prefabs/Player.prefab
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Player.prefab");
             if (prefab != null)
             {
-                bool prefabModified = false;
+                GameObject prefabContents = PrefabUtility.LoadPrefabContents(
+                    "Assets/Prefabs/Player.prefab");
+                bool prefabModified = RemoveMissingScriptsFromHierarchy(prefabContents);
 
-                if (prefab.GetComponent<Fodinae.Player.Logic.PlayerMovementController>() == null)
+                if (prefabContents.GetComponent<Fodinae.Player.Logic.PlayerMovementController>() == null)
                 {
-                    prefab.AddComponent<Fodinae.Player.Logic.PlayerMovementController>();
+                    prefabContents.AddComponent<Fodinae.Player.Logic.PlayerMovementController>();
                     prefabModified = true;
                 }
 
-                if (prefab.GetComponent<Fodinae.Game.Robot>() == null)
+                if (prefabContents.GetComponent<Fodinae.Game.Robot>() == null)
                 {
-                    prefab.AddComponent<Fodinae.Game.Robot>();
+                    prefabContents.AddComponent<Fodinae.Game.Robot>();
                     prefabModified = true;
                 }
 
-                if (prefab.GetComponent<Fodinae.Player.PlayerInteractionController>() == null)
+                Fodinae.Game.Robot robot = prefabContents.GetComponent<Fodinae.Game.Robot>() ??
+                    throw new InvalidOperationException("Player prefab Robot component is missing.");
+                SerializedObject serializedRobot = new(robot);
+                SerializedProperty intensity = serializedRobot.FindProperty("_dynamicLightIntensity") ??
+                    throw new InvalidOperationException(
+                        "Robot is missing serialized field '_dynamicLightIntensity'.");
+                if (!Mathf.Approximately(intensity.floatValue, 1.25f))
                 {
-                    prefab.AddComponent<Fodinae.Player.PlayerInteractionController>();
+                    intensity.floatValue = 1.25f;
+                    serializedRobot.ApplyModifiedPropertiesWithoutUndo();
                     prefabModified = true;
                 }
 
-                if (prefab.GetComponent<Fodinae.Player.Input.PlayerInputHandler>() == null)
+                if (prefabContents.GetComponent<Fodinae.Player.PlayerInteractionController>() == null)
                 {
-                    prefab.AddComponent<Fodinae.Player.Input.PlayerInputHandler>();
+                    prefabContents.AddComponent<Fodinae.Player.PlayerInteractionController>();
                     prefabModified = true;
                 }
 
-                if (prefab.GetComponent<Fodinae.Game.RobotHeadlight>() == null)
+                if (prefabContents.GetComponent<Fodinae.Player.Input.PlayerInputHandler>() == null)
                 {
-                    prefab.AddComponent<Fodinae.Game.RobotHeadlight>();
+                    prefabContents.AddComponent<Fodinae.Player.Input.PlayerInputHandler>();
                     prefabModified = true;
                 }
 
                 if (prefabModified)
                 {
-                    EditorUtility.SetDirty(prefab);
-                    AssetDatabase.SaveAssets();
+                    PrefabUtility.SaveAsPrefabAsset(prefabContents, "Assets/Prefabs/Player.prefab");
                     Debug.Log("[FixPlayerPrefabUtility] Fixed and saved missing components on Assets/Prefabs/Player.prefab");
                 }
+
+                if (CountMissingScriptsInHierarchy(prefabContents) != 0)
+                {
+                    throw new InvalidOperationException(
+                        "Player prefab still contains missing MonoBehaviour scripts after cleanup.");
+                }
+
+                PrefabUtility.UnloadPrefabContents(prefabContents);
             }
 
             // 3. Проверка инстанса Player в открытой сцене
-            var playerSceneGo = GameObject.FindGameObjectWithTag("Player");
+            GameObject? playerSceneGo = FindPlayerInOpenScenes();
             if (playerSceneGo != null)
             {
-                // Очистка битых скриптов (Missing Script)
-                GameObjectUtility.RemoveMonoBehavioursWithMissingScript(playerSceneGo);
-
-                bool sceneModified = false;
+                bool sceneModified = RemoveMissingScriptsFromHierarchy(playerSceneGo);
 
                 if (playerSceneGo.GetComponent<Fodinae.Player.Logic.PlayerMovementController>() == null)
                 {
@@ -105,18 +118,68 @@ namespace Fodinae.Editor
                     sceneModified = true;
                 }
 
-                if (playerSceneGo.GetComponent<Fodinae.Game.RobotHeadlight>() == null)
-                {
-                    playerSceneGo.AddComponent<Fodinae.Game.RobotHeadlight>();
-                    sceneModified = true;
-                }
-
                 if (sceneModified)
                 {
                     EditorSceneManager.MarkSceneDirty(playerSceneGo.scene);
+                    EditorSceneManager.SaveScene(playerSceneGo.scene);
                     Debug.Log("[FixPlayerPrefabUtility] Fixed missing components on scene Player GameObject");
                 }
+
+                if (CountMissingScriptsInHierarchy(playerSceneGo) != 0)
+                {
+                    throw new InvalidOperationException(
+                        "Scene Player still contains missing MonoBehaviour scripts after cleanup.");
+                }
             }
+
+            AssetDatabase.SaveAssets();
+        }
+
+        private static bool RemoveMissingScriptsFromHierarchy(GameObject root)
+        {
+            bool modified = false;
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(includeInactive: true);
+            foreach (Transform transform in transforms)
+            {
+                modified |= GameObjectUtility.RemoveMonoBehavioursWithMissingScript(
+                    transform.gameObject) > 0;
+            }
+
+            return modified;
+        }
+
+        private static int CountMissingScriptsInHierarchy(GameObject root)
+        {
+            int missingCount = 0;
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(includeInactive: true);
+            foreach (Transform transform in transforms)
+            {
+                MonoBehaviour[] components = transform.GetComponents<MonoBehaviour>();
+                foreach (MonoBehaviour component in components)
+                {
+                    if (component == null)
+                    {
+                        missingCount++;
+                    }
+                }
+            }
+
+            return missingCount;
+        }
+
+        private static GameObject? FindPlayerInOpenScenes()
+        {
+            Transform[] transforms = UnityEngine.Object.FindObjectsByType<Transform>(
+                FindObjectsInactive.Include);
+            foreach (Transform transform in transforms)
+            {
+                if (transform.CompareTag("Player"))
+                {
+                    return transform.gameObject;
+                }
+            }
+
+            return null;
         }
     }
 }

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -204,21 +205,20 @@ namespace Fodinae.UI
             rt.anchorMax = Vector2.one;
             rt.sizeDelta = Vector2.zero;
             rt.anchoredPosition = Vector2.zero;
-
         }
 
         private void InitColorTable()
         {
+            var manager = _manager;
+            if (manager == null)
+            {
+                throw new InvalidOperationException("[WorldMapRenderer] Cannot build color table: map manager is not initialized");
+            }
+
             for (int i = 0; i < 256; i++)
             {
                 CellType type = (CellType)i;
-                Color color = _manager?.GetCellMinimapColor(type) ?? new Color(0.3f, 0.3f, 0.3f);
-                if (color.a < 0.01f)
-                {
-                    color = new Color(0.3f, 0.3f, 0.3f);
-                }
-
-                _cellColorTable[i] = (Color32)color;
+                _cellColorTable[i] = (Color32)manager.GetCellMinimapColor(type);
             }
         }
 
@@ -310,16 +310,20 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (!RenderViewport())
+            {
+                return;
+            }
+
             _lastRenderTime = Time.time;
             _initialRenderDone = true;
-            RenderViewport();
         }
 
-        private void RenderViewport()
+        private bool RenderViewport()
         {
             if (_manager == null || _storage == null)
             {
-                return;
+                return false;
             }
 
             int worldW = _manager.WorldWidth;
@@ -346,7 +350,11 @@ namespace Fodinae.UI
             // world and then painted the same pixel many times. A 10k x 10k
             // world could therefore trigger 100 million GetCell calls for a
             // texture that contains only ~500k pixels.
-            _chunkCache.Clear();
+            if (!PrepareViewportChunks(worldW, worldH, cp, cx, cy, texW, texH))
+            {
+                return false;
+            }
+
             for (int py = 0; py < texH; py++)
             {
                 int rowStart = py * texW;
@@ -414,13 +422,77 @@ namespace Fodinae.UI
 
             _renderRequested = false;
             _lastRenderedStorageRevision = (_storage as MapStorage)?.Revision ?? -1;
+            return true;
+        }
+
+        private bool PrepareViewportChunks(
+            int worldWidth,
+            int worldHeight,
+            float cellsPerPixel,
+            float centerX,
+            float centerY,
+            int textureWidth,
+            int textureHeight)
+        {
+            if (_cellLayer == null || _chunkSize <= 0 || _heightChunks <= 0)
+            {
+                return true;
+            }
+
+            int minX = Mathf.Clamp(
+                Mathf.FloorToInt(centerX - (textureWidth * 0.5f * cellsPerPixel)),
+                0,
+                worldWidth - 1);
+            int maxX = Mathf.Clamp(
+                Mathf.CeilToInt(centerX + (textureWidth * 0.5f * cellsPerPixel)),
+                0,
+                worldWidth - 1);
+            int minY = Mathf.Clamp(
+                Mathf.FloorToInt(centerY - (textureHeight * 0.5f * cellsPerPixel)),
+                0,
+                worldHeight - 1);
+            int maxY = Mathf.Clamp(
+                Mathf.CeilToInt(centerY + (textureHeight * 0.5f * cellsPerPixel)),
+                0,
+                worldHeight - 1);
+
+            _chunkCache.Clear();
+            int firstChunkX = minX / _chunkSize;
+            int lastChunkX = maxX / _chunkSize;
+            int firstChunkY = minY / _chunkSize;
+            int lastChunkY = maxY / _chunkSize;
+            for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
+            {
+                for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
+                {
+                    int chunkIndex = chunkY + (chunkX * _heightChunks);
+                    CellType[]? chunk = _cellLayer.GetChunk(
+                        chunkIndex,
+                        createIfMissing: false,
+                        touchLru: true);
+                    if (chunk == null)
+                    {
+                        return false;
+                    }
+
+                    _chunkCache[chunkIndex] = chunk;
+                }
+            }
+
+            return true;
         }
 
         private CellType GetCell(int serverX, int serverY)
         {
             if (_cellLayer == null || _chunkSize <= 0 || _heightChunks <= 0)
             {
-                return _storage?.GetCell(serverX, serverY) ?? CellType.Unloaded;
+                var storage = _storage;
+                if (storage == null)
+                {
+                    throw new InvalidOperationException("[WorldMapRenderer] Cannot read cells: storage is not initialized");
+                }
+
+                return storage.GetCell(serverX, serverY);
             }
 
             int chunkX = serverX / _chunkSize;
@@ -434,7 +506,7 @@ namespace Fodinae.UI
 
             if (chunk == null)
             {
-                return CellType.Unloaded;
+                throw new InvalidOperationException($"[WorldMapRenderer] Chunk {chunkIndex} is not loaded and could not be fetched");
             }
 
             int localX = serverX % _chunkSize;

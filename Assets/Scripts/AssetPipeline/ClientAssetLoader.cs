@@ -45,23 +45,25 @@ namespace Fodinae
             return new List<string>(_pendingRequests.Keys).ToArray();
         }
 
-        private Texture2D? _placeholderTexture;
-        private Texture2D? _errorTexture;
+        // Плейсхолдер- и error-текстуры отключены (No Implicit Defaults):
+        // вместо заглушек клиент прерывается исключением при отсутствии ассета.
+        // private Texture2D? _placeholderTexture;
+        // private Texture2D? _errorTexture;
 
         [Inject]
         private IConnectionService _connectionService = null!;
 
         protected void Awake()
         {
-            _placeholderTexture = new Texture2D(1, 1);
-            _placeholderTexture.SetPixel(0, 0, Color.gray);
-            _placeholderTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-            _placeholderTexture.name = "Placeholder_Texture";
+            // _placeholderTexture = new Texture2D(1, 1);
+            // _placeholderTexture.SetPixel(0, 0, Color.gray);
+            // _placeholderTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
+            // _placeholderTexture.name = "Placeholder_Texture";
 
-            _errorTexture = new Texture2D(1, 1);
-            _errorTexture.SetPixel(0, 0, Color.red);
-            _errorTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-            _errorTexture.name = "Error_Texture";
+            // _errorTexture = new Texture2D(1, 1);
+            // _errorTexture.SetPixel(0, 0, Color.red);
+            // _errorTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
+            // _errorTexture.name = "Error_Texture";
 
             _loopCts = new CancellationTokenSource();
             ProcessBatchLoop(_loopCts.Token).Forget();
@@ -73,17 +75,17 @@ namespace Fodinae
             _loopCts?.Dispose();
             _cache.Clear();
 
-            if (_placeholderTexture != null)
-            {
-                Destroy(_placeholderTexture);
-                _placeholderTexture = null;
-            }
+            // if (_placeholderTexture != null)
+            // {
+            //     Destroy(_placeholderTexture);
+            //     _placeholderTexture = null;
+            // }
 
-            if (_errorTexture != null)
-            {
-                Destroy(_errorTexture);
-                _errorTexture = null;
-            }
+            // if (_errorTexture != null)
+            // {
+            //     Destroy(_errorTexture);
+            //     _errorTexture = null;
+            // }
 
             if (_connectionService is ConnectionManager cm)
             {
@@ -125,10 +127,11 @@ namespace Fodinae
 
         public async UniTaskVoid LoadAndApplyTexture(Action<Texture2D> applyTextureAction, string filename, CancellationToken cancellationToken)
         {
-            if (_placeholderTexture != null)
-            {
-                applyTextureAction(_placeholderTexture);
-            }
+            // // Старое поведение с плейсхолдером/error-текстурой (отключено):
+            // if (_placeholderTexture != null)
+            // {
+            //     applyTextureAction(_placeholderTexture);
+            // }
 
             var texture = await GetTextureAsync(filename, cancellationToken);
 
@@ -143,14 +146,16 @@ namespace Fodinae
             }
             else
             {
-                if (!HasAsset(filename))
-                {
-                    Debug.LogError($"Failed to load texture for '{filename}'. Applying error texture.");
-                    if (_errorTexture != null)
-                    {
-                        applyTextureAction(_errorTexture);
-                    }
-                }
+                // if (!HasAsset(filename))
+                // {
+                //     Debug.LogError($"Failed to load texture for '{filename}'. Applying error texture.");
+                //     if (_errorTexture != null)
+                //     {
+                //         applyTextureAction(_errorTexture);
+                //     }
+                // }
+
+                Debug.LogError($"Failed to load texture for '{filename}'. No texture applied.");
             }
         }
 
@@ -325,7 +330,18 @@ namespace Fodinae
                     if (assetPacket.Contents.Length == 0 && !string.IsNullOrEmpty(assetPacket.ETag))
                     {
                         var cachedAsset = await GetAssetAsync(assetPacket.Filename).ConfigureAwait(false);
-                        tcs.TrySetResult(cachedAsset ?? Array.Empty<byte>());
+
+                        // // Старое поведение: подставлять пустой массив при отсутствии кэша (отключено).
+                        // tcs.TrySetResult(cachedAsset ?? Array.Empty<byte>());
+
+                        if (cachedAsset == null)
+                        {
+                            var noAssetEx = new Exception($"Asset '{filename}' is not cached and server returned empty contents");
+                            tcs.TrySetException(noAssetEx);
+                            return;
+                        }
+
+                        tcs.TrySetResult(cachedAsset);
                     }
                     else
                     {

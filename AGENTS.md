@@ -95,13 +95,14 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 
 ### Lighting и terrain invariants
 
+- Активный lighting-пайплайн — GPU Radiance Cascades из `WorldLighting.compute`: `LightingMaterialField`/`EmissionField → SolveCascade → ResolveDirect → SolveDiffuseBounce → CompositeLighting`. Не возвращать старые SDF/raymarch/AO-neighbour/blur проходы, CPU sweep, GPU readback или runtime fallback.
 - Единственный источник emission — серверный `CellConfigProperties.Glowing` (в Dummy выставлять тот же флаг), не `CellType` и не клиентские allow/deny-листы. Цвет можно брать из `CellConfigurationPacket.Color`.
-- Используются world-anchored emissive clusters 2×2 и per-tile списки источников; нельзя возвращать CPU sweep или глобальный цикл «каждый пиксель × все источники». Mesh получает один `RequiredTerrainPadding` под viewport, радиус света и safe border.
-- Visibility строится height-aware SDF cone tracing с интеграцией optical thickness: opaque блок закрывает свет, alpha пропускает пропорционально. Высота отвечает за длину тени, cone radius — за penumbra, coverage/density — за пропускание.
-- Receiver self-skip разрешён только внутри исходной клетки; после выхода из неё соседние opaque samples снова поглощают свет. Ambient добавляется ровно один раз.
-- `OcclusionCoverage` в `Terrain.shader` — единственный источник формы окклюдера; CPU-чтение сырого alpha запрещено. Coverage/SDF проходят через `ToOcclusionGrid` и `_OcclusionYFlip = SystemInfo.graphicsUVStartsAtTop`; spatial mismatch исправлять не коэффициентами.
-- SDF: `InitializeSdfSeeds → JumpFloodSdf → FinalizeSdf`, кэш по региону, revision карты/атласа и lighting settings. `FilterLighting` — только edge-aware reconstruction direct light; AO хранится в alpha, ambient/AO не смешивать с direct visibility. Eigengrau не часть lighting reconstruction.
-- Профили `Low/Medium/High/Ultra` меняют только разрешение, лимит источников, шаги SDF и частоту обновления. Профиль хранится в `PlayerPrefs` под `WorldLightingQuality`, источник пресетов — `TerrariaLightingEngine.ApplyQualityPreset`; Ultra: 8 texel/cell, до 2048, 64 шага. Normal map/Lambert пока не реализованы.
+- `MaterialField.rgb` — surface albedo для одного diffuse bounce, `MaterialField.a` — физическая occupancy; `EmissionField` содержит излучение. Альфа атласа, visual blending, анимации и песок поверх валуна не меняют физическую массу. Соседние `DropsShadow`-клетки образуют единый контур без внутренних границ.
+- Beer–Lambert extinction — **ослабление света**, итоговая surviving fraction — **пропускание света**. Direct radiance, transmission и AO — разные величины; не называть поглощение или visibility «AO». Receiver self-skip разрешён только внутри исходной клетки, после выхода соседняя масса снова ослабляет свет.
+- Новый обязательный трек описан в корневом `LIGHTING_AO_PLAN.md`: удалить legacy `nearSolidPath` pseudo-AO и добавить отдельный полноразрешённый contact/cavity AO из occupancy. AO даёт слабую тень у открытой границы, более сильную в 90° углах/щелях, не создаёт швов внутри массива и влияет только на ambient и diffuse bounce, но не на direct radiance/emission.
+- AO хранится отдельно в persistent `RHalf`, публикуется в alpha итоговой `_WorldLightTexture` и пересчитывается только при geometry revision, смене региона/размера поля или AO-настроек. Изменение источников света AO не пересчитывает. Ambient добавляется ровно один раз; Eigengrau не относится к lighting reconstruction.
+- Статическое поле геометрии растеризуется фактическим terrain mesh одним command buffer; динамические источники добавляются GPU draw. Незагруженные и выходящие за границы мира клетки не должны попадать в submesh indices или подставлять cell type `0`.
+- Сохранять внешний контракт `TerrariaLightingEngine`: `_WorldLightTexture`, `_WorldLightRect`, `InvalidateCell`. Профили `Low/Medium/High/Ultra` меняют только качество/стоимость существующего алгоритма; отдельные визуальные пресеты и скрытые fallback-коэффициенты запрещены. Normal map/Lambert пока не реализованы.
 
 ## 4. Unity, YAML и код
 
@@ -128,6 +129,8 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 8. UI Toolkit не поддерживает `calc()`: использовать готовое число или inline-стиль из C#.
 
 ## 6. Workflow и диагностика
+
+- **Кэш Unity никогда не считать причиной дефекта.** Не списывать ошибки на `Library/`, кэш импорта, кэш шейдеров или layout-кэш редактора. Причину искать в исходном коде, сериализованных данных, настройках проекта и фактическом runtime-состоянии; очистка кэша не является исправлением.
 
 - Основная сцена — `Assets/Scenes/MainGame.unity`; offline режим даёт `DummyConnection`.
 - Сборка: `BuildScript.BuildMacOS` из `Assets/Editor/`; стандартный Build Settings не копирует текстуры.

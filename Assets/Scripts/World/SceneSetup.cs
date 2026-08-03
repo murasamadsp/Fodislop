@@ -12,7 +12,23 @@ namespace Fodinae.World
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {
+        [Header("Surface Materials")]
+        [SerializeField]
+        private Material? _transitMaterial;
+        [SerializeField]
+        private Material? _perspectiveMaterial;
+
         private WorldBackgroundSetup? _backgroundSetup;
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            _transitMaterial ??= UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/Materials/SurfaceMaterial.mat");
+            _perspectiveMaterial ??= UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
+                "Assets/Materials/SurfaceMaterial.mat");
+        }
+#endif
 
         protected void Awake()
         {
@@ -59,7 +75,8 @@ namespace Fodinae.World
 
             var surfaceGO = new GameObject("SurfaceRenderer");
             surfaceGO.transform.SetParent(transform);
-            surfaceGO.AddComponent<SurfaceRenderer>();
+            var surfaceRenderer = surfaceGO.AddComponent<SurfaceRenderer>();
+            surfaceRenderer.SetMaterials(_transitMaterial, _perspectiveMaterial);
         }
 
         private void SetupWorldMapController()

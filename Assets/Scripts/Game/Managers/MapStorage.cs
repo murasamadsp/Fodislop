@@ -28,11 +28,11 @@ namespace Fodinae.Game.Managers
         }
 
         private bool _isInitialized;
-        private string? _worldCodeName;
+        private string _worldCodeName = string.Empty;
 
         public WorldLayer<CellType>? CellLayer => _cellLayer;
 
-        public string MapFilePath => _mapFilePath ?? string.Empty;
+        public string MapFilePath => _mapFilePath ?? throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
         public string BackupMapFilePath
         {
@@ -72,14 +72,12 @@ namespace Fodinae.Game.Managers
 
             if (string.IsNullOrEmpty(worldCodeName))
             {
-                Debug.LogError("[MapStorage] World code name cannot be null or empty");
-                return;
+                throw new ArgumentException("[MapStorage] World code name cannot be null or empty", nameof(worldCodeName));
             }
 
             if (width <= 0 || height <= 0)
             {
-                Debug.LogError($"[MapStorage] Invalid world dimensions: {width}x{height}");
-                return;
+                throw new ArgumentOutOfRangeException($"[MapStorage] Invalid world dimensions: {width}x{height}");
             }
 
             _worldCodeName = worldCodeName;
@@ -89,8 +87,7 @@ namespace Fodinae.Game.Managers
 
             if (widthChunks <= 0 || heightChunks <= 0)
             {
-                Debug.LogError($"[MapStorage] Invalid chunk calculation: {widthChunks}x{heightChunks}");
-                return;
+                throw new ArgumentOutOfRangeException($"[MapStorage] Invalid chunk calculation: {widthChunks}x{heightChunks}");
             }
 
             string path = Path.Combine(Application.persistentDataPath, worldCodeName + MapExtension);
@@ -110,33 +107,33 @@ namespace Fodinae.Game.Managers
             }
             catch (IOException ioEx)
             {
-                Debug.LogError($"[MapStorage] Could not open map file '{path}': {ioEx.Message}");
                 _cellLayer = null;
                 _mapFilePath = null;
+                throw new IOException($"[MapStorage] Could not open map file '{path}': {ioEx.Message}", ioEx);
             }
             catch (UnauthorizedAccessException authEx)
             {
-                Debug.LogError($"[MapStorage] Access denied for map file '{path}': {authEx.Message}");
                 _cellLayer = null;
                 _mapFilePath = null;
+                throw new UnauthorizedAccessException($"[MapStorage] Access denied for map file '{path}': {authEx.Message}", authEx);
             }
             catch (OutOfMemoryException)
             {
-                Debug.LogError($"[MapStorage] Out of memory while opening map file '{path}'.");
                 _cellLayer = null;
                 _mapFilePath = null;
+                throw;
             }
         }
 
         public bool IsInitialized() => _isInitialized;
 
-        public string GetWorldCodeName() => _worldCodeName ?? string.Empty;
+        public string GetWorldCodeName() => _worldCodeName;
 
         public CellType GetCell(int x, int y)
         {
             if (!_isInitialized || _cellLayer == null)
             {
-                return CellType.Unloaded;
+                throw new InvalidOperationException("[MapStorage] GetCell called before world initialization");
             }
 
             return _cellLayer.GetCell(x, y, touchLru: true);

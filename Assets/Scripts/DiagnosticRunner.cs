@@ -2,7 +2,6 @@
 
 using System.IO;
 using System.Text;
-using Effekseer;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
@@ -70,6 +69,10 @@ namespace Fodinae
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
                 $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0} " +
                 $"lightingSolves={lighting?.SolveCount ?? 0} " +
+                $"lightingContactAOSolves={lighting?.ContactOcclusionSolveCount ?? 0} " +
+                $"dynamicLights={lighting?.DynamicLightCount ?? 0} " +
+                $"dynamicUploaded={lighting?.UploadedDynamicLightCount ?? 0} " +
+                $"dynamicDropped={lighting?.DroppedDynamicLightCount ?? 0} " +
                 $"lightingField={lighting?.FieldWidth ?? 0}x{lighting?.FieldHeight ?? 0} " +
                 $"lightingAtlas={lighting?.AtlasEntryCount ?? 0}\n";
 
@@ -88,10 +91,7 @@ namespace Fodinae
             sb.AppendLine($"  MonoUsed={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1} MB");
             sb.AppendLine($"  MonoHeap={Profiler.GetMonoHeapSizeLong() / (1024f * 1024f):F1} MB");
             sb.AppendLine($"  GCHeap={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1} MB");
-            sb.AppendLine($"  TextureObjects={Resources.FindObjectsOfTypeAll<Texture2D>().Length}");
-            sb.AppendLine($"  RenderTextureObjects={Resources.FindObjectsOfTypeAll<RenderTexture>().Length}");
-            sb.AppendLine($"  MeshObjects={Resources.FindObjectsOfTypeAll<Mesh>().Length}");
-            sb.AppendLine($"  EffekseerAssets={Resources.FindObjectsOfTypeAll<EffekseerEffectAsset>().Length}");
+            sb.AppendLine("  Unity resource object counts omitted; diagnostics do not scan the heap.");
             sb.AppendLine($"  ActiveRuntimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount}");
 
             sb.AppendLine("\n[SERVICES]");

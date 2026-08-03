@@ -37,7 +37,6 @@ namespace Fodinae.World
         private MeshFilter? _perspectiveFilter;
         private MeshRenderer? _transitRenderer;
         private MeshRenderer? _perspectiveRenderer;
-        private bool _ownsTransitMaterial;
         private bool _ownsPerspectiveMaterial;
 
         private readonly Vector2[] _uvTransit = new Vector2[4];
@@ -53,6 +52,20 @@ namespace Fodinae.World
         private float _lastCameraAspect = float.NaN;
         private int _lastWorldHeight = int.MinValue;
 
+        public void SetMaterials(Material? transitMaterial, Material? perspectiveMaterial)
+        {
+            _transitMaterial = transitMaterial;
+            _perspectiveMaterial = perspectiveMaterial;
+            if (_transitMaterial != null && _transitMaterial == _perspectiveMaterial)
+            {
+                Material sharedMaterial = _perspectiveMaterial;
+                _perspectiveMaterial = new Material(sharedMaterial)
+                {
+                    name = $"{sharedMaterial.name} (Perspective)",
+                };
+                _ownsPerspectiveMaterial = true;
+            }
+        }
 
         protected void Start()
         {
@@ -84,14 +97,12 @@ namespace Fodinae.World
 
             if (_transitMaterial == null)
             {
-                _transitMaterial = CreateDefaultMaterial();
-                _ownsTransitMaterial = true;
+                throw new InvalidOperationException("[SurfaceRenderer] Transit material is not assigned in the inspector");
             }
 
             if (_perspectiveMaterial == null)
             {
-                _perspectiveMaterial = CreateDefaultMaterial();
-                _ownsPerspectiveMaterial = true;
+                throw new InvalidOperationException("[SurfaceRenderer] Perspective material is not assigned in the inspector");
             }
 
             // These materials are owned by the component. Using .material
@@ -100,13 +111,6 @@ namespace Fodinae.World
             _perspectiveRenderer.sharedMaterial = _perspectiveMaterial;
 
             LoadTexturesAsync().Forget();
-        }
-
-        private Material CreateDefaultMaterial()
-        {
-            var mat = new Material(Shader.Find("Sprites/Default"));
-            mat.mainTexture = Texture2D.whiteTexture;
-            return mat;
         }
 
         private async UniTaskVoid LoadTexturesAsync()
@@ -121,24 +125,27 @@ namespace Fodinae.World
             try
             {
                 var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-                if (loader != null)
+                if (loader == null)
                 {
-                    var transitTex = await loader.GetTextureAsync(_transitTexturePath);
-                    if (transitTex != null && _transitMaterial != null)
-                    {
-                        _transitMaterial.mainTexture = transitTex;
-                    }
+                    throw new InvalidOperationException("[SurfaceRenderer] ClientAssetLoader is not registered");
+                }
 
-                    var persTex = await loader.GetTextureAsync(_perspectiveTexturePath);
-                    if (persTex != null && _perspectiveMaterial != null)
-                    {
-                        _perspectiveMaterial.mainTexture = persTex;
-                    }
+                var transitTex = await loader.GetTextureAsync(_transitTexturePath);
+                if (transitTex != null && _transitMaterial != null)
+                {
+                    _transitMaterial.mainTexture = transitTex;
+                }
+
+                var persTex = await loader.GetTextureAsync(_perspectiveTexturePath);
+                if (persTex != null && _perspectiveMaterial != null)
+                {
+                    _perspectiveMaterial.mainTexture = persTex;
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[SurfaceRenderer] Failed to load textures: {ex.Message}");
+                Debug.LogError($"[SurfaceRenderer] Failed to load textures: {ex.Message}");
+                throw;
             }
             finally
             {
@@ -256,16 +263,11 @@ namespace Fodinae.World
                 _perspectiveMesh = null;
             }
 
-            if (_ownsTransitMaterial && _transitMaterial != null)
-            {
-                Destroy(_transitMaterial);
-                _transitMaterial = null;
-            }
-
             if (_ownsPerspectiveMaterial && _perspectiveMaterial != null)
             {
                 Destroy(_perspectiveMaterial);
                 _perspectiveMaterial = null;
+                _ownsPerspectiveMaterial = false;
             }
         }
     }

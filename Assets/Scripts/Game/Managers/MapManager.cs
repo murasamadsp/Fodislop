@@ -47,17 +47,6 @@ namespace Fodinae.Game.Managers
         public Action? OnWorldInitialized { get; set; }
         public Action? OnWorldDataLoaded { get; set; }
 
-        private static readonly CellConfigurationPacket _fallbackConfig = new CellConfigurationPacket
-        {
-            Animation = CellAnimationType.None,
-            AnimationSpeed = 0,
-            Color = 0,
-            FrameOffset = 0,
-            Properties = CellConfigProperties.None,
-            Distortion = (CellDistortionType)0,
-            ReliefGroup = 0,
-        };
-
         private CellConfigurationPacket[]? _cellConfigurations;
         private Dictionary<CellType, int> _cellToTileGroup = new();
         private Dictionary<CellType, ushort> _cellMoveSpeeds = new();
@@ -66,7 +55,6 @@ namespace Fodinae.Game.Managers
         private ushort _width;
         private ushort _height;
 
-        private bool _nullConfigWarned;
         private float _nextMapFlushTime;
         private const float DurableMapFlushInterval = 5f;
         public bool IsWorldInitialized { get; private set; }
@@ -206,9 +194,16 @@ namespace Fodinae.Game.Managers
 
         public CellConfigurationPacket GetCellConfig(CellType type)
         {
-            if (_cellConfigurations == null || (int)type < 0 || (int)type >= _cellConfigurations.Length)
+            if (_cellConfigurations == null)
             {
-                return _fallbackConfig;
+                throw new InvalidOperationException(
+                    $"Cell configuration requested for '{type}' before WorldInitPacket was loaded.");
+            }
+
+            if ((int)type < 0 || (int)type >= _cellConfigurations.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Cell type '{type}' has no server configuration. Config count: {_cellConfigurations.Length}.");
             }
 
             return _cellConfigurations[(int)type];
@@ -218,13 +213,8 @@ namespace Fodinae.Game.Managers
         {
             if (_cellConfigurations == null)
             {
-                if (!_nullConfigWarned)
-                {
-                    _nullConfigWarned = true;
-                    Debug.LogWarning("[MapManager] GetConfigLength called but _cellConfigurations is null (показано один раз)");
-                }
-
-                return -1;
+                throw new InvalidOperationException(
+                    "Cell configuration count requested before WorldInitPacket was loaded.");
             }
 
             return _cellConfigurations.Length;

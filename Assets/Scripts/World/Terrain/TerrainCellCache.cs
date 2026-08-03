@@ -47,7 +47,9 @@ namespace Fodinae.World.Terrain
         {
             if (x < 0 || x >= _cacheWidth || y < 0 || y >= _cacheHeight)
             {
-                return default;
+                throw new ArgumentOutOfRangeException(
+                    nameof(x),
+                    $"Terrain cell cache index ({x}, {y}) is outside {_cacheWidth}x{_cacheHeight}.");
             }
 
             return _cellCache[x, y];
@@ -55,6 +57,15 @@ namespace Fodinae.World.Terrain
 
         public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
         {
+            if (wtm == null)
+            {
+                throw new ArgumentNullException(nameof(wtm));
+            }
+
+            if (atlases == null)
+            {
+                throw new ArgumentNullException(nameof(atlases));
+            }
             if (mm == null || mapStorage == null || !mapStorage.IsReady)
             {
                 return;
@@ -63,7 +74,7 @@ namespace Fodinae.World.Terrain
             int worldWidth = mm.WorldWidth;
             int worldHeight = mm.WorldHeight;
             var layer = mapStorage.CellLayer;
-            if (layer == null || atlases == null)
+            if (layer == null)
             {
                 return;
             }
@@ -87,16 +98,25 @@ namespace Fodinae.World.Terrain
 
                     if (Application.isPlaying && type != CellType.Unloaded && !meta.IsTextureReady)
                     {
-                        wtm?.RequestTexture(type);
+                        wtm.RequestTexture(type);
                     }
                 }
             }
 
-            wtm?.RequestTexture((CellType)0);
+            wtm.RequestTexture((CellType)0);
         }
 
         public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
         {
+            if (wtm == null)
+            {
+                throw new ArgumentNullException(nameof(wtm));
+            }
+
+            if (atlases == null)
+            {
+                throw new ArgumentNullException(nameof(atlases));
+            }
             if (mm == null || mapStorage == null || !mapStorage.IsReady)
             {
                 return;
@@ -128,7 +148,7 @@ namespace Fodinae.World.Terrain
 
                 if (Application.isPlaying && type != CellType.Unloaded && !meta.IsTextureReady)
                 {
-                    wtm?.RequestTexture(type);
+                    wtm.RequestTexture(type);
                 }
             }
 
@@ -174,14 +194,14 @@ namespace Fodinae.World.Terrain
                 }
             }
 
-            wtm?.RequestTexture((CellType)0);
+            wtm.RequestTexture((CellType)0);
         }
 
         private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, WorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[]? currentChunk)
         {
             if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
             {
-                return (gridX < 0 || gridX >= worldWidth || unityY < 0) ? (CellType)0 : CellType.Unloaded;
+                return CellType.Unloaded;
             }
 
             int serverY = CoordinateUtils.UnityToServerY(unityY, worldHeight);
@@ -199,23 +219,18 @@ namespace Fodinae.World.Terrain
             return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
         }
 
-        public CellMetadata GetMetadata(CellType type, MapManager? mm, WorldTextureManager? wtm, List<TextureAtlas>? atlases)
+        public CellMetadata GetMetadata(CellType type, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
         {
             if (_metadataCache.TryGetValue(type, out var meta))
             {
                 return meta;
             }
 
-            if (mm == null || wtm == null)
-            {
-                return default;
-            }
-
             var config = mm.GetCellConfig(type);
 
             if (!_atlasIndexCache.TryGetValue(type, out int atlasIndex))
             {
-                for (int i = 0; i < atlases!.Count; i++)
+                for (int i = 0; i < atlases.Count; i++)
                 {
                     if (atlases[i].ContainsCell(type))
                     {
@@ -242,7 +257,10 @@ namespace Fodinae.World.Terrain
                 AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
                 AtlasRect = atlasRect,
                 AtlasIndex = atlasIndex,
-                UVTileSize = (atlases!.Count > atlasIndex) ? (float)RenderingConstants.CELL_SIZE / atlases![atlasIndex].Size : 0,
+                UVTileSize = atlasIndex >= 0 && atlasIndex < atlases.Count
+                    ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size
+                    : throw new InvalidOperationException(
+                        $"No texture atlas contains cell type '{type}'."),
                 AnimationFrameCount = frameCount,
                 FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
                 IsTextureReady = atlasRect.z > 0.0001f,
@@ -272,7 +290,13 @@ namespace Fodinae.World.Terrain
             };
         }
 
-        public ref CachedCellData GetNeighborCacheEntryRef(CellType type, int cx, int cy, MapManager? mm, WorldTextureManager? wtm, List<TextureAtlas>? atlases, ref CachedCellData fallback)
+        public CachedCellData GetNeighborCacheEntry(
+            CellType type,
+            int cx,
+            int cy,
+            MapManager mm,
+            WorldTextureManager wtm,
+            List<TextureAtlas> atlases)
         {
             for (int dy = -1; dy <= 1; dy++)
             {
@@ -280,14 +304,12 @@ namespace Fodinae.World.Terrain
                 {
                     if (_cellCache[cx + dx, cy + dy].Type == type)
                     {
-                        return ref _cellCache[cx + dx, cy + dy];
+                        return _cellCache[cx + dx, cy + dy];
                     }
                 }
             }
 
-            var meta = GetMetadata(type, mm, wtm, atlases);
-            fallback = CreateCachedData(type, meta);
-            return ref fallback;
+            return CreateCachedData(type, GetMetadata(type, mm, wtm, atlases));
         }
 
         public static void Scroll2DArray<T>(T[,] buffer, int w, int h, int dx, int dy)

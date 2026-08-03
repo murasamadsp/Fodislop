@@ -30,6 +30,7 @@ Shader "Hidden/Fodinae/DynamicEmission"
                 float4 positionCS : SV_POSITION;
                 float2 localPosition : TEXCOORD0;
                 nointerpolation float4 colorIntensity : TEXCOORD1;
+                nointerpolation float edgeSoftness : TEXCOORD2;
             };
 
             StructuredBuffer<DynamicLight> _DynamicLights;
@@ -53,16 +54,21 @@ Shader "Hidden/Fodinae/DynamicEmission"
                 output.positionCS = TransformWorldToHClip(float3(worldPosition, 0.0));
                 output.localPosition = corner;
                 output.colorIntensity = light.colorIntensity;
+                output.edgeSoftness = light.positionRadius.w;
                 return output;
             }
 
             half4 DynamicEmissionFrag(Varyings input) : SV_Target
             {
                 float distanceFromCenter = length(input.localPosition);
-                float antialias = max(fwidth(distanceFromCenter), 0.0001);
+                // The quad is only a rasterization bound. The radial source
+                // uses the same emission scale as glowing terrain; its radius
+                // and edge softness only describe the source distribution.
+                float edgeSoftness = saturate(input.edgeSoftness);
+                float edgeStart = 1.0 - edgeSoftness;
                 float sourceShape = 1.0 - smoothstep(
-                    1.0 - antialias,
-                    1.0 + antialias,
+                    edgeStart,
+                    1.0,
                     distanceFromCenter);
                 return half4(
                     input.colorIntensity.rgb * input.colorIntensity.a * sourceShape,

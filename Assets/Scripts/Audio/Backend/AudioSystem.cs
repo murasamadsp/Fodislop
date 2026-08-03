@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Fodinae.Audio.Core;
@@ -24,6 +25,8 @@ namespace Fodinae.Audio.Backend
     {
         private const string TAG = "[AudioSystem]";
         private FmodAudioBackend _backend = null!;
+
+        public bool IsInitialized => _backend != null;
 
         private void Awake()
         {
@@ -69,12 +72,22 @@ namespace Fodinae.Audio.Backend
 
         public float GetBusVolume(AudioBusType type)
         {
-            return _backend?.GetBusVolume(type) ?? 1f;
+            if (_backend == null)
+            {
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
+            }
+
+            return _backend.GetBusVolume(type);
         }
 
         public void SetBusVolume(AudioBusType type, float volume)
         {
-            _backend?.SetBusVolume(type, volume);
+            if (_backend == null)
+            {
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
+            }
+
+            _backend.SetBusVolume(type, volume);
         }
 
         /// <summary>
@@ -82,13 +95,12 @@ namespace Fodinae.Audio.Backend
         /// </summary>
         public async Cysharp.Threading.Tasks.UniTask<bool> EnsureBankLoadedAsync(string bankName)
         {
-            if (_backend != null)
+            if (_backend == null)
             {
-                return await _backend.EnsureBankLoadedAsync(bankName);
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
             }
 
-            Debug.LogWarning($"{TAG} Cannot load bank '{bankName}': backend not initialized");
-            return false;
+            return await _backend.EnsureBankLoadedAsync(bankName);
         }
 
         /// <summary>
@@ -96,7 +108,12 @@ namespace Fodinae.Audio.Backend
         /// </summary>
         public void UnloadBank(string bankName)
         {
-            _backend?.UnloadBank(bankName);
+            if (_backend == null)
+            {
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
+            }
+
+            _backend.UnloadBank(bankName);
         }
 
         /// <summary>Воспроизвести событие по имени с опциональной 3D-позицией.</summary>

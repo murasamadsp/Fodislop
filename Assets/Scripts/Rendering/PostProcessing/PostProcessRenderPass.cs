@@ -41,6 +41,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
     private static readonly int ColorFilterID = Shader.PropertyToID("_ColorFilter");
     private static readonly int ContrastID = Shader.PropertyToID("_Contrast");
     private static readonly int SaturationID = Shader.PropertyToID("_Saturation");
+    private static readonly int ToneMappingEnabledID = Shader.PropertyToID("_ToneMappingEnabled");
+    private static readonly int ToneMappingWhitePointID = Shader.PropertyToID("_ToneMappingWhitePoint");
 
     private static readonly int EigengrauIntensityID = Shader.PropertyToID("_EigengrauIntensity");
     private static readonly int EigengrauColorID = Shader.PropertyToID("_EigengrauColor");
@@ -395,6 +397,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
         public Vector4 ColorFilter;
         public float Contrast;
         public float Saturation;
+        public bool ToneMappingEnabled;
+        public float ToneMappingWhitePoint;
 
         public bool EigengrauActive;
         public float EigengrauIntensity;
@@ -434,10 +438,9 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
         bool eigengrauActive = eigengrau != null && eigengrau.active && eigengrau.IsActive();
         bool mbActive = mb != null && mb.active && mb.IsActive();
 
-        if (!bloomActive && !vignetteActive && !caActive && !cgActive && !eigengrauActive && !mbActive)
-        {
-            return;
-        }
+        // CompositeFinal is also the display-referred HDR compression stage.
+        // It must run even when all optional artistic effects are disabled;
+        // otherwise HDR terrain and emission bypass ToneMapHdrAces.
 
         UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
         var activeColor = resourceData.activeColorTexture;
@@ -562,6 +565,8 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
                 passData.ColorFilter = cg.colorFilter.value;
                 passData.Contrast = cg.contrast.value;
                 passData.Saturation = cg.saturation.value;
+                passData.ToneMappingEnabled = cg.toneMapping.value;
+                passData.ToneMappingWhitePoint = cg.toneMappingWhitePoint.value;
             }
 
             passData.EigengrauActive = eigengrauActive;
@@ -730,6 +735,14 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
                 cmd.SetComputeVectorParam(data.PostProcessCS, ColorFilterID, data.CgActive ? data.ColorFilter : Color.white);
                 cmd.SetComputeFloatParam(data.PostProcessCS, ContrastID, data.CgActive ? data.Contrast : 0f);
                 cmd.SetComputeFloatParam(data.PostProcessCS, SaturationID, data.CgActive ? data.Saturation : 1f);
+                cmd.SetComputeIntParam(
+                    data.PostProcessCS,
+                    ToneMappingEnabledID,
+                    data.CgActive && data.ToneMappingEnabled ? 1 : 0);
+                cmd.SetComputeFloatParam(
+                    data.PostProcessCS,
+                    ToneMappingWhitePointID,
+                    data.CgActive ? data.ToneMappingWhitePoint : 1f);
 
                 cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauIntensityID, data.EigengrauActive ? data.EigengrauIntensity : 0f);
                 if (data.EigengrauActive)

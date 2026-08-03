@@ -76,7 +76,6 @@ namespace Fodinae.World.Terrain
         private bool _useColorLod = false;
         private float _targetUseLight2D;
         private int _lastAtlasCount = -1;
-        private ulong _lightingGeometryRevision = 1;
         private bool _lightingBindingValidated;
 
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
@@ -97,6 +96,9 @@ namespace Fodinae.World.Terrain
         private static readonly ProfilerMarker FloodFillMarker = new("Fodinae.Terrain.BackgroundFloodFill");
         private static readonly ProfilerMarker MeshBuildMarker = new("Fodinae.Terrain.MeshBuild");
         private static readonly ProfilerMarker MeshUploadMarker = new("Fodinae.Terrain.MeshUpload");
+        private static readonly ProfilerMarker TerrainLateUpdateMarker =
+            new("Fodinae.Terrain.LateUpdate.CPU");
+        private ulong _lightingGeometryRevision = 1;
 
         public CachedCellInfo GetCell(int x, int y)
         {
@@ -145,6 +147,11 @@ namespace Fodinae.World.Terrain
                 CoordinateUtils.ServerToUnityY(lastServerY, _mapManager.WorldHeight));
             int minimumUnityY = Mathf.Min(firstUnityY, lastUnityY);
             int maximumUnityY = Mathf.Max(firstUnityY, lastUnityY);
+            TerrariaLightingEngine.Instance?.InvalidateRegion(
+                serverX,
+                minimumUnityY,
+                width,
+                maximumUnityY - minimumUnityY + 1);
             bool affectsCachedTerrain =
                 serverX + width - 1 >= _lastGridPos.x - 1 &&
                 serverX <= _lastGridPos.x + _meshWidth &&
@@ -290,6 +297,7 @@ namespace Fodinae.World.Terrain
 
         protected void LateUpdate()
         {
+            using var terrainLateUpdateMarker = TerrainLateUpdateMarker.Auto();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
                 if ((_diagLogged & (1 << 0)) == 0)
@@ -696,7 +704,7 @@ namespace Fodinae.World.Terrain
 
                 using (MeshBuildMarker.Auto())
                 {
-                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod);
+                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, wtm);
                 }
 
                 if (_mesh != null)

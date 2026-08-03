@@ -18,6 +18,10 @@ MonoBehaviour:
     LightingMaximumLightCount: 128
     LightingMaximumRaySteps: 20
     LightingUpdatesPerSecond: 20
+    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
+    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
+    BounceStrength: 0.3
+    LightingCascadeAtlasLimit: 512
     RenderScale: 0.8
     VSyncCount: 0
     AntiAliasing: 0
@@ -27,6 +31,10 @@ MonoBehaviour:
     LightingMaximumLightCount: 256
     LightingMaximumRaySteps: 28
     LightingUpdatesPerSecond: 24
+    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
+    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
+    BounceStrength: 0.3
+    LightingCascadeAtlasLimit: 768
     RenderScale: 0.9
     VSyncCount: 1
     AntiAliasing: 0
@@ -35,7 +43,11 @@ MonoBehaviour:
     LightingMaximumTextureDimension: 1536
     LightingMaximumLightCount: 512
     LightingMaximumRaySteps: 40
-    LightingUpdatesPerSecond: 30
+    LightingUpdatesPerSecond: 60
+    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
+    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
+    BounceStrength: 0.35
+    LightingCascadeAtlasLimit: 1536
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
@@ -44,7 +56,11 @@ MonoBehaviour:
     LightingMaximumTextureDimension: 2048
     LightingMaximumLightCount: 1024
     LightingMaximumRaySteps: 64
-    LightingUpdatesPerSecond: 30
+    LightingUpdatesPerSecond: 60
+    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
+    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
+    BounceStrength: 0.4
+    LightingCascadeAtlasLimit: 2048
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
