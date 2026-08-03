@@ -67,6 +67,7 @@ namespace Fodinae.World.Lighting
         private static readonly int MaterialFieldId = Shader.PropertyToID("_MaterialField");
         private static readonly int EmissionFieldId = Shader.PropertyToID("_EmissionField");
         private static readonly int DynamicLightsId = Shader.PropertyToID("_DynamicLights");
+        private static readonly int DynamicEmissionCellSizeId = Shader.PropertyToID("_CellSize");
         private static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
         private static readonly int DirectTextureId = Shader.PropertyToID("_DirectTexture");
         private static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
@@ -294,22 +295,18 @@ namespace Fodinae.World.Lighting
 
             public DynamicLight(
                 Vector2 position,
-                float emitterRadius,
                 Color color,
-                float intensity,
-                float edgeSoftness)
+                float intensity)
             {
-                PositionRadius = new Vector4(position.x, position.y, emitterRadius, edgeSoftness);
+                PositionRadius = new Vector4(position.x, position.y, 0f, 0f);
                 ColorIntensity = new Vector4(color.r, color.g, color.b, intensity);
             }
         }
 
         private readonly record struct DynamicLightSource(
             Vector2 Position,
-            float Radius,
             Color Color,
-            float Intensity,
-            float EdgeSoftness);
+            float Intensity);
 
         private void Reset()
         {
@@ -414,15 +411,10 @@ namespace Fodinae.World.Lighting
         {
             get
             {
-                float maximumRadius = 0f;
-                foreach (DynamicLightSource source in _externalLights.Values)
-                {
-                    maximumRadius = Mathf.Max(maximumRadius, source.Radius);
-                }
-
-                int radiusInCells = Mathf.CeilToInt(
-                    maximumRadius / GameConstants.World.CELLSIZE);
-                return Mathf.Max(1, radiusInCells + _lightSafeBorder);
+                // Dynamic sources are rasterized as one-cell emitters. Their
+                // propagation distance is solved by the same extinction and
+                // cascade intervals as terrain emission, not by a source halo.
+                return Mathf.Max(1, 1 + _lightSafeBorder);
             }
         }
 
@@ -494,17 +486,13 @@ namespace Fodinae.World.Lighting
         public void SetDynamicLight(
             int id,
             Vector2 position,
-            float radius,
             Color color,
-            float intensity,
-            float edgeSoftness)
+            float intensity)
         {
             var source = new DynamicLightSource(
                 position,
-                Mathf.Max(0.1f, radius),
                 color,
-                Mathf.Max(0f, intensity),
-                Mathf.Clamp(edgeSoftness, 0.05f, 1f));
+                Mathf.Max(0f, intensity));
             if (_externalLights.TryGetValue(id, out DynamicLightSource previous) &&
                 DynamicLightSourceApproximatelyEquals(previous, source))
             {
@@ -521,10 +509,8 @@ namespace Fodinae.World.Lighting
         {
             return (left.Position - right.Position).sqrMagnitude <=
                 DynamicLightPositionEpsilon * DynamicLightPositionEpsilon &&
-                Mathf.Approximately(left.Radius, right.Radius) &&
                 left.Color == right.Color &&
-                Mathf.Approximately(left.Intensity, right.Intensity) &&
-                Mathf.Approximately(left.EdgeSoftness, right.EdgeSoftness);
+                Mathf.Approximately(left.Intensity, right.Intensity);
         }
 
         public void RemoveDynamicLight(int id)
@@ -1078,7 +1064,7 @@ namespace Fodinae.World.Lighting
                     continue;
                 }
 
-                if (!IntersectsWorldRect(source.Position, source.Radius, worldRect, cellSize))
+                if (!IntersectsWorldRect(source.Position, 1f, worldRect, cellSize))
                 {
                     _lastDroppedDynamicLightIds.Add(pair.Key);
                     continue;
@@ -1086,10 +1072,8 @@ namespace Fodinae.World.Lighting
 
                 _dynamicLights[dynamicLightCount++] = new DynamicLight(
                     source.Position * cellSize,
-                    source.Radius * cellSize,
                     source.Color,
-                    source.Intensity,
-                    source.EdgeSoftness);
+                    source.Intensity);
             }
 
             _lastDynamicLightCount = dynamicLightCount;
@@ -1134,6 +1118,9 @@ namespace Fodinae.World.Lighting
             }
 
             _dynamicEmissionMaterial!.SetBuffer(DynamicLightsId, _dynamicLightBuffer!);
+            _dynamicEmissionMaterial.SetFloat(
+                DynamicEmissionCellSizeId,
+                GameConstants.World.CELLSIZE);
             Matrix4x4 projection = Matrix4x4.Ortho(
                 worldRect.x,
                 worldRect.x + worldRect.z,

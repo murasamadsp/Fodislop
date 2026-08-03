@@ -499,24 +499,10 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateLabel("Динамические источники"));
             Robot? localRobot = PlayerMovementController.LocalPlayer?.GetComponent<Robot>();
             Robot? GetLocalRobot() => PlayerMovementController.LocalPlayer?.GetComponent<Robot>() ?? localRobot;
-            float dynamicLightRadius = localRobot?.DynamicLightRadius ?? 8f;
             float dynamicLightIntensity = localRobot?.DynamicLightIntensity ?? 1.25f;
-            float dynamicLightEdgeSoftness = localRobot?.DynamicLightEdgeSoftness ?? 0.65f;
             Color dynamicLightColor = localRobot?.DynamicLightColor ?? Color.white;
             scrollContainer.Add(CreateSlider(
-                "Радиус света игрока",
-                dynamicLightRadius,
-                value => GetLocalRobot()?.SetDynamicLightRadius(value),
-                1f,
-                16f));
-            scrollContainer.Add(CreateSlider(
-                "Мягкость края света игрока",
-                dynamicLightEdgeSoftness,
-                value => GetLocalRobot()?.SetDynamicLightEdgeSoftness(value),
-                0.05f,
-                1f));
-            scrollContainer.Add(CreateSlider(
-                "Интенсивность света игрока",
+                "Мощность emission игрока",
                 dynamicLightIntensity,
                 value => GetLocalRobot()?.SetDynamicLightIntensity(value),
                 0f,

@@ -50,7 +50,8 @@ namespace Fodinae.Game
         private bool _emitsDynamicLight = true;
         [SerializeField]
         [Min(0.1f)]
-        [Tooltip("Радиус dynamic emission в физических клетках.")]
+        [HideInInspector]
+        [Tooltip("Legacy-поле. Источник Robot теперь всегда занимает одну физическую клетку.")]
         private float _dynamicLightRadius = 8f;
         [SerializeField]
         [Range(0f, 4f)]
@@ -58,7 +59,8 @@ namespace Fodinae.Game
         private float _dynamicLightIntensity = 1.25f;
         [SerializeField]
         [Range(0.05f, 1f)]
-        [Tooltip("Доля радиуса, занятая мягким затуханием dynamic light. 1 — полностью плавный профиль без жёсткого диска.")]
+        [HideInInspector]
+        [Tooltip("Legacy-поле. Профиль источника больше не задаётся радиусом или edge softness.")]
         private float _dynamicLightEdgeSoftness = 0.65f;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
@@ -390,10 +392,8 @@ namespace Fodinae.Game
             lighting.SetDynamicLight(
                 _dynamicLightId,
                 new Vector2(_targetPosition.x, _targetPosition.y),
-                _dynamicLightRadius,
                 _dynamicLightColor,
-                _dynamicLightIntensity,
-                _dynamicLightEdgeSoftness);
+                _dynamicLightIntensity);
         }
 
         protected void OnDisable()

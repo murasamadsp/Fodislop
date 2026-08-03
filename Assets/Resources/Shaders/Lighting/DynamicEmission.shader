@@ -30,10 +30,10 @@ Shader "Hidden/Fodinae/DynamicEmission"
                 float4 positionCS : SV_POSITION;
                 float2 localPosition : TEXCOORD0;
                 nointerpolation float4 colorIntensity : TEXCOORD1;
-                nointerpolation float edgeSoftness : TEXCOORD2;
             };
 
             StructuredBuffer<DynamicLight> _DynamicLights;
+            float _CellSize;
 
             Varyings DynamicEmissionVert(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID)
             {
@@ -48,31 +48,23 @@ Shader "Hidden/Fodinae/DynamicEmission"
                 };
                 DynamicLight light = _DynamicLights[instanceId];
                 float2 corner = corners[vertexId];
-                float2 worldPosition = light.positionRadius.xy + corner * light.positionRadius.z;
+                float2 worldPosition = light.positionRadius.xy + corner * (_CellSize * 0.5);
 
                 Varyings output;
                 output.positionCS = TransformWorldToHClip(float3(worldPosition, 0.0));
                 output.localPosition = corner;
                 output.colorIntensity = light.colorIntensity;
-                output.edgeSoftness = light.positionRadius.w;
                 return output;
             }
 
             half4 DynamicEmissionFrag(Varyings input) : SV_Target
             {
-                float distanceFromCenter = length(input.localPosition);
-                // The quad is only a rasterization bound. The radial source
-                // uses the same emission scale as glowing terrain; its radius
-                // and edge softness only describe the source distribution.
-                float edgeSoftness = saturate(input.edgeSoftness);
-                float edgeStart = 1.0 - edgeSoftness;
-                float sourceShape = 1.0 - smoothstep(
-                    edgeStart,
-                    1.0,
-                    distanceFromCenter);
+                // A robot is a one-cell emission source. Its power is carried
+                // by intensity; propagation and attenuation are solved by
+                // the same cascade used for glowing terrain.
                 return half4(
-                    input.colorIntensity.rgb * input.colorIntensity.a * sourceShape,
-                    sourceShape);
+                    input.colorIntensity.rgb * input.colorIntensity.a,
+                    1.0);
             }
             ENDHLSL
         }

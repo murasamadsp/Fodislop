@@ -27,3 +27,25 @@
 - [ ] Сделать отдельные визуальные тест-сцены/кейсы: голый блок, цветной источник, HDR emission, соседний albedo, 1–3 клетки extinction, AO и bounce.
 - [ ] Проверить производительность HDR/post-process и lighting в Unity Profiler и GPU timing: стабильный frame time, без периодических полных mip/cascade rebuild и CPU↔GPU sync.
 - [ ] Удалить диагностический `Enable Final Lighting Clamp` после завершения калибровки или оставить только как явно помеченный debug-инструмент.
+
+## Cheap modern graphics track
+
+Порядок приоритета: сначала снизить стоимость lighting без изменения физического результата, затем добавить визуальные эффекты поверх уже рассчитанного результата.
+
+- [ ] Edge-aware upsampling для lighting: считать radiance/AO в пониженном разрешении и восстанавливать границы по occupancy/material edges. Цель — снизить стоимость cascade и AO без швов на блоках.
+- [ ] Half-resolution diffuse bounce: уменьшить bounce до 8 направлений × 4 шагов и поднимать результат edge-aware фильтром. Проверить визуальное отличие и GPU timing.
+- [ ] Разделить static и dynamic lighting: кэшировать static terrain radiance, а перемещаемые Robot sources считать в отдельном малом dynamic field. Движение источника не должно пересобирать весь static cascade.
+- [ ] Selective emission bloom: использовать отдельную emission mask для bloom, сохранив terrain/albedo без дополнительного пересвета. Работать на half-resolution.
+- [ ] Surface-gradient lighting: получить дешёвый локальный surface gradient из occupancy/albedo для ощущения объёма без normal map и дополнительных текстур. Не менять физическое поглощение.
+- [ ] Стабильный blue-noise dithering для низкоразрешённых AO/soft-shadow границ. Не использовать temporal noise и не менять детерминированный Contact AO.
+- [ ] Профилировать Ultra отдельно: проверить стоимость `LightingPixelsPerCell=8`, field до `2048`, cascade steps `64` и diffuse bounce перед изменением значений профиля.
+
+## Modern GPU technology candidates (audit before implementation)
+
+- [ ] Проверить существующий SDF/JFA: в активных shader-pass отдельного JFA/SDF нет; комментарий в `TerrainRenderer` упоминает старый SDF и может быть устаревшим. Не добавлять новый distance-field проход, пока GPU timing не покажет, что он дешевле текущих cascade/AO.
+- [ ] GPU distance field через Jump Flooding Algorithm — кандидат для soft contact shadows, penumbra и source falloff, но только как geometry-cache pass при изменении occupancy; не пересчитывать каждый кадр и не заменять физический extinction без тестов.
+- [ ] Dynamic-light field: проверить, можно ли считать движущиеся источники в малом отдельном поле и композить со static radiance без повторного полного cascade solve.
+- [ ] Tiled/clustered light culling — добавить только при подтверждённом большом числе dynamic sources; для нескольких Robot sources отдельный culling может быть дороже обычного buffer.
+- [ ] Async compute — проверить через Unity Render Graph Viewer и GPU timestamps; не считать автоматически оптимизацией, потому что неподдерживаемые async queues выполняются на graphics queue.
+- [ ] Render Graph resource aliasing — проверить lifetime lighting/bloom textures и убрать лишние device-memory copies, не меняя математический результат lighting.
+- [ ] Не внедрять пока temporal/neural upscaling, mesh shaders, ray tracing и Metal tile shaders: для 2D voxel-границ есть риск ghosting/платформенной зависимости при сомнительной выгоде.
