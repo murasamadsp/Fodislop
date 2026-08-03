@@ -223,8 +223,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (input.packedData.x > 0.5)
                 {
                     float2 anchoredUV = input.packedData.zw;
-                    bool outsideX = anchoredUV.x < 0.0 || anchoredUV.x > 1.0;
-                    bool outsideY = anchoredUV.y < 0.0 || anchoredUV.y > 1.0;
+                    float2 stepUV = float2(0.0, 0.0);
+                    stepUV.x = anchoredUV.x >= 1.0 ? 1.0 : (anchoredUV.x <= 0.0 ? -1.0 : 0.0);
+                    stepUV.y = anchoredUV.y >= 1.0 ? -1.0 : (anchoredUV.y <= 0.0 ? 1.0 : 0.0);
+                    bool outsideX = stepUV.x != 0.0;
+                    bool outsideY = stepUV.y != 0.0;
                     if (isScrollAnimated)
                     {
                         quadUV.x = outsideX ? frac(anchoredUV.x) : anchoredUV.x;
@@ -233,6 +236,31 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     else
                     {
                         quadUV = (outsideX || outsideY) ? frac(anchoredUV) : anchoredUV;
+                    }
+
+                    if (outsideX || outsideY)
+                    {
+                        float2 stepPos = gPos + stepUV;
+                        float2 wrappedStep;
+                        float stepVariantY = fmod(abs(stepPos.y), tilesCount.y);
+                        wrappedStep.y = floor(tilesCount.y - EPS - stepVariantY);
+                        if (isTiling)
+                        {
+                            wrappedStep.x = floor(input.worldPos.z + stepUV.x + EPS);
+                        }
+                        else
+                        {
+                            wrappedStep.x = floor(fmod(abs(stepPos.x), tilesCount.x) + EPS);
+                        }
+
+                        wrappedStep = clamp(wrappedStep, 0.0, tilesCount - 1.0);
+                        if (isScrollAnimated)
+                        {
+                            wrappedStep.y = wrapped.y;
+                        }
+
+                        tileOffsetUV = wrappedStep * tileSizeUV;
+                        availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
                     }
                 }
 

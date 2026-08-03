@@ -353,6 +353,7 @@
     <None Include="Assets\Resources\Styles\PauseMenu.uss" />
     <None Include="Assets\Resources\Styles\Theme.uss" />
     <None Include="Assets\TextMesh Pro\Shaders\SDFFunctions.hlsl" />
+    <None Include="Assets\Shaders\DynamicEmission.shader" />
     <None Include="Assets\Resources\Styles\Panel.uss" />
     <None Include="Assets\Resources\Styles\Button.uss" />
     <None Include="Assets\TextMesh Pro\Shaders\TMP_SDF-Surface.shader" />
