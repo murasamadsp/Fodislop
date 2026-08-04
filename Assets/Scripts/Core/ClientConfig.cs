@@ -4,25 +4,21 @@ using System;
 
 namespace Fodinae.Core
 {
-    /// <summary>
-    /// Единственный источник дефолтов для клиентского конфига.
-    /// Все значения здесь — канонические, менять их здесь, а не в разбросанных по коду fallback-значениях.
-    /// </summary>
     [Serializable]
     public class ClientConfig
     {
-        public float MasterVolume { get; set; }
-        public float SfxVolume { get; set; }
-        public float MusicVolume { get; set; }
-        public float AmbienceVolume { get; set; }
-        public float VoiceVolume { get; set; }
-        public float UiVolume { get; set; }
-        public float UiScale { get; set; }
-        public bool UseLight2D { get; set; }
-        public int GraphicsQuality { get; set; }
-        public float RenderScale { get; set; }
-        public int VSyncCount { get; set; }
-        public int AntiAliasing { get; set; }
+        public float MasterVolume;
+        public float SfxVolume;
+        public float MusicVolume;
+        public float AmbienceVolume;
+        public float VoiceVolume;
+        public float UiVolume;
+        public float UiScale;
+        public bool UseLight2D;
+        public int GraphicsQuality;
+        public float RenderScale;
+        public int VSyncCount;
+        public int AntiAliasing;
 
         public static ClientConfig Defaults { get; } = new()
         {
