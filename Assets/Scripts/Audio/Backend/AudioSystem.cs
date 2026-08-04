@@ -25,6 +25,8 @@ namespace Fodinae.Audio.Backend
     {
         private const string TAG = "[AudioSystem]";
         private FmodAudioBackend _backend = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
 
         public bool IsInitialized => _backend != null;
 
@@ -284,16 +286,17 @@ namespace Fodinae.Audio.Backend
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Применяет сохранённые в PlayerPrefs значения громкости для всех 6 шин FMOD Studio.
+        /// Применяет сохранённые локальные значения громкости для всех 6 шин FMOD Studio.
         /// </summary>
         public void ApplySavedBusVolumes()
         {
-            SetBusVolume(AudioBusType.Master, PlayerPrefs.GetFloat("Audio_Master", 1f));
-            SetBusVolume(AudioBusType.SFX, PlayerPrefs.GetFloat("Audio_SFX", PlayerPrefs.GetFloat("Audio_Sfx", 1f)));
-            SetBusVolume(AudioBusType.Music, PlayerPrefs.GetFloat("Audio_Music", PlayerPrefs.GetFloat("Audio_Ambient", 0.5f)));
-            SetBusVolume(AudioBusType.Voice, PlayerPrefs.GetFloat("Audio_Voice", 1f));
-            SetBusVolume(AudioBusType.Ambience, PlayerPrefs.GetFloat("Audio_Ambience", 0.7f));
-            SetBusVolume(AudioBusType.UI, PlayerPrefs.GetFloat("Audio_UI", 1f));
+            var config = _clientConfig.Config;
+            SetBusVolume(AudioBusType.Master, config.MasterVolume);
+            SetBusVolume(AudioBusType.SFX, config.SfxVolume);
+            SetBusVolume(AudioBusType.Music, config.MusicVolume);
+            SetBusVolume(AudioBusType.Voice, config.VoiceVolume);
+            SetBusVolume(AudioBusType.Ambience, config.AmbienceVolume);
+            SetBusVolume(AudioBusType.UI, config.UiVolume);
         }
     }
 }

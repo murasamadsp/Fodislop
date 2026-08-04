@@ -32,6 +32,8 @@ namespace Fodinae.UI
 
         [Inject]
         private UIDocument _doc = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
         private VisualElement? _menuPanel;
         private VisualElement? _mainPage;
         private VisualElement? _settingsPage;
@@ -48,7 +50,16 @@ namespace Fodinae.UI
                 return audioSystem.GetBusVolume(busType);
             }
 
-            return PlayerPrefs.GetFloat(preferenceKey, defaultValue);
+            return busType switch
+            {
+                AudioBusType.Master => _clientConfig.Config.MasterVolume,
+                AudioBusType.SFX => _clientConfig.Config.SfxVolume,
+                AudioBusType.Music => _clientConfig.Config.MusicVolume,
+                AudioBusType.Voice => _clientConfig.Config.VoiceVolume,
+                AudioBusType.Ambience => _clientConfig.Config.AmbienceVolume,
+                AudioBusType.UI => _clientConfig.Config.UiVolume,
+                _ => defaultValue,
+            };
         }
 
         [Inject]
@@ -79,7 +90,7 @@ namespace Fodinae.UI
             CreateMenu(_doc.rootVisualElement);
             CloseMenu();
 
-            var savedScale = PlayerPrefs.GetFloat("UIScale", 1f);
+            var savedScale = _clientConfig.Config.UiScale;
             _doc.panelSettings.scale = savedScale;
             foreach (var canvas in FindObjectsByType<Canvas>())
             {
@@ -126,9 +137,9 @@ namespace Fodinae.UI
             return container;
         }
 
-        private static bool IsHeadlightOn()
+        private bool IsHeadlightOn()
         {
-            return PlayerPrefs.GetInt("UseLight2D", 1) == 1;
+            return _clientConfig.Config.UseLight2D;
         }
 
         private void CreateMenu(VisualElement root)
@@ -250,11 +261,11 @@ namespace Fodinae.UI
 
             scrollContainer.Add(CreateSlider(
                 "Масштаб UI",
-                PlayerPrefs.GetFloat("UIScale", 1f),
+                _clientConfig.Config.UiScale,
                 v =>
                 {
-                    PlayerPrefs.SetFloat("UIScale", v);
-                    PlayerPrefs.Save();
+                    _clientConfig.Config.UiScale = v;
+                    _clientConfig.Save();
                     if (_doc != null && _doc.panelSettings != null)
                     {
                         _doc.panelSettings.scale = v;
@@ -797,11 +808,38 @@ namespace Fodinae.UI
                         audioSystem.SetBusVolume(busType, v);
                     }
 
-                    PlayerPrefs.SetFloat(prefKey, v);
-                    PlayerPrefs.Save();
+                    SetBusVolumeInConfig(busType, v);
                 },
                 0f,
                 1f);
+        }
+
+        private void SetBusVolumeInConfig(AudioBusType busType, float volume)
+        {
+            var config = _clientConfig.Config;
+            switch (busType)
+            {
+                case AudioBusType.Master:
+                    config.MasterVolume = volume;
+                    break;
+                case AudioBusType.SFX:
+                    config.SfxVolume = volume;
+                    break;
+                case AudioBusType.Music:
+                    config.MusicVolume = volume;
+                    break;
+                case AudioBusType.Voice:
+                    config.VoiceVolume = volume;
+                    break;
+                case AudioBusType.Ambience:
+                    config.AmbienceVolume = volume;
+                    break;
+                case AudioBusType.UI:
+                    config.UiVolume = volume;
+                    break;
+            }
+
+            _clientConfig.Save();
         }
 
         private Button CreateButton(string text, System.Action action)
@@ -876,7 +914,7 @@ namespace Fodinae.UI
 
         private void ToggleHeadlight()
         {
-            bool current = PlayerPrefs.GetInt("UseLight2D", 1) == 1;
+            bool current = _clientConfig.Config.UseLight2D;
             bool newValue = !current;
 
             var terrain = _terrainRenderer;
@@ -885,8 +923,8 @@ namespace Fodinae.UI
                 terrain.SetUseLight2D(newValue);
             }
 
-            PlayerPrefs.SetInt("UseLight2D", newValue ? 1 : 0);
-            PlayerPrefs.Save();
+            _clientConfig.Config.UseLight2D = newValue;
+            _clientConfig.Save();
             if (_headlightButton != null)
             {
                 _headlightButton.text = newValue ? "Вкл" : "Выкл";
@@ -936,7 +974,7 @@ namespace Fodinae.UI
             context.Add(new StringPairPacket("ui_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.UI, "Audio_UI", 1f) * 255)).ToString()));
 
             context.Add(new StringPairPacket("headlight", IsHeadlightOn() ? "true" : "false"));
-            context.Add(new StringPairPacket("ui_scale", PlayerPrefs.GetFloat("UIScale", 1f).ToString("F2")));
+            context.Add(new StringPairPacket("ui_scale", _clientConfig.Config.UiScale.ToString("F2")));
 
             Debug.Log($"[PauseMenu] Sending save_client_config with {context.Count} entries");
             _networkService.Send(new ElementClickPacket("save_client_config", 0, context));
