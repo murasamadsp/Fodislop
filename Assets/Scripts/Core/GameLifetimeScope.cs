@@ -86,6 +86,7 @@ namespace Fodinae.Core
             }
 
             RegisterManager<ServerConfig>(builder).AsImplementedInterfaces().AsSelf();
+            RegisterManager<ClientConfigManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TextureStorageManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder);
             RegisterManager<UIInputManager>(builder);
@@ -108,6 +109,7 @@ namespace Fodinae.Core
                 resolver.Resolve<IAudioSystem>();
                 resolver.Resolve<GameManager>();
                 resolver.Resolve<ServerConfig>();
+                resolver.Resolve<IClientConfigManager>();
                 resolver.Resolve<TerrariaLightingEngine>();
                 resolver.Resolve<TextureStorageManager>();
                 resolver.Resolve<WorldTextureManager>();
