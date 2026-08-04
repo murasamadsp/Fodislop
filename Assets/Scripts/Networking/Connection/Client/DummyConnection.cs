@@ -129,6 +129,9 @@ namespace MinesServer.Networking.Connection.Client
         private RendererMode _clientRenderer = RendererMode.Default;
         private readonly List<StringPairPacket> _clientKeybinds = new();
         private readonly List<string> _clientUnrenderedTextures = new();
+        private float _digCooldown = 0.3f;
+        private int _maxGlobalChatLength = 50;
+        private int _maxLocalChatLength = 20;
 
         private static readonly System.Random _rng = new();
 
@@ -1146,6 +1149,9 @@ namespace MinesServer.Networking.Connection.Client
                 _clientRenderer,
                 _clientKeybinds,
                 _clientUnrenderedTextures)));
+
+            var serverConfig = ServiceLocator.Resolve<ServerConfig>();
+            serverConfig?.ApplyValues(_digCooldown, _maxGlobalChatLength, _maxLocalChatLength);
         }
 
         private void SendMissionWindow()
