@@ -162,6 +162,7 @@ namespace Fodinae.UI
             _followPlayer = true;
             _playerBlinkState = true;
             _playerBlinkTimer = 0f;
+            _lastPlayerPos = _player != null ? _player.Position : default;
         }
 
         public void Hide()
@@ -506,7 +507,7 @@ namespace Fodinae.UI
 
             if (chunk == null)
             {
-                throw new InvalidOperationException($"[WorldMapRenderer] Chunk {chunkIndex} is not loaded and could not be fetched");
+                return CellType.Unloaded;
             }
 
             int localX = serverX % _chunkSize;
