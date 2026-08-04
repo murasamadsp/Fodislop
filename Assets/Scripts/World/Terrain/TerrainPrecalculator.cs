@@ -226,7 +226,7 @@ namespace Fodinae.World.Terrain
             }
             else if (IsCause(tl) && IsCause(tr))
             {
-                GridVertexOffsets[x, y] = new Vector3(0, ry, 0);
+                GridVertexOffsets[x, y] = new Vector3(0, -ry, 0);
             }
             else if (IsCause(tl) && IsCause(bl))
             {
@@ -238,23 +238,23 @@ namespace Fodinae.World.Terrain
             }
             else if (IsCause(bl) && IsCause(br))
             {
-                GridVertexOffsets[x, y] = new Vector3(0, -ry, 0);
+                GridVertexOffsets[x, y] = new Vector3(0, ry, 0);
             }
             else if (IsCause(tl))
             {
-                GridVertexOffsets[x, y] = new Vector3(-rx, ry, 0);
+                GridVertexOffsets[x, y] = new Vector3(-rx, -ry, 0);
             }
             else if (IsCause(tr))
             {
-                GridVertexOffsets[x, y] = new Vector3(rx, ry, 0);
+                GridVertexOffsets[x, y] = new Vector3(rx, -ry, 0);
             }
             else if (IsCause(bl))
             {
-                GridVertexOffsets[x, y] = new Vector3(-rx, -ry, 0);
+                GridVertexOffsets[x, y] = new Vector3(-rx, ry, 0);
             }
             else if (IsCause(br))
             {
-                GridVertexOffsets[x, y] = new Vector3(rx, -ry, 0);
+                GridVertexOffsets[x, y] = new Vector3(rx, ry, 0);
             }
             else
             {

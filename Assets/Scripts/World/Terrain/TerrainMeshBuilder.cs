@@ -15,13 +15,6 @@ namespace Fodinae.World.Terrain
     {
         private TerrainVertex[] _vertexBuffer = Array.Empty<TerrainVertex>();
         private float _cellSize;
-        private static readonly Vector2[] _localUVsBuffer =
-        {
-            new(-0.70710678f, -0.70710678f),
-            new(0.70710678f, -0.70710678f),
-            new(0.70710678f, 0.70710678f),
-            new(-0.70710678f, 0.70710678f),
-        };
         public TerrainVertex[] VertexBuffer => _vertexBuffer;
 
         public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
@@ -200,10 +193,10 @@ namespace Fodinae.World.Terrain
                 (materialColor32.b << 16);
 
             _vertexBuffer[vIdx].UV5 = new Vector4(
-                textureType,
+                anchorFlag,
                 isRelief ? reliefMask : sv00,
-                _localUVsBuffer[0].x,
-                _localUVsBuffer[0].y);
+                anchor0.x,
+                anchor0.y);
 
             _vertexBuffer[vIdx + 1].Color = color;
             _vertexBuffer[vIdx + 1].UV1 = atlasRect;
@@ -211,10 +204,10 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 1].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 1].UV4 = animDataVec;
             _vertexBuffer[vIdx + 1].UV5 = new Vector4(
-                textureType,
+                anchorFlag,
                 isRelief ? reliefMask : sv10,
-                _localUVsBuffer[1].x,
-                _localUVsBuffer[1].y);
+                anchor1.x,
+                anchor1.y);
 
             _vertexBuffer[vIdx + 2].Color = color;
             _vertexBuffer[vIdx + 2].UV1 = atlasRect;
@@ -222,10 +215,10 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 2].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 2].UV4 = animDataVec;
             _vertexBuffer[vIdx + 2].UV5 = new Vector4(
-                textureType,
+                anchorFlag,
                 isRelief ? reliefMask : sv11,
-                _localUVsBuffer[2].x,
-                _localUVsBuffer[2].y);
+                anchor2.x,
+                anchor2.y);
 
             _vertexBuffer[vIdx + 3].Color = color;
             _vertexBuffer[vIdx + 3].UV1 = atlasRect;
@@ -233,10 +226,10 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 3].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 3].UV4 = animDataVec;
             _vertexBuffer[vIdx + 3].UV5 = new Vector4(
-                textureType,
+                anchorFlag,
                 isRelief ? reliefMask : sv01,
-                _localUVsBuffer[3].x,
-                _localUVsBuffer[3].y);
+                anchor3.x,
+                anchor3.y);
 
             float glowFlags = 0f;
             if (isGlowing)
