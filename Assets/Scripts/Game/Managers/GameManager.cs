@@ -2,8 +2,11 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Player;
+using Fodinae.Player.Logic;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Player.Model;
+using Fodinae.World.Terrain;
 using UnityEngine;
 
 namespace Fodinae.Game.Managers
@@ -35,6 +38,8 @@ namespace Fodinae.Game.Managers
         public event Action? OnWorldLoaded;
 
         private GameObject? _uiRoot;
+        private bool _worldLoadPending;
+        private bool _worldLoadPublished;
 
         private void Awake()
         {
@@ -121,7 +126,43 @@ namespace Fodinae.Game.Managers
 
         public void NotifyWorldLoaded()
         {
-            Debug.Log("[GameManager] World load completed, notifying listeners.");
+            _worldLoadPending = true;
+            TryPublishWorldLoaded();
+        }
+
+        private void Update()
+        {
+            if (_worldLoadPending)
+            {
+                TryPublishWorldLoaded();
+            }
+        }
+
+        private void TryPublishWorldLoaded()
+        {
+            if (_worldLoadPublished)
+            {
+                return;
+            }
+
+            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
+            if (player == null || !player.HasServerPosition)
+            {
+                return;
+            }
+
+            TerrainRenderer? terrain = TerrainRenderer.Instance;
+            if (terrain == null || !terrain.IsReadyForGameplay)
+            {
+                return;
+            }
+
+            _worldLoadPending = false;
+            _worldLoadPublished = true;
+            SetState(GameState.InGame);
+            player.SetGameplayVisible();
+            CameraFollow.Instance?.SnapToTarget();
+            Debug.Log("[GameManager] World load completed: server position and terrain are ready.");
             OnWorldLoaded?.Invoke();
         }
 

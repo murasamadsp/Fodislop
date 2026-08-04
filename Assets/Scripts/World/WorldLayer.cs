@@ -66,6 +66,8 @@ namespace Fodinae
 
         public int MaxChunksInMemory => _maxChunksInMemory;
 
+        public event Action<int, int, int, int>? ChunkLoaded;
+
         public T this[int x, int y]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -458,6 +460,13 @@ namespace Fodinae
 
             AddToCache(chunkIndex, chunk);
             _loadingChunks.Remove(chunkIndex);
+            int chunkX = chunkIndex / _heightChunks;
+            int chunkY = chunkIndex % _heightChunks;
+            ChunkLoaded?.Invoke(
+                chunkX * _chunkSize,
+                chunkY * _chunkSize,
+                _chunkSize,
+                _chunkSize);
         }
 
         private void AddToCache(int chunkIndex, T[] chunk)

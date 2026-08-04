@@ -1,12 +1,13 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Player.Logic;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.World
 {
@@ -46,11 +47,15 @@ namespace Fodinae.World
         private static readonly int[] Triangles = { 0, 1, 2, 3, 2, 1 };
 
         private Camera? _mainCamera;
+        [Inject]
+        private MapManager? _mapManager;
         private bool _texturesLoading;
         private float _lastCameraX = float.NaN;
         private float _lastCameraOrthoSize = float.NaN;
         private float _lastCameraAspect = float.NaN;
         private int _lastWorldHeight = int.MinValue;
+        private int _diagnosticWorldHeight = int.MinValue;
+        private bool _surfaceInitialized;
 
         public void SetMaterials(Material? transitMaterial, Material? perspectiveMaterial)
         {
@@ -69,8 +74,17 @@ namespace Fodinae.World
 
         protected void Start()
         {
-            _mainCamera = Camera.main;
+            _mainCamera = FindAnyObjectByType<Camera>(FindObjectsInactive.Include);
+        }
 
+        private void InitializeSurface()
+        {
+            if (_surfaceInitialized)
+            {
+                return;
+            }
+
+            _surfaceInitialized = true;
             var transitGO = new GameObject("SurfaceTransit");
             transitGO.transform.SetParent(transform, false);
             _transitFilter = transitGO.AddComponent<MeshFilter>();
@@ -131,20 +145,39 @@ namespace Fodinae.World
                 }
 
                 var transitTex = await loader.GetTextureAsync(_transitTexturePath);
-                if (transitTex != null && _transitMaterial != null)
+                if (transitTex == null)
                 {
-                    _transitMaterial.mainTexture = transitTex;
+                    throw new InvalidOperationException(
+                        $"[SurfaceRenderer] Texture loader returned null for '{_transitTexturePath}'.");
                 }
 
-                var persTex = await loader.GetTextureAsync(_perspectiveTexturePath);
-                if (persTex != null && _perspectiveMaterial != null)
+                if (_transitMaterial == null)
                 {
-                    _perspectiveMaterial.mainTexture = persTex;
+                    throw new InvalidOperationException(
+                        "[SurfaceRenderer] Transit material became null before texture assignment.");
                 }
+
+                _transitMaterial.mainTexture = transitTex;
+
+                var persTex = await loader.GetTextureAsync(_perspectiveTexturePath);
+                if (persTex == null)
+                {
+                    throw new InvalidOperationException(
+                        $"[SurfaceRenderer] Texture loader returned null for '{_perspectiveTexturePath}'.");
+                }
+
+                if (_perspectiveMaterial == null)
+                {
+                    throw new InvalidOperationException(
+                        "[SurfaceRenderer] Perspective material became null before texture assignment.");
+                }
+
+                _perspectiveMaterial.mainTexture = persTex;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[SurfaceRenderer] Failed to load textures: {ex.Message}");
+                Debug.LogException(ex);
                 throw;
             }
             finally
@@ -160,13 +193,29 @@ namespace Fodinae.World
                 return;
             }
 
-            var mapManager = ServiceLocator.Resolve<MapManager>();
-            if (mapManager == null)
+            if (_mapManager == null)
+            {
+                _mapManager = ServiceLocator.Resolve<MapManager>();
+                if (_mapManager == null)
+                {
+                    throw new InvalidOperationException(
+                        "[SurfaceRenderer] MapManager is required before surface initialization.");
+                }
+            }
+
+            if (!_mapManager.IsWorldInitialized)
             {
                 return;
             }
 
-            int worldHeight = mapManager.WorldHeight;
+            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            {
+                return;
+            }
+
+            InitializeSurface();
+
+            int worldHeight = _mapManager.WorldHeight;
             float camX = _mainCamera.transform.position.x;
             float cameraOrthoSize = _mainCamera.orthographicSize;
             float cameraAspect = _mainCamera.aspect;
@@ -191,6 +240,17 @@ namespace Fodinae.World
 
             UpdateTransit(left, right, baseY, camX);
             UpdatePerspective(left, right, baseY, camX);
+
+            if (_diagnosticWorldHeight != worldHeight)
+            {
+                _diagnosticWorldHeight = worldHeight;
+                Debug.Log(
+                    $"[SurfaceDiag] camera=({camX:F2},{_mainCamera.transform.position.y:F2}) " +
+                    $"worldHeight={worldHeight} rangeX=({left:F2},{right:F2}) " +
+                    $"transitY=({baseY:F2},{baseY + TRANSIT_HEIGHT:F2}) " +
+                    $"transitTexture={_transitMaterial?.mainTexture?.name ?? "NULL"} " +
+                    $"perspectiveTexture={_perspectiveMaterial?.mainTexture?.name ?? "NULL"}");
+            }
         }
 
         private void UpdateTransit(float left, float right, float baseY, float camX)

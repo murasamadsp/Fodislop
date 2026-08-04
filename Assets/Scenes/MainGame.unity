@@ -478,37 +478,6 @@ MonoBehaviour:
   _minZoom: 5
   _maxZoom: 30
   _zoomSmoothness: 8
---- !u!1 &619394800
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 619394802}
-  m_Layer: 0
-  m_Name: Global Light 2D
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &619394802
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 619394800}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!43 &975790002
 Mesh:
   m_ObjectHideFlags: 0
@@ -957,10 +926,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.World.Lighting.TerrariaLightingEngine
   _quality: 3
-  _graphicsProfile: {fileID: 0}
+  _graphicsProfile: {fileID: 11400000, guid: 0b7c4f0fd9e04f619d688a453e9193dd, type: 2}
   _ambientColor: {r: 0.12, g: 0.14, b: 0.18, a: 1}
+  _emptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
+  _solidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
   _minimumTransmission: 0.008
-  _staticLightRadius: 8
   _lightSafeBorder: 2
   _ambientOcclusionEnabled: 1
   _ambientOcclusionRadiusCells: 2
@@ -971,9 +941,11 @@ MonoBehaviour:
   _solidExtinctionMultiplier: 1
   _bounceStrength: 0.18
   _maximumLightMultiplier: 8
+  _enableFinalLightingClamp: 0
   _transmittanceDebugDistanceCells: 10
   _debugView: 0
   _diffuseBounceEnabled: 1
+  _dynamicLightUpdatesPerSecond: 20
 --- !u!4 &1908995099
 Transform:
   m_ObjectHideFlags: 0
@@ -1042,7 +1014,6 @@ SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 519420032}
-  - {fileID: 619394802}
   - {fileID: 439439807}
   - {fileID: 1000000002}
   - {fileID: 1792288505}

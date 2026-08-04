@@ -31,15 +31,6 @@ namespace Fodinae.Rendering
         [Min(1f)]
         [Tooltip("Максимальная частота lighting solve. Изменение геометрии всё равно обрабатывается сразу.")]
         public float LightingUpdatesPerSecond;
-        [ColorUsage(showAlpha: false, hdr: true)]
-        [Tooltip("Legacy/profile base empty extinction. Фактическое значение задаётся на WorldLighting.")]
-        public Color EmptyExtinctionRgb;
-        [ColorUsage(showAlpha: false, hdr: true)]
-        [Tooltip("Legacy/profile base solid extinction. Фактическое значение задаётся на WorldLighting.")]
-        public Color SolidExtinctionRgb;
-        [Range(0f, 2f)]
-        [Tooltip("Legacy/profile bounce value. Рабочая настройка diffuse bounce находится на WorldLighting.")]
-        public float BounceStrength;
         [Min(128)]
         [Tooltip("Бюджет radiance cascade atlas.")]
         public int LightingCascadeAtlasLimit;
@@ -59,9 +50,6 @@ namespace Fodinae.Rendering
             int lightingMaximumLightCount,
             int lightingMaximumRaySteps,
             float lightingUpdatesPerSecond,
-            Color? emptyExtinctionRgb = null,
-            Color? solidExtinctionRgb = null,
-            float bounceStrength = 0.3f,
             int lightingCascadeAtlasLimit = 512,
             float renderScale = 1f,
             int vSyncCount = 1,
@@ -72,9 +60,6 @@ namespace Fodinae.Rendering
             LightingMaximumLightCount = lightingMaximumLightCount;
             LightingMaximumRaySteps = lightingMaximumRaySteps;
             LightingUpdatesPerSecond = lightingUpdatesPerSecond;
-            EmptyExtinctionRgb = emptyExtinctionRgb ?? new Color(0.015f, 0.012f, 0.009f, 1f);
-            SolidExtinctionRgb = solidExtinctionRgb ?? new Color(4.5f, 4.25f, 4f, 1f);
-            BounceStrength = bounceStrength;
             LightingCascadeAtlasLimit = lightingCascadeAtlasLimit;
             RenderScale = renderScale;
             VSyncCount = vSyncCount;
@@ -92,7 +77,7 @@ namespace Fodinae.Rendering
         [SerializeField]
         private GraphicsQualitySettings _high = new(4, 1536, 512, 40, 60f, lightingCascadeAtlasLimit: 1536);
         [SerializeField]
-        private GraphicsQualitySettings _ultra = new(8, 2048, 1024, 64, 30f, lightingCascadeAtlasLimit: 2048);
+        private GraphicsQualitySettings _ultra = new(4, 2048, 1024, 64, 60f, lightingCascadeAtlasLimit: 2048);
 
         public GraphicsQualitySettings Get(GraphicsQualityTier tier)
         {
@@ -116,20 +101,12 @@ namespace Fodinae.Rendering
                 settings.LightingMaximumRaySteps < 1 ||
                 settings.LightingUpdatesPerSecond <= 0f ||
                 settings.LightingCascadeAtlasLimit < 128 ||
-                settings.BounceStrength is < 0f or > 2f ||
                 settings.RenderScale is < 0.5f or > 1f ||
                 settings.VSyncCount is < 0 or > 4 ||
                 settings.AntiAliasing is < 0 or > 8)
             {
                 throw new InvalidOperationException(
                     $"Graphics quality profile '{tier}' contains invalid quality settings.");
-            }
-
-            if (settings.EmptyExtinctionRgb.maxColorComponent <= 0f ||
-                settings.SolidExtinctionRgb.maxColorComponent <= 0f)
-            {
-                throw new InvalidOperationException(
-                    $"Graphics quality profile '{tier}' is missing explicit extinction values.");
             }
         }
     }

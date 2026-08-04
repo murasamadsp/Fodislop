@@ -22,6 +22,13 @@ namespace Fodinae.World.Terrain
         private readonly Dictionary<CellType, int> _atlasIndexCache = new();
         private readonly Dictionary<CellType, CellMetadata> _metadataCache = new();
 
+        private static CachedCellData UnloadedCellData => new()
+        {
+            State = TerrainCellState.Unloaded,
+            Type = CellType.Unloaded,
+            AtlasIndex = -1,
+        };
+
         public int CacheMinX => _cacheMinX;
         public int CacheMinY => _cacheMinY;
         public int CacheWidth => _cacheWidth;
@@ -66,6 +73,7 @@ namespace Fodinae.World.Terrain
             {
                 throw new ArgumentNullException(nameof(atlases));
             }
+
             if (mm == null || mapStorage == null || !mapStorage.IsReady)
             {
                 return;
@@ -93,10 +101,16 @@ namespace Fodinae.World.Terrain
                     int unityY = _cacheMinY + y;
                     CellType type = GetCellType(gridX, unityY, worldWidth, worldHeight, layer, ref lastChunkIndex, ref currentChunk);
 
+                    if (type == CellType.Unloaded)
+                    {
+                        _cellCache[x, y] = UnloadedCellData;
+                        continue;
+                    }
+
                     var meta = GetMetadata(type, mm, wtm, atlases);
                     _cellCache[x, y] = CreateCachedData(type, meta);
 
-                    if (Application.isPlaying && type != CellType.Unloaded && !meta.IsTextureReady)
+                    if (Application.isPlaying && !meta.IsTextureReady)
                     {
                         wtm.RequestTexture(type);
                     }
@@ -117,6 +131,7 @@ namespace Fodinae.World.Terrain
             {
                 throw new ArgumentNullException(nameof(atlases));
             }
+
             if (mm == null || mapStorage == null || !mapStorage.IsReady)
             {
                 return;
@@ -143,6 +158,13 @@ namespace Fodinae.World.Terrain
                 CellType[]? currentChunk = null;
 
                 CellType type = GetCellType(gridX, unityY, worldWidth, worldHeight, layer, ref lastChunkIndex, ref currentChunk);
+
+                if (type == CellType.Unloaded)
+                {
+                    _cellCache[cx, cy] = UnloadedCellData;
+                    return;
+                }
+
                 var meta = GetMetadata(type, mm, wtm, atlases);
                 _cellCache[cx, cy] = CreateCachedData(type, meta);
 
@@ -230,6 +252,7 @@ namespace Fodinae.World.Terrain
 
             if (!_atlasIndexCache.TryGetValue(type, out int atlasIndex))
             {
+                atlasIndex = -1;
                 for (int i = 0; i < atlases.Count; i++)
                 {
                     if (atlases[i].ContainsCell(type))
@@ -259,8 +282,7 @@ namespace Fodinae.World.Terrain
                 AtlasIndex = atlasIndex,
                 UVTileSize = atlasIndex >= 0 && atlasIndex < atlases.Count
                     ? (float)RenderingConstants.CELL_SIZE / atlases[atlasIndex].Size
-                    : throw new InvalidOperationException(
-                        $"No texture atlas contains cell type '{type}'."),
+                    : 0f,
                 AnimationFrameCount = frameCount,
                 FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
                 IsTextureReady = atlasRect.z > 0.0001f,
@@ -273,6 +295,7 @@ namespace Fodinae.World.Terrain
         {
             return new CachedCellData
             {
+                State = TerrainCellState.Loaded,
                 Type = type,
                 Properties = meta.Properties,
                 ReliefGroup = meta.ReliefGroup,

@@ -2,6 +2,7 @@
 
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.World;
 using UnityEngine;
@@ -20,6 +21,8 @@ namespace Fodinae.UI
         private ushort? _targetY;
         [Inject]
         private IPlayerStats _playerStats = null!;
+        [Inject]
+        private MapManager _mapManager = null!;
 
         protected void Start()
         {
@@ -89,7 +92,10 @@ namespace Fodinae.UI
                 return;
             }
 
-            var worldPos = CoordinateUtils.ServerToUnityPos(_targetX.Value, _targetY.Value);
+            var worldPos = CoordinateUtils.ServerToUnityPos(
+                _targetX.Value,
+                _targetY.Value,
+                _mapManager.WorldHeight);
             var screenPos = _camera.WorldToScreenPoint(worldPos);
 
             if (_doc == null || _doc.rootVisualElement == null || _doc.rootVisualElement.panel == null || _arrow == null)

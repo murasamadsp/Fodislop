@@ -1,4 +1,5 @@
 #pragma kernel SolveCascade
+#pragma kernel SolveAutomaticNormals
 #pragma kernel SolveContactOcclusion
 #pragma kernel ResolveDirect
 #pragma kernel SolveDiffuseBounce
@@ -13,6 +14,8 @@ Texture2D<float4> _MaterialField;
 Texture2D<float4> _EmissionField;
 RWStructuredBuffer<uint3> _RadianceAtlas;
 RWTexture2D<float4> _DirectTexture;
+RWTexture2D<float4> _AutomaticNormalField;
+Texture2D<float4> _AutomaticNormalInput;
 RWTexture2D<float> _ContactOcclusionTexture;
 Texture2D<float4> _DirectInput;
 RWTexture2D<float4> _BounceTexture;
@@ -143,7 +146,7 @@ float4 SampleEmission(float2 pixelPosition, float mipLevel)
     return emission;
 }
 
-float4 SampleAutomaticSurfaceNormal(float2 pixelPosition)
+float4 CalculateAutomaticSurfaceNormal(float2 pixelPosition)
 {
     float occupancyLeft = SampleOccupancy(pixelPosition - float2(1.0, 0.0), 0.0);
     float occupancyRight = SampleOccupancy(pixelPosition + float2(1.0, 0.0), 0.0);
@@ -161,6 +164,15 @@ float4 SampleAutomaticSurfaceNormal(float2 pixelPosition)
     }
 
     return float4(surfaceNormal, strength);
+}
+
+float4 SampleAutomaticSurfaceNormal(float2 pixelPosition)
+{
+    int2 pixel = clamp(
+        int2(floor(pixelPosition)),
+        int2(0, 0),
+        _FieldSize - 1);
+    return _AutomaticNormalInput.Load(int3(pixel, 0));
 }
 
 float SurfaceLambert(
@@ -214,8 +226,13 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
     [loop]
     for (int stepIndex = 0; stepIndex < MAX_INTERVAL_STEPS; stepIndex++)
     {
+        if (stepIndex >= stepCount)
+        {
+            break;
+        }
+
         float3 currentTransmission = Transmission(pathLength);
-        if (stepIndex >= stepCount || Max3(currentTransmission) <= _MinimumTransmission)
+        if (Max3(currentTransmission) <= _MinimumTransmission)
         {
             break;
         }
@@ -226,6 +243,15 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
             any(samplePosition >= float2(_FieldSize));
         if (outside)
         {
+            // The final cascade has no far interval that consumes its
+            // accumulated path length. Once the ray leaves the finite field,
+            // no further emission can contribute to its radiance, so avoid
+            // spending the remaining interval steps on empty space.
+            if (_HasFarCascade == 0)
+            {
+                break;
+            }
+
             pathLength.x += physicalStepLength;
             continue;
         }
@@ -300,6 +326,18 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
     _RadianceAtlas[atlasIndex] = PackInterval(
         radiance,
         pathLength);
+}
+
+[numthreads(8, 8, 1)]
+void SolveAutomaticNormals(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (any(dispatchId.xy >= (uint2)_FieldSize))
+    {
+        return;
+    }
+
+    _AutomaticNormalField[dispatchId.xy] = CalculateAutomaticSurfaceNormal(
+        float2(dispatchId.xy) + 0.5);
 }
 
 [numthreads(8, 8, 1)]

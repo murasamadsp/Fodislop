@@ -5,7 +5,9 @@ using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Player.Logic;
 using Fodinae.World.Lighting;
+using MinesServer.Data;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -77,6 +79,7 @@ namespace Fodinae.World.Terrain
         private float _targetUseLight2D;
         private int _lastAtlasCount = -1;
         private bool _lightingBindingValidated;
+        private WorldLayer<CellType>? _subscribedCellLayer;
 
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
@@ -90,7 +93,8 @@ namespace Fodinae.World.Terrain
             new VertexAttributeDescriptor(VertexAttribute.TexCoord5, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4),
         };
-        private const MeshUpdateFlags UPLOAD_FLAGS = MeshUpdateFlags.DontValidateIndices;
+        private const MeshUpdateFlags UPLOAD_FLAGS =
+            MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds;
         private static readonly ProfilerMarker CacheMarker = new("Fodinae.Terrain.Cache");
         private static readonly ProfilerMarker PrecalculateMarker = new("Fodinae.Terrain.Precalculate");
         private static readonly ProfilerMarker FloodFillMarker = new("Fodinae.Terrain.BackgroundFloodFill");
@@ -107,6 +111,12 @@ namespace Fodinae.World.Terrain
         }
 
         public ulong LightingGeometryRevision => _lightingGeometryRevision;
+
+        public bool IsReadyForGameplay =>
+            _isInitialized &&
+            _mesh != null &&
+            _mesh.vertexCount > 0 &&
+            _materials.Length > 0;
 
         public static void OnCellChanged(int x, int y)
         {
@@ -133,7 +143,6 @@ namespace Fodinae.World.Terrain
             int width,
             int height)
         {
-            _lightingGeometryRevision++;
             if (_mapManager == null || _lastGridPos.x == int.MinValue)
             {
                 _needsRefresh = true;
@@ -159,6 +168,7 @@ namespace Fodinae.World.Terrain
                 minimumUnityY <= _lastGridPos.y + _meshHeight;
             if (affectsCachedTerrain)
             {
+                _lightingGeometryRevision++;
                 _needsRefresh = true;
             }
         }
@@ -198,6 +208,7 @@ namespace Fodinae.World.Terrain
 
         public void EnsureSubscriptions()
         {
+            SubscribeToCellLayer();
             if (_subscribedEvents)
             {
                 return;
@@ -226,6 +237,12 @@ namespace Fodinae.World.Terrain
             if (_mapManager != null)
             {
                 _mapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnCellLayerChunkLoaded;
+                _subscribedCellLayer = null;
             }
 
             if (Instance == this)
@@ -290,9 +307,35 @@ namespace Fodinae.World.Terrain
 
         private void OnWorldDataLoaded()
         {
+            SubscribeToCellLayer();
             _needsRefresh = true;
             _lightingGeometryRevision++;
             TerrariaLightingEngine.Instance?.InvalidateStaticCache();
+        }
+
+        private void SubscribeToCellLayer()
+        {
+            WorldLayer<CellType>? cellLayer = _storage?.CellLayer;
+            if (ReferenceEquals(_subscribedCellLayer, cellLayer))
+            {
+                return;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnCellLayerChunkLoaded;
+            }
+
+            _subscribedCellLayer = cellLayer;
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded += OnCellLayerChunkLoaded;
+            }
+        }
+
+        private void OnCellLayerChunkLoaded(int serverX, int serverY, int width, int height)
+        {
+            HandleRegionChanged(serverX, serverY, width, height);
         }
 
         protected void LateUpdate()
@@ -308,6 +351,11 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
+            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            {
+                return;
+            }
+
             if ((_diagLogged & (1 << 1)) == 0)
             {
                 LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
@@ -320,7 +368,7 @@ namespace Fodinae.World.Terrain
 
             if (_mainCamera == null)
             {
-                _mainCamera = _mapManager.MainCamera;
+                _mainCamera = FindAnyObjectByType<Camera>(FindObjectsInactive.Include);
             }
 
             if (_mainCamera == null)
@@ -440,6 +488,16 @@ namespace Fodinae.World.Terrain
             if (terrainWasRebuilt)
             {
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
+                if (!_needsRefresh)
+                {
+                    // The lighting material field is rasterized from this
+                    // mesh. A streamed chunk can change occupancy at the
+                    // cache edge without changing the camera lighting
+                    // region, so every successful mesh rebuild must publish a
+                    // new geometry revision for normal/AO caches as well.
+                    _lightingGeometryRevision++;
+                }
+
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
             }
@@ -714,7 +772,13 @@ namespace Fodinae.World.Terrain
                         _mesh.Clear();
                         _mesh.subMeshCount = atlases.Count;
                         _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
-                        _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
+                        _mesh.SetVertexBufferData(
+                            _meshBuilder.VertexBuffer,
+                            0,
+                            0,
+                            _meshBuilder.VertexBuffer.Length,
+                            0,
+                            UPLOAD_FLAGS);
 
                         // The terrain is a regular viewport-sized grid. Scanning
                         // every vertex after each rebuild is wasted CPU work and
@@ -729,7 +793,13 @@ namespace Fodinae.World.Terrain
                                 2f));
                         if ((_diagLogged & (1 << 8)) == 0)
                         {
-                            LogDiag(1 << 8, $"[TerrainDiag] BuildFull: verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} bounds={_mesh.bounds}");
+                            LogDiag(
+                                1 << 8,
+                                "[TerrainDiag] BuildFull: grid=(" +
+                                $"{_lastGridPos.x},{_lastGridPos.y}) " +
+                                $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
+                                $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} " +
+                                $"bounds={_mesh.bounds} transform={transform.position}");
                         }
 
                         for (int i = 0; i < atlases.Count; i++)
@@ -757,7 +827,13 @@ namespace Fodinae.World.Terrain
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[TerrainRenderer] Build failed: {ex.Message}\n{ex.StackTrace}");
+                Debug.LogError(
+                    $"[TerrainRenderer] Build failed: grid=({_lastGridPos.x},{_lastGridPos.y}) " +
+                    $"size={_meshWidth}x{_meshHeight}, world=" +
+                    $"{_mapManager?.WorldWidth ?? 0}x{_mapManager?.WorldHeight ?? 0}, " +
+                    $"atlases={(_textureService as WorldTextureManager)?.GetAllAtlases().Count ?? 0}, " +
+                    $"storageReady={_storage?.IsReady ?? false}.");
+                Debug.LogException(ex);
                 _needsRefresh = true;
             }
 

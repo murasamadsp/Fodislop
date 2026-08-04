@@ -62,7 +62,7 @@ namespace Fodinae.World.Terrain
 
             CachedCellData ccd = cellCache.GetCellData(cx, cy);
             CellType cellFgType = ccd.Type;
-            if (cellFgType == CellType.Unloaded)
+            if (ccd.State != TerrainCellState.Loaded)
             {
                 vIdx += 4;
                 return;
@@ -82,7 +82,14 @@ namespace Fodinae.World.Terrain
             int atlasIndex = data.AtlasIndex;
             if (atlasIndex < 0 || atlasIndex >= subMeshIndices.Length)
             {
-                atlasIndex = 0;
+                vIdx += 4;
+                return;
+            }
+
+            if (data.AtlasRect.z <= 0f || data.AtlasRect.w <= 0f || data.UVTileSize <= 0f)
+            {
+                vIdx += 4;
+                return;
             }
 
             float zOffset = isBackground ? 0.1f : 0.0f;

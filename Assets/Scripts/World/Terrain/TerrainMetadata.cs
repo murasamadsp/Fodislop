@@ -6,8 +6,16 @@ using UnityEngine;
 
 namespace Fodinae.World.Terrain
 {
+    public enum TerrainCellState
+    {
+        Loaded,
+        Unloaded,
+        OutsideWorld,
+    }
+
     public struct CachedCellData
     {
+        public TerrainCellState State;
         public CellType Type;
         public CellConfigProperties Properties;
         public byte ReliefGroup;

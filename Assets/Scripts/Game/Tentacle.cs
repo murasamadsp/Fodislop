@@ -25,6 +25,7 @@ public class Tentacle
     private readonly Vector3[] _renderPoints;
     private readonly Vector3[] _velocities;
     private readonly float[] _segmentLengths;
+    private bool _isActive = true;
 
     public Tentacle(TentacleBatchRenderer renderer, Texture2D texture, Vector3 startPosition, float wiggleOffset, int sliceIndex, int totalSlices)
     {
@@ -55,6 +56,35 @@ public class Tentacle
         return _renderPoints[index];
     }
 
+    public bool IsActive => _isActive;
+
+    public bool IsSettled
+    {
+        get
+        {
+            for (int i = 1; i < _velocities.Length; i++)
+            {
+                if (_velocities[i].sqrMagnitude > 1e-8f)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    public void SetActive(bool active)
+    {
+        if (_isActive == active)
+        {
+            return;
+        }
+
+        _isActive = active;
+        _renderer.MarkDirty(_texture);
+    }
+
     public void Snap(Vector3 position)
     {
         for (int i = 0; i < _positions.Length; i++)
@@ -67,6 +97,11 @@ public class Tentacle
 
     public void Update(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
     {
+        if (!_isActive)
+        {
+            return;
+        }
+
         _positions[0] = rootPosition;
         _renderPoints[0] = rootPosition;
         _segmentLengths[0] = 0f;
@@ -98,6 +133,8 @@ public class Tentacle
             lastPos = _positions[i];
             targetPos = _positions[i] + (MAX_SEGMENT_DIST * movementFactor * direction);
         }
+
+        _renderer.MarkDirty(_texture);
     }
 
     /// <summary>

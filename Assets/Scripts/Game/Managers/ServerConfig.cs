@@ -9,12 +9,15 @@ namespace Fodinae.Game.Managers
     {
         private const string TAG = "[ServerConfig]";
 
-        public float DigCooldown { get; private set; } = 0.3f;
-        public int MaxGlobalChatLength { get; private set; } = 50;
-        public int MaxLocalChatLength { get; private set; } = 20;
+        public float DigCooldown { get; private set; }
+        public int MaxGlobalChatLength { get; private set; }
+        public int MaxLocalChatLength { get; private set; }
 
         protected void Awake()
         {
+            DigCooldown = PlayerPrefs.GetFloat(nameof(DigCooldown), 0.3f);
+            MaxGlobalChatLength = PlayerPrefs.GetInt(nameof(MaxGlobalChatLength), 50);
+            MaxLocalChatLength = PlayerPrefs.GetInt(nameof(MaxLocalChatLength), 20);
             Debug.Log($"{TAG} Initialized: DigCooldown={DigCooldown}, MaxGlobalChat={MaxGlobalChatLength}, MaxLocalChat={MaxLocalChatLength}");
         }
     }

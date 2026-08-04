@@ -105,13 +105,19 @@ public class PostProcessRenderPass : ScriptableRenderPass2D
             return false;
         }
 
-        var robot = tag.CachedRobot ?? tag.GetComponent<Robot>();
+        Robot? robot = tag.CachedRobot;
         if (robot == null || robot.IsLocalPlayer)
         {
             return false;
         }
 
-        renderer = tag.CachedSpriteRenderer ?? tag.GetComponent<SpriteRenderer>();
+        SpriteRenderer? cachedRenderer = tag.CachedSpriteRenderer;
+        if (cachedRenderer == null)
+        {
+            return false;
+        }
+
+        renderer = cachedRenderer;
         return renderer != null && renderer.enabled && renderer.sprite != null;
     }
 

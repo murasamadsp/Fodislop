@@ -61,6 +61,21 @@ namespace Fodinae.Game.Managers
 
         public bool IsStandaloneMode { get; set; } = false;
 
+        public void InitializeEditorPreview(MapStorage storage)
+        {
+            if (Application.isPlaying)
+            {
+                throw new InvalidOperationException(
+                    "[MapManager] Editor preview initialization is forbidden in Play Mode.");
+            }
+
+            _worldStorage = storage ?? throw new ArgumentNullException(nameof(storage));
+            _packManager = null!;
+            _robotService = null!;
+            _audioService = null!;
+            IsStandaloneMode = true;
+        }
+
         private IWorldDataStorage WorldStorage => _worldStorage;
 
         protected void OnDestroy()
@@ -160,7 +175,18 @@ namespace Fodinae.Game.Managers
             }
 
 
-            storage.InitWorld(packet.CodeName, _width, _height);
+            try
+            {
+                storage.InitWorld(packet.CodeName, _width, _height);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    $"[MapManager] Failed to initialize world '{packet.CodeName}' " +
+                    $"({_width}x{_height}) in storage.");
+                Debug.LogException(ex);
+                throw;
+            }
 
             if (!storage.IsReady)
             {

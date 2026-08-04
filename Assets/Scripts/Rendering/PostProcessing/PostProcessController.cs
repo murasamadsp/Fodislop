@@ -6,7 +6,6 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-
     [DisallowMultipleComponent]
     public class PostProcessController : MonoBehaviour
     {
@@ -23,6 +22,12 @@ namespace Fodinae.Rendering.PostProcessing
         private int _worldUiLayerMask;
         private bool _ownsRuntimeVolume;
         private bool _ownsRuntimeProfile;
+        private float _lastWorldUiOrthographicSize = float.NaN;
+        private float _lastWorldUiFieldOfView = float.NaN;
+        private float _lastWorldUiNearClipPlane = float.NaN;
+        private float _lastWorldUiFarClipPlane = float.NaN;
+        private Matrix4x4 _lastWorldUiProjection;
+        private bool _hasWorldUiProjection;
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -243,7 +248,12 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
-            var mainCamera = Camera.main;
+            Camera? mainCamera = _configuredMainCamera;
+            if (mainCamera == null)
+            {
+                mainCamera = Camera.main;
+            }
+
             if (mainCamera == null)
             {
                 return;
@@ -270,12 +280,32 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
+            Matrix4x4 projection = mainCamera.projectionMatrix;
+            bool projectionChanged =
+                !_hasWorldUiProjection ||
+                _worldUiCamera.orthographic != mainCamera.orthographic ||
+                !Mathf.Approximately(_lastWorldUiOrthographicSize, mainCamera.orthographicSize) ||
+                !Mathf.Approximately(_lastWorldUiFieldOfView, mainCamera.fieldOfView) ||
+                !Mathf.Approximately(_lastWorldUiNearClipPlane, mainCamera.nearClipPlane) ||
+                !Mathf.Approximately(_lastWorldUiFarClipPlane, mainCamera.farClipPlane) ||
+                _lastWorldUiProjection != projection;
+            if (!projectionChanged)
+            {
+                return;
+            }
+
             _worldUiCamera.orthographic = mainCamera.orthographic;
             _worldUiCamera.orthographicSize = mainCamera.orthographicSize;
             _worldUiCamera.fieldOfView = mainCamera.fieldOfView;
             _worldUiCamera.nearClipPlane = mainCamera.nearClipPlane;
             _worldUiCamera.farClipPlane = mainCamera.farClipPlane;
-            _worldUiCamera.projectionMatrix = mainCamera.projectionMatrix;
+            _worldUiCamera.projectionMatrix = projection;
+            _lastWorldUiOrthographicSize = mainCamera.orthographicSize;
+            _lastWorldUiFieldOfView = mainCamera.fieldOfView;
+            _lastWorldUiNearClipPlane = mainCamera.nearClipPlane;
+            _lastWorldUiFarClipPlane = mainCamera.farClipPlane;
+            _lastWorldUiProjection = projection;
+            _hasWorldUiProjection = true;
         }
 
         private void EnsureCameraSetup(Camera mainCamera)
@@ -337,12 +367,16 @@ namespace Fodinae.Rendering.PostProcessing
             }
         }
 
-        private void GetOrAddComponent<T>(ref T? target, VolumeProfile profile) where T : VolumeComponent
+        private void GetOrAddComponent<T>(
+            ref T? target,
+            VolumeProfile profile)
+            where T : VolumeComponent
         {
             if (!profile.TryGet(out target) || target == null)
             {
                 target = profile.Add<T>();
             }
+
             target.SetAllOverridesTo(true);
         }
     }

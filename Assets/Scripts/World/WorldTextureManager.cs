@@ -141,6 +141,12 @@ namespace Fodinae.World
         public void RequestTexture(CellType cellType)
         {
             EnsureInitialized();
+            if (_textureCache.TryGetTexture(cellType, out _) ||
+                _pendingRequests.ContainsKey(cellType))
+            {
+                return;
+            }
+
             GetCellTextureCoordinate(cellType, 0, 0).Forget();
         }
 

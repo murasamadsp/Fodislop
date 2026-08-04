@@ -62,7 +62,7 @@ MonoBehaviour:
   active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 0.043
+    m_Value: 1
 --- !u!114 &3512870612399361332
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -75,7 +75,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 996afb401c6ff45f882623218512cf5b, type: 3}
   m_Name: MotionBlurComponent
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.MotionBlurComponent
-  active: 1
+  active: 0
   intensity:
     m_OverrideState: 1
     m_Value: 1
@@ -94,7 +94,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2fa40d9b75c3f4178a67936681d8c115, type: 3}
   m_Name: ColorGradingComponent
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.ColorGradingComponent
-  active: 0
+  active: 1
   exposure:
     m_OverrideState: 1
     m_Value: 0
@@ -105,6 +105,12 @@ MonoBehaviour:
     m_OverrideState: 1
     m_Value: 0
   saturation:
+    m_OverrideState: 1
+    m_Value: 1
+  toneMapping:
+    m_OverrideState: 1
+    m_Value: 0
+  toneMappingWhitePoint:
     m_OverrideState: 1
     m_Value: 1
 --- !u!114 &3739390409327271990
@@ -122,13 +128,13 @@ MonoBehaviour:
   active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 0.46
+    m_Value: 0.13
   threshold:
     m_OverrideState: 1
-    m_Value: 0.55
+    m_Value: 1.842
   scatter:
     m_OverrideState: 1
-    m_Value: 0.671
+    m_Value: 0.529
   tint:
     m_OverrideState: 1
     m_Value: {r: 1, g: 1, b: 1, a: 1}

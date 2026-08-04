@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Audio.Backend;
 using Fodinae.Audio.Core;
@@ -337,8 +338,10 @@ namespace Fodinae.UI
                 "Высокое",
                 "Ультра",
             ];
+            TerrariaLightingEngine? qualityEngine = TerrariaLightingEngine.Instance
+                ?? FindAnyObjectByType<TerrariaLightingEngine>();
             int savedQuality = Mathf.Clamp(
-                PlayerPrefs.GetInt("WorldLightingQuality", (int)TerrariaLightingEngine.QualityPreset.Ultra),
+                (int)(qualityEngine?.Quality ?? LightingDefaults.Quality),
                 0,
                 lightingQualityNames.Length - 1);
             var lightingQuality = new Button();
@@ -361,8 +364,6 @@ namespace Fodinae.UI
 
                 var quality = (TerrariaLightingEngine.QualityPreset)savedQuality;
                 engine.SetQuality(quality);
-                PlayerPrefs.SetInt("WorldLightingQuality", (int)quality);
-                PlayerPrefs.Save();
                 UpdateLightingQualityButton();
             };
             lightingQuality.AddToClassList("pause-btn");
@@ -371,9 +372,9 @@ namespace Fodinae.UI
 
             var ambientOcclusionToggle = new Toggle("Контактное затенение (AO)")
             {
-                value = PlayerPrefs.GetInt(
-                    TerrariaLightingEngine.AmbientOcclusionPreferenceKey,
-                    1) == 1,
+                value = (TerrariaLightingEngine.Instance ??
+                    FindAnyObjectByType<TerrariaLightingEngine>())?.AmbientOcclusionEnabled ??
+                    LightingDefaults.AmbientOcclusionEnabled,
             };
             ambientOcclusionToggle.RegisterValueChangedCallback(evt =>
             {
@@ -385,18 +386,15 @@ namespace Fodinae.UI
                     return;
                 }
 
-                PlayerPrefs.SetInt(
-                    TerrariaLightingEngine.AmbientOcclusionPreferenceKey,
-                    evt.newValue ? 1 : 0);
-                PlayerPrefs.Save();
+                throw new InvalidOperationException("Lighting engine is required before changing AO.");
             });
             scrollContainer.Add(ambientOcclusionToggle);
 
             var globalIlluminationToggle = new Toggle("Непрямой диффузный свет")
             {
-                value = PlayerPrefs.GetInt(
-                    TerrariaLightingEngine.DiffuseBouncePreferenceKey,
-                    1) == 1,
+                value = (TerrariaLightingEngine.Instance ??
+                    FindAnyObjectByType<TerrariaLightingEngine>())?.DiffuseBounceEnabled ??
+                    LightingDefaults.DiffuseBounceEnabled,
             };
             globalIlluminationToggle.RegisterValueChangedCallback(evt =>
             {
@@ -408,15 +406,11 @@ namespace Fodinae.UI
                     return;
                 }
 
-                PlayerPrefs.SetInt(
-                    TerrariaLightingEngine.DiffuseBouncePreferenceKey,
-                    evt.newValue ? 1 : 0);
-                PlayerPrefs.Save();
+                throw new InvalidOperationException("Lighting engine is required before changing diffuse bounce.");
             });
             scrollContainer.Add(globalIlluminationToggle);
 
             void ApplyLightingSetting(
-                string preferenceKey,
                 float value,
                 System.Action<TerrariaLightingEngine, float> apply)
             {
@@ -428,29 +422,10 @@ namespace Fodinae.UI
                     return;
                 }
 
-                PlayerPrefs.SetFloat(preferenceKey, value);
-                PlayerPrefs.Save();
-            }
-
-            void ApplyLightingIntSetting(
-                string preferenceKey,
-                float value,
-                System.Action<TerrariaLightingEngine, float> apply)
-            {
-                TerrariaLightingEngine? engine = TerrariaLightingEngine.Instance
-                    ?? FindAnyObjectByType<TerrariaLightingEngine>();
-                if (engine != null)
-                {
-                    apply(engine, value);
-                    return;
-                }
-
-                PlayerPrefs.SetInt(preferenceKey, Mathf.RoundToInt(value));
-                PlayerPrefs.Save();
+                throw new InvalidOperationException("Lighting engine is required before changing lighting settings.");
             }
 
             float GetLightingValue(
-                string preferenceKey,
                 float defaultValue,
                 float minimum,
                 float maximum,
@@ -460,10 +435,7 @@ namespace Fodinae.UI
                     ?? FindAnyObjectByType<TerrariaLightingEngine>();
                 return engine != null
                     ? actualValue(engine)
-                    : Mathf.Clamp(
-                        PlayerPrefs.GetFloat(preferenceKey, defaultValue),
-                        minimum,
-                        maximum);
+                    : Mathf.Clamp(defaultValue, minimum, maximum);
             }
 
             lightingSectionLabel = CreateLabel("Параметры освещения");
@@ -471,13 +443,11 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Яркость окружения",
                 GetLightingValue(
-                    TerrariaLightingEngine.AmbientIntensityPreferenceKey,
-                    0.85f,
+                    LightingDefaults.AmbientIntensity,
                     0f,
                     1f,
                     static engine => engine.AmbientIntensity),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.AmbientIntensityPreferenceKey,
                     value,
                     static (engine, setting) => engine.SetAmbientIntensity(setting)),
                 0f,
@@ -485,13 +455,11 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Мощность излучения",
                 GetLightingValue(
-                    TerrariaLightingEngine.EmissionScalePreferenceKey,
-                    8f,
+                    LightingDefaults.EmissionScale,
                     0.1f,
                     8f,
                     static engine => engine.EmissionScale),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.EmissionScalePreferenceKey,
                     value,
                     static (engine, setting) => engine.SetEmissionScale(setting)),
                 0.1f,
@@ -499,54 +467,70 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateLabel("Динамические источники"));
             Robot? localRobot = PlayerMovementController.LocalPlayer?.GetComponent<Robot>();
             Robot? GetLocalRobot() => PlayerMovementController.LocalPlayer?.GetComponent<Robot>() ?? localRobot;
-            float dynamicLightIntensity = localRobot?.DynamicLightIntensity ?? 1.25f;
-            Color dynamicLightColor = localRobot?.DynamicLightColor ?? Color.white;
+            float dynamicLightIntensity = localRobot?.DynamicLightIntensity ??
+                LightingDefaults.DynamicLightIntensity;
+            Color dynamicLightColor = localRobot?.DynamicLightColor ?? LightingDefaults.DynamicLightColor;
             scrollContainer.Add(CreateSlider(
                 "Мощность emission игрока",
                 dynamicLightIntensity,
                 value => GetLocalRobot()?.SetDynamicLightIntensity(value),
                 0f,
                 4f));
+            TerrariaLightingEngine? dynamicLightingEngine = TerrariaLightingEngine.Instance
+                ?? FindAnyObjectByType<TerrariaLightingEngine>();
+            scrollContainer.Add(CreateSlider(
+                "Частота расчёта dynamic emission",
+                dynamicLightingEngine?.DynamicLightUpdatesPerSecond ??
+                    LightingDefaults.DynamicLightUpdatesPerSecond,
+                value => dynamicLightingEngine?.SetDynamicLightUpdatesPerSecond(value),
+                1f,
+                LightingDefaults.DynamicLightUpdatesPerSecondLimit));
+
+            System.Action<float> setDynamicLightRed = value =>
+            {
+                Robot? robot = GetLocalRobot();
+                if (robot != null)
+                {
+                    Color color = robot.DynamicLightColor;
+                    robot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
+                }
+            };
             scrollContainer.Add(CreateSlider(
                 "Цвет источника: красный",
                 dynamicLightColor.r,
-                value =>
-                {
-                    Robot? robot = GetLocalRobot();
-                    if (robot != null)
-                    {
-                        Color color = robot.DynamicLightColor;
-                        robot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
-                    }
-                },
+                setDynamicLightRed,
                 0f,
                 1f));
+
+            System.Action<float> setDynamicLightGreen = value =>
+            {
+                Robot? robot = GetLocalRobot();
+                if (robot != null)
+                {
+                    Color color = robot.DynamicLightColor;
+                    robot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
+                }
+            };
             scrollContainer.Add(CreateSlider(
                 "Цвет источника: зелёный",
                 dynamicLightColor.g,
-                value =>
-                {
-                    Robot? robot = GetLocalRobot();
-                    if (robot != null)
-                    {
-                        Color color = robot.DynamicLightColor;
-                        robot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
-                    }
-                },
+                setDynamicLightGreen,
                 0f,
                 1f));
+
+            System.Action<float> setDynamicLightBlue = value =>
+            {
+                Robot? robot = GetLocalRobot();
+                if (robot != null)
+                {
+                    Color color = robot.DynamicLightColor;
+                    robot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
+                }
+            };
             scrollContainer.Add(CreateSlider(
                 "Цвет источника: синий",
                 dynamicLightColor.b,
-                value =>
-                {
-                    Robot? robot = GetLocalRobot();
-                    if (robot != null)
-                    {
-                        Color color = robot.DynamicLightColor;
-                        robot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
-                    }
-                },
+                setDynamicLightBlue,
                 0f,
                 1f));
 
@@ -554,13 +538,11 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Ослабление света в пустой среде",
                 GetLightingValue(
-                    TerrariaLightingEngine.EmptyExtinctionPreferenceKey,
-                    1f,
+                    LightingDefaults.EmptyExtinctionMultiplier,
                     0f,
                     2f,
                     static engine => engine.EmptyExtinctionMultiplier),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.EmptyExtinctionPreferenceKey,
                     value,
                     static (engine, setting) =>
                         engine.SetEmptyExtinctionMultiplier(setting)),
@@ -569,13 +551,11 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Ослабление света физической массой",
                 GetLightingValue(
-                    TerrariaLightingEngine.SolidExtinctionPreferenceKey,
-                    2f,
+                    LightingDefaults.SolidExtinctionMultiplier,
                     0.25f,
                     2f,
                     static engine => engine.SolidExtinctionMultiplier),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.SolidExtinctionPreferenceKey,
                     value,
                     static (engine, setting) =>
                         engine.SetSolidExtinctionMultiplier(setting)),
@@ -585,28 +565,24 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Сила непрямого диффузного света",
                 GetLightingValue(
-                    TerrariaLightingEngine.BounceStrengthPreferenceKey,
-                    1f,
+                    LightingDefaults.BounceStrength,
                     0f,
                     1f,
                     static engine => engine.BounceStrength),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.BounceStrengthPreferenceKey,
                     value,
                     static (engine, setting) => engine.SetBounceStrength(setting)),
                 0f,
-                2f));
+                1f));
             scrollContainer.Add(CreateLabel("Контактное затенение"));
             scrollContainer.Add(CreateSlider(
                 "Радиус контактного AO",
                 GetLightingValue(
-                    TerrariaLightingEngine.AmbientOcclusionRadiusPreferenceKey,
-                    2f,
+                    LightingDefaults.AmbientOcclusionRadiusCells,
                     0.5f,
                     8f,
                     static engine => engine.AmbientOcclusionRadiusCells),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.AmbientOcclusionRadiusPreferenceKey,
                     value,
                     static (engine, setting) =>
                         engine.SetAmbientOcclusionRadius(setting)),
@@ -615,13 +591,11 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Интенсивность контактного AO",
                 GetLightingValue(
-                    TerrariaLightingEngine.AmbientOcclusionStrengthPreferenceKey,
-                    5f,
+                    LightingDefaults.AmbientOcclusionStrength,
                     0.1f,
                     8f,
                     static engine => engine.AmbientOcclusionStrength),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.AmbientOcclusionStrengthPreferenceKey,
                     value,
                     static (engine, setting) =>
                         engine.SetAmbientOcclusionStrength(setting)),
@@ -631,28 +605,24 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Максимум светового множителя",
                 GetLightingValue(
-                    TerrariaLightingEngine.MaximumMultiplierPreferenceKey,
-                    1f,
+                    LightingDefaults.MaximumLightMultiplier,
                     0.25f,
-                    4f,
+                    LightingDefaults.MaximumLightMultiplierLimit,
                     static engine => engine.MaximumLightMultiplier),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.MaximumMultiplierPreferenceKey,
                     value,
                     static (engine, setting) =>
                         engine.SetMaximumLightMultiplier(setting)),
                 0.25f,
-                4f));
+                LightingDefaults.MaximumLightMultiplierLimit));
             scrollContainer.Add(CreateSlider(
                 "Пропускание света — диагностика",
                 GetLightingValue(
-                    TerrariaLightingEngine.TransmittanceDistancePreferenceKey,
-                    10f,
+                    LightingDefaults.TransmittanceDebugDistanceCells,
                     2f,
                     32f,
                     static engine => engine.TransmittanceDebugDistanceCells),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.TransmittanceDistancePreferenceKey,
                     value,
                     static (engine, setting) =>
                         engine.SetTransmittanceDebugDistance(setting)),
@@ -661,13 +631,11 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Минимальное пропускание каскадов",
                 GetLightingValue(
-                    TerrariaLightingEngine.MinimumTransmissionPreferenceKey,
-                    0.008f,
+                    LightingDefaults.MinimumTransmission,
                     0.0001f,
                     0.1f,
                     static engine => engine.MinimumTransmission),
                 value => ApplyLightingSetting(
-                    TerrariaLightingEngine.MinimumTransmissionPreferenceKey,
                     value,
                     static (engine, setting) => engine.SetMinimumTransmission(setting)),
                 0.0001f,
@@ -675,14 +643,11 @@ namespace Fodinae.UI
             TerrariaLightingEngine? currentLightingEngine = TerrariaLightingEngine.Instance
                 ?? FindAnyObjectByType<TerrariaLightingEngine>();
             float currentLightSafeBorder = currentLightingEngine?.LightSafeBorder ??
-                PlayerPrefs.GetInt(
-                    TerrariaLightingEngine.LightSafeBorderPreferenceKey,
-                    2);
+                LightingDefaults.LightSafeBorder;
             scrollContainer.Add(CreateSlider(
                 "Безопасная граница света",
                 currentLightSafeBorder,
-                value => ApplyLightingIntSetting(
-                    TerrariaLightingEngine.LightSafeBorderPreferenceKey,
+                value => ApplyLightingSetting(
                     value,
                     static (engine, setting) => engine.SetLightSafeBorder(setting)),
                 0f,
@@ -740,6 +705,7 @@ namespace Fodinae.UI
 
                 lightingDiagnostics.text =
                     $"Quality={engine.Quality}\n" +
+                    $"Config={engine.RuntimeConfigFilePath}\n" +
                     $"Debug={engine.ActiveDebugView}\n" +
                     $"AO={(engine.AmbientOcclusionEnabled ? 1 : 0)} " +
                     $"radius={engine.AmbientOcclusionRadiusCells:F2} " +
@@ -747,7 +713,8 @@ namespace Fodinae.UI
                     $"DiffuseBounce={(engine.DiffuseBounceEnabled ? 1 : 0)} " +
                     $"strength={engine.BounceStrength:F3}\n" +
                     $"Ambient={engine.AmbientIntensity:F3} " +
-                    $"Emission={engine.EmissionScale:F3}\n" +
+                    $"Emission={engine.EmissionScale:F3} " +
+                    $"DynamicRate={engine.DynamicLightUpdatesPerSecond:F1}\n" +
                     $"EmptyExtinction={engine.EmptyExtinctionMultiplier:F3} " +
                     $"SolidExtinction={engine.SolidExtinctionMultiplier:F3}\n" +
                     $"MinimumTransmission={engine.MinimumTransmission:F4} " +

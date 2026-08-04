@@ -39,8 +39,6 @@ namespace Fodinae.Editor
             }
 
             AssignGraphicsProfile(engine);
-            ApplyLightingInspectorDefaults(engine);
-
             EditorUtility.SetDirty(engine);
             EditorSceneManager.MarkSceneDirty(scene);
             if (!EditorSceneManager.SaveScene(scene))
@@ -54,6 +52,29 @@ namespace Fodinae.Editor
                 $"AO={engine.AmbientOcclusionEnabled}, AO radius={engine.AmbientOcclusionRadiusCells}, " +
                 $"AO strength={engine.AmbientOcclusionStrength}, ambient={engine.AmbientIntensity}, " +
                 $"emission={engine.EmissionScale}.");
+        }
+
+        [MenuItem("Fodinae/Reset Lighting Inspector Defaults")]
+        public static void ResetLightingInspectorDefaults()
+        {
+            Scene scene = EditorSceneManager.OpenScene(MainScenePath, OpenSceneMode.Single);
+            TerrariaLightingEngine[] engines = UnityEngine.Object.FindObjectsByType<TerrariaLightingEngine>(
+                FindObjectsInactive.Include);
+            if (engines.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Main scene contains {engines.Length} TerrariaLightingEngine components; expected one.");
+            }
+
+            ApplyLightingInspectorDefaults(engines[0]);
+            EditorUtility.SetDirty(engines[0]);
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+            {
+                throw new InvalidOperationException($"Could not save scene '{MainScenePath}'.");
+            }
+
+            Debug.Log("[LightingSetup] Reset Inspector defaults from LightingDefaults.");
         }
 
         private static TerrariaLightingEngine CreateLightingEngine(Scene scene)
@@ -86,15 +107,38 @@ namespace Fodinae.Editor
         private static void ApplyLightingInspectorDefaults(TerrariaLightingEngine engine)
         {
             SerializedObject serializedEngine = new(engine);
-            SetFloat(serializedEngine, "_emissionScale", 4f);
-            SetFloat(serializedEngine, "_bounceStrength", 0.65f);
-            SetFloat(serializedEngine, "_maximumLightMultiplier", 16f);
-            SetFloat(serializedEngine, "_ambientIntensity", 0.85f);
-            SetFloat(serializedEngine, "_ambientOcclusionStrength", 0.65f);
-            SetColor(serializedEngine, "_emptyExtinctionRgb", new Color(0.015f, 0.012f, 0.009f, 1f));
-            SetColor(serializedEngine, "_solidExtinctionRgb", new Color(1.2f, 1.1f, 1f, 1f));
+            SetEnum(serializedEngine, "_quality", (int)LightingDefaults.Quality);
+            SetBool(serializedEngine, "_ambientOcclusionEnabled", LightingDefaults.AmbientOcclusionEnabled);
+            SetBool(serializedEngine, "_diffuseBounceEnabled", LightingDefaults.DiffuseBounceEnabled);
+            SetFloat(serializedEngine, "_ambientIntensity", LightingDefaults.AmbientIntensity);
+            SetFloat(serializedEngine, "_emissionScale", LightingDefaults.EmissionScale);
+            SetFloat(serializedEngine, "_emptyExtinctionMultiplier", LightingDefaults.EmptyExtinctionMultiplier);
+            SetFloat(serializedEngine, "_solidExtinctionMultiplier", LightingDefaults.SolidExtinctionMultiplier);
+            SetFloat(serializedEngine, "_bounceStrength", LightingDefaults.BounceStrength);
+            SetFloat(serializedEngine, "_ambientOcclusionRadiusCells", LightingDefaults.AmbientOcclusionRadiusCells);
+            SetFloat(serializedEngine, "_ambientOcclusionStrength", LightingDefaults.AmbientOcclusionStrength);
+            SetFloat(serializedEngine, "_maximumLightMultiplier", LightingDefaults.MaximumLightMultiplier);
+            SetFloat(serializedEngine, "_transmittanceDebugDistanceCells", LightingDefaults.TransmittanceDebugDistanceCells);
+            SetFloat(serializedEngine, "_minimumTransmission", LightingDefaults.MinimumTransmission);
+            SetInt(serializedEngine, "_lightSafeBorder", LightingDefaults.LightSafeBorder);
+            SetBool(serializedEngine, "_enableFinalLightingClamp", LightingDefaults.EnableFinalLightingClamp);
+            SetColor(serializedEngine, "_ambientColor", LightingDefaults.AmbientColor);
+            SetColor(serializedEngine, "_emptyExtinctionRgb", LightingDefaults.EmptyExtinctionRgb);
+            SetColor(serializedEngine, "_solidExtinctionRgb", LightingDefaults.SolidExtinctionRgb);
             serializedEngine.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(engine);
+        }
+
+        private static void SetBool(SerializedObject serializedObject, string propertyName, bool value)
+        {
+            SerializedProperty property = serializedObject.FindProperty(propertyName) ??
+                throw new InvalidOperationException($"TerrariaLightingEngine is missing serialized field '{propertyName}'.");
+            property.boolValue = value;
+        }
+
+        private static void SetEnum(SerializedObject serializedObject, string propertyName, int value)
+        {
+            SetInt(serializedObject, propertyName, value);
         }
 
         private static void SetFloat(
@@ -106,6 +150,17 @@ namespace Fodinae.Editor
                 throw new InvalidOperationException(
                     $"TerrariaLightingEngine is missing serialized field '{propertyName}'.");
             property.floatValue = value;
+        }
+
+        private static void SetInt(
+            SerializedObject serializedObject,
+            string propertyName,
+            int value)
+        {
+            SerializedProperty property = serializedObject.FindProperty(propertyName) ??
+                throw new InvalidOperationException(
+                    $"TerrariaLightingEngine is missing serialized field '{propertyName}'.");
+            property.intValue = value;
         }
 
         private static void SetColor(

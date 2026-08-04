@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -38,23 +39,7 @@ namespace Fodinae.World.Lighting
         }
 
         private const string ComputeResourcePath = "Shaders/Lighting/WorldLighting";
-        private const string QualityPreferenceKey = "WorldLightingQuality";
-        public const string AmbientOcclusionPreferenceKey = "WorldLightingAO";
-        private const string LegacyGlobalIlluminationPreferenceKey = "WorldLightingGI";
-        public const string DiffuseBouncePreferenceKey = "WorldLightingDiffuseBounce";
-        public const string AmbientIntensityPreferenceKey = "WorldLightingAmbientIntensity";
-        public const string EmissionScalePreferenceKey = "WorldLightingEmissionScale";
-        public const string EmptyExtinctionPreferenceKey = "WorldLightingEmptyExtinction";
-        public const string SolidExtinctionPreferenceKey = "WorldLightingSolidExtinction";
-        public const string BounceStrengthPreferenceKey = "WorldLightingBounceStrength";
-        public const string AmbientOcclusionRadiusPreferenceKey = "WorldLightingAORadius";
-        public const string AmbientOcclusionStrengthPreferenceKey = "WorldLightingAOStrength";
-        public const string MaximumMultiplierPreferenceKey = "WorldLightingMaximumMultiplier";
-        public const string MinimumTransmissionPreferenceKey =
-            "WorldLightingMinimumTransmission";
-        public const string LightSafeBorderPreferenceKey = "WorldLightingSafeBorder";
-        public const string TransmittanceDistancePreferenceKey =
-            "WorldLightingTransmittanceDistance";
+        private const string RuntimeConfigFileName = "lighting.config.json";
         private const int LightingCacheAnchorCells = 8;
         private const int LightingRegionSizeQuantum = 32;
         private const int LightingRegionPaddingCells = 16;
@@ -66,8 +51,15 @@ namespace Fodinae.World.Lighting
 
         private static readonly int MaterialFieldId = Shader.PropertyToID("_MaterialField");
         private static readonly int EmissionFieldId = Shader.PropertyToID("_EmissionField");
+        private static readonly int AutomaticNormalFieldId =
+            Shader.PropertyToID("_AutomaticNormalField");
+        private static readonly int AutomaticNormalInputId =
+            Shader.PropertyToID("_AutomaticNormalInput");
         private static readonly int DynamicLightsId = Shader.PropertyToID("_DynamicLights");
-        private static readonly int DynamicEmissionCellSizeId = Shader.PropertyToID("_CellSize");
+        private static readonly int DynamicEmissionWorldRectId =
+            Shader.PropertyToID("_WorldRect");
+        private static readonly int DynamicEmissionFieldSizeId =
+            Shader.PropertyToID("_FieldSize");
         private static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
         private static readonly int DirectTextureId = Shader.PropertyToID("_DirectTexture");
         private static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
@@ -128,6 +120,7 @@ namespace Fodinae.World.Lighting
         private static readonly string[] RequiredKernels =
         [
             "SolveCascade",
+            "SolveAutomaticNormals",
             "SolveContactOcclusion",
             "ResolveDirect",
             "SolveDiffuseBounce",
@@ -139,7 +132,7 @@ namespace Fodinae.World.Lighting
         [Header("Quality")]
         [SerializeField]
         [Tooltip("Качество каскадов: Ultra увеличивает разрешение поля, atlas budget, ray steps и лимит источников.")]
-        private QualityPreset _quality = QualityPreset.Ultra;
+        private QualityPreset _quality = LightingDefaults.Quality;
         [SerializeField]
         [Tooltip("GraphicsQualityProfile с техническими лимитами quality tier. Не меняет физику поглощения.")]
         private GraphicsQualityProfile? _graphicsProfile;
@@ -147,69 +140,69 @@ namespace Fodinae.World.Lighting
         [Header("Radiance Cascades")]
         [SerializeField]
         [Tooltip("Базовый цвет ambient-света до Ambient Intensity.")]
-        private Color _ambientColor = new(0.12f, 0.14f, 0.18f, 1f);
+        private Color _ambientColor = LightingDefaults.AmbientColor;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
         [Tooltip("Поглощение в пустой среде на одну физическую клетку. Это extinction, не итоговое пропускание.")]
-        private Color _emptyExtinctionRgb = new(0.015f, 0.012f, 0.009f, 1f);
+        private Color _emptyExtinctionRgb = LightingDefaults.EmptyExtinctionRgb;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
         [Tooltip("Поглощение полной массой блока на одну клетку. Больше значение — меньше света проходит через блок.")]
-        private Color _solidExtinctionRgb = new(1.2f, 1.1f, 1f, 1f);
+        private Color _solidExtinctionRgb = LightingDefaults.SolidExtinctionRgb;
         [SerializeField]
         [Range(0.0001f, 0.1f)]
         [Tooltip("Минимальная surviving transmission, после которой cascade прекращает трассировку.")]
-        private float _minimumTransmission = 0.008f;
+        private float _minimumTransmission = LightingDefaults.MinimumTransmission;
         [SerializeField]
         [Min(0)]
         [Tooltip("Запас клеток вокруг видимой области, чтобы источник света не обрезался на границе поля.")]
-        private int _lightSafeBorder = 2;
+        private int _lightSafeBorder = LightingDefaults.LightSafeBorder;
 
         [Header("Ambient Occlusion")]
         [SerializeField]
         [Tooltip("Включает Contact AO. AO затемняет только ambient и diffuse bounce.")]
-        private bool _ambientOcclusionEnabled = true;
+        private bool _ambientOcclusionEnabled = LightingDefaults.AmbientOcclusionEnabled;
         [SerializeField]
         [Range(0.5f, 8f)]
         [Tooltip("Радиус Contact AO в физических клетках.")]
-        private float _ambientOcclusionRadiusCells = 2f;
+        private float _ambientOcclusionRadiusCells = LightingDefaults.AmbientOcclusionRadiusCells;
         [SerializeField]
         [Range(0.1f, 8f)]
         [Tooltip("Сила Contact AO. Не влияет на direct radiance и emission.")]
-        private float _ambientOcclusionStrength = 5f;
+        private float _ambientOcclusionStrength = LightingDefaults.AmbientOcclusionStrength;
 
         [Header("Runtime Lighting Calibration")]
         [SerializeField]
         [Range(0f, 1f)]
         [Tooltip("Множитель ambient-составляющей после умножения на Ambient Color.")]
-        private float _ambientIntensity = 0.85f;
+        private float _ambientIntensity = LightingDefaults.AmbientIntensity;
         [SerializeField]
         [Range(0.1f, 8f)]
         [Tooltip("Множитель emission radiance для glowing blocks и dynamic sources. 1 — единица radiance без художественного усиления.")]
-        private float _emissionScale = 8f;
+        private float _emissionScale = LightingDefaults.EmissionScale;
         [SerializeField]
         [Range(0f, 2f)]
         [Tooltip("Множитель пустого-space extinction. 1 — физическое значение Empty Extinction RGB.")]
-        private float _emptyExtinctionMultiplier = 1f;
+        private float _emptyExtinctionMultiplier = LightingDefaults.EmptyExtinctionMultiplier;
         [SerializeField]
         [Range(0.25f, 2f)]
         [Tooltip("Множитель block extinction. 1 — физическое значение Solid Extinction RGB.")]
-        private float _solidExtinctionMultiplier = 2f;
+        private float _solidExtinctionMultiplier = LightingDefaults.SolidExtinctionMultiplier;
         [SerializeField]
         [Range(0f, 1f)]
         [Tooltip("Сила непрямого диффузного света: albedo соседней поверхности умножается на её direct radiance и возвращается в поле. Это не зеркальное отражение и не emission.")]
-        private float _bounceStrength = 1f;
+        private float _bounceStrength = LightingDefaults.BounceStrength;
         [SerializeField]
-        [Range(0.25f, 4f)]
+        [Range(0.25f, 16f)]
         [Tooltip("Верхняя граница diffuse lighting перед умножением на художественную terrain-текстуру. 1 сохраняет её исходную яркость; больше 1 разрешает HDR-пересвет.")]
-        private float _maximumLightMultiplier = 1f;
+        private float _maximumLightMultiplier = LightingDefaults.MaximumLightMultiplier;
         [SerializeField]
         [Tooltip("Диагностический clamp diffuse lighting. В штатном HDR-пайплайне выключен: сжатие HDR выполняется общим post-process на экране.")]
-        private bool _enableFinalLightingClamp = false;
+        private bool _enableFinalLightingClamp = LightingDefaults.EnableFinalLightingClamp;
         [SerializeField]
         [Range(2f, 32f)]
         [Tooltip("Длина диагностической transmission-пробы в физических клетках.")]
-        private float _transmittanceDebugDistanceCells = 10f;
+        private float _transmittanceDebugDistanceCells = LightingDefaults.TransmittanceDebugDistanceCells;
 
         [Header("Diagnostics")]
         [SerializeField]
@@ -227,11 +220,13 @@ namespace Fodinae.World.Lighting
         private RenderTexture? _materialField;
         private RenderTexture? _staticEmissionField;
         private RenderTexture? _emissionField;
+        private RenderTexture? _automaticNormalField;
         private RenderTexture? _directTexture;
         private RenderTexture? _ambientOcclusionTexture;
         private RenderTexture? _bounceTexture;
         private RenderTexture? _lightmapTexture;
         private int _solveCascadeKernel;
+        private int _solveAutomaticNormalsKernel;
         private int _solveContactOcclusionKernel;
         private int _resolveDirectKernel;
         private int _solveDiffuseBounceKernel;
@@ -244,7 +239,13 @@ namespace Fodinae.World.Lighting
         private int _atlasEntryCount;
         private bool _fieldDirty = true;
         private bool _ambientOcclusionDirty = true;
+        private bool _compositeDirty = true;
+        private bool _bounceDirty = true;
+        private bool _runtimeConfigSavePending;
+        private float _runtimeConfigSaveTime;
+        private LightingRuntimeConfig _runtimeConfig = null!;
         private float _nextLightingUpdateTime;
+        private float _nextDynamicLightingUpdateTime;
         private ulong _solveCount;
         private ulong _contactOcclusionSolveCount;
         private ulong _lastTerrainGeometryRevision;
@@ -252,11 +253,20 @@ namespace Fodinae.World.Lighting
 
         private bool _hasRenderedLightState;
         private bool _externalLightsDirty;
+        private uint _externalLightsRevision;
         private bool _hasStaticRadianceState;
+        private uint _dynamicLightGeneration;
+        private bool _dynamicSolveInProgress;
+        private int _dynamicSolveCascadeIndex;
+        private uint _dynamicSolveSourceRevision;
         [Header("Diffuse Bounce")]
         [SerializeField]
         [Tooltip("Включает diffuse bounce pass.")]
-        private bool _diffuseBounceEnabled = true;
+        private bool _diffuseBounceEnabled = LightingDefaults.DiffuseBounceEnabled;
+        [SerializeField]
+        [Range(1f, 60f)]
+        [Tooltip("Максимальная частота пересчёта только dynamic sources. Геометрия не ждёт этот интервал.")]
+        private float _dynamicLightUpdatesPerSecond = LightingDefaults.DynamicLightUpdatesPerSecond;
         private DynamicLight[] _dynamicLights = new DynamicLight[1];
         private readonly List<int> _lastDroppedDynamicLightIds = new();
         private int _lastDynamicLightCount;
@@ -343,9 +353,21 @@ namespace Fodinae.World.Lighting
 
         public float MinimumTransmission => _minimumTransmission;
 
+        public float DynamicLightIntensity => _runtimeConfig.DynamicLightIntensity;
+
+        public Color DynamicLightColor => _runtimeConfig.DynamicLightColor;
+
+        public float DynamicLightUpdatesPerSecond => _runtimeConfig.DynamicLightUpdatesPerSecond;
+
+        public bool IsRuntimeConfigReady => _runtimeConfig != null;
+
+        public string RuntimeConfigFilePath => RuntimeConfigPath;
+
         public int LightSafeBorder => _lightSafeBorder;
 
         public int DynamicLightCount => _externalLights.Count;
+
+        public uint DynamicLightGeneration => _dynamicLightGeneration;
 
         public int UploadedDynamicLightCount => _lastDynamicLightCount;
 
@@ -429,14 +451,8 @@ namespace Fodinae.World.Lighting
             _instance = this;
             _graphicsProfile ??= Resources.Load<GraphicsQualityProfile>("GraphicsQualityProfile");
             CaptureInspectorDefaults();
-            _ambientOcclusionEnabled =
-                PlayerPrefs.GetInt(
-                    AmbientOcclusionPreferenceKey,
-                    _ambientOcclusionEnabled ? 1 : 0) == 1;
-            _diffuseBounceEnabled =
-                LoadDiffuseBouncePreference();
-            LoadRuntimeSettings();
-            int savedQuality = PlayerPrefs.GetInt(QualityPreferenceKey, (int)QualityPreset.Ultra);
+            LoadRuntimeConfig();
+            int savedQuality = _runtimeConfig.Quality;
             ApplyQualityPreset(
                 (QualityPreset)Mathf.Clamp(savedQuality, 0, (int)QualityPreset.Ultra),
                 save: false);
@@ -459,7 +475,10 @@ namespace Fodinae.World.Lighting
 
             _emissionScale = Mathf.Clamp(_emissionScale, 0.1f, 8f);
             _bounceStrength = Mathf.Clamp01(_bounceStrength);
-            _maximumLightMultiplier = Mathf.Clamp(_maximumLightMultiplier, 0.25f, 4f);
+            _maximumLightMultiplier = Mathf.Clamp(
+                _maximumLightMultiplier,
+                0.25f,
+                LightingDefaults.MaximumLightMultiplierLimit);
 
             ApplyQualityPreset(_quality, save: false);
             _fieldDirty = true;
@@ -468,6 +487,7 @@ namespace Fodinae.World.Lighting
 
         private void OnDestroy()
         {
+            FlushRuntimeConfig();
             if (_instance == this)
             {
                 _instance = null;
@@ -481,6 +501,19 @@ namespace Fodinae.World.Lighting
                 DestroyLightingObject(_dynamicEmissionMaterial);
                 _dynamicEmissionMaterial = null;
             }
+        }
+
+        private void Update()
+        {
+            if (_runtimeConfigSavePending && Time.unscaledTime >= _runtimeConfigSaveTime)
+            {
+                FlushRuntimeConfig();
+            }
+        }
+
+        private void OnApplicationQuit()
+        {
+            FlushRuntimeConfig();
         }
 
         public void SetDynamicLight(
@@ -501,6 +534,7 @@ namespace Fodinae.World.Lighting
 
             _externalLights[id] = source;
             _externalLightsDirty = true;
+            _externalLightsRevision++;
         }
 
         private static bool DynamicLightSourceApproximatelyEquals(
@@ -518,6 +552,7 @@ namespace Fodinae.World.Lighting
             if (_externalLights.Remove(id))
             {
                 _externalLightsDirty = true;
+                _externalLightsRevision++;
             }
         }
 
@@ -530,6 +565,8 @@ namespace Fodinae.World.Lighting
 
             _externalLights.Clear();
             _externalLightsDirty = true;
+            _externalLightsRevision++;
+            _dynamicLightGeneration++;
         }
 
         public void InvalidateStaticCache()
@@ -577,6 +614,7 @@ namespace Fodinae.World.Lighting
 
             _debugView = debugView;
             _hasRenderedLightState = false;
+            _compositeDirty = true;
         }
 
         public void SetAmbientOcclusionEnabled(bool enabled)
@@ -587,14 +625,13 @@ namespace Fodinae.World.Lighting
             }
 
             _ambientOcclusionEnabled = enabled;
-            PlayerPrefs.SetInt(AmbientOcclusionPreferenceKey, enabled ? 1 : 0);
-            PlayerPrefs.Save();
+            QueueRuntimeConfigSave();
             if (enabled)
             {
                 _ambientOcclusionDirty = true;
             }
 
-            _hasRenderedLightState = false;
+            _compositeDirty = true;
         }
 
         public void SetDiffuseBounceEnabled(bool enabled)
@@ -605,9 +642,9 @@ namespace Fodinae.World.Lighting
             }
 
             _diffuseBounceEnabled = enabled;
-            PlayerPrefs.SetInt(DiffuseBouncePreferenceKey, enabled ? 1 : 0);
-            PlayerPrefs.Save();
-            _hasRenderedLightState = false;
+            QueueRuntimeConfigSave();
+            _bounceDirty = true;
+            _compositeDirty = true;
         }
 
         public void SetAmbientIntensity(float value)
@@ -615,9 +652,9 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _ambientIntensity,
                 value,
-                AmbientIntensityPreferenceKey,
                 0f,
-                1f);
+                1f,
+                radianceDirty: false);
         }
 
         public void SetEmissionScale(float value)
@@ -625,7 +662,6 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _emissionScale,
                 value,
-                EmissionScalePreferenceKey,
                 0.1f,
                 8f);
         }
@@ -635,7 +671,6 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _emptyExtinctionMultiplier,
                 value,
-                EmptyExtinctionPreferenceKey,
                 0f,
                 2f);
         }
@@ -645,41 +680,50 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _solidExtinctionMultiplier,
                 value,
-                SolidExtinctionPreferenceKey,
                 0.25f,
                 2f);
         }
 
         public void SetBounceStrength(float value)
         {
-            SetRuntimeSetting(
+            bool changed = SetRuntimeSetting(
                 ref _bounceStrength,
                 value,
-                BounceStrengthPreferenceKey,
                 0f,
-                1f);
+                1f,
+                radianceDirty: false);
+            if (changed)
+            {
+                _bounceDirty = true;
+            }
         }
 
         public void SetAmbientOcclusionRadius(float value)
         {
-            SetRuntimeSetting(
+            bool changed = SetRuntimeSetting(
                 ref _ambientOcclusionRadiusCells,
                 value,
-                AmbientOcclusionRadiusPreferenceKey,
                 0.5f,
-                8f);
-            _ambientOcclusionDirty = true;
+                8f,
+                radianceDirty: false);
+            if (changed)
+            {
+                _ambientOcclusionDirty = true;
+            }
         }
 
         public void SetAmbientOcclusionStrength(float value)
         {
-            SetRuntimeSetting(
+            bool changed = SetRuntimeSetting(
                 ref _ambientOcclusionStrength,
                 value,
-                AmbientOcclusionStrengthPreferenceKey,
                 0.1f,
-                8f);
-            _ambientOcclusionDirty = true;
+                8f,
+                radianceDirty: false);
+            if (changed)
+            {
+                _ambientOcclusionDirty = true;
+            }
         }
 
         public void SetMaximumLightMultiplier(float value)
@@ -687,9 +731,9 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _maximumLightMultiplier,
                 value,
-                MaximumMultiplierPreferenceKey,
                 0.25f,
-                4f);
+                LightingDefaults.MaximumLightMultiplierLimit,
+                radianceDirty: false);
         }
 
         public void SetTransmittanceDebugDistance(float value)
@@ -697,9 +741,9 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _transmittanceDebugDistanceCells,
                 value,
-                TransmittanceDistancePreferenceKey,
                 2f,
-                32f);
+                32f,
+                radianceDirty: false);
         }
 
         public void SetMinimumTransmission(float value)
@@ -707,7 +751,6 @@ namespace Fodinae.World.Lighting
             SetRuntimeSetting(
                 ref _minimumTransmission,
                 value,
-                MinimumTransmissionPreferenceKey,
                 0.0001f,
                 0.1f);
         }
@@ -721,49 +764,21 @@ namespace Fodinae.World.Lighting
             }
 
             _lightSafeBorder = border;
-            PlayerPrefs.SetInt(LightSafeBorderPreferenceKey, border);
-            PlayerPrefs.Save();
+            QueueRuntimeConfigSave();
             _fieldDirty = true;
             _hasRenderedLightState = false;
         }
 
         public void ResetRuntimeLightingPreferences()
         {
-            PlayerPrefs.DeleteKey(QualityPreferenceKey);
-            PlayerPrefs.DeleteKey(AmbientOcclusionPreferenceKey);
-            PlayerPrefs.DeleteKey(DiffuseBouncePreferenceKey);
-            PlayerPrefs.DeleteKey(AmbientIntensityPreferenceKey);
-            PlayerPrefs.DeleteKey(EmissionScalePreferenceKey);
-            PlayerPrefs.DeleteKey(EmptyExtinctionPreferenceKey);
-            PlayerPrefs.DeleteKey(SolidExtinctionPreferenceKey);
-            PlayerPrefs.DeleteKey(BounceStrengthPreferenceKey);
-            PlayerPrefs.DeleteKey(MaximumMultiplierPreferenceKey);
-            PlayerPrefs.DeleteKey(MinimumTransmissionPreferenceKey);
-            PlayerPrefs.DeleteKey(LightSafeBorderPreferenceKey);
-            PlayerPrefs.DeleteKey(AmbientOcclusionRadiusPreferenceKey);
-            PlayerPrefs.DeleteKey(AmbientOcclusionStrengthPreferenceKey);
-            PlayerPrefs.DeleteKey(TransmittanceDistancePreferenceKey);
-            PlayerPrefs.DeleteKey(LegacyGlobalIlluminationPreferenceKey);
-            PlayerPrefs.Save();
-            _quality = _inspectorQuality;
-            _ambientOcclusionEnabled = _inspectorAmbientOcclusionEnabled;
-            _diffuseBounceEnabled = _inspectorDiffuseBounceEnabled;
-            _ambientIntensity = _inspectorAmbientIntensity;
-            _emissionScale = _inspectorEmissionScale;
-            _emptyExtinctionRgb = _inspectorEmptyExtinctionRgb;
-            _solidExtinctionRgb = _inspectorSolidExtinctionRgb;
-            _emptyExtinctionMultiplier = _inspectorEmptyExtinctionMultiplier;
-            _solidExtinctionMultiplier = _inspectorSolidExtinctionMultiplier;
-            _bounceStrength = _inspectorBounceStrength;
-            _maximumLightMultiplier = _inspectorMaximumLightMultiplier;
-            _ambientOcclusionRadiusCells = _inspectorAmbientOcclusionRadiusCells;
-            _ambientOcclusionStrength = _inspectorAmbientOcclusionStrength;
-            _transmittanceDebugDistanceCells = _inspectorTransmittanceDebugDistanceCells;
-            _minimumTransmission = _inspectorMinimumTransmission;
-            _lightSafeBorder = _inspectorLightSafeBorder;
+            _runtimeConfig = CreateConfigFromInspectorDefaults();
+            ApplyRuntimeConfig(_runtimeConfig);
+            SaveRuntimeConfig();
             ApplyQualityPreset(_quality, save: false);
             _fieldDirty = true;
             _ambientOcclusionDirty = true;
+            _compositeDirty = true;
+            _bounceDirty = true;
             _hasRenderedLightState = false;
         }
 
@@ -795,23 +810,43 @@ namespace Fodinae.World.Lighting
             int gridHeight = Mathf.RoundToInt(lightingRegion.w);
             EnsureResources(gridWidth, gridHeight);
 
-            bool dynamicLightsChanged = HasDynamicLightsChanged();
+            bool dynamicLightsDirty = HasDynamicLightsChanged();
             bool geometryChanged =
                 _lastTerrainGeometryRevision != terrainRenderer.LightingGeometryRevision;
             bool ambientOcclusionChanged = _ambientOcclusionDirty;
-            if (!_fieldDirty && !regionChanged && !dynamicLightsChanged && !geometryChanged &&
-                !ambientOcclusionChanged)
+            if (!_fieldDirty && !regionChanged && !dynamicLightsDirty && !geometryChanged &&
+                !ambientOcclusionChanged && !_compositeDirty && !_bounceDirty)
             {
                 PublishLightingGlobals();
                 return;
             }
 
             bool geometryUpdateRequired = _fieldDirty || regionChanged || geometryChanged;
-            if (Time.unscaledTime < _nextLightingUpdateTime && !geometryUpdateRequired &&
+            bool dynamicOnlyUpdate = dynamicLightsDirty &&
+                !geometryUpdateRequired &&
+                !ambientOcclusionChanged &&
+                !_bounceDirty &&
+                !_compositeDirty;
+            bool continueDynamicSolve = _dynamicSolveInProgress &&
+                !geometryUpdateRequired &&
+                !ambientOcclusionChanged &&
+                !_bounceDirty &&
+                !_compositeDirty;
+            float nextAllowedUpdateTime = dynamicOnlyUpdate
+                ? _nextDynamicLightingUpdateTime
+                : _nextLightingUpdateTime;
+            if (!continueDynamicSolve &&
+                Time.unscaledTime < nextAllowedUpdateTime &&
+                !geometryUpdateRequired &&
                 !ambientOcclusionChanged)
             {
                 PublishLightingGlobals();
                 return;
+            }
+
+            if (geometryUpdateRequired || ambientOcclusionChanged || _bounceDirty || _compositeDirty)
+            {
+                _dynamicSolveInProgress = false;
             }
 
             const float cellSize = GameConstants.World.CELLSIZE;
@@ -836,23 +871,126 @@ namespace Fodinae.World.Lighting
                         worldRect);
                 }
 
-                UploadDynamicLights(commandBuffer, worldRect, cellSize);
-                if (rebuildFields || dynamicLightsChanged)
+                int dynamicLightCount;
+                bool dynamicLightsChanged;
+                if (_dynamicSolveInProgress)
                 {
-                    commandBuffer.CopyTexture(
-                        _staticEmissionField!,
-                        0,
-                        0,
-                        _emissionField!,
-                        0,
-                        0);
-                    DrawDynamicEmission(
+                    dynamicLightCount = _lastDynamicLightCount;
+                    dynamicLightsChanged = false;
+                }
+                else
+                {
+                    dynamicLightCount = UploadDynamicLights(
                         commandBuffer,
                         worldRect,
-                        _lastDynamicLightCount);
-                    commandBuffer.GenerateMips(_emissionField!);
+                        cellSize,
+                        out dynamicLightsChanged);
                 }
-                ConfigureSharedComputeParameters(commandBuffer, worldRect, cellSize);
+
+                bool dynamicRadianceView = _debugView is
+                    DebugView.FinalLighting or
+                    DebugView.DirectRadiance or
+                    DebugView.DiffuseBounce;
+                bool phasedDynamicSolve = !rebuildFields &&
+                    dynamicRadianceView &&
+                    (continueDynamicSolve || dynamicOnlyUpdate);
+                if (phasedDynamicSolve)
+                {
+                    if (!_dynamicSolveInProgress)
+                    {
+                        PrepareEmissionField(
+                            commandBuffer,
+                            worldRect,
+                            dynamicLightCount,
+                            dynamicLightsChanged);
+                        _dynamicSolveInProgress = true;
+                        _dynamicSolveCascadeIndex = _cascades.Count - 1;
+                        _dynamicSolveSourceRevision = _externalLightsRevision;
+                    }
+
+                    var dynamicEmissionField = _lastDynamicLightCount > 0
+                        ? _emissionField!
+                        : _staticEmissionField!;
+                    ConfigureSharedComputeParameters(
+                        commandBuffer,
+                        worldRect,
+                        cellSize,
+                        dynamicEmissionField);
+                    DispatchRadianceCascade(
+                        commandBuffer,
+                        _dynamicSolveCascadeIndex);
+                    _dynamicSolveCascadeIndex--;
+                    if (_dynamicSolveCascadeIndex >= 0)
+                    {
+                        commandBuffer.EndSample("Fodinae.RadianceCascades");
+                        Graphics.ExecuteCommandBuffer(commandBuffer);
+                        return;
+                    }
+
+                    bool solveBounce = _debugView is
+                        DebugView.FinalLighting or
+                        DebugView.DiffuseBounce;
+                    DispatchResolveAndBounce(
+                        commandBuffer,
+                        solveBounce: solveBounce,
+                        composite: false);
+                    DispatchComposite(commandBuffer);
+                    _dynamicSolveInProgress = false;
+                    commandBuffer.EndSample("Fodinae.RadianceCascades");
+                    Graphics.ExecuteCommandBuffer(commandBuffer);
+                    PublishLightingGlobals();
+                    _solveCount++;
+                    _fieldDirty = false;
+                    _ambientOcclusionDirty = false;
+                    _compositeDirty = false;
+                    _bounceDirty = false;
+                    _hasStaticRadianceState = true;
+                    _nextLightingUpdateTime = Time.unscaledTime +
+                        (1f / Mathf.Max(_qualitySettings.LightingUpdatesPerSecond, 1f));
+                    _nextDynamicLightingUpdateTime = Time.unscaledTime +
+                        (1f / Mathf.Max(_dynamicLightUpdatesPerSecond, 1f));
+                    _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
+                    if (_externalLightsRevision == _dynamicSolveSourceRevision)
+                    {
+                        RememberDynamicLightState();
+                    }
+
+                    return;
+                }
+
+                if (!rebuildFields && !dynamicLightsChanged &&
+                    !ambientOcclusionChanged && !_compositeDirty && !_bounceDirty)
+                {
+                    commandBuffer.EndSample("Fodinae.RadianceCascades");
+                    RememberDynamicLightState();
+                    return;
+                }
+
+                RenderTexture emissionField = _lastDynamicLightCount > 0
+                    ? _emissionField!
+                    : _staticEmissionField!;
+                if (rebuildFields || dynamicLightsChanged)
+                {
+                    PrepareEmissionField(
+                        commandBuffer,
+                        worldRect,
+                        dynamicLightCount,
+                        dynamicLightsChanged);
+                    emissionField = dynamicLightCount > 0
+                        ? _emissionField!
+                        : _staticEmissionField!;
+                }
+
+                ConfigureSharedComputeParameters(
+                    commandBuffer,
+                    worldRect,
+                    cellSize,
+                    emissionField);
+                if (rebuildFields)
+                {
+                    DispatchAutomaticNormals(commandBuffer);
+                }
+
                 if (ShouldDispatchContactOcclusion(
                     _ambientOcclusionEnabled,
                     rebuildFields,
@@ -869,15 +1007,33 @@ namespace Fodinae.World.Lighting
                 }
                 else
                 {
-                    if (staticRadianceChanged)
+                    if (staticRadianceChanged || _bounceDirty)
                     {
-                        DispatchRadianceCascades(commandBuffer);
-                        DispatchResolveAndBounce(
-                            commandBuffer,
-                            solveBounce: _debugView != DebugView.Transmission,
-                            composite: false);
+                        bool needsCascade = _debugView is
+                            DebugView.FinalLighting or
+                            DebugView.DirectRadiance or
+                            DebugView.DiffuseBounce;
+                        bool needsDirect = needsCascade ||
+                            _debugView == DebugView.Transmission;
+                        bool needsBounce = _debugView is
+                            DebugView.FinalLighting or
+                            DebugView.DiffuseBounce;
+                        if (needsCascade && staticRadianceChanged)
+                        {
+                            DispatchRadianceCascades(commandBuffer);
+                        }
+
+                        if (needsDirect)
+                        {
+                            DispatchResolveAndBounce(
+                                commandBuffer,
+                                solveBounce: needsBounce,
+                                composite: false);
+                        }
+
                         _hasStaticRadianceState = true;
                     }
+
                     DispatchComposite(commandBuffer);
                 }
 
@@ -888,8 +1044,12 @@ namespace Fodinae.World.Lighting
 
                 _fieldDirty = false;
                 _ambientOcclusionDirty = false;
+                _compositeDirty = false;
+                _bounceDirty = false;
                 _nextLightingUpdateTime = Time.unscaledTime +
                     (1f / Mathf.Max(_qualitySettings.LightingUpdatesPerSecond, 1f));
+                _nextDynamicLightingUpdateTime = Time.unscaledTime +
+                    (1f / Mathf.Max(_dynamicLightUpdatesPerSecond, 1f));
                 _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
                 RememberDynamicLightState();
             }
@@ -928,7 +1088,8 @@ namespace Fodinae.World.Lighting
         private void ConfigureSharedComputeParameters(
             CommandBuffer commandBuffer,
             Vector4 worldRect,
-            float cellSize)
+            float cellSize,
+            RenderTexture emissionField)
         {
             ComputeShader compute = _lightingCompute!;
             commandBuffer.SetComputeIntParams(compute, FieldSizeId, _fieldWidth, _fieldHeight);
@@ -990,11 +1151,18 @@ namespace Fodinae.World.Lighting
                 compute,
                 EnableDiffuseBounceId,
                 _diffuseBounceEnabled ? 1 : 0);
-            BindFieldTextures(commandBuffer, _solveCascadeKernel);
-            BindFieldTextures(commandBuffer, _solveContactOcclusionKernel);
-            BindFieldTextures(commandBuffer, _resolveDirectKernel);
-            BindFieldTextures(commandBuffer, _solveDiffuseBounceKernel);
-            BindFieldTextures(commandBuffer, _compositeLightingKernel);
+            BindFieldTextures(commandBuffer, _solveCascadeKernel, emissionField);
+            commandBuffer.SetComputeTextureParam(
+                _lightingCompute!,
+                _solveAutomaticNormalsKernel,
+                MaterialFieldId,
+                _materialField!);
+            BindFieldTextures(commandBuffer, _solveContactOcclusionKernel, emissionField);
+            BindFieldTextures(commandBuffer, _resolveDirectKernel, emissionField);
+            BindFieldTextures(commandBuffer, _solveDiffuseBounceKernel, emissionField);
+            BindFieldTextures(commandBuffer, _compositeLightingKernel, emissionField);
+            BindAutomaticNormalInput(commandBuffer, _resolveDirectKernel);
+            BindAutomaticNormalInput(commandBuffer, _solveDiffuseBounceKernel);
             commandBuffer.SetComputeTextureParam(
                 _lightingCompute!,
                 _compositeLightingKernel,
@@ -1002,7 +1170,10 @@ namespace Fodinae.World.Lighting
                 _ambientOcclusionTexture!);
         }
 
-        private void BindFieldTextures(CommandBuffer commandBuffer, int kernel)
+        private void BindFieldTextures(
+            CommandBuffer commandBuffer,
+            int kernel,
+            RenderTexture emissionField)
         {
             commandBuffer.SetComputeTextureParam(
                 _lightingCompute!,
@@ -1013,7 +1184,31 @@ namespace Fodinae.World.Lighting
                 _lightingCompute!,
                 kernel,
                 EmissionFieldId,
-                _emissionField!);
+                emissionField);
+        }
+
+        private void BindAutomaticNormalInput(CommandBuffer commandBuffer, int kernel)
+        {
+            commandBuffer.SetComputeTextureParam(
+                _lightingCompute!,
+                kernel,
+                AutomaticNormalInputId,
+                _automaticNormalField!);
+        }
+
+        private void DispatchAutomaticNormals(CommandBuffer commandBuffer)
+        {
+            commandBuffer.SetComputeTextureParam(
+                _lightingCompute!,
+                _solveAutomaticNormalsKernel,
+                AutomaticNormalFieldId,
+                _automaticNormalField!);
+            commandBuffer.DispatchCompute(
+                _lightingCompute!,
+                _solveAutomaticNormalsKernel,
+                Mathf.CeilToInt(_fieldWidth / 8f),
+                Mathf.CeilToInt(_fieldHeight / 8f),
+                1);
         }
 
         private void DispatchContactOcclusion(CommandBuffer commandBuffer)
@@ -1044,10 +1239,13 @@ namespace Fodinae.World.Lighting
         private int UploadDynamicLights(
             CommandBuffer commandBuffer,
             Vector4 worldRect,
-            float cellSize)
+            float cellSize,
+            out bool uploadedLightsChanged)
         {
             int maximumLightCount = _dynamicLights.Length;
             int dynamicLightCount = 0;
+            int previousDynamicLightCount = _lastDynamicLightCount;
+            uploadedLightsChanged = false;
             _lastDroppedDynamicLightIds.Clear();
             foreach (KeyValuePair<int, DynamicLightSource> pair in _externalLights)
             {
@@ -1070,16 +1268,28 @@ namespace Fodinae.World.Lighting
                     continue;
                 }
 
-                _dynamicLights[dynamicLightCount++] = new DynamicLight(
+                DynamicLight dynamicLight = new(
                     source.Position * cellSize,
                     source.Color,
                     source.Intensity);
+                if (dynamicLightCount >= previousDynamicLightCount ||
+                    !DynamicLightEquals(_dynamicLights[dynamicLightCount], dynamicLight))
+                {
+                    uploadedLightsChanged = true;
+                }
+
+                _dynamicLights[dynamicLightCount++] = dynamicLight;
+            }
+
+            if (dynamicLightCount != previousDynamicLightCount)
+            {
+                uploadedLightsChanged = true;
             }
 
             _lastDynamicLightCount = dynamicLightCount;
             _lastDroppedDynamicLightCount = _lastDroppedDynamicLightIds.Count;
 
-            if (dynamicLightCount > 0)
+            if (uploadedLightsChanged && dynamicLightCount > 0)
             {
                 commandBuffer.SetBufferData(
                     _dynamicLightBuffer!,
@@ -1090,6 +1300,14 @@ namespace Fodinae.World.Lighting
             }
 
             return dynamicLightCount;
+        }
+
+        private static bool DynamicLightEquals(
+            DynamicLight left,
+            DynamicLight right)
+        {
+            return left.PositionRadius == right.PositionRadius &&
+                left.ColorIntensity == right.ColorIntensity;
         }
 
         private static bool IntersectsWorldRect(
@@ -1118,9 +1336,12 @@ namespace Fodinae.World.Lighting
             }
 
             _dynamicEmissionMaterial!.SetBuffer(DynamicLightsId, _dynamicLightBuffer!);
-            _dynamicEmissionMaterial.SetFloat(
-                DynamicEmissionCellSizeId,
-                GameConstants.World.CELLSIZE);
+            _dynamicEmissionMaterial.SetVector(
+                DynamicEmissionWorldRectId,
+                worldRect);
+            _dynamicEmissionMaterial.SetVector(
+                DynamicEmissionFieldSizeId,
+                new Vector4(_fieldWidth, _fieldHeight, 0f, 0f));
             Matrix4x4 projection = Matrix4x4.Ortho(
                 worldRect.x,
                 worldRect.x + worldRect.z,
@@ -1141,6 +1362,36 @@ namespace Fodinae.World.Lighting
                 instanceCount: dynamicLightCount);
         }
 
+        private void PrepareEmissionField(
+            CommandBuffer commandBuffer,
+            Vector4 worldRect,
+            int dynamicLightCount,
+            bool dynamicLightsChanged)
+        {
+            if (!dynamicLightsChanged && dynamicLightCount == 0)
+            {
+                return;
+            }
+
+            if (dynamicLightCount == 0)
+            {
+                return;
+            }
+
+            commandBuffer.CopyTexture(
+                _staticEmissionField!,
+                0,
+                0,
+                _emissionField!,
+                0,
+                0);
+            DrawDynamicEmission(
+                commandBuffer,
+                worldRect,
+                dynamicLightCount);
+            commandBuffer.GenerateMips(_emissionField!);
+        }
+
         private void DispatchRadianceCascades(CommandBuffer commandBuffer)
         {
             ComputeShader compute = _lightingCompute!;
@@ -1151,64 +1402,77 @@ namespace Fodinae.World.Lighting
                 _radianceAtlas!);
             for (int cascadeIndex = _cascades.Count - 1; cascadeIndex >= 0; cascadeIndex--)
             {
-                CascadeLayout cascade = _cascades[cascadeIndex];
-                bool hasFarCascade = cascadeIndex + 1 < _cascades.Count;
-                CascadeLayout farCascade = hasFarCascade
-                    ? _cascades[cascadeIndex + 1]
-                    : cascade;
-                commandBuffer.SetComputeIntParam(compute, CascadeOffsetId, cascade.Offset);
-                commandBuffer.SetComputeIntParams(
-                    compute,
-                    CascadeProbeSizeId,
-                    cascade.ProbeWidth,
-                    cascade.ProbeHeight);
-                commandBuffer.SetComputeIntParam(
-                    compute,
-                    CascadeProbeSpacingId,
-                    cascade.ProbeSpacing);
-                commandBuffer.SetComputeIntParam(
-                    compute,
-                    CascadeDirectionCountId,
-                    cascade.DirectionCount);
-                commandBuffer.SetComputeVectorParam(
-                    compute,
-                    CascadeIntervalId,
-                    new Vector4(cascade.IntervalStart, cascade.IntervalEnd, 0f, 0f));
-                commandBuffer.SetComputeIntParam(compute, FarCascadeOffsetId, farCascade.Offset);
-                commandBuffer.SetComputeIntParams(
-                    compute,
-                    FarCascadeProbeSizeId,
-                    farCascade.ProbeWidth,
-                    farCascade.ProbeHeight);
-                commandBuffer.SetComputeIntParam(
-                    compute,
-                    FarCascadeProbeSpacingId,
-                    farCascade.ProbeSpacing);
-                commandBuffer.SetComputeIntParam(
-                    compute,
-                    FarCascadeDirectionCountId,
-                    farCascade.DirectionCount);
-                commandBuffer.SetComputeIntParam(compute, HasFarCascadeId, hasFarCascade ? 1 : 0);
-                commandBuffer.SetComputeIntParam(
-                    compute,
-                    CascadeEntryCountId,
-                    cascade.EntryCount);
-                int totalGroupCount = Mathf.CeilToInt(cascade.EntryCount / 64f);
-                int groupCountX = Mathf.Min(
-                    MaximumDispatchGroupsPerDimension,
-                    totalGroupCount);
-                int groupCountY = Mathf.CeilToInt(totalGroupCount / (float)groupCountX);
-                commandBuffer.SetComputeIntParam(
-                    compute,
-                    CascadeDispatchRowWidthId,
-                    groupCountX * 64);
-                commandBuffer.DispatchCompute(
-                    compute,
-                    _solveCascadeKernel,
-                    groupCountX,
-                    groupCountY,
-                    1);
+                DispatchRadianceCascade(commandBuffer, cascadeIndex);
             }
+        }
+
+        private void DispatchRadianceCascade(
+            CommandBuffer commandBuffer,
+            int cascadeIndex)
+        {
+            ComputeShader compute = _lightingCompute!;
+            CascadeLayout cascade = _cascades[cascadeIndex];
+            bool hasFarCascade = cascadeIndex + 1 < _cascades.Count;
+            CascadeLayout farCascade = hasFarCascade
+                ? _cascades[cascadeIndex + 1]
+                : cascade;
+            commandBuffer.SetComputeBufferParam(
+                compute,
+                _solveCascadeKernel,
+                RadianceAtlasId,
+                _radianceAtlas!);
+            commandBuffer.SetComputeIntParam(compute, CascadeOffsetId, cascade.Offset);
+            commandBuffer.SetComputeIntParams(
+                compute,
+                CascadeProbeSizeId,
+                cascade.ProbeWidth,
+                cascade.ProbeHeight);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                CascadeProbeSpacingId,
+                cascade.ProbeSpacing);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                CascadeDirectionCountId,
+                cascade.DirectionCount);
+            commandBuffer.SetComputeVectorParam(
+                compute,
+                CascadeIntervalId,
+                new Vector4(cascade.IntervalStart, cascade.IntervalEnd, 0f, 0f));
+            commandBuffer.SetComputeIntParam(compute, FarCascadeOffsetId, farCascade.Offset);
+            commandBuffer.SetComputeIntParams(
+                compute,
+                FarCascadeProbeSizeId,
+                farCascade.ProbeWidth,
+                farCascade.ProbeHeight);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                FarCascadeProbeSpacingId,
+                farCascade.ProbeSpacing);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                FarCascadeDirectionCountId,
+                farCascade.DirectionCount);
+            commandBuffer.SetComputeIntParam(compute, HasFarCascadeId, hasFarCascade ? 1 : 0);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                CascadeEntryCountId,
+                cascade.EntryCount);
+            int totalGroupCount = Mathf.CeilToInt(cascade.EntryCount / 64f);
+            int groupCountX = Mathf.Min(
+                MaximumDispatchGroupsPerDimension,
+                totalGroupCount);
+            int groupCountY = Mathf.CeilToInt(totalGroupCount / (float)groupCountX);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                CascadeDispatchRowWidthId,
+                groupCountX * 64);
+            commandBuffer.DispatchCompute(
+                compute,
+                _solveCascadeKernel,
+                groupCountX,
+                groupCountY,
+                1);
         }
 
         private void DispatchResolveAndBounce(
@@ -1236,7 +1500,7 @@ namespace Fodinae.World.Lighting
                 Mathf.CeilToInt(_fieldHeight / 8f),
                 1);
 
-            if (solveBounce && _diffuseBounceEnabled)
+            if (solveBounce && _diffuseBounceEnabled && _bounceStrength > 0f)
             {
                 commandBuffer.SetComputeTextureParam(
                     compute,
@@ -1260,27 +1524,6 @@ namespace Fodinae.World.Lighting
             {
                 DispatchComposite(commandBuffer);
             }
-        }
-
-        private void DispatchDiffuseBounce(CommandBuffer commandBuffer)
-        {
-            ComputeShader compute = _lightingCompute!;
-            commandBuffer.SetComputeTextureParam(
-                compute,
-                _solveDiffuseBounceKernel,
-                DirectInputId,
-                _directTexture!);
-            commandBuffer.SetComputeTextureParam(
-                compute,
-                _solveDiffuseBounceKernel,
-                BounceTextureId,
-                _bounceTexture!);
-            commandBuffer.DispatchCompute(
-                compute,
-                _solveDiffuseBounceKernel,
-                Mathf.CeilToInt(_bounceWidth / 8f),
-                Mathf.CeilToInt(_bounceHeight / 8f),
-                1);
         }
 
         private void DispatchComposite(CommandBuffer commandBuffer)
@@ -1314,52 +1557,174 @@ namespace Fodinae.World.Lighting
             return !_hasRenderedLightState || _externalLightsDirty;
         }
 
-        private void LoadRuntimeSettings()
+        private void LoadRuntimeConfig()
         {
-            _ambientIntensity = Mathf.Clamp(
-                PlayerPrefs.GetFloat(AmbientIntensityPreferenceKey, _ambientIntensity),
+            string path = RuntimeConfigPath;
+            if (!File.Exists(path))
+            {
+                _runtimeConfig = CreateConfigFromInspectorDefaults();
+                SaveRuntimeConfig();
+            }
+            else
+            {
+                string json = File.ReadAllText(path);
+                _runtimeConfig = JsonUtility.FromJson<LightingRuntimeConfig>(json) ??
+                    throw new InvalidDataException($"Lighting config '{path}' is empty or invalid.");
+                _runtimeConfig.Validate();
+            }
+
+            ApplyRuntimeConfig(_runtimeConfig);
+        }
+
+        private LightingRuntimeConfig CreateConfigFromInspectorDefaults()
+        {
+            LightingRuntimeConfig config = new()
+            {
+                Schema = LightingRuntimeConfig.SchemaId,
+                Quality = (int)_inspectorQuality,
+                AmbientOcclusionEnabled = _inspectorAmbientOcclusionEnabled,
+                DiffuseBounceEnabled = _inspectorDiffuseBounceEnabled,
+                AmbientIntensity = _inspectorAmbientIntensity,
+                EmissionScale = _inspectorEmissionScale,
+                AmbientColor = _ambientColor,
+                EmptyExtinctionRgb = _inspectorEmptyExtinctionRgb,
+                SolidExtinctionRgb = _inspectorSolidExtinctionRgb,
+                EmptyExtinctionMultiplier = _inspectorEmptyExtinctionMultiplier,
+                SolidExtinctionMultiplier = _inspectorSolidExtinctionMultiplier,
+                BounceStrength = _inspectorBounceStrength,
+                AmbientOcclusionRadiusCells = _inspectorAmbientOcclusionRadiusCells,
+                AmbientOcclusionStrength = _inspectorAmbientOcclusionStrength,
+                MaximumLightMultiplier = _inspectorMaximumLightMultiplier,
+                EnableFinalLightingClamp = _enableFinalLightingClamp,
+                TransmittanceDebugDistanceCells = _inspectorTransmittanceDebugDistanceCells,
+                MinimumTransmission = _inspectorMinimumTransmission,
+                LightSafeBorder = _inspectorLightSafeBorder,
+                DynamicLightIntensity = LightingDefaults.DynamicLightIntensity,
+                DynamicLightColor = LightingDefaults.DynamicLightColor,
+                DynamicLightUpdatesPerSecond = _dynamicLightUpdatesPerSecond,
+            };
+            config.Validate();
+            return config;
+        }
+
+        private void ApplyRuntimeConfig(LightingRuntimeConfig config)
+        {
+            _quality = (QualityPreset)config.Quality;
+            _ambientOcclusionEnabled = config.AmbientOcclusionEnabled;
+            _diffuseBounceEnabled = config.DiffuseBounceEnabled;
+            _ambientIntensity = config.AmbientIntensity;
+            _emissionScale = config.EmissionScale;
+            _ambientColor = config.AmbientColor;
+            _emptyExtinctionRgb = config.EmptyExtinctionRgb;
+            _solidExtinctionRgb = config.SolidExtinctionRgb;
+            _emptyExtinctionMultiplier = config.EmptyExtinctionMultiplier;
+            _solidExtinctionMultiplier = config.SolidExtinctionMultiplier;
+            _bounceStrength = config.BounceStrength;
+            _ambientOcclusionRadiusCells = config.AmbientOcclusionRadiusCells;
+            _ambientOcclusionStrength = config.AmbientOcclusionStrength;
+            _maximumLightMultiplier = config.MaximumLightMultiplier;
+            _enableFinalLightingClamp = config.EnableFinalLightingClamp;
+            _transmittanceDebugDistanceCells = config.TransmittanceDebugDistanceCells;
+            _minimumTransmission = config.MinimumTransmission;
+            _lightSafeBorder = config.LightSafeBorder;
+            _dynamicLightUpdatesPerSecond = config.DynamicLightUpdatesPerSecond;
+        }
+
+        private void SyncRuntimeConfig()
+        {
+            _runtimeConfig.Quality = (int)_quality;
+            _runtimeConfig.AmbientOcclusionEnabled = _ambientOcclusionEnabled;
+            _runtimeConfig.DiffuseBounceEnabled = _diffuseBounceEnabled;
+            _runtimeConfig.AmbientIntensity = _ambientIntensity;
+            _runtimeConfig.EmissionScale = _emissionScale;
+            _runtimeConfig.AmbientColor = _ambientColor;
+            _runtimeConfig.EmptyExtinctionRgb = _emptyExtinctionRgb;
+            _runtimeConfig.SolidExtinctionRgb = _solidExtinctionRgb;
+            _runtimeConfig.EmptyExtinctionMultiplier = _emptyExtinctionMultiplier;
+            _runtimeConfig.SolidExtinctionMultiplier = _solidExtinctionMultiplier;
+            _runtimeConfig.BounceStrength = _bounceStrength;
+            _runtimeConfig.AmbientOcclusionRadiusCells = _ambientOcclusionRadiusCells;
+            _runtimeConfig.AmbientOcclusionStrength = _ambientOcclusionStrength;
+            _runtimeConfig.MaximumLightMultiplier = _maximumLightMultiplier;
+            _runtimeConfig.EnableFinalLightingClamp = _enableFinalLightingClamp;
+            _runtimeConfig.TransmittanceDebugDistanceCells = _transmittanceDebugDistanceCells;
+            _runtimeConfig.MinimumTransmission = _minimumTransmission;
+            _runtimeConfig.LightSafeBorder = _lightSafeBorder;
+            _runtimeConfig.DynamicLightIntensity = Mathf.Clamp(
+                _runtimeConfig.DynamicLightIntensity,
                 0f,
-                1f);
-            _emissionScale = Mathf.Clamp(
-                PlayerPrefs.GetFloat(EmissionScalePreferenceKey, _emissionScale),
-                0.1f,
-                8f);
-            _emptyExtinctionMultiplier = Mathf.Clamp(
-                PlayerPrefs.GetFloat(EmptyExtinctionPreferenceKey, _emptyExtinctionMultiplier),
-                0f,
-                2f);
-            _solidExtinctionMultiplier = Mathf.Clamp(
-                PlayerPrefs.GetFloat(SolidExtinctionPreferenceKey, _solidExtinctionMultiplier),
-                0.25f,
-                2f);
-            _bounceStrength = Mathf.Clamp(
-                PlayerPrefs.GetFloat(BounceStrengthPreferenceKey, _bounceStrength),
-                0f,
-                1f);
-            _ambientOcclusionRadiusCells = Mathf.Clamp(
-                PlayerPrefs.GetFloat(AmbientOcclusionRadiusPreferenceKey, _ambientOcclusionRadiusCells),
-                0.5f,
-                8f);
-            _ambientOcclusionStrength = Mathf.Clamp(
-                PlayerPrefs.GetFloat(AmbientOcclusionStrengthPreferenceKey, _ambientOcclusionStrength),
-                0.1f,
-                8f);
-            _maximumLightMultiplier = Mathf.Clamp(
-                PlayerPrefs.GetFloat(MaximumMultiplierPreferenceKey, _maximumLightMultiplier),
-                0.25f,
                 4f);
-            _transmittanceDebugDistanceCells = Mathf.Clamp(
-                PlayerPrefs.GetFloat(TransmittanceDistancePreferenceKey, _transmittanceDebugDistanceCells),
-                2f,
-                32f);
-            _minimumTransmission = Mathf.Clamp(
-                PlayerPrefs.GetFloat(MinimumTransmissionPreferenceKey, _minimumTransmission),
-                0.0001f,
-                0.1f);
-            _lightSafeBorder = Mathf.Clamp(
-                PlayerPrefs.GetInt(LightSafeBorderPreferenceKey, _lightSafeBorder),
-                0,
-                8);
+            _runtimeConfig.DynamicLightColor = new Color(
+                Mathf.Max(0f, _runtimeConfig.DynamicLightColor.r),
+                Mathf.Max(0f, _runtimeConfig.DynamicLightColor.g),
+                Mathf.Max(0f, _runtimeConfig.DynamicLightColor.b),
+                1f);
+            _runtimeConfig.DynamicLightUpdatesPerSecond = Mathf.Clamp(
+                _dynamicLightUpdatesPerSecond,
+                1f,
+                LightingDefaults.DynamicLightUpdatesPerSecondLimit);
+            _runtimeConfig.Validate();
+        }
+
+        public void SetDynamicLightSettings(float intensity, Color color)
+        {
+            _runtimeConfig.DynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
+            _runtimeConfig.DynamicLightColor = new Color(
+                Mathf.Max(0f, color.r),
+                Mathf.Max(0f, color.g),
+                Mathf.Max(0f, color.b),
+                1f);
+            QueueRuntimeConfigSave();
+        }
+
+        public void SetDynamicLightUpdatesPerSecond(float value)
+        {
+            float clampedValue = Mathf.Clamp(
+                value,
+                1f,
+                LightingDefaults.DynamicLightUpdatesPerSecondLimit);
+            if (Mathf.Approximately(_dynamicLightUpdatesPerSecond, clampedValue))
+            {
+                return;
+            }
+
+            _dynamicLightUpdatesPerSecond = clampedValue;
+            _nextDynamicLightingUpdateTime = 0f;
+            QueueRuntimeConfigSave();
+        }
+
+        private string RuntimeConfigPath =>
+            Path.Combine(Application.persistentDataPath, RuntimeConfigFileName);
+
+        private void QueueRuntimeConfigSave()
+        {
+            SyncRuntimeConfig();
+            _runtimeConfigSavePending = true;
+            _runtimeConfigSaveTime = Time.unscaledTime + 0.25f;
+        }
+
+        private void SaveRuntimeConfig()
+        {
+            _runtimeConfig.Validate();
+            Directory.CreateDirectory(Application.persistentDataPath);
+            string path = RuntimeConfigPath;
+            string temporaryPath = path + ".tmp";
+            File.WriteAllText(temporaryPath, JsonUtility.ToJson(_runtimeConfig, prettyPrint: true));
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            File.Move(temporaryPath, path);
+            _runtimeConfigSavePending = false;
+        }
+
+        private void FlushRuntimeConfig()
+        {
+            if (_runtimeConfigSavePending)
+            {
+                SaveRuntimeConfig();
+            }
         }
 
         private void CaptureInspectorDefaults()
@@ -1382,42 +1747,28 @@ namespace Fodinae.World.Lighting
             _inspectorLightSafeBorder = _lightSafeBorder;
         }
 
-        private bool LoadDiffuseBouncePreference()
-        {
-            if (PlayerPrefs.HasKey(DiffuseBouncePreferenceKey))
-            {
-                return PlayerPrefs.GetInt(DiffuseBouncePreferenceKey) == 1;
-            }
-
-            if (!PlayerPrefs.HasKey(LegacyGlobalIlluminationPreferenceKey))
-            {
-                return _diffuseBounceEnabled;
-            }
-
-            bool enabled = PlayerPrefs.GetInt(LegacyGlobalIlluminationPreferenceKey) == 1;
-            PlayerPrefs.SetInt(DiffuseBouncePreferenceKey, enabled ? 1 : 0);
-            PlayerPrefs.DeleteKey(LegacyGlobalIlluminationPreferenceKey);
-            PlayerPrefs.Save();
-            return enabled;
-        }
-
-        private void SetRuntimeSetting(
+        private bool SetRuntimeSetting(
             ref float field,
             float value,
-            string preferenceKey,
             float minimum,
-            float maximum)
+            float maximum,
+            bool radianceDirty = true)
         {
             float clampedValue = Mathf.Clamp(value, minimum, maximum);
             if (Mathf.Approximately(field, clampedValue))
             {
-                return;
+                return false;
             }
 
             field = clampedValue;
-            PlayerPrefs.SetFloat(preferenceKey, clampedValue);
-            PlayerPrefs.Save();
-            _hasRenderedLightState = false;
+            QueueRuntimeConfigSave();
+            if (radianceDirty)
+            {
+                _hasRenderedLightState = false;
+            }
+
+            _compositeDirty = true;
+            return true;
         }
 
         private void RememberDynamicLightState()
@@ -1524,6 +1875,13 @@ namespace Fodinae.World.Lighting
                 FilterMode.Bilinear,
                 "_EmissionField",
                 useMipMap: true);
+            _automaticNormalField = CreateTexture(
+                fieldWidth,
+                fieldHeight,
+                RenderTextureFormat.ARGBHalf,
+                randomWrite: true,
+                FilterMode.Point,
+                "_AutomaticNormalField");
             _directTexture = CreateTexture(
                 fieldWidth,
                 fieldHeight,
@@ -1744,11 +2102,13 @@ namespace Fodinae.World.Lighting
             }
 
             _solveCascadeKernel = _lightingCompute.FindKernel("SolveCascade");
+            _solveAutomaticNormalsKernel = _lightingCompute.FindKernel("SolveAutomaticNormals");
             _solveContactOcclusionKernel = _lightingCompute.FindKernel("SolveContactOcclusion");
             _resolveDirectKernel = _lightingCompute.FindKernel("ResolveDirect");
             _solveDiffuseBounceKernel = _lightingCompute.FindKernel("SolveDiffuseBounce");
             _compositeLightingKernel = _lightingCompute.FindKernel("CompositeLighting");
             ValidateKernelSupportOrThrow("SolveCascade", _solveCascadeKernel);
+            ValidateKernelSupportOrThrow("SolveAutomaticNormals", _solveAutomaticNormalsKernel);
             ValidateKernelSupportOrThrow("SolveContactOcclusion", _solveContactOcclusionKernel);
             ValidateKernelSupportOrThrow("ResolveDirect", _resolveDirectKernel);
             ValidateKernelSupportOrThrow("SolveDiffuseBounce", _solveDiffuseBounceKernel);
@@ -1824,31 +2184,22 @@ namespace Fodinae.World.Lighting
 
             _quality = quality;
             ApplyUnityQualityLevel(quality);
-            _qualitySettings = _graphicsProfile != null
-                ? _graphicsProfile.Get((GraphicsQualityTier)quality)
-                : CreateDefaultQualitySettings(quality);
+            GraphicsQualityProfile profile = _graphicsProfile ??
+                throw new InvalidOperationException(
+                    "Lighting runtime config requires GraphicsQualityProfile.");
+            _qualitySettings = profile.Get((GraphicsQualityTier)quality);
             ApplyUnityRenderingSettings(_qualitySettings);
             _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
             _fieldDirty = true;
             _nextLightingUpdateTime = 0f;
+            _nextDynamicLightingUpdateTime = 0f;
+            _dynamicSolveInProgress = false;
             _hasRenderedLightState = false;
 
             if (save)
             {
-                PlayerPrefs.SetInt(QualityPreferenceKey, (int)_quality);
-                PlayerPrefs.Save();
+                QueueRuntimeConfigSave();
             }
-        }
-
-        private static GraphicsQualitySettings CreateDefaultQualitySettings(QualityPreset quality)
-        {
-            return quality switch
-            {
-                QualityPreset.Low => new GraphicsQualitySettings(1, 512, 128, 20, 60f, lightingCascadeAtlasLimit: 512),
-                QualityPreset.Medium => new GraphicsQualitySettings(2, 768, 256, 28, 60f, lightingCascadeAtlasLimit: 768),
-                QualityPreset.High => new GraphicsQualitySettings(4, 1536, 512, 40, 60f, lightingCascadeAtlasLimit: 1536),
-                _ => new GraphicsQualitySettings(8, 2048, 1024, 64, 30f, lightingCascadeAtlasLimit: 2048),
-            };
         }
 
         private static void ApplyUnityQualityLevel(QualityPreset quality)
@@ -1876,6 +2227,9 @@ namespace Fodinae.World.Lighting
         {
             _dynamicLightBuffer?.Release();
             _dynamicLightBuffer = null;
+            _lastDynamicLightCount = 0;
+            _lastDroppedDynamicLightCount = 0;
+            _lastDroppedDynamicLightIds.Clear();
             _radianceAtlas?.Release();
             _radianceAtlas = null;
             _atlasCapacity = 0;
@@ -1888,6 +2242,7 @@ namespace Fodinae.World.Lighting
             ReleaseTexture(ref _materialField);
             ReleaseTexture(ref _staticEmissionField);
             ReleaseTexture(ref _emissionField);
+            ReleaseTexture(ref _automaticNormalField);
             ReleaseTexture(ref _directTexture);
             ReleaseTexture(ref _ambientOcclusionTexture);
             ReleaseTexture(ref _bounceTexture);
@@ -1897,6 +2252,7 @@ namespace Fodinae.World.Lighting
             _bounceWidth = 0;
             _bounceHeight = 0;
             _cascades.Clear();
+            _dynamicSolveInProgress = false;
             _hasStaticRadianceState = false;
         }
 

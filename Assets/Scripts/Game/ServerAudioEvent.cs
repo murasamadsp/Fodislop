@@ -319,11 +319,13 @@ namespace Fodinae.Game
             {
                 var service = ServiceLocator.Resolve<IRobotService>();
                 var sourceBot = service is RobotManager manager ? manager.GetOrCreateRobot(_sourceBotId) : null;
-                pos = sourceBot != null ? sourceBot.transform.position : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
+                pos = sourceBot != null
+                    ? sourceBot.transform.position
+                    : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
             }
             else
             {
-                pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
+                pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
             }
 
             if (_gameObject != null)
@@ -494,7 +496,7 @@ namespace Fodinae.Game
                 }
                 else if (_hasAttractorPosition)
                 {
-                    var attractorPos = CoordinateUtils.ServerToUnityPos(_attractorX, _attractorY);
+                    var attractorPos = CoordinateUtils.ServerToUnityPos(_attractorX, _attractorY, GetWorldHeight());
                     _effekseerHandle.SetTargetLocation(attractorPos);
                 }
 
@@ -518,6 +520,14 @@ namespace Fodinae.Game
                 MarkVisualCompleted();
                 return false;
             }
+        }
+
+        private static int GetWorldHeight()
+        {
+            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+                throw new InvalidOperationException(
+                    "[ServerAudioEvent] MapManager is required for server-to-world coordinate conversion.");
+            return mapManager.WorldHeight;
         }
 
         private void MarkVisualCompleted()

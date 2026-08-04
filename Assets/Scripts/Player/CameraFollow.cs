@@ -12,6 +12,7 @@ namespace Fodinae.Player
 {
     public class CameraFollow : MonoBehaviour
     {
+        public static CameraFollow? Instance { get; private set; }
         [Header("Follow Settings")]
         [SerializeField]
         private Transform? _target;
@@ -40,12 +41,15 @@ namespace Fodinae.Player
         private bool _scrollEnabled = true;
         private bool _cameraNullLogged;
         private bool _scrollNullLogged;
+        private bool _hasSnappedToServerPosition;
+        private bool _playerEventSubscribed;
         private Vector3 _followVelocity;
         [Inject]
         private IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {
+            Instance = this;
             _camera = GetComponent<Camera>();
         }
 
@@ -81,6 +85,12 @@ namespace Fodinae.Player
                 }
             }
 
+            if (PlayerMovementController.LocalPlayer != null && !_playerEventSubscribed)
+            {
+                PlayerMovementController.LocalPlayer.OnPlayerMoved += HandlePlayerMoved;
+                _playerEventSubscribed = true;
+            }
+
             SnapToTarget();
             InitializeInput();
         }
@@ -93,8 +103,30 @@ namespace Fodinae.Player
 
         protected void OnDestroy()
         {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
+            if (PlayerMovementController.LocalPlayer != null && _playerEventSubscribed)
+            {
+                PlayerMovementController.LocalPlayer.OnPlayerMoved -= HandlePlayerMoved;
+                _playerEventSubscribed = false;
+            }
+
             _scrollAction?.Disable();
             _scrollAction?.Dispose();
+        }
+
+        private void HandlePlayerMoved(Vector2Int oldPosition, Vector2Int newPosition)
+        {
+            if (_hasSnappedToServerPosition || oldPosition == newPosition)
+            {
+                return;
+            }
+
+            _hasSnappedToServerPosition = true;
+            SnapToTarget();
         }
 
         protected void LateUpdate()
@@ -166,6 +198,11 @@ namespace Fodinae.Player
 
         private void HandleFollow()
         {
+            if (PlayerMovementController.LocalPlayer is { HasServerPosition: false })
+            {
+                return;
+            }
+
             if (_target == null || _target == transform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
@@ -191,6 +228,11 @@ namespace Fodinae.Player
 
         public void SnapToTarget()
         {
+            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            {
+                return;
+            }
+
             if (_target == null || _target == transform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
@@ -205,6 +247,18 @@ namespace Fodinae.Player
                 transform.position = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
                 _followVelocity = Vector3.zero;
             }
+        }
+
+        public void SetGameplayReady()
+        {
+            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            {
+                throw new InvalidOperationException(
+                    "[CameraFollow] Cannot enable camera before the local server position is synchronized.");
+            }
+
+            SnapToTarget();
+            _hasSnappedToServerPosition = true;
         }
 
         public void SetTarget(Transform newTarget)

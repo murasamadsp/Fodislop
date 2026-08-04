@@ -19,12 +19,6 @@ namespace Fodinae.Game
     {
         private const string TAG = "[Robot]";
         private static int _nextDynamicLightId;
-        public const string DynamicLightRadiusPreferenceKey = "WorldLightingDynamicRadius";
-        public const string DynamicLightIntensityPreferenceKey = "WorldLightingDynamicIntensity";
-        public const string DynamicLightEdgeSoftnessPreferenceKey = "WorldLightingDynamicEdgeSoftness";
-        public const string DynamicLightColorRPreferenceKey = "WorldLightingDynamicColorR";
-        public const string DynamicLightColorGPreferenceKey = "WorldLightingDynamicColorG";
-        public const string DynamicLightColorBPreferenceKey = "WorldLightingDynamicColorB";
 
         [SerializeField]
         private uint _botId;
@@ -49,29 +43,20 @@ namespace Fodinae.Game
         [Tooltip("Разрешает Robot регистрировать dynamic emission source в TerrariaLightingEngine.")]
         private bool _emitsDynamicLight = true;
         [SerializeField]
-        [Min(0.1f)]
-        [HideInInspector]
-        [Tooltip("Legacy-поле. Источник Robot теперь всегда занимает одну физическую клетку.")]
-        private float _dynamicLightRadius = 8f;
-        [SerializeField]
         [Range(0f, 4f)]
         [Tooltip("Интенсивность dynamic emission. HDR-значение выше 1 усиливает источник.")]
-        private float _dynamicLightIntensity = 1.25f;
-        [SerializeField]
-        [Range(0.05f, 1f)]
-        [HideInInspector]
-        [Tooltip("Legacy-поле. Профиль источника больше не задаётся радиусом или edge softness.")]
-        private float _dynamicLightEdgeSoftness = 0.65f;
+        private float _dynamicLightIntensity = LightingDefaults.DynamicLightIntensity;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
         [Tooltip("HDR-цвет dynamic emission источника Robot.")]
-        private Color _dynamicLightColor = Color.white;
+        private Color _dynamicLightColor = LightingDefaults.DynamicLightColor;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
         private const float MIN_SMOOTH_TIME = 0.05f;
         private const float MAX_SMOOTH_TIME = 0.15f;
         private const float REFERENCE_MOVE_SPEED = 25f;
+        private const float DYNAMIC_LIGHT_POSITION_EPSILON = 0.00390625f;
 
         private bool _isMetadataLoaded = false;
         private CancellationTokenSource? _cts;
@@ -88,15 +73,26 @@ namespace Fodinae.Game
 
         [Inject]
         private IRobotService _robotService = null!;
-        private RobotTentacleSegment[]? _tentacles;
-        private GameObject? _tailContainer;
+        private Tentacle[]? _tentacles;
         private Sprite? _skinSprite;
         private Sprite? _clanSprite;
         private bool _dynamicLightEnabled;
         private int _dynamicLightId;
-        private float _inspectorDynamicLightRadius;
+        private TerrariaLightingEngine? _lastDynamicLightEngine;
+        private uint _lastDynamicLightGeneration;
+        private Vector2 _lastDynamicLightPosition;
+        private Color _lastDynamicLightColor;
+        private float _lastDynamicLightIntensity;
+        private bool _hasSubmittedDynamicLight;
+        private bool _tentaclesSettled;
+        private Vector3 _lastTentacleRootPosition;
+        private float _lastTentacleRotation;
+        private bool _hasUpdatedLabels;
+        private Vector3 _lastLabelsPosition;
+        private bool _dynamicLightSettingsLoaded;
+        [Inject]
+        private TentacleBatchRenderer _tentacleBatchRenderer = null!;
         private float _inspectorDynamicLightIntensity;
-        private float _inspectorDynamicLightEdgeSoftness;
         private Color _inspectorDynamicLightColor;
 
         public uint BotId => _botId;
@@ -106,11 +102,7 @@ namespace Fodinae.Game
         public bool IsMetadataLoaded => _isMetadataLoaded;
         public bool IsLocalPlayer => gameObject.CompareTag("Player");
 
-        public float DynamicLightRadius => _dynamicLightRadius;
-
         public float DynamicLightIntensity => _dynamicLightIntensity;
-
-        public float DynamicLightEdgeSoftness => _dynamicLightEdgeSoftness;
 
         public Color DynamicLightColor => _dynamicLightColor;
 
@@ -172,36 +164,18 @@ namespace Fodinae.Game
         protected void Awake()
         {
             _dynamicLightId = Interlocked.Increment(ref _nextDynamicLightId);
-            _inspectorDynamicLightRadius = _dynamicLightRadius;
             _inspectorDynamicLightIntensity = _dynamicLightIntensity;
-            _inspectorDynamicLightEdgeSoftness = _dynamicLightEdgeSoftness;
             _inspectorDynamicLightColor = _dynamicLightColor;
-            // Dynamic emission is a property of this Robot source. The old
-            // UseLight2D preference used to force a second, player-only path
-            // here; terrain lighting now owns the global lighting toggle.
+
+            // Dynamic emission is a property of this Robot source. Terrain
+            // lighting owns the global lighting toggle.
             _dynamicLightEnabled = _emitsDynamicLight;
-            if (IsLocalPlayer)
+            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            if (lighting?.IsRuntimeConfigReady == true)
             {
-                _dynamicLightRadius = PlayerPrefs.GetFloat(
-                    DynamicLightRadiusPreferenceKey,
-                    _dynamicLightRadius);
-                _dynamicLightIntensity = Mathf.Clamp(
-                    PlayerPrefs.GetFloat(
-                        DynamicLightIntensityPreferenceKey,
-                        _dynamicLightIntensity),
-                    0f,
-                    4f);
-                _dynamicLightEdgeSoftness = Mathf.Clamp(
-                    PlayerPrefs.GetFloat(
-                        DynamicLightEdgeSoftnessPreferenceKey,
-                        _dynamicLightEdgeSoftness),
-                    0.05f,
-                    1f);
-                _dynamicLightColor = new Color(
-                    PlayerPrefs.GetFloat(DynamicLightColorRPreferenceKey, _dynamicLightColor.r),
-                    PlayerPrefs.GetFloat(DynamicLightColorGPreferenceKey, _dynamicLightColor.g),
-                    PlayerPrefs.GetFloat(DynamicLightColorBPreferenceKey, _dynamicLightColor.b),
-                    1f);
+                _dynamicLightIntensity = lighting.DynamicLightIntensity;
+                _dynamicLightColor = lighting.DynamicLightColor;
+                _dynamicLightSettingsLoaded = true;
             }
 
             if (_spriteRenderer == null)
@@ -232,14 +206,19 @@ namespace Fodinae.Game
         protected void OnEnable()
         {
             ApplyWorldUiLayer();
+            _tentaclesSettled = false;
+            SetTentaclesActive(true);
+        }
+
+        protected void OnDisable()
+        {
+            TerrariaLightingEngine.Instance?.RemoveDynamicLight(_dynamicLightId);
+            _hasSubmittedDynamicLight = false;
+            SetTentaclesActive(false);
         }
 
         private void InitializeVisualElements()
         {
-            _tailContainer = new GameObject("TailContainer");
-            _tailContainer.transform.SetParent(transform);
-            _tailContainer.transform.localPosition = Vector3.zero;
-
             var textGo = new GameObject("Nickname");
             textGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             textGo.transform.SetParent(transform);
@@ -319,7 +298,26 @@ namespace Fodinae.Game
 
         protected void Update()
         {
-            float renderDistance = Vector2.Distance(_smoothPosition, _targetPosition);
+            if (_tentacles == null)
+            {
+                _tentaclesSettled = true;
+            }
+
+            bool bodySettled =
+                (_smoothPosition - _targetPosition).sqrMagnitude <= 1e-8f &&
+                _currentVelocity.sqrMagnitude <= 1e-8f &&
+                Mathf.Abs(Mathf.DeltaAngle(_smoothAngle, _targetAngle)) <= 0.001f &&
+                Mathf.Abs(_currentAngularVelocity) <= 0.001f &&
+                _tremor <= 0.01f &&
+                _tentaclesSettled;
+            if (bodySettled)
+            {
+                UpdateLabelsPosition();
+                UpdateDynamicLight();
+                return;
+            }
+
+            float renderDistance = (_smoothPosition - _targetPosition).magnitude;
 
             // 1. Base smooth time now scales PROPORTIONALLY with speed.
             // Slower = snappier/tighter (low smooth time). Faster = momentum/curves (higher smooth time).
@@ -374,7 +372,18 @@ namespace Fodinae.Game
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
             float movementFactor = Mathf.Clamp01(_currentVelocity.magnitude / 5f);
-            UpdateTentacles(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime);
+            bool tentacleStateChanged =
+                !_tentaclesSettled ||
+                (finalPosition - _lastTentacleRootPosition).sqrMagnitude > 1e-8f ||
+                Mathf.Abs(Mathf.DeltaAngle(_lastTentacleRotation, nowRotationAngle)) > 0.001f ||
+                movementFactor > 0.0001f;
+            if (tentacleStateChanged)
+            {
+                UpdateTentacles(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime);
+                _tentaclesSettled = AreTentaclesSettled();
+                _lastTentacleRootPosition = finalPosition;
+                _lastTentacleRotation = nowRotationAngle;
+            }
 
             UpdateLabelsPosition();
             UpdateDynamicLight();
@@ -383,54 +392,59 @@ namespace Fodinae.Game
         private void UpdateDynamicLight()
         {
             TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
-            if (!_dynamicLightEnabled || lighting == null)
+            if (!_dynamicLightEnabled || lighting == null || !lighting.IsRuntimeConfigReady)
             {
-                lighting?.RemoveDynamicLight(_dynamicLightId);
+                if (_hasSubmittedDynamicLight)
+                {
+                    lighting?.RemoveDynamicLight(_dynamicLightId);
+                }
+
+                _hasSubmittedDynamicLight = false;
                 return;
             }
 
+            if (!_dynamicLightSettingsLoaded)
+            {
+                _dynamicLightIntensity = lighting.DynamicLightIntensity;
+                _dynamicLightColor = lighting.DynamicLightColor;
+                _dynamicLightSettingsLoaded = true;
+            }
+
+            Vector2 position = new(_smoothPosition.x, _smoothPosition.y);
+            uint generation = lighting.DynamicLightGeneration;
+            if (_hasSubmittedDynamicLight &&
+                ReferenceEquals(_lastDynamicLightEngine, lighting) &&
+                _lastDynamicLightGeneration == generation &&
+                (_lastDynamicLightPosition - position).sqrMagnitude <=
+                    DYNAMIC_LIGHT_POSITION_EPSILON * DYNAMIC_LIGHT_POSITION_EPSILON &&
+                _lastDynamicLightColor == _dynamicLightColor &&
+                Mathf.Approximately(_lastDynamicLightIntensity, _dynamicLightIntensity))
+            {
+                return;
+            }
+
+            // Lighting follows the interpolated render position. Using
+            // _targetPosition here made the sprite move smoothly while
+            // its emission snapped between server cells.
             lighting.SetDynamicLight(
                 _dynamicLightId,
-                new Vector2(_targetPosition.x, _targetPosition.y),
+                position,
                 _dynamicLightColor,
                 _dynamicLightIntensity);
-        }
-
-        protected void OnDisable()
-        {
-            TerrariaLightingEngine.Instance?.RemoveDynamicLight(_dynamicLightId);
-        }
-
-        public void SetDynamicLightRadius(float radius)
-        {
-            _dynamicLightRadius = Mathf.Clamp(radius, 1f, 16f);
-            if (IsLocalPlayer)
-            {
-                PlayerPrefs.SetFloat(DynamicLightRadiusPreferenceKey, _dynamicLightRadius);
-                PlayerPrefs.Save();
-            }
+            _lastDynamicLightEngine = lighting;
+            _lastDynamicLightGeneration = generation;
+            _lastDynamicLightPosition = position;
+            _lastDynamicLightColor = _dynamicLightColor;
+            _lastDynamicLightIntensity = _dynamicLightIntensity;
+            _hasSubmittedDynamicLight = true;
         }
 
         public void SetDynamicLightIntensity(float intensity)
         {
             _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
-            if (IsLocalPlayer)
-            {
-                PlayerPrefs.SetFloat(DynamicLightIntensityPreferenceKey, _dynamicLightIntensity);
-                PlayerPrefs.Save();
-            }
-        }
-
-        public void SetDynamicLightEdgeSoftness(float softness)
-        {
-            _dynamicLightEdgeSoftness = Mathf.Clamp(softness, 0.05f, 1f);
-            if (IsLocalPlayer)
-            {
-                PlayerPrefs.SetFloat(
-                    DynamicLightEdgeSoftnessPreferenceKey,
-                    _dynamicLightEdgeSoftness);
-                PlayerPrefs.Save();
-            }
+            TerrariaLightingEngine.Instance?.SetDynamicLightSettings(
+                _dynamicLightIntensity,
+                _dynamicLightColor);
         }
 
         public void SetDynamicLightColor(Color color)
@@ -440,13 +454,9 @@ namespace Fodinae.Game
                 Mathf.Max(0f, color.g),
                 Mathf.Max(0f, color.b),
                 1f);
-            if (IsLocalPlayer)
-            {
-                PlayerPrefs.SetFloat(DynamicLightColorRPreferenceKey, _dynamicLightColor.r);
-                PlayerPrefs.SetFloat(DynamicLightColorGPreferenceKey, _dynamicLightColor.g);
-                PlayerPrefs.SetFloat(DynamicLightColorBPreferenceKey, _dynamicLightColor.b);
-                PlayerPrefs.Save();
-            }
+            TerrariaLightingEngine.Instance?.SetDynamicLightSettings(
+                _dynamicLightIntensity,
+                _dynamicLightColor);
         }
 
         public void ResetDynamicLightPreferences()
@@ -456,33 +466,27 @@ namespace Fodinae.Game
                 return;
             }
 
-            PlayerPrefs.DeleteKey(DynamicLightRadiusPreferenceKey);
-            PlayerPrefs.DeleteKey(DynamicLightIntensityPreferenceKey);
-            PlayerPrefs.DeleteKey(DynamicLightEdgeSoftnessPreferenceKey);
-            PlayerPrefs.DeleteKey(DynamicLightColorRPreferenceKey);
-            PlayerPrefs.DeleteKey(DynamicLightColorGPreferenceKey);
-            PlayerPrefs.DeleteKey(DynamicLightColorBPreferenceKey);
-            PlayerPrefs.Save();
-            _dynamicLightRadius = _inspectorDynamicLightRadius;
-            _dynamicLightIntensity = _inspectorDynamicLightIntensity;
-            _dynamicLightEdgeSoftness = _inspectorDynamicLightEdgeSoftness;
-            _dynamicLightColor = _inspectorDynamicLightColor;
+            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            _dynamicLightIntensity = lighting?.DynamicLightIntensity ?? _inspectorDynamicLightIntensity;
+            _dynamicLightColor = lighting?.DynamicLightColor ?? _inspectorDynamicLightColor;
+            _dynamicLightSettingsLoaded = true;
         }
 
         private void CreateTentacles(Texture2D tailTexture)
         {
-            if (_tailContainer == null)
-            {
-                _tailContainer = new GameObject("TailContainer");
-                _tailContainer.transform.SetParent(transform, false);
-            }
-
             ClearTentacles();
-            _tentacles = new RobotTentacleSegment[4];
+            _tentacles = new Tentacle[4];
+            _tentaclesSettled = false;
             float[] offsets = { 0f, 1.5f, 3.0f, 4.5f };
             for (int i = 0; i < 4; i++)
             {
-                _tentacles[i] = new RobotTentacleSegment(_tailContainer, tailTexture, offsets[i], -1, i, 4);
+                _tentacles[i] = new Tentacle(
+                    _tentacleBatchRenderer,
+                    tailTexture,
+                    transform.position,
+                    offsets[i],
+                    i,
+                    4);
             }
         }
 
@@ -497,6 +501,37 @@ namespace Fodinae.Game
 
                 _tentacles = null;
             }
+        }
+
+        private void SetTentaclesActive(bool active)
+        {
+            if (_tentacles == null)
+            {
+                return;
+            }
+
+            foreach (Tentacle tentacle in _tentacles)
+            {
+                tentacle.SetActive(active);
+            }
+        }
+
+        private bool AreTentaclesSettled()
+        {
+            if (_tentacles == null)
+            {
+                return true;
+            }
+
+            foreach (Tentacle tentacle in _tentacles)
+            {
+                if (!tentacle.IsSettled)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void UpdateTentacles(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
@@ -514,15 +549,25 @@ namespace Fodinae.Game
 
         private void UpdateLabelsPosition()
         {
+            Vector3 position = transform.position;
+            if (_hasUpdatedLabels &&
+                (position - _lastLabelsPosition).sqrMagnitude <= 1e-8f)
+            {
+                return;
+            }
+
             if (_nicknameText != null)
             {
-                _nicknameText.transform.SetPositionAndRotation(transform.position + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
+                _nicknameText.transform.SetPositionAndRotation(position + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
             }
 
             if (_clanRenderer != null)
             {
-                _clanRenderer.transform.SetPositionAndRotation(transform.position + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
+                _clanRenderer.transform.SetPositionAndRotation(position + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
             }
+
+            _lastLabelsPosition = position;
+            _hasUpdatedLabels = true;
         }
 
         public void Initialize(uint botId)
@@ -779,104 +824,6 @@ namespace Fodinae.Game
             }
 
             ClearTentacles();
-        }
-
-        private class RobotTentacleSegment
-        {
-            private LineRenderer? _line;
-            private MaterialPropertyBlock? _propBlock;
-            private readonly Vector3[] _positions;
-            private readonly Vector3[] _velocities;
-            private readonly float _wiggleOffset;
-            private const int POINT_COUNT = 5;
-            private const float SMOOTH_TIME = 0.08f;
-            private const float MAX_SEGMENT_DIST = 0.2f;
-
-            public RobotTentacleSegment(GameObject container, Texture2D texture, float wiggleOffset, int sortingOrder, int sliceIndex, int totalSlices)
-            {
-                _wiggleOffset = wiggleOffset;
-                _positions = new Vector3[POINT_COUNT];
-                _velocities = new Vector3[POINT_COUNT];
-
-                _line = TentaclePool.Get();
-                _line.transform.SetParent(container.transform);
-                _line.transform.localPosition = Vector3.zero;
-
-                var sharedMat = SharedMaterialCache.GetForTexture(texture);
-                _line.sharedMaterial = sharedMat;
-                _line.sortingOrder = sortingOrder;
-
-                _propBlock = new MaterialPropertyBlock();
-                float sliceHeight = 1.0f / totalSlices;
-                _propBlock.SetVector("_MainTex_ST", new Vector4(1, sliceHeight, 0, sliceIndex * sliceHeight));
-                _line.SetPropertyBlock(_propBlock);
-
-                _line.startWidth = 0.15f;
-                _line.endWidth = 0.02f;
-
-                for (int i = 0; i < POINT_COUNT; i++)
-                {
-                    _positions[i] = container.transform.position;
-                    _line.SetPosition(i, _positions[i]);
-                }
-            }
-
-            public void Snap(Vector3 position)
-            {
-                for (int i = 0; i < POINT_COUNT; i++)
-                {
-                    _positions[i] = position;
-                    _velocities[i] = Vector3.zero;
-                    _line?.SetPosition(i, position);
-                }
-            }
-
-            public void Update(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
-            {
-                _positions[0] = rootPosition;
-                _line?.SetPosition(0, _positions[0]);
-
-                Vector3 lastPos = rootPosition;
-                float angleRad = rotationAngle * Mathf.Deg2Rad;
-                Vector3 baseOffset = -0.2f * movementFactor * new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
-                float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
-                baseOffset += 0.15f * movementFactor * new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0);
-
-                Vector3 targetPos = rootPosition + baseOffset;
-
-                for (int i = 1; i < POINT_COUNT; i++)
-                {
-                    _positions[i] = Vector3.SmoothDamp(_positions[i], targetPos, ref _velocities[i], SMOOTH_TIME, 50f, deltaTime);
-
-                    float wiggle = Mathf.Sin((Time.time * 15f) + (i * 1.5f) + _wiggleOffset) * 0.1f * movementFactor;
-                    Vector3 direction = (_positions[i] - lastPos).normalized;
-                    if (direction == Vector3.zero)
-                    {
-                        direction = new Vector3(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0);
-                    }
-
-                    Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0);
-
-                    if (_line != null)
-                    {
-                        _line.SetPosition(i, _positions[i] + (perpendicular * wiggle));
-                    }
-
-                    lastPos = _positions[i];
-                    targetPos = _positions[i] + (MAX_SEGMENT_DIST * movementFactor * direction);
-                }
-            }
-
-            public void Destroy()
-            {
-                if (_line != null)
-                {
-                    _line.transform.SetParent(null);
-                    _propBlock = null!;
-                    TentaclePool.Return(_line);
-                    _line = null!;
-                }
-            }
         }
     }
 }

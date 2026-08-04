@@ -243,7 +243,6 @@ namespace Fodinae.Networking
             var gm = _gameManager;
             if (gm != null)
             {
-                gm.SetState(GameState.InGame);
                 gm.NotifyWorldLoaded();
             }
         }

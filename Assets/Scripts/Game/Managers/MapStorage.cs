@@ -29,6 +29,8 @@ namespace Fodinae.Game.Managers
 
         private bool _isInitialized;
         private string _worldCodeName = string.Empty;
+        private int _worldWidth;
+        private int _worldHeight;
 
         public WorldLayer<CellType>? CellLayer => _cellLayer;
 
@@ -81,6 +83,8 @@ namespace Fodinae.Game.Managers
             }
 
             _worldCodeName = worldCodeName;
+            _worldWidth = width;
+            _worldHeight = height;
             const int CHUNK_SIZE = 32;
             int widthChunks = (width + CHUNK_SIZE - 1) / CHUNK_SIZE;
             int heightChunks = (height + CHUNK_SIZE - 1) / CHUNK_SIZE;
@@ -159,10 +163,39 @@ namespace Fodinae.Game.Managers
             int height,
             CellType[] cells)
         {
-            if (!_isInitialized || _cellLayer == null ||
-                width <= 0 || height <= 0 || cells.Length < width * height)
+            if (!_isInitialized || _cellLayer == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    $"[MapStorage] SetRegion called before world initialization: " +
+                    $"({startX},{startY}) {width}x{height}.");
+            }
+
+            long expectedCellCount = (long)width * height;
+            if (width <= 0 || height <= 0 || cells.Length < expectedCellCount)
+            {
+                throw new ArgumentException(
+                    $"[MapStorage] Invalid region ({startX},{startY}) {width}x{height}: " +
+                    $"payload has {cells.Length} cells, expected at least {expectedCellCount}.",
+                    nameof(cells));
+            }
+
+            if (startX < 0 || startY < 0 || startX >= _worldWidth || startY >= _worldHeight)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(startX),
+                    "[MapStorage] Region " +
+                    $"({startX},{startY}) {width}x{height} " +
+                    $"is outside world bounds {_worldWidth}x{_worldHeight}.");
+            }
+
+            int appliedWidth = Math.Min(width, _worldWidth - startX);
+            int appliedHeight = Math.Min(height, _worldHeight - startY);
+            if (appliedWidth != width || appliedHeight != height)
+            {
+                Debug.LogWarning(
+                    $"[MapStorage] Clipping padded edge region ({startX},{startY}) " +
+                    $"{width}x{height} to {appliedWidth}x{appliedHeight} " +
+                    $"for world {_worldWidth}x{_worldHeight}.");
             }
 
             bool changed = false;
@@ -171,9 +204,14 @@ namespace Fodinae.Game.Managers
             {
                 for (int x = 0; x < width; x++)
                 {
+                    CellType type = cells[index++];
+                    if (x >= appliedWidth || y >= appliedHeight)
+                    {
+                        continue;
+                    }
+
                     int worldX = startX + x;
                     int worldY = startY + y;
-                    CellType type = cells[index++];
                     if (_cellLayer.GetCellSync(worldX, worldY, touchLru: true) == type)
                     {
                         continue;
@@ -228,6 +266,8 @@ namespace Fodinae.Game.Managers
             _cellLayer = null;
             _isInitialized = false;
             _worldCodeName = string.Empty;
+            _worldWidth = 0;
+            _worldHeight = 0;
             _mapFilePath = null;
             IsDisposed = true;
             Revision++;

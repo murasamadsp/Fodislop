@@ -262,6 +262,7 @@ namespace Fodinae.World
                 var sourcePixels = texture.GetPixels32();
                 CopyPixelsToAtlasArray(sourcePixels, texture.width, texture.height, rect);
             }
+
             lock (_lock)
             {
                 _dirtyCells.Add(cellType);
@@ -296,21 +297,11 @@ namespace Fodinae.World
                 SystemInfo.copyTextureSupport != CopyTextureSupport.None;
             if (uploadedDirectly)
             {
-                try
+                foreach (var (_, texture, rect) in dirtyTextures)
                 {
-                    foreach (var (_, texture, rect) in dirtyTextures)
-                    {
-                        Graphics.CopyTexture(
-                            texture, 0, 0, 0, 0, texture.width, texture.height,
-                            _atlasTexture, 0, 0, rect.X, rect.Y);
-                    }
-                }
-                catch (Exception)
-                {
-                    // Some platforms reject CopyTexture for a format pair even
-                    // when the device advertises support. The CPU buffer is
-                    // kept as a safe compatibility fallback.
-                    uploadedDirectly = false;
+                    Graphics.CopyTexture(
+                        texture, 0, 0, 0, 0, texture.width, texture.height,
+                        _atlasTexture, 0, 0, rect.X, rect.Y);
                 }
             }
 
@@ -318,7 +309,8 @@ namespace Fodinae.World
             {
                 if (_atlasPixels == null)
                 {
-                    return;
+                    throw new InvalidOperationException(
+                        $"[TextureAtlas] CPU atlas storage is unavailable for {Size}x{Size} atlas.");
                 }
 
                 _atlasTexture.SetPixels32(_atlasPixels);

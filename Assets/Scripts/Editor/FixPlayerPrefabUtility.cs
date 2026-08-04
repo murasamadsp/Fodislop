@@ -48,17 +48,9 @@ namespace Fodinae.Editor
                     prefabModified = true;
                 }
 
-                Fodinae.Game.Robot robot = prefabContents.GetComponent<Fodinae.Game.Robot>() ??
-                    throw new InvalidOperationException("Player prefab Robot component is missing.");
-                SerializedObject serializedRobot = new(robot);
-                SerializedProperty intensity = serializedRobot.FindProperty("_dynamicLightIntensity") ??
-                    throw new InvalidOperationException(
-                        "Robot is missing serialized field '_dynamicLightIntensity'.");
-                if (!Mathf.Approximately(intensity.floatValue, 1.25f))
+                if (prefabContents.GetComponent<Fodinae.Game.Robot>() == null)
                 {
-                    intensity.floatValue = 1.25f;
-                    serializedRobot.ApplyModifiedPropertiesWithoutUndo();
-                    prefabModified = true;
+                    throw new InvalidOperationException("Player prefab Robot component is missing.");
                 }
 
                 if (prefabContents.GetComponent<Fodinae.Player.PlayerInteractionController>() == null)
@@ -73,9 +65,11 @@ namespace Fodinae.Editor
                     prefabModified = true;
                 }
 
+                // Always round-trip through the Unity prefab API. This also
+                // removes serialized fields that no longer belong to Robot.
+                PrefabUtility.SaveAsPrefabAsset(prefabContents, "Assets/Prefabs/Player.prefab");
                 if (prefabModified)
                 {
-                    PrefabUtility.SaveAsPrefabAsset(prefabContents, "Assets/Prefabs/Player.prefab");
                     Debug.Log("[FixPlayerPrefabUtility] Fixed and saved missing components on Assets/Prefabs/Player.prefab");
                 }
 
@@ -118,10 +112,18 @@ namespace Fodinae.Editor
                     sceneModified = true;
                 }
 
+                // Always save through the Unity scene API so removed
+                // serialized fields are stripped from the scene object.
+                EditorUtility.SetDirty(playerSceneGo);
+                EditorSceneManager.MarkSceneDirty(playerSceneGo.scene);
+                if (!EditorSceneManager.SaveScene(playerSceneGo.scene))
+                {
+                    throw new InvalidOperationException(
+                        $"Could not save scene '{playerSceneGo.scene.path}'.");
+                }
+
                 if (sceneModified)
                 {
-                    EditorSceneManager.MarkSceneDirty(playerSceneGo.scene);
-                    EditorSceneManager.SaveScene(playerSceneGo.scene);
                     Debug.Log("[FixPlayerPrefabUtility] Fixed missing components on scene Player GameObject");
                 }
 
@@ -133,6 +135,57 @@ namespace Fodinae.Editor
             }
 
             AssetDatabase.SaveAssets();
+        }
+
+        [MenuItem("Fodinae/Reset Robot Inspector Defaults")]
+        public static void ResetRobotInspectorDefaults()
+        {
+            GameObject prefabContents = PrefabUtility.LoadPrefabContents("Assets/Prefabs/Player.prefab");
+            try
+            {
+                Fodinae.Game.Robot prefabRobot = prefabContents.GetComponent<Fodinae.Game.Robot>() ??
+                    throw new InvalidOperationException("Player prefab Robot component is missing.");
+                ApplyRobotDefaults(prefabRobot);
+                PrefabUtility.SaveAsPrefabAsset(prefabContents, "Assets/Prefabs/Player.prefab");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(prefabContents);
+            }
+
+            GameObject? scenePlayer = FindPlayerInOpenScenes();
+            if (scenePlayer != null)
+            {
+                Fodinae.Game.Robot sceneRobot = scenePlayer.GetComponent<Fodinae.Game.Robot>() ??
+                    throw new InvalidOperationException("Scene Player Robot component is missing.");
+                ApplyRobotDefaults(sceneRobot);
+                EditorUtility.SetDirty(sceneRobot);
+                EditorSceneManager.MarkSceneDirty(scenePlayer.scene);
+                if (!EditorSceneManager.SaveScene(scenePlayer.scene))
+                {
+                    throw new InvalidOperationException(
+                        $"Could not save scene '{scenePlayer.scene.path}'.");
+                }
+            }
+
+            AssetDatabase.SaveAssets();
+            Debug.Log("[FixPlayerPrefabUtility] Reset Robot Inspector defaults.");
+        }
+
+        private static void ApplyRobotDefaults(Fodinae.Game.Robot robot)
+        {
+            SerializedObject serializedRobot = new(robot);
+            SerializedProperty emitsDynamicLight = serializedRobot.FindProperty("_emitsDynamicLight") ??
+                throw new InvalidOperationException("Robot is missing serialized field '_emitsDynamicLight'.");
+            SerializedProperty intensity = serializedRobot.FindProperty("_dynamicLightIntensity") ??
+                throw new InvalidOperationException("Robot is missing serialized field '_dynamicLightIntensity'.");
+            SerializedProperty color = serializedRobot.FindProperty("_dynamicLightColor") ??
+                throw new InvalidOperationException("Robot is missing serialized field '_dynamicLightColor'.");
+            emitsDynamicLight.boolValue = true;
+            intensity.floatValue = Fodinae.World.Lighting.LightingDefaults.DynamicLightIntensity;
+            color.colorValue = Fodinae.World.Lighting.LightingDefaults.DynamicLightColor;
+            serializedRobot.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(robot);
         }
 
         private static bool RemoveMissingScriptsFromHierarchy(GameObject root)
