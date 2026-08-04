@@ -509,7 +509,9 @@ namespace Fodinae.World.Terrain
                 // hysteresis now, so feeding currentGridPos here would leave
                 // the lightmap behind the camera while it moves inside the
                 // cached mesh.
-                int lightingPadding = lightingEngine!.RequiredTerrainPadding;
+                int requiredLightingPadding = lightingEngine!.RequiredTerrainPadding +
+                    TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
+                int lightingPadding = requiredLightingPadding;
                 int lightingMinX = viewportMinX - lightingPadding;
                 int lightingMinY = viewportMinY - lightingPadding;
                 int lightingWidth = viewportWidth + (lightingPadding * 2);
