@@ -9,6 +9,5 @@ namespace Fodinae.Core.Interfaces
         ClientConfig Config { get; }
         void Load();
         void Save();
-        void ApplyDefaults();
     }
 }
