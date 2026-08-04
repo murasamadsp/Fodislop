@@ -298,16 +298,19 @@ namespace Fodinae
                 Debug.LogWarning($"[WorldLayer] Unauthorized access during dispose: {authEx.Message}");
             }
 
-            try
+            lock (_ioLock)
             {
-                _fileStream?.Dispose();
-            }
-            catch (IOException ioEx)
-            {
-                Debug.LogWarning($"[WorldLayer] I/O error closing stream during dispose: {ioEx.Message}");
+                _disposed = true;
+                try
+                {
+                    _fileStream?.Dispose();
+                }
+                catch (IOException ioEx)
+                {
+                    Debug.LogWarning($"[WorldLayer] I/O error closing stream during dispose: {ioEx.Message}");
+                }
             }
 
-            _disposed = true;
             _loadedChunks.Clear();
             _lruIndexMap.Clear();
             _lruList.Clear();
@@ -535,6 +538,11 @@ namespace Fodinae
 
             lock (_ioLock)
             {
+                if (_disposed)
+                {
+                    return null;
+                }
+
                 long offset = _chunkOffsets[index];
                 if (offset < 0 || _fileStream == null)
                 {
@@ -556,6 +564,11 @@ namespace Fodinae
 
             lock (_ioLock)
             {
+                if (_disposed)
+                {
+                    return;
+                }
+
                 _fileStream.Seek(0, SeekOrigin.End);
                 long newOffset = _fileStream.Position;
 
