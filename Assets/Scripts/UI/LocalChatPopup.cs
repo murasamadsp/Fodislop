@@ -31,18 +31,33 @@ namespace Fodinae.UI
         [Inject]
         private IServerConfig _serverConfig = null!;
 
-        protected void OnDestroy()
-        {
-            _idleCts?.Cancel();
-            _idleCts?.Dispose();
-        }
-
         protected void Start()
         {
+            _serverConfig.OnInitialized += ApplyServerConfig;
             CreateUI();
             if (_overlay != null)
             {
                 _overlay.style.display = DisplayStyle.None;
+            }
+
+            if (_serverConfig.IsInitialized)
+            {
+                ApplyServerConfig();
+            }
+        }
+
+        protected void OnDestroy()
+        {
+            _serverConfig.OnInitialized -= ApplyServerConfig;
+            _idleCts?.Cancel();
+            _idleCts?.Dispose();
+        }
+
+        private void ApplyServerConfig()
+        {
+            if (_inputField != null && _serverConfig.IsInitialized)
+            {
+                _inputField.maxLength = _serverConfig.MaxLocalChatLength;
             }
         }
 
@@ -59,7 +74,6 @@ namespace Fodinae.UI
             _inputField.selectAllOnFocus = false;
             _inputField.selectAllOnMouseUp = false;
             _inputField.AddToClassList("lchat-input");
-            _inputField.maxLength = _serverConfig.MaxLocalChatLength;
             _overlay.Add(_inputField);
 
             _inputField.RegisterCallback<FocusEvent>(_ =>
@@ -145,10 +159,13 @@ namespace Fodinae.UI
             string text = _inputField.value.Trim();
             if (!string.IsNullOrEmpty(text))
             {
-                var chatMaxLen = _serverConfig.MaxLocalChatLength;
-                if (text.Length > chatMaxLen)
+                if (_serverConfig.IsInitialized)
                 {
-                    text = text.Substring(0, chatMaxLen);
+                    var chatMaxLen = _serverConfig.MaxLocalChatLength;
+                    if (text.Length > chatMaxLen)
+                    {
+                        text = text.Substring(0, chatMaxLen);
+                    }
                 }
 
                 _networkService.Send(new SendLocalChatMessagePacket(text));

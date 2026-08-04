@@ -39,21 +39,36 @@ namespace Fodinae.UI
         [Inject]
         private IServerConfig _serverConfig = null!;
 
-        protected void OnDestroy()
-        {
-            _idleCts?.Cancel();
-            _idleCts?.Dispose();
-        }
-
         protected void Start()
         {
+            _serverConfig.OnInitialized += ApplyServerConfig;
             CreateUI();
             if (_panel != null)
             {
                 _panel.style.display = DisplayStyle.None;
             }
 
+            if (_serverConfig.IsInitialized)
+            {
+                ApplyServerConfig();
+            }
+
             _networkService.Send(new QueryChatHistoryPacket("global", 0));
+        }
+
+        protected void OnDestroy()
+        {
+            _serverConfig.OnInitialized -= ApplyServerConfig;
+            _idleCts?.Cancel();
+            _idleCts?.Dispose();
+        }
+
+        private void ApplyServerConfig()
+        {
+            if (_inputField != null && _serverConfig.IsInitialized)
+            {
+                _inputField.maxLength = _serverConfig.MaxGlobalChatLength;
+            }
         }
 
         protected void Update()
@@ -112,7 +127,6 @@ namespace Fodinae.UI
             _inputField.selectAllOnFocus = false;
             _inputField.selectAllOnMouseUp = false;
             _inputField.AddToClassList("gchat-input");
-            _inputField.maxLength = _serverConfig.MaxGlobalChatLength;
             bottomRow.Add(_inputField);
 
             _inputField.RegisterCallback<FocusEvent>(_ =>
@@ -208,10 +222,13 @@ namespace Fodinae.UI
                 return;
             }
 
-            var chatMaxLen = _serverConfig.MaxGlobalChatLength;
-            if (text.Length > chatMaxLen)
+            if (_serverConfig.IsInitialized)
             {
-                text = text.Substring(0, chatMaxLen);
+                var chatMaxLen = _serverConfig.MaxGlobalChatLength;
+                if (text.Length > chatMaxLen)
+                {
+                    text = text.Substring(0, chatMaxLen);
+                }
             }
 
             _networkService.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));

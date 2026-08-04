@@ -15,6 +15,10 @@ namespace Fodinae.Game.Managers
         private int _maxLocalChatLength;
         private bool _isInitialized;
 
+        public bool IsInitialized => _isInitialized;
+
+        public event Action? OnInitialized;
+
         public float DigCooldown
         {
             get
@@ -53,6 +57,7 @@ namespace Fodinae.Game.Managers
             _maxGlobalChatLength = maxGlobalChatLength;
             _maxLocalChatLength = maxLocalChatLength;
             _isInitialized = true;
+            OnInitialized?.Invoke();
             Debug.Log($"{TAG} Initialized from server: DigCooldown={DigCooldown}, MaxGlobalChat={MaxGlobalChatLength}, MaxLocalChat={MaxLocalChatLength}");
         }
 
