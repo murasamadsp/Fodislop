@@ -162,7 +162,7 @@ namespace Fodinae.UI
             _followPlayer = true;
             _playerBlinkState = true;
             _playerBlinkTimer = 0f;
-            _lastPlayerPos = _player != null ? _player.Position : default;
+            _lastPlayerPos = new Vector2Int(int.MinValue, int.MinValue);
         }
 
         public void Hide()
@@ -473,7 +473,7 @@ namespace Fodinae.UI
                         touchLru: true);
                     if (chunk == null)
                     {
-                        return false;
+                        continue;
                     }
 
                     _chunkCache[chunkIndex] = chunk;
