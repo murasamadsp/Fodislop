@@ -120,9 +120,9 @@ namespace MinesServer.Networking.Connection.Client
                 new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
             };
         }
-
-        private const int _maxDepth = 200;
-        private bool _depthWarningActive;
+        // Depth warning/damage feature disabled in DummyConnection
+        // private const int _maxDepth = 200;
+        // private bool _depthWarningActive;
 
         private byte _clientMasterVolume = 255;
         private readonly Dictionary<string, byte> _clientSoundVolumes = new();
@@ -1107,7 +1107,8 @@ namespace MinesServer.Networking.Connection.Client
                 [CellType.Empty] = 100,
                 [CellType.Road] = 20,
             })));
-            OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
+            // Depth warning/damage feature disabled in DummyConnection
+            // OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
             var inventoryData = new Dictionary<ItemType, long>();
             foreach (var type in ItemRegistry.AllTypes)
@@ -1360,51 +1361,51 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket(tag)));
                 }
 
-                // Depth warning check
-                if (_y > _maxDepth)
-                {
-                    if (!_depthWarningActive)
-                    {
-                        _depthWarningActive = true;
-                        OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
-                            0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
-                    }
-                }
-                else
-                {
-                    if (_depthWarningActive)
-                    {
-                        _depthWarningActive = false;
-                        OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
-                    }
-                }
+                // Depth warning check disabled
+                // if (_y > _maxDepth)
+                // {
+                //     if (!_depthWarningActive)
+                //     {
+                //         _depthWarningActive = true;
+                //         OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
+                //             0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
+                //     }
+                // }
+                // else
+                // {
+                //     if (_depthWarningActive)
+                //     {
+                //         _depthWarningActive = false;
+                //         OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
+                //     }
+                // }
 
-                // Depth damage
-                if (_y > _maxDepth)
-                {
-                    int blocksBelow = _y - _maxDepth;
-                    int damage = (((blocksBelow - 1) / 10) + 1) * 10;
-                    _health = Math.Max(0, _health - damage);
-                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
-                    if (_health <= 0)
-                    {
-                        const ushort SPAWN_X = 25;
-                        const ushort SPAWN_Y = 50;
-                        var deathX = _x;
-                        var deathY = _y;
-                        _x = SPAWN_X;
-                        _y = SPAWN_Y;
-                        _rot = Direction.Up;
-                        _health = 500;
-                        OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                        OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
-                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                        {
-                            new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
-                            new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
-                        })));
-                    }
-                }
+                // Depth damage disabled
+                // if (_y > _maxDepth)
+                // {
+                //     int blocksBelow = _y - _maxDepth;
+                //     int damage = (((blocksBelow - 1) / 10) + 1) * 10;
+                //     _health = Math.Max(0, _health - damage);
+                //     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
+                //     if (_health <= 0)
+                //     {
+                //         const ushort SPAWN_X = 25;
+                //         const ushort SPAWN_Y = 50;
+                //         var deathX = _x;
+                //         var deathY = _y;
+                //         _x = SPAWN_X;
+                //         _y = SPAWN_Y;
+                //         _rot = Direction.Up;
+                //         _health = 500;
+                //         OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
+                //         OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
+                //         OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                //         {
+                //             new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
+                //             new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
+                //         })));
+                //     }
+                // }
             }
         }
 
