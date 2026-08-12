@@ -18,6 +18,9 @@ namespace Fodinae.Core.Interfaces
         void Dispose();
         bool IsInitialized();
         string GetWorldCodeName();
+
+#if UNITY_EDITOR
         void EnsureEditorInitialized();
+#endif
     }
 }

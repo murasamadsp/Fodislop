@@ -89,7 +89,6 @@
     <Compile Include="Assets\Scripts\Rendering\PostProcessing\PostProcessRenderPass.cs" />
     <Compile Include="Assets\Scripts\UI\Programmator\ProgrammatorTextureRegistry.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Annotations\IPostLateTickable.cs" />
-    <Compile Include="Assets\Scripts\Tests\UI\PlayerStatsModelTests.cs" />
     <Compile Include="Assets\Scripts\World\Rectangle.cs" />
     <Compile Include="Assets\Scripts\Rendering\PostProcessing\MotionBlurTag.cs" />
     <Compile Include="Assets\Scripts\Networking\Processors\WorldInitProcessor.cs" />
@@ -97,7 +96,6 @@
     <Compile Include="Assets\Scripts\UI\WorldMapRenderer.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\InstanceProviders\WorldInstanceProvider.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\SystemRegistrationBuilder.cs" />
-    <Compile Include="Assets\Scripts\Player\PlayerMovementBoundaryTests.cs" />
     <Compile Include="Assets\Scripts\Core\Interfaces\ITextureStorageService.cs" />
     <Compile Include="Assets\Scripts\Audio\Spatial\AudioSpatial.cs" />
     <Compile Include="Assets\Scripts\Networking\Connection\Client\DummyConnection.cs" />
@@ -148,7 +146,6 @@
     <Compile Include="Assets\Scripts\VContainer\Runtime\Annotations\IPostInitializable.cs" />
     <Compile Include="Assets\Scripts\Game\Managers\ServerAudioEventManager.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\FreeList.cs" />
-    <Compile Include="Assets\Scripts\Tests\World\TileBitmaskConverterTests.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Annotations\ILateTickable.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\IInstanceProvider.cs" />
     <Compile Include="Assets\Scripts\World\AtlasCell.cs" />
@@ -243,7 +240,6 @@
     <Compile Include="Assets\Scripts\Networking\Processors\OpenURLProcessor.cs" />
     <Compile Include="Assets\Scripts\UI\Programmator\RadialMenu.cs" />
     <Compile Include="Assets\Scripts\Rendering\PostProcessing\PostProcessVolumeRegistration.cs" />
-    <Compile Include="Assets\Scripts\Tests\World\CoordinateUtilsTests.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\TypeKeyHashTable2.cs" />
     <Compile Include="Assets\Scripts\Audio\Backend\FmodAudioBackend.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\RuntimeTypeCache.cs" />
@@ -299,7 +295,6 @@
     <Compile Include="Assets\Scripts\World\Terrain\TerrainRenderer.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Internal\CompositeDisposable.cs" />
     <Compile Include="Assets\Scripts\Effekseer\RuntimeEffekseerLoader.cs" />
-    <Compile Include="Assets\Scripts\Tests\UI\InventoryModelTests.cs" />
     <Compile Include="Assets\Scripts\UI\Builders\TextPacketBuilder.cs" />
     <Compile Include="Assets\Scripts\VContainer\Runtime\Unity\InstanceProviders\UnmanagedSystemInstanceProvider.cs" />
     <Compile Include="Assets\Scripts\UI\UIStack.cs" />
@@ -344,7 +339,7 @@
     <None Include="Assets\Shaders\PostProcessing\MotionBlur.compute" />
     <None Include="Assets\TextMesh Pro\Shaders\TMP_Bitmap.shader" />
     <None Include="Assets\Resources\Styles\Inventory.uss" />
-    <None Include="Assets\Shaders\PostProcessing\Velocity.shader" />
+    <None Include="Assets\Resources\Shaders\PostProcessing\Velocity.shader" />
     <None Include="Assets\Resources\Styles\Programmator.uss" />
     <None Include="Assets\TextMesh Pro\Shaders\TMPro_Mobile.cginc" />
     <None Include="Assets\TextMesh Pro\Shaders\TMP_SDF SSD.shader" />
@@ -353,7 +348,7 @@
     <None Include="Assets\Resources\Styles\PauseMenu.uss" />
     <None Include="Assets\Resources\Styles\Theme.uss" />
     <None Include="Assets\TextMesh Pro\Shaders\SDFFunctions.hlsl" />
-    <None Include="Assets\Shaders\DynamicEmission.shader" />
+    <None Include="Assets\Resources\Shaders\Lighting\DynamicEmission.shader" />
     <None Include="Assets\Resources\Styles\Panel.uss" />
     <None Include="Assets\Resources\Styles\Button.uss" />
     <None Include="Assets\TextMesh Pro\Shaders\TMP_SDF-Surface.shader" />
