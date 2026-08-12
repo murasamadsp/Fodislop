@@ -222,7 +222,7 @@ namespace Fodinae.Player.Logic
 
         public event Action<bool>? OnCollisionChanged;
 
-        internal static bool IsWithinWorldBounds(Vector2Int position, int worldWidth, int worldHeight)
+        public static bool IsWithinWorldBounds(Vector2Int position, int worldWidth, int worldHeight)
         {
             return worldWidth > 0 &&
                    worldHeight > 0 &&

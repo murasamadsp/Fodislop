@@ -1467,6 +1467,7 @@ namespace Fodinae.World.Lighting
         private void CreateDynamicEmissionMaterial()
         {
             Shader dynamicEmissionShader = Shader.Find("Hidden/Fodinae/DynamicEmission") ??
+                Resources.Load<Shader>("Shaders/Lighting/DynamicEmission") ??
                 throw new InvalidOperationException("The dynamic emission shader is missing.");
             _dynamicEmissionMaterial = new Material(dynamicEmissionShader)
             {
