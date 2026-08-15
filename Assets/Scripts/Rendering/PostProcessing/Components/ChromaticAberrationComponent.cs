@@ -11,7 +11,7 @@ namespace Fodinae.Rendering.PostProcessing
     public class ChromaticAberrationComponent : VolumeComponent, IPostProcessComponent
     {
         [Tooltip("Radial RGB separation toward the screen edges. Zero disables the effect.")]
-        public ClampedFloatParameter intensity = new(0f, 0f, 1f);
+        public ClampedFloatParameter intensity = PostProcessDefaults.ChromaticAberrationIntensity();
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;

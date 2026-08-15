@@ -8,6 +8,54 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
+    internal static class PostProcessDefaults
+    {
+        public static ClampedFloatParameter BloomIntensity() => new(0f, 0f, 5f);
+
+        public static ClampedFloatParameter BloomThreshold() => new(0.9f, 0f, 2f);
+
+        public static ClampedFloatParameter BloomScatter() => new(0.7f, 0.1f, 1f);
+
+        public static ColorParameter BloomTint() => new(Color.white);
+
+        public static ClampedFloatParameter VignetteIntensity() => new(0f, 0f, 1f);
+
+        public static ColorParameter VignetteColor() => new(Color.black);
+
+        public static ClampedFloatParameter VignetteSmoothness() => new(0.2f, 0.01f, 1f);
+
+        public static Vector2Parameter VignetteCenter() => new(new Vector2(0.5f, 0.5f));
+
+        public static ClampedFloatParameter ChromaticAberrationIntensity() => new(0f, 0f, 1f);
+
+        public static ClampedFloatParameter ColorGradingExposure() => new(0f, -4f, 4f);
+
+        public static ColorParameter ColorGradingFilter() => new(Color.white);
+
+        public static ClampedFloatParameter ColorGradingContrast() => new(0f, -1f, 1f);
+
+        public static ClampedFloatParameter ColorGradingSaturation() => new(1f, 0f, 2f);
+
+        public static BoolParameter ColorGradingToneMapping() => new(true);
+
+        public static ClampedFloatParameter ColorGradingWhitePoint() => new(1f, 0.25f, 8f);
+
+        public static ClampedFloatParameter EigengrauIntensity() => new(0.2f, 0f, 1f);
+
+        public static ColorParameter EigengrauColor() =>
+            new(new Color(0.018f, 0.02f, 0.028f, 1f));
+
+        public static ClampedFloatParameter EigengrauDarknessThreshold() => new(0.18f, 0.02f, 0.75f);
+
+        public static ClampedFloatParameter EigengrauNoiseScale() => new(1f, 0.75f, 2f);
+
+        public static ClampedFloatParameter EigengrauAnimationSpeed() => new(18f, 1f, 60f);
+
+        public static ClampedFloatParameter MotionBlurIntensity() => new(0f, 0f, 1f);
+
+        public static ClampedIntParameter MotionBlurMaxSamples() => new(8, 2, 32);
+    }
+
     [DisallowMultipleComponent]
     public class PostProcessController : MonoBehaviour
     {
@@ -387,7 +435,66 @@ namespace Fodinae.Rendering.PostProcessing
                 target = profile.Add<T>();
             }
 
-            target.SetAllOverridesTo(true);
+            EnsureParameters(target);
+            EnableOverrides(target);
+        }
+
+        private static void EnsureParameters(VolumeComponent component)
+        {
+            switch (component)
+            {
+                case BloomComponent bloom:
+                    bloom.intensity ??= PostProcessDefaults.BloomIntensity();
+                    bloom.threshold ??= PostProcessDefaults.BloomThreshold();
+                    bloom.scatter ??= PostProcessDefaults.BloomScatter();
+                    bloom.tint ??= PostProcessDefaults.BloomTint();
+                    break;
+                case VignetteComponent vignette:
+                    vignette.intensity ??= PostProcessDefaults.VignetteIntensity();
+                    vignette.color ??= PostProcessDefaults.VignetteColor();
+                    vignette.smoothness ??= PostProcessDefaults.VignetteSmoothness();
+                    vignette.center ??= PostProcessDefaults.VignetteCenter();
+                    break;
+                case ChromaticAberrationComponent chromaticAberration:
+                    chromaticAberration.intensity ??= PostProcessDefaults.ChromaticAberrationIntensity();
+                    break;
+                case ColorGradingComponent colorGrading:
+                    colorGrading.exposure ??= PostProcessDefaults.ColorGradingExposure();
+                    colorGrading.colorFilter ??= PostProcessDefaults.ColorGradingFilter();
+                    colorGrading.contrast ??= PostProcessDefaults.ColorGradingContrast();
+                    colorGrading.saturation ??= PostProcessDefaults.ColorGradingSaturation();
+                    colorGrading.toneMapping ??= PostProcessDefaults.ColorGradingToneMapping();
+                    colorGrading.toneMappingWhitePoint ??= PostProcessDefaults.ColorGradingWhitePoint();
+                    break;
+                case EigengrauComponent eigengrau:
+                    eigengrau.intensity ??= PostProcessDefaults.EigengrauIntensity();
+                    eigengrau.color ??= PostProcessDefaults.EigengrauColor();
+                    eigengrau.darknessThreshold ??= PostProcessDefaults.EigengrauDarknessThreshold();
+                    eigengrau.noiseScale ??= PostProcessDefaults.EigengrauNoiseScale();
+                    eigengrau.animationSpeed ??= PostProcessDefaults.EigengrauAnimationSpeed();
+                    break;
+                case MotionBlurComponent motionBlur:
+                    motionBlur.intensity ??= PostProcessDefaults.MotionBlurIntensity();
+                    motionBlur.maxSamples ??= PostProcessDefaults.MotionBlurMaxSamples();
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unsupported post-process component type '{component.GetType().FullName}'.");
+            }
+        }
+
+        private static void EnableOverrides(VolumeComponent component)
+        {
+            foreach (VolumeParameter parameter in component.parameters)
+            {
+                if (parameter == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Post-process component '{component.GetType().FullName}' contains a null parameter.");
+                }
+
+                parameter.overrideState = true;
+            }
         }
     }
 }
