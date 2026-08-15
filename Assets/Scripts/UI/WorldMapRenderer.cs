@@ -144,7 +144,7 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            _scrollAction?.Dispose();
+            DisposeScrollAction();
             if (_mapTexture != null)
             {
                 Destroy(_mapTexture);
@@ -166,6 +166,24 @@ namespace Fodinae.UI
                 _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
                 _subscribedCellLayer = null;
             }
+        }
+
+        protected void OnDisable()
+        {
+            DisposeScrollAction();
+        }
+
+        private void DisposeScrollAction()
+        {
+            if (_scrollAction == null)
+            {
+                return;
+            }
+
+            _scrollAction.performed -= OnScroll;
+            _scrollAction.Disable();
+            _scrollAction.Dispose();
+            _scrollAction = null;
         }
 
         private void OnLocalPlayerSpawned(PlayerMovementController player)

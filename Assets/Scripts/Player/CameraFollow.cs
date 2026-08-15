@@ -109,6 +109,14 @@ namespace Fodinae.Player
             InitializeInput();
         }
 
+        protected void OnEnable()
+        {
+            if (_camera != null && _scrollAction == null)
+            {
+                InitializeInput();
+            }
+        }
+
         private void InitializeInput()
         {
             _scrollAction = new InputAction("Scroll", binding: "<Mouse>/scroll");
@@ -134,8 +142,24 @@ namespace Fodinae.Player
                 _localPlayerSpawnSubscription = false;
             }
 
-            _scrollAction?.Disable();
-            _scrollAction?.Dispose();
+            DisposeScrollAction();
+        }
+
+        protected void OnDisable()
+        {
+            DisposeScrollAction();
+        }
+
+        private void DisposeScrollAction()
+        {
+            if (_scrollAction == null)
+            {
+                return;
+            }
+
+            _scrollAction.Disable();
+            _scrollAction.Dispose();
+            _scrollAction = null;
         }
 
         private void HandlePlayerMoved(Vector2Int oldPosition, Vector2Int newPosition)

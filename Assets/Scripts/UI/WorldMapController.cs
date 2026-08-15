@@ -78,8 +78,25 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            _mapToggleAction?.Dispose();
+            DisposeMapToggleAction();
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+        }
+
+        protected void OnDisable()
+        {
+            DisposeMapToggleAction();
+        }
+
+        private void DisposeMapToggleAction()
+        {
+            if (_mapToggleAction == null)
+            {
+                return;
+            }
+
+            _mapToggleAction.Disable();
+            _mapToggleAction.Dispose();
+            _mapToggleAction = null;
         }
 
         private void OnLocalPlayerSpawned(PlayerMovementController player)

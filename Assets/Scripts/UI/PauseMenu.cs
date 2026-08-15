@@ -77,6 +77,14 @@ namespace Fodinae.UI
             TryInitialize();
         }
 
+        protected void OnEnable()
+        {
+            if (_initialized)
+            {
+                EnsureEscapeAction();
+            }
+        }
+
         protected void Update()
         {
             if (!_initialized)
@@ -100,9 +108,7 @@ namespace Fodinae.UI
                     "[PauseMenu] Required DI services and UIDocument must be initialized before building pause menu.");
             }
 
-            _escapeAction = new InputAction("Escape", binding: "<Keyboard>/escape");
-            _escapeAction.performed += _ => ToggleMenu();
-            _escapeAction.Enable();
+            EnsureEscapeAction();
 
             _originalScale = _doc.panelSettings.scale;
 
@@ -135,7 +141,41 @@ namespace Fodinae.UI
                 }
             }
 
-            _escapeAction?.Dispose();
+            DisposeEscapeAction();
+        }
+
+        protected void OnDisable()
+        {
+            DisposeEscapeAction();
+        }
+
+        private void EnsureEscapeAction()
+        {
+            if (_escapeAction != null)
+            {
+                return;
+            }
+
+            _escapeAction = new InputAction("Escape", binding: "<Keyboard>/escape");
+            _escapeAction.performed += OnEscapePerformed;
+            _escapeAction.Enable();
+        }
+
+        private void DisposeEscapeAction()
+        {
+            if (_escapeAction == null)
+            {
+                return;
+            }
+
+            _escapeAction.performed -= OnEscapePerformed;
+            _escapeAction.Dispose();
+            _escapeAction = null;
+        }
+
+        private void OnEscapePerformed(InputAction.CallbackContext _)
+        {
+            ToggleMenu();
         }
 
         private static VisualElement CreateSlider(string labelText, float initialValue, System.Action<float> onChange, float min, float max)
