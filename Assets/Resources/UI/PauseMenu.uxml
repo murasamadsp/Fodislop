@@ -4,7 +4,7 @@
 
         <ui:VisualElement name="MainPage" class="pause-panel pause-page">
             <ui:Label text="Меню" class="pause-title" />
-            <ui:ScrollView name="MainPageScroll" class="pause-scroll" mode="Vertical" />
+            <ui:ScrollView name="MainPageScroll" class="pause-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
         </ui:VisualElement>
 
         <ui:VisualElement name="SettingsPage" class="pause-panel pause-page pause-settings">
@@ -18,11 +18,11 @@
                     <ui:Button name="DebugTab" text="Debug" class="settings-tab settings-tab--debug" />
                 </ui:VisualElement>
                 <ui:VisualElement name="SettingsContent" class="settings-content">
-                    <ui:ScrollView name="GraphicsScroll" class="pause-scroll settings-page" mode="Vertical" />
-                    <ui:ScrollView name="DisplayScroll" class="pause-scroll settings-page" mode="Vertical" />
-                    <ui:ScrollView name="AudioScroll" class="pause-scroll settings-page" mode="Vertical" />
-                    <ui:ScrollView name="InterfaceScroll" class="pause-scroll settings-page" mode="Vertical" />
-                    <ui:ScrollView name="DebugScroll" class="pause-scroll settings-page" mode="Vertical" />
+                    <ui:ScrollView name="GraphicsScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+                    <ui:ScrollView name="DisplayScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+                    <ui:ScrollView name="AudioScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+                    <ui:ScrollView name="InterfaceScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+                    <ui:ScrollView name="DebugScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:Button name="SettingsBack" text="Назад" class="pause-btn" />

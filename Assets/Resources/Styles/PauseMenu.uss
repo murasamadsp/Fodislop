@@ -84,24 +84,31 @@
 .settings-navigation {
     width: 150px;
     min-width: 150px;
+    flex-shrink: 0;
     padding-right: 12px;
     border-right-width: 1px;
     border-right-color: rgba(90, 90, 90, 0.65);
 }
 
 .settings-content {
+    position: relative;
     flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
     min-width: 0;
     min-height: 0;
     padding-left: 14px;
+    overflow: hidden;
 }
 
 .settings-page {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    min-height: 0;
 }
 
 .settings-tab {
