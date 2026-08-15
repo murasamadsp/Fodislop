@@ -60,19 +60,33 @@ namespace Fodinae.UI
         private bool _renderRequested;
         private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
+        private WorldLayer<CellType>? _subscribedCellLayer;
 
         private float _playerBlinkTimer;
         private bool _playerBlinkState = true;
 
         protected void Awake()
         {
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
             _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
         }
 
         protected void Start()
         {
-            _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
+            _player = PlayerMovementController.LocalPlayer;
+            if (_player == null)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+            }
+            else
+            {
+                _player.OnPlayerMoved += OnPlayerMoved;
+            }
             if (_storage == null || _manager == null)
             {
                 Debug.LogError("[WorldMapRenderer] MapStorage or MapManager not available");
@@ -88,9 +102,7 @@ namespace Fodinae.UI
             int h = _manager.WorldHeight;
             if (_storage is MapStorage mapStorage && mapStorage.CellLayer != null)
             {
-                _cellLayer = mapStorage.CellLayer;
-                _chunkSize = _cellLayer.ChunkSize;
-                _heightChunks = _cellLayer.HeightChunks;
+                BindCellLayer(mapStorage.CellLayer);
             }
 
             // Start at a local view (1 world cell = 1 pixel) centered on the player,
@@ -124,6 +136,75 @@ namespace Fodinae.UI
             {
                 Destroy(_canvas.gameObject);
             }
+
+            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            if (_player != null)
+            {
+                _player.OnPlayerMoved -= OnPlayerMoved;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                _subscribedCellLayer = null;
+            }
+        }
+
+        private void OnLocalPlayerSpawned(PlayerMovementController player)
+        {
+            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _player = player;
+            _player.OnPlayerMoved += OnPlayerMoved;
+            _lastPlayerPos = new Vector2Int(int.MinValue, int.MinValue);
+            _renderRequested = true;
+        }
+
+        private void OnPlayerMoved(Vector2Int oldPosition, Vector2Int newPosition)
+        {
+            _lastPlayerPos = newPosition;
+            if (_followPlayer)
+            {
+                _viewCenterX = newPosition.x;
+                _viewCenterY = newPosition.y;
+                _renderRequested = true;
+            }
+        }
+
+        private void OnChunkLoaded(int serverX, int serverY, int width, int height)
+        {
+            _chunkCache.Clear();
+            _chunkCacheOrder.Clear();
+            _renderRequested = true;
+        }
+
+        private void BindCellLayer(WorldLayer<CellType>? cellLayer)
+        {
+            if (ReferenceEquals(_subscribedCellLayer, cellLayer))
+            {
+                return;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+            }
+
+            _subscribedCellLayer = cellLayer;
+            _cellLayer = cellLayer;
+            _chunkCache.Clear();
+            _chunkCacheOrder.Clear();
+
+            if (_subscribedCellLayer != null)
+            {
+                _chunkSize = _subscribedCellLayer.ChunkSize;
+                _heightChunks = _subscribedCellLayer.HeightChunks;
+                _subscribedCellLayer.ChunkLoaded += OnChunkLoaded;
+            }
+            else
+            {
+                _chunkSize = 0;
+                _heightChunks = 0;
+            }
         }
 
         protected void Update()
@@ -150,6 +231,11 @@ namespace Fodinae.UI
         {
             if (_storage == null || _manager == null)
             {
+                if (!Fodinae.Core.ServiceLocator.IsInitialized)
+                {
+                    return;
+                }
+
                 _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
                 _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
                 if (_storage == null || _manager == null)
@@ -314,7 +400,18 @@ namespace Fodinae.UI
             if (_storage is MapStorage mapStorage &&
                 mapStorage.Revision != _lastRenderedStorageRevision)
             {
+                _chunkCache.Clear();
+                _chunkCacheOrder.Clear();
                 _renderRequested = true;
+            }
+
+            if (_storage is MapStorage currentStorage &&
+                !ReferenceEquals(_cellLayer, currentStorage.CellLayer))
+            {
+                BindCellLayer(currentStorage.CellLayer);
+                _renderRequested = true;
+                _initialRenderDone = false;
+                _lastRenderedStorageRevision = -1;
             }
 
             if (!_renderRequested)

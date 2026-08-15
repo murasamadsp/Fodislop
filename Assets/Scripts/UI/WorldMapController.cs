@@ -32,7 +32,11 @@ namespace Fodinae.UI
         protected void Start()
         {
             _cameraFollow = UnityEngine.Object.FindAnyObjectByType<CameraFollow>();
-            _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
+            _player = PlayerMovementController.LocalPlayer;
+            if (_player == null)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+            }
             _terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
             _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
             _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>();
@@ -54,6 +58,13 @@ namespace Fodinae.UI
         protected void OnDestroy()
         {
             _mapToggleAction?.Dispose();
+            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+        }
+
+        private void OnLocalPlayerSpawned(PlayerMovementController player)
+        {
+            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _player = player;
         }
 
         private void ToggleMapMode()

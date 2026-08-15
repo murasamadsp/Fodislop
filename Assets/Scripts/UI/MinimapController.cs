@@ -56,6 +56,8 @@ namespace Fodinae.UI
         private bool _ready;
         private bool _initialRefreshDone;
         private long _lastRenderedStorageRevision = -1;
+        private bool _chunkLoadRefreshRequested;
+        private WorldLayer<CellType>? _subscribedCellLayer;
 
         // Toggle state
         private bool _isVisible = true;
@@ -129,11 +131,26 @@ namespace Fodinae.UI
                 TryInitialize();
             }
 
+            if (_ready && _mapStorage != null &&
+                !ReferenceEquals(_cellLayer, _mapStorage.CellLayer))
+            {
+                _ready = false;
+                TryInitialize();
+            }
+
             if (_ready && _isVisible && _player != null && _player.HasServerPosition &&
                 _mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)
             {
+                _chunkCache.Clear();
                 RefreshTexture(_player.Position.x, _player.Position.y);
                 _lastRenderedStorageRevision = _mapStorage.Revision;
+            }
+
+            if (_chunkLoadRefreshRequested && _ready && _isVisible &&
+                _player != null && _player.HasServerPosition)
+            {
+                _chunkLoadRefreshRequested = false;
+                RefreshTexture(_player.Position.x, _player.Position.y);
             }
 
             if (Keyboard.current != null && Keyboard.current.nKey.wasPressedThisFrame)
@@ -144,6 +161,11 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             if (_mapManager == null)
             {
                 _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
@@ -217,6 +239,21 @@ namespace Fodinae.UI
             if (_cellLayer == null)
             {
                 return;
+            }
+
+            if (!ReferenceEquals(_subscribedCellLayer, _cellLayer))
+            {
+                if (_subscribedCellLayer != null)
+                {
+                    _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                }
+
+                _subscribedCellLayer = _cellLayer;
+                _subscribedCellLayer.ChunkLoaded += OnChunkLoaded;
+                _chunkCache.Clear();
+                _chunkLoadRefreshRequested = true;
+                _initialRefreshDone = false;
+                _lastRenderedStorageRevision = -1;
             }
 
             _worldWidth = _mapManager.WorldWidth;
@@ -342,6 +379,12 @@ namespace Fodinae.UI
             }
         }
 
+        private void OnChunkLoaded(int serverX, int serverY, int width, int height)
+        {
+            _chunkCache.Clear();
+            _chunkLoadRefreshRequested = true;
+        }
+
         private void RefreshTexture(int playerX, int playerY)
         {
             int halfSize = _uiSize / 2;
@@ -456,6 +499,12 @@ namespace Fodinae.UI
             if (_player != null)
             {
                 _player.OnPlayerMoved -= OnPlayerMoved;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                _subscribedCellLayer = null;
             }
 
             if (_minimapTexture != null)
