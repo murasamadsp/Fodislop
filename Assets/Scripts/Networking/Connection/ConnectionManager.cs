@@ -158,9 +158,7 @@ namespace Fodinae.Networking.Connection
             Connection.Disconnect();
             Connection = null;
 
-            while (_packetQueue.TryDequeue(out _))
-            {
-            }
+            ClearPendingPackets();
 
             _mapManager.ResetWorldState();
             (_worldStorage as MapStorage)?.Dispose();
@@ -240,9 +238,7 @@ namespace Fodinae.Networking.Connection
 
         private void OnDisconnected()
         {
-            while (_packetQueue.TryDequeue(out _))
-            {
-            }
+            ClearPendingPackets();
 
             _mapManager.ResetWorldState();
             (_worldStorage as MapStorage)?.Dispose();
@@ -254,6 +250,21 @@ namespace Fodinae.Networking.Connection
                 _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
                 _gameManager?.SetState(Game.Managers.GameState.Disconnected);
                 ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
+            }
+        }
+
+        private void ClearPendingPackets()
+        {
+            int discardedCount = 0;
+            while (_packetQueue.TryDequeue(out _))
+            {
+                discardedCount++;
+            }
+
+            if (discardedCount > 0)
+            {
+                Debug.LogWarning(
+                    $"[ConnectionManager] Discarded {discardedCount} stale packet(s) after disconnect.");
             }
         }
 
