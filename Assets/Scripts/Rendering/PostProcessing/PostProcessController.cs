@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Reflection;
 using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -485,12 +486,20 @@ namespace Fodinae.Rendering.PostProcessing
 
         private static void EnableOverrides(VolumeComponent component)
         {
-            foreach (VolumeParameter parameter in component.parameters)
+            FieldInfo[] fields = component.GetType().GetFields(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            foreach (FieldInfo field in fields)
             {
-                if (parameter == null)
+                if (!typeof(VolumeParameter).IsAssignableFrom(field.FieldType))
+                {
+                    continue;
+                }
+
+                object? value = field.GetValue(component);
+                if (value is not VolumeParameter parameter)
                 {
                     throw new InvalidOperationException(
-                        $"Post-process component '{component.GetType().FullName}' contains a null parameter.");
+                        $"Post-process component '{component.GetType().FullName}' has a null parameter field '{field.Name}'.");
                 }
 
                 parameter.overrideState = true;
