@@ -40,8 +40,6 @@ namespace Fodinae.UI
         private WorldLayer<CellType>? _cellLayer;
         private int _worldWidth;
         private int _worldHeight;
-        private int _chunkSize;
-        private int _heightChunks;
 
         // Pixel buffer and cell color cache
         private Color32[]? _pixelColors;
@@ -64,7 +62,7 @@ namespace Fodinae.UI
 
         private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
 
-        private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
+        private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
         private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
         private static readonly Color32 MarkerColor = Color.white;
         private static readonly Color32 CenterColor = Color.red;
@@ -259,8 +257,6 @@ namespace Fodinae.UI
 
             _worldWidth = _mapManager.WorldWidth;
             _worldHeight = _mapManager.WorldHeight;
-            _chunkSize = _cellLayer.ChunkSize;
-            _heightChunks = _cellLayer.HeightChunks;
             CacheCellColors();
             _ready = true;
             SetVisible(_isVisible);

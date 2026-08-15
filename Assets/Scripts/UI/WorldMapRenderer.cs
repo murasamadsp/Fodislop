@@ -32,10 +32,9 @@ namespace Fodinae.UI
         private Color32[]? _pixelBuffer;
         private Color32[] _cellColorTable = new Color32[256];
         private Color32 _defaultColor = new Color32(48, 48, 48, 255);
-        private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
+        private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
         private WorldLayer<CellType>? _cellLayer;
         private int _chunkSize = 32;
-        private int _heightChunks;
         private readonly MapCellSampler _cellSampler = new();
 
         private float _viewCenterX;
@@ -199,13 +198,11 @@ namespace Fodinae.UI
             if (_subscribedCellLayer != null)
             {
                 _chunkSize = _subscribedCellLayer.ChunkSize;
-                _heightChunks = _subscribedCellLayer.HeightChunks;
                 _subscribedCellLayer.ChunkLoaded += OnChunkLoaded;
             }
             else
             {
                 _chunkSize = 0;
-                _heightChunks = 0;
             }
         }
 

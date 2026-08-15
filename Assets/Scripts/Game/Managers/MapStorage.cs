@@ -148,8 +148,13 @@ namespace Fodinae.Game.Managers
 
         public void SetCell(int x, int y, CellType type)
         {
-            if (!_isInitialized || _cellLayer == null ||
-                _cellLayer.GetCellSync(x, y, touchLru: true) == type)
+            if (!_isInitialized || _cellLayer == null)
+            {
+                throw new InvalidOperationException(
+                    $"[MapStorage] SetCell called before world initialization: ({x},{y}).");
+            }
+
+            if (_cellLayer.GetCellSync(x, y, touchLru: true) == type)
             {
                 return;
             }

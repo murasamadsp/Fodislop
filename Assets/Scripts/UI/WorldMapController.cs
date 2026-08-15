@@ -74,6 +74,12 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                throw new InvalidOperationException(
+                    "[WorldMapController] Map toggle was requested before the VContainer resolver was initialized.");
+            }
+
             var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (mapStorage == null || !mapStorage.IsReady)
             {
