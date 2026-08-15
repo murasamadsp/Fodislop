@@ -28,6 +28,7 @@ namespace Fodinae.Core
         }
 
         public ClientConfig Config { get; private set; } = null!;
+        private bool _initialized;
 
         [Inject]
         private IProjectDefaults _projectDefaults = null!;
@@ -44,7 +45,32 @@ namespace Fodinae.Core
 
         private void Start()
         {
+            TryInitialize();
+        }
+
+        private void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_projectDefaults == null)
+            {
+                throw new InvalidOperationException(
+                    "[ClientConfigManager] ProjectDefaults must be injected before loading client config.");
+            }
+
             Load();
+            _initialized = true;
         }
 
         public void Load()
