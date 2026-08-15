@@ -52,7 +52,10 @@ namespace Fodinae
             if (Time.unscaledTime >= _nextMemorySampleTime)
             {
                 _nextMemorySampleTime = Time.unscaledTime + 5f;
-                WriteMemorySample();
+                if (ServiceLocator.IsInitialized)
+                {
+                    WriteMemorySample();
+                }
             }
 
             if (Keyboard.current != null && Keyboard.current.f12Key.wasPressedThisFrame)
@@ -63,6 +66,11 @@ namespace Fodinae
 
         private static void WriteMemorySample()
         {
+            if (!ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             var lighting = TerrariaLightingEngine.Instance;
             string line =
@@ -87,6 +95,13 @@ namespace Fodinae
 
         private void WriteSnapshot()
         {
+            if (!ServiceLocator.IsInitialized)
+            {
+                Debug.LogWarning(
+                    "[DiagnosticRunner] Snapshot skipped: VContainer resolver is not initialized yet.");
+                return;
+            }
+
             var sb = new StringBuilder();
             sb.AppendLine($"=== SNAPSHOT frame={Time.frameCount} time={Time.time:F2}s ===");
 

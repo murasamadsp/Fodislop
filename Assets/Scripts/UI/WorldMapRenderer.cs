@@ -372,9 +372,11 @@ namespace Fodinae.UI
             {
                 int rowStart = py * texW;
 
-                // World Y grows downward (server Top-Left). Screen top (py = 0)
-                // must show the smallest server Y, so worldY grows with py.
-                float worldY = cy + ((py + 0.5f - (texH * 0.5f)) * cp);
+                // Texture2D row zero is the bottom of the displayed RawImage.
+                // Server coordinates use a top-left origin, so the bottom texture
+                // row must sample the largest server Y in the viewport.
+                float screenRowFromTop = (texH - 1 - py) + 0.5f;
+                float worldY = cy + ((screenRowFromTop - (texH * 0.5f)) * cp);
                 int serverY = Mathf.FloorToInt(worldY);
 
                 for (int px = 0; px < texW; px++)
@@ -408,7 +410,7 @@ namespace Fodinae.UI
                     playerPos.y + 1f >= topServerY && playerPos.y <= bottomServerY)
                 {
                     float pixelX = ((playerPos.x - cx) / cp) + (texW * 0.5f);
-                    float pixelY = ((playerPos.y - cy) / cp) + (texH * 0.5f);
+                    float pixelY = (texH * 0.5f) - ((playerPos.y - cy) / cp);
                     float markerSize = Mathf.Max(1f, 1f / cp);
 
                     int pxStart = Mathf.Clamp(Mathf.RoundToInt(pixelX), 0, texW - 1);

@@ -54,6 +54,8 @@ namespace Fodinae.UI
         private Vector2Int _lastUpdatePos; public Vector2Int LastUpdatePos => _lastUpdatePos;
         private float _lastUpdateTime;
         private bool _ready;
+        private bool _initialRefreshDone;
+        private long _lastRenderedStorageRevision = -1;
 
         // Toggle state
         private bool _isVisible = true;
@@ -122,9 +124,16 @@ namespace Fodinae.UI
         /// </summary>
         protected void Update()
         {
-            if (!_ready)
+            if (!_ready || _player == null || !_player.HasServerPosition)
             {
                 TryInitialize();
+            }
+
+            if (_ready && _isVisible && _player != null && _player.HasServerPosition &&
+                _mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)
+            {
+                RefreshTexture(_player.Position.x, _player.Position.y);
+                _lastRenderedStorageRevision = _mapStorage.Revision;
             }
 
             if (Keyboard.current != null && Keyboard.current.nKey.wasPressedThisFrame)
@@ -155,15 +164,25 @@ namespace Fodinae.UI
                 return;
             }
 
-            InitializeWorldState();
+            _player ??= PlayerMovementController.LocalPlayer;
 
-            if (_player != null)
+            if (!_ready)
+            {
+                InitializeWorldState();
+            }
+
+            if (_player != null && _player.HasServerPosition && !_initialRefreshDone)
             {
                 UpdateCoordinatesText(_player.Position.x, _player.Position.y);
                 if (_isVisible)
                 {
                     RefreshTexture(_player.Position.x, _player.Position.y);
                 }
+
+                _lastUpdatePos = _player.Position;
+                _lastUpdateTime = Time.time;
+                _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
+                _initialRefreshDone = true;
             }
         }
 
@@ -319,6 +338,7 @@ namespace Fodinae.UI
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
                 RefreshTexture(newPos.x, newPos.y);
+                _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
             }
         }
 
@@ -453,6 +473,7 @@ namespace Fodinae.UI
                 _lastUpdateTime = Time.time;
                 _lastUpdatePos = _player.Position;
                 RefreshTexture(_player.Position.x, _player.Position.y);
+                _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
             }
 
         }
