@@ -61,6 +61,9 @@ namespace Fodinae.UI
         private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
         private WorldLayer<CellType>? _subscribedCellLayer;
+        private int _boundWorldWidth;
+        private int _boundWorldHeight;
+        private string _boundWorldCodeName = string.Empty;
 
         private float _playerBlinkTimer;
         private bool _playerBlinkState = true;
@@ -100,6 +103,7 @@ namespace Fodinae.UI
 
             int w = _manager.WorldWidth;
             int h = _manager.WorldHeight;
+            BindWorldDimensions(w, h);
             if (_storage is MapStorage mapStorage && mapStorage.CellLayer != null)
             {
                 BindCellLayer(mapStorage.CellLayer);
@@ -205,6 +209,19 @@ namespace Fodinae.UI
                 _chunkSize = 0;
                 _heightChunks = 0;
             }
+        }
+
+        private void BindWorldDimensions(int worldWidth, int worldHeight)
+        {
+            if (worldWidth <= 0 || worldHeight <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"[WorldMapRenderer] Invalid world dimensions: {worldWidth}x{worldHeight}.");
+            }
+
+            _boundWorldWidth = worldWidth;
+            _boundWorldHeight = worldHeight;
+            _boundWorldCodeName = _manager?.WorldCodeName ?? string.Empty;
         }
 
         protected void Update()
@@ -415,6 +432,23 @@ namespace Fodinae.UI
                 _renderRequested = true;
                 _initialRenderDone = false;
                 _lastRenderedStorageRevision = -1;
+            }
+
+            if (_manager != null &&
+                (_manager.WorldWidth != _boundWorldWidth ||
+                 _manager.WorldHeight != _boundWorldHeight ||
+                 !string.Equals(_manager.WorldCodeName, _boundWorldCodeName, StringComparison.Ordinal)))
+            {
+                BindWorldDimensions(_manager.WorldWidth, _manager.WorldHeight);
+                InitColorTable();
+                BindCellLayer((_storage as MapStorage)?.CellLayer);
+                _cellsPerPixel = 1f;
+                _maxCellsPerPixel = ComputeMaxZoomOut(_boundWorldWidth, _boundWorldHeight);
+                _viewCenterX = _boundWorldWidth * 0.5f;
+                _viewCenterY = _boundWorldHeight * 0.5f;
+                _lastRenderedStorageRevision = -1;
+                _initialRenderDone = false;
+                _renderRequested = true;
             }
 
             if (!_renderRequested)
