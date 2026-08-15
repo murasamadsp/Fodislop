@@ -425,7 +425,7 @@ namespace Fodinae.World
                 {
                     float hue = (float)random.NextDouble();
                     float value = (((x / 4) + (y / 4)) & 1) == 0 ? 0.9f : 0.45f;
-                    pixels[y * _cellTextureSize + x] = Color.HSVToRGB(hue, 0.85f, value);
+                    pixels[(y * _cellTextureSize) + x] = Color.HSVToRGB(hue, 0.85f, value);
                 }
             }
 

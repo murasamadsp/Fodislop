@@ -58,6 +58,7 @@ namespace Fodinae.UI
                 PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
                 _playerSpawnSubscription = true;
             }
+
             _terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
             _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
             _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>();

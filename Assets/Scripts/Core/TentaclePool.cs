@@ -94,7 +94,14 @@ public static class TentaclePool
             var line = _pool.Dequeue();
             if (line != null)
             {
-                Object.Destroy(line.gameObject);
+                if (Application.isPlaying)
+                {
+                    Object.Destroy(line.gameObject);
+                }
+                else
+                {
+                    Object.DestroyImmediate(line.gameObject);
+                }
             }
         }
     }

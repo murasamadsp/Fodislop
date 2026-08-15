@@ -57,7 +57,14 @@ namespace Fodinae.Core
             {
                 if (mat != null)
                 {
-                    UnityEngine.Object.Destroy(mat);
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(mat);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(mat);
+                    }
                 }
             }
 

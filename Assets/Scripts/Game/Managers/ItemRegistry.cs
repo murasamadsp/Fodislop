@@ -69,7 +69,14 @@ namespace Fodinae.Game.Managers
             {
                 if (texture != null)
                 {
-                    Object.Destroy(texture);
+                    if (Application.isPlaying)
+                    {
+                        Object.Destroy(texture);
+                    }
+                    else
+                    {
+                        Object.DestroyImmediate(texture);
+                    }
                 }
             }
 

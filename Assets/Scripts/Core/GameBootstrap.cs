@@ -52,6 +52,7 @@ namespace Fodinae.Core
                 throw new InvalidOperationException(
                     "NetworkService failed to subscribe to the connection packet stream.");
             }
+
             _resolver.Resolve<MapManager>();
             var packetHandler = _resolver.Resolve<PacketHandler>();
             packetHandler.EnsureInitialized();
@@ -100,6 +101,7 @@ namespace Fodinae.Core
             {
                 terrain.EnsureSubscriptions();
             }
+
             ValidateStartup(_resolver);
         }
 
