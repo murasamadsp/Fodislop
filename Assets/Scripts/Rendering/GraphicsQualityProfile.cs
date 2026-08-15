@@ -50,10 +50,10 @@ namespace Fodinae.Rendering
             int lightingMaximumLightCount,
             int lightingMaximumRaySteps,
             float lightingUpdatesPerSecond,
-            int lightingCascadeAtlasLimit = 512,
-            float renderScale = 1f,
-            int vSyncCount = 1,
-            int antiAliasing = 0)
+            int lightingCascadeAtlasLimit,
+            float renderScale,
+            int vSyncCount,
+            int antiAliasing)
         {
             LightingPixelsPerCell = lightingPixelsPerCell;
             LightingMaximumTextureDimension = lightingMaximumTextureDimension;
@@ -71,13 +71,13 @@ namespace Fodinae.Rendering
     public sealed class GraphicsQualityProfile : ScriptableObject
     {
         [SerializeField]
-        private GraphicsQualitySettings _low = new(1, 512, 128, 20, 60f, lightingCascadeAtlasLimit: 512);
+        private GraphicsQualitySettings _low = new(1, 512, 128, 20, 60f, 512, 0.75f, 1, 0);
         [SerializeField]
-        private GraphicsQualitySettings _medium = new(2, 768, 256, 28, 60f, lightingCascadeAtlasLimit: 768);
+        private GraphicsQualitySettings _medium = new(2, 768, 256, 28, 60f, 768, 0.85f, 1, 0);
         [SerializeField]
-        private GraphicsQualitySettings _high = new(4, 1536, 512, 40, 60f, lightingCascadeAtlasLimit: 1536);
+        private GraphicsQualitySettings _high = new(4, 1536, 512, 40, 60f, 1536, 1f, 1, 0);
         [SerializeField]
-        private GraphicsQualitySettings _ultra = new(4, 2048, 1024, 64, 60f, lightingCascadeAtlasLimit: 2048);
+        private GraphicsQualitySettings _ultra = new(4, 2048, 1024, 64, 60f, 2048, 1f, 1, 0);
 
         public GraphicsQualitySettings Get(GraphicsQualityTier tier)
         {
@@ -86,7 +86,8 @@ namespace Fodinae.Rendering
                 GraphicsQualityTier.Low => _low,
                 GraphicsQualityTier.Medium => _medium,
                 GraphicsQualityTier.High => _high,
-                _ => _ultra,
+                GraphicsQualityTier.Ultra => _ultra,
+                _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, "Unknown graphics quality tier."),
             };
 
             Validate(settings, tier);
