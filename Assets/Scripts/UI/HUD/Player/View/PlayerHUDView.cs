@@ -127,7 +127,21 @@ namespace Fodinae.UI.HUD.Player.View
         private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
         {
             InitializeHUD();
-            await LoadCrystalTextures(cancellationToken);
+            try
+            {
+                await LoadCrystalTextures(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Crystal icons are optional HUD content. Keep the already-built
+                // gameplay HUD alive, but surface the missing asset explicitly.
+                GameErrorUI.ReportError("Не удалось загрузить текстуры кристаллов", ex);
+            }
+
             if (cancellationToken.IsCancellationRequested || this == null)
             {
                 return;

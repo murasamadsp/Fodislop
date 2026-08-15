@@ -85,7 +85,7 @@ namespace Fodinae.Networking
 
         public void EnsureInitialized()
         {
-            if (!TryInitialize())
+            if (!TryInitialize() || !_isSubscribed)
             {
                 throw new InvalidOperationException(
                     "PacketHandler dependencies were not injected before startup completed.");
@@ -96,10 +96,12 @@ namespace Fodinae.Networking
         {
             if (_isInitialized)
             {
+                TrySubscribeToNetworkService();
                 return true;
             }
 
-            if (_mapDataProvider == null || _mapStorageInterface == null || _uiDocument == null)
+            if (_mapDataProvider == null || _mapStorageInterface == null ||
+                _uiDocument == null || _networkService == null)
             {
                 return false;
             }

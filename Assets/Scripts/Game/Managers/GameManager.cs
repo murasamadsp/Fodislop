@@ -167,6 +167,11 @@ namespace Fodinae.Game.Managers
 
         public void NotifyWorldLoaded()
         {
+            // WorldInit can arrive again after reconnect or an offline-world
+            // restart. A published load belongs to the previous world session
+            // and must never suppress the next load notification.
+            IsWorldLoaded = false;
+            _worldLoadPublished = false;
             _worldLoadPending = true;
             TryPublishWorldLoaded();
         }
