@@ -62,6 +62,8 @@ namespace Fodinae.UI
         private int _boundWorldWidth;
         private int _boundWorldHeight;
         private string _boundWorldCodeName = string.Empty;
+        private bool _initialized;
+        private bool _playerSpawnSubscription;
 
         private float _playerBlinkTimer;
         private bool _playerBlinkState = true;
@@ -79,22 +81,33 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            _storage ??= ServiceLocator.Resolve<IWorldDataStorage>();
+            _manager ??= ServiceLocator.Resolve<MapManager>();
+            if (_storage == null || _manager == null || !_manager.IsWorldInitialized || !_storage.IsReady)
+            {
+                return;
+            }
+
             _player = PlayerMovementController.LocalPlayer;
-            if (_player == null)
+            if (_player == null && !_playerSpawnSubscription)
             {
                 PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+                _playerSpawnSubscription = true;
             }
             else
             {
                 _player.OnPlayerMoved += OnPlayerMoved;
             }
-            if (_storage == null || _manager == null)
-            {
-                Debug.LogError("[WorldMapRenderer] MapStorage or MapManager not available");
-                enabled = false;
-                return;
-            }
-
             CreateCanvas();
             InitColorTable();
             InitTexture();
@@ -124,6 +137,8 @@ namespace Fodinae.UI
             {
                 Hide();
             }
+
+            _initialized = true;
         }
 
         protected void OnDestroy()
@@ -155,6 +170,7 @@ namespace Fodinae.UI
         private void OnLocalPlayerSpawned(PlayerMovementController player)
         {
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _playerSpawnSubscription = false;
             _player = player;
             _player.OnPlayerMoved += OnPlayerMoved;
             _lastPlayerPos = new Vector2Int(int.MinValue, int.MinValue);
@@ -224,6 +240,15 @@ namespace Fodinae.UI
             if (!enabled)
             {
                 return;
+            }
+
+            if (!_initialized)
+            {
+                TryInitialize();
+                if (!_initialized)
+                {
+                    return;
+                }
             }
 
             HandleDrag();

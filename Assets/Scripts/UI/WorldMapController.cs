@@ -22,6 +22,8 @@ namespace Fodinae.UI
         private InputAction? _mapToggleAction;
 
         private bool _isInMapMode;
+        private bool _initialized;
+        private bool _playerSpawnSubscription;
 
         // HUD elements
         private Fodinae.UI.HUD.Player.View.PlayerHUDView? _playerHud;
@@ -31,11 +33,30 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             _cameraFollow = UnityEngine.Object.FindAnyObjectByType<CameraFollow>();
             _player = PlayerMovementController.LocalPlayer;
-            if (_player == null)
+            if (_player == null && !_playerSpawnSubscription)
             {
                 PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+                _playerSpawnSubscription = true;
             }
             _terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
             _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
@@ -45,14 +66,13 @@ namespace Fodinae.UI
 
             if (_cameraFollow == null)
             {
-                Debug.LogError("[WorldMapController] CameraFollow not found");
-                enabled = false;
                 return;
             }
 
             _mapToggleAction = new InputAction("MapToggle", binding: "<Keyboard>/m");
             _mapToggleAction.performed += _ => ToggleMapMode();
             _mapToggleAction.Enable();
+            _initialized = true;
         }
 
         protected void OnDestroy()
@@ -64,6 +84,7 @@ namespace Fodinae.UI
         private void OnLocalPlayerSpawned(PlayerMovementController player)
         {
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _playerSpawnSubscription = false;
             _player = player;
         }
 
