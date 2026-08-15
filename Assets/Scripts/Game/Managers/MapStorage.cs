@@ -56,17 +56,20 @@ namespace Fodinae.Game.Managers
 
         public bool IsDisposed { get; private set; }
 
-#if UNITY_EDITOR
         public void EnsureEditorInitialized()
         {
+#if UNITY_EDITOR
             if (_isInitialized || Application.isPlaying)
             {
                 return;
             }
 
             InitWorld("EditorPreview", 128, 128);
-        }
+#else
+            throw new InvalidOperationException(
+                "[MapStorage] EnsureEditorInitialized is available only in the Unity Editor.");
 #endif
+        }
 
         public void InitWorld(string worldCodeName, int width, int height)
         {
