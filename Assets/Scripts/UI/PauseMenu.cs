@@ -171,6 +171,7 @@ namespace Fodinae.UI
                 throw new InvalidOperationException(
                     "[PauseMenu] Resources/UI/PauseMenu.uxml is required.");
             TemplateContainer menuTree = menuTemplate.Instantiate();
+            menuTree.AddToClassList("ui-fullscreen");
             _menuPanel = menuTree.Q<VisualElement>("PauseOverlay") ??
                 throw new InvalidOperationException("[PauseMenu] PauseOverlay is missing from PauseMenu.uxml.");
             _mainPage = menuTree.Q<VisualElement>("MainPage") ??
