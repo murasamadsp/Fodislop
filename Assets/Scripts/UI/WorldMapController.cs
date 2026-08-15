@@ -97,6 +97,15 @@ namespace Fodinae.UI
                 return;
             }
 
+            PlayerMovementController? player = _player ?? PlayerMovementController.LocalPlayer;
+            if (player == null || !player.HasServerPosition)
+            {
+                throw new InvalidOperationException(
+                    "[WorldMapController] Cannot enter map mode before the local player has a server position.");
+            }
+
+            _player = player;
+
             var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
             if (mapStorage == null || !mapStorage.IsReady)
             {
@@ -120,13 +129,6 @@ namespace Fodinae.UI
             _mapRenderer.Show();
 
             SetHudVisible(false);
-
-            // Center map on player position
-            var player = _player;
-            if (player == null)
-            {
-                throw new InvalidOperationException("[WorldMapController] Cannot enter map mode: local player is not spawned");
-            }
 
             _mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
         }

@@ -297,6 +297,7 @@ namespace Fodinae.UI
 
             _viewCenterX = worldX;
             _viewCenterY = worldY;
+            ClampViewCenter();
         }
 
         private void CreateCanvas()
@@ -386,6 +387,7 @@ namespace Fodinae.UI
                     // (smaller server Y), so centerY must INCREASE when delta.y is +.
                     _viewCenterX -= delta.x * _cellsPerPixel * _dragSpeed;
                     _viewCenterY += delta.y * _cellsPerPixel * _dragSpeed;
+                    ClampViewCenter();
                     _renderRequested = true;
                 }
             }
@@ -647,7 +649,32 @@ namespace Fodinae.UI
 
             _cellsPerPixel *= 1f - (delta * 0.1f);
             _cellsPerPixel = Mathf.Clamp(_cellsPerPixel, 0.25f, _maxCellsPerPixel);
+            ClampViewCenter();
             _renderRequested = true;
+        }
+
+        private void ClampViewCenter()
+        {
+            if (_manager == null || _texWidth <= 0 || _texHeight <= 0)
+            {
+                return;
+            }
+
+            float halfWidth = _texWidth * 0.5f * _cellsPerPixel;
+            float halfHeight = _texHeight * 0.5f * _cellsPerPixel;
+            _viewCenterX = ClampCenter(_viewCenterX, halfWidth, _manager.WorldWidth);
+            _viewCenterY = ClampCenter(_viewCenterY, halfHeight, _manager.WorldHeight);
+        }
+
+        private static float ClampCenter(float center, float halfViewport, int worldSize)
+        {
+            float worldCenter = worldSize * 0.5f;
+            if (halfViewport * 2f >= worldSize)
+            {
+                return worldCenter;
+            }
+
+            return Mathf.Clamp(center, halfViewport, worldSize - halfViewport);
         }
     }
 }
