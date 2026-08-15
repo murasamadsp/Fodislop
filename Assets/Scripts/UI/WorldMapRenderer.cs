@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -33,16 +32,16 @@ namespace Fodinae.UI
         private Color32[]? _pixelBuffer;
         private Color32[] _cellColorTable = new Color32[256];
         private Color32 _defaultColor = new Color32(48, 48, 48, 255);
+        private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
         private WorldLayer<CellType>? _cellLayer;
         private int _chunkSize = 32;
         private int _heightChunks;
-        private readonly Dictionary<int, CellType[]?> _chunkCache = new();
+        private readonly MapCellSampler _cellSampler = new();
 
         private float _viewCenterX;
         private float _viewCenterY;
         private float _cellsPerPixel = 1f;
         private float _maxCellsPerPixel = 10f;
-        private readonly Queue<int> _chunkCacheOrder = new();
 
         [Inject]
         private IWorldDataStorage? _storage;
@@ -176,8 +175,7 @@ namespace Fodinae.UI
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
-            _chunkCache.Clear();
-            _chunkCacheOrder.Clear();
+            _cellSampler.Invalidate();
             _renderRequested = true;
         }
 
@@ -195,8 +193,8 @@ namespace Fodinae.UI
 
             _subscribedCellLayer = cellLayer;
             _cellLayer = cellLayer;
-            _chunkCache.Clear();
-            _chunkCacheOrder.Clear();
+            _cellSampler.Bind(cellLayer);
+            _cellSampler.Invalidate();
 
             if (_subscribedCellLayer != null)
             {
@@ -422,8 +420,7 @@ namespace Fodinae.UI
             if (_storage is MapStorage mapStorage &&
                 mapStorage.Revision != _lastRenderedStorageRevision)
             {
-                _chunkCache.Clear();
-                _chunkCacheOrder.Clear();
+                _cellSampler.Invalidate();
                 _renderRequested = true;
             }
 
@@ -524,7 +521,9 @@ namespace Fodinae.UI
                     if (serverX >= 0 && serverX < worldW && serverY >= 0 && serverY < worldH)
                     {
                         CellType type = GetCell(serverX, serverY);
-                        color = _cellColorTable[(byte)type];
+                        color = type == CellType.Unloaded
+                            ? UnloadedColor
+                            : _cellColorTable[(byte)type];
                     }
 
                     _pixelBuffer[rowStart + px] = color;
@@ -579,43 +578,9 @@ namespace Fodinae.UI
 
         private CellType GetCell(int serverX, int serverY)
         {
-            if (_cellLayer == null || _chunkSize <= 0 || _heightChunks <= 0)
-            {
-                var storage = _storage;
-                if (storage == null)
-                {
-                    throw new InvalidOperationException("[WorldMapRenderer] Cannot read cells: storage is not initialized");
-                }
-
-                return storage.GetCell(serverX, serverY);
-            }
-
-            int chunkX = serverX / _chunkSize;
-            int chunkY = serverY / _chunkSize;
-            int chunkIndex = chunkY + (chunkX * _heightChunks);
-            if (!_chunkCache.TryGetValue(chunkIndex, out CellType[]? chunk))
-            {
-                // Lazily load on demand. touchLru: false — the world-layer LRU belongs
-                // to gameplay; the map must not evict real terrain chunks from it.
-                chunk = _cellLayer.GetChunk(chunkIndex, createIfMissing: false, touchLru: false);
-                _chunkCache[chunkIndex] = chunk;
-                _chunkCacheOrder.Enqueue(chunkIndex);
-
-                if (_chunkCache.Count > MaxChunkCacheEntries)
-                {
-                    int evict = _chunkCacheOrder.Dequeue();
-                    _chunkCache.Remove(evict);
-                }
-            }
-
-            if (chunk == null)
-            {
-                return CellType.Unloaded;
-            }
-
-            int localX = serverX % _chunkSize;
-            int localY = serverY % _chunkSize;
-            return chunk[localY + (localX * _chunkSize)];
+            return _cellSampler.TryGetCell(serverX, serverY, out CellType cellType)
+                ? cellType
+                : CellType.Unloaded;
         }
 
         private float ComputeMaxZoomOut(int worldW, int worldH)

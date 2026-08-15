@@ -48,7 +48,7 @@ namespace Fodinae.UI
         private readonly Dictionary<CellType, Color32> _cellColors = new(256);
 
         // Per-update chunk cache (reused, cleared each frame — allocation-free)
-        private readonly Dictionary<int, CellType[]?> _chunkCache = new();
+        private readonly MapCellSampler _cellSampler = new();
 
         // Throttle state
         private Vector2Int _lastUpdatePos; public Vector2Int LastUpdatePos => _lastUpdatePos;
@@ -141,7 +141,7 @@ namespace Fodinae.UI
             if (_ready && _isVisible && _player != null && _player.HasServerPosition &&
                 _mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)
             {
-                _chunkCache.Clear();
+                _cellSampler.Invalidate();
                 RefreshTexture(_player.Position.x, _player.Position.y);
                 _lastRenderedStorageRevision = _mapStorage.Revision;
             }
@@ -250,7 +250,8 @@ namespace Fodinae.UI
 
                 _subscribedCellLayer = _cellLayer;
                 _subscribedCellLayer.ChunkLoaded += OnChunkLoaded;
-                _chunkCache.Clear();
+                _cellSampler.Bind(_cellLayer);
+                _cellSampler.Invalidate();
                 _chunkLoadRefreshRequested = true;
                 _initialRefreshDone = false;
                 _lastRenderedStorageRevision = -1;
@@ -381,7 +382,7 @@ namespace Fodinae.UI
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
-            _chunkCache.Clear();
+            _cellSampler.Invalidate();
             _chunkLoadRefreshRequested = true;
         }
 
@@ -397,8 +398,6 @@ namespace Fodinae.UI
             }
 
             Dictionary<CellType, Color32> cellColors = _cellColors;
-            Dictionary<int, CellType[]?> cache = _chunkCache;
-            cache.Clear();
 
             int index = 0;
 
@@ -420,10 +419,6 @@ namespace Fodinae.UI
                     continue;
                 }
 
-                // Column-major chunk indexing for WorldLayer<T>
-                int chunkY = serverY / _chunkSize;
-                int localY = serverY % _chunkSize;
-
                 for (int texX = 0; texX < texSize; texX++)
                 {
                     int serverX = minX + texX;
@@ -434,20 +429,9 @@ namespace Fodinae.UI
                         continue;
                     }
 
-                    int chunkX = serverX / _chunkSize;
-                    int chunkIdx = chunkY + (chunkX * _heightChunks);
-
-                    if (!cache.TryGetValue(chunkIdx, out CellType[]? chunk))
+                    if (_cellSampler.TryGetCell(serverX, serverY, out CellType cellType))
                     {
-                        // Don't create missing chunks, don't touch LRU (no cache pollution)
-                        chunk = _cellLayer?.GetChunk(chunkIdx, false, false);
-                        cache[chunkIdx] = chunk;
-                    }
-
-                    if (chunk != null)
-                    {
-                        int localIdx = localY + ((serverX % _chunkSize) * _chunkSize);
-                        colors[index++] = cellColors[chunk[localIdx]];
+                        colors[index++] = cellColors[cellType];
                     }
                     else
                     {
