@@ -24,21 +24,18 @@ namespace Fodinae.UI
         {
             _cam = Camera.main;
             _elapsed = 0f;
-            gameObject.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
-
             if (_textMesh == null)
             {
                 _textMesh = gameObject.AddComponent<TextMesh>();
                 _meshRenderer = GetComponent<MeshRenderer>();
-                _meshRenderer.sortingOrder = 300;
+                UnityRenderLayerContracts.ApplyWorldUI(_meshRenderer, 300);
 
                 var bgGo = new GameObject("ChatBubbleBG");
-                bgGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
                 bgGo.transform.SetParent(transform, false);
                 bgGo.transform.localPosition = new Vector3(0, 0, 0.01f);
                 _bgFilter = bgGo.AddComponent<MeshFilter>();
                 _bgRenderer = bgGo.AddComponent<MeshRenderer>();
-                _bgRenderer.sortingOrder = 299;
+                UnityRenderLayerContracts.ApplyWorldUI(_bgRenderer, 299);
                 _bgRenderer.sharedMaterial = SharedMaterialCache.GetForTexture(Texture2D.whiteTexture);
                 _bgPropertyBlock = new MaterialPropertyBlock();
                 SetBackgroundAlpha(0.5f);

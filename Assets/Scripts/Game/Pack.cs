@@ -39,11 +39,10 @@ namespace Fodinae.Game
             }
 
             var clanGo = new GameObject("ClanIcon");
-            clanGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             clanGo.transform.SetParent(transform);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
-            _clanRenderer.sortingOrder = 10; // Ensure it's on top of the pack
+            UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 10);
         }
 
         public void Initialize(PackType packType, byte variant, byte linkedClan)

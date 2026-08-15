@@ -32,7 +32,8 @@ public static class ProjectRuntimeContracts
 
     public static class RequiredLayers
     {
-        public const string WorldUi = "UI"; //TODO: Ui поменять на UI!!!!!!!!!!!!!!!!!!!!!
+        public const string WorldUI = "UI";
+        public const string WorldUISortingLayer = "World UI";
     }
 
     public static class RuntimeLimits

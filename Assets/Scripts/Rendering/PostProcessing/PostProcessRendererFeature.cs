@@ -10,7 +10,7 @@ namespace Fodinae.Rendering.PostProcessing
     [DisallowMultipleRendererFeature]
     public class PostProcessRendererFeature : ScriptableRendererFeature
     {
-        public const string WorldUiLayerName = "UI";
+        public const string WorldUILayerName = ProjectRuntimeContracts.RequiredLayers.WorldUI;
 
         [Serializable]
         public sealed class Settings

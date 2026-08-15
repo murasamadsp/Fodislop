@@ -344,12 +344,8 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void EnsureWorldUiCamera(Camera mainCamera, UniversalAdditionalCameraData mainCameraData)
         {
-            int uiLayer = LayerMask.NameToLayer(ProjectRuntimeContracts.RequiredLayers.WorldUi);
-            if (uiLayer < 0)
-            {
-                throw new InvalidOperationException(
-                    $"Unity layer '{ProjectRuntimeContracts.RequiredLayers.WorldUi}' is required for post-processing camera separation.");
-            }
+            int uiLayer = UnityRenderLayerContracts.RequireWorldUIGameObjectLayer();
+            UnityRenderLayerContracts.RequireWorldUISortingLayer();
 
             _worldUiLayerMask = 1 << uiLayer;
             mainCamera.cullingMask &= ~_worldUiLayerMask;

@@ -210,7 +210,6 @@ namespace Fodinae.Game
         private void InitializeVisualElements()
         {
             var textGo = new GameObject("Nickname");
-            textGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             textGo.transform.SetParent(transform);
             _nicknameText = textGo.AddComponent<TextMeshPro>();
             _nicknameText.alignment = TextAlignmentOptions.Center;
@@ -220,20 +219,17 @@ namespace Fodinae.Game
             _nicknameText.color = Color.white;
 
             var textRenderer = textGo.GetComponent<MeshRenderer>();
-            textRenderer.sortingOrder = 100;
+            UnityRenderLayerContracts.ApplyWorldUI(textRenderer, 100);
 
             var clanGo = new GameObject("ClanIcon");
-            clanGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             clanGo.transform.SetParent(transform);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
-            _clanRenderer.sortingOrder = 100;
+            UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 100);
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
         }
 
         private void ApplyWorldUiLayer()
         {
-            int uiLayer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
-
             if (_nicknameText == null)
             {
                 _nicknameText = transform.Find("Nickname")?.GetComponent<TextMeshPro>();
@@ -246,12 +242,16 @@ namespace Fodinae.Game
 
             if (_nicknameText != null)
             {
-                _nicknameText.gameObject.layer = uiLayer;
+                MeshRenderer? nicknameRenderer = _nicknameText.GetComponent<MeshRenderer>();
+                if (nicknameRenderer != null)
+                {
+                    UnityRenderLayerContracts.ApplyWorldUI(nicknameRenderer, 100);
+                }
             }
 
             if (_clanRenderer != null)
             {
-                _clanRenderer.gameObject.layer = uiLayer;
+                UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 100);
             }
         }
 
