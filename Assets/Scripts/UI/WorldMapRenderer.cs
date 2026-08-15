@@ -322,7 +322,10 @@ namespace Fodinae.UI
         {
             const int BASE_RES = 512;
             _texHeight = BASE_RES;
-            _texWidth = Mathf.RoundToInt(BASE_RES * ((float)Screen.width / Screen.height));
+            int screenHeight = Mathf.Max(1, Screen.height);
+            _texWidth = Mathf.Max(
+                1,
+                Mathf.RoundToInt(BASE_RES * ((float)Mathf.Max(1, Screen.width) / screenHeight)));
             _mapTexture = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
 
             // Bilinear smooths the upscale from the 512px texture to a full-screen
@@ -507,7 +510,7 @@ namespace Fodinae.UI
                     playerPos.y + 1f >= topServerY && playerPos.y <= bottomServerY)
                 {
                     float pixelX = ((playerPos.x - cx) / cp) + (texW * 0.5f);
-                    float pixelY = (texH * 0.5f) - ((playerPos.y - cy) / cp);
+                    float pixelY = (texH * 0.5f) - 1f - ((playerPos.y - cy) / cp);
                     float markerSize = Mathf.Max(1f, 1f / cp);
 
                     int pxStart = Mathf.Clamp(Mathf.RoundToInt(pixelX), 0, texW - 1);
