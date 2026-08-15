@@ -252,6 +252,15 @@ namespace Fodinae.UI
                 }
             }
 
+            if (_manager == null || _storage == null ||
+                !_manager.IsWorldInitialized || !_storage.IsReady)
+            {
+                BindCellLayer(null);
+                _initialRenderDone = false;
+                _renderRequested = false;
+                return;
+            }
+
             HandleDrag();
             HandleFollowPlayer();
             HandleQueuedRender();
