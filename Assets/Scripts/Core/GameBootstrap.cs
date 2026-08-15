@@ -65,7 +65,8 @@ namespace Fodinae.Core
                 }
             }
 
-            _resolver.Resolve<IAudioSystem>();
+            var audioSystem = _resolver.Resolve<AudioSystem>();
+            audioSystem.ApplySavedBusVolumes();
             _resolver.Resolve<IPlayerStats>();
             _resolver.Resolve<PlayerMovementController>();
 

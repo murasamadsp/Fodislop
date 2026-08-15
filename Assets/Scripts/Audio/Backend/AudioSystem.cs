@@ -27,6 +27,7 @@ namespace Fodinae.Audio.Backend
         private FmodAudioBackend _backend = null!;
         [Inject]
         private IClientConfigManager _clientConfig = null!;
+        private bool _configApplied;
 
         public bool IsInitialized => _backend != null;
 
@@ -38,6 +39,30 @@ namespace Fodinae.Audio.Backend
 
         private void Start()
         {
+            TryApplySavedBusVolumes();
+        }
+
+        private void Update()
+        {
+            if (!_configApplied)
+            {
+                TryApplySavedBusVolumes();
+            }
+        }
+
+        private void TryApplySavedBusVolumes()
+        {
+            if (_configApplied || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_clientConfig == null || _clientConfig.Config == null)
+            {
+                throw new InvalidOperationException(
+                    $"{TAG} ClientConfigManager must be initialized before applying audio settings.");
+            }
+
             ApplySavedBusVolumes();
         }
 
@@ -301,6 +326,7 @@ namespace Fodinae.Audio.Backend
             SetBusVolume(AudioBusType.Voice, config.VoiceVolume);
             SetBusVolume(AudioBusType.Ambience, config.AmbienceVolume);
             SetBusVolume(AudioBusType.UI, config.UiVolume);
+            _configApplied = true;
         }
     }
 }
