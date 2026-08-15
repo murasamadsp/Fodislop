@@ -62,6 +62,18 @@ namespace Fodinae.Game.Managers
 
         public bool IsStandaloneMode { get; set; } = false;
 
+        public void ResetWorldState()
+        {
+            IsWorldInitialized = false;
+            _cellConfigurations = null;
+            _cellToTileGroup.Clear();
+            _cellMoveSpeeds.Clear();
+            _worldCodeName = string.Empty;
+            _worldDisplayName = string.Empty;
+            _width = 0;
+            _height = 0;
+        }
+
         public void InitializeEditorPreview(MapStorage storage)
         {
             if (Application.isPlaying)

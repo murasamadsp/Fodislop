@@ -50,6 +50,7 @@ namespace MinesServer.Networking.Connection.Client
     public class DummyConnection : IServerConnection, IOfflineConnection
     {
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
+        private int _lifecycleVersion;
 
         public ConnectionStatus ConnectionStatus => _status;
 
@@ -178,12 +179,17 @@ namespace MinesServer.Networking.Connection.Client
             OnConnecting?.Invoke();
 
             // Run asynchronously, but stay on the Unity Main Thread
-            ConnectAsync().Forget();
+            ConnectAsync(++_lifecycleVersion).Forget();
         }
 
-        private async UniTaskVoid ConnectAsync()
+        private async UniTaskVoid ConnectAsync(int lifecycleVersion)
         {
             await UniTask.Yield();
+
+            if (_status != ConnectionStatus.Connecting || lifecycleVersion != _lifecycleVersion)
+            {
+                return;
+            }
 
             _status = ConnectionStatus.Connected;
             OnConnected?.Invoke();
@@ -191,22 +197,31 @@ namespace MinesServer.Networking.Connection.Client
 
         public void Disconnect()
         {
-            if (_status != ConnectionStatus.Connected)
+            if (_status == ConnectionStatus.Disconnected)
             {
+                _worldLayer?.Dispose();
+                _worldLayer = null;
                 return;
             }
 
+            _lifecycleVersion++;
             _worldLayer?.Dispose();
             _worldLayer = null;
 
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
-            DisconnectAsync().Forget();
+            DisconnectAsync(_lifecycleVersion).Forget();
         }
 
-        private async UniTaskVoid DisconnectAsync()
+        private async UniTaskVoid DisconnectAsync(int lifecycleVersion)
         {
             await UniTask.Delay(100);
+
+            if (lifecycleVersion != _lifecycleVersion || _status != ConnectionStatus.Disconnecting)
+            {
+                return;
+            }
+
             _status = ConnectionStatus.Disconnected;
             OnDisconnected?.Invoke();
         }

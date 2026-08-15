@@ -53,6 +53,8 @@ namespace Fodinae.Networking.Connection
         [Inject]
         private IWorldDataStorage _worldStorage = null!;
         [Inject]
+        private MapManager _mapManager = null!;
+        [Inject]
         private GameManager _gameManager = null!;
 
         protected void Awake()
@@ -121,6 +123,15 @@ namespace Fodinae.Networking.Connection
                 return;
             }
 
+            if (Connection != null)
+            {
+                Connection.OnReceived -= OnReceived;
+                Connection.OnConnected -= OnConnected;
+                Connection.OnDisconnected -= OnDisconnected;
+                (Connection as IDisposable)?.Dispose();
+                Connection = null;
+            }
+
             _useOldClient = oldClient;
             _gameManager?.SetState(Game.Managers.GameState.Connecting);
 
@@ -147,6 +158,11 @@ namespace Fodinae.Networking.Connection
             Connection.Disconnect();
             Connection = null;
 
+            while (_packetQueue.TryDequeue(out _))
+            {
+            }
+
+            _mapManager.ResetWorldState();
             (_worldStorage as MapStorage)?.Dispose();
         }
 
@@ -224,6 +240,12 @@ namespace Fodinae.Networking.Connection
 
         private void OnDisconnected()
         {
+            while (_packetQueue.TryDequeue(out _))
+            {
+            }
+
+            _mapManager.ResetWorldState();
+            (_worldStorage as MapStorage)?.Dispose();
             _gameManager?.DeauthorizeUI();
 
             if (_shouldAutoReconnect && !_serverInitiatedDisconnect)
