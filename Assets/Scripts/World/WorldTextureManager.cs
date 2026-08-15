@@ -240,12 +240,21 @@ namespace Fodinae.World
                     return info.ContainerFPS;
                 }
 
-                var mmForSpeed = ServiceLocator.Resolve<MapManager>();
-                var speed = mmForSpeed != null ? mmForSpeed.GetAnimationSpeed(cellType) : 5;
-                return speed > 0 ? speed : 5;
+                MapManager mmForSpeed = ServiceLocator.Resolve<MapManager>() ??
+                    throw new InvalidOperationException(
+                        "MapManager is required to resolve animation speed for a terrain texture.");
+                byte speed = mmForSpeed.GetAnimationSpeed(cellType);
+                if (speed <= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Server animation speed for cell type {cellType} must be greater than zero.");
+                }
+
+                return speed;
             }
 
-            return 5f;
+            throw new InvalidOperationException(
+                $"Animation speed requested before texture metadata was loaded for cell type {cellType}.");
         }
 
         public int GetFrameSize(CellType cellType)
@@ -353,11 +362,10 @@ namespace Fodinae.World
             Texture2D? texture = null;
             try
             {
-                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-                if (loader != null)
-                {
-                    texture = await loader.GetTextureAsync(filename);
-                }
+                ClientAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader ??
+                    throw new InvalidOperationException(
+                        "ClientAssetLoader is required to load terrain textures.");
+                texture = await loader.GetTextureAsync(filename);
             }
             catch (Exception ex)
             {
