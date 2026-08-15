@@ -400,8 +400,10 @@ namespace Fodinae.World
                 }
             }
 
-            var mmForFrame = ServiceLocator.Resolve<MapManager>();
-            int frameHeight = mmForFrame != null ? mmForFrame.GetAnimationFrameHeight(cellType) : texture.height;
+            MapManager mmForFrame = ServiceLocator.Resolve<MapManager>() ??
+                throw new InvalidOperationException(
+                    "MapManager is required to resolve terrain texture frame metadata.");
+            int frameHeight = mmForFrame.GetAnimationFrameHeight(cellType);
             float containerFPS = 0;
 
             if (texture.name.Contains("|"))
@@ -436,7 +438,8 @@ namespace Fodinae.World
 
             if (_currentAtlas == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "WorldTextureManager atlas is not initialized before adding a terrain texture.");
             }
 
             if (!_currentAtlas.TryAddTexture(cellType, texture, out var coordinate))
@@ -450,14 +453,14 @@ namespace Fodinae.World
 
                     if (!_currentAtlas.TryAddTexture(cellType, texture, out coordinate))
                     {
-                        Debug.LogError($"Failed to add texture to new atlas of size {newSize}");
-                        return;
+                        throw new InvalidOperationException(
+                            $"Failed to add terrain texture for cell type {cellType} to new atlas of size {newSize}.");
                     }
                 }
                 else
                 {
-                    Debug.LogError($"Atlas size limit reached ({_maxAtlasSize}). Cannot add more textures.");
-                    return;
+                    throw new InvalidOperationException(
+                        $"Terrain texture atlas size limit reached ({_maxAtlasSize}) while adding cell type {cellType}.");
                 }
             }
 
