@@ -1005,7 +1005,7 @@ namespace Fodinae.UI
             IsMenuOpen = true;
             if (_menuPanel != null)
             {
-                _menuPanel.SetEnabled(true);
+                _menuPanel.BringToFront();
                 _menuPanel.pickingMode = PickingMode.Position;
                 _menuPanel.style.display = DisplayStyle.Flex;
             }
@@ -1029,7 +1029,6 @@ namespace Fodinae.UI
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.None;
-                _menuPanel.SetEnabled(false);
                 _menuPanel.pickingMode = PickingMode.Ignore;
             }
         }
