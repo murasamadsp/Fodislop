@@ -309,8 +309,6 @@ namespace Fodinae.UI
                 }
             }));
 
-            ScrollView scrollContainer = graphicsScroll;
-
             VisualElement displaySection = CreateSettingsSection("Экран");
             VisualElement graphicsSection = CreateSettingsSection("Графика");
             VisualElement audioSection = CreateSettingsSection("Звук");
@@ -564,11 +562,12 @@ namespace Fodinae.UI
                 4f));
             TerrariaLightingEngine? dynamicLightingEngine = TerrariaLightingEngine.Instance
                 ?? FindAnyObjectByType<TerrariaLightingEngine>();
+            float dynamicLightUpdatesPerSecond = dynamicLightingEngine != null
+                ? dynamicLightingEngine.DynamicLightUpdatesPerSecond
+                : _projectDefaults.Lighting.DynamicLightUpdatesPerSecond;
             advancedGraphicsSection.Add(CreateSlider(
                 "Частота расчёта dynamic emission",
-                dynamicLightingEngine != null
-                    ? dynamicLightingEngine.DynamicLightUpdatesPerSecond
-                    : _projectDefaults.Lighting.DynamicLightUpdatesPerSecond,
+                dynamicLightUpdatesPerSecond,
                 value => dynamicLightingEngine?.SetDynamicLightUpdatesPerSecond(value),
                 1f,
                 LightingConfigLimits.DynamicLightUpdatesPerSecond));
@@ -923,13 +922,6 @@ namespace Fodinae.UI
             btn.text = text;
             btn.AddToClassList("pause-btn");
             return btn;
-        }
-
-        private Label CreateTitle(string text)
-        {
-            var label = new Label(text);
-            label.AddToClassList("pause-title");
-            return label;
         }
 
         private static Label CreateLabel(string text)
