@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
+using Fodinae.Core;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using UnityEngine;
@@ -25,9 +26,6 @@ namespace Fodinae
     /// </summary>
     public sealed class AssetCache
     {
-        private const long DEFAULT_MAX_BYTES = 256L * 1024 * 1024; // 256 MB
-        private const long DEFAULT_MAX_DECODED_BYTES = 256L * 1024 * 1024;
-
         private readonly ConcurrentDictionary<string, CacheEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, long> _entrySizes = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentQueue<string> _accessOrder = new();
@@ -35,8 +33,8 @@ namespace Fodinae
         private readonly ConcurrentQueue<string> _decodedAccessOrder = new();
         private readonly Func<string, CancellationToken, int, UniTask<byte[]?>> _bytesLoader;
         private long _totalBytes;
-        private long _maxBytes = DEFAULT_MAX_BYTES;
-        private long _maxDecodedBytes = DEFAULT_MAX_DECODED_BYTES;
+        private long _maxBytes = ProjectRuntimeContracts.AssetCacheCapacityBytes;
+        private long _maxDecodedBytes = ProjectRuntimeContracts.DecodedAssetCacheCapacityBytes;
         private long _totalDecodedBytes;
         private int _unloadUnusedAssetsRequested;
 
@@ -46,28 +44,40 @@ namespace Fodinae
         }
 
         /// <summary>Retrieve raw bytes. Cached and deduplicated.</summary>
-        public UniTask<byte[]?> GetBytesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
+        public UniTask<byte[]?> GetBytesAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetBytesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve a decoded Texture2D. Cached after first decode.</summary>
-        public UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
+        public UniTask<Texture2D?> GetTextureAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetTextureAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve a decoded AudioClip from WAV bytes. Cached after first decode.</summary>
-        public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<AudioClip?> GetAudioAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAudioAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve an animated Sprite[] from GIF/WebP. Cached after first decode.</summary>
-        public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<Sprite[]?> GetSpritesAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -77,7 +87,10 @@ namespace Fodinae
         /// Retrieve animated sprites WITH metadata (FPS, frame height).
         /// Use this when you need accurate animation timing from the source file.
         /// </summary>
-        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAnimatedSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));

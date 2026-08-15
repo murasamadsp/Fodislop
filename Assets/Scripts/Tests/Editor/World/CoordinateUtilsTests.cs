@@ -64,11 +64,17 @@ namespace Fodinae.Tests.World
         }
 
         [Test]
-        public void UnityToServerY_NegativeUnityY_WrapsCorrectlyWithinBounds()
+        public void UnityToServerY_NegativeUnityY_IsRejected()
         {
-            // Testing wrapping behavior for Y below zero
-            int serverY = CoordinateUtils.UnityToServerY(-0.5f, TEST_WORLD_HEIGHT);
-            Assert.IsTrue(serverY >= 0 && serverY < TEST_WORLD_HEIGHT, "Server Y should be wrapped within [0, worldHeight)");
+            Assert.Throws<System.ArgumentOutOfRangeException>(
+                () => CoordinateUtils.UnityToServerY(-0.5f, TEST_WORLD_HEIGHT));
+        }
+
+        [Test]
+        public void UnityToServerY_AboveWorldHeight_IsRejected()
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(
+                () => CoordinateUtils.UnityToServerY(TEST_WORLD_HEIGHT + 0.5f, TEST_WORLD_HEIGHT));
         }
     }
 }

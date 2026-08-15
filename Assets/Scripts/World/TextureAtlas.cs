@@ -27,7 +27,6 @@ namespace Fodinae.World
         private readonly ConcurrentDictionary<CellType, AtlasCell> _cells = new();
         private readonly List<Rectangle> _freeRectangles = new();
         private readonly List<Rectangle> _usedRectangles = new();
-        private readonly Dictionary<CellType, Texture2D> _placeholderTextures = new();
         private readonly HashSet<CellType> _dirtyCells = new();
 
         private bool _isDirty = false;
@@ -61,24 +60,6 @@ namespace Fodinae.World
 
         public void Dispose()
         {
-            foreach (var placeholder in _placeholderTextures.Values)
-            {
-                if (placeholder == null)
-                {
-                    continue;
-                }
-
-                if (Application.isPlaying)
-                {
-                    UnityEngine.Object.Destroy(placeholder);
-                }
-                else
-                {
-                    UnityEngine.Object.DestroyImmediate(placeholder);
-                }
-            }
-
-            _placeholderTextures.Clear();
             _cells.Clear();
             _dirtyCells.Clear();
 
@@ -116,20 +97,6 @@ namespace Fodinae.World
                 _usedRectangles.Clear();
                 _freeRectangles.Clear();
                 _freeRectangles.Add(new Rectangle(0, 0, Size, Size));
-
-                foreach (var placeholder in _placeholderTextures.Values)
-                {
-                    if (Application.isPlaying)
-                    {
-                        UnityEngine.Object.Destroy(placeholder);
-                    }
-                    else
-                    {
-                        UnityEngine.Object.DestroyImmediate(placeholder);
-                    }
-                }
-
-                _placeholderTextures.Clear();
 
                 EnsurePixelBuffer();
                 if (_atlasPixels != null && _atlasTexture != null)
@@ -466,51 +433,9 @@ namespace Fodinae.World
                 }
             }
 
-            return CreatePlaceholderTexture(cellType);
-        }
-
-        private Texture2D CreatePlaceholderTexture(CellType cellType)
-        {
-            if (_placeholderTextures.TryGetValue(cellType, out var cached))
-            {
-                return cached;
-            }
-
-            var texture = new Texture2D(CELL_SIZE, CELL_SIZE);
-            var color = GetCellColor(cellType);
-            var pixels = new Color[CELL_SIZE * CELL_SIZE];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = color;
-            }
-
-            texture.SetPixels(pixels);
-            texture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-            _placeholderTextures[cellType] = texture;
-            return texture;
-        }
-
-        private static Color GetCellColor(CellType cellType)
-        {
-            var mapManager = ServiceLocator.Resolve<MapManager>();
-            if (mapManager != null)
-            {
-                var serverColor = mapManager.GetCellMinimapColor(cellType);
-                if (serverColor.a > 0)
-                {
-                    return serverColor;
-                }
-            }
-
-            return cellType switch
-            {
-                CellType.Empty => new Color(0.2f, 0.2f, 0.2f),
-                CellType.Road => new Color(0.8f, 0.8f, 0.8f),
-                CellType.Boulder1 => Color.black,
-                CellType.WhiteSand => new Color(1f, 0.92f, 0.8f),
-                CellType.GrayAcid => new Color(0f, 1f, 0f),
-                _ => Color.magenta,
-            };
+            throw new InvalidOperationException(
+                $"No texture has been loaded for cell type '{cellType}'. " +
+                "Refusing to render a placeholder texture.");
         }
 
         private Rectangle? FindBestFit(int width, int height)

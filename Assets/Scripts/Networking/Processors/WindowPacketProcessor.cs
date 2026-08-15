@@ -1,6 +1,8 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -39,8 +41,7 @@ namespace Fodinae.Networking.Processors
         {
             if (packet == null)
             {
-                Debug.LogError("[WindowPacketProcessor] Process OpenWindowPacket: packet is null");
-                return;
+                throw new ArgumentNullException(nameof(packet));
             }
 
             Debug.Log($"[WindowPacketProcessor] Opening window '{packet.WindowTag}'");
@@ -49,8 +50,8 @@ namespace Fodinae.Networking.Processors
             var element = builder.Build(packet.Content);
             if (element == null)
             {
-                Debug.LogError("[WindowPacketProcessor] Cannot open window: builder returned null element");
-                return;
+                throw new InvalidDataException(
+                    $"Server window '{packet.WindowTag}' produced no UI element.");
             }
 
             element.style.width = packet.Width;
@@ -69,7 +70,8 @@ namespace Fodinae.Networking.Processors
             }
             else
             {
-                Debug.LogWarning("[WindowPacketProcessor] UIInputManager not resolved — modal stack NOT updated");
+                throw new InvalidOperationException(
+                    "UIInputManager is required before opening a server window.");
             }
 
             var binding = new WindowBinding();

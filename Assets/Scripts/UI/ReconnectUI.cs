@@ -1,6 +1,6 @@
 #nullable enable
 
-using Fodinae.Networking.Connection;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
@@ -14,62 +14,123 @@ namespace Fodinae.UI
 
         [Inject]
         private UIDocument _doc = null!;
+
         private VisualElement? _reconnectOverlay;
         private VisualElement? _disconnectOverlay;
         private Label? _reconnectLabel;
         private Label? _disconnectLabel;
         private bool _reconnectStatusSet;
+        private bool _initialized;
 
-        public void ShowReconnecting(string status)
+        private void Awake()
         {
-            if (_doc == null)
+            _instance = this;
+        }
+
+        private void OnDisable()
+        {
+            if (_instance == this)
+            {
+                _instance = null;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance == this)
+            {
+                _instance = null;
+            }
+
+            _reconnectOverlay?.RemoveFromHierarchy();
+            _disconnectOverlay?.RemoveFromHierarchy();
+            _reconnectOverlay = null;
+            _disconnectOverlay = null;
+        }
+
+        private void Start()
+        {
+            if (_initialized)
             {
                 return;
             }
 
-            if (_disconnectOverlay != null && _disconnectOverlay.parent != null)
+            _initialized = true;
+            CreateUI();
+        }
+
+        private void CreateUI()
+        {
+            if (_doc?.rootVisualElement == null)
             {
-                _doc.rootVisualElement.Remove(_disconnectOverlay);
+                return;
             }
 
-            if (_reconnectLabel != null)
+            _reconnectOverlay = new VisualElement();
+            ApplyOverlayState(_reconnectOverlay);
+            UIContainerLayers.Get(_doc, UIContainerLayers.Blocking).Add(_reconnectOverlay);
+
+            _reconnectLabel = new Label("Переподключение к серверу...");
+            _reconnectLabel.AddToClassList("ui-overlay-label");
+            _reconnectOverlay.Add(_reconnectLabel);
+
+            _disconnectOverlay = new VisualElement();
+            ApplyOverlayState(_disconnectOverlay);
+            UIContainerLayers.Get(_doc, UIContainerLayers.Blocking).Add(_disconnectOverlay);
+
+            _disconnectLabel = new Label();
+            _disconnectLabel.AddToClassList("ui-overlay-label");
+            _disconnectOverlay.Add(_disconnectLabel);
+        }
+
+        private static void ApplyOverlayState(VisualElement overlay)
+        {
+            overlay.AddToClassList("ui-overlay");
+            overlay.AddToClassList("ui-overlay--blocking");
+            overlay.AddToClassList("ui-overlay-message");
+            overlay.SetEnabled(false);
+            overlay.style.display = DisplayStyle.None;
+            overlay.pickingMode = PickingMode.Ignore;
+        }
+
+        public void ShowReconnecting(string status)
+        {
+            if (_doc == null || _reconnectOverlay == null || _reconnectLabel == null)
             {
-                _reconnectLabel.text = status;
+                return;
             }
+
+            HideOverlay(_disconnectOverlay);
+
+            _reconnectLabel.text = status;
 
             _reconnectStatusSet = true;
-            if (_reconnectOverlay != null && _reconnectOverlay.parent == null)
-            {
-                _doc.rootVisualElement.Add(_reconnectOverlay);
-            }
+            _reconnectOverlay.style.display = DisplayStyle.Flex;
+            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
+            _reconnectOverlay.SetEnabled(true);
+            _reconnectOverlay.pickingMode = PickingMode.Position;
         }
 
         public void ShowDisconnectReason(string reason)
         {
-            if (_doc == null)
+            if (_doc == null || _disconnectOverlay == null || _disconnectLabel == null)
             {
                 return;
             }
 
-            if (_reconnectOverlay != null && _reconnectOverlay.parent != null)
-            {
-                _doc.rootVisualElement.Remove(_reconnectOverlay);
-            }
+            HideOverlay(_reconnectOverlay);
 
-            if (_disconnectLabel != null)
-            {
-                _disconnectLabel.text = reason;
-            }
+            _disconnectLabel.text = reason;
 
-            if (_disconnectOverlay != null && _disconnectOverlay.parent == null)
-            {
-                _doc.rootVisualElement.Add(_disconnectOverlay);
-            }
+            _disconnectOverlay.style.display = DisplayStyle.Flex;
+            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
+            _disconnectOverlay.SetEnabled(true);
+            _disconnectOverlay.pickingMode = PickingMode.Position;
         }
 
         public void SetStatus(string status)
         {
-            if (_disconnectOverlay != null && _disconnectOverlay.parent != null)
+            if (_disconnectOverlay?.style.display == DisplayStyle.Flex)
             {
                 return;
             }
@@ -79,9 +140,12 @@ namespace Fodinae.UI
                 _reconnectLabel.text = status;
             }
 
-            if (!_reconnectStatusSet && _doc != null && _reconnectOverlay != null && _reconnectOverlay.parent == null)
+            if (!_reconnectStatusSet && _doc != null && _reconnectOverlay != null)
             {
-                _doc.rootVisualElement.Add(_reconnectOverlay);
+                _reconnectOverlay.style.display = DisplayStyle.Flex;
+                UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
+                _reconnectOverlay.SetEnabled(true);
+                _reconnectOverlay.pickingMode = PickingMode.Position;
             }
         }
 
@@ -92,17 +156,30 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_reconnectOverlay != null && _reconnectOverlay.parent != null)
+            if (_reconnectOverlay != null)
             {
-                _doc.rootVisualElement.Remove(_reconnectOverlay);
+                HideOverlay(_reconnectOverlay);
             }
 
-            if (_disconnectOverlay != null && _disconnectOverlay.parent != null)
+            if (_disconnectOverlay != null)
             {
-                _doc.rootVisualElement.Remove(_disconnectOverlay);
+                HideOverlay(_disconnectOverlay);
             }
 
             _reconnectStatusSet = false;
+            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, false);
+        }
+
+        private static void HideOverlay(VisualElement? overlay)
+        {
+            if (overlay == null)
+            {
+                return;
+            }
+
+            overlay.style.display = DisplayStyle.None;
+            overlay.SetEnabled(false);
+            overlay.pickingMode = PickingMode.Ignore;
         }
     }
 }

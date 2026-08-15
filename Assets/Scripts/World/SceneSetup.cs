@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.UI;
 using UnityEngine;
 
@@ -12,31 +13,39 @@ namespace Fodinae.World
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {
-        [Header("Surface Materials")]
+        [Header("Local Surface Assets")]
         [SerializeField]
-        private Material? _transitMaterial;
+        private Texture2D? _transitTexture;
         [SerializeField]
-        private Material? _perspectiveMaterial;
+        private Texture2D? _perspectiveTexture;
 
         private WorldBackgroundSetup? _backgroundSetup;
 
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            _transitMaterial ??= UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
-                "Assets/Materials/SurfaceMaterial.mat");
-            _perspectiveMaterial ??= UnityEditor.AssetDatabase.LoadAssetAtPath<Material>(
-                "Assets/Materials/SurfaceMaterial.mat");
+            ResolveEditorSurfaceAssets();
+        }
+
+        private void ResolveEditorSurfaceAssets()
+        {
+            _transitTexture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
+                "Assets/Textures/transit.png");
+            _perspectiveTexture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
+                "Assets/Textures/perspective.png");
         }
 #endif
 
         protected void Awake()
         {
+#if UNITY_EDITOR
+            ResolveEditorSurfaceAssets();
+#endif
             SetupWorldBackground();
-            SetupSurfaceRenderer();
             SetupWorldMapController();
             SetupMinimapController();
             SetupWorldAudioController();
+            SetupSurfaceRenderer();
         }
 
         private void SetupMinimapController()
@@ -67,16 +76,22 @@ namespace Fodinae.World
 
         private void SetupSurfaceRenderer()
         {
-            var existing = FindAnyObjectByType<SurfaceRenderer>();
-            if (existing != null)
+            if (_transitTexture == null || _perspectiveTexture == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "SceneSetup requires serialized transit and perspective surface textures.");
             }
 
-            var surfaceGO = new GameObject("SurfaceRenderer");
-            surfaceGO.transform.SetParent(transform);
-            var surfaceRenderer = surfaceGO.AddComponent<SurfaceRenderer>();
-            surfaceRenderer.SetMaterials(_transitMaterial, _perspectiveMaterial);
+            SurfaceRenderer? surfaceRenderer = FindAnyObjectByType<SurfaceRenderer>();
+            if (surfaceRenderer == null)
+            {
+                var surfaceGO = new GameObject("SurfaceRenderer");
+                surfaceGO.transform.SetParent(transform);
+                surfaceRenderer = surfaceGO.AddComponent<SurfaceRenderer>();
+            }
+
+            Fodinae.Core.ServiceLocator.Inject(surfaceRenderer);
+            surfaceRenderer.SetLocalAssets(_transitTexture, _perspectiveTexture);
         }
 
         private void SetupWorldMapController()

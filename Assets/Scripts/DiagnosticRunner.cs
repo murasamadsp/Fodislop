@@ -25,6 +25,7 @@ namespace Fodinae
         private static readonly string LogPath = Path.Combine(Application.dataPath, "..", "diagnostic.txt");
         private static readonly string MemoryLogPath = Path.Combine(Application.dataPath, "..", "memory_growth.txt");
         private float _nextMemorySampleTime;
+        private Camera? _mainCamera;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EnsureCreated()
@@ -39,6 +40,11 @@ namespace Fodinae
             var go = new GameObject("FodinaeDiagnostics");
             DontDestroyOnLoad(go);
             go.AddComponent<DiagnosticRunner>();
+        }
+
+        protected void Awake()
+        {
+            _mainCamera = Camera.main;
         }
 
         protected void Update()
@@ -169,7 +175,7 @@ namespace Fodinae
             }
 
             sb.AppendLine("\n[CAMERA]");
-            var cam = Camera.main;
+            var cam = _mainCamera;
             sb.AppendLine(cam != null
                 ? $"  pos={cam.transform.position} ortho={cam.orthographic} size={cam.orthographicSize} active={cam.gameObject.activeInHierarchy}"
                 : "  NULL");

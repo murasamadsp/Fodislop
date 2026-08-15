@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
@@ -126,20 +127,18 @@ namespace Fodinae.Game.Managers
 
             if (packet == null)
             {
-                Debug.LogError("[MapManager] LoadWorldInit called with null packet");
-                return;
+                throw new ArgumentNullException(nameof(packet), "WorldInitPacket is required.");
             }
 
             if (string.IsNullOrEmpty(packet.CodeName))
             {
-                Debug.LogError("[MapManager] LoadWorldInit called with null or empty world code name");
-                return;
+                throw new InvalidDataException("WorldInitPacket.CodeName is required.");
             }
 
             if (packet.Width <= 0 || packet.Height <= 0)
             {
-                Debug.LogError($"[MapManager] Invalid dimensions: {packet.Width}x{packet.Height}");
-                return;
+                throw new InvalidDataException(
+                    $"WorldInitPacket dimensions are invalid: {packet.Width}x{packet.Height}.");
             }
 
             _worldCodeName = packet.CodeName;
@@ -170,8 +169,8 @@ namespace Fodinae.Game.Managers
             var storage = WorldStorage;
             if (storage == null)
             {
-                Debug.LogError("[MapManager] WorldStorage is null — IWorldDataStorage not registered");
-                return;
+                throw new InvalidOperationException(
+                    "WorldStorage is not registered; cannot initialize the world.");
             }
 
 
@@ -190,8 +189,9 @@ namespace Fodinae.Game.Managers
 
             if (!storage.IsReady)
             {
-                Debug.LogError($"[MapManager] MapStorage.InitWorld failed: IsReady=false, IsInitialized={storage.IsInitialized()}, CellLayer={(storage.CellLayer != null ? "ok" : "NULL")}");
-                return;
+                throw new InvalidDataException(
+                    $"World storage initialization completed without readiness: " +
+                    $"IsInitialized={storage.IsInitialized()}, CellLayer={(storage.CellLayer != null ? "ok" : "NULL")}.");
             }
 
             IsWorldInitialized = true;
@@ -381,7 +381,7 @@ namespace Fodinae.Game.Managers
                 if (cam != null && Application.isPlaying)
                 {
                     Vector3 camPos = cam.transform.position;
-                    const int range = GameConstants.Debug.COLLISION_DEBUG_RANGE;
+                    const int range = GameConstants.Debug.CollisionDebugRange;
                     int startX = Mathf.FloorToInt(camPos.x) - range;
                     int startY = Mathf.FloorToInt(camPos.y) - range;
 
@@ -389,6 +389,11 @@ namespace Fodinae.Game.Managers
                     {
                         for (int y = startY; y < startY + (range * 2); y++)
                         {
+                            if (y < 0 || y >= WorldHeight)
+                            {
+                                continue;
+                            }
+
                             int worldX = x;
                             int worldY = CoordinateUtils.UnityToServerY(y, WorldHeight);
 

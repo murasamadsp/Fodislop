@@ -34,6 +34,8 @@ namespace Fodinae.Networking
         private readonly object _subscribersLock = new();
         private bool _connectionSubscribed;
 
+        public bool IsConnectionSubscriptionEstablished => _connectionSubscribed;
+
         protected void Awake()
         {
             Instance = this;
@@ -122,14 +124,9 @@ namespace Fodinae.Networking
 
         public void Send(IRootClientPacket packet)
         {
-            var connection = Fodinae.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (connection == null || connection.Connection == null)
-            {
-                return;
-            }
-
+            var connectionService = Fodinae.Core.ServiceLocator.Resolve<IConnectionService>()!;
             var timestamp = (uint)DateTimeOffset.UtcNow.Ticks;
-            connection.Connection.SendAsync(new ClientPacket(timestamp, packet));
+            connectionService.Send(new ClientPacket(timestamp, packet));
         }
 
         void INetworkService.Send(IRootClientPacket packet) => Send(packet);

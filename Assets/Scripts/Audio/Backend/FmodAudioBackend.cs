@@ -50,7 +50,11 @@ namespace Fodinae.Audio.Backend
         {
             foreach (var bankName in _requiredBanks)
             {
-                await EnsureBankLoadedAsync(bankName);
+                if (!await EnsureBankLoadedAsync(bankName))
+                {
+                    throw new InvalidOperationException(
+                        $"Required FMOD bank '{bankName}' could not be loaded.");
+                }
             }
 
             MapBuses();

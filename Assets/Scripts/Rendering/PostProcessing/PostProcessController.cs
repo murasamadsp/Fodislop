@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -19,6 +21,8 @@ namespace Fodinae.Rendering.PostProcessing
         private UniversalAdditionalCameraData? _configuredMainCameraData;
         private Camera? _worldUiCamera;
         private UniversalAdditionalCameraData? _worldUiCameraData;
+        private Camera? _mainCamera;
+        private UniversalAdditionalCameraData? _cachedMainCameraData;
         private int _worldUiLayerMask;
         private bool _ownsRuntimeVolume;
         private bool _ownsRuntimeProfile;
@@ -145,6 +149,7 @@ namespace Fodinae.Rendering.PostProcessing
         private void Awake()
         {
             _instance = this;
+            _mainCamera = Camera.main;
         }
 
         private void OnDestroy()
@@ -188,7 +193,7 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            var mainCam = Camera.main;
+            var mainCam = _mainCamera;
             if (mainCam != null)
             {
                 EnsureCameraSetup(mainCam);
@@ -251,7 +256,7 @@ namespace Fodinae.Rendering.PostProcessing
             Camera? mainCamera = _configuredMainCamera;
             if (mainCamera == null)
             {
-                mainCamera = Camera.main;
+                mainCamera = _mainCamera;
             }
 
             if (mainCamera == null)
@@ -310,10 +315,20 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void EnsureCameraSetup(Camera mainCamera)
         {
-            var cameraData = mainCamera.GetComponent<UniversalAdditionalCameraData>();
-            if (cameraData == null)
+            UniversalAdditionalCameraData? cameraData = null;
+            if (mainCamera == _configuredMainCamera && _cachedMainCameraData != null)
             {
-                cameraData = mainCamera.gameObject.AddComponent<UniversalAdditionalCameraData>();
+                cameraData = _cachedMainCameraData;
+            }
+            else
+            {
+                cameraData = mainCamera.GetComponent<UniversalAdditionalCameraData>();
+                if (cameraData == null)
+                {
+                    cameraData = mainCamera.gameObject.AddComponent<UniversalAdditionalCameraData>();
+                }
+
+                _cachedMainCameraData = cameraData;
             }
 
             // This project uses its own renderer feature. Keeping URP's built-in
@@ -329,11 +344,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void EnsureWorldUiCamera(Camera mainCamera, UniversalAdditionalCameraData mainCameraData)
         {
-            int uiLayer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
+            int uiLayer = LayerMask.NameToLayer(ProjectRuntimeContracts.RequiredLayers.WorldUi);
             if (uiLayer < 0)
             {
-                Debug.LogError($"[PostProcess] Unity layer '{PostProcessRendererFeature.WorldUiLayerName}' is missing.");
-                return;
+                throw new InvalidOperationException(
+                    $"Unity layer '{ProjectRuntimeContracts.RequiredLayers.WorldUi}' is required for post-processing camera separation.");
             }
 
             _worldUiLayerMask = 1 << uiLayer;

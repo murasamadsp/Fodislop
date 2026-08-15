@@ -23,6 +23,8 @@ namespace Fodinae.UI
         [SerializeField]
         private float _dragSpeed = 0.5f;
 
+        private const int MaxChunkCacheEntries = 4096;
+
         private int _texWidth;
         private int _texHeight;
         private Canvas? _canvas;
@@ -39,6 +41,8 @@ namespace Fodinae.UI
         private float _viewCenterX;
         private float _viewCenterY;
         private float _cellsPerPixel = 1f;
+        private float _maxCellsPerPixel = 10f;
+        private readonly Queue<int> _chunkCacheOrder = new();
 
         [Inject]
         private IWorldDataStorage? _storage;
@@ -89,7 +93,12 @@ namespace Fodinae.UI
                 _heightChunks = _cellLayer.HeightChunks;
             }
 
-            _cellsPerPixel = Mathf.Max((float)w / _texWidth, (float)h / _texHeight, 0.05f);
+            // Start at a local view (1 world cell = 1 pixel) centered on the player,
+            // not at whole-world zoom. Whole-world zoom on a large map would force
+            // loading every chunk into the disk LRU at once (OOM / stall).
+            _cellsPerPixel = 1f;
+            _maxCellsPerPixel = ComputeMaxZoomOut(w, h);
+            _cellsPerPixel = Mathf.Min(_cellsPerPixel, _maxCellsPerPixel);
             _viewCenterX = w / 2f;
             _viewCenterY = h / 2f;
 
@@ -229,7 +238,10 @@ namespace Fodinae.UI
             _texHeight = BASE_RES;
             _texWidth = Mathf.RoundToInt(BASE_RES * ((float)Screen.width / Screen.height));
             _mapTexture = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
-            _mapTexture.filterMode = FilterMode.Point;
+
+            // Bilinear smooths the upscale from the 512px texture to a full-screen
+            // RawImage. Point filtering here produced jagged, aliased cell edges.
+            _mapTexture.filterMode = FilterMode.Bilinear;
             _mapTexture.wrapMode = TextureWrapMode.Clamp;
             if (_rawImage != null)
             {
@@ -262,8 +274,12 @@ namespace Fodinae.UI
 
                 if (delta.sqrMagnitude > 1f)
                 {
+                    // Screen-space: +X right, +Y up. World: +X right, +Y down.
+                    // Grab-style drag: content follows the cursor. Dragging right
+                    // moves the view left (X +), dragging up moves the view "north"
+                    // (smaller server Y), so centerY must INCREASE when delta.y is +.
                     _viewCenterX -= delta.x * _cellsPerPixel * _dragSpeed;
-                    _viewCenterY -= delta.y * _cellsPerPixel * _dragSpeed;
+                    _viewCenterY += delta.y * _cellsPerPixel * _dragSpeed;
                     _renderRequested = true;
                 }
             }
@@ -350,16 +366,15 @@ namespace Fodinae.UI
             // cell. When zoomed out, the old implementation walked the entire
             // world and then painted the same pixel many times. A 10k x 10k
             // world could therefore trigger 100 million GetCell calls for a
-            // texture that contains only ~500k pixels.
-            if (!PrepareViewportChunks(worldW, worldH, cp, cx, cy, texW, texH))
-            {
-                return false;
-            }
-
+            // texture that contains only ~500k pixels. GetCell loads chunks
+            // lazily through a bounded cache, so memory stays flat at any zoom.
             for (int py = 0; py < texH; py++)
             {
                 int rowStart = py * texW;
-                float worldY = cy - ((py + 0.5f - (texH * 0.5f)) * cp);
+
+                // World Y grows downward (server Top-Left). Screen top (py = 0)
+                // must show the smallest server Y, so worldY grows with py.
+                float worldY = cy + ((py + 0.5f - (texH * 0.5f)) * cp);
                 int serverY = Mathf.FloorToInt(worldY);
 
                 for (int px = 0; px < texW; px++)
@@ -382,32 +397,30 @@ namespace Fodinae.UI
             {
                 Vector2Int playerPos = _player.Position;
 
-                float visibleLeft = cx - (texW * 0.5f * cp);
-                float visibleRight = cx + (texW * 0.5f * cp);
-                float visibleBottom = cy - (texH * 0.5f * cp);
-                float visibleTop = cy + (texH * 0.5f * cp);
-                if (playerPos.x + 1f >= visibleLeft && playerPos.x <= visibleRight &&
-                    playerPos.y + 1f >= visibleBottom && playerPos.y <= visibleTop)
+                float halfW = texW * 0.5f * cp;
+                float halfH = texH * 0.5f * cp;
+                float leftX = cx - halfW;
+                float rightX = cx + halfW;
+                float topServerY = cy - halfH;
+                float bottomServerY = cy + halfH;
+
+                if (playerPos.x + 1f >= leftX && playerPos.x <= rightX &&
+                    playerPos.y + 1f >= topServerY && playerPos.y <= bottomServerY)
                 {
-                    float worldX_left = playerPos.x;
-                    float worldX_right = playerPos.x + 1f;
+                    float pixelX = ((playerPos.x - cx) / cp) + (texW * 0.5f);
+                    float pixelY = ((playerPos.y - cy) / cp) + (texH * 0.5f);
+                    float markerSize = Mathf.Max(1f, 1f / cp);
 
-                    float pixelX_left = ((worldX_left - cx) / cp) + (texW * 0.5f);
-                    float pixelX_right = ((worldX_right - cx) / cp) + (texW * 0.5f);
-                    float pixelY_top = ((cy - playerPos.y) / cp) + (texH * 0.5f);
-                    float pixelY_bottom = ((cy - (playerPos.y + 1f)) / cp) + (texH * 0.5f);
-
-                    int pixX_start = Mathf.Clamp(Mathf.RoundToInt(pixelX_left), 0, texW - 1);
-                    int pixX_end = Mathf.Clamp(Mathf.RoundToInt(pixelX_right), 0, texW - 1);
-                    int pixY_start = Mathf.Clamp(Mathf.RoundToInt(pixelY_bottom), 0, texH - 1);
-                    int pixY_end = Mathf.Clamp(Mathf.RoundToInt(pixelY_top), 0, texH - 1);
+                    int pxStart = Mathf.Clamp(Mathf.RoundToInt(pixelX), 0, texW - 1);
+                    int pxEnd = Mathf.Clamp(Mathf.RoundToInt(pixelX + markerSize), 0, texW - 1);
+                    int pyStart = Mathf.Clamp(Mathf.RoundToInt(pixelY), 0, texH - 1);
+                    int pyEnd = Mathf.Clamp(Mathf.RoundToInt(pixelY + markerSize), 0, texH - 1);
 
                     Color32 playerColor = new Color32(255, 0, 0, 255);
-
-                    for (int py = pixY_start; py <= pixY_end; py++)
+                    for (int py = pyStart; py <= pyEnd; py++)
                     {
                         int rowStart = py * texW;
-                        for (int px = pixX_start; px <= pixX_end; px++)
+                        for (int px = pxStart; px <= pxEnd; px++)
                         {
                             _pixelBuffer[rowStart + px] = playerColor;
                         }
@@ -423,63 +436,6 @@ namespace Fodinae.UI
 
             _renderRequested = false;
             _lastRenderedStorageRevision = (_storage as MapStorage)?.Revision ?? -1;
-            return true;
-        }
-
-        private bool PrepareViewportChunks(
-            int worldWidth,
-            int worldHeight,
-            float cellsPerPixel,
-            float centerX,
-            float centerY,
-            int textureWidth,
-            int textureHeight)
-        {
-            if (_cellLayer == null || _chunkSize <= 0 || _heightChunks <= 0)
-            {
-                return true;
-            }
-
-            int minX = Mathf.Clamp(
-                Mathf.FloorToInt(centerX - (textureWidth * 0.5f * cellsPerPixel)),
-                0,
-                worldWidth - 1);
-            int maxX = Mathf.Clamp(
-                Mathf.CeilToInt(centerX + (textureWidth * 0.5f * cellsPerPixel)),
-                0,
-                worldWidth - 1);
-            int minY = Mathf.Clamp(
-                Mathf.FloorToInt(centerY - (textureHeight * 0.5f * cellsPerPixel)),
-                0,
-                worldHeight - 1);
-            int maxY = Mathf.Clamp(
-                Mathf.CeilToInt(centerY + (textureHeight * 0.5f * cellsPerPixel)),
-                0,
-                worldHeight - 1);
-
-            _chunkCache.Clear();
-            int firstChunkX = minX / _chunkSize;
-            int lastChunkX = maxX / _chunkSize;
-            int firstChunkY = minY / _chunkSize;
-            int lastChunkY = maxY / _chunkSize;
-            for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
-            {
-                for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
-                {
-                    int chunkIndex = chunkY + (chunkX * _heightChunks);
-                    CellType[]? chunk = _cellLayer.GetChunk(
-                        chunkIndex,
-                        createIfMissing: false,
-                        touchLru: true);
-                    if (chunk == null)
-                    {
-                        continue;
-                    }
-
-                    _chunkCache[chunkIndex] = chunk;
-                }
-            }
-
             return true;
         }
 
@@ -501,8 +457,17 @@ namespace Fodinae.UI
             int chunkIndex = chunkY + (chunkX * _heightChunks);
             if (!_chunkCache.TryGetValue(chunkIndex, out CellType[]? chunk))
             {
+                // Lazily load on demand. touchLru: false — the world-layer LRU belongs
+                // to gameplay; the map must not evict real terrain chunks from it.
                 chunk = _cellLayer.GetChunk(chunkIndex, createIfMissing: false, touchLru: false);
                 _chunkCache[chunkIndex] = chunk;
+                _chunkCacheOrder.Enqueue(chunkIndex);
+
+                if (_chunkCache.Count > MaxChunkCacheEntries)
+                {
+                    int evict = _chunkCacheOrder.Dequeue();
+                    _chunkCache.Remove(evict);
+                }
             }
 
             if (chunk == null)
@@ -513,6 +478,22 @@ namespace Fodinae.UI
             int localX = serverX % _chunkSize;
             int localY = serverY % _chunkSize;
             return chunk[localY + (localX * _chunkSize)];
+        }
+
+        private float ComputeMaxZoomOut(int worldW, int worldH)
+        {
+            if (_texWidth <= 0 || _texHeight <= 0 || _chunkSize <= 0)
+            {
+                return 10f;
+            }
+
+            // Bound the number of chunks a single render pass may hold at once so
+            // that zooming out on a huge world can never pin the whole map into
+            // memory. Visible cells = texW * cp * texH * cp; each chunk holds
+            // _chunkSize * _chunkSize cells, so cap cp by the chunk-cache budget.
+            int visibleCellBudget = MaxChunkCacheEntries * _chunkSize * _chunkSize;
+            float maxCp = Mathf.Sqrt((float)visibleCellBudget / (_texWidth * _texHeight));
+            return Mathf.Max(1f, maxCp);
         }
 
         private void OnScroll(InputAction.CallbackContext ctx)
@@ -529,7 +510,7 @@ namespace Fodinae.UI
             }
 
             _cellsPerPixel *= 1f - (delta * 0.1f);
-            _cellsPerPixel = Mathf.Clamp(_cellsPerPixel, 0.02f, 10f);
+            _cellsPerPixel = Mathf.Clamp(_cellsPerPixel, 0.25f, _maxCellsPerPixel);
             _renderRequested = true;
         }
     }

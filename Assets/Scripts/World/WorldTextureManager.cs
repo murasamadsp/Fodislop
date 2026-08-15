@@ -274,11 +274,9 @@ namespace Fodinae.World
             }
 
             var request = new TextureRequest(cellType);
-            if (!_pendingRequests.TryAdd(cellType, request))
+            bool ownsRequest = _pendingRequests.TryAdd(cellType, request);
+            if (!ownsRequest)
             {
-                // A request can arrive between the initial lookup above and
-                // TryAdd. Join that request instead of decoding the same
-                // texture a second time.
                 if (_pendingRequests.TryGetValue(cellType, out var racingRequest))
                 {
                     await racingRequest.Task;
@@ -314,7 +312,10 @@ namespace Fodinae.World
             }
             finally
             {
-                _pendingRequests.TryRemove(cellType, out _);
+                if (ownsRequest)
+                {
+                    _pendingRequests.TryRemove(cellType, out _);
+                }
             }
         }
 
@@ -376,7 +377,8 @@ namespace Fodinae.World
             else
             {
                 Debug.LogWarning($"[AssetDiag] TEXFAIL {filename} — texture null");
-                throw new Exception($"Failed to load texture for {cellType}");
+                throw new InvalidOperationException(
+                    $"Failed to load required terrain texture '{filename}' for cell type {cellType}.");
             }
         }
 

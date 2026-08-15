@@ -76,11 +76,6 @@ namespace Fodinae.Player
 
                 if (_mainCamera == null)
                 {
-                    _mainCamera = Camera.main;
-                }
-
-                if (_mainCamera == null)
-                {
                     return;
                 }
 

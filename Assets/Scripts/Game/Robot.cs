@@ -37,7 +37,7 @@ namespace Fodinae.Game
         [SerializeField]
         private string _tailPath = string.Empty;
         [SerializeField]
-        private float _rotationSpeed = 1080f;
+        private float _rotationSpeed = ProjectRuntimeContracts.RobotRotationSpeed;
         [Header("Dynamic Emission")]
         [SerializeField]
         [Tooltip("Разрешает Robot регистрировать dynamic emission source в TerrariaLightingEngine.")]
@@ -45,18 +45,17 @@ namespace Fodinae.Game
         [SerializeField]
         [Range(0f, 4f)]
         [Tooltip("Интенсивность dynamic emission. HDR-значение выше 1 усиливает источник.")]
-        private float _dynamicLightIntensity = LightingDefaults.DynamicLightIntensity;
+        private float _dynamicLightIntensity;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
         [Tooltip("HDR-цвет dynamic emission источника Robot.")]
-        private Color _dynamicLightColor = LightingDefaults.DynamicLightColor;
+        private Color _dynamicLightColor;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
-        private const float MIN_SMOOTH_TIME = 0.05f;
-        private const float MAX_SMOOTH_TIME = 0.15f;
-        private const float REFERENCE_MOVE_SPEED = 25f;
-        private const float DYNAMIC_LIGHT_POSITION_EPSILON = 0.00390625f;
+        private const float MinimumSmoothTime = 0.05f;
+        private const float MaximumSmoothTime = 0.15f;
+        private const float DynamicLightPositionEpsilon = 0.00390625f;
 
         private bool _isMetadataLoaded = false;
         private CancellationTokenSource? _cts;
@@ -68,11 +67,13 @@ namespace Fodinae.Game
         private Vector3 _currentVelocity;
         private float _currentAngularVelocity;
         [SerializeField]
-        private float _moveSpeed = 15f;
+        private float _moveSpeed = ProjectRuntimeContracts.RobotMoveSpeed;
         private float _tremor = 0f;
 
         [Inject]
         private IRobotService _robotService = null!;
+        [Inject]
+        private IProjectDefaults _projectDefaults = null!;
         private Tentacle[]? _tentacles;
         private Sprite? _skinSprite;
         private Sprite? _clanSprite;
@@ -92,8 +93,6 @@ namespace Fodinae.Game
         private bool _dynamicLightSettingsLoaded;
         [Inject]
         private TentacleBatchRenderer _tentacleBatchRenderer = null!;
-        private float _inspectorDynamicLightIntensity;
-        private Color _inspectorDynamicLightColor;
 
         public uint BotId => _botId;
         public int PlayerId => _playerId;
@@ -164,19 +163,10 @@ namespace Fodinae.Game
         protected void Awake()
         {
             _dynamicLightId = Interlocked.Increment(ref _nextDynamicLightId);
-            _inspectorDynamicLightIntensity = _dynamicLightIntensity;
-            _inspectorDynamicLightColor = _dynamicLightColor;
 
             // Dynamic emission is a property of this Robot source. Terrain
             // lighting owns the global lighting toggle.
             _dynamicLightEnabled = _emitsDynamicLight;
-            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
-            if (lighting?.IsRuntimeConfigReady == true)
-            {
-                _dynamicLightIntensity = lighting.DynamicLightIntensity;
-                _dynamicLightColor = lighting.DynamicLightColor;
-                _dynamicLightSettingsLoaded = true;
-            }
 
             if (_spriteRenderer == null)
             {
@@ -267,6 +257,8 @@ namespace Fodinae.Game
 
         protected void Start()
         {
+            InitializeDynamicLightSettings();
+
             Vector3 snappedPos = new Vector3(
                 Mathf.Floor(transform.position.x) + 0.5f,
                 Mathf.Floor(transform.position.y) + 0.5f,
@@ -312,6 +304,10 @@ namespace Fodinae.Game
                 _tentaclesSettled;
             if (bodySettled)
             {
+                // Tentacles contain a time-based idle animation even when the
+                // robot itself is stationary. Keep their render mesh current
+                // while the body transform can take the cheap early-out path.
+                UpdateTentacles(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime);
                 UpdateLabelsPosition();
                 UpdateDynamicLight();
                 return;
@@ -321,12 +317,13 @@ namespace Fodinae.Game
 
             // 1. Base smooth time now scales PROPORTIONALLY with speed.
             // Slower = snappier/tighter (low smooth time). Faster = momentum/curves (higher smooth time).
-            float speedRatio = Mathf.Clamp01(_moveSpeed / REFERENCE_MOVE_SPEED);
-            float targetSmoothTime = Mathf.Lerp(MIN_SMOOTH_TIME, MAX_SMOOTH_TIME, speedRatio);
+            float speedRatio = Mathf.Clamp01(
+                _moveSpeed / GameConstants.Movement.ReferenceMoveSpeed);
+            float targetSmoothTime = Mathf.Lerp(MinimumSmoothTime, MaximumSmoothTime, speedRatio);
 
             // 2. Distance factor: get extra snappy when very close to the target (e.g. moving exactly 1 cell and stopping)
             float distanceRatio = Mathf.Clamp01(renderDistance / 2f);
-            float smoothTime = Mathf.Lerp(MIN_SMOOTH_TIME, targetSmoothTime, distanceRatio);
+            float smoothTime = Mathf.Lerp(MinimumSmoothTime, targetSmoothTime, distanceRatio);
 
             if (renderDistance > 28f)
             {
@@ -416,7 +413,7 @@ namespace Fodinae.Game
                 ReferenceEquals(_lastDynamicLightEngine, lighting) &&
                 _lastDynamicLightGeneration == generation &&
                 (_lastDynamicLightPosition - position).sqrMagnitude <=
-                    DYNAMIC_LIGHT_POSITION_EPSILON * DYNAMIC_LIGHT_POSITION_EPSILON &&
+                    DynamicLightPositionEpsilon * DynamicLightPositionEpsilon &&
                 _lastDynamicLightColor == _dynamicLightColor &&
                 Mathf.Approximately(_lastDynamicLightIntensity, _dynamicLightIntensity))
             {
@@ -467,9 +464,24 @@ namespace Fodinae.Game
             }
 
             TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
-            _dynamicLightIntensity = lighting?.DynamicLightIntensity ?? _inspectorDynamicLightIntensity;
-            _dynamicLightColor = lighting?.DynamicLightColor ?? _inspectorDynamicLightColor;
+            _dynamicLightIntensity = lighting?.DynamicLightIntensity ??
+                _projectDefaults.Lighting.DynamicLightIntensity;
+            _dynamicLightColor = lighting?.DynamicLightColor ??
+                _projectDefaults.Lighting.DynamicLightColor;
             _dynamicLightSettingsLoaded = true;
+        }
+
+        private void InitializeDynamicLightSettings()
+        {
+            LightingDefaultsSnapshot defaults = _projectDefaults.Lighting;
+            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            _dynamicLightIntensity = lighting?.IsRuntimeConfigReady == true
+                ? lighting.DynamicLightIntensity
+                : defaults.DynamicLightIntensity;
+            _dynamicLightColor = lighting?.IsRuntimeConfigReady == true
+                ? lighting.DynamicLightColor
+                : defaults.DynamicLightColor;
+            _dynamicLightSettingsLoaded = lighting?.IsRuntimeConfigReady == true;
         }
 
         private void CreateTentacles(Texture2D tailTexture)
@@ -477,7 +489,7 @@ namespace Fodinae.Game
             ClearTentacles();
             _tentacles = new Tentacle[4];
             _tentaclesSettled = false;
-            float[] offsets = { 0f, 1.5f, 3.0f, 4.5f };
+            float[] offsets = { -45f, -15f, 15f, 45f };
             for (int i = 0; i < 4; i++)
             {
                 _tentacles[i] = new Tentacle(
@@ -572,6 +584,7 @@ namespace Fodinae.Game
 
         public void Initialize(uint botId)
         {
+            InitializeDynamicLightSettings();
             _botId = botId;
             ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
 

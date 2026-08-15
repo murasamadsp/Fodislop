@@ -47,7 +47,7 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client
 {
-    public class DummyConnection : IServerConnection
+    public class DummyConnection : IServerConnection, IOfflineConnection
     {
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
 
@@ -690,8 +690,8 @@ namespace MinesServer.Networking.Connection.Client
                 ushort frontY = _y;
                 switch (_rot)
                 {
-                    case Direction.Up: frontY++; break;
-                    case Direction.Down: frontY--; break;
+                    case Direction.Up: frontY--; break;
+                    case Direction.Down: frontY++; break;
                     case Direction.Left: frontX--; break;
                     case Direction.Right: frontX++; break;
                 }
@@ -1024,17 +1024,16 @@ namespace MinesServer.Networking.Connection.Client
             string? mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
             if (string.IsNullOrEmpty(mapbPath) || !File.Exists(mapbPath))
             {
-                Debug.LogError($"[DummyConnection] Prebaked map file for '{PrebakedWorldCodeName}' not found! Fail-fast without fallbacks.");
-                TriggerDisconnect($"Prebaked map file for '{PrebakedWorldCodeName}' not found");
-                return;
+                throw new FileNotFoundException(
+                    $"Prebaked map file for '{PrebakedWorldCodeName}' was not found.",
+                    mapbPath);
             }
 
             (int worldWidth, int worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
             if (worldWidth <= 0 || worldHeight <= 0)
             {
-                Debug.LogError($"[DummyConnection] Prebaked map file '{mapbPath}' has invalid dimensions ({worldWidth}x{worldHeight}). Fail-fast!");
-                TriggerDisconnect("Invalid prebaked map dimensions");
-                return;
+                throw new InvalidDataException(
+                    $"Prebaked map file '{mapbPath}' has invalid dimensions ({worldWidth}x{worldHeight}).");
             }
 
             int widthChunks = (worldWidth + 31) / 32;
@@ -2020,7 +2019,8 @@ namespace MinesServer.Networking.Connection.Client
             const int StreamingRadiusChunks = 4;
             if (_worldLayer == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Cannot stream map chunks before the DummyConnection world layer is initialized.");
             }
 
             int centerChunkX = serverX / ChunkSize;
@@ -2109,10 +2109,13 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[DummyConnection] Failed reading map dimensions: {ex.Message}");
+                throw new InvalidDataException(
+                    $"Failed reading prebaked map dimensions from '{path}'.",
+                    ex);
             }
 
-            return (0, 0);
+            throw new InvalidDataException(
+                $"Prebaked map '{path}' contains invalid dimensions.");
         }
 
         private async UniTaskVoid HandleRobotInfoMock(ushort botId)

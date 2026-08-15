@@ -277,17 +277,6 @@ namespace Fodinae.Player.Logic
 
         private void ApplyMovement()
         {
-            // _robot может быть null если PlayerMovementController создан VContainer'ом
-            // отдельно от префаба Player. Пробуем получить его лениво.
-            if (_robot is null)
-            {
-                _robot = GetComponent<Robot>();
-                if (_robot is not null)
-                {
-                    _robot.MoveSpeed = _moveSpeed;
-                }
-            }
-
             if (_robot is null || _input is null)
             {
                 return;

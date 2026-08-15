@@ -288,7 +288,7 @@
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
+      "hash": "12b6ac115786738ccc4a78979f1926bb5e63f79a"
     },
     "darkar25.fodinae.networking": {
       "version": "https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Networking/",
@@ -302,7 +302,7 @@
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "37dea99b895c42fde35682fb285d049ec73338a2"
+      "hash": "12b6ac115786738ccc4a78979f1926bb5e63f79a"
     },
     "darkar25.fodinae.networking.connection": {
       "version": "https://github.com/MinesReborn/MinesServerNetworking.git?path=/MinesServer.Networking.Connection/",

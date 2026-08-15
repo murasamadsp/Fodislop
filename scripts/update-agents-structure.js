@@ -62,7 +62,6 @@ const DIR_COMMENTS = new Map([
 // Комментарии к отдельным ключевым файлам
 const FILE_COMMENTS = new Map([
   ['BuildScript.cs', '# Сборка билдов'],
-  ['CsProjFix.cs', '# csproj постпроцессор'],
   ['FmodBankBuilder.cs', '# Синк FMOD-банков'],
   ['MapbConverter.cs', '# Конвертер серверных карт'],
   ['SingleMeshTerrainRenderer.cs', '# Один меш на весь террейн, 7 UV-каналов'],

@@ -68,6 +68,15 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 - `WindowBinding` использует SmartFormat. Inventory — модель/presenter/view, 9×6 + хотбар; HUD включает HP, энергию, баффы, авто-копку и Programmator. Chat состоит из global/local/floating компонентов.
 - `MainMenu` загружает `Resources/UI/MainMenu.uxml`; после сборки UI фиксированный `PanelSettings` нужно восстановить, иначе элементы могут отображаться, но не принимать события.
 
+#### Идиоматика UI Toolkit (обязательна для нового/переписываемого кода)
+
+1. **Один источник стилей** — `PanelSettings.themeUss` → `FodinaeTheme.tss`, который `@import`'ит все `Resources/Styles/*.uss`. Запрещено в контроллерах делать `element.styleSheets.Add(Resources.Load<StyleSheet>(...))` и дублировать уже импортированные стили.
+2. **Структура в UXML, не в коде.** Статическая разметка (контейнеры, кнопки, панели) — в `.uxml` в `Resources/UI/`; код через `VisualTreeAsset.CloneTree()` и `tree.Q<T>("Name")` только привязывает обработчики и data-bound контент. Конструкция `new VisualElement()` в C# — только для динамических списков/сеток.
+3. **Размер панели — дело PanelSettings, не кода.** Запрещено выставлять `root.style.width/height` из `Screen.width/height` и полагаться на абсолютные `top/left` координаты. Рут и контейнеры растягиваются через `position:absolute; left/right/top/bottom:0` или `flex-grow:1` в USS; центрирование — flexbox (`align-items/justify-content`).
+4. **Переключение видимости — `display:Flex/None`** через класс или inline-стиль на существующем элементе UXML. Не добавлять/удалять оверлеи из иерархии на каждом кадре и не играться `pickingMode` для «прозрачности» — модальные/фоновые слои задаются z-порядком в UXML и USS.
+5. **Сборка UI один раз** (guard по флагу в `OnEnable`/`Start`), а не при каждом показе. `clicked`/`RegisterCallback` подписывать один раз; при `OnDisable` — отписываться.
+6. **`Screen.width` ненадёжен в редакторе** — до первого layout панель может дать NaN; причина некликабельности. Диагностировать по `root.layout` (конечный размер ≠ NaN) и `element.worldBound`. После `CloneTree` не модифицировать `root` кроме `Add(tree)`.
+
 ### Мир и координаты
 
 - Серверные координаты: левый верхний угол `(0, 0)`, X вправо, Y вниз. Все преобразования — через `CoordinateUtils`; всегда учитывать `MapManager.WorldHeight`.
@@ -110,7 +119,7 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 - Имя файла Unity-скрипта должно совпадать с классом. После создания/переименования проверять `MonoScript.GetClass()` в Editor: `dotnet build` этого не проверяет.
 - `VolumeProfile.Add<T>()` создаёт component только в памяти; editor-код обязан вызвать `AssetDatabase.AddObjectToAsset()` до `SaveAssets()`.
 - `Renderer2D.asset` содержит ровно одну активную `PostProcessRendererFeature`. Post-process применяется к базовой камере; world-space UI на слое `UI` рисуется отдельной Overlay `WorldUICamera` без post-process; UI Toolkit/Screen Space Overlay идёт позже.
-- Внутренний URP HDR (`supportsHDR`) включён для lighting/bloom, HDR display отключён через `SdrOutputEnforcer`. Не отключать URP HDR ради SDR.
+- Внутренний URP HDR (`supportsHDR`) включён для lighting/bloom, HDR display отключён (`PlayerSettings.allowHDRDisplaySupport = false`). Не отключать URP HDR ради SDR.
 - Motion blur строит velocity только для удалённых `Robot` с `MotionBlurTag`; локального игрока исключать. Передавать реальные sprite texture и GPU matrices; teleport delta сбрасывать.
 - Terrain material не затемнять relief/connectivity или `u-v`/`u+v` градиентами; затемнение только через `_WorldLightTexture`.
 - DI — VContainer; singleton-паттерн только `Instance + Awake`, без `SingletonMonoBehaviour`. Асинхронность — UniTask, связь — `Action`.
@@ -155,6 +164,13 @@ dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -n
 - Проверки (build/lint) запускать осмысленно, не без необходимости.
 - Не выбирать ленивые фоллбеки и временные решения.
 - **Запрещено вручную менять префабы, ассеты и сцены.**
+- **Запрещено «дрочить Unity» и команды:** не запускать Unity вручную через
+  shell/batchmode, `osascript`, GUI automation или принудительный Refresh; не
+  повторять build/restore/poll-команды без нового диагностического основания и
+  не ждать зависшие процессы бесконечными циклами. Editor, Console, Play Mode,
+  scene state и импорт проверять только через Unity MCP. Если Unity MCP не
+  подключён или не экспонирует нужный инструмент, остановиться, назвать точный
+  blocker и запросить восстановление MCP, а не обходить его ручным управлением.
 
 ## 9. Принцип No Implicit Defaults и Fail-Fast
 

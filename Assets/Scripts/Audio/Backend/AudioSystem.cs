@@ -34,6 +34,10 @@ namespace Fodinae.Audio.Backend
         {
             _backend = new FmodAudioBackend();
             _backend.Initialize(this);
+        }
+
+        private void Start()
+        {
             ApplySavedBusVolumes();
         }
 

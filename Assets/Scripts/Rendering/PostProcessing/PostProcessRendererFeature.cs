@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -33,7 +34,7 @@ namespace Fodinae.Rendering.PostProcessing
         private Settings _settings = new();
 
         private PostProcessRenderPass? _pass;
-        private bool _missingShaderReported;
+        private Camera? _mainCamera;
 
         public override void Create()
         {
@@ -42,26 +43,26 @@ namespace Fodinae.Rendering.PostProcessing
 
             var computeShader = _settings.ComputeShader != null
                 ? _settings.ComputeShader
-                : Resources.Load<ComputeShader>("Shaders/PostProcessing/PostProcess");
+                : Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.PostProcessCompute);
 
             if (computeShader == null)
             {
-                if (!_missingShaderReported)
-                {
-                    Debug.LogError(
-                        "[PostProcess] Missing Resources/Shaders/PostProcessing/PostProcess.compute. " +
-                        "The renderer feature is disabled until a compute shader is assigned.");
-                    _missingShaderReported = true;
-                }
-
-                return;
+                throw new InvalidOperationException(
+                    "PostProcessRendererFeature requires PostProcess.compute; " +
+                    "the renderer feature cannot be disabled silently.");
             }
 
-            _missingShaderReported = false;
-            var velocityShader = Shader.Find("Fodinae/PostProcessing/Velocity") ??
-                                 Resources.Load<Shader>("Shaders/PostProcessing/Velocity");
+            var velocityShader = Shader.Find(ProjectRuntimeContracts.ShaderNames.Velocity);
+            if (velocityShader == null || !velocityShader.isSupported)
+            {
+                throw new InvalidOperationException(
+                    $"PostProcessRendererFeature requires the supported {ProjectRuntimeContracts.ShaderNames.Velocity} shader.");
+            }
+
             _pass = new PostProcessRenderPass(computeShader, velocityShader);
             _pass.ConfigureInput(ScriptableRenderPassInput.Color);
+            _mainCamera = Camera.main;
+            PostProcessRenderPass.SetMainCamera(_mainCamera);
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -71,10 +72,18 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
+            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                return;
+            }
+
+            PostProcessRenderPass.SetMainCamera(_mainCamera);
+
             ref var cameraData = ref renderingData.cameraData;
             if (cameraData.renderType != CameraRenderType.Base ||
                 cameraData.camera.cameraType != CameraType.Game ||
-                cameraData.camera != Camera.main)
+                cameraData.camera != _mainCamera)
             {
                 return;
             }

@@ -9,6 +9,7 @@ using Fodinae.UI;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
+using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Connection;
@@ -26,6 +27,7 @@ namespace Fodinae.Networking.Connection
 
         public IServerConnection? Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
+        public bool IsOffline => Connection is IOfflineConnection;
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
 
@@ -70,10 +72,16 @@ namespace Fodinae.Networking.Connection
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[ConnectionManager] Error processing packet: {ex.Message}\n{ex.StackTrace}");
+                    Debug.LogException(
+                        new InvalidOperationException(
+                            "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
+                            ex));
+                    TriggerDisconnect("Client packet processing failed.");
+                    break;
                 }
 
-                if (processedCount >= 250 || (Time.realtimeSinceStartup - startTime) * 1000f > 33f)
+                if (processedCount >= ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame ||
+                    (Time.realtimeSinceStartup - startTime) * 1000f > 33f)
                 {
                     break;
                 }
@@ -134,6 +142,33 @@ namespace Fodinae.Networking.Connection
             Connection = null;
 
             (_worldStorage as MapStorage)?.Dispose();
+        }
+
+        public void TriggerDisconnect(string reason)
+        {
+            if (Connection is IOfflineConnection offline)
+            {
+                offline.TriggerDisconnect(reason);
+                return;
+            }
+
+            Disconnect();
+        }
+
+        public void TriggerReconnect(string reason)
+        {
+            if (Connection is IOfflineConnection offline)
+            {
+                offline.TriggerReconnect(reason);
+                return;
+            }
+
+            Disconnect();
+        }
+
+        public void Send(ClientPacket packet)
+        {
+            Connection?.SendAsync(packet);
         }
 
         public void HandleServerDisconnect(string reason)

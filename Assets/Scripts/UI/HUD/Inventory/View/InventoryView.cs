@@ -197,11 +197,6 @@ namespace Fodinae.UI.HUD.Inventory.View
         private void BuildUI()
         {
             var root = _doc.rootVisualElement;
-            var invUss = Resources.Load<StyleSheet>("Styles/Inventory");
-            if (invUss != null)
-            {
-                root.styleSheets.Add(invUss);
-            }
 
             CreateFullInventoryPanel(root);
             CreateHotbar(root);

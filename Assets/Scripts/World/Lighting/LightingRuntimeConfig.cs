@@ -13,27 +13,26 @@ public sealed class LightingRuntimeConfig
 
     public string Schema = string.Empty;
     public int Version = CurrentVersion;
-    public int Quality = (int)LightingDefaults.Quality;
-    public bool AmbientOcclusionEnabled = LightingDefaults.AmbientOcclusionEnabled;
-    public bool DiffuseBounceEnabled = LightingDefaults.DiffuseBounceEnabled;
-    public float AmbientIntensity = LightingDefaults.AmbientIntensity;
-    public float EmissionScale = LightingDefaults.EmissionScale;
-    public Color AmbientColor = LightingDefaults.AmbientColor;
-    public Color EmptyExtinctionRgb = LightingDefaults.EmptyExtinctionRgb;
-    public Color SolidExtinctionRgb = LightingDefaults.SolidExtinctionRgb;
-    public float EmptyExtinctionMultiplier = LightingDefaults.EmptyExtinctionMultiplier;
-    public float SolidExtinctionMultiplier = LightingDefaults.SolidExtinctionMultiplier;
-    public float BounceStrength = LightingDefaults.BounceStrength;
-    public float AmbientOcclusionRadiusCells = LightingDefaults.AmbientOcclusionRadiusCells;
-    public float AmbientOcclusionStrength = LightingDefaults.AmbientOcclusionStrength;
-    public float MaximumLightMultiplier = LightingDefaults.MaximumLightMultiplier;
-    public bool EnableFinalLightingClamp = LightingDefaults.EnableFinalLightingClamp;
-    public float TransmittanceDebugDistanceCells = LightingDefaults.TransmittanceDebugDistanceCells;
-    public float MinimumTransmission = LightingDefaults.MinimumTransmission;
-    public int LightSafeBorder = LightingDefaults.LightSafeBorder;
-    public float DynamicLightIntensity = LightingDefaults.DynamicLightIntensity;
-    public Color DynamicLightColor = LightingDefaults.DynamicLightColor;
-    public float DynamicLightUpdatesPerSecond = LightingDefaults.DynamicLightUpdatesPerSecond;
+    public bool AmbientOcclusionEnabled;
+    public bool DiffuseBounceEnabled;
+    public float AmbientIntensity;
+    public float EmissionScale;
+    public Color AmbientColor;
+    public Color EmptyExtinctionRgb;
+    public Color SolidExtinctionRgb;
+    public float EmptyExtinctionMultiplier;
+    public float SolidExtinctionMultiplier;
+    public float BounceStrength;
+    public float AmbientOcclusionRadiusCells;
+    public float AmbientOcclusionStrength;
+    public float MaximumLightMultiplier;
+    public bool EnableFinalLightingClamp;
+    public float TransmittanceDebugDistanceCells;
+    public float MinimumTransmission;
+    public int LightSafeBorder;
+    public float DynamicLightIntensity;
+    public Color DynamicLightColor;
+    public float DynamicLightUpdatesPerSecond;
 
     public void Validate()
     {
@@ -66,21 +65,19 @@ public sealed class LightingRuntimeConfig
         ValidateColor(SolidExtinctionRgb, nameof(SolidExtinctionRgb));
         ValidateColor(DynamicLightColor, nameof(DynamicLightColor));
 
-        if (Quality < (int)TerrariaLightingEngine.QualityPreset.Low ||
-            Quality > (int)TerrariaLightingEngine.QualityPreset.Ultra ||
-            AmbientIntensity is < 0f or > 1f ||
+        if (AmbientIntensity is < 0f or > 1f ||
             EmissionScale is < 0.1f or > 8f ||
             EmptyExtinctionMultiplier is < 0f or > 2f ||
             SolidExtinctionMultiplier is < 0.25f or > 2f ||
             BounceStrength is < 0f or > 1f ||
             AmbientOcclusionRadiusCells is < 0.5f or > 8f ||
             AmbientOcclusionStrength is < 0.1f or > 8f ||
-            MaximumLightMultiplier is < 0.25f or > LightingDefaults.MaximumLightMultiplierLimit ||
+            MaximumLightMultiplier is < 0.25f or > LightingConfigLimits.MaximumLightMultiplier ||
             TransmittanceDebugDistanceCells is < 2f or > 32f ||
             MinimumTransmission is < 0.0001f or > 0.1f ||
             LightSafeBorder is < 0 or > 8 ||
             DynamicLightIntensity is < 0f or > 4f ||
-            DynamicLightUpdatesPerSecond is < 1f or > LightingDefaults.DynamicLightUpdatesPerSecondLimit)
+            DynamicLightUpdatesPerSecond is < 1f or > LightingConfigLimits.DynamicLightUpdatesPerSecond)
         {
             throw new InvalidOperationException("Lighting runtime config contains an out-of-range value.");
         }

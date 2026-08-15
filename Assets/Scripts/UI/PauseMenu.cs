@@ -15,9 +15,7 @@ using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI.Programmator;
 using Fodinae.World;
 using Fodinae.World.Lighting;
-using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets.GUI;
-using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -34,14 +32,16 @@ namespace Fodinae.UI
         private UIDocument _doc = null!;
         [Inject]
         private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private IProjectDefaults _projectDefaults = null!;
         private VisualElement? _menuPanel;
         private VisualElement? _mainPage;
+        private ScrollView? _mainPageScroll;
         private VisualElement? _settingsPage;
         private bool _isOpen;
         private InputAction? _escapeAction;
         private float _originalScale;
         private Button? _fullscreenButton;
-        private Button? _headlightButton;
 
         private float GetConfiguredBusVolume(AudioBusType busType, string preferenceKey, float defaultValue)
         {
@@ -70,8 +70,6 @@ namespace Fodinae.UI
         private IConnectionService _connectionService = null!;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
-        [Inject]
-        private TerrainRenderer _terrainRenderer = null!;
 
         protected void Start()
         {
@@ -91,7 +89,11 @@ namespace Fodinae.UI
             CloseMenu();
 
             var savedScale = _clientConfig.Config.UiScale;
-            _doc.panelSettings.scale = savedScale;
+            if (Mathf.Abs(_doc.panelSettings.scale - savedScale) > 0.0001f)
+            {
+                _doc.panelSettings.scale = savedScale;
+            }
+
             foreach (var canvas in FindObjectsByType<Canvas>())
             {
                 canvas.scaleFactor = savedScale;
@@ -104,7 +106,10 @@ namespace Fodinae.UI
 
             if (_doc != null && _doc.panelSettings != null)
             {
-                _doc.panelSettings.scale = _originalScale;
+                if (Mathf.Abs(_doc.panelSettings.scale - _originalScale) > 0.0001f)
+                {
+                    _doc.panelSettings.scale = _originalScale;
+                }
             }
 
             _escapeAction?.Dispose();
@@ -137,21 +142,12 @@ namespace Fodinae.UI
             return container;
         }
 
-        private bool IsHeadlightOn()
-        {
-            return _clientConfig.Config.UseLight2D;
-        }
-
         private void CreateMenu(VisualElement root)
         {
-            var uss = Resources.Load<StyleSheet>("Styles/PauseMenu");
-
             _menuPanel = new VisualElement();
             _menuPanel.AddToClassList("pause-overlay");
-            if (uss != null)
-            {
-                _menuPanel.styleSheets.Add(uss);
-            }
+            _menuPanel.AddToClassList("ui-overlay");
+            _menuPanel.AddToClassList("ui-overlay--modal");
 
             var dimmer = new VisualElement();
             dimmer.AddToClassList("pause-dimmer");
@@ -160,66 +156,68 @@ namespace Fodinae.UI
 
             _mainPage = new VisualElement();
             _mainPage.AddToClassList("pause-panel");
+            _mainPage.AddToClassList("pause-page");
             _mainPage.Add(CreateTitle("Меню"));
-            _mainPage.Add(CreateButton("Продолжить", CloseMenu));
-            _mainPage.Add(CreateButton("Настройки", OpenSettings));
-            _mainPage.Add(CreateButton("Выйти", QuitGame));
+            _mainPageScroll = new ScrollView(ScrollViewMode.Vertical);
+            _mainPageScroll.AddToClassList("pause-scroll");
+            _mainPage.Add(_mainPageScroll);
+            _mainPageScroll.Add(CreateButton("Продолжить", CloseMenu));
+            _mainPageScroll.Add(CreateButton("Настройки", OpenSettings));
+            _mainPageScroll.Add(CreateButton("Выйти", QuitGame));
 
             var debugDivider = new Label("═════ Отладка ═════");
             debugDivider.AddToClassList("pause-debug-divider");
-            _mainPage.Add(debugDivider);
+            _mainPageScroll.Add(debugDivider);
 
-            _mainPage.Add(CreateButton("Тест: Kick сервером", () =>
+            _mainPageScroll.Add(CreateButton("Тест: Kick сервером", () =>
             {
-                var conn = (_connectionService as ConnectionManager)?.Connection as DummyConnection;
-                conn?.TriggerDisconnect("Тестовый дисконнект от сервера");
+                _connectionService.TriggerDisconnect("Тестовый дисконнект от сервера");
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Тест: Reconnect", () =>
+            _mainPageScroll.Add(CreateButton("Тест: Reconnect", () =>
             {
-                var conn = (_connectionService as ConnectionManager)?.Connection as DummyConnection;
-                conn?.TriggerReconnect("Сервер перезагружается");
+                _connectionService.TriggerReconnect("Сервер перезагружается");
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Тест: Открыть URL", () =>
+            _mainPageScroll.Add(CreateButton("Тест: Открыть URL", () =>
             {
                 _networkService.Send(new ElementClickPacket("open_url_test", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Тест модального окна", () =>
+            _mainPageScroll.Add(CreateButton("Тест модального окна", () =>
             {
                 _networkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Вступить в клан", () =>
+            _mainPageScroll.Add(CreateButton("Вступить в клан", () =>
             {
                 _networkService.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Выйти из клана", () =>
+            _mainPageScroll.Add(CreateButton("Выйти из клана", () =>
             {
                 _networkService.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Тест: Стрелка миссии", () =>
+            _mainPageScroll.Add(CreateButton("Тест: Стрелка миссии", () =>
             {
                 _networkService.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Миссии", () =>
+            _mainPageScroll.Add(CreateButton("Миссии", () =>
             {
                 _networkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
 
-            _mainPage.Add(CreateButton("Стены ✗", () =>
+            _mainPageScroll.Add(CreateButton("Стены ✗", () =>
             {
                 var player = PlayerMovementController.LocalPlayer;
                 if (player != null)
@@ -233,6 +231,7 @@ namespace Fodinae.UI
 
             _settingsPage = new VisualElement();
             _settingsPage.AddToClassList("pause-panel");
+            _settingsPage.AddToClassList("pause-page");
             _settingsPage.AddToClassList("pause-settings");
             _settingsPage.Add(CreateTitle("Настройки"));
 
@@ -349,10 +348,8 @@ namespace Fodinae.UI
                 "Высокое",
                 "Ультра",
             ];
-            TerrariaLightingEngine? qualityEngine = TerrariaLightingEngine.Instance
-                ?? FindAnyObjectByType<TerrariaLightingEngine>();
             int savedQuality = Mathf.Clamp(
-                (int)(qualityEngine?.Quality ?? LightingDefaults.Quality),
+                _clientConfig.Config.GraphicsQuality,
                 0,
                 lightingQualityNames.Length - 1);
             var lightingQuality = new Button();
@@ -375,6 +372,8 @@ namespace Fodinae.UI
 
                 var quality = (TerrariaLightingEngine.QualityPreset)savedQuality;
                 engine.SetQuality(quality);
+                _clientConfig.Config.GraphicsQuality = savedQuality;
+                _clientConfig.Save();
                 UpdateLightingQualityButton();
             };
             lightingQuality.AddToClassList("pause-btn");
@@ -385,7 +384,7 @@ namespace Fodinae.UI
             {
                 value = (TerrariaLightingEngine.Instance ??
                     FindAnyObjectByType<TerrariaLightingEngine>())?.AmbientOcclusionEnabled ??
-                    LightingDefaults.AmbientOcclusionEnabled,
+                    _projectDefaults.Lighting.AmbientOcclusionEnabled,
             };
             ambientOcclusionToggle.RegisterValueChangedCallback(evt =>
             {
@@ -405,7 +404,7 @@ namespace Fodinae.UI
             {
                 value = (TerrariaLightingEngine.Instance ??
                     FindAnyObjectByType<TerrariaLightingEngine>())?.DiffuseBounceEnabled ??
-                    LightingDefaults.DiffuseBounceEnabled,
+                    _projectDefaults.Lighting.DiffuseBounceEnabled,
             };
             globalIlluminationToggle.RegisterValueChangedCallback(evt =>
             {
@@ -454,7 +453,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Яркость окружения",
                 GetLightingValue(
-                    LightingDefaults.AmbientIntensity,
+                    _projectDefaults.Lighting.AmbientIntensity,
                     0f,
                     1f,
                     static engine => engine.AmbientIntensity),
@@ -466,7 +465,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Мощность излучения",
                 GetLightingValue(
-                    LightingDefaults.EmissionScale,
+                    _projectDefaults.Lighting.EmissionScale,
                     0.1f,
                     8f,
                     static engine => engine.EmissionScale),
@@ -479,8 +478,9 @@ namespace Fodinae.UI
             Robot? localRobot = PlayerMovementController.LocalPlayer?.GetComponent<Robot>();
             Robot? GetLocalRobot() => PlayerMovementController.LocalPlayer?.GetComponent<Robot>() ?? localRobot;
             float dynamicLightIntensity = localRobot?.DynamicLightIntensity ??
-                LightingDefaults.DynamicLightIntensity;
-            Color dynamicLightColor = localRobot?.DynamicLightColor ?? LightingDefaults.DynamicLightColor;
+                _projectDefaults.Lighting.DynamicLightIntensity;
+            Color dynamicLightColor = localRobot?.DynamicLightColor ??
+                _projectDefaults.Lighting.DynamicLightColor;
             scrollContainer.Add(CreateSlider(
                 "Мощность emission игрока",
                 dynamicLightIntensity,
@@ -491,11 +491,12 @@ namespace Fodinae.UI
                 ?? FindAnyObjectByType<TerrariaLightingEngine>();
             scrollContainer.Add(CreateSlider(
                 "Частота расчёта dynamic emission",
-                dynamicLightingEngine?.DynamicLightUpdatesPerSecond ??
-                    LightingDefaults.DynamicLightUpdatesPerSecond,
+                dynamicLightingEngine != null
+                    ? dynamicLightingEngine.DynamicLightUpdatesPerSecond
+                    : _projectDefaults.Lighting.DynamicLightUpdatesPerSecond,
                 value => dynamicLightingEngine?.SetDynamicLightUpdatesPerSecond(value),
                 1f,
-                LightingDefaults.DynamicLightUpdatesPerSecondLimit));
+                LightingConfigLimits.DynamicLightUpdatesPerSecond));
 
             System.Action<float> setDynamicLightRed = value =>
             {
@@ -549,7 +550,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Ослабление света в пустой среде",
                 GetLightingValue(
-                    LightingDefaults.EmptyExtinctionMultiplier,
+                    _projectDefaults.Lighting.EmptyExtinctionMultiplier,
                     0f,
                     2f,
                     static engine => engine.EmptyExtinctionMultiplier),
@@ -562,7 +563,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Ослабление света физической массой",
                 GetLightingValue(
-                    LightingDefaults.SolidExtinctionMultiplier,
+                    _projectDefaults.Lighting.SolidExtinctionMultiplier,
                     0.25f,
                     2f,
                     static engine => engine.SolidExtinctionMultiplier),
@@ -576,7 +577,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Сила непрямого диффузного света",
                 GetLightingValue(
-                    LightingDefaults.BounceStrength,
+                    _projectDefaults.Lighting.BounceStrength,
                     0f,
                     1f,
                     static engine => engine.BounceStrength),
@@ -589,7 +590,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Радиус контактного AO",
                 GetLightingValue(
-                    LightingDefaults.AmbientOcclusionRadiusCells,
+                    _projectDefaults.Lighting.AmbientOcclusionRadiusCells,
                     0.5f,
                     8f,
                     static engine => engine.AmbientOcclusionRadiusCells),
@@ -602,7 +603,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Интенсивность контактного AO",
                 GetLightingValue(
-                    LightingDefaults.AmbientOcclusionStrength,
+                    _projectDefaults.Lighting.AmbientOcclusionStrength,
                     0.1f,
                     8f,
                     static engine => engine.AmbientOcclusionStrength),
@@ -616,20 +617,20 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Максимум светового множителя",
                 GetLightingValue(
-                    LightingDefaults.MaximumLightMultiplier,
+                    _projectDefaults.Lighting.MaximumLightMultiplier,
                     0.25f,
-                    LightingDefaults.MaximumLightMultiplierLimit,
+                    LightingConfigLimits.MaximumLightMultiplier,
                     static engine => engine.MaximumLightMultiplier),
                 value => ApplyLightingSetting(
                     value,
                     static (engine, setting) =>
                         engine.SetMaximumLightMultiplier(setting)),
                 0.25f,
-                LightingDefaults.MaximumLightMultiplierLimit));
+                LightingConfigLimits.MaximumLightMultiplier));
             scrollContainer.Add(CreateSlider(
                 "Пропускание света — диагностика",
                 GetLightingValue(
-                    LightingDefaults.TransmittanceDebugDistanceCells,
+                    _projectDefaults.Lighting.TransmittanceDebugDistanceCells,
                     2f,
                     32f,
                     static engine => engine.TransmittanceDebugDistanceCells),
@@ -642,7 +643,7 @@ namespace Fodinae.UI
             scrollContainer.Add(CreateSlider(
                 "Минимальное пропускание каскадов",
                 GetLightingValue(
-                    LightingDefaults.MinimumTransmission,
+                    _projectDefaults.Lighting.MinimumTransmission,
                     0.0001f,
                     0.1f,
                     static engine => engine.MinimumTransmission),
@@ -654,7 +655,7 @@ namespace Fodinae.UI
             TerrariaLightingEngine? currentLightingEngine = TerrariaLightingEngine.Instance
                 ?? FindAnyObjectByType<TerrariaLightingEngine>();
             float currentLightSafeBorder = currentLightingEngine?.LightSafeBorder ??
-                LightingDefaults.LightSafeBorder;
+                _projectDefaults.Lighting.LightSafeBorder;
             scrollContainer.Add(CreateSlider(
                 "Безопасная граница света",
                 currentLightSafeBorder,
@@ -780,19 +781,12 @@ namespace Fodinae.UI
                 scrollContainer.Add(CreateSlider("Размытие движения", pp.MotionBlurIntensity, v => pp.MotionBlurIntensity = v, 0f, 1f));
             }
 
-            scrollContainer.Add(CreateLabel("Аура игрока"));
-
-            _headlightButton = new Button(ToggleHeadlight);
-            _headlightButton.text = IsHeadlightOn() ? "Вкл" : "Выкл";
-            _headlightButton.AddToClassList("pause-btn");
-            scrollContainer.Add(_headlightButton);
-
             _settingsPage.Add(scrollContainer);
             _settingsPage.Add(CreateButton("Назад", CloseSettings));
             _settingsPage.style.display = DisplayStyle.None;
             _menuPanel.Add(_settingsPage);
 
-            root.Add(_menuPanel);
+            UIContainerLayers.Get(_doc, UIContainerLayers.Modal).Add(_menuPanel);
         }
 
         private VisualElement CreateAudioSlider(string title, AudioBusType busType, string prefKey, float defaultValue)
@@ -912,29 +906,11 @@ namespace Fodinae.UI
             }
         }
 
-        private void ToggleHeadlight()
-        {
-            bool current = _clientConfig.Config.UseLight2D;
-            bool newValue = !current;
-
-            var terrain = _terrainRenderer;
-            if (terrain != null)
-            {
-                terrain.SetUseLight2D(newValue);
-            }
-
-            _clientConfig.Config.UseLight2D = newValue;
-            _clientConfig.Save();
-            if (_headlightButton != null)
-            {
-                _headlightButton.text = newValue ? "Вкл" : "Выкл";
-            }
-        }
-
         private void OpenMenu()
         {
             _isOpen = true;
             IsMenuOpen = true;
+            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Modal, true);
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.Flex;
@@ -956,6 +932,7 @@ namespace Fodinae.UI
             SendClientConfig();
             _isOpen = false;
             IsMenuOpen = false;
+            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Modal, false);
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.None;
@@ -973,7 +950,6 @@ namespace Fodinae.UI
             context.Add(new StringPairPacket("voice_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Voice, "Audio_Voice", 1f) * 255)).ToString()));
             context.Add(new StringPairPacket("ui_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.UI, "Audio_UI", 1f) * 255)).ToString()));
 
-            context.Add(new StringPairPacket("headlight", IsHeadlightOn() ? "true" : "false"));
             context.Add(new StringPairPacket("ui_scale", _clientConfig.Config.UiScale.ToString("F2")));
 
             Debug.Log($"[PauseMenu] Sending save_client_config with {context.Count} entries");
@@ -1023,9 +999,13 @@ namespace Fodinae.UI
             var overlay = new VisualElement();
             overlay.name = "QuitConfirmOverlay";
             overlay.AddToClassList("pause-confirm-overlay");
+            overlay.AddToClassList("ui-overlay");
+            overlay.AddToClassList("ui-overlay--modal");
 
             var panel = new VisualElement();
             panel.AddToClassList("pause-confirm-panel");
+            panel.AddToClassList("ui-panel");
+            panel.AddToClassList("ui-panel--modal");
 
             var titleLabel = new Label("Выход из игры");
             titleLabel.AddToClassList("pause-confirm-title");
@@ -1037,6 +1017,7 @@ namespace Fodinae.UI
 
             var buttonsRow = new VisualElement();
             buttonsRow.AddToClassList("pause-confirm-buttons");
+            buttonsRow.AddToClassList("ui-actions-row");
 
             var confirmBtn = new Button(() =>
             {

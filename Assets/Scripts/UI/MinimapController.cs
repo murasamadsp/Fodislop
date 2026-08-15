@@ -57,9 +57,7 @@ namespace Fodinae.UI
 
         // Toggle state
         private bool _isVisible = true;
-        private string _togglePrefKey = "MinimapVisible";
 
-        private const int TEXTURE_SIZE = GameConstants.UI.MINIMAP_WIDTH; // 128
         private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
 
         private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
@@ -69,32 +67,23 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            if (_mapManager == null)
-            {
-                Debug.LogError("[MinimapController] MapManager is null — minimap disabled");
-                enabled = false;
-                return;
-            }
+            // GameBootstrap (IPostStartable.PostStart) injects [Inject] fields only after
+            // MonoBehaviour.Start, so _mapManager/_mapStorage are null here. Never disable
+            // the component based on that: Update() -> TryInitialize() resolves them via
+            // ServiceLocator and waits for the world to become ready. World dimensions are
+            // computed there too (InitializeWorldState), so they are not duplicated here.
 
-            if (_mapStorage == null)
+            // Render at the on-screen display size so 1 world cell = 1 screen pixel.
+            // A lower-res texture upscaled with Point filtering produces jagged,
+            // shimmering cells; matching the display resolution removes that
+            // upscale aliasing entirely, and Bilinear covers canvas DPI scaling.
+            _minimapTexture = new Texture2D(_uiSize, _uiSize, TextureFormat.RGBA32, false)
             {
-                Debug.LogError("[MinimapController] MapStorage is null — minimap disabled");
-                enabled = false;
-                return;
-            }
-
-            _worldWidth = _mapManager.WorldWidth;
-            _worldHeight = _mapManager.WorldHeight;
-            _chunkSize = _mapStorage.CellLayer != null ? _mapStorage.CellLayer.ChunkSize : 32;
-            _heightChunks = (_worldHeight + _chunkSize - 1) / _chunkSize;
-
-            _minimapTexture = new Texture2D(TEXTURE_SIZE, TEXTURE_SIZE, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Point,
+                filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
             };
 
-            _pixelColors = new Color32[TEXTURE_SIZE * TEXTURE_SIZE];
+            _pixelColors = new Color32[_uiSize * _uiSize];
 
             CreateUI();
 
@@ -230,8 +219,10 @@ namespace Fodinae.UI
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.overrideSorting = true;
 
-            // Draw above the world, but below the UI Toolkit HUD and its modal panels.
-            canvas.sortingOrder = -1;
+            // Runtime UI Toolkit occupies a full-screen panel. A negative
+            // overlay order places uGUI behind that panel even where its
+            // visual background is transparent.
+            canvas.sortingOrder = 10;
             canvasObj.AddComponent<CanvasScaler>();
 
             // Minimap image
@@ -333,9 +324,9 @@ namespace Fodinae.UI
 
         private void RefreshTexture(int playerX, int playerY)
         {
-            const int HALF_SIZE = TEXTURE_SIZE / 2;
-            int minX = playerX - HALF_SIZE;
-            const int TEX_SIZE = TEXTURE_SIZE;
+            int halfSize = _uiSize / 2;
+            int minX = playerX - halfSize;
+            int texSize = _uiSize;
             Color32[]? colors = _pixelColors;
             if (colors == null)
             {
@@ -348,16 +339,16 @@ namespace Fodinae.UI
 
             int index = 0;
 
-            for (int texY = 0; texY < TEX_SIZE; texY++)
+            for (int texY = 0; texY < texSize; texY++)
             {
                 // texY = 0 is bottom of screen (deeper underground, larger Server Y)
-                // texY = TEX_SIZE - 1 is top of screen (towards surface, smaller Server Y)
-                int serverY = playerY + HALF_SIZE - texY;
+                // texY = texSize - 1 is top of screen (towards surface, smaller Server Y)
+                int serverY = playerY + halfSize - texY;
 
                 if (serverY < 0 || serverY >= _worldHeight)
                 {
                     // Entire row is out of bounds
-                    int end = index + TEX_SIZE;
+                    int end = index + texSize;
                     while (index < end)
                     {
                         colors[index++] = OutOfBoundsColor;
@@ -370,7 +361,7 @@ namespace Fodinae.UI
                 int chunkY = serverY / _chunkSize;
                 int localY = serverY % _chunkSize;
 
-                for (int texX = 0; texX < TEX_SIZE; texX++)
+                for (int texX = 0; texX < texSize; texX++)
                 {
                     int serverX = minX + texX;
 
@@ -403,22 +394,23 @@ namespace Fodinae.UI
             }
 
             // Draw player marker (plus sign)
-            const int cx = HALF_SIZE;
-            colors[(cx * TEX_SIZE) + cx - 1] = MarkerColor;
-            colors[(cx * TEX_SIZE) + cx] = CenterColor;
-            colors[(cx * TEX_SIZE) + cx + 1] = MarkerColor;
-            colors[((cx - 1) * TEX_SIZE) + cx] = MarkerColor;
-            colors[((cx + 1) * TEX_SIZE) + cx] = MarkerColor;
+            int cx = halfSize;
+            colors[(cx * texSize) + cx - 1] = MarkerColor;
+            colors[(cx * texSize) + cx] = CenterColor;
+            colors[(cx * texSize) + cx + 1] = MarkerColor;
+            colors[((cx - 1) * texSize) + cx] = MarkerColor;
+            colors[((cx + 1) * texSize) + cx] = MarkerColor;
 
             if (_minimapTexture != null)
             {
                 _minimapTexture.SetPixels32(colors);
+
                 // Keep the texture readable: this texture is updated again on
                 // every throttled player movement. Passing true discards the
                 // CPU copy and makes the next SetPixels32 fail/force a costly
                 // reallocation.
-                _minimapTexture.Apply(false);
-            } // Async GPU upload — non-blocking
+                _minimapTexture.Apply(false); // Async GPU upload — non-blocking
+            }
         }
 
         private void UpdateCoordinatesText(int x, int y)
@@ -462,8 +454,7 @@ namespace Fodinae.UI
                 _lastUpdatePos = _player.Position;
                 RefreshTexture(_player.Position.x, _player.Position.y);
             }
-            PlayerPrefs.SetInt(_togglePrefKey, _isVisible ? 1 : 0);
-            PlayerPrefs.Save();
+
         }
 
         private void SetVisible(bool visible)

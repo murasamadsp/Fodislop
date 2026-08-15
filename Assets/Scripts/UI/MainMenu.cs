@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.IO;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -24,164 +25,113 @@ namespace Fodinae
         [SerializeField]
         private Texture2D? _loaderTexture;
         private UIDocument? _doc;
+        private VisualElement? _root;
+        private VisualElement? _tree;
         private VisualElement? _mainMenuContainer;
         private VisualElement? _loaderContainer;
-        private bool _hasShownLoader = false;
-        private bool _ownsLoaderTexture;
+        private Image? _loaderImage;
         private Button? _playButton;
+        private GameManager? _gameManager;
+        private bool _built;
+        private bool _playButtonSubscribed;
 
         protected void OnEnable()
         {
-            // OnEnable can run repeatedly when the menu object is toggled.
-            // Rebuilding the entire UI tree each time retains old VisualElement
-            // schedules and callbacks until the panel is destroyed.
-            if (_mainMenuContainer != null)
+            if (_built)
             {
+                SubscribePlayButton();
                 return;
             }
 
             _doc = GetComponent<UIDocument>();
             if (_doc == null || _doc.rootVisualElement == null)
             {
-                Debug.LogError("[MainMenu] UIDocument component or rootVisualElement not ready on MainMenu GameObject");
-                return;
+                throw new InvalidOperationException(
+                    "MainMenu requires a UIDocument with a ready rootVisualElement.");
             }
 
-            var root = _doc.rootVisualElement;
-            root.AddToClassList("mm-root");
-            ShowLoader();
+            _root = _doc.rootVisualElement;
 
-            var mainMenuUXML = Resources.Load<VisualTreeAsset>("UI/MainMenu");
+            var mainMenuUXML = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
             if (mainMenuUXML == null)
             {
-                Debug.LogError("[MainMenu] MainMenu.uxml not found in Resources/UI/");
-                return;
+                throw new InvalidOperationException(
+                    "Required UI asset 'Resources/UI/MainMenu.uxml' was not found.");
             }
 
-            var mainMenu = mainMenuUXML.CloneTree();
-            if (mainMenu == null)
-            {
-                Debug.LogError("[MainMenu] Failed to clone MainMenu.uxml tree");
-                return;
-            }
+            VisualElement tree = mainMenuUXML.CloneTree();
+            tree.AddToClassList("ui-fullscreen");
+            _root.Add(tree);
+            _tree = tree;
 
-            _mainMenuContainer = mainMenu.Q<VisualElement>("MainMenuContainer");
-            _playButton = mainMenu.Q<Button>("PlayButton");
-            if (_playButton != null)
-            {
-                _playButton.clicked += OnPlayButtonClicked;
-            }
-
-            root.Add(mainMenu);
-
-            mainMenu.AddToClassList("mm-menu-fill");
-            mainMenu.BringToFront();
+            _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer") ?? throw new InvalidDataException(
+                "MainMenu.uxml is missing the required 'MainMenuContainer' element.");
+            _loaderContainer = tree.Q<VisualElement>("LoaderContainer") ?? throw new InvalidDataException(
+                "MainMenu.uxml is missing the required 'LoaderContainer' element.");
+            _loaderImage = tree.Q<Image>("LoaderImage") ?? throw new InvalidDataException(
+                "MainMenu.uxml is missing the required 'LoaderImage' element.");
+            _playButton = tree.Q<Button>("PlayButton") ?? throw new InvalidDataException(
+                "MainMenu.uxml is missing the required 'PlayButton' element.");
             if (_loaderContainer != null)
             {
                 _loaderContainer.pickingMode = PickingMode.Ignore;
             }
 
-            Debug.Log($"[MainMenu] UI BUILT: rootChildren={root.childCount}, rootLayout={root.layout}, panel={(_doc != null && _doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
+            if (_loaderImage != null)
+            {
+                _loaderImage.pickingMode = PickingMode.Ignore;
+            }
+
+            SubscribePlayButton();
+
+            if (_loaderImage != null)
+            {
+                Texture2D texture = _loaderTexture ?? throw new InvalidOperationException(
+                    "MainMenu requires an explicit loader texture assigned in the scene.");
+                _loaderImage.image = texture;
+            }
+
+            _built = true;
+            Debug.Log($"[MainMenu] UI BUILT: rootChildren={_root.childCount}, panel={(_doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
         }
 
         protected void OnDisable()
         {
-            if (_playButton != null)
+            if (_playButtonSubscribed && _playButton != null)
             {
                 _playButton.clicked -= OnPlayButtonClicked;
+                _playButtonSubscribed = false;
             }
         }
 
-        private void ShowLoader()
+        private void SubscribePlayButton()
         {
-            if (_doc == null || _doc.rootVisualElement == null)
+            if (_playButtonSubscribed || _playButton == null)
             {
                 return;
             }
 
-            var root = _doc.rootVisualElement;
-
-            _loaderContainer = new VisualElement();
-            _loaderContainer.name = "LoaderContainer";
-            _loaderContainer.AddToClassList("mm-loader");
-
-            var image = new UnityEngine.UIElements.Image();
-            Texture2D? loaderTexture = _loaderTexture;
-            if (loaderTexture == null)
-            {
-                _loaderTexture = loaderTexture = CreateSimpleLoaderTexture();
-                _ownsLoaderTexture = true;
-                Debug.LogWarning("[MainMenu] Loader texture not assigned, using placeholder");
-            }
-
-            image.image = loaderTexture;
-            image.AddToClassList("mm-loader-image");
-            image.scaleMode = ScaleMode.ScaleAndCrop; // покрывает весь элемент, сохраняя пропорции
-
-            _loaderContainer.Add(image);
-            root.Add(_loaderContainer);
-            _hasShownLoader = true;
-
-            Debug.Log("[MainMenu] Loader shown");
-        }
-
-        private static Texture2D CreateSimpleLoaderTexture()
-        {
-            const int width = 192;
-            const int height = 108;
-
-            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
-
-            Color32 black = Color.black;
-            Color32 white = Color.white;
-            Color32[] pixels = new Color32[width * height];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = black;
-            }
-
-            const int CENTER_X = width / 2;
-            const int CENTER_Y = height / 2;
-            const int radius = 15;
-
-            for (int y = -radius; y < radius; y++)
-            {
-                for (int x = -radius; x < radius; x++)
-                {
-                    if ((x * x) + (y * y) < radius * radius)
-                    {
-                        int px = CENTER_X + x;
-                        int py = CENTER_Y + y;
-                        if (px >= 0 && px < width && py >= 0 && py < height)
-                        {
-                            pixels[(py * width) + px] = white;
-                        }
-                    }
-                }
-            }
-
-            texture.SetPixels32(pixels);
-            texture.Apply();
-
-            return texture;
-        }
-
-        private void HideLoader()
-        {
-            if (_hasShownLoader && _loaderContainer != null)
-            {
-                _loaderContainer.RemoveFromHierarchy();
-                _hasShownLoader = false;
-                Debug.Log("[MainMenu] Loader hidden");
-            }
+            _playButton.clicked += OnPlayButtonClicked;
+            _playButtonSubscribed = true;
         }
 
         protected void OnDestroy()
         {
-            if (_ownsLoaderTexture && _loaderTexture != null)
+            if (_gameManager != null)
             {
-                Destroy(_loaderTexture);
-                _loaderTexture = null;
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            }
+
+            _tree?.RemoveFromHierarchy();
+            _tree = null;
+        }
+
+        private void HideLoader()
+        {
+            if (_loaderContainer != null)
+            {
+                _loaderContainer.style.display = DisplayStyle.None;
+                Debug.Log("[MainMenu] Loader hidden");
             }
         }
 
@@ -194,14 +144,38 @@ namespace Fodinae
             }
         }
 
+        private void OnWorldLoaded()
+        {
+            HideLoader();
+            HideMenu();
+
+            if (_tree != null)
+            {
+                _tree.style.display = DisplayStyle.None;
+                _tree.pickingMode = PickingMode.Ignore;
+                Debug.Log("[MainMenu] Fullscreen layer hidden");
+            }
+
+            if (_gameManager != null)
+            {
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            }
+        }
+
         private void OnPlayButtonClicked()
         {
             Debug.Log("[MainMenu] Play button clicked");
 
-            HideLoader();
             HideMenu();
 
-            var connectionService = _connectionService ?? (Fodinae.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager);
+            _gameManager ??= ServiceLocator.Resolve<GameManager>();
+            if (_gameManager != null)
+            {
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+                _gameManager.OnWorldLoaded += OnWorldLoaded;
+            }
+
+            var connectionService = _connectionService ?? ServiceLocator.Resolve<IConnectionService>();
             if (connectionService != null && !connectionService.IsConnected)
             {
                 connectionService.Connect(oldClient: false);

@@ -82,7 +82,6 @@ namespace Fodinae.UI.Programmator
         {
             _popup = new VisualElement();
             _popup.AddToClassList("prog-popup");
-            RadialMenu.AttachStyles(_popup);
 
             var dimmer = new VisualElement();
             dimmer.AddToClassList("prog-dimmer");
@@ -400,7 +399,7 @@ namespace Fodinae.UI.Programmator
             dialogPanel.Add(dialogButtons);
             _createDialog.Add(dialogPanel);
             _popup.Add(_createDialog);
-            _doc!.rootVisualElement.Add(_popup!);
+            UIContainerLayers.Get(_doc!, UIContainerLayers.Modal).Add(_popup!);
 
             _radial = new RadialMenu();
             _radial.OnCategoryClicked += OnRadialCategoryClicked;

@@ -10,13 +10,10 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Connection;
-using Fodinae.Networking.Connection.Client;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Utilities;
-using MinesServer.Networking.Connection;
-using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Utilities;
 using UnityEngine;
@@ -45,26 +42,15 @@ namespace Fodinae
             return new List<string>(_pendingRequests.Keys).ToArray();
         }
 
-        // Плейсхолдер- и error-текстуры отключены (No Implicit Defaults):
-        // вместо заглушек клиент прерывается исключением при отсутствии ассета.
-        // private Texture2D? _placeholderTexture;
-        // private Texture2D? _errorTexture;
-
         [Inject]
         private IConnectionService _connectionService = null!;
 
+        private bool _assetSubscriptionEstablished;
+
+        public bool IsAssetSubscriptionEstablished => _assetSubscriptionEstablished;
+
         protected void Awake()
         {
-            // _placeholderTexture = new Texture2D(1, 1);
-            // _placeholderTexture.SetPixel(0, 0, Color.gray);
-            // _placeholderTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-            // _placeholderTexture.name = "Placeholder_Texture";
-
-            // _errorTexture = new Texture2D(1, 1);
-            // _errorTexture.SetPixel(0, 0, Color.red);
-            // _errorTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-            // _errorTexture.name = "Error_Texture";
-
             _loopCts = new CancellationTokenSource();
             ProcessBatchLoop(_loopCts.Token).Forget();
         }
@@ -75,39 +61,74 @@ namespace Fodinae
             _loopCts?.Dispose();
             _cache.Clear();
 
-            // if (_placeholderTexture != null)
-            // {
-            //     Destroy(_placeholderTexture);
-            //     _placeholderTexture = null;
-            // }
-
-            // if (_errorTexture != null)
-            // {
-            //     Destroy(_errorTexture);
-            //     _errorTexture = null;
-            // }
-
-            if (_connectionService is ConnectionManager cm)
-            {
-                cm.OnPacketReceived -= OnPacketReceived;
-            }
+            UnsubscribeFromConnection();
         }
 
-        public UniTask<byte[]?> GetAssetBytesAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 5)
+        /// <summary>
+        /// Binds the packet stream after VContainer injection. Unity may call
+        /// Awake/OnEnable before [Inject] has populated the connection field,
+        /// and OnDestroy may fire during domain reload before any injection.
+        /// </summary>
+        public void EnsureAssetSubscription()
+        {
+            if (_assetSubscriptionEstablished)
+            {
+                return;
+            }
+
+            if (_connectionService == null)
+            {
+                throw new InvalidOperationException(
+                    "ClientAssetLoader requires IConnectionService before subscription.");
+            }
+
+            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _connectionService.OnPacketReceived += OnPacketReceived;
+            _assetSubscriptionEstablished = true;
+        }
+
+        private void UnsubscribeFromConnection()
+        {
+            if (!_assetSubscriptionEstablished || _connectionService == null)
+            {
+                return;
+            }
+
+            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _assetSubscriptionEstablished = false;
+        }
+
+        public UniTask<byte[]?> GetAssetBytesAsync(
+            string filename,
+            CancellationToken cancellationToken = default,
+            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             return _cache.GetBytesAsync(filename, cancellationToken, timeoutSeconds);
         }
 
-        public async UniTask<string> GetAssetPathAsync(string filename, CancellationToken cancellationToken = default, int timeoutSeconds = 5)
+        public async UniTask<string> GetAssetPathAsync(
+            string filename,
+            CancellationToken cancellationToken = default,
+            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             var cleanFilename = filename.TrimStart('/').ToLowerInvariant();
-            await GetAssetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
+            byte[]? bytes = await GetAssetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
+            if (bytes == null || bytes.Length == 0 || !PersistentAssetCache.HasAsset(cleanFilename))
+            {
+                throw new FileNotFoundException(
+                    $"Required asset '{cleanFilename}' could not be loaded or persisted.",
+                    cleanFilename);
+            }
+
             return PersistentAssetCache.GetAssetPath(cleanFilename);
         }
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return await _cache.GetTextureAsync(filename, cancellationToken);
+            Texture2D? texture = await _cache.GetTextureAsync(filename, cancellationToken);
+            return texture ?? throw new FileNotFoundException(
+                $"Required texture '{filename}' could not be loaded.",
+                filename);
         }
 
         public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
@@ -127,36 +148,21 @@ namespace Fodinae
 
         public async UniTaskVoid LoadAndApplyTexture(Action<Texture2D> applyTextureAction, string filename, CancellationToken cancellationToken)
         {
-            // // Старое поведение с плейсхолдером/error-текстурой (отключено):
-            // if (_placeholderTexture != null)
-            // {
-            //     applyTextureAction(_placeholderTexture);
-            // }
-
-            var texture = await GetTextureAsync(filename, cancellationToken);
+            Texture2D? texture = await GetTextureAsync(filename, cancellationToken);
 
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
             }
 
-            if (texture != null)
+            if (texture == null)
             {
-                applyTextureAction(texture);
+                throw new FileNotFoundException(
+                    $"Required texture '{filename}' could not be applied.",
+                    filename);
             }
-            else
-            {
-                // if (!HasAsset(filename))
-                // {
-                //     Debug.LogError($"Failed to load texture for '{filename}'. Applying error texture.");
-                //     if (_errorTexture != null)
-                //     {
-                //         applyTextureAction(_errorTexture);
-                //     }
-                // }
 
-                Debug.LogError($"Failed to load texture for '{filename}'. No texture applied.");
-            }
+            applyTextureAction(texture);
         }
 
         public void ClearCache()
@@ -166,12 +172,9 @@ namespace Fodinae
 
         private static async UniTask<byte[]?> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
         {
-            var instance = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            if (instance == null)
-            {
-                Debug.LogError("[ClientAssetLoader] Cannot load bytes: instance is null");
-                return null;
-            }
+            var instance = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader ??
+                throw new InvalidOperationException(
+                    "ClientAssetLoader is not registered in the active container.");
 
             return await instance.LoadBytesFromServer(filename, ct, timeoutSeconds);
         }
@@ -181,8 +184,8 @@ namespace Fodinae
             filename = filename.TrimStart('/').ToLowerInvariant();
 
             // 1. Check local RAM/disk cache first when offline
-            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            var isConnected = cm != null && cm.Connection != null && cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected;
+            var connectionService = ServiceLocator.Resolve<IConnectionService>()!;
+            var isConnected = connectionService.IsConnected;
 
             if (!isConnected)
             {
@@ -299,12 +302,11 @@ namespace Fodinae
 
                 if (batch.Count > 0)
                 {
-                    var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-                    if (cm != null && cm.Connection != null &&
-                        cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected)
+                    var connectionService = ServiceLocator.Resolve<IConnectionService>()!;
+                    if (connectionService.IsConnected)
                     {
                         var assetRequest = new RuntimeAssetRequestPacket(batch);
-                        cm.Connection.SendAsync(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
+                        connectionService.Send(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
                     }
                     else
                     {
@@ -373,9 +375,8 @@ namespace Fodinae
                 _pendingRequests.TryRemove(filename, out _);
             });
 
-            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (cm == null || cm.Connection == null ||
-                cm.Connection.ConnectionStatus != MinesServer.Networking.Shared.ConnectionStatus.Connected)
+            var connectionService = ServiceLocator.Resolve<IConnectionService>()!;
+            if (!connectionService.IsConnected)
             {
                 try
                 {

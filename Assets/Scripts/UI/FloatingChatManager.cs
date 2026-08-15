@@ -64,11 +64,6 @@ namespace Fodinae.UI
         {
             if (_camera == null)
             {
-                _camera = Camera.main;
-            }
-
-            if (_camera == null)
-            {
                 return false;
             }
 

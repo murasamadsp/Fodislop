@@ -1,333 +1,406 @@
 #nullable enable
 
 using System;
-using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
-using Fodinae.Player.Logic;
+using Fodinae.World.Lighting;
 using UnityEngine;
+using UnityEngine.Rendering;
 using VContainer;
 
 namespace Fodinae.World
 {
-    public class SurfaceRenderer : MonoBehaviour
+    [DisallowMultipleComponent]
+    public class SurfaceRenderer : MonoBehaviour, ILightingGeometryContributor
     {
-        [Header("Materials")]
-        [SerializeField]
-        private Material? _transitMaterial;
-        [SerializeField]
-        private Material? _perspectiveMaterial;
+        private const string SurfaceShaderName = ProjectRuntimeContracts.ShaderNames.WorldSurface;
+        private const float TransitHeight = 2f;
+        private const float PerspectiveHeight = 2f;
+        private const float TransitTileWidth = 32f;
+        private const float PerspectiveTileWidth = 5f;
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int WrapBaseMapId = Shader.PropertyToID("_WrapBaseMap");
+        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+        private static readonly int EmissionStrengthId = Shader.PropertyToID("_EmissionStrength");
+        private static readonly int OccupancyId = Shader.PropertyToID("_Occupancy");
+        private static readonly int[] QuadTriangles =
+        [
+            0, 1, 2, 3, 2, 1,
+        ];
 
-        [Header("Settings")]
+        [Header("Local Assets")]
         [SerializeField]
-        private string _transitTexturePath = "transit";
+        private Texture2D? _transitTexture;
         [SerializeField]
-        private string _perspectiveTexturePath = "perspective";
+        private Texture2D? _perspectiveTexture;
+
+        [Header("Lighting")]
+        [SerializeField]
+        [ColorUsage(showAlpha: false, hdr: true)]
+        private Color _transitEmissionColor = new(1f, 0.7f, 0.35f, 1f);
+        [SerializeField]
+        [Range(0f, 8f)]
+        private float _transitEmissionStrength = 0.35f;
+        [SerializeField]
+        [ColorUsage(showAlpha: false, hdr: true)]
+        private Color _perspectiveEmissionColor = new(0.45f, 0.65f, 1f, 1f);
+        [SerializeField]
+        [Range(0f, 8f)]
+        private float _perspectiveEmissionStrength = 0.12f;
+        [Header("Rendering")]
         [SerializeField]
         private int _transitSortingOrder = -501;
         [SerializeField]
         private int _perspectiveSortingOrder = -502;
 
-        private const float TRANSIT_HEIGHT = 2f;
-        private const float PERSPECTIVE_HEIGHT = 2f;
-        private const float TILE_SIZE = 32f;
-        private Mesh? _transitMesh;
-        private Mesh? _perspectiveMesh;
-        private MeshFilter? _transitFilter;
-        private MeshFilter? _perspectiveFilter;
-        private MeshRenderer? _transitRenderer;
-        private MeshRenderer? _perspectiveRenderer;
-        private bool _ownsPerspectiveMaterial;
-
-        private readonly Vector2[] _uvTransit = new Vector2[4];
-        private readonly Vector2[] _uvPers = new Vector2[4];
-        private readonly Vector3[] _verticesTransit = new Vector3[4];
-        private readonly Vector3[] _verticesPers = new Vector3[4];
-        private static readonly int[] Triangles = { 0, 1, 2, 3, 2, 1 };
-
-        private Camera? _mainCamera;
         [Inject]
         private MapManager? _mapManager;
-        private bool _texturesLoading;
-        private float _lastCameraX = float.NaN;
+        [Inject]
+        private LightingGeometryRegistry? _lightingGeometryRegistry;
+
+        private Camera? _mainCamera;
+        private Mesh? _transitMesh;
+        private Mesh? _perspectiveMesh;
+        private Mesh? _transitLightingMesh;
+        private Mesh? _perspectiveLightingMesh;
+        private Material? _transitMaterial;
+        private Material? _perspectiveMaterial;
+        private ulong _lightingGeometryRevision = 1;
+        private int _lastWorldWidth = int.MinValue;
+        private int _lastWorldHeight = int.MinValue;
+        private Vector3 _lastCameraPosition = new(float.NaN, float.NaN, float.NaN);
         private float _lastCameraOrthoSize = float.NaN;
         private float _lastCameraAspect = float.NaN;
-        private int _lastWorldHeight = int.MinValue;
-        private int _diagnosticWorldHeight = int.MinValue;
-        private bool _surfaceInitialized;
+        private bool _initialized;
+        private bool _registered;
 
-        public void SetMaterials(Material? transitMaterial, Material? perspectiveMaterial)
+        public ulong LightingGeometryRevision => _lightingGeometryRevision;
+
+        public void SetLocalAssets(Texture2D? transitTexture, Texture2D? perspectiveTexture)
         {
-            _transitMaterial = transitMaterial;
-            _perspectiveMaterial = perspectiveMaterial;
-            if (_transitMaterial != null && _transitMaterial == _perspectiveMaterial)
+            if (_initialized)
             {
-                Material sharedMaterial = _perspectiveMaterial;
-                _perspectiveMaterial = new Material(sharedMaterial)
-                {
-                    name = $"{sharedMaterial.name} (Perspective)",
-                };
-                _ownsPerspectiveMaterial = true;
-            }
-        }
-
-        protected void Start()
-        {
-            _mainCamera = FindAnyObjectByType<Camera>(FindObjectsInactive.Include);
-        }
-
-        private void InitializeSurface()
-        {
-            if (_surfaceInitialized)
-            {
-                return;
+                throw new InvalidOperationException(
+                    "Surface assets cannot be replaced after SurfaceRenderer initialization.");
             }
 
-            _surfaceInitialized = true;
-            var transitGO = new GameObject("SurfaceTransit");
-            transitGO.transform.SetParent(transform, false);
-            _transitFilter = transitGO.AddComponent<MeshFilter>();
-            _transitRenderer = transitGO.AddComponent<MeshRenderer>();
-            _transitRenderer.sortingOrder = _transitSortingOrder;
-            _transitMesh = new Mesh();
-            _transitMesh.MarkDynamic();
-            _transitMesh.vertices = _verticesTransit;
-            _transitMesh.uv = _uvTransit;
-            _transitMesh.triangles = Triangles;
-            _transitFilter.mesh = _transitMesh;
-
-            var persGO = new GameObject("SurfacePerspective");
-            persGO.transform.SetParent(transform, false);
-            _perspectiveFilter = persGO.AddComponent<MeshFilter>();
-            _perspectiveRenderer = persGO.AddComponent<MeshRenderer>();
-            _perspectiveRenderer.sortingOrder = _perspectiveSortingOrder;
-            _perspectiveMesh = new Mesh();
-            _perspectiveMesh.MarkDynamic();
-            _perspectiveMesh.vertices = _verticesPers;
-            _perspectiveMesh.uv = _uvPers;
-            _perspectiveMesh.triangles = Triangles;
-            _perspectiveFilter.mesh = _perspectiveMesh;
-
-            if (_transitMaterial == null)
-            {
-                throw new InvalidOperationException("[SurfaceRenderer] Transit material is not assigned in the inspector");
-            }
-
-            if (_perspectiveMaterial == null)
-            {
-                throw new InvalidOperationException("[SurfaceRenderer] Perspective material is not assigned in the inspector");
-            }
-
-            // These materials are owned by the component. Using .material
-            // would ask Unity to instantiate another material per renderer.
-            _transitRenderer.sharedMaterial = _transitMaterial;
-            _perspectiveRenderer.sharedMaterial = _perspectiveMaterial;
-
-            LoadTexturesAsync().Forget();
-        }
-
-        private async UniTaskVoid LoadTexturesAsync()
-        {
-            if (_texturesLoading)
-            {
-                return;
-            }
-
-            _texturesLoading = true;
-
-            try
-            {
-                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-                if (loader == null)
-                {
-                    throw new InvalidOperationException("[SurfaceRenderer] ClientAssetLoader is not registered");
-                }
-
-                var transitTex = await loader.GetTextureAsync(_transitTexturePath);
-                if (transitTex == null)
-                {
-                    throw new InvalidOperationException(
-                        $"[SurfaceRenderer] Texture loader returned null for '{_transitTexturePath}'.");
-                }
-
-                if (_transitMaterial == null)
-                {
-                    throw new InvalidOperationException(
-                        "[SurfaceRenderer] Transit material became null before texture assignment.");
-                }
-
-                _transitMaterial.mainTexture = transitTex;
-
-                var persTex = await loader.GetTextureAsync(_perspectiveTexturePath);
-                if (persTex == null)
-                {
-                    throw new InvalidOperationException(
-                        $"[SurfaceRenderer] Texture loader returned null for '{_perspectiveTexturePath}'.");
-                }
-
-                if (_perspectiveMaterial == null)
-                {
-                    throw new InvalidOperationException(
-                        "[SurfaceRenderer] Perspective material became null before texture assignment.");
-                }
-
-                _perspectiveMaterial.mainTexture = persTex;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[SurfaceRenderer] Failed to load textures: {ex.Message}");
-                Debug.LogException(ex);
-                throw;
-            }
-            finally
-            {
-                _texturesLoading = false;
-            }
+            _transitTexture = transitTexture;
+            _perspectiveTexture = perspectiveTexture;
         }
 
         protected void LateUpdate()
         {
-            if (_mainCamera == null)
+            MapManager mapManager = _mapManager ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer requires MapManager injection.");
+            if (!mapManager.IsWorldInitialized)
             {
                 return;
             }
 
-            if (_mapManager == null)
-            {
-                _mapManager = ServiceLocator.Resolve<MapManager>();
-                if (_mapManager == null)
-                {
-                    throw new InvalidOperationException(
-                        "[SurfaceRenderer] MapManager is required before surface initialization.");
-                }
-            }
+            EnsureInitialized();
 
-            if (!_mapManager.IsWorldInitialized)
-            {
-                return;
-            }
-
-            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            Camera mainCamera = _mainCamera ??= Camera.main ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer requires a tagged Main Camera.");
+            if (_lastWorldWidth == mapManager.WorldWidth &&
+                _lastWorldHeight == mapManager.WorldHeight &&
+                _lastCameraPosition == mainCamera.transform.position &&
+                Mathf.Approximately(_lastCameraOrthoSize, mainCamera.orthographicSize) &&
+                Mathf.Approximately(_lastCameraAspect, mainCamera.aspect))
             {
                 return;
             }
 
-            InitializeSurface();
-
-            int worldHeight = _mapManager.WorldHeight;
-            float camX = _mainCamera.transform.position.x;
-            float cameraOrthoSize = _mainCamera.orthographicSize;
-            float cameraAspect = _mainCamera.aspect;
-            if (Mathf.Approximately(_lastCameraX, camX) &&
-                Mathf.Approximately(_lastCameraOrthoSize, cameraOrthoSize) &&
-                Mathf.Approximately(_lastCameraAspect, cameraAspect) &&
-                _lastWorldHeight == worldHeight)
-            {
-                return;
-            }
-
-            _lastCameraX = camX;
-            _lastCameraOrthoSize = cameraOrthoSize;
-            _lastCameraAspect = cameraAspect;
-            _lastWorldHeight = worldHeight;
-
-            float halfScreenW = cameraOrthoSize * cameraAspect;
-
-            float left = camX - halfScreenW;
-            float right = camX + halfScreenW;
-            float baseY = worldHeight;
-
-            UpdateTransit(left, right, baseY, camX);
-            UpdatePerspective(left, right, baseY, camX);
-
-            if (_diagnosticWorldHeight != worldHeight)
-            {
-                _diagnosticWorldHeight = worldHeight;
-                Debug.Log(
-                    $"[SurfaceDiag] camera=({camX:F2},{_mainCamera.transform.position.y:F2}) " +
-                    $"worldHeight={worldHeight} rangeX=({left:F2},{right:F2}) " +
-                    $"transitY=({baseY:F2},{baseY + TRANSIT_HEIGHT:F2}) " +
-                    $"transitTexture={_transitMaterial?.mainTexture?.name ?? "NULL"} " +
-                    $"perspectiveTexture={_perspectiveMaterial?.mainTexture?.name ?? "NULL"}");
-            }
+            RebuildBands(mapManager.WorldWidth, mapManager.WorldHeight, mainCamera);
         }
 
-        private void UpdateTransit(float left, float right, float baseY, float camX)
+        public void RenderLightingFields(
+            CommandBuffer commandBuffer,
+            in LightingFieldContext context)
         {
-            if (_transitMesh == null)
+            if (!_initialized || _transitLightingMesh == null ||
+                _perspectiveLightingMesh == null ||
+                _transitMaterial == null || _perspectiveMaterial == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Surface lighting fields cannot be rendered before surface initialization.");
             }
 
-            float uLeft = -(left - (Mathf.Floor(left / TILE_SIZE) * TILE_SIZE)) / TILE_SIZE;
-            float uRight = uLeft + ((left - right) / TILE_SIZE);
-
-            _uvTransit[0] = new Vector2(uLeft, 0f);
-            _uvTransit[1] = new Vector2(uLeft, 1f);
-            _uvTransit[2] = new Vector2(uRight, 0f);
-            _uvTransit[3] = new Vector2(uRight, 1f);
-
-            _verticesTransit[0] = new Vector3(left, baseY, 0f);
-            _verticesTransit[1] = new Vector3(left, baseY + TRANSIT_HEIGHT, 0f);
-            _verticesTransit[2] = new Vector3(right, baseY, 0f);
-            _verticesTransit[3] = new Vector3(right, baseY + TRANSIT_HEIGHT, 0f);
-
-            _transitMesh.vertices = _verticesTransit;
-            _transitMesh.uv = _uvTransit;
-            _transitMesh.bounds = new Bounds(new Vector3(camX, baseY + 1f, 0f), new Vector3(100f, 100f, 10f));
-        }
-
-        private void UpdatePerspective(float left, float right, float baseY, float camX)
-        {
-            if (_perspectiveMesh == null)
-            {
-                return;
-            }
-
-            const float PERS_TILE_SIZE = 5f;
-            float uLeft = -(left - (Mathf.Floor(left / PERS_TILE_SIZE) * PERS_TILE_SIZE)) / PERS_TILE_SIZE;
-            float uRight = uLeft + ((left - right) / PERS_TILE_SIZE);
-
-            float uMid = 0.5f * (uLeft + uRight);
-            float uWidth = uRight - uLeft;
-            float persLeft = uMid - (0.5f * uWidth);
-            float persRight = uMid + (0.5f * uWidth);
-
-            _uvPers[0] = new Vector2(persLeft, 0f);
-            _uvPers[1] = new Vector2(persLeft, 1f);
-            _uvPers[2] = new Vector2(persRight, 0f);
-            _uvPers[3] = new Vector2(persRight, 1f);
-
-            _verticesPers[0] = new Vector3(left, baseY + TRANSIT_HEIGHT, 0f);
-            _verticesPers[1] = new Vector3(left, baseY + TRANSIT_HEIGHT + PERSPECTIVE_HEIGHT, 0f);
-            _verticesPers[2] = new Vector3(right, baseY + TRANSIT_HEIGHT, 0f);
-            _verticesPers[3] = new Vector3(right, baseY + TRANSIT_HEIGHT + PERSPECTIVE_HEIGHT, 0f);
-
-            _perspectiveMesh.vertices = _verticesPers;
-            _perspectiveMesh.uv = _uvPers;
-            _perspectiveMesh.bounds = new Bounds(new Vector3(camX, baseY + 3f, 0f), new Vector3(100f, 100f, 10f));
+            int transitPass = RequireLightingPass(_transitMaterial);
+            int perspectivePass = RequireLightingPass(_perspectiveMaterial);
+            commandBuffer.DrawMesh(
+                _perspectiveLightingMesh,
+                transform.localToWorldMatrix,
+                _perspectiveMaterial,
+                submeshIndex: 0,
+                shaderPass: perspectivePass);
+            commandBuffer.DrawMesh(
+                _transitLightingMesh,
+                transform.localToWorldMatrix,
+                _transitMaterial,
+                submeshIndex: 0,
+                shaderPass: transitPass);
         }
 
         protected void OnDestroy()
         {
-            if (_transitMesh != null)
+            if (_registered)
             {
-                Destroy(_transitMesh);
-                _transitMesh = null;
+                _lightingGeometryRegistry?.Unregister(this);
+                _registered = false;
             }
 
-            if (_perspectiveMesh != null)
+            DestroyOwnedObject(_transitMesh);
+            DestroyOwnedObject(_perspectiveMesh);
+            DestroyOwnedObject(_transitLightingMesh);
+            DestroyOwnedObject(_perspectiveLightingMesh);
+            DestroyOwnedObject(_transitMaterial);
+            DestroyOwnedObject(_perspectiveMaterial);
+            _transitMesh = null;
+            _perspectiveMesh = null;
+            _transitLightingMesh = null;
+            _perspectiveLightingMesh = null;
+            _transitMaterial = null;
+            _perspectiveMaterial = null;
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_initialized)
             {
-                Destroy(_perspectiveMesh);
-                _perspectiveMesh = null;
+                return;
             }
 
-            if (_ownsPerspectiveMaterial && _perspectiveMaterial != null)
+            Texture2D transitTexture = _transitTexture ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer transit texture is not assigned.");
+            Texture2D perspectiveTexture = _perspectiveTexture ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer perspective texture is not assigned.");
+            Shader surfaceShader = Shader.Find(SurfaceShaderName);
+            if (surfaceShader == null || !surfaceShader.isSupported)
             {
-                Destroy(_perspectiveMaterial);
-                _perspectiveMaterial = null;
-                _ownsPerspectiveMaterial = false;
+                throw new InvalidOperationException(
+                    $"Required surface shader '{SurfaceShaderName}' is missing or unsupported.");
+            }
+
+            _transitMaterial = CreateMaterial(
+                surfaceShader,
+                "World Surface Transit",
+                transitTexture,
+                _transitEmissionColor,
+                _transitEmissionStrength,
+                occupancy: 1f,
+                wrapBaseMap: true);
+            _perspectiveMaterial = CreateMaterial(
+                surfaceShader,
+                "World Surface Perspective",
+                perspectiveTexture,
+                _perspectiveEmissionColor,
+                _perspectiveEmissionStrength,
+                occupancy: 0f,
+                wrapBaseMap: true);
+            _transitMesh = CreateBandMesh("World Surface Transit Mesh");
+            _perspectiveMesh = CreateBandMesh("World Surface Perspective Mesh");
+            _transitLightingMesh = CreateBandMesh("World Surface Transit Lighting Mesh");
+            _perspectiveLightingMesh = CreateBandMesh(
+                "World Surface Perspective Lighting Mesh");
+
+            CreateBandObject(
+                "SurfaceTransit",
+                _transitMesh,
+                _transitMaterial,
+                _transitSortingOrder);
+            CreateBandObject(
+                "SurfacePerspective",
+                _perspectiveMesh,
+                _perspectiveMaterial,
+                _perspectiveSortingOrder);
+            LightingGeometryRegistry registry = _lightingGeometryRegistry ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer requires LightingGeometryRegistry injection.");
+            registry.Register(this);
+            _registered = true;
+            _initialized = true;
+        }
+
+        private void RebuildBands(int worldWidth, int worldHeight, Camera mainCamera)
+        {
+            if (worldWidth <= 0 || worldHeight <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"SurfaceRenderer received invalid world dimensions {worldWidth}x{worldHeight}.");
+            }
+
+            float halfHeight = mainCamera.orthographicSize;
+            float halfWidth = halfHeight * mainCamera.aspect;
+            float cameraLeft = mainCamera.transform.position.x - halfWidth;
+            float cameraRight = mainCamera.transform.position.x + halfWidth;
+            float surfaceLeft = Mathf.Clamp(cameraLeft, 0f, worldWidth);
+            float surfaceRight = Mathf.Clamp(cameraRight, surfaceLeft, worldWidth);
+            bool worldDimensionsChanged =
+                _lastWorldWidth != worldWidth || _lastWorldHeight != worldHeight;
+
+            if (worldDimensionsChanged)
+            {
+                UpdateTopBandMesh(
+                    _transitLightingMesh!,
+                    0f,
+                    worldWidth,
+                    bottom: worldHeight,
+                    thickness: TransitHeight,
+                    tileLength: TransitTileWidth,
+                    lightSampleY: worldHeight - 0.5f);
+                UpdateTopBandMesh(
+                    _perspectiveLightingMesh!,
+                    0f,
+                    worldWidth,
+                    bottom: worldHeight + TransitHeight,
+                    thickness: PerspectiveHeight,
+                    tileLength: PerspectiveTileWidth,
+                    lightSampleY: worldHeight - 0.5f);
+                _lightingGeometryRevision++;
+            }
+
+            UpdateTopBandMesh(
+                _transitMesh!,
+                surfaceLeft,
+                surfaceRight,
+                bottom: worldHeight,
+                thickness: TransitHeight,
+                tileLength: TransitTileWidth,
+                lightSampleY: worldHeight - 0.5f);
+            UpdateTopBandMesh(
+                _perspectiveMesh!,
+                surfaceLeft,
+                surfaceRight,
+                bottom: worldHeight + TransitHeight,
+                thickness: PerspectiveHeight,
+                tileLength: PerspectiveTileWidth,
+                lightSampleY: worldHeight - 0.5f);
+            _lastWorldWidth = worldWidth;
+            _lastWorldHeight = worldHeight;
+            _lastCameraPosition = mainCamera.transform.position;
+            _lastCameraOrthoSize = mainCamera.orthographicSize;
+            _lastCameraAspect = mainCamera.aspect;
+        }
+
+        private void CreateBandObject(
+            string objectName,
+            Mesh mesh,
+            Material material,
+            int sortingOrder)
+        {
+            var bandObject = new GameObject(objectName);
+            bandObject.transform.SetParent(transform, worldPositionStays: false);
+            MeshFilter meshFilter = bandObject.AddComponent<MeshFilter>();
+            MeshRenderer meshRenderer = bandObject.AddComponent<MeshRenderer>();
+            meshFilter.sharedMesh = mesh;
+            meshRenderer.sharedMaterial = material;
+            meshRenderer.sortingOrder = sortingOrder;
+        }
+
+        private static Material CreateMaterial(
+            Shader shader,
+            string materialName,
+            Texture2D texture,
+            Color emissionColor,
+            float emissionStrength,
+            float occupancy,
+            bool wrapBaseMap)
+        {
+            var material = new Material(shader)
+            {
+                name = materialName,
+                hideFlags = HideFlags.DontSave,
+            };
+            material.SetTexture(BaseMapId, texture);
+            material.SetFloat(WrapBaseMapId, wrapBaseMap ? 1f : 0f);
+            material.SetColor(EmissionColorId, emissionColor);
+            material.SetFloat(EmissionStrengthId, emissionStrength);
+            material.SetFloat(OccupancyId, occupancy);
+            return material;
+        }
+
+        private static Mesh CreateBandMesh(string meshName)
+        {
+            var mesh = new Mesh
+            {
+                name = meshName,
+                hideFlags = HideFlags.DontSave,
+            };
+            mesh.MarkDynamic();
+            return mesh;
+        }
+
+        private static void UpdateTopBandMesh(
+            Mesh mesh,
+            float left,
+            float right,
+            float bottom,
+            float thickness,
+            float tileLength,
+            float lightSampleY)
+        {
+            Vector3[] vertices =
+            [
+                new(left, bottom, 0f),
+                new(left, bottom + thickness, 0f),
+                new(right, bottom, 0f),
+                new(right, bottom + thickness, 0f),
+            ];
+            float uLeft = -(left - (Mathf.Floor(left / tileLength) * tileLength)) /
+                tileLength;
+            float uRight = uLeft + ((left - right) / tileLength);
+            Vector2[] uv =
+            [
+                new(uLeft, 0f),
+                new(uLeft, 1f),
+                new(uRight, 0f),
+                new(uRight, 1f),
+            ];
+            Vector2[] lightingData =
+            [
+                new(1f, lightSampleY - bottom),
+                new(1f, lightSampleY - (bottom + thickness)),
+                new(1f, lightSampleY - bottom),
+                new(1f, lightSampleY - (bottom + thickness)),
+            ];
+
+            mesh.Clear(keepVertexLayout: false);
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(channel: 0, uv);
+            mesh.SetUVs(channel: 1, lightingData);
+            mesh.SetTriangles(QuadTriangles, submesh: 0, calculateBounds: true);
+        }
+
+        private static int RequireLightingPass(Material material)
+        {
+            int pass = material.FindPass("LightingMaterialField");
+            if (pass < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Surface material '{material.name}' is missing LightingMaterialField pass.");
+            }
+
+            return pass;
+        }
+
+        private static void DestroyOwnedObject(UnityEngine.Object? ownedObject)
+        {
+            if (ownedObject == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(ownedObject);
+            }
+            else
+            {
+                DestroyImmediate(ownedObject);
             }
         }
     }

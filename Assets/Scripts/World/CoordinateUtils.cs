@@ -37,19 +37,22 @@ namespace Fodinae.World
         }
 
         /// <summary>
-        /// Converts Unity World Y to Server Y with modulo wrapping.
+        /// Converts Unity World Y to Server Y. Coordinates outside the loaded
+        /// world are invalid and must never wrap into another row.
         /// </summary>
         public static int UnityToServerY(float unityY, int worldHeight)
         {
             int h = ResolveHeight(worldHeight);
             int y = Mathf.FloorToInt(unityY);
-            int serverY = (h - 1 - y) % h;
-            if (serverY < 0)
+            if (y < 0 || y >= h)
             {
-                serverY += h;
+                throw new ArgumentOutOfRangeException(
+                    nameof(unityY),
+                    unityY,
+                    $"Unity Y must map inside the world height [0, {h}).");
             }
 
-            return serverY;
+            return h - 1 - y;
         }
 
         /// <summary>

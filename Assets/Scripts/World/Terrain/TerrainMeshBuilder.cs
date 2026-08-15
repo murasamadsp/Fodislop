@@ -50,7 +50,13 @@ namespace Fodinae.World.Terrain
             int worldWidth, int worldHeight, bool isBackground, ref int vIdx, List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
             MapManager mapManager, WorldTextureManager textureManager)
         {
-            if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
+            if (unityY < 0 || unityY >= worldHeight)
+            {
+                vIdx += 4;
+                return;
+            }
+
+            if (gridX < 0 || gridX >= worldWidth)
             {
                 vIdx += 4;
                 return;

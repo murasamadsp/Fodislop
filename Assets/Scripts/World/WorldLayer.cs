@@ -103,29 +103,47 @@ namespace Fodinae
         {
             if (!GetChunkIndexAndLocal(x, y, out int chunkIndex, out int localIndex))
             {
-                return default;
+                throw new ArgumentOutOfRangeException(
+                    nameof(x),
+                    $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
             T[]? chunk = GetChunk(chunkIndex, createIfMissing: false, touchLru: touchLru);
-            return chunk == null ? default : chunk[localIndex];
+            if (chunk == null)
+            {
+                throw new InvalidDataException(
+                    $"World layer '{_filePath}' has no loaded chunk for cell ({x}, {y}).");
+            }
+
+            return chunk[localIndex];
         }
 
         public T GetCellSync(int x, int y, bool touchLru = true)
         {
             if (!GetChunkIndexAndLocal(x, y, out int chunkIndex, out int localIndex))
             {
-                return default;
+                throw new ArgumentOutOfRangeException(
+                    nameof(x),
+                    $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
             T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: touchLru);
-            return chunk == null ? default : chunk[localIndex];
+            if (chunk == null)
+            {
+                throw new InvalidDataException(
+                    $"World layer '{_filePath}' could not load chunk for cell ({x}, {y}).");
+            }
+
+            return chunk[localIndex];
         }
 
         public void SetCell(int x, int y, T value)
         {
             if (!GetChunkIndexAndLocal(x, y, out int chunkIndex, out int localIndex))
             {
-                return;
+                throw new ArgumentOutOfRangeException(
+                    nameof(x),
+                    $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
             T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
@@ -344,6 +362,12 @@ namespace Fodinae
         {
             int size = Unsafe.SizeOf<T>();
             ReadOnlySpan<byte> bytes = r.ReadBytes(size);
+            if (bytes.Length != size)
+            {
+                throw new EndOfStreamException(
+                    $"Expected {size} bytes for a world-layer value, received {bytes.Length}.");
+            }
+
             return MemoryMarshal.Read<T>(bytes);
         }
 
@@ -628,7 +652,14 @@ namespace Fodinae
             }
             catch (EndOfStreamException)
             {
-                // Ignore end of stream
+                throw new InvalidDataException(
+                    $"World layer chunk ended before {_chunkArea} cells were decoded.");
+            }
+
+            if (ptr != _chunkArea)
+            {
+                throw new InvalidDataException(
+                    $"World layer chunk contains {ptr} cells; expected {_chunkArea}.");
             }
 
             return chunk;

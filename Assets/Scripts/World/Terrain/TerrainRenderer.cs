@@ -28,7 +28,7 @@ namespace Fodinae.World.Terrain
 
         [Header("Configuration")]
         [SerializeField]
-        private float _cellSize = GameConstants.World.CELLSIZE;
+        private float _cellSize = GameConstants.World.CellSize;
         [SerializeField]
         private Shader? _terrainShader;
         [SerializeField]
@@ -63,7 +63,6 @@ namespace Fodinae.World.Terrain
         private Material[] _materials = Array.Empty<Material>();
         private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
         private readonly RenderTargetIdentifier[] _lightingFieldTargets = new RenderTargetIdentifier[2];
-
         private Vector2Int _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
         private int _meshWidth;
         private int _meshHeight;
@@ -76,7 +75,6 @@ namespace Fodinae.World.Terrain
         private bool _textureRefreshPending;
         private float _nextTextureRefreshTime;
         private bool _useColorLod = false;
-        private float _targetUseLight2D;
         private int _lastAtlasCount = -1;
         private bool _lightingBindingValidated;
         private WorldLayer<CellType>? _subscribedCellLayer;
@@ -182,11 +180,11 @@ namespace Fodinae.World.Terrain
             }
 
             Instance = this;
-            _targetUseLight2D = PlayerPrefs.GetInt("UseLight2D", 1) == 1 ? 1f : 0f;
             InitializeShader();
 
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
+            _mainCamera = Camera.main;
 
             if (_mesh == null)
             {
@@ -203,6 +201,20 @@ namespace Fodinae.World.Terrain
                 _meshRenderer.enabled = true;
                 _meshRenderer.sortingLayerName = _sortingLayerName;
                 _meshRenderer.sortingOrder = _sortingOrder;
+            }
+        }
+
+        protected void Start()
+        {
+            if (_mainCamera != null)
+            {
+                return;
+            }
+
+            _mainCamera = Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = FindAnyObjectByType<Camera>(FindObjectsInactive.Include);
             }
         }
 
@@ -263,11 +275,11 @@ namespace Fodinae.World.Terrain
         {
             if (_terrainShader == null)
             {
-                _terrainShader = Shader.Find("Universal Render Pipeline/Custom/Terrain");
+                _terrainShader = Shader.Find(ProjectRuntimeContracts.ShaderNames.Terrain);
                 if (_terrainShader == null || !_terrainShader.isSupported)
                 {
                     throw new InvalidOperationException(
-                        "Required terrain shader 'Universal Render Pipeline/Custom/Terrain' " +
+                        $"Required terrain shader '{ProjectRuntimeContracts.ShaderNames.Terrain}' " +
                         "is missing or unsupported. World lighting cannot run without it.");
                 }
             }
@@ -368,11 +380,6 @@ namespace Fodinae.World.Terrain
 
             if (_mainCamera == null)
             {
-                _mainCamera = FindAnyObjectByType<Camera>(FindObjectsInactive.Include);
-            }
-
-            if (_mainCamera == null)
-            {
                 LogDiag(1 << 2, "[TerrainDiag] camera NULL");
                 return;
             }
@@ -389,23 +396,15 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             }
 
-            TerrariaLightingEngine? lightingEngine = null;
+            TerrariaLightingEngine lightingEngine = TerrariaLightingEngine.Instance ??
+                throw new InvalidOperationException(
+                    "TerrariaLightingEngine was not initialized by GameLifetimeScope.");
             int effectiveViewportPadding = _viewportPadding;
-            if (_targetUseLight2D > 0.5f)
-            {
-                lightingEngine = TerrariaLightingEngine.Instance;
-                if (lightingEngine == null)
-                {
-                    throw new InvalidOperationException(
-                        "TerrariaLightingEngine was not initialized by GameLifetimeScope.");
-                }
-
-                int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
-                    TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
-                effectiveViewportPadding = Mathf.Max(
-                    effectiveViewportPadding,
-                    requiredLightingPadding);
-            }
+            int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
+                TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
+            effectiveViewportPadding = Mathf.Max(
+                effectiveViewportPadding,
+                requiredLightingPadding);
 
             int requestedWidth = Mathf.Clamp(
                 Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) +
@@ -502,29 +501,20 @@ namespace Fodinae.World.Terrain
                 _lastGridPos = currentGridPos;
             }
 
-            if (_targetUseLight2D > 0.5f)
-            {
-                // Lighting follows the actual camera viewport, not the cached
-                // terrain origin. The terrain mesh intentionally uses
-                // hysteresis now, so feeding currentGridPos here would leave
-                // the lightmap behind the camera while it moves inside the
-                // cached mesh.
-                int requiredLightingPadding = lightingEngine!.RequiredTerrainPadding +
-                    TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
-                int lightingPadding = requiredLightingPadding;
-                int lightingMinX = viewportMinX - lightingPadding;
-                int lightingMinY = viewportMinY - lightingPadding;
-                int lightingWidth = viewportWidth + (lightingPadding * 2);
-                int lightingHeight = viewportHeight + (lightingPadding * 2);
-                lightingEngine.UpdateLighting(
-                    lightingMinX,
-                    lightingMinY,
-                    lightingWidth,
-                    lightingHeight,
-                    _storage,
-                    _mapManager);
-                ValidateLightingBinding();
-            }
+            // Lighting follows the actual camera viewport, not the cached terrain origin.
+            int lightingPadding = requiredLightingPadding;
+            int lightingMinX = viewportMinX - lightingPadding;
+            int lightingMinY = viewportMinY - lightingPadding;
+            int lightingWidth = viewportWidth + (lightingPadding * 2);
+            int lightingHeight = viewportHeight + (lightingPadding * 2);
+            lightingEngine.UpdateLighting(
+                lightingMinX,
+                lightingMinY,
+                lightingWidth,
+                lightingHeight,
+                _storage,
+                _mapManager);
+            ValidateLightingBinding();
         }
 
         private void ValidateLightingBinding()
@@ -537,11 +527,11 @@ namespace Fodinae.World.Terrain
             for (int materialIndex = 0; materialIndex < _materials.Length; materialIndex++)
             {
                 Material material = _materials[materialIndex];
-                if (!material.HasProperty("_UseLight2D") ||
-                    material.GetFloat("_UseLight2D") <= 0.5f)
+                if (material.FindPass("Universal2D") < 0 ||
+                    material.FindPass("LightingMaterialField") < 0)
                 {
                     throw new InvalidOperationException(
-                        $"Terrain material '{material.name}' is not connected to world lighting.");
+                        $"Terrain material '{material.name}' is missing world-lighting passes.");
                 }
             }
 
@@ -602,7 +592,8 @@ namespace Fodinae.World.Terrain
             if (_mesh == null || _materials.Length == 0 ||
                 !materialField.IsCreated() || !emissionField.IsCreated())
             {
-                throw new InvalidOperationException("Terrain material fields cannot be rendered before the terrain mesh and targets are ready.");
+                throw new InvalidOperationException(
+                    "Terrain material fields cannot be rendered before the terrain mesh and targets are ready.");
             }
 
             _lightingFieldTargets[0] = new RenderTargetIdentifier(materialField);
@@ -610,7 +601,10 @@ namespace Fodinae.World.Terrain
             commandBuffer.SetRenderTarget(
                 _lightingFieldTargets,
                 new RenderTargetIdentifier(BuiltinRenderTextureType.None));
-            commandBuffer.ClearRenderTarget(clearDepth: false, clearColor: true, backgroundColor: Color.clear);
+            commandBuffer.ClearRenderTarget(
+                clearDepth: false,
+                clearColor: true,
+                backgroundColor: Color.clear);
 
             Matrix4x4 projection = Matrix4x4.Ortho(
                 worldRect.x,
@@ -689,8 +683,7 @@ namespace Fodinae.World.Terrain
                 {
                     _subMeshIndices[i] = new List<int>(estimatedPerAtlas);
                     _materials[i] = new Material(_terrainShader);
-                    if (!_materials[i].HasProperty("_UseLight2D") ||
-                        _materials[i].FindPass("Universal2D") < 0 ||
+                    if (_materials[i].FindPass("Universal2D") < 0 ||
                         _materials[i].FindPass("LightingMaterialField") < 0)
                     {
                         throw new InvalidOperationException(
@@ -818,8 +811,6 @@ namespace Fodinae.World.Terrain
                                 _materials[i].SetTexture("_FlowMap", wtm.FlowMapTexture);
                             }
 
-                            _materials[i].SetFloat("_UseLight2D", _targetUseLight2D);
-
                             _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                         }
                     }
@@ -892,21 +883,6 @@ namespace Fodinae.World.Terrain
             {
                 DestroyImmediate(obj, allowDestroyingAssets: true);
             }
-        }
-
-        public void SetUseLight2D(bool enabled)
-        {
-            _targetUseLight2D = enabled ? 1f : 0f;
-            foreach (var mat in _materials)
-            {
-                if (mat != null)
-                {
-                    mat.SetFloat("_UseLight2D", _targetUseLight2D);
-                }
-            }
-
-            PlayerPrefs.SetInt("UseLight2D", enabled ? 1 : 0);
-            PlayerPrefs.Save();
         }
     }
 }

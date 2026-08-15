@@ -20,6 +20,7 @@ namespace Fodinae.UI
     {
         [Inject]
         private UIDocument _doc = null!;
+        private VisualElement? _tree;
         private VisualElement? _panel;
         private ScrollView? _scrollView;
         private TextField? _inputField;
@@ -33,11 +34,26 @@ namespace Fodinae.UI
         private Controls.ChatInputBlinker? _blinker;
         private CancellationTokenSource? _idleCts;
 
+        private static readonly System.Drawing.Color[] PresetColors =
+        {
+            System.Drawing.Color.White,
+            System.Drawing.Color.FromArgb(255, 60, 60),
+            System.Drawing.Color.FromArgb(60, 255, 60),
+            System.Drawing.Color.FromArgb(60, 130, 255),
+            System.Drawing.Color.FromArgb(255, 220, 60),
+            System.Drawing.Color.FromArgb(60, 255, 255),
+            System.Drawing.Color.FromArgb(255, 60, 255),
+            System.Drawing.Color.FromArgb(255, 160, 60),
+        };
+
         [Inject]
         private INetworkService _networkService = null!;
 
         [Inject]
         private IServerConfig _serverConfig = null!;
+
+        [Inject]
+        private IInputBlocker _inputBlocker = null!;
 
         protected void Start()
         {
@@ -53,14 +69,28 @@ namespace Fodinae.UI
                 ApplyServerConfig();
             }
 
-            _networkService.Send(new QueryChatHistoryPacket("global", 0));
+            try
+            {
+                _networkService.Send(new QueryChatHistoryPacket("global", 0));
+            }
+            catch (Exception ex)
+            {
+                GameErrorUI.ReportError("Не удалось запросить историю чата", ex);
+            }
         }
 
         protected void OnDestroy()
         {
-            _serverConfig.OnInitialized -= ApplyServerConfig;
+            if (_serverConfig != null)
+            {
+                _serverConfig.OnInitialized -= ApplyServerConfig;
+            }
+
             _idleCts?.Cancel();
             _idleCts?.Dispose();
+            _blinker?.StopBlink();
+            _tree?.RemoveFromHierarchy();
+            _tree = null;
         }
 
         private void ApplyServerConfig()
@@ -78,8 +108,15 @@ namespace Fodinae.UI
                 return;
             }
 
+            bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
+
             if (Keyboard.current.tabKey.wasPressedThisFrame)
             {
+                if (inputBlocked && !_isOpen)
+                {
+                    return;
+                }
+
                 if (_isOpen || !ChatInput.IsFocused)
                 {
                     Toggle();
@@ -96,7 +133,11 @@ namespace Fodinae.UI
             if (Keyboard.current.enterKey.wasPressedThisFrame ||
                 Keyboard.current.numpadEnterKey.wasPressedThisFrame)
             {
-                OnSendClicked();
+                if (!inputBlocked)
+                {
+                    OnSendClicked();
+                }
+
                 return;
             }
 
@@ -108,104 +149,76 @@ namespace Fodinae.UI
 
         private void CreateUI()
         {
-            _panel = new VisualElement();
-            _panel.AddToClassList("gchat-panel");
-
-            var header = new Label("Глобальный чат");
-            header.AddToClassList("gchat-header");
-            _panel.Add(header);
-
-            _scrollView = new ScrollView(ScrollViewMode.Vertical);
-            _scrollView.AddToClassList("gchat-scroll");
-            _scrollView.verticalScrollerVisibility = ScrollerVisibility.Auto;
-            _panel.Add(_scrollView);
-
-            var bottomRow = new VisualElement();
-            bottomRow.AddToClassList("gchat-bottom-row");
-
-            _inputField = new TextField();
-            _inputField.selectAllOnFocus = false;
-            _inputField.selectAllOnMouseUp = false;
-            _inputField.AddToClassList("gchat-input");
-            bottomRow.Add(_inputField);
-
-            _inputField.RegisterCallback<FocusEvent>(_ =>
+            var uiUxml = Resources.Load<VisualTreeAsset>("UI/GlobalChat");
+            if (uiUxml != null)
             {
-                StartBlink();
-                ChatInput.OnFocus();
-            });
-            _inputField.RegisterCallback<BlurEvent>(_ =>
-            {
-                StopBlink();
-                ChatInput.OnBlur();
-            });
-            _inputField.RegisterValueChangedCallback(_ => OnInputChanged());
+                VisualElement tree = uiUxml.CloneTree();
+                tree.AddToClassList("ui-fullscreen");
+                tree.pickingMode = PickingMode.Ignore;
+                _tree = tree;
+                _panel = tree.Q<VisualElement>("ChatPanel");
+                _scrollView = tree.Q<ScrollView>("ChatScroll");
+                _inputField = tree.Q<TextField>("ChatInput");
+                _sendButton = tree.Q<Button>("SendButton");
+                _colorButton = tree.Q<Button>("ColorButton");
+                _colorGrid = tree.Q<VisualElement>("ColorGrid");
 
-            _sendButton = new Button(OnSendClicked);
-            _sendButton.text = ">";
-            _sendButton.AddToClassList("gchat-send-button");
-            bottomRow.Add(_sendButton);
+                if (_doc != null && _panel != null)
+                {
+                    UIContainerLayers.Get(_doc, UIContainerLayers.Hud).Add(tree);
+                }
 
-            _colorButton = new Button(ToggleColorGrid);
-            _colorButton.AddToClassList("gchat-color-button");
-            _colorButton.style.backgroundColor = new Color(_currentColor.R / 255f, _currentColor.G / 255f, _currentColor.B / 255f);
-            bottomRow.Add(_colorButton);
+                if (_inputField != null)
+                {
+                    _inputField.selectAllOnFocus = false;
+                    _inputField.selectAllOnMouseUp = false;
+                    _inputField.RegisterCallback<FocusEvent>(_ =>
+                    {
+                        StartBlink();
+                        ChatInput.OnFocus();
+                    });
+                    _inputField.RegisterCallback<BlurEvent>(_ =>
+                    {
+                        StopBlink();
+                        ChatInput.OnBlur();
+                    });
+                    _inputField.RegisterValueChangedCallback(_ => OnInputChanged());
+                }
 
-            _panel.Add(bottomRow);
+                if (_sendButton != null)
+                {
+                    _sendButton.clicked += OnSendClicked;
+                }
 
-            _colorGrid = new VisualElement();
-            _colorGrid.AddToClassList("gchat-color-grid");
-            _colorGrid.style.display = DisplayStyle.None;
+                if (_colorButton != null)
+                {
+                    _colorButton.clicked += ToggleColorGrid;
+                    _colorButton.style.backgroundColor = new Color(_currentColor.R / 255f, _currentColor.G / 255f, _currentColor.B / 255f);
+                }
 
-            var presetColors = new System.Drawing.Color[]
-            {
-                System.Drawing.Color.White,
-                System.Drawing.Color.FromArgb(255, 60, 60),
-                System.Drawing.Color.FromArgb(60, 255, 60),
-                System.Drawing.Color.FromArgb(60, 130, 255),
-                System.Drawing.Color.FromArgb(255, 220, 60),
-                System.Drawing.Color.FromArgb(60, 255, 255),
-                System.Drawing.Color.FromArgb(255, 60, 255),
-                System.Drawing.Color.FromArgb(255, 160, 60),
-            };
+                if (_colorGrid != null)
+                {
+                    foreach (var c in PresetColors)
+                    {
+                        var swatch = new Button(() => SelectColor(c));
+                        swatch.AddToClassList("gchat-swatch");
+                        swatch.style.backgroundColor = new Color(c.R / 255f, c.G / 255f, c.B / 255f);
+                        _colorGrid.Add(swatch);
+                    }
+                }
 
-            foreach (var c in presetColors)
-            {
-                var swatch = new Button(() => SelectColor(c));
-                swatch.AddToClassList("gchat-swatch");
-                swatch.style.backgroundColor = new Color(c.R / 255f, c.G / 255f, c.B / 255f);
-                _colorGrid.Add(swatch);
-            }
+                _internalInput = _inputField != null
+                    ? _inputField.Q<VisualElement>(className: "unity-text-field__input")
+                    : null;
+                if (_internalInput != null)
+                {
+                    _internalInput.AddToClassList("gchat-internal-input");
+                }
 
-            _panel.Add(_colorGrid);
-
-            if (_doc != null && _panel != null)
-            {
-                _doc.rootVisualElement.Add(_panel);
-            }
-
-            _internalInput = _inputField.Q<VisualElement>(className: "unity-text-field__input");
-
-            if (_internalInput != null)
-            {
-                _internalInput.AddToClassList("gchat-internal-input");
-            }
-
-            if (_inputField != null && _internalInput != null)
-            {
-                _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
-            }
-
-            var uss = Resources.Load<StyleSheet>("chat-input");
-            if (uss != null)
-            {
-                _panel!.styleSheets.Add(uss);
-            }
-
-            var chatUss = Resources.Load<StyleSheet>("Styles/Chat");
-            if (chatUss != null)
-            {
-                _panel!.styleSheets.Add(chatUss);
+                if (_inputField != null && _internalInput != null)
+                {
+                    _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
+                }
             }
         }
 
@@ -231,7 +244,14 @@ namespace Fodinae.UI
                 }
             }
 
-            _networkService.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
+            try
+            {
+                _networkService.Send(new MinesServer.Networking.Client.Packets.Chat.SendChatMessagePacket("global", text));
+            }
+            catch (Exception ex)
+            {
+                GameErrorUI.ReportError("Не удалось отправить сообщение в чат", ex);
+            }
 
             _inputField.value = string.Empty;
             _inputField.Focus();
@@ -351,7 +371,14 @@ namespace Fodinae.UI
                 _colorGrid.style.display = DisplayStyle.None;
             }
 
-            _networkService.Send(new ChangeChatColorPacket(color));
+            try
+            {
+                _networkService.Send(new ChangeChatColorPacket(color));
+            }
+            catch (Exception ex)
+            {
+                GameErrorUI.ReportError("Не удалось отправить изменение цвета чата", ex);
+            }
         }
     }
 }

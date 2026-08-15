@@ -8,7 +8,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _FallbackColor ("Fallback Color", Color) = (1, 1, 0, 1)
         _DebugColor ("Debug Color", Color) = (1, 0, 1, 1)
         [ToggleUI] _DebugMode ("Debug Mode", Float) = 0
-        [ToggleUI] _UseLight2D ("Use Light2D", Float) = 0
     }
     SubShader
     {
@@ -71,7 +70,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _FallbackColor;
                 float4 _DebugColor;
                 float _DebugMode;
-                float _UseLight2D;
             CBUFFER_END
 
             Texture2D<float4> _WorldLightTexture;
@@ -82,11 +80,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             float3 GetTerrariaLightColor(float2 worldPos)
             {
-                if (_UseLight2D <= 0.5)
-                {
-                    return float3(1.0, 1.0, 1.0);
-                }
-
                 float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
                 if (_WorldLightDebugView != 0)
                 {

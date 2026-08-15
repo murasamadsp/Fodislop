@@ -12,6 +12,7 @@ using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using VContainer;
 
 namespace Fodinae.World.Lighting
 {
@@ -38,7 +39,6 @@ namespace Fodinae.World.Lighting
             ContactOcclusion,
         }
 
-        private const string ComputeResourcePath = "Shaders/Lighting/WorldLighting";
         private const string RuntimeConfigFileName = "lighting.config.json";
         private const int LightingCacheAnchorCells = 8;
         private const int LightingRegionSizeQuantum = 32;
@@ -132,7 +132,7 @@ namespace Fodinae.World.Lighting
         [Header("Quality")]
         [SerializeField]
         [Tooltip("Качество каскадов: Ultra увеличивает разрешение поля, atlas budget, ray steps и лимит источников.")]
-        private QualityPreset _quality = LightingDefaults.Quality;
+        private QualityPreset _quality;
         [SerializeField]
         [Tooltip("GraphicsQualityProfile с техническими лимитами quality tier. Не меняет физику поглощения.")]
         private GraphicsQualityProfile? _graphicsProfile;
@@ -140,69 +140,69 @@ namespace Fodinae.World.Lighting
         [Header("Radiance Cascades")]
         [SerializeField]
         [Tooltip("Базовый цвет ambient-света до Ambient Intensity.")]
-        private Color _ambientColor = LightingDefaults.AmbientColor;
+        private Color _ambientColor;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
         [Tooltip("Поглощение в пустой среде на одну физическую клетку. Это extinction, не итоговое пропускание.")]
-        private Color _emptyExtinctionRgb = LightingDefaults.EmptyExtinctionRgb;
+        private Color _emptyExtinctionRgb;
         [SerializeField]
         [ColorUsage(showAlpha: false, hdr: true)]
         [Tooltip("Поглощение полной массой блока на одну клетку. Больше значение — меньше света проходит через блок.")]
-        private Color _solidExtinctionRgb = LightingDefaults.SolidExtinctionRgb;
+        private Color _solidExtinctionRgb;
         [SerializeField]
         [Range(0.0001f, 0.1f)]
         [Tooltip("Минимальная surviving transmission, после которой cascade прекращает трассировку.")]
-        private float _minimumTransmission = LightingDefaults.MinimumTransmission;
+        private float _minimumTransmission;
         [SerializeField]
         [Min(0)]
         [Tooltip("Запас клеток вокруг видимой области, чтобы источник света не обрезался на границе поля.")]
-        private int _lightSafeBorder = LightingDefaults.LightSafeBorder;
+        private int _lightSafeBorder;
 
         [Header("Ambient Occlusion")]
         [SerializeField]
         [Tooltip("Включает Contact AO. AO затемняет только ambient и diffuse bounce.")]
-        private bool _ambientOcclusionEnabled = LightingDefaults.AmbientOcclusionEnabled;
+        private bool _ambientOcclusionEnabled;
         [SerializeField]
         [Range(0.5f, 8f)]
         [Tooltip("Радиус Contact AO в физических клетках.")]
-        private float _ambientOcclusionRadiusCells = LightingDefaults.AmbientOcclusionRadiusCells;
+        private float _ambientOcclusionRadiusCells;
         [SerializeField]
         [Range(0.1f, 8f)]
         [Tooltip("Сила Contact AO. Не влияет на direct radiance и emission.")]
-        private float _ambientOcclusionStrength = LightingDefaults.AmbientOcclusionStrength;
+        private float _ambientOcclusionStrength;
 
         [Header("Runtime Lighting Calibration")]
         [SerializeField]
         [Range(0f, 1f)]
         [Tooltip("Множитель ambient-составляющей после умножения на Ambient Color.")]
-        private float _ambientIntensity = LightingDefaults.AmbientIntensity;
+        private float _ambientIntensity;
         [SerializeField]
         [Range(0.1f, 8f)]
         [Tooltip("Множитель emission radiance для glowing blocks и dynamic sources. 1 — единица radiance без художественного усиления.")]
-        private float _emissionScale = LightingDefaults.EmissionScale;
+        private float _emissionScale;
         [SerializeField]
         [Range(0f, 2f)]
         [Tooltip("Множитель пустого-space extinction. 1 — физическое значение Empty Extinction RGB.")]
-        private float _emptyExtinctionMultiplier = LightingDefaults.EmptyExtinctionMultiplier;
+        private float _emptyExtinctionMultiplier;
         [SerializeField]
         [Range(0.25f, 2f)]
         [Tooltip("Множитель block extinction. 1 — физическое значение Solid Extinction RGB.")]
-        private float _solidExtinctionMultiplier = LightingDefaults.SolidExtinctionMultiplier;
+        private float _solidExtinctionMultiplier;
         [SerializeField]
         [Range(0f, 1f)]
         [Tooltip("Сила непрямого диффузного света: albedo соседней поверхности умножается на её direct radiance и возвращается в поле. Это не зеркальное отражение и не emission.")]
-        private float _bounceStrength = LightingDefaults.BounceStrength;
+        private float _bounceStrength;
         [SerializeField]
         [Range(0.25f, 16f)]
         [Tooltip("Верхняя граница diffuse lighting перед умножением на художественную terrain-текстуру. 1 сохраняет её исходную яркость; больше 1 разрешает HDR-пересвет.")]
-        private float _maximumLightMultiplier = LightingDefaults.MaximumLightMultiplier;
+        private float _maximumLightMultiplier;
         [SerializeField]
         [Tooltip("Диагностический clamp diffuse lighting. В штатном HDR-пайплайне выключен: сжатие HDR выполняется общим post-process на экране.")]
-        private bool _enableFinalLightingClamp = LightingDefaults.EnableFinalLightingClamp;
+        private bool _enableFinalLightingClamp;
         [SerializeField]
         [Range(2f, 32f)]
         [Tooltip("Длина диагностической transmission-пробы в физических клетках.")]
-        private float _transmittanceDebugDistanceCells = LightingDefaults.TransmittanceDebugDistanceCells;
+        private float _transmittanceDebugDistanceCells;
 
         [Header("Diagnostics")]
         [SerializeField]
@@ -249,6 +249,13 @@ namespace Fodinae.World.Lighting
         private ulong _solveCount;
         private ulong _contactOcclusionSolveCount;
         private ulong _lastTerrainGeometryRevision;
+        private ulong _lastContributorGeometryRevision;
+        [Inject]
+        private LightingGeometryRegistry _lightingGeometryRegistry = null!;
+        [Inject]
+        private IProjectDefaults _projectDefaults = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
         private Vector4 _lastVisibleRegion = new(float.NaN, float.NaN, float.NaN, float.NaN);
 
         private bool _hasRenderedLightState;
@@ -262,16 +269,15 @@ namespace Fodinae.World.Lighting
         [Header("Diffuse Bounce")]
         [SerializeField]
         [Tooltip("Включает diffuse bounce pass.")]
-        private bool _diffuseBounceEnabled = LightingDefaults.DiffuseBounceEnabled;
+        private bool _diffuseBounceEnabled;
         [SerializeField]
         [Range(1f, 60f)]
         [Tooltip("Максимальная частота пересчёта только dynamic sources. Геометрия не ждёт этот интервал.")]
-        private float _dynamicLightUpdatesPerSecond = LightingDefaults.DynamicLightUpdatesPerSecond;
+        private float _dynamicLightUpdatesPerSecond;
         private DynamicLight[] _dynamicLights = new DynamicLight[1];
         private readonly List<int> _lastDroppedDynamicLightIds = new();
         private int _lastDynamicLightCount;
         private int _lastDroppedDynamicLightCount;
-        private QualityPreset _inspectorQuality;
         private float _inspectorAmbientIntensity;
         private float _inspectorEmissionScale;
         private Color _inspectorEmptyExtinctionRgb;
@@ -394,13 +400,13 @@ namespace Fodinae.World.Lighting
 
         public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
-        public float CellSize => GameConstants.World.CELLSIZE;
+        public float CellSize => GameConstants.World.CellSize;
 
         public Vector4 WorldRect => new(
-            _lastVisibleRegion.x * GameConstants.World.CELLSIZE,
-            _lastVisibleRegion.y * GameConstants.World.CELLSIZE,
-            _lastVisibleRegion.z * GameConstants.World.CELLSIZE,
-            _lastVisibleRegion.w * GameConstants.World.CELLSIZE);
+            _lastVisibleRegion.x * GameConstants.World.CellSize,
+            _lastVisibleRegion.y * GameConstants.World.CellSize,
+            _lastVisibleRegion.z * GameConstants.World.CellSize,
+            _lastVisibleRegion.w * GameConstants.World.CellSize);
 
         public IReadOnlyList<string> GetCascadeUniformSummaries()
         {
@@ -449,13 +455,22 @@ namespace Fodinae.World.Lighting
             }
 
             _instance = this;
+        }
+
+        private void Start()
+        {
             _graphicsProfile ??= Resources.Load<GraphicsQualityProfile>("GraphicsQualityProfile");
+            ApplyProjectDefaults(_projectDefaults.Lighting);
             CaptureInspectorDefaults();
             LoadRuntimeConfig();
-            int savedQuality = _runtimeConfig.Quality;
+            int savedQuality = Mathf.Clamp(
+                _clientConfig.Config.GraphicsQuality,
+                (int)QualityPreset.Low,
+                (int)QualityPreset.Ultra);
             ApplyQualityPreset(
                 (QualityPreset)Mathf.Clamp(savedQuality, 0, (int)QualityPreset.Ultra),
                 save: false);
+
             LoadComputeShaderOrThrow();
             ValidateGpuRequirements();
             ValidateMaterialFieldPass();
@@ -478,7 +493,7 @@ namespace Fodinae.World.Lighting
             _maximumLightMultiplier = Mathf.Clamp(
                 _maximumLightMultiplier,
                 0.25f,
-                LightingDefaults.MaximumLightMultiplierLimit);
+                LightingConfigLimits.MaximumLightMultiplier);
 
             ApplyQualityPreset(_quality, save: false);
             _fieldDirty = true;
@@ -600,9 +615,13 @@ namespace Fodinae.World.Lighting
 
         public void SetQuality(QualityPreset quality)
         {
-            ApplyQualityPreset(
-                (QualityPreset)Mathf.Clamp((int)quality, 0, (int)QualityPreset.Ultra),
-                save: true);
+            QualityPreset selectedQuality = (QualityPreset)Mathf.Clamp(
+                (int)quality,
+                (int)QualityPreset.Low,
+                (int)QualityPreset.Ultra);
+            ApplyQualityPreset(selectedQuality, save: false);
+            _clientConfig.Config.GraphicsQuality = (int)selectedQuality;
+            _clientConfig.Save();
         }
 
         public void SetDebugView(DebugView debugView)
@@ -732,7 +751,7 @@ namespace Fodinae.World.Lighting
                 ref _maximumLightMultiplier,
                 value,
                 0.25f,
-                LightingDefaults.MaximumLightMultiplierLimit,
+                LightingConfigLimits.MaximumLightMultiplier,
                 radianceDirty: false);
         }
 
@@ -797,7 +816,8 @@ namespace Fodinae.World.Lighting
             }
 
             TerrainRenderer terrainRenderer = TerrainRenderer.Instance ??
-                throw new InvalidOperationException("Radiance Cascades requires an active TerrainRenderer.");
+                throw new InvalidOperationException(
+                    "Radiance Cascades requires an active TerrainRenderer.");
             Vector4 lightingRegion = GetStableLightingRegion(
                 visibleMinX,
                 visibleMinY,
@@ -811,8 +831,11 @@ namespace Fodinae.World.Lighting
             EnsureResources(gridWidth, gridHeight);
 
             bool dynamicLightsDirty = HasDynamicLightsChanged();
+            ulong contributorGeometryRevision =
+                _lightingGeometryRegistry.GeometryRevision;
             bool geometryChanged =
-                _lastTerrainGeometryRevision != terrainRenderer.LightingGeometryRevision;
+                _lastTerrainGeometryRevision != terrainRenderer.LightingGeometryRevision ||
+                _lastContributorGeometryRevision != contributorGeometryRevision;
             bool ambientOcclusionChanged = _ambientOcclusionDirty;
             if (!_fieldDirty && !regionChanged && !dynamicLightsDirty && !geometryChanged &&
                 !ambientOcclusionChanged && !_compositeDirty && !_bounceDirty)
@@ -849,7 +872,7 @@ namespace Fodinae.World.Lighting
                 _dynamicSolveInProgress = false;
             }
 
-            const float cellSize = GameConstants.World.CELLSIZE;
+            const float cellSize = GameConstants.World.CellSize;
             Vector4 worldRect = new(
                 lightingRegion.x * cellSize,
                 lightingRegion.y * cellSize,
@@ -869,6 +892,15 @@ namespace Fodinae.World.Lighting
                         _materialField!,
                         _staticEmissionField!,
                         worldRect);
+                    if (_lightingGeometryRegistry.HasContributors)
+                    {
+                        _lightingGeometryRegistry.RenderLightingFields(
+                            commandBuffer,
+                            _materialField!,
+                            _staticEmissionField!,
+                            worldRect,
+                            clearFields: false);
+                    }
                 }
 
                 int dynamicLightCount;
@@ -950,6 +982,7 @@ namespace Fodinae.World.Lighting
                     _nextDynamicLightingUpdateTime = Time.unscaledTime +
                         (1f / Mathf.Max(_dynamicLightUpdatesPerSecond, 1f));
                     _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
+                    _lastContributorGeometryRevision = contributorGeometryRevision;
                     if (_externalLightsRevision == _dynamicSolveSourceRevision)
                     {
                         RememberDynamicLightState();
@@ -1051,6 +1084,7 @@ namespace Fodinae.World.Lighting
                 _nextDynamicLightingUpdateTime = Time.unscaledTime +
                     (1f / Mathf.Max(_dynamicLightUpdatesPerSecond, 1f));
                 _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
+                _lastContributorGeometryRevision = contributorGeometryRevision;
                 RememberDynamicLightState();
             }
             finally
@@ -1066,7 +1100,7 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
-            const float cellSize = GameConstants.World.CELLSIZE;
+            const float cellSize = GameConstants.World.CellSize;
             Shader.SetGlobalTexture(WorldLightTextureId, _lightmapTexture);
             Shader.SetGlobalInteger(WorldLightDebugViewId, (int)_debugView);
             Shader.SetGlobalVector(
@@ -1581,7 +1615,6 @@ namespace Fodinae.World.Lighting
             LightingRuntimeConfig config = new()
             {
                 Schema = LightingRuntimeConfig.SchemaId,
-                Quality = (int)_inspectorQuality,
                 AmbientOcclusionEnabled = _inspectorAmbientOcclusionEnabled,
                 DiffuseBounceEnabled = _inspectorDiffuseBounceEnabled,
                 AmbientIntensity = _inspectorAmbientIntensity,
@@ -1599,8 +1632,8 @@ namespace Fodinae.World.Lighting
                 TransmittanceDebugDistanceCells = _inspectorTransmittanceDebugDistanceCells,
                 MinimumTransmission = _inspectorMinimumTransmission,
                 LightSafeBorder = _inspectorLightSafeBorder,
-                DynamicLightIntensity = LightingDefaults.DynamicLightIntensity,
-                DynamicLightColor = LightingDefaults.DynamicLightColor,
+                DynamicLightIntensity = _projectDefaults.Lighting.DynamicLightIntensity,
+                DynamicLightColor = _projectDefaults.Lighting.DynamicLightColor,
                 DynamicLightUpdatesPerSecond = _dynamicLightUpdatesPerSecond,
             };
             config.Validate();
@@ -1609,7 +1642,6 @@ namespace Fodinae.World.Lighting
 
         private void ApplyRuntimeConfig(LightingRuntimeConfig config)
         {
-            _quality = (QualityPreset)config.Quality;
             _ambientOcclusionEnabled = config.AmbientOcclusionEnabled;
             _diffuseBounceEnabled = config.DiffuseBounceEnabled;
             _ambientIntensity = config.AmbientIntensity;
@@ -1632,7 +1664,6 @@ namespace Fodinae.World.Lighting
 
         private void SyncRuntimeConfig()
         {
-            _runtimeConfig.Quality = (int)_quality;
             _runtimeConfig.AmbientOcclusionEnabled = _ambientOcclusionEnabled;
             _runtimeConfig.DiffuseBounceEnabled = _diffuseBounceEnabled;
             _runtimeConfig.AmbientIntensity = _ambientIntensity;
@@ -1662,7 +1693,7 @@ namespace Fodinae.World.Lighting
             _runtimeConfig.DynamicLightUpdatesPerSecond = Mathf.Clamp(
                 _dynamicLightUpdatesPerSecond,
                 1f,
-                LightingDefaults.DynamicLightUpdatesPerSecondLimit);
+                LightingConfigLimits.DynamicLightUpdatesPerSecond);
             _runtimeConfig.Validate();
         }
 
@@ -1682,7 +1713,7 @@ namespace Fodinae.World.Lighting
             float clampedValue = Mathf.Clamp(
                 value,
                 1f,
-                LightingDefaults.DynamicLightUpdatesPerSecondLimit);
+                LightingConfigLimits.DynamicLightUpdatesPerSecond);
             if (Mathf.Approximately(_dynamicLightUpdatesPerSecond, clampedValue))
             {
                 return;
@@ -1727,9 +1758,31 @@ namespace Fodinae.World.Lighting
             }
         }
 
+        private void ApplyProjectDefaults(LightingDefaultsSnapshot defaults)
+        {
+            _quality = defaults.Quality;
+            _ambientOcclusionEnabled = defaults.AmbientOcclusionEnabled;
+            _diffuseBounceEnabled = defaults.DiffuseBounceEnabled;
+            _ambientIntensity = defaults.AmbientIntensity;
+            _emissionScale = defaults.EmissionScale;
+            _ambientColor = defaults.AmbientColor;
+            _emptyExtinctionRgb = defaults.EmptyExtinctionRgb;
+            _solidExtinctionRgb = defaults.SolidExtinctionRgb;
+            _emptyExtinctionMultiplier = defaults.EmptyExtinctionMultiplier;
+            _solidExtinctionMultiplier = defaults.SolidExtinctionMultiplier;
+            _bounceStrength = defaults.BounceStrength;
+            _ambientOcclusionRadiusCells = defaults.AmbientOcclusionRadiusCells;
+            _ambientOcclusionStrength = defaults.AmbientOcclusionStrength;
+            _maximumLightMultiplier = defaults.MaximumLightMultiplier;
+            _enableFinalLightingClamp = defaults.EnableFinalLightingClamp;
+            _transmittanceDebugDistanceCells = defaults.TransmittanceDebugDistanceCells;
+            _minimumTransmission = defaults.MinimumTransmission;
+            _lightSafeBorder = defaults.LightSafeBorder;
+            _dynamicLightUpdatesPerSecond = defaults.DynamicLightUpdatesPerSecond;
+        }
+
         private void CaptureInspectorDefaults()
         {
-            _inspectorQuality = _quality;
             _inspectorAmbientOcclusionEnabled = _ambientOcclusionEnabled;
             _inspectorDiffuseBounceEnabled = _diffuseBounceEnabled;
             _inspectorAmbientIntensity = _ambientIntensity;
@@ -2089,9 +2142,9 @@ namespace Fodinae.World.Lighting
                 throw new NotSupportedException("Radiance Cascades requires compute shader support.");
             }
 
-            _lightingCompute = Resources.Load<ComputeShader>(ComputeResourcePath) ??
+            _lightingCompute = Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute) ??
                 throw new InvalidOperationException(
-                    $"Required compute shader Resources/{ComputeResourcePath} is missing.");
+                    $"Required compute shader Resources/{ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute} is missing.");
             foreach (string kernelName in RequiredKernels)
             {
                 if (!_lightingCompute.HasKernel(kernelName))
@@ -2140,7 +2193,7 @@ namespace Fodinae.World.Lighting
 
         private static void ValidateMaterialFieldPass()
         {
-            Shader terrainShader = Shader.Find("Universal Render Pipeline/Custom/Terrain") ??
+            Shader terrainShader = Shader.Find(ProjectRuntimeContracts.ShaderNames.Terrain) ??
                 throw new InvalidOperationException("The terrain shader required by lighting is missing.");
             var validationMaterial = new Material(terrainShader);
             try

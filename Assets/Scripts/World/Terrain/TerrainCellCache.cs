@@ -221,9 +221,14 @@ namespace Fodinae.World.Terrain
 
         private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, WorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[]? currentChunk)
         {
-            if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
+            if (unityY >= worldHeight)
             {
                 return CellType.Unloaded;
+            }
+
+            if (gridX < 0 || gridX >= worldWidth || unityY < 0)
+            {
+                return CellType.RedRock;
             }
 
             int serverY = CoordinateUtils.UnityToServerY(unityY, worldHeight);
