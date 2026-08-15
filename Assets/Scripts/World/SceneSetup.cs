@@ -20,6 +20,7 @@ namespace Fodinae.World
         private Texture2D? _perspectiveTexture;
 
         private WorldBackgroundSetup? _backgroundSetup;
+        private bool _surfaceRendererSetup;
 
 #if UNITY_EDITOR
         private void OnValidate()
@@ -45,7 +46,18 @@ namespace Fodinae.World
             SetupWorldMapController();
             SetupMinimapController();
             SetupWorldAudioController();
-            SetupSurfaceRenderer();
+            TrySetupSurfaceRenderer();
+        }
+
+        protected void Update()
+        {
+            if (_surfaceRendererSetup)
+            {
+                enabled = false;
+                return;
+            }
+
+            TrySetupSurfaceRenderer();
         }
 
         private void SetupMinimapController()
@@ -74,8 +86,13 @@ namespace Fodinae.World
             audioGO.AddComponent<Audio.Spatial.WorldAudioController>();
         }
 
-        private void SetupSurfaceRenderer()
+        private void TrySetupSurfaceRenderer()
         {
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             if (_transitTexture == null || _perspectiveTexture == null)
             {
                 throw new InvalidOperationException(
@@ -92,6 +109,7 @@ namespace Fodinae.World
 
             Fodinae.Core.ServiceLocator.Inject(surfaceRenderer);
             surfaceRenderer.SetLocalAssets(_transitTexture, _perspectiveTexture);
+            _surfaceRendererSetup = true;
         }
 
         private void SetupWorldMapController()

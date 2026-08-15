@@ -47,6 +47,16 @@ namespace Fodinae.UI
                 return;
             }
 
+            TryInitialize();
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             _gameManager = ServiceLocator.Resolve<GameManager>();
             if (_gameManager == null || _assetLoader == null || _fpsCounter == null || _document == null)
             {
@@ -78,6 +88,12 @@ namespace Fodinae.UI
 
         private void Update()
         {
+            if (!_initialized)
+            {
+                TryInitialize();
+                return;
+            }
+
             if (_root == null)
             {
                 return;
