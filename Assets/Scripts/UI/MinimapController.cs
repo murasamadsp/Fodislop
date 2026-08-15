@@ -53,6 +53,7 @@ namespace Fodinae.UI
         private float _lastUpdateTime;
         private bool _ready;
         private bool _initialRefreshDone;
+        private bool _lastRefreshHadLoadedCells;
         private long _lastRenderedStorageRevision = -1;
         private bool _chunkLoadRefreshRequested;
         private WorldLayer<CellType>? _subscribedCellLayer;
@@ -124,7 +125,7 @@ namespace Fodinae.UI
         /// </summary>
         protected void Update()
         {
-            if (!_ready || _player == null || !_player.HasServerPosition)
+            if (!_ready || _player == null || !_player.HasServerPosition || !_initialRefreshDone)
             {
                 TryInitialize();
             }
@@ -136,7 +137,8 @@ namespace Fodinae.UI
                 TryInitialize();
             }
 
-            if (_ready && _isVisible && _player != null && _player.HasServerPosition &&
+            if (_ready && _initialRefreshDone && _isVisible &&
+                _player != null && _player.HasServerPosition &&
                 _mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)
             {
                 _cellSampler.Invalidate();
@@ -201,8 +203,11 @@ namespace Fodinae.UI
 
                 _lastUpdatePos = _player.Position;
                 _lastUpdateTime = Time.time;
-                _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
-                _initialRefreshDone = true;
+                _initialRefreshDone = !_isVisible || _lastRefreshHadLoadedCells;
+                if (_initialRefreshDone)
+                {
+                    _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
+                }
             }
         }
 
@@ -396,6 +401,7 @@ namespace Fodinae.UI
             Dictionary<CellType, Color32> cellColors = _cellColors;
 
             int index = 0;
+            bool hasLoadedCells = false;
 
             for (int texY = 0; texY < texSize; texY++)
             {
@@ -427,6 +433,7 @@ namespace Fodinae.UI
 
                     if (_cellSampler.TryGetCell(serverX, serverY, out CellType cellType))
                     {
+                        hasLoadedCells = true;
                         colors[index++] = cellColors[cellType];
                     }
                     else
@@ -454,6 +461,8 @@ namespace Fodinae.UI
                 // reallocation.
                 _minimapTexture.Apply(false); // Async GPU upload — non-blocking
             }
+
+            _lastRefreshHadLoadedCells = hasLoadedCells;
         }
 
         private void UpdateCoordinatesText(int x, int y)
