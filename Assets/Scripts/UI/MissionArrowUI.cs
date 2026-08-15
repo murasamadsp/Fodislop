@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -19,6 +20,7 @@ namespace Fodinae.UI
         private Camera? _camera;
         private ushort? _targetX;
         private ushort? _targetY;
+        private bool _initialized;
         [Inject]
         private IPlayerStats _playerStats = null!;
         [Inject]
@@ -26,6 +28,30 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
+            {
+                throw new InvalidOperationException(
+                    "[MissionArrowUI] Required DI services and UIDocument must be initialized before building the arrow.");
+            }
+
             _camera = Camera.main;
 
             _arrow = new VisualElement();
@@ -48,6 +74,8 @@ namespace Fodinae.UI
                     _arrow.style.display = DisplayStyle.Flex;
                 }
             }
+
+            _initialized = true;
         }
 
         protected void OnDestroy()

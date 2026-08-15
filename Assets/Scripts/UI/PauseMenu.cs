@@ -42,6 +42,7 @@ namespace Fodinae.UI
         private InputAction? _escapeAction;
         private float _originalScale;
         private Button? _fullscreenButton;
+        private bool _initialized;
 
         private float GetConfiguredBusVolume(AudioBusType busType, string preferenceKey, float defaultValue)
         {
@@ -73,15 +74,35 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null ||
+                _clientConfig == null || _projectDefaults == null || _networkService == null ||
+                _audioSystem == null || _connectionService == null || _inputBlocker == null)
+            {
+                throw new InvalidOperationException(
+                    "[PauseMenu] Required DI services and UIDocument must be initialized before building pause menu.");
+            }
+
             _escapeAction = new InputAction("Escape", binding: "<Keyboard>/escape");
             _escapeAction.performed += _ => ToggleMenu();
             _escapeAction.Enable();
-
-            if (_doc.panelSettings == null)
-            {
-                Debug.LogError("[PauseMenu] PanelSettings не назначен на UIDocument");
-                return;
-            }
 
             _originalScale = _doc.panelSettings.scale;
 
@@ -98,6 +119,8 @@ namespace Fodinae.UI
             {
                 canvas.scaleFactor = savedScale;
             }
+
+            _initialized = true;
         }
 
         protected void OnDestroy()

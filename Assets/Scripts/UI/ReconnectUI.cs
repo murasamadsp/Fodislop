@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -41,6 +43,14 @@ namespace Fodinae.UI
             }
         }
 
+        private void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
         private void OnDestroy()
         {
             if (_instance == this)
@@ -56,22 +66,28 @@ namespace Fodinae.UI
 
         private void Start()
         {
-            if (_initialized)
+            TryInitialize();
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
             {
                 return;
             }
 
-            _initialized = true;
+            if (_doc == null || _doc.rootVisualElement == null)
+            {
+                throw new InvalidOperationException(
+                    "[ReconnectUI] UIDocument must be injected and have a root before initialization.");
+            }
+
             CreateUI();
+            _initialized = true;
         }
 
         private void CreateUI()
         {
-            if (_doc?.rootVisualElement == null)
-            {
-                return;
-            }
-
             _reconnectOverlay = new VisualElement();
             ApplyOverlayState(_reconnectOverlay);
             _doc.rootVisualElement.Add(_reconnectOverlay);

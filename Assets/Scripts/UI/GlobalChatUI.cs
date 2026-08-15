@@ -33,6 +33,7 @@ namespace Fodinae.UI
         private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker? _blinker;
         private CancellationTokenSource? _idleCts;
+        private bool _initialized;
 
         private static readonly System.Drawing.Color[] PresetColors =
         {
@@ -57,6 +58,24 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
+                _serverConfig == null || _inputBlocker == null)
+            {
+                throw new InvalidOperationException(
+                    "[GlobalChatUI] Required DI services and UIDocument must be initialized before building chat UI.");
+            }
+
+            _initialized = true;
             _serverConfig.OnInitialized += ApplyServerConfig;
             CreateUI();
             if (_panel != null)
@@ -103,6 +122,15 @@ namespace Fodinae.UI
 
         protected void Update()
         {
+            if (!_initialized)
+            {
+                TryInitialize();
+                if (!_initialized)
+                {
+                    return;
+                }
+            }
+
             if (Keyboard.current == null)
             {
                 return;
