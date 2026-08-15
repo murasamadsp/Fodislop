@@ -87,6 +87,12 @@ namespace Fodinae.Rendering.PostProcessing
 
         private static Camera? _mainCamera;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            _mainCamera = null;
+        }
+
         private void RefreshVolumeComponents(VolumeStack stack)
         {
             if (ReferenceEquals(_cachedVolumeStack, stack))

@@ -199,6 +199,7 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
+            _mainCamera ??= Camera.main;
             var mainCam = _mainCamera;
             if (mainCam != null)
             {
@@ -259,6 +260,7 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
+            _mainCamera ??= Camera.main;
             Camera? mainCamera = _configuredMainCamera;
             if (mainCamera == null)
             {
