@@ -20,6 +20,8 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
@@ -31,6 +33,8 @@ namespace Fodinae.Core
     {
         protected override void Configure(IContainerBuilder builder)
         {
+            EnsureRuntimeUiInput();
+
             IProjectDefaults projectDefaults = ProjectDefaultsLoader.LoadRequired();
             builder.RegisterInstance(projectDefaults);
 
@@ -105,6 +109,21 @@ namespace Fodinae.Core
             // когда весь DI-граф уже построен — любой резолв в этот момент безопасен и
             // не вызывает reentrancy Lazy-фабрик (в отличие от build-callback'а внутри Build()).
             builder.RegisterEntryPoint<GameBootstrap>();
+        }
+
+        private static void EnsureRuntimeUiInput()
+        {
+            EventSystem? eventSystem = FindAnyObjectByType<EventSystem>(FindObjectsInactive.Include);
+            if (eventSystem == null)
+            {
+                GameObject eventSystemObject = new("EventSystem");
+                eventSystem = eventSystemObject.AddComponent<EventSystem>();
+            }
+
+            if (eventSystem.GetComponent<InputSystemUIInputModule>() == null)
+            {
+                eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
+            }
         }
 
         private static void InjectSceneBehaviours(IObjectResolver resolver)
