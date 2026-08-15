@@ -117,7 +117,7 @@ namespace Fodinae.World.Terrain
                 }
             }
 
-            wtm.RequestTexture((CellType)0);
+            wtm.RequestTexture(CellType.Empty);
         }
 
         public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
@@ -216,7 +216,7 @@ namespace Fodinae.World.Terrain
                 }
             }
 
-            wtm.RequestTexture((CellType)0);
+            wtm.RequestTexture(CellType.Empty);
         }
 
         private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, WorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[]? currentChunk)
