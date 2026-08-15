@@ -35,11 +35,12 @@
     flex-shrink: 0;
     overflow: hidden;
     min-width: 260px;
+    align-self: center;
 }
 
 .pause-settings {
-    width: 100%;
-    max-width: none;
+    width: 520px;
+    max-width: 80%;
 }
 
 .pause-page {

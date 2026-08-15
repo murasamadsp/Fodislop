@@ -21,6 +21,12 @@ namespace Fodinae.Core
 
         public static ClientConfigManager? Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         public ClientConfig Config { get; private set; } = null!;
 
         [Inject]

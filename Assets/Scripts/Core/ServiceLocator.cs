@@ -10,6 +10,12 @@ namespace Fodinae.Core
     {
         private static IObjectResolver? _resolver;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            _resolver = null;
+        }
+
         public static bool IsInitialized => _resolver != null;
 
         public static void Initialize(IObjectResolver resolver)

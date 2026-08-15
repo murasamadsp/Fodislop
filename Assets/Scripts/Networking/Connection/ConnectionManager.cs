@@ -25,6 +25,12 @@ namespace Fodinae.Networking.Connection
     {
         public static ConnectionManager? Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         public IServerConnection? Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
         public bool IsOffline => Connection is IOfflineConnection;

@@ -43,7 +43,6 @@ namespace Fodinae.UI
             _panel.Add(okButton);
 
             _overlay!.style.display = DisplayStyle.Flex;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Modal, true);
             _overlay.SetEnabled(true);
             _overlay.pickingMode = PickingMode.Position;
         }
@@ -55,7 +54,6 @@ namespace Fodinae.UI
             if (_overlay != null)
             {
                 _overlay.style.display = DisplayStyle.None;
-                UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Modal, false);
                 _overlay.SetEnabled(false);
                 _overlay.pickingMode = PickingMode.Ignore;
             }

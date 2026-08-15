@@ -48,17 +48,6 @@
     flex-direction: column;
 }
 
-.ui-layer {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-}
-
 /* ─── Единый контракт контейнеров ─── */
 
 .ui-overlay {

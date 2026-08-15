@@ -63,6 +63,13 @@ namespace Fodinae.Player.Logic
         public static PlayerMovementController? LocalPlayer { get; private set; }
         public static event Action<PlayerMovementController>? OnLocalPlayerSpawned;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            LocalPlayer = null;
+            OnLocalPlayerSpawned = null;
+        }
+
         protected void Awake()
         {
             LocalPlayer = this;

@@ -14,6 +14,12 @@ namespace Fodinae.Rendering.PostProcessing
         private static PostProcessController? _instance;
         public static PostProcessController Instance => _instance!;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            _instance = null;
+        }
+
         [SerializeField]
         private Volume? _volume;
 

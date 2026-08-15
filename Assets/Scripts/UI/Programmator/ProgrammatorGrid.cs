@@ -69,6 +69,11 @@ namespace Fodinae.UI.Programmator
 
         public static bool IsOpen { get; private set; }
 
+        protected void OnDestroy()
+        {
+            IsOpen = false;
+        }
+
         protected void Start()
         {
             CreateUI();
@@ -399,7 +404,7 @@ namespace Fodinae.UI.Programmator
             dialogPanel.Add(dialogButtons);
             _createDialog.Add(dialogPanel);
             _popup.Add(_createDialog);
-            UIContainerLayers.Get(_doc!, UIContainerLayers.Modal).Add(_popup!);
+            _doc!.rootVisualElement.Add(_popup!);
 
             _radial = new RadialMenu();
             _radial.OnCategoryClicked += OnRadialCategoryClicked;

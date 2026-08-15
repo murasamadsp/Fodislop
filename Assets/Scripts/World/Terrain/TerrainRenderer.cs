@@ -26,6 +26,12 @@ namespace Fodinae.World.Terrain
 
         public static TerrainRenderer? Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         [Header("Configuration")]
         [SerializeField]
         private float _cellSize = GameConstants.World.CellSize;

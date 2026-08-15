@@ -786,7 +786,7 @@ namespace Fodinae.UI
             _settingsPage.style.display = DisplayStyle.None;
             _menuPanel.Add(_settingsPage);
 
-            UIContainerLayers.Get(_doc, UIContainerLayers.Modal).Add(_menuPanel);
+            root.Add(_menuPanel);
         }
 
         private VisualElement CreateAudioSlider(string title, AudioBusType busType, string prefKey, float defaultValue)
@@ -910,7 +910,6 @@ namespace Fodinae.UI
         {
             _isOpen = true;
             IsMenuOpen = true;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Modal, true);
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.Flex;
@@ -932,7 +931,6 @@ namespace Fodinae.UI
             SendClientConfig();
             _isOpen = false;
             IsMenuOpen = false;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Modal, false);
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.None;

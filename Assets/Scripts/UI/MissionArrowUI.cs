@@ -34,7 +34,7 @@ namespace Fodinae.UI
 
             // Видимость — рантайм-состояние
             _arrow.style.display = DisplayStyle.None;
-            UIContainerLayers.Get(_doc, UIContainerLayers.Hud).Add(_arrow);
+            _doc.rootVisualElement.Add(_arrow);
 
             var stats = _playerStats as PlayerStatsModel;
             if (stats != null)

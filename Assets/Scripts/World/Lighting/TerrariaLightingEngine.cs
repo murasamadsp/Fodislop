@@ -129,6 +129,12 @@ namespace Fodinae.World.Lighting
 
         private static TerrariaLightingEngine? _instance;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            _instance = null;
+        }
+
         [Header("Quality")]
         [SerializeField]
         [Tooltip("Качество каскадов: Ultra увеличивает разрешение поля, atlas budget, ray steps и лимит источников.")]

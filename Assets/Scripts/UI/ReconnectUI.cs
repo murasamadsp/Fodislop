@@ -12,6 +12,12 @@ namespace Fodinae.UI
         private static ReconnectUI? _instance;
         public static ReconnectUI? Instance => _instance;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            _instance = null;
+        }
+
         [Inject]
         private UIDocument _doc = null!;
 
@@ -106,7 +112,6 @@ namespace Fodinae.UI
 
             _reconnectStatusSet = true;
             _reconnectOverlay.style.display = DisplayStyle.Flex;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
             _reconnectOverlay.SetEnabled(true);
             _reconnectOverlay.pickingMode = PickingMode.Position;
         }
@@ -123,7 +128,6 @@ namespace Fodinae.UI
             _disconnectLabel.text = reason;
 
             _disconnectOverlay.style.display = DisplayStyle.Flex;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
             _disconnectOverlay.SetEnabled(true);
             _disconnectOverlay.pickingMode = PickingMode.Position;
         }
@@ -143,7 +147,6 @@ namespace Fodinae.UI
             if (!_reconnectStatusSet && _doc != null && _reconnectOverlay != null)
             {
                 _reconnectOverlay.style.display = DisplayStyle.Flex;
-                UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
                 _reconnectOverlay.SetEnabled(true);
                 _reconnectOverlay.pickingMode = PickingMode.Position;
             }
@@ -167,7 +170,6 @@ namespace Fodinae.UI
             }
 
             _reconnectStatusSet = false;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, false);
         }
 
         private static void HideOverlay(VisualElement? overlay)

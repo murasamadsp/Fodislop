@@ -21,6 +21,18 @@ namespace Fodinae.UI.Programmator
         public static int CurrentPage;
         public static int HoveredCell = -1;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Codes = new List<int>(new int[CELLS_PER_PAGE]);
+            Values = new List<string?>(new string?[CELLS_PER_PAGE]);
+            Labels = new List<string?>(new string?[CELLS_PER_PAGE]);
+            CurrentPage = 0;
+            HoveredCell = -1;
+            _undoStack.Clear();
+            _redoStack.Clear();
+        }
+
         public static void AddPage()
         {
             if (PageCount >= 100)

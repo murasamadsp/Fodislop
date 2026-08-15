@@ -169,7 +169,6 @@ namespace Fodinae.UI
             _isCritical = isCritical;
             _errorMessageLabel!.text = message;
             _errorPanel!.style.display = DisplayStyle.Flex;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, true);
             _errorPanel.SetEnabled(true);
             _errorPanel.pickingMode = PickingMode.Position;
 
@@ -181,7 +180,6 @@ namespace Fodinae.UI
         private void Hide()
         {
             _errorPanel!.style.display = DisplayStyle.None;
-            UIContainerLayers.SetInteractive(_doc, UIContainerLayers.Blocking, false);
             _errorPanel.SetEnabled(false);
             _errorPanel.pickingMode = PickingMode.Ignore;
         }

@@ -26,6 +26,12 @@ namespace Fodinae.Networking
     {
         public static NetworkService? Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         [Inject]
         private IConnectionService _connectionService = null!;
 

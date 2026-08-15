@@ -9,6 +9,12 @@ namespace Fodinae.UI
     {
         public static bool IsFocused { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            IsFocused = false;
+        }
+
         public static void OnFocus()
         {
             IsFocused = true;

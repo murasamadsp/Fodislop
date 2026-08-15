@@ -13,6 +13,12 @@ namespace Fodinae.Player
     public class CameraFollow : MonoBehaviour
     {
         public static CameraFollow? Instance { get; private set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
         [Header("Follow Settings")]
         [SerializeField]
         private Transform? _target;
