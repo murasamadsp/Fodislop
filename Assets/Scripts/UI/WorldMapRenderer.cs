@@ -644,10 +644,98 @@ namespace Fodinae.UI
                 return;
             }
 
-            _cellsPerPixel *= 1f - (delta * 0.1f);
-            _cellsPerPixel = Mathf.Clamp(_cellsPerPixel, 0.25f, _maxCellsPerPixel);
+            float oldCellsPerPixel = _cellsPerPixel;
+            float cursorWorldX = 0f;
+            float cursorWorldY = 0f;
+            bool hasCursorAnchor = TryGetCursorWorldPosition(
+                out cursorWorldX,
+                out cursorWorldY);
+
+            // Mouse-wheel values differ by platform: some backends report one
+            // line per notch while others report 120. A bounded exponential
+            // step gives the same usable zoom response in both cases and never
+            // jumps directly to a clamp boundary.
+            float zoomSteps = Mathf.Clamp(delta, -4f, 4f);
+            _cellsPerPixel = Mathf.Clamp(
+                oldCellsPerPixel * Mathf.Pow(0.85f, zoomSteps),
+                0.25f,
+                _maxCellsPerPixel);
+
+            if (hasCursorAnchor && oldCellsPerPixel > 0f)
+            {
+                ApplyCursorAnchor(cursorWorldX, cursorWorldY);
+            }
+
             ClampViewCenter();
             _renderRequested = true;
+        }
+
+        private bool TryGetCursorWorldPosition(out float worldX, out float worldY)
+        {
+            worldX = 0f;
+            worldY = 0f;
+            if (Mouse.current == null || _rawImage == null ||
+                _texWidth <= 0 || _texHeight <= 0)
+            {
+                return false;
+            }
+
+            RectTransform rectTransform = _rawImage.rectTransform;
+            Rect rect = rectTransform.rect;
+            if (rect.width <= 0f || rect.height <= 0f ||
+                float.IsNaN(rect.width) || float.IsNaN(rect.height) ||
+                float.IsInfinity(rect.width) || float.IsInfinity(rect.height))
+            {
+                return false;
+            }
+
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                rectTransform,
+                Mouse.current.position.ReadValue(),
+                null,
+                out Vector2 localPoint))
+            {
+                return false;
+            }
+
+            float pixelX = ((localPoint.x - rect.xMin) / rect.width) * _texWidth;
+            float pixelY = ((localPoint.y - rect.yMin) / rect.height) * _texHeight;
+            worldX = _viewCenterX + (pixelX - (_texWidth * 0.5f)) * _cellsPerPixel;
+            worldY = _viewCenterY +
+                ((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel;
+            return true;
+        }
+
+        private void ApplyCursorAnchor(float worldX, float worldY)
+        {
+            if (Mouse.current == null || _rawImage == null ||
+                _texWidth <= 0 || _texHeight <= 0)
+            {
+                return;
+            }
+
+            RectTransform rectTransform = _rawImage.rectTransform;
+            Rect rect = rectTransform.rect;
+            if (rect.width <= 0f || rect.height <= 0f)
+            {
+                return;
+            }
+
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                rectTransform,
+                Mouse.current.position.ReadValue(),
+                null,
+                out Vector2 localPoint))
+            {
+                return;
+            }
+
+            float pixelX = ((localPoint.x - rect.xMin) / rect.width) * _texWidth;
+            float pixelY = ((localPoint.y - rect.yMin) / rect.height) * _texHeight;
+            _viewCenterX = worldX -
+                (pixelX - (_texWidth * 0.5f)) * _cellsPerPixel;
+            _viewCenterY = worldY -
+                ((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel;
         }
 
         private void ClampViewCenter()
