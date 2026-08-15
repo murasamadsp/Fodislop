@@ -251,6 +251,11 @@ namespace Fodinae.World
                     return info.ContainerFPS;
                 }
 
+                if (info.AnimationFrames <= 1)
+                {
+                    return 0f;
+                }
+
                 MapManager mmForSpeed = ServiceLocator.Resolve<MapManager>() ??
                     throw new InvalidOperationException(
                         "MapManager is required to resolve animation speed for a terrain texture.");

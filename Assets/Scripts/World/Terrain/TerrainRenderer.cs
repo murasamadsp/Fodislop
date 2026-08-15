@@ -489,6 +489,17 @@ namespace Fodinae.World.Terrain
                     SnapRegionCoordinate(desiredGridPos.y, regionAnchor))
                 : _lastGridPos;
 
+            if (currentGridPos.x == int.MinValue || currentGridPos.y == int.MinValue)
+            {
+                Debug.LogError(
+                    $"[TerrainRenderer] Invalid terrain grid position {currentGridPos}. " +
+                    $"Camera position={camPos}; desired grid={desiredGridPos}; " +
+                    $"last grid={_lastGridPos}; dimensions={_meshWidth}x{_meshHeight}.");
+                currentGridPos = new Vector2Int(
+                    SnapRegionCoordinate(desiredGridPos.x, regionAnchor),
+                    SnapRegionCoordinate(desiredGridPos.y, regionAnchor));
+            }
+
             bool terrainWasRebuilt = currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged;
             if (terrainWasRebuilt)
             {
