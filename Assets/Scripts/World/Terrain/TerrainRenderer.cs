@@ -827,7 +827,7 @@ namespace Fodinae.World.Terrain
             catch (Exception ex)
             {
                 Debug.LogError(
-                    $"[TerrainRenderer] Build failed: grid=({_lastGridPos.x},{_lastGridPos.y}) " +
+                    $"[TerrainRenderer] Build failed: grid=({minX},{minY}) " +
                     $"size={_meshWidth}x{_meshHeight}, world=" +
                     $"{_mapManager?.WorldWidth ?? 0}x{_mapManager?.WorldHeight ?? 0}, " +
                     $"atlases={(_textureService as WorldTextureManager)?.GetAllAtlases().Count ?? 0}, " +

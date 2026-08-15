@@ -143,10 +143,13 @@ namespace Fodinae.UI.HUD.Inventory.View
                     "[InventoryUI] UIDocument must be injected and have a root before initialization.");
             }
 
-            _model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
+            IInventoryModel model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>() ??
+                throw new InvalidOperationException(
+                    "Inventory model was not registered before InventoryView initialization.");
+            _model = model;
 
-            _model.OnSlotChanged += RefreshSlot;
-            _model.OnSlotSelected += OnModelSlotSelected;
+            model.OnSlotChanged += RefreshSlot;
+            model.OnSlotSelected += OnModelSlotSelected;
 
             CreateTooltip(_doc.rootVisualElement);
             BuildUI();

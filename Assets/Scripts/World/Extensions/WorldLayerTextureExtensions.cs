@@ -148,8 +148,10 @@ namespace Fodinae.World.Extensions
         /// <returns>List of active texture atlases.</returns>
         public static List<TextureAtlas> GetActiveAtlases(this WorldLayer<CellType> worldLayer)
         {
-            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
-            return manager?.GetAllAtlases() ?? new List<TextureAtlas>();
+            var manager = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager ??
+                throw new InvalidOperationException(
+                    "WorldTextureManager is required to enumerate active terrain atlases.");
+            return manager.GetAllAtlases();
         }
 
         /// <summary>

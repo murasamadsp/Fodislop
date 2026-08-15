@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Core.Interfaces;
@@ -74,17 +75,39 @@ namespace Fodinae.Networking
 
         protected virtual void Awake()
         {
-            if (_mapDataProvider == null)
+            TryInitialize();
+        }
+
+        protected void Start()
+        {
+            TryInitialize();
+        }
+
+        public void EnsureInitialized()
+        {
+            if (!TryInitialize())
             {
-                Debug.LogError("[PacketHandler] FATAL: IMapDataProvider is not injected — PacketHandler cannot function. World will not render.");
-                return;
+                throw new InvalidOperationException(
+                    "PacketHandler dependencies were not injected before startup completed.");
+            }
+        }
+
+        private bool TryInitialize()
+        {
+            if (_isInitialized)
+            {
+                return true;
+            }
+
+            if (_mapDataProvider == null || _mapStorageInterface == null || _uiDocument == null)
+            {
+                return false;
             }
 
             var mapStorage = MapStorage;
             if (mapStorage == null)
             {
-                Debug.LogError("[PacketHandler] FATAL: MapStorage not found at Awake — PacketHandler cannot function. World will not render.");
-                return;
+                return false;
             }
 
             var modalWindowHandler = new ModalWindowHandler(_uiDocument);
@@ -98,11 +121,7 @@ namespace Fodinae.Networking
             }
 
             _isInitialized = true;
-        }
-
-        protected void Start()
-        {
-            TrySubscribeToNetworkService();
+            return true;
         }
 
         private void TrySubscribeToNetworkService()

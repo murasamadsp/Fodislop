@@ -179,15 +179,26 @@ namespace Fodinae.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    var mmForAnim = ServiceLocator.Resolve<MapManager>();
-                    float speed = textureInfo.ContainerFPS > 0 ? textureInfo.ContainerFPS : (mmForAnim != null ? mmForAnim.GetAnimationSpeed(cellType) : 5f);
+                    float speed = textureInfo.ContainerFPS;
+                    MapManager? mmForAnim = null;
                     if (speed <= 0)
                     {
-                        speed = 5;
+                        mmForAnim = ServiceLocator.Resolve<MapManager>() ??
+                            throw new InvalidOperationException(
+                                "MapManager is required to resolve animation speed for a terrain texture.");
+                        speed = mmForAnim.GetAnimationSpeed(cellType);
+                    }
+
+                    if (speed <= 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Server animation speed for cell type {cellType} must be greater than zero.");
                     }
 
                     frameIndex = (int)(Time.realtimeSinceStartup * speed) % textureInfo.AnimationFrames;
-                    frameHeight = textureInfo.ContainerFPS > 0 ? textureInfo.FrameSize : (mmForAnim != null ? mmForAnim.GetAnimationFrameHeight(cellType) : textureInfo.FrameSize);
+                    frameHeight = textureInfo.ContainerFPS > 0
+                        ? textureInfo.FrameSize
+                        : (mmForAnim ?? ServiceLocator.Resolve<MapManager>()!).GetAnimationFrameHeight(cellType);
                 }
 
                 foreach (var atlas in _atlases)
@@ -253,8 +264,14 @@ namespace Fodinae.World
                 return speed;
             }
 
-            throw new InvalidOperationException(
-                $"Animation speed requested before texture metadata was loaded for cell type {cellType}.");
+            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+                throw new InvalidOperationException(
+                    "MapManager is required to resolve animation speed before terrain texture metadata is loaded.");
+            byte serverSpeed = mapManager.GetAnimationSpeed(cellType);
+
+            // Zero is the valid server value for a static texture. It only becomes
+            // invalid when an actually animated texture needs a frame cadence.
+            return serverSpeed;
         }
 
         public int GetFrameSize(CellType cellType)
@@ -384,10 +401,37 @@ namespace Fodinae.World
             }
             else
             {
-                Debug.LogWarning($"[AssetDiag] TEXFAIL {filename} — texture null");
-                throw new InvalidOperationException(
-                    $"Failed to load required terrain texture '{filename}' for cell type {cellType}.");
+                // Missing server textures are an explicit visual diagnostic mode: keep
+                // the terrain mesh alive and make the missing cell type visible.
+                Debug.LogWarning($"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
+                texture = CreateMissingTexture(cellType);
+                AddTextureToAtlas(cellType, texture);
             }
+        }
+
+        private Texture2D CreateMissingTexture(CellType cellType)
+        {
+            var texture = new Texture2D(_cellTextureSize, _cellTextureSize, TextureFormat.RGBA32, false)
+            {
+                name = $"MissingCell_{(int)cellType}",
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            var random = new System.Random(unchecked((int)cellType * 397) ^ 0x5F3759DF);
+            var pixels = new Color[_cellTextureSize * _cellTextureSize];
+            for (int y = 0; y < _cellTextureSize; y++)
+            {
+                for (int x = 0; x < _cellTextureSize; x++)
+                {
+                    float hue = (float)random.NextDouble();
+                    float value = (((x / 4) + (y / 4)) & 1) == 0 ? 0.9f : 0.45f;
+                    pixels[y * _cellTextureSize + x] = Color.HSVToRGB(hue, 0.85f, value);
+                }
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, true);
+            return texture;
         }
 
         private void AddTextureToAtlas(CellType cellType, Texture2D texture)

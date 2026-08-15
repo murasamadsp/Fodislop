@@ -19,6 +19,7 @@ namespace Fodinae.Player
         {
             Instance = null;
         }
+
         [Header("Follow Settings")]
         [SerializeField]
         private Transform? _target;
@@ -49,6 +50,7 @@ namespace Fodinae.Player
         private bool _scrollNullLogged;
         private bool _hasSnappedToServerPosition;
         private bool _playerEventSubscribed;
+        private bool _localPlayerSpawnSubscription;
         private Vector3 _followVelocity;
         [Inject]
         private IInputBlocker _inputBlocker = null!;
@@ -97,6 +99,12 @@ namespace Fodinae.Player
                 _playerEventSubscribed = true;
             }
 
+            if (!_localPlayerSpawnSubscription)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += HandleLocalPlayerSpawned;
+                _localPlayerSpawnSubscription = true;
+            }
+
             SnapToTarget();
             InitializeInput();
         }
@@ -120,6 +128,12 @@ namespace Fodinae.Player
                 _playerEventSubscribed = false;
             }
 
+            if (_localPlayerSpawnSubscription)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned -= HandleLocalPlayerSpawned;
+                _localPlayerSpawnSubscription = false;
+            }
+
             _scrollAction?.Disable();
             _scrollAction?.Dispose();
         }
@@ -132,6 +146,22 @@ namespace Fodinae.Player
             }
 
             _hasSnappedToServerPosition = true;
+            SnapToTarget();
+        }
+
+        private void HandleLocalPlayerSpawned(PlayerMovementController player)
+        {
+            if (_target == null || _target == transform)
+            {
+                _target = player.transform;
+            }
+
+            if (!_playerEventSubscribed)
+            {
+                player.OnPlayerMoved += HandlePlayerMoved;
+                _playerEventSubscribed = true;
+            }
+
             SnapToTarget();
         }
 

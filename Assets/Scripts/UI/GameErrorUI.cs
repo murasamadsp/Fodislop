@@ -60,7 +60,9 @@ namespace Fodinae.UI
             string fullMessage = ex != null ? $"{message}\n\n{ex.Message}" : message;
             Debug.LogError($"[GameError] FATAL: {fullMessage}");
 
-            var connectionService = ServiceLocator.Resolve<IConnectionService>();
+            IConnectionService? connectionService = ServiceLocator.IsInitialized
+                ? ServiceLocator.Resolve<IConnectionService>()
+                : null;
             if (connectionService != null && connectionService.IsOffline)
             {
                 connectionService.TriggerDisconnect(fullMessage);
@@ -84,17 +86,20 @@ namespace Fodinae.UI
 
         private static GameErrorUI? ResolveInstance()
         {
-            try
+            if (ServiceLocator.IsInitialized)
             {
-                var resolved = ServiceLocator.Resolve<GameErrorUI>();
-                if (resolved != null)
+                try
                 {
-                    return resolved;
+                    var resolved = ServiceLocator.Resolve<GameErrorUI>();
+                    if (resolved != null)
+                    {
+                        return resolved;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[GameError] ServiceLocator.Resolve<GameErrorUI> failed: {ex.Message}");
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[GameError] ServiceLocator.Resolve<GameErrorUI> failed: {ex.Message}");
+                }
             }
 
             return FindAnyObjectByType<GameErrorUI>();

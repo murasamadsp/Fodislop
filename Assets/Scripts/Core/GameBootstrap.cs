@@ -53,7 +53,8 @@ namespace Fodinae.Core
                     "NetworkService failed to subscribe to the connection packet stream.");
             }
             _resolver.Resolve<MapManager>();
-            _resolver.Resolve<PacketHandler>();
+            var packetHandler = _resolver.Resolve<PacketHandler>();
+            packetHandler.EnsureInitialized();
             var assetLoader = _resolver.Resolve<IAssetLoader>();
             if (assetLoader is ClientAssetLoader clientAssetLoader)
             {

@@ -104,10 +104,11 @@ namespace Fodinae.UI
                 PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
                 _playerSpawnSubscription = true;
             }
-            else
+            else if (_player != null)
             {
                 _player.OnPlayerMoved += OnPlayerMoved;
             }
+
             CreateCanvas();
             InitColorTable();
             InitTexture();
