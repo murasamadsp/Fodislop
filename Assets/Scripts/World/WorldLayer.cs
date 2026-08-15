@@ -480,13 +480,18 @@ namespace Fodinae
                 return;
             }
 
+            _loadingChunks.Remove(chunkIndex);
+
+            // A sparse map is expected while the server is streaming regions.
+            // Missing data is not an empty chunk: keep it unloaded so consumers
+            // can render the explicit unloaded/black state and retry only after
+            // an actual region is received.
             if (chunk == null)
             {
-                chunk = new T[_chunkArea];
+                return;
             }
 
             AddToCache(chunkIndex, chunk);
-            _loadingChunks.Remove(chunkIndex);
             int chunkX = chunkIndex / _heightChunks;
             int chunkY = chunkIndex % _heightChunks;
             ChunkLoaded?.Invoke(

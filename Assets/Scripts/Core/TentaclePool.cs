@@ -10,6 +10,13 @@ public static class TentaclePool
     private static readonly Queue<LineRenderer> _pool = new();
     private static Transform? _parent;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetForDomainReload()
+    {
+        Clear();
+        _parent = null;
+    }
+
     private static Transform? Parent
     {
         get

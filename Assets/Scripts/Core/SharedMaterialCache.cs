@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -16,11 +17,20 @@ namespace Fodinae.Core
             {
                 if (_shader == null)
                 {
-                    _shader = Shader.Find("Sprites/Default");
+                    _shader = Shader.Find("Sprites/Default") ??
+                        throw new InvalidOperationException(
+                            "SharedMaterialCache requires the supported 'Sprites/Default' shader.");
                 }
 
                 return _shader;
             }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Clear();
+            _shader = null;
         }
 
         public static Material? GetForTexture(Texture2D texture)
@@ -47,7 +57,7 @@ namespace Fodinae.Core
             {
                 if (mat != null)
                 {
-                    Object.Destroy(mat);
+                    UnityEngine.Object.Destroy(mat);
                 }
             }
 

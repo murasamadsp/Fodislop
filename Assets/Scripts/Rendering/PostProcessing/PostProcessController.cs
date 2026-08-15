@@ -233,24 +233,15 @@ namespace Fodinae.Rendering.PostProcessing
                 _ownsRuntimeProfile = true;
             }
 
-            if (profile.components.Count == 0)
-            {
-                GetOrAddComponent(ref _bloom, profile);
-                GetOrAddComponent(ref _vignette, profile);
-                GetOrAddComponent(ref _chromaticAberration, profile);
-                GetOrAddComponent(ref _colorGrading, profile);
-                GetOrAddComponent(ref _eigengrau, profile);
-                GetOrAddComponent(ref _motionBlur, profile);
-            }
-            else
-            {
-                profile.TryGet(out _bloom);
-                profile.TryGet(out _vignette);
-                profile.TryGet(out _chromaticAberration);
-                profile.TryGet(out _colorGrading);
-                profile.TryGet(out _eigengrau);
-                profile.TryGet(out _motionBlur);
-            }
+            // Profiles can be partially serialized (for example after an editor
+            // domain reload). Do not treat a non-empty profile as complete: each
+            // runtime component is an independent part of the post-process contract.
+            GetOrAddComponent(ref _bloom, profile);
+            GetOrAddComponent(ref _vignette, profile);
+            GetOrAddComponent(ref _chromaticAberration, profile);
+            GetOrAddComponent(ref _colorGrading, profile);
+            GetOrAddComponent(ref _eigengrau, profile);
+            GetOrAddComponent(ref _motionBlur, profile);
         }
 
         public void EnsureEditorVolume()

@@ -13,6 +13,12 @@ namespace Fodinae.Game.Managers
         private static readonly Dictionary<ItemType, Texture2D> _iconCache = new();
         private static readonly HashSet<ItemType> _missingIconWarned = new();
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Clear();
+        }
+
         public static string GetName(ItemType type) => type.ToString();
 
         public static string GetDescription(ItemType type) => string.Empty;
