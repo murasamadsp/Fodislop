@@ -267,6 +267,7 @@ namespace Fodinae.World.Lighting
         private bool _hasRenderedLightState;
         private bool _externalLightsDirty;
         private uint _externalLightsRevision;
+        private bool _initialized;
         private bool _hasStaticRadianceState;
         private uint _dynamicLightGeneration;
         private bool _dynamicSolveInProgress;
@@ -465,6 +466,22 @@ namespace Fodinae.World.Lighting
 
         private void Start()
         {
+            TryInitialize();
+        }
+
+        public void EnsureInitialized()
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            if (_projectDefaults == null || _clientConfig == null || _lightingGeometryRegistry == null)
+            {
+                throw new InvalidOperationException(
+                    "TerrariaLightingEngine requires all DI dependencies before initialization.");
+            }
+
             _graphicsProfile ??= Resources.Load<GraphicsQualityProfile>("GraphicsQualityProfile");
             ApplyProjectDefaults(_projectDefaults.Lighting);
             CaptureInspectorDefaults();
@@ -485,6 +502,17 @@ namespace Fodinae.World.Lighting
             {
                 name = "Fodinae Radiance Cascades",
             };
+            _initialized = true;
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            EnsureInitialized();
         }
 
         private void OnValidate()
@@ -526,6 +554,12 @@ namespace Fodinae.World.Lighting
 
         private void Update()
         {
+            if (!_initialized)
+            {
+                TryInitialize();
+                return;
+            }
+
             if (_runtimeConfigSavePending && Time.unscaledTime >= _runtimeConfigSaveTime)
             {
                 FlushRuntimeConfig();

@@ -80,7 +80,8 @@ namespace Fodinae.Core
 
             var gameManager = _resolver.Resolve<GameManager>();
             _resolver.Resolve<ServerConfig>();
-            _resolver.Resolve<TerrariaLightingEngine>();
+            var lightingEngine = _resolver.Resolve<TerrariaLightingEngine>();
+            lightingEngine.EnsureInitialized();
             _resolver.Resolve<TextureStorageManager>();
             _resolver.Resolve<WorldTextureManager>();
             _resolver.Resolve<ServerAudioEventManager>();
