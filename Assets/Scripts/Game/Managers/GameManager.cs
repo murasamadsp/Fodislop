@@ -62,8 +62,22 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
-            _uiSetup = true;
-            SetupUI();
+            try
+            {
+                SetupUI();
+                _uiSetup = true;
+            }
+            catch
+            {
+                if (_uiRoot != null)
+                {
+                    Destroy(_uiRoot);
+                    _uiRoot = null;
+                }
+
+                _uiSetup = false;
+                throw;
+            }
         }
 
         private void SetupUI()
@@ -131,9 +145,12 @@ namespace Fodinae.Game.Managers
                 AddInjectedComponent<GameErrorUI>(errorGO);
             }
 
-            var arrowGO = new GameObject("MissionArrowUI");
-            arrowGO.transform.SetParent(_uiRoot.transform);
-            AddInjectedComponent<MissionArrowUI>(arrowGO);
+            if (UnityEngine.Object.FindAnyObjectByType<MissionArrowUI>(FindObjectsInactive.Include) == null)
+            {
+                var arrowGO = new GameObject("MissionArrowUI");
+                arrowGO.transform.SetParent(_uiRoot.transform);
+                AddInjectedComponent<MissionArrowUI>(arrowGO);
+            }
         }
 
         public void SetState(GameState newState)
