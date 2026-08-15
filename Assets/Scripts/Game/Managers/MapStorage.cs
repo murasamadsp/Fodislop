@@ -254,31 +254,50 @@ namespace Fodinae.Game.Managers
             {
                 _cellLayer.Flush(flushToDisk: true);
             }
-            catch (IOException ioEx)
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is UnauthorizedAccessException ||
+                ex is ObjectDisposedException)
             {
-                Debug.LogError($"[MapStorage] Map flush failed; dirty chunks were retained: {ioEx.Message}");
-            }
-            catch (UnauthorizedAccessException authEx)
-            {
-                Debug.LogError($"[MapStorage] Map flush access denied; dirty chunks were retained: {authEx.Message}");
-            }
-            catch (ObjectDisposedException disposedEx)
-            {
-                Debug.LogError($"[MapStorage] Map stream was disposed before flush: {disposedEx.Message}");
+                throw new IOException(
+                    $"[MapStorage] Failed to persist map '{MapFilePath}'. " +
+                    "The world cannot continue with unsaved chunks.",
+                    ex);
             }
         }
 
         public void Dispose()
         {
-            _cellLayer?.Dispose();
-            _cellLayer = null;
-            _isInitialized = false;
-            _worldCodeName = string.Empty;
-            _worldWidth = 0;
-            _worldHeight = 0;
-            _mapFilePath = null;
-            IsDisposed = true;
-            Revision++;
+            Exception? disposeFailure = null;
+            try
+            {
+                _cellLayer?.Dispose();
+            }
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is UnauthorizedAccessException ||
+                ex is ObjectDisposedException)
+            {
+                disposeFailure = ex;
+            }
+            finally
+            {
+                _cellLayer = null;
+                _isInitialized = false;
+                _worldCodeName = string.Empty;
+                _worldWidth = 0;
+                _worldHeight = 0;
+                _mapFilePath = null;
+                IsDisposed = true;
+                Revision++;
+            }
+
+            if (disposeFailure != null)
+            {
+                throw new IOException(
+                    "[MapStorage] Failed to close the persistent world map after flushing.",
+                    disposeFailure);
+            }
         }
     }
 }

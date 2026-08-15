@@ -299,21 +299,17 @@ namespace Fodinae
                 return;
             }
 
+            Exception? disposeFailure = null;
             try
             {
                 Flush(flushToDisk: true);
             }
-            catch (IOException ioEx)
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is UnauthorizedAccessException ||
+                ex is ObjectDisposedException)
             {
-                Debug.LogWarning($"[WorldLayer] I/O error flushing during dispose: {ioEx.Message}");
-            }
-            catch (ObjectDisposedException)
-            {
-                // Already disposed, ignore
-            }
-            catch (UnauthorizedAccessException authEx)
-            {
-                Debug.LogWarning($"[WorldLayer] Unauthorized access during dispose: {authEx.Message}");
+                disposeFailure = ex;
             }
 
             lock (_ioLock)
@@ -323,9 +319,9 @@ namespace Fodinae
                 {
                     _fileStream?.Dispose();
                 }
-                catch (IOException ioEx)
+                catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException)
                 {
-                    Debug.LogWarning($"[WorldLayer] I/O error closing stream during dispose: {ioEx.Message}");
+                    disposeFailure ??= ex;
                 }
             }
 
@@ -334,6 +330,13 @@ namespace Fodinae
             _lruList.Clear();
             _dirtyChunks.Clear();
             _loadingChunks.Clear();
+
+            if (disposeFailure != null)
+            {
+                throw new IOException(
+                    $"[WorldLayer] Failed to persist or close map file '{_filePath}'.",
+                    disposeFailure);
+            }
         }
 
         private static void ReadExactly(Stream stream, Span<byte> buffer)
