@@ -43,7 +43,8 @@ public static class UIContainerLayers
 
     public static void SetInteractive(UIDocument document, string layerName, bool interactive)
     {
-        VisualElement layer = Get(document, layerName);
-        layer.pickingMode = interactive ? PickingMode.Position : PickingMode.Ignore;
+        // Interactive overlays are attached directly to the panel root. A full-screen
+        // VisualElement ancestor participates in UI Toolkit hit testing and can swallow
+        // pointer events from nested buttons and ScrollViews.
     }
 }

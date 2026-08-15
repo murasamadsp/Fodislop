@@ -86,7 +86,7 @@ namespace Fodinae.UI
 
             if (_doc != null && _overlay != null)
             {
-                UIContainerLayers.Get(_doc, UIContainerLayers.Hud).Add(tree);
+                _doc.rootVisualElement.Add(tree);
             }
 
             if (_inputField != null)

@@ -120,7 +120,7 @@ namespace Fodinae.UI
 
             _errorPanel = new VisualElement();
             ApplyErrorPanelStyle(_errorPanel);
-            UIContainerLayers.Get(_doc, UIContainerLayers.Blocking).Add(_errorPanel);
+            _doc.rootVisualElement.Add(_errorPanel);
 
             var titleLabel = new Label("<b>Ошибка</b>");
             titleLabel.AddToClassList("error-title");

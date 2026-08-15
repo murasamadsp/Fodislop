@@ -81,7 +81,7 @@ namespace Fodinae.UI
             _panel.AddToClassList("ui-panel");
             _panel.AddToClassList("ui-panel--modal");
             _overlay.Add(_panel);
-            UIContainerLayers.Get(_doc, UIContainerLayers.Modal).Add(_overlay);
+            _doc.rootVisualElement.Add(_overlay);
         }
     }
 }

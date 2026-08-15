@@ -68,7 +68,7 @@ namespace Fodinae.UI
 
             _reconnectOverlay = new VisualElement();
             ApplyOverlayState(_reconnectOverlay);
-            UIContainerLayers.Get(_doc, UIContainerLayers.Blocking).Add(_reconnectOverlay);
+            _doc.rootVisualElement.Add(_reconnectOverlay);
 
             _reconnectLabel = new Label("Переподключение к серверу...");
             _reconnectLabel.AddToClassList("ui-overlay-label");
@@ -76,7 +76,7 @@ namespace Fodinae.UI
 
             _disconnectOverlay = new VisualElement();
             ApplyOverlayState(_disconnectOverlay);
-            UIContainerLayers.Get(_doc, UIContainerLayers.Blocking).Add(_disconnectOverlay);
+            _doc.rootVisualElement.Add(_disconnectOverlay);
 
             _disconnectLabel = new Label();
             _disconnectLabel.AddToClassList("ui-overlay-label");

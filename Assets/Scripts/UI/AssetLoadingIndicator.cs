@@ -166,7 +166,7 @@ namespace Fodinae.UI
 
             VisualElement tree = uiUxml.CloneTree();
             tree.AddToClassList("ui-fullscreen");
-            UIContainerLayers.Get(_document, UIContainerLayers.Blocking).Add(tree);
+            _document.rootVisualElement.Add(tree);
 
             _root = tree;
             _loadingOverlay = tree.Q<VisualElement>("LoadingOverlay");
