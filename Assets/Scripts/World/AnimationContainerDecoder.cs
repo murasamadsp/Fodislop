@@ -8,11 +8,11 @@ using Fodinae.Core;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 
+using UnityEngine;
+using UnityEngine.Rendering;
+using WebP;
 using unity.libwebp;
 using unity.libwebp.Interop;
-using UnityEngine;
-using WebP;
-using UnityEngine.Rendering;
 
 namespace Fodinae.World
 {
@@ -220,7 +220,7 @@ namespace Fodinae.World
 
         private class GifInternalDecoder
         {
-            private byte[] _data = Array.Empty<byte>();
+            private byte[] _data;
             private int _pos;
             private int _sw;
             private int _sh;

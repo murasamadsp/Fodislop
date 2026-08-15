@@ -257,6 +257,5 @@ namespace Fodinae.Core
                     $"Project default '{name}' must be within [{minimum}, {maximum}].");
             }
         }
-
     }
 }

@@ -504,7 +504,6 @@ namespace Fodinae.UI
                 RefreshTexture(_player.Position.x, _player.Position.y);
                 _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
             }
-
         }
 
         private void SetVisible(bool visible)
