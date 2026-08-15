@@ -243,6 +243,15 @@ namespace Fodinae.UI
 #endif
             root.Add(menuTree);
 
+            _menuPanel.pickingMode = PickingMode.Position;
+            _mainPage.pickingMode = PickingMode.Position;
+            _settingsPage.pickingMode = PickingMode.Position;
+            graphicsScroll.pickingMode = PickingMode.Position;
+            displayScroll.pickingMode = PickingMode.Position;
+            audioScroll.pickingMode = PickingMode.Position;
+            interfaceScroll.pickingMode = PickingMode.Position;
+            debugScroll.pickingMode = PickingMode.Position;
+
             _mainPageScroll.Add(CreateButton("Продолжить", CloseMenu));
             _mainPageScroll.Add(CreateButton("Настройки", OpenSettings));
             _mainPageScroll.Add(CreateButton("Выйти", QuitGame));
@@ -996,6 +1005,8 @@ namespace Fodinae.UI
             IsMenuOpen = true;
             if (_menuPanel != null)
             {
+                _menuPanel.SetEnabled(true);
+                _menuPanel.pickingMode = PickingMode.Position;
                 _menuPanel.style.display = DisplayStyle.Flex;
             }
 
@@ -1018,6 +1029,8 @@ namespace Fodinae.UI
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.None;
+                _menuPanel.SetEnabled(false);
+                _menuPanel.pickingMode = PickingMode.Ignore;
             }
         }
 
