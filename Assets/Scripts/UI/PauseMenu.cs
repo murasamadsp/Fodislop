@@ -144,23 +144,82 @@ namespace Fodinae.UI
 
         private void CreateMenu(VisualElement root)
         {
-            _menuPanel = new VisualElement();
-            _menuPanel.AddToClassList("pause-overlay");
-            _menuPanel.AddToClassList("ui-overlay");
-            _menuPanel.AddToClassList("ui-overlay--modal");
+            VisualTreeAsset menuTemplate = Resources.Load<VisualTreeAsset>("UI/PauseMenu") ??
+                throw new InvalidOperationException(
+                    "[PauseMenu] Resources/UI/PauseMenu.uxml is required.");
+            TemplateContainer menuTree = menuTemplate.Instantiate();
+            _menuPanel = menuTree.Q<VisualElement>("PauseOverlay") ??
+                throw new InvalidOperationException("[PauseMenu] PauseOverlay is missing from PauseMenu.uxml.");
+            _mainPage = menuTree.Q<VisualElement>("MainPage") ??
+                throw new InvalidOperationException("[PauseMenu] MainPage is missing from PauseMenu.uxml.");
+            _mainPageScroll = menuTree.Q<ScrollView>("MainPageScroll") ??
+                throw new InvalidOperationException("[PauseMenu] MainPageScroll is missing from PauseMenu.uxml.");
+            _settingsPage = menuTree.Q<VisualElement>("SettingsPage") ??
+                throw new InvalidOperationException("[PauseMenu] SettingsPage is missing from PauseMenu.uxml.");
+            ScrollView graphicsScroll = menuTree.Q<ScrollView>("GraphicsScroll") ??
+                throw new InvalidOperationException("[PauseMenu] GraphicsScroll is missing from PauseMenu.uxml.");
+            ScrollView displayScroll = menuTree.Q<ScrollView>("DisplayScroll") ??
+                throw new InvalidOperationException("[PauseMenu] DisplayScroll is missing from PauseMenu.uxml.");
+            ScrollView audioScroll = menuTree.Q<ScrollView>("AudioScroll") ??
+                throw new InvalidOperationException("[PauseMenu] AudioScroll is missing from PauseMenu.uxml.");
+            ScrollView interfaceScroll = menuTree.Q<ScrollView>("InterfaceScroll") ??
+                throw new InvalidOperationException("[PauseMenu] InterfaceScroll is missing from PauseMenu.uxml.");
+            ScrollView debugScroll = menuTree.Q<ScrollView>("DebugScroll") ??
+                throw new InvalidOperationException("[PauseMenu] DebugScroll is missing from PauseMenu.uxml.");
+            Button settingsBack = menuTree.Q<Button>("SettingsBack") ??
+                throw new InvalidOperationException("[PauseMenu] SettingsBack is missing from PauseMenu.uxml.");
+            settingsBack.clicked += CloseSettings;
 
-            var dimmer = new VisualElement();
-            dimmer.AddToClassList("pause-dimmer");
-            dimmer.pickingMode = PickingMode.Ignore;
-            _menuPanel.Add(dimmer);
+            Button graphicsTab = menuTree.Q<Button>("GraphicsTab") ??
+                throw new InvalidOperationException("[PauseMenu] GraphicsTab is missing from PauseMenu.uxml.");
+            Button displayTab = menuTree.Q<Button>("DisplayTab") ??
+                throw new InvalidOperationException("[PauseMenu] DisplayTab is missing from PauseMenu.uxml.");
+            Button audioTab = menuTree.Q<Button>("AudioTab") ??
+                throw new InvalidOperationException("[PauseMenu] AudioTab is missing from PauseMenu.uxml.");
+            Button interfaceTab = menuTree.Q<Button>("InterfaceTab") ??
+                throw new InvalidOperationException("[PauseMenu] InterfaceTab is missing from PauseMenu.uxml.");
+            Button debugTab = menuTree.Q<Button>("DebugTab") ??
+                throw new InvalidOperationException("[PauseMenu] DebugTab is missing from PauseMenu.uxml.");
 
-            _mainPage = new VisualElement();
-            _mainPage.AddToClassList("pause-panel");
-            _mainPage.AddToClassList("pause-page");
-            _mainPage.Add(CreateTitle("Меню"));
-            _mainPageScroll = new ScrollView(ScrollViewMode.Vertical);
-            _mainPageScroll.AddToClassList("pause-scroll");
-            _mainPage.Add(_mainPageScroll);
+            VisualElement[] settingsPages =
+            [
+                graphicsScroll,
+                displayScroll,
+                audioScroll,
+                interfaceScroll,
+                debugScroll,
+            ];
+            Button[] settingsTabs =
+            [
+                graphicsTab,
+                displayTab,
+                audioTab,
+                interfaceTab,
+                debugTab,
+            ];
+            void ShowSettingsPage(int index)
+            {
+                for (int i = 0; i < settingsPages.Length; i++)
+                {
+                    settingsPages[i].style.display = i == index
+                        ? DisplayStyle.Flex
+                        : DisplayStyle.None;
+                    settingsTabs[i].EnableInClassList("settings-tab--active", i == index);
+                }
+            }
+
+            graphicsTab.clicked += () => ShowSettingsPage(0);
+            displayTab.clicked += () => ShowSettingsPage(1);
+            audioTab.clicked += () => ShowSettingsPage(2);
+            interfaceTab.clicked += () => ShowSettingsPage(3);
+            debugTab.clicked += () => ShowSettingsPage(4);
+            ShowSettingsPage(0);
+
+#if !UNITY_EDITOR && !DEVELOPMENT_BUILD
+            debugTab.style.display = DisplayStyle.None;
+#endif
+            root.Add(menuTree);
+
             _mainPageScroll.Add(CreateButton("Продолжить", CloseMenu));
             _mainPageScroll.Add(CreateButton("Настройки", OpenSettings));
             _mainPageScroll.Add(CreateButton("Выйти", QuitGame));
@@ -227,38 +286,38 @@ namespace Fodinae.UI
                 }
             }));
 
-            _menuPanel.Add(_mainPage);
+            ScrollView scrollContainer = graphicsScroll;
 
-            _settingsPage = new VisualElement();
-            _settingsPage.AddToClassList("pause-panel");
-            _settingsPage.AddToClassList("pause-page");
-            _settingsPage.AddToClassList("pause-settings");
-            _settingsPage.Add(CreateTitle("Настройки"));
-
-            var scrollContainer = new ScrollView(ScrollViewMode.Vertical);
-            scrollContainer.AddToClassList("pause-scroll");
-            Label? lightingSectionLabel = null;
-            var lightingJumpButton = new Button(() =>
+            VisualElement displaySection = CreateSettingsSection("Экран");
+            VisualElement graphicsSection = CreateSettingsSection("Графика");
+            VisualElement audioSection = CreateSettingsSection("Звук");
+            VisualElement interfaceSection = CreateSettingsSection("Интерфейс");
+            var advancedGraphicsSection = new Foldout
             {
-                if (lightingSectionLabel != null)
-                {
-                    scrollContainer.ScrollTo(lightingSectionLabel);
-                }
-            })
-            {
-                text = "Перейти к настройкам освещения",
+                text = "Расширенные настройки графики",
+                value = false,
             };
-            lightingJumpButton.AddToClassList("pause-btn");
-            scrollContainer.Add(lightingJumpButton);
+            advancedGraphicsSection.AddToClassList("settings-section");
+            advancedGraphicsSection.AddToClassList("settings-section--advanced");
 
-            scrollContainer.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master, "Audio_Master", 1f));
-            scrollContainer.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX, "Audio_SFX", 1f));
-            scrollContainer.Add(CreateAudioSlider("Музыка", AudioBusType.Music, "Audio_Music", 0.5f));
-            scrollContainer.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience, "Audio_Ambience", 0.7f));
-            scrollContainer.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice, "Audio_Voice", 1f));
-            scrollContainer.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI, "Audio_UI", 1f));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            var debugSection = new Foldout
+            {
+                text = "Debug",
+                value = false,
+            };
+            debugSection.AddToClassList("settings-section");
+            debugSection.AddToClassList("settings-section--debug");
+#endif
 
-            scrollContainer.Add(CreateSlider(
+            audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master, "Audio_Master", 1f));
+            audioSection.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX, "Audio_SFX", 1f));
+            audioSection.Add(CreateAudioSlider("Музыка", AudioBusType.Music, "Audio_Music", 0.5f));
+            audioSection.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience, "Audio_Ambience", 0.7f));
+            audioSection.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice, "Audio_Voice", 1f));
+            audioSection.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI, "Audio_UI", 1f));
+
+            interfaceSection.Add(CreateSlider(
                 "Масштаб UI",
                 _clientConfig.Config.UiScale,
                 v =>
@@ -278,14 +337,10 @@ namespace Fodinae.UI
                 0.65f,
                 1f));
 
-            scrollContainer.Add(CreateLabel("Экран"));
-
             _fullscreenButton = new Button(ToggleFullscreen);
             _fullscreenButton.text = Screen.fullScreen ? "Полный экран" : "Оконный";
             _fullscreenButton.AddToClassList("pause-btn");
-            scrollContainer.Add(_fullscreenButton);
-
-            scrollContainer.Add(CreateLabel("Разрешение"));
+            displaySection.Add(_fullscreenButton);
 
             var resolutions = Screen.resolutions;
             var uniqueResolutions = new System.Collections.Generic.List<Resolution>();
@@ -337,9 +392,7 @@ namespace Fodinae.UI
             resolutionButton.SetEnabled(uniqueResolutions.Count > 0);
             resolutionButton.AddToClassList("pause-btn");
             UpdateResolutionButton();
-            scrollContainer.Add(resolutionButton);
-
-            scrollContainer.Add(CreateLabel("Графика"));
+            displaySection.Add(resolutionButton);
 
             string[] lightingQualityNames =
             [
@@ -378,7 +431,7 @@ namespace Fodinae.UI
             };
             lightingQuality.AddToClassList("pause-btn");
             UpdateLightingQualityButton();
-            scrollContainer.Add(lightingQuality);
+            graphicsSection.Add(lightingQuality);
 
             var ambientOcclusionToggle = new Toggle("Контактное затенение (AO)")
             {
@@ -398,7 +451,7 @@ namespace Fodinae.UI
 
                 throw new InvalidOperationException("Lighting engine is required before changing AO.");
             });
-            scrollContainer.Add(ambientOcclusionToggle);
+            graphicsSection.Add(ambientOcclusionToggle);
 
             var globalIlluminationToggle = new Toggle("Непрямой диффузный свет")
             {
@@ -418,7 +471,7 @@ namespace Fodinae.UI
 
                 throw new InvalidOperationException("Lighting engine is required before changing diffuse bounce.");
             });
-            scrollContainer.Add(globalIlluminationToggle);
+            graphicsSection.Add(globalIlluminationToggle);
 
             void ApplyLightingSetting(
                 float value,
@@ -448,9 +501,8 @@ namespace Fodinae.UI
                     : Mathf.Clamp(defaultValue, minimum, maximum);
             }
 
-            lightingSectionLabel = CreateLabel("Параметры освещения");
-            scrollContainer.Add(lightingSectionLabel);
-            scrollContainer.Add(CreateSlider(
+            graphicsSection.Add(CreateLabel("Освещение"));
+            advancedGraphicsSection.Add(CreateSlider(
                 "Яркость окружения",
                 GetLightingValue(
                     _projectDefaults.Lighting.AmbientIntensity,
@@ -462,7 +514,7 @@ namespace Fodinae.UI
                     static (engine, setting) => engine.SetAmbientIntensity(setting)),
                 0f,
                 1f));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Мощность излучения",
                 GetLightingValue(
                     _projectDefaults.Lighting.EmissionScale,
@@ -474,14 +526,14 @@ namespace Fodinae.UI
                     static (engine, setting) => engine.SetEmissionScale(setting)),
                 0.1f,
                 8f));
-            scrollContainer.Add(CreateLabel("Динамические источники"));
+            advancedGraphicsSection.Add(CreateLabel("Динамические источники"));
             Robot? localRobot = PlayerMovementController.LocalPlayer?.GetComponent<Robot>();
             Robot? GetLocalRobot() => PlayerMovementController.LocalPlayer?.GetComponent<Robot>() ?? localRobot;
             float dynamicLightIntensity = localRobot?.DynamicLightIntensity ??
                 _projectDefaults.Lighting.DynamicLightIntensity;
             Color dynamicLightColor = localRobot?.DynamicLightColor ??
                 _projectDefaults.Lighting.DynamicLightColor;
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Мощность emission игрока",
                 dynamicLightIntensity,
                 value => GetLocalRobot()?.SetDynamicLightIntensity(value),
@@ -489,7 +541,7 @@ namespace Fodinae.UI
                 4f));
             TerrariaLightingEngine? dynamicLightingEngine = TerrariaLightingEngine.Instance
                 ?? FindAnyObjectByType<TerrariaLightingEngine>();
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Частота расчёта dynamic emission",
                 dynamicLightingEngine != null
                     ? dynamicLightingEngine.DynamicLightUpdatesPerSecond
@@ -507,7 +559,7 @@ namespace Fodinae.UI
                     robot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
                 }
             };
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Цвет источника: красный",
                 dynamicLightColor.r,
                 setDynamicLightRed,
@@ -523,7 +575,7 @@ namespace Fodinae.UI
                     robot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
                 }
             };
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Цвет источника: зелёный",
                 dynamicLightColor.g,
                 setDynamicLightGreen,
@@ -539,15 +591,15 @@ namespace Fodinae.UI
                     robot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
                 }
             };
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Цвет источника: синий",
                 dynamicLightColor.b,
                 setDynamicLightBlue,
                 0f,
                 1f));
 
-            scrollContainer.Add(CreateLabel("Физическое поглощение"));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateLabel("Физическое поглощение"));
+            advancedGraphicsSection.Add(CreateSlider(
                 "Ослабление света в пустой среде",
                 GetLightingValue(
                     _projectDefaults.Lighting.EmptyExtinctionMultiplier,
@@ -560,7 +612,7 @@ namespace Fodinae.UI
                         engine.SetEmptyExtinctionMultiplier(setting)),
                 0f,
                 2f));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Ослабление света физической массой",
                 GetLightingValue(
                     _projectDefaults.Lighting.SolidExtinctionMultiplier,
@@ -573,8 +625,8 @@ namespace Fodinae.UI
                         engine.SetSolidExtinctionMultiplier(setting)),
                 0.25f,
                 2f));
-            scrollContainer.Add(CreateLabel("Непрямой диффузный свет"));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateLabel("Непрямой диффузный свет"));
+            advancedGraphicsSection.Add(CreateSlider(
                 "Сила непрямого диффузного света",
                 GetLightingValue(
                     _projectDefaults.Lighting.BounceStrength,
@@ -586,8 +638,8 @@ namespace Fodinae.UI
                     static (engine, setting) => engine.SetBounceStrength(setting)),
                 0f,
                 1f));
-            scrollContainer.Add(CreateLabel("Контактное затенение"));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateLabel("Контактное затенение"));
+            advancedGraphicsSection.Add(CreateSlider(
                 "Радиус контактного AO",
                 GetLightingValue(
                     _projectDefaults.Lighting.AmbientOcclusionRadiusCells,
@@ -600,7 +652,7 @@ namespace Fodinae.UI
                         engine.SetAmbientOcclusionRadius(setting)),
                 0.5f,
                 8f));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Интенсивность контактного AO",
                 GetLightingValue(
                     _projectDefaults.Lighting.AmbientOcclusionStrength,
@@ -613,8 +665,8 @@ namespace Fodinae.UI
                         engine.SetAmbientOcclusionStrength(setting)),
                 0.1f,
                 8f));
-            scrollContainer.Add(CreateLabel("Диагностика и границы расчёта"));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateLabel("Границы расчёта"));
+            advancedGraphicsSection.Add(CreateSlider(
                 "Максимум светового множителя",
                 GetLightingValue(
                     _projectDefaults.Lighting.MaximumLightMultiplier,
@@ -627,7 +679,7 @@ namespace Fodinae.UI
                         engine.SetMaximumLightMultiplier(setting)),
                 0.25f,
                 LightingConfigLimits.MaximumLightMultiplier));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Пропускание света — диагностика",
                 GetLightingValue(
                     _projectDefaults.Lighting.TransmittanceDebugDistanceCells,
@@ -640,7 +692,7 @@ namespace Fodinae.UI
                         engine.SetTransmittanceDebugDistance(setting)),
                 2f,
                 32f));
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Минимальное пропускание каскадов",
                 GetLightingValue(
                     _projectDefaults.Lighting.MinimumTransmission,
@@ -656,7 +708,7 @@ namespace Fodinae.UI
                 ?? FindAnyObjectByType<TerrariaLightingEngine>();
             float currentLightSafeBorder = currentLightingEngine?.LightSafeBorder ??
                 _projectDefaults.Lighting.LightSafeBorder;
-            scrollContainer.Add(CreateSlider(
+            advancedGraphicsSection.Add(CreateSlider(
                 "Безопасная граница света",
                 currentLightSafeBorder,
                 value => ApplyLightingSetting(
@@ -665,6 +717,7 @@ namespace Fodinae.UI
                 0f,
                 8f));
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             string[] lightingDebugNames =
             [
                     "FinalLighting — итоговый свет",
@@ -700,9 +753,9 @@ namespace Fodinae.UI
             };
             lightingDebugView.AddToClassList("pause-btn");
             UpdateLightingDebugButton();
-            scrollContainer.Add(lightingDebugView);
+            debugSection.Add(lightingDebugView);
 
-            scrollContainer.Add(CreateLabel("Фактические параметры lighting"));
+            debugSection.Add(CreateLabel("Фактические параметры lighting"));
             var lightingDiagnostics = new Label();
             lightingDiagnostics.AddToClassList("pause-slider-label");
             void UpdateLightingDiagnostics()
@@ -748,13 +801,13 @@ namespace Fodinae.UI
             }
 
             UpdateLightingDiagnostics();
-            scrollContainer.Add(lightingDiagnostics);
+            debugSection.Add(lightingDiagnostics);
             var refreshLightingDiagnostics = new Button(UpdateLightingDiagnostics)
             {
                 text = "Обновить параметры lighting",
             };
             refreshLightingDiagnostics.AddToClassList("pause-btn");
-            scrollContainer.Add(refreshLightingDiagnostics);
+            debugSection.Add(refreshLightingDiagnostics);
             var resetLightingPreferences = new Button(() =>
             {
                 TerrariaLightingEngine? engine = TerrariaLightingEngine.Instance
@@ -767,26 +820,31 @@ namespace Fodinae.UI
                 text = "Сбросить lighting к натуральным defaults",
             };
             resetLightingPreferences.AddToClassList("pause-btn");
-            scrollContainer.Add(resetLightingPreferences);
+            debugSection.Add(resetLightingPreferences);
+#endif
 
-            scrollContainer.Add(CreateLabel("Постобработка"));
+            graphicsSection.Add(CreateLabel("Визуальные эффекты"));
 
             if (PostProcessController.Instance != null)
             {
                 var pp = PostProcessController.Instance;
-                scrollContainer.Add(CreateSlider("Свечение (Bloom)", pp.BloomIntensity, v => pp.BloomIntensity = v, 0f, 5f));
-                scrollContainer.Add(CreateSlider("Виньетка", pp.VignetteIntensity, v => pp.VignetteIntensity = v, 0f, 1f));
-                scrollContainer.Add(CreateSlider("Хроматическая аберрация", pp.ChromaticAberrationIntensity, v => pp.ChromaticAberrationIntensity = v, 0f, 1f));
-                scrollContainer.Add(CreateSlider("Зернистость (Eigengrau)", pp.EigengrauIntensity, v => pp.EigengrauIntensity = v, 0f, 1f));
-                scrollContainer.Add(CreateSlider("Размытие движения", pp.MotionBlurIntensity, v => pp.MotionBlurIntensity = v, 0f, 1f));
+                graphicsSection.Add(CreateSlider("Свечение", pp.BloomIntensity, v => pp.BloomIntensity = v, 0f, 5f));
+                graphicsSection.Add(CreateSlider("Виньетка", pp.VignetteIntensity, v => pp.VignetteIntensity = v, 0f, 1f));
+                graphicsSection.Add(CreateSlider("Хроматическая аберрация", pp.ChromaticAberrationIntensity, v => pp.ChromaticAberrationIntensity = v, 0f, 1f));
+                graphicsSection.Add(CreateSlider("Зернистость", pp.EigengrauIntensity, v => pp.EigengrauIntensity = v, 0f, 1f));
+                graphicsSection.Add(CreateSlider("Размытие движения", pp.MotionBlurIntensity, v => pp.MotionBlurIntensity = v, 0f, 1f));
             }
 
-            _settingsPage.Add(scrollContainer);
-            _settingsPage.Add(CreateButton("Назад", CloseSettings));
-            _settingsPage.style.display = DisplayStyle.None;
-            _menuPanel.Add(_settingsPage);
+            displayScroll.Add(displaySection);
+            graphicsScroll.Add(graphicsSection);
+            graphicsScroll.Add(advancedGraphicsSection);
+            audioScroll.Add(audioSection);
+            interfaceScroll.Add(interfaceSection);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            debugScroll.Add(debugSection);
+#endif
 
-            root.Add(_menuPanel);
+            _settingsPage.style.display = DisplayStyle.None;
         }
 
         private VisualElement CreateAudioSlider(string title, AudioBusType busType, string prefKey, float defaultValue)
@@ -856,6 +914,17 @@ namespace Fodinae.UI
             var label = new Label(text);
             label.AddToClassList("pause-slider-label");
             return label;
+        }
+
+        private static VisualElement CreateSettingsSection(string title)
+        {
+            var section = new VisualElement();
+            section.AddToClassList("settings-section");
+
+            var heading = new Label(title);
+            heading.AddToClassList("settings-section__title");
+            section.Add(heading);
+            return section;
         }
 
         private void ToggleMenu()
