@@ -347,6 +347,15 @@ namespace Fodinae
                     }
                     else
                     {
+                        if (assetPacket.Contents == null || assetPacket.Contents.Length == 0)
+                        {
+                            var invalidPacket = new InvalidDataException(
+                                $"Server returned empty asset contents for '{filename}' without a usable ETag/cache entry.");
+                            tcs.TrySetException(invalidPacket);
+                            _connectionService.TriggerDisconnect(invalidPacket.Message);
+                            return;
+                        }
+
                         var etag = Calculate(assetPacket.Contents);
                         await SaveAssetAsync(assetPacket.Filename, assetPacket.Contents, etag ?? string.Empty).ConfigureAwait(false);
                         tcs.TrySetResult(assetPacket.Contents);

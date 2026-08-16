@@ -37,11 +37,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         public static ClampedFloatParameter ColorGradingSaturation() => new(1f, 0f, 2f);
 
-        public static BoolParameter ColorGradingToneMapping() => new(true);
+        public static BoolParameter ColorGradingToneMapping() => new(false);
 
         public static ClampedFloatParameter ColorGradingWhitePoint() => new(1f, 0.25f, 8f);
 
-        public static ClampedFloatParameter EigengrauIntensity() => new(0.2f, 0f, 1f);
+        public static ClampedFloatParameter EigengrauIntensity() => new(0f, 0f, 1f);
 
         public static ColorParameter EigengrauColor() =>
             new(new Color(0.018f, 0.02f, 0.028f, 1f));
@@ -79,8 +79,6 @@ namespace Fodinae.Rendering.PostProcessing
         private Camera? _mainCamera;
         private UniversalAdditionalCameraData? _cachedMainCameraData;
         private int _worldUiLayerMask;
-        private bool _ownsRuntimeVolume;
-        private bool _ownsRuntimeProfile;
         private float _lastWorldUiOrthographicSize = float.NaN;
         private float _lastWorldUiFieldOfView = float.NaN;
         private float _lastWorldUiNearClipPlane = float.NaN;
@@ -213,19 +211,6 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 _instance = null;
             }
-
-            Volume? ownedVolume = _ownsRuntimeVolume ? _volume : null;
-            VolumeProfile? ownedProfile = _ownsRuntimeProfile ? _volume?.sharedProfile : null;
-
-            if (ownedProfile != null)
-            {
-                Destroy(ownedProfile);
-            }
-
-            if (ownedVolume != null)
-            {
-                Destroy(ownedVolume.gameObject);
-            }
         }
 
         private void OnEnable()
@@ -266,31 +251,23 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_volume == null)
             {
-                var volumeGO = new GameObject("GlobalPostProcessVolume");
-                _volume = volumeGO.AddComponent<Volume>();
-                _volume.isGlobal = true;
-                _volume.priority = 1f;
-                _ownsRuntimeVolume = true;
+                throw new InvalidOperationException(
+                    "PostProcessController requires a serialized Volume component.");
             }
 
-            var profile = _volume.sharedProfile;
+            VolumeProfile? profile = _volume.profile;
             if (profile == null)
             {
-                profile = ScriptableObject.CreateInstance<VolumeProfile>();
-                profile.name = "RuntimePostProcessVolumeProfile";
-                _volume.sharedProfile = profile;
-                _ownsRuntimeProfile = true;
+                throw new InvalidOperationException(
+                    "PostProcessController requires a runtime VolumeProfile on its serialized Volume.");
             }
 
-            // Profiles can be partially serialized (for example after an editor
-            // domain reload). Do not treat a non-empty profile as complete: each
-            // runtime component is an independent part of the post-process contract.
-            GetOrAddComponent(ref _bloom, profile);
-            GetOrAddComponent(ref _vignette, profile);
-            GetOrAddComponent(ref _chromaticAberration, profile);
-            GetOrAddComponent(ref _colorGrading, profile);
-            GetOrAddComponent(ref _eigengrau, profile);
-            GetOrAddComponent(ref _motionBlur, profile);
+            RequireComponent(ref _bloom, profile);
+            RequireComponent(ref _vignette, profile);
+            RequireComponent(ref _chromaticAberration, profile);
+            RequireComponent(ref _colorGrading, profile);
+            RequireComponent(ref _eigengrau, profile);
+            RequireComponent(ref _motionBlur, profile);
         }
 
         public void EnsureEditorVolume()
@@ -426,62 +403,19 @@ namespace Fodinae.Rendering.PostProcessing
             }
         }
 
-        private void GetOrAddComponent<T>(
+        private static void RequireComponent<T>(
             ref T? target,
             VolumeProfile profile)
             where T : VolumeComponent
         {
             if (!profile.TryGet(out target) || target == null)
             {
-                target = profile.Add<T>();
+                throw new InvalidOperationException(
+                    $"Post-process VolumeProfile '{profile.name}' is missing " +
+                    $"the required '{typeof(T).Name}' component.");
             }
 
-            EnsureParameters(target);
             EnableOverrides(target);
-        }
-
-        private static void EnsureParameters(VolumeComponent component)
-        {
-            switch (component)
-            {
-                case BloomComponent bloom:
-                    bloom.intensity ??= PostProcessDefaults.BloomIntensity();
-                    bloom.threshold ??= PostProcessDefaults.BloomThreshold();
-                    bloom.scatter ??= PostProcessDefaults.BloomScatter();
-                    bloom.tint ??= PostProcessDefaults.BloomTint();
-                    break;
-                case VignetteComponent vignette:
-                    vignette.intensity ??= PostProcessDefaults.VignetteIntensity();
-                    vignette.color ??= PostProcessDefaults.VignetteColor();
-                    vignette.smoothness ??= PostProcessDefaults.VignetteSmoothness();
-                    vignette.center ??= PostProcessDefaults.VignetteCenter();
-                    break;
-                case ChromaticAberrationComponent chromaticAberration:
-                    chromaticAberration.intensity ??= PostProcessDefaults.ChromaticAberrationIntensity();
-                    break;
-                case ColorGradingComponent colorGrading:
-                    colorGrading.exposure ??= PostProcessDefaults.ColorGradingExposure();
-                    colorGrading.colorFilter ??= PostProcessDefaults.ColorGradingFilter();
-                    colorGrading.contrast ??= PostProcessDefaults.ColorGradingContrast();
-                    colorGrading.saturation ??= PostProcessDefaults.ColorGradingSaturation();
-                    colorGrading.toneMapping ??= PostProcessDefaults.ColorGradingToneMapping();
-                    colorGrading.toneMappingWhitePoint ??= PostProcessDefaults.ColorGradingWhitePoint();
-                    break;
-                case EigengrauComponent eigengrau:
-                    eigengrau.intensity ??= PostProcessDefaults.EigengrauIntensity();
-                    eigengrau.color ??= PostProcessDefaults.EigengrauColor();
-                    eigengrau.darknessThreshold ??= PostProcessDefaults.EigengrauDarknessThreshold();
-                    eigengrau.noiseScale ??= PostProcessDefaults.EigengrauNoiseScale();
-                    eigengrau.animationSpeed ??= PostProcessDefaults.EigengrauAnimationSpeed();
-                    break;
-                case MotionBlurComponent motionBlur:
-                    motionBlur.intensity ??= PostProcessDefaults.MotionBlurIntensity();
-                    motionBlur.maxSamples ??= PostProcessDefaults.MotionBlurMaxSamples();
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"Unsupported post-process component type '{component.GetType().FullName}'.");
-            }
         }
 
         private static void EnableOverrides(VolumeComponent component)

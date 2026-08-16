@@ -55,19 +55,19 @@ namespace Fodinae.Rendering.PostProcessing
         private static readonly int MotionBlurMaxSamplesID = Shader.PropertyToID("_MotionBlurMaxSamples");
         private static readonly string[] BloomDownNames =
         {
-        "_PPBloomDown_0",
-        "_PPBloomDown_1",
-        "_PPBloomDown_2",
-        "_PPBloomDown_3",
-        "_PPBloomDown_4",
-    };
+            "_PPBloomDown_0",
+            "_PPBloomDown_1",
+            "_PPBloomDown_2",
+            "_PPBloomDown_3",
+            "_PPBloomDown_4",
+        };
         private static readonly string[] BloomUpNames =
         {
-        "_PPBloomUp_0",
-        "_PPBloomUp_1",
-        "_PPBloomUp_2",
-        "_PPBloomUp_3",
-    };
+            "_PPBloomUp_0",
+            "_PPBloomUp_1",
+            "_PPBloomUp_2",
+            "_PPBloomUp_3",
+        };
 
         private readonly ComputeShader _postProcessCS;
         private readonly Material? _velocityMaterial;
@@ -512,7 +512,7 @@ namespace Fodinae.Rendering.PostProcessing
                 desc,
                 "_PPIntermediateColor",
                 true,
-                FilterMode.Bilinear);
+                FilterMode.Point);
 
             TextureHandle bloomPrefilterTexture = default;
             if (bloomActive)

@@ -5,7 +5,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         [MainTexture] _BaseMap ("Texture Atlas", 2D) = "white" {}
         _FlowMap ("Shimmer Flow Map", 2D) = "gray" {}
         _ShimmerColor ("Shimmer Color", Color) = (1,1,1,1)
-        _FallbackColor ("Fallback Color", Color) = (1, 1, 0, 1)
         _DebugColor ("Debug Color", Color) = (1, 0, 1, 1)
         [ToggleUI] _DebugMode ("Debug Mode", Float) = 0
     }
@@ -67,7 +66,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _ShimmerColor;
-                float4 _FallbackColor;
                 float4 _DebugColor;
                 float _DebugMode;
             CBUFFER_END
@@ -155,7 +153,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     }
 
                     float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
-                    return half4(input.color.rgb * worldLight, input.color.a);
+                    return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
                 }
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
@@ -172,7 +170,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 {
                     if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
                     float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
-                    return half4(input.color.rgb * worldLight, input.color.a);
+                    return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
                 }
 
                 float frameCount = input.tileSizeUV.z;
@@ -182,7 +180,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (frameCount > 1.5)
                 {
                     float speed = input.animData.y;
-                    if (speed <= 0) speed = 5;
                     float frameIndex = floor(fmod(_Time.y * speed, frameCount));
                     animOffsetUV = frameIndex * frameHeightTiles * tileSizeUV.y;
                 }
@@ -269,12 +266,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (isScrollAnimated)
                 {
                     float speed = input.animData.y;
-                    if (speed <= 0) speed = 5;
                     float scrollUV = fmod(_Time.y * speed * tileSizeUV.y * 0.05, subAtlasSizeUV.y);
                     finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
                 }
 
-                half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV);
+                // Terrain atlases are uploaded without mipmaps and are pixel art.
+                // Do not let the platform-selected material sampler introduce
+                // bilinear filtering between neighbouring atlas cells.
+                half4 texColor = _BaseMap.SampleLevel(sampler_PointClamp, finalUV, 0);
 
                 if (texColor.a < 0.05)
                 {

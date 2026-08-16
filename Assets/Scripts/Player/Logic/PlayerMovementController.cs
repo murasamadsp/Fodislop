@@ -124,6 +124,14 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
+            // The player object can exist during the connection/world-init gap.
+            // Input is intentionally ignored until the authoritative map layer
+            // is ready; movement validation must never probe an uninitialized map.
+            if (_storage == null || !_storage.IsReady)
+            {
+                return;
+            }
+
             ApplyMovement();
             HandleDigInput();
 
@@ -320,10 +328,9 @@ namespace Fodinae.Player.Logic
                     ushort currentServerY = (ushort)Mathf.Clamp(Position.y, 0, ushort.MaxValue);
 
                     var storage = _storage;
-                    if (storage == null)
+                    if (storage == null || !storage.IsReady)
                     {
-                        throw new InvalidOperationException(
-                            "[PlayerMovementController] IWorldDataStorage is required for movement validation.");
+                        return;
                     }
 
                     var currentCellType = storage.GetCell(currentX, currentServerY);

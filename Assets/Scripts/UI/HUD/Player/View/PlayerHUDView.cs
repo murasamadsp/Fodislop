@@ -137,9 +137,10 @@ namespace Fodinae.UI.HUD.Player.View
             }
             catch (Exception ex)
             {
-                // Crystal icons are optional HUD content. Keep the already-built
-                // gameplay HUD alive, but surface the missing asset explicitly.
-                GameErrorUI.ReportError("Не удалось загрузить текстуры кристаллов", ex);
+                // Crystal icons are optional HUD content. Keep the gameplay HUD
+                // alive and report the asset miss only to diagnostics; an optional
+                // visual asset must not cover or block the game UI.
+                Debug.LogWarning($"[PlayerHUD] Optional crystal textures unavailable: {ex.Message}");
             }
 
             if (cancellationToken.IsCancellationRequested || this == null)

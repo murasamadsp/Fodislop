@@ -5,7 +5,7 @@ Shader "Fodinae/World Surface"
         [MainTexture] _BaseMap ("Surface Texture", 2D) = "white" {}
         [Toggle] _WrapBaseMap ("Wrap Surface Texture", Float) = 0
         [HDR] _EmissionColor ("Emission Color", Color) = (1, 1, 1, 1)
-        _EmissionStrength ("Emission Strength", Range(0, 8)) = 0
+        _EmissionStrength ("Emission Strength", Range(0, 8)) = 1
         _Occupancy ("Physical Occupancy", Range(0, 1)) = 1
     }
 
@@ -37,7 +37,7 @@ Shader "Fodinae/World Surface"
             {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
-                float2 lightingData : TEXCOORD1;
+                float4 glowData : TEXCOORD6;
             };
 
             struct Varyings
@@ -54,6 +54,7 @@ Shader "Fodinae/World Surface"
             SamplerState sampler_WorldLightTexture;
             float4 _WorldLightRect;
             float4 _WorldLightTextureSize;
+            float _WorldEmissionScale;
             int _WorldLightDebugView;
 
             CBUFFER_START(UnityPerMaterial)
@@ -84,23 +85,22 @@ Shader "Fodinae/World Surface"
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
-                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz).xy +
-                    float2(0.0, input.lightingData.y);
-                output.emissionMask = input.lightingData.x;
+                output.worldPosition = TransformObjectToWorld(input.positionOS.xyz).xy;
+                output.emissionMask = saturate(frac(input.glowData.y) * 4.0);
                 return output;
             }
 
             half4 VisibleFrag(Varyings input) : SV_Target
             {
                 float2 baseMapUV = _WrapBaseMap > 0.5 ? frac(input.uv) : input.uv;
-                half4 surface = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseMapUV);
+                half4 surface = _BaseMap.SampleLevel(sampler_PointClamp, baseMapUV, 0);
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(SampleWorldLight(input.worldPosition), surface.a);
                 }
 
                 float3 emission = surface.rgb * _EmissionColor.rgb *
-                    _EmissionStrength * input.emissionMask;
+                    _EmissionStrength * input.emissionMask * _WorldEmissionScale;
                 float3 litSurface = surface.rgb * SampleWorldLight(input.worldPosition);
                 return half4(litSurface + emission, surface.a);
             }
@@ -129,7 +129,7 @@ Shader "Fodinae/World Surface"
             {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
-                float2 lightingData : TEXCOORD1;
+                float4 lightingData : TEXCOORD6;
             };
 
             struct Varyings
@@ -161,14 +161,14 @@ Shader "Fodinae/World Surface"
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
-                output.emissionMask = input.lightingData.x;
+                output.emissionMask = saturate(frac(input.lightingData.y) * 4.0);
                 return output;
             }
 
             LightingFieldOutput LightingFieldFrag(Varyings input)
             {
                 float2 baseMapUV = _WrapBaseMap > 0.5 ? frac(input.uv) : input.uv;
-                half4 surface = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, baseMapUV);
+                half4 surface = _BaseMap.SampleLevel(sampler_PointClamp, baseMapUV, 0);
                 float coverage = step(0.05, surface.a);
                 float occupancy = coverage * surface.a * _Occupancy;
                 float emissionStrength = coverage * surface.a *

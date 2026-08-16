@@ -13,6 +13,7 @@ RWTexture2D<float4> _DestTex;
 RWTexture2D<float4> _OutputTex;
 
 SamplerState sampler_LinearClamp;
+SamplerState sampler_PointClamp;
 
 float4 _ScreenSize; // x=width, y=height, z=1/width, w=1/height
 float4 _SourceTexelSize; // xy=1/source size, zw=source size
@@ -198,14 +199,14 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         float2 distFromCenter = uv - float2(0.5, 0.5);
         float2 offset = distFromCenter * _ChromaticAberrationIntensity * 0.02;
 
-        float r = _InputTex.SampleLevel(sampler_LinearClamp, uv - offset, 0).r;
-        float g = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0).g;
-        float b = _InputTex.SampleLevel(sampler_LinearClamp, uv + offset, 0).b;
+        float r = _InputTex.SampleLevel(sampler_PointClamp, uv - offset, 0).r;
+        float g = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).g;
+        float b = _InputTex.SampleLevel(sampler_PointClamp, uv + offset, 0).b;
         color = float3(r, g, b);
     }
     else
     {
-        color = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
+        color = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).rgb;
     }
 
     // 2. Motion Blur (if velocity texture present and intensity > 0)
@@ -223,7 +224,7 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
                 float2 sampleVelocity = _VelocityTex.SampleLevel(sampler_LinearClamp, sampleUV, 0).xy;
                 float velocityAgreement = dot(sampleVelocity, vel) / max(dot(vel, vel), 0.0000001);
                 float sampleWeight = step(0.5, velocityAgreement);
-                accumulated += _InputTex.SampleLevel(sampler_LinearClamp, sampleUV, 0).rgb * sampleWeight;
+                accumulated += _InputTex.SampleLevel(sampler_PointClamp, sampleUV, 0).rgb * sampleWeight;
                 accumulatedWeight += sampleWeight;
             }
             color = accumulated / accumulatedWeight;

@@ -44,13 +44,8 @@ namespace Fodinae.UI
         private Button? _fullscreenButton;
         private bool _initialized;
 
-        private float GetConfiguredBusVolume(AudioBusType busType, string preferenceKey, float defaultValue)
+        private float GetConfiguredBusVolume(AudioBusType busType)
         {
-            if (_audioSystem is AudioSystem audioSystem && audioSystem.IsInitialized)
-            {
-                return audioSystem.GetBusVolume(busType);
-            }
-
             return busType switch
             {
                 AudioBusType.Master => _clientConfig.Config.MasterVolume,
@@ -59,7 +54,7 @@ namespace Fodinae.UI
                 AudioBusType.Voice => _clientConfig.Config.VoiceVolume,
                 AudioBusType.Ambience => _clientConfig.Config.AmbienceVolume,
                 AudioBusType.UI => _clientConfig.Config.UiVolume,
-                _ => defaultValue,
+                _ => throw new ArgumentOutOfRangeException(nameof(busType), busType, "Unsupported audio bus."),
             };
         }
 
@@ -277,7 +272,6 @@ namespace Fodinae.UI
             audioTab.clicked += () => ShowSettingsPage(2);
             interfaceTab.clicked += () => ShowSettingsPage(3);
             debugTab.clicked += () => ShowSettingsPage(4);
-            ShowSettingsPage(0);
 
 #if !UNITY_EDITOR && !DEVELOPMENT_BUILD
             debugTab.style.display = DisplayStyle.None;
@@ -365,8 +359,8 @@ namespace Fodinae.UI
             VisualElement interfaceSection = CreateSettingsSection("Интерфейс");
             var advancedGraphicsSection = new Foldout
             {
-                text = "Расширенные настройки графики",
-                value = false,
+                text = "Освещение",
+                value = true,
             };
             advancedGraphicsSection.AddToClassList("settings-section");
             advancedGraphicsSection.AddToClassList("settings-section--advanced");
@@ -381,12 +375,12 @@ namespace Fodinae.UI
             debugSection.AddToClassList("settings-section--debug");
 #endif
 
-            audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master, "Audio_Master", 1f));
-            audioSection.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX, "Audio_SFX", 1f));
-            audioSection.Add(CreateAudioSlider("Музыка", AudioBusType.Music, "Audio_Music", 0.5f));
-            audioSection.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience, "Audio_Ambience", 0.7f));
-            audioSection.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice, "Audio_Voice", 1f));
-            audioSection.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI, "Audio_UI", 1f));
+            audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master));
+            audioSection.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX));
+            audioSection.Add(CreateAudioSlider("Музыка", AudioBusType.Music));
+            audioSection.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience));
+            audioSection.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice));
+            audioSection.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI));
 
             interfaceSection.Add(CreateSlider(
                 "Масштаб UI",
@@ -490,8 +484,8 @@ namespace Fodinae.UI
                     ?? FindAnyObjectByType<TerrariaLightingEngine>();
                 if (engine == null)
                 {
-                    Debug.LogWarning("[PauseMenu] Graphics quality selected before lighting engine initialization");
-                    return;
+                    throw new InvalidOperationException(
+                        "[PauseMenu] Graphics quality cannot be changed before TerrariaLightingEngine initialization.");
                 }
 
                 var quality = (TerrariaLightingEngine.QualityPreset)savedQuality;
@@ -572,7 +566,6 @@ namespace Fodinae.UI
                     : Mathf.Clamp(defaultValue, minimum, maximum);
             }
 
-            graphicsSection.Add(CreateLabel("Освещение"));
             advancedGraphicsSection.Add(CreateSlider(
                 "Яркость окружения",
                 GetLightingValue(
@@ -897,9 +890,12 @@ namespace Fodinae.UI
 
             graphicsSection.Add(CreateLabel("Визуальные эффекты"));
 
-            if (PostProcessController.Instance != null)
+            PostProcessController? postProcessController = PostProcessController.Instance
+                ?? FindAnyObjectByType<PostProcessController>();
+            if (postProcessController != null)
             {
-                var pp = PostProcessController.Instance;
+                postProcessController.EnsureVolumeSetup();
+                var pp = postProcessController;
                 graphicsSection.Add(CreateSlider("Свечение", pp.BloomIntensity, v => pp.BloomIntensity = v, 0f, 5f));
                 graphicsSection.Add(CreateSlider("Виньетка", pp.VignetteIntensity, v => pp.VignetteIntensity = v, 0f, 1f));
                 graphicsSection.Add(CreateSlider("Хроматическая аберрация", pp.ChromaticAberrationIntensity, v => pp.ChromaticAberrationIntensity = v, 0f, 1f));
@@ -907,21 +903,26 @@ namespace Fodinae.UI
                 graphicsSection.Add(CreateSlider("Размытие движения", pp.MotionBlurIntensity, v => pp.MotionBlurIntensity = v, 0f, 1f));
             }
 
-            displayScroll.Add(displaySection);
-            graphicsScroll.Add(graphicsSection);
-            graphicsScroll.Add(advancedGraphicsSection);
-            audioScroll.Add(audioSection);
-            interfaceScroll.Add(interfaceSection);
+            displayScroll.contentContainer.Add(displaySection);
+            graphicsScroll.contentContainer.Add(graphicsSection);
+            graphicsScroll.contentContainer.Add(advancedGraphicsSection);
+            audioScroll.contentContainer.Add(audioSection);
+            interfaceScroll.contentContainer.Add(interfaceSection);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            debugScroll.Add(debugSection);
+            debugScroll.contentContainer.Add(debugSection);
 #endif
+
+            // Apply the initial page after all dynamic content has been attached.
+            // ScrollView owns its content container; adding sections directly to it
+            // can leave the viewport empty after a domain reload.
+            ShowSettingsPage(0);
 
             _settingsPage.style.display = DisplayStyle.None;
         }
 
-        private VisualElement CreateAudioSlider(string title, AudioBusType busType, string prefKey, float defaultValue)
+        private VisualElement CreateAudioSlider(string title, AudioBusType busType)
         {
-            float currentVol = GetConfiguredBusVolume(busType, prefKey, defaultValue);
+            float currentVol = GetConfiguredBusVolume(busType);
             return CreateSlider(
                 title,
                 currentVol,
@@ -1078,12 +1079,12 @@ namespace Fodinae.UI
         {
             var context = new List<StringPairPacket>();
 
-            context.Add(new StringPairPacket("master_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Master, "Audio_Master", 1f) * 255)).ToString()));
-            context.Add(new StringPairPacket("sfx_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.SFX, "Audio_SFX", 1f) * 255)).ToString()));
-            context.Add(new StringPairPacket("music_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Music, "Audio_Music", 0.5f) * 255)).ToString()));
-            context.Add(new StringPairPacket("ambience_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Ambience, "Audio_Ambience", 0.7f) * 255)).ToString()));
-            context.Add(new StringPairPacket("voice_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Voice, "Audio_Voice", 1f) * 255)).ToString()));
-            context.Add(new StringPairPacket("ui_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.UI, "Audio_UI", 1f) * 255)).ToString()));
+            context.Add(new StringPairPacket("master_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Master) * 255)).ToString()));
+            context.Add(new StringPairPacket("sfx_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.SFX) * 255)).ToString()));
+            context.Add(new StringPairPacket("music_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Music) * 255)).ToString()));
+            context.Add(new StringPairPacket("ambience_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Ambience) * 255)).ToString()));
+            context.Add(new StringPairPacket("voice_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Voice) * 255)).ToString()));
+            context.Add(new StringPairPacket("ui_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.UI) * 255)).ToString()));
 
             context.Add(new StringPairPacket("ui_scale", _clientConfig.Config.UiScale.ToString("F2")));
 
