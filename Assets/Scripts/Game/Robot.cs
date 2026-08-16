@@ -227,7 +227,11 @@ namespace Fodinae.Game
                 GameObject textGo = existingNickname != null
                     ? existingNickname.gameObject
                     : new GameObject("Nickname");
-                textGo.transform.SetParent(transform);
+
+                // Nicknames are world-space UI. They follow the robot position,
+                // but must not inherit the robot's facing rotation, sprite flip,
+                // or non-uniform scale.
+                textGo.transform.SetParent(null, worldPositionStays: true);
                 _nicknameText = textGo.GetComponent<TextMeshPro>() ??
                     textGo.AddComponent<TextMeshPro>();
                 textGo.SetActive(true);
@@ -623,7 +627,7 @@ namespace Fodinae.Game
                     throw new InvalidOperationException(
                         $"{TAG} SpriteRenderer is required to anchor nickname for bot {_botId}.");
                 Bounds spriteBounds = spriteRenderer.bounds;
-                Vector3 topRight = new(spriteBounds.max.x, spriteBounds.max.y, position.z);
+                Vector3 topRight = new(spriteBounds.max.x, spriteBounds.max.y + 0.5f, position.z);
 
                 // World-space labels use the actual rendered sprite bounds, not a
                 // fixed offset from the robot pivot. TopLeft alignment makes the
@@ -654,7 +658,7 @@ namespace Fodinae.Game
             _isMetadataLoaded = false;
             if (_spriteRenderer != null)
             {
-                _spriteRenderer.color = new Color(1, 1, 1, 0.5f);
+                _spriteRenderer.color = Color.white;
             }
 
             if (_nicknameText != null)
@@ -977,6 +981,12 @@ namespace Fodinae.Game
             if (_clanSprite != null)
             {
                 Object.Destroy(_clanSprite);
+            }
+
+            if (_nicknameText != null)
+            {
+                Object.Destroy(_nicknameText.gameObject);
+                _nicknameText = null;
             }
 
             ClearTentacles();

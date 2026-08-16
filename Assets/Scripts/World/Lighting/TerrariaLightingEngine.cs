@@ -108,6 +108,16 @@ namespace Fodinae.World.Lighting
             Shader.PropertyToID("_WorldEmissionScale");
         private static readonly ProfilerMarker LightingUpdateMarker =
             new("Fodinae.Lighting.UpdateLighting.CPU");
+        private static readonly ProfilerMarker DynamicUploadMarker =
+            new("Fodinae.Lighting.DynamicLights.Upload.CPU");
+        private static readonly ProfilerMarker EmissionMarker =
+            new("Fodinae.Lighting.Emission.Record.CPU");
+        private static readonly ProfilerMarker CascadeMarker =
+            new("Fodinae.Lighting.Cascades.Record.CPU");
+        private static readonly ProfilerMarker ResolveMarker =
+            new("Fodinae.Lighting.Resolve.Record.CPU");
+        private static readonly ProfilerMarker CompositeMarker =
+            new("Fodinae.Lighting.Composite.Record.CPU");
 
         private static readonly string[] RequiredKernels =
         [
@@ -882,6 +892,7 @@ namespace Fodinae.World.Lighting
                 bool rebuildFields = _fieldDirty || regionChanged || geometryChanged;
                 if (rebuildFields)
                 {
+                    commandBuffer.BeginSample("Fodinae.Lighting.MaterialField");
                     terrainRenderer.RenderLightingMaterialFields(
                         commandBuffer,
                         _materialField!,
@@ -896,6 +907,12 @@ namespace Fodinae.World.Lighting
                             worldRect,
                             clearFields: false);
                     }
+                    else
+                    {
+                        commandBuffer.GenerateMips(_materialField!);
+                    }
+
+                    commandBuffer.EndSample("Fodinae.Lighting.MaterialField");
                 }
 
                 int dynamicLightCount;
@@ -1243,6 +1260,7 @@ namespace Fodinae.World.Lighting
 
         private void DispatchContactOcclusion(CommandBuffer commandBuffer)
         {
+            commandBuffer.BeginSample("Fodinae.Lighting.ContactOcclusion");
             commandBuffer.SetComputeTextureParam(
                 _lightingCompute!,
                 _solveContactOcclusionKernel,
@@ -1254,6 +1272,7 @@ namespace Fodinae.World.Lighting
                 Mathf.CeilToInt(_fieldWidth / 8f),
                 Mathf.CeilToInt(_fieldHeight / 8f),
                 1);
+            commandBuffer.EndSample("Fodinae.Lighting.ContactOcclusion");
             _contactOcclusionSolveCount++;
         }
 
@@ -1272,6 +1291,7 @@ namespace Fodinae.World.Lighting
             float cellSize,
             out bool uploadedLightsChanged)
         {
+            using var dynamicUploadMarker = DynamicUploadMarker.Auto();
             int maximumLightCount = _dynamicLights.Length;
             int dynamicLightCount = 0;
             int previousDynamicLightCount = _lastDynamicLightCount;
@@ -1398,6 +1418,7 @@ namespace Fodinae.World.Lighting
             int dynamicLightCount,
             bool dynamicLightsChanged)
         {
+            using var emissionMarker = EmissionMarker.Auto();
             if (!dynamicLightsChanged && dynamicLightCount == 0)
             {
                 return;
@@ -1415,15 +1436,19 @@ namespace Fodinae.World.Lighting
                 _emissionField!,
                 0,
                 0);
+            commandBuffer.BeginSample("Fodinae.Lighting.DynamicEmission");
             DrawDynamicEmission(
                 commandBuffer,
                 worldRect,
                 dynamicLightCount);
             commandBuffer.GenerateMips(_emissionField!);
+            commandBuffer.EndSample("Fodinae.Lighting.DynamicEmission");
         }
 
         private void DispatchRadianceCascades(CommandBuffer commandBuffer)
         {
+            using var cascadeMarker = CascadeMarker.Auto();
+            commandBuffer.BeginSample("Fodinae.Lighting.RadianceCascades");
             ComputeShader compute = _lightingCompute!;
             commandBuffer.SetComputeBufferParam(
                 compute,
@@ -1434,12 +1459,15 @@ namespace Fodinae.World.Lighting
             {
                 DispatchRadianceCascade(commandBuffer, cascadeIndex);
             }
+
+            commandBuffer.EndSample("Fodinae.Lighting.RadianceCascades");
         }
 
         private void DispatchRadianceCascade(
             CommandBuffer commandBuffer,
             int cascadeIndex)
         {
+            commandBuffer.BeginSample("Fodinae.Lighting.RadianceCascade");
             ComputeShader compute = _lightingCompute!;
             CascadeLayout cascade = _cascades[cascadeIndex];
             bool hasFarCascade = cascadeIndex + 1 < _cascades.Count;
@@ -1503,6 +1531,7 @@ namespace Fodinae.World.Lighting
                 groupCountX,
                 groupCountY,
                 1);
+            commandBuffer.EndSample("Fodinae.Lighting.RadianceCascade");
         }
 
         private void DispatchResolveAndBounce(
@@ -1510,6 +1539,8 @@ namespace Fodinae.World.Lighting
             bool solveBounce,
             bool composite = true)
         {
+            using var resolveMarker = ResolveMarker.Auto();
+            commandBuffer.BeginSample("Fodinae.Lighting.ResolveAndBounce");
             ComputeShader compute = _lightingCompute!;
             CascadeLayout baseCascade = _cascades[0];
             commandBuffer.SetComputeIntParam(compute, CascadeOffsetId, baseCascade.Offset);
@@ -1554,10 +1585,14 @@ namespace Fodinae.World.Lighting
             {
                 DispatchComposite(commandBuffer);
             }
+
+            commandBuffer.EndSample("Fodinae.Lighting.ResolveAndBounce");
         }
 
         private void DispatchComposite(CommandBuffer commandBuffer)
         {
+            using var compositeMarker = CompositeMarker.Auto();
+            commandBuffer.BeginSample("Fodinae.Lighting.Composite");
             ComputeShader compute = _lightingCompute!;
             commandBuffer.SetComputeTextureParam(
                 compute,
@@ -1580,6 +1615,7 @@ namespace Fodinae.World.Lighting
                 Mathf.CeilToInt(_fieldWidth / 8f),
                 Mathf.CeilToInt(_fieldHeight / 8f),
                 1);
+            commandBuffer.EndSample("Fodinae.Lighting.Composite");
         }
 
         private bool HasDynamicLightsChanged()

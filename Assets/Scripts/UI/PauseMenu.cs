@@ -595,6 +595,7 @@ namespace Fodinae.UI
             displaySection.Add(resolutionButton);
 
             var graphicsRefreshers = new List<Action>();
+            Foldout customGraphicsSection = null!;
             string[] graphicsPresetNames =
             [
                 "Очень низкое",
@@ -622,10 +623,28 @@ namespace Fodinae.UI
             lightingQuality.clicked += () =>
             {
                 GraphicsPreset currentPreset = _graphicsSettings.SelectedPreset;
-                int nextIndex = GraphicsQualityProfile.IsStandard(currentPreset)
-                    ? ((int)currentPreset + 1) % GraphicsQualityProfile.StandardPresetCount
-                    : 0;
-                _graphicsSettings.SelectStandardPreset((GraphicsPreset)nextIndex);
+                GraphicsPreset nextPreset;
+                if (GraphicsQualityProfile.IsStandard(currentPreset))
+                {
+                    nextPreset = currentPreset == GraphicsPreset.Ultra
+                        ? GraphicsPreset.Custom
+                        : (GraphicsPreset)((int)currentPreset + 1);
+                }
+                else
+                {
+                    nextPreset = GraphicsPreset.VeryLow;
+                }
+
+                if (nextPreset == GraphicsPreset.Custom)
+                {
+                    _graphicsSettings.SelectCustomPreset();
+                    customGraphicsSection.value = true;
+                }
+                else
+                {
+                    _graphicsSettings.SelectStandardPreset(nextPreset);
+                }
+
                 foreach (Action refresh in graphicsRefreshers)
                 {
                     refresh();
@@ -636,7 +655,7 @@ namespace Fodinae.UI
             UpdateLightingQualityButton();
             graphicsSection.Add(lightingQuality);
 
-            var customGraphicsSection = new Foldout
+            customGraphicsSection = new Foldout
             {
                 text = "Пользовательский профиль",
                 value = _graphicsSettings.SelectedPreset == GraphicsPreset.Custom,
@@ -663,7 +682,7 @@ namespace Fodinae.UI
             void ApplyCustomTechnicalSettings(
                 Func<GraphicsQualitySettings, GraphicsQualitySettings> update)
             {
-                _graphicsSettings.SelectCustomPreset();
+                _graphicsSettings.MarkCustom();
                 GraphicsQualitySettings settings = update(_graphicsSettings.CustomSettings);
                 _graphicsSettings.SetCustomSettings(settings);
                 customGraphicsSection.value = true;

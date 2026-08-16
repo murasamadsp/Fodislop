@@ -1068,6 +1068,13 @@ namespace MinesServer.Networking.Connection.Client
                 })));
 
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
+            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(
+                _mockBotId,
+                999,
+                1,
+                "Skin/bee.png",
+                "Tail/default.png",
+                string.Empty)));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
             RunCircularBots(6).Forget();
@@ -2194,7 +2201,7 @@ namespace MinesServer.Networking.Connection.Client
                 }
 
                 OnReceived?.Invoke(new ServerPacket(new HBPacket(positions.ToArray())));
-                await UniTask.Delay(20);
+                await UniTask.Delay(100);
             }
         }
 

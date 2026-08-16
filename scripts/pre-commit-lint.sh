@@ -22,9 +22,17 @@ ensure_restore_assets() {
         return 0
     fi
 
-    echo "Missing NuGet assets: $assets_file"
-    echo "Run: dotnet restore $project_file --ignore-failed-sources --disable-parallel"
-    exit 1
+    echo "Missing NuGet assets: $assets_file, restoring..."
+    if ! dotnet restore "$project_file" --ignore-failed-sources --disable-parallel >/dev/null 2>&1; then
+        echo "Auto-restore failed for $project_file"
+        echo "Run manually: dotnet restore $project_file --ignore-failed-sources --disable-parallel"
+        exit 1
+    fi
+
+    if [ ! -f "$assets_file" ]; then
+        echo "NuGet assets still missing after restore: $assets_file"
+        exit 1
+    fi
 }
 
 # Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build

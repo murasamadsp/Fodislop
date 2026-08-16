@@ -560,7 +560,10 @@ namespace Fodinae.World.Terrain
                 _lastGridPos = currentGridPos;
             }
 
-            // Lighting follows the actual camera viewport, not the cached terrain origin.
+            // Keep command-buffer execution outside the URP sprite pass. The
+            // lighting field pass changes render targets and matrices, and
+            // executing it from an unsafe RenderGraph pass would leak that
+            // state into the following terrain draw.
             int lightingPadding = requiredLightingPadding;
             int lightingMinX = viewportMinX - lightingPadding;
             int lightingMinY = viewportMinY - lightingPadding;
@@ -695,8 +698,6 @@ namespace Fodinae.World.Terrain
                     subMeshIndex,
                     materialFieldPass);
             }
-
-            commandBuffer.GenerateMips(materialField);
         }
 
         private void UpdateVertexAttributes(int minX, int minY)
