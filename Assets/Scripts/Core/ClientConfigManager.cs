@@ -225,6 +225,13 @@ namespace Fodinae.Core
             ApplyShaderDefaults(Config, _projectDefaults.Shaders);
         }
 
+        public void SetCustomGraphicsSettings(GraphicsQualitySettings settings)
+        {
+            MarkGraphicsAsCustom();
+            GraphicsQualityProfile.ValidateSettings(settings, "Custom");
+            Config.GraphicsQualitySettings = settings;
+        }
+
         public void Save()
         {
             Validate(Config);

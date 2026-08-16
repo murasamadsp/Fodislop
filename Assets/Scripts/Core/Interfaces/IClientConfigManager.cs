@@ -12,6 +12,7 @@ namespace Fodinae.Core.Interfaces
         GraphicsPreset SelectedGraphicsPreset { get; }
         void MarkGraphicsAsCustom();
         void SelectGraphicsPreset(GraphicsPreset preset);
+        void SetCustomGraphicsSettings(GraphicsQualitySettings settings);
         void Load();
         void Save();
     }

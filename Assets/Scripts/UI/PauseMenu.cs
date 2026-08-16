@@ -627,6 +627,160 @@ namespace Fodinae.UI
             UpdateLightingQualityButton();
             graphicsSection.Add(lightingQuality);
 
+            var customGraphicsSection = new Foldout
+            {
+                text = "Пользовательский профиль",
+                value = _graphicsSettings.SelectedPreset == GraphicsPreset.Custom,
+            };
+            customGraphicsSection.AddToClassList("settings-section");
+            customGraphicsSection.AddToClassList("settings-section--custom");
+
+            var customGraphicsButton = new Button
+            {
+                text = "Настроить пользовательскую графику",
+            };
+            customGraphicsButton.AddToClassList("pause-btn");
+            customGraphicsButton.clicked += () =>
+            {
+                _graphicsSettings.SelectCustomPreset();
+                customGraphicsSection.value = true;
+                foreach (Action refresh in graphicsRefreshers)
+                {
+                    refresh();
+                }
+            };
+            graphicsSection.Add(customGraphicsButton);
+
+            void ApplyCustomTechnicalSettings(
+                Func<GraphicsQualitySettings, GraphicsQualitySettings> update)
+            {
+                _graphicsSettings.SelectCustomPreset();
+                GraphicsQualitySettings settings = update(_graphicsSettings.CustomSettings);
+                _graphicsSettings.SetCustomSettings(settings);
+                customGraphicsSection.value = true;
+                UpdateLightingQualityButton();
+            }
+
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Плотность lighting",
+                () => _graphicsSettings.CustomSettings.LightingMinimumPixelsPerCell,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingMinimumPixelsPerCell = Mathf.RoundToInt(value);
+                    return settings;
+                }),
+                1f,
+                8f,
+                graphicsRefreshers));
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Максимальный размер lighting",
+                () => _graphicsSettings.CustomSettings.LightingMaximumTextureDimension,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingMaximumTextureDimension = Mathf.RoundToInt(value);
+                    return settings;
+                }),
+                128f,
+                4096f,
+                graphicsRefreshers));
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Максимум dynamic lights",
+                () => _graphicsSettings.CustomSettings.LightingMaximumLightCount,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingMaximumLightCount = Mathf.RoundToInt(value);
+                    return settings;
+                }),
+                1f,
+                2048f,
+                graphicsRefreshers));
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Шаги lighting cascade",
+                () => _graphicsSettings.CustomSettings.LightingMaximumRaySteps,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingMaximumRaySteps = Mathf.RoundToInt(value);
+                    return settings;
+                }),
+                1f,
+                128f,
+                graphicsRefreshers));
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Частота lighting solve",
+                () => _graphicsSettings.CustomSettings.LightingUpdatesPerSecond,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingUpdatesPerSecond = Mathf.Round(value);
+                    return settings;
+                }),
+                1f,
+                60f,
+                graphicsRefreshers));
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Размер cascade atlas",
+                () => _graphicsSettings.CustomSettings.LightingCascadeAtlasLimit,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingCascadeAtlasLimit = Mathf.RoundToInt(value);
+                    return settings;
+                }),
+                128f,
+                4096f,
+                graphicsRefreshers));
+            customGraphicsSection.Add(CreateBoundSlider(
+                "Render scale",
+                () => _graphicsSettings.CustomSettings.RenderScale,
+                value => ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.RenderScale = value;
+                    return settings;
+                }),
+                0.5f,
+                1f,
+                graphicsRefreshers));
+
+            var customVSyncButton = new Button();
+            void RefreshCustomVSync()
+            {
+                customVSyncButton.text =
+                    $"VSync: {_graphicsSettings.CustomSettings.VSyncCount}";
+            }
+
+            customVSyncButton.clicked += () => ApplyCustomTechnicalSettings(settings =>
+            {
+                settings.VSyncCount = (settings.VSyncCount + 1) % 5;
+                return settings;
+            });
+            customVSyncButton.AddToClassList("pause-btn");
+            graphicsRefreshers.Add(RefreshCustomVSync);
+            RefreshCustomVSync();
+            customGraphicsSection.Add(customVSyncButton);
+
+            var customAntiAliasingButton = new Button();
+            void RefreshCustomAntiAliasing()
+            {
+                customAntiAliasingButton.text =
+                    $"MSAA: {_graphicsSettings.CustomSettings.AntiAliasing}";
+            }
+
+            customAntiAliasingButton.clicked += () => ApplyCustomTechnicalSettings(settings =>
+            {
+                settings.AntiAliasing = settings.AntiAliasing switch
+                {
+                    0 => 2,
+                    2 => 4,
+                    4 => 8,
+                    _ => 0,
+                };
+                return settings;
+            });
+            customAntiAliasingButton.AddToClassList("pause-btn");
+            graphicsRefreshers.Add(RefreshCustomAntiAliasing);
+            RefreshCustomAntiAliasing();
+            customGraphicsSection.Add(customAntiAliasingButton);
+
+            graphicsSection.Add(customGraphicsSection);
+
             Toggle ambientOcclusionToggle = CreateBoundToggle(
                 "Контактное затенение (AO)",
                 () => _lightingEngine.AmbientOcclusionEnabled,

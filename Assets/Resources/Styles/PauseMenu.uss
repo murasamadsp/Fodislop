@@ -185,6 +185,17 @@
     padding: 14px;
 }
 
+.settings-section--custom {
+    background-color: rgba(35, 31, 24, 0.98);
+    border-color: rgba(205, 170, 90, 0.8);
+}
+
+.settings-section--custom .unity-foldout__content {
+    margin-top: 12px;
+    padding-left: 8px;
+    padding-right: 4px;
+}
+
 .settings-section--advanced .unity-foldout__content,
 .settings-section--debug .unity-foldout__content {
     margin-top: 14px;

@@ -34,6 +34,8 @@ public sealed class GraphicsSettingsController
 
     public GraphicsPreset SelectedPreset => _clientConfig.SelectedGraphicsPreset;
 
+    public GraphicsQualitySettings CustomSettings => _clientConfig.Config.GraphicsQualitySettings;
+
     public void MarkCustom()
     {
         _clientConfig.MarkGraphicsAsCustom();
@@ -42,6 +44,20 @@ public sealed class GraphicsSettingsController
     public void SelectStandardPreset(GraphicsPreset preset)
     {
         _clientConfig.SelectGraphicsPreset(preset);
+        ApplyAll();
+        _clientConfig.Save();
+    }
+
+    public void SelectCustomPreset()
+    {
+        _clientConfig.MarkGraphicsAsCustom();
+        ApplyAll();
+        _clientConfig.Save();
+    }
+
+    public void SetCustomSettings(GraphicsQualitySettings settings)
+    {
+        _clientConfig.SetCustomGraphicsSettings(settings);
         ApplyAll();
         _clientConfig.Save();
     }
