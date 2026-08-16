@@ -1,6 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="ChatPanel" class="gchat-panel">
         <ui:Label name="ChatHeader" class="gchat-header" text="Глобальный чат" />
+        <ui:Label name="ChatMuteStatus" class="gchat-mute-status" style="display: none;" />
         <ui:ScrollView name="ChatScroll" class="gchat-scroll" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
         <ui:VisualElement name="BottomRow" class="gchat-bottom-row">
             <ui:TextField name="ChatInput" class="gchat-input" />

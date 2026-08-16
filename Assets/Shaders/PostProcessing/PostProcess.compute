@@ -177,8 +177,8 @@ void BloomUpsample(uint3 id : SV_DispatchThreadID)
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(0.0,  texel.y), 0) * 2.0;
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(0.0, -texel.y), 0) * 2.0;
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2( texel.x,  texel.y), 0);
-    lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(-texel.x,  texel.y), 0);
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2( texel.x, -texel.y), 0);
+    lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(-texel.x,  texel.y), 0);
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(-texel.x, -texel.y), 0);
     lowRes *= 1.0 / 16.0;
 

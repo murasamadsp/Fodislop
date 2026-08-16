@@ -31,8 +31,8 @@ namespace Fodinae.UI
         private Texture2D? _mapTexture;
         private Color32[]? _pixelBuffer;
         private Color32[] _cellColorTable = new Color32[256];
-        private Color32 _defaultColor = new Color32(48, 48, 48, 255);
         private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
+        private Color32 _defaultColor = UnloadedColor;
         private WorldLayer<CellType>? _cellLayer;
         private int _chunkSize = 32;
         private readonly MapCellSampler _cellSampler = new();
@@ -64,6 +64,7 @@ namespace Fodinae.UI
         private string _boundWorldCodeName = string.Empty;
         private bool _initialized;
         private bool _playerSpawnSubscription;
+        private bool _playerMoveSubscription;
 
         private float _playerBlinkTimer;
         private bool _playerBlinkState = true;
@@ -84,30 +85,40 @@ namespace Fodinae.UI
             TryInitialize();
         }
 
+        protected void OnEnable()
+        {
+            if (_initialized)
+            {
+                RebindRuntimeSources();
+                EnsureScrollAction();
+            }
+        }
+
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized)
+            {
+                EnsureScrollAction();
+                return;
+            }
+
+            if (!ServiceLocator.IsInitialized)
             {
                 return;
             }
 
-            _storage ??= ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager ??= ServiceLocator.Resolve<MapManager>();
-            if (_storage == null || _manager == null || !_manager.IsWorldInitialized || !_storage.IsReady)
+            _storage ??= ServiceLocator.Resolve<IWorldDataStorage>() ??
+                throw new InvalidOperationException(
+                    "WorldMapRenderer requires IWorldDataStorage after the resolver was initialized.");
+            _manager ??= ServiceLocator.Resolve<MapManager>() ??
+                throw new InvalidOperationException(
+                    "WorldMapRenderer requires MapManager after the resolver was initialized.");
+            if (!_manager.IsWorldInitialized || !_storage.IsReady)
             {
                 return;
             }
 
-            _player = PlayerMovementController.LocalPlayer;
-            if (_player == null && !_playerSpawnSubscription)
-            {
-                PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
-                _playerSpawnSubscription = true;
-            }
-            else if (_player != null)
-            {
-                _player.OnPlayerMoved += OnPlayerMoved;
-            }
+            EnsurePlayerBinding();
 
             CreateCanvas();
             InitColorTable();
@@ -127,12 +138,18 @@ namespace Fodinae.UI
             _cellsPerPixel = 1f;
             _maxCellsPerPixel = ComputeMaxZoomOut(w, h);
             _cellsPerPixel = Mathf.Min(_cellsPerPixel, _maxCellsPerPixel);
-            _viewCenterX = w / 2f;
-            _viewCenterY = h / 2f;
+            if (_player is { HasServerPosition: true })
+            {
+                _viewCenterX = _player.Position.x;
+                _viewCenterY = _player.Position.y;
+            }
+            else
+            {
+                _viewCenterX = w / 2f;
+                _viewCenterY = h / 2f;
+            }
 
-            _scrollAction = new InputAction("MapScroll", binding: "<Mouse>/scroll");
-            _scrollAction.performed += OnScroll;
-            _scrollAction.Enable();
+            EnsureScrollAction();
 
             if (_canvas != null && !_canvas.gameObject.activeSelf)
             {
@@ -158,7 +175,7 @@ namespace Fodinae.UI
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
             if (_player != null)
             {
-                _player.OnPlayerMoved -= OnPlayerMoved;
+                UnsubscribeFromPlayer(_player);
             }
 
             if (_subscribedCellLayer != null)
@@ -186,12 +203,107 @@ namespace Fodinae.UI
             _scrollAction = null;
         }
 
+        private void EnsureScrollAction()
+        {
+            if (_scrollAction != null)
+            {
+                return;
+            }
+
+            _scrollAction = new InputAction("MapScroll", binding: "<Mouse>/scroll");
+            _scrollAction.performed += OnScroll;
+            _scrollAction.Enable();
+        }
+
+        private void SubscribeToPlayer(PlayerMovementController player)
+        {
+            if (_playerMoveSubscription && ReferenceEquals(_player, player))
+            {
+                return;
+            }
+
+            if (_playerMoveSubscription && _player != null)
+            {
+                _player.OnPlayerMoved -= OnPlayerMoved;
+            }
+
+            _player = player;
+            _player.OnPlayerMoved += OnPlayerMoved;
+            _playerMoveSubscription = true;
+        }
+
+        private void EnsurePlayerBinding()
+        {
+            if (_playerSpawnSubscription)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+                _playerSpawnSubscription = false;
+            }
+
+            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
+            if (player != null)
+            {
+                SubscribeToPlayer(player);
+                return;
+            }
+
+            PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+            _playerSpawnSubscription = true;
+        }
+
+        private void RebindRuntimeSources()
+        {
+            if (!ServiceLocator.IsInitialized)
+            {
+                _initialized = false;
+                return;
+            }
+
+            _storage = ServiceLocator.Resolve<IWorldDataStorage>();
+            _manager = ServiceLocator.Resolve<MapManager>();
+            if (_storage == null || _manager == null)
+            {
+                _initialized = false;
+                return;
+            }
+
+            EnsurePlayerBinding();
+
+            if (_storage is not MapStorage mapStorage || mapStorage.CellLayer == null)
+            {
+                BindCellLayer(null);
+                return;
+            }
+
+            WorldLayer<CellType> cellLayer = mapStorage.CellLayer;
+            if (!ReferenceEquals(_subscribedCellLayer, cellLayer))
+            {
+                BindCellLayer(cellLayer);
+                return;
+            }
+
+            cellLayer.ChunkLoaded -= OnChunkLoaded;
+            cellLayer.ChunkLoaded += OnChunkLoaded;
+            _cellSampler.Bind(cellLayer);
+            _cellSampler.Invalidate();
+        }
+
+        private void UnsubscribeFromPlayer(PlayerMovementController player)
+        {
+            if (!_playerMoveSubscription)
+            {
+                return;
+            }
+
+            player.OnPlayerMoved -= OnPlayerMoved;
+            _playerMoveSubscription = false;
+        }
+
         private void OnLocalPlayerSpawned(PlayerMovementController player)
         {
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
             _playerSpawnSubscription = false;
-            _player = player;
-            _player.OnPlayerMoved += OnPlayerMoved;
+            SubscribeToPlayer(player);
             _lastPlayerPos = new Vector2Int(int.MinValue, int.MinValue);
             _renderRequested = true;
         }
@@ -251,7 +363,16 @@ namespace Fodinae.UI
 
             _boundWorldWidth = worldWidth;
             _boundWorldHeight = worldHeight;
-            _boundWorldCodeName = _manager?.WorldCodeName ?? string.Empty;
+            MapManager manager = _manager ??
+                throw new InvalidOperationException(
+                    "[WorldMapRenderer] MapManager is required before binding world dimensions.");
+            if (string.IsNullOrWhiteSpace(manager.WorldCodeName))
+            {
+                throw new InvalidOperationException(
+                    "[WorldMapRenderer] World code name is required before binding map state.");
+            }
+
+            _boundWorldCodeName = manager.WorldCodeName;
         }
 
         protected void Update()
@@ -387,17 +508,33 @@ namespace Fodinae.UI
         private void InitTexture()
         {
             const int BASE_RES = 512;
+            Canvas canvas = _canvas ?? throw new InvalidOperationException(
+                "[WorldMapRenderer] Canvas must be created before the map texture.");
+            Canvas.ForceUpdateCanvases();
+            Rect canvasRect = canvas.pixelRect;
+            if (canvasRect.width <= 0f || canvasRect.height <= 0f)
+            {
+                throw new InvalidOperationException(
+                    $"[WorldMapRenderer] Canvas has invalid layout {canvasRect.width}x{canvasRect.height}.");
+            }
+
             _texHeight = BASE_RES;
-            int screenHeight = Mathf.Max(1, Screen.height);
+            int canvasHeight = Mathf.RoundToInt(canvasRect.height);
+            int canvasWidth = Mathf.RoundToInt(canvasRect.width);
             _texWidth = Mathf.Max(
                 1,
-                Mathf.RoundToInt(BASE_RES * ((float)Mathf.Max(1, Screen.width) / screenHeight)));
-            _mapTexture = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
+                Mathf.RoundToInt(BASE_RES * ((float)canvasWidth / canvasHeight)));
 
-            // Bilinear smooths the upscale from the 512px texture to a full-screen
-            // RawImage. Point filtering here produced jagged, aliased cell edges.
-            _mapTexture.filterMode = FilterMode.Bilinear;
-            _mapTexture.wrapMode = TextureWrapMode.Clamp;
+            // This texture is categorical map data: one texel represents one
+            // sampled world cell. Bilinear filtering fabricates blended terrain
+            // types and makes chunk availability boundaries look loaded.
+            _mapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                _texWidth,
+                _texHeight,
+                "WorldMapTexture",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp);
             if (_rawImage != null)
             {
                 _rawImage.texture = _mapTexture;
@@ -467,17 +604,17 @@ namespace Fodinae.UI
 
         private void HandleQueuedRender()
         {
-            if (_storage is MapStorage mapStorage &&
-                mapStorage.Revision != _lastRenderedStorageRevision)
+            IWorldDataStorage storage = _storage ??
+                throw new InvalidOperationException("WorldMapRenderer storage is not initialized.");
+            if (storage.Revision != _lastRenderedStorageRevision)
             {
                 _cellSampler.Invalidate();
                 _renderRequested = true;
             }
 
-            if (_storage is MapStorage currentStorage &&
-                !ReferenceEquals(_cellLayer, currentStorage.CellLayer))
+            if (!ReferenceEquals(_cellLayer, storage.CellLayer))
             {
-                BindCellLayer(currentStorage.CellLayer);
+                BindCellLayer(storage.CellLayer);
                 _renderRequested = true;
                 _initialRenderDone = false;
                 _lastRenderedStorageRevision = -1;
@@ -490,11 +627,20 @@ namespace Fodinae.UI
             {
                 BindWorldDimensions(_manager.WorldWidth, _manager.WorldHeight);
                 InitColorTable();
-                BindCellLayer((_storage as MapStorage)?.CellLayer);
+                BindCellLayer(storage.CellLayer);
                 _cellsPerPixel = 1f;
                 _maxCellsPerPixel = ComputeMaxZoomOut(_boundWorldWidth, _boundWorldHeight);
-                _viewCenterX = _boundWorldWidth * 0.5f;
-                _viewCenterY = _boundWorldHeight * 0.5f;
+                if (_player is { HasServerPosition: true })
+                {
+                    _viewCenterX = _player.Position.x;
+                    _viewCenterY = _player.Position.y;
+                }
+                else
+                {
+                    _viewCenterX = _boundWorldWidth * 0.5f;
+                    _viewCenterY = _boundWorldHeight * 0.5f;
+                }
+
                 _lastRenderedStorageRevision = -1;
                 _initialRenderDone = false;
                 _renderRequested = true;
@@ -622,7 +768,9 @@ namespace Fodinae.UI
             }
 
             _renderRequested = false;
-            _lastRenderedStorageRevision = (_storage as MapStorage)?.Revision ?? -1;
+            _lastRenderedStorageRevision = _storage?.Revision ??
+                throw new InvalidOperationException(
+                    "WorldMapRenderer storage disappeared while rendering the map.");
             return true;
         }
 
@@ -718,9 +866,10 @@ namespace Fodinae.UI
 
             float pixelX = ((localPoint.x - rect.xMin) / rect.width) * _texWidth;
             float pixelY = ((localPoint.y - rect.yMin) / rect.height) * _texHeight;
-            worldX = _viewCenterX + (pixelX - (_texWidth * 0.5f)) * _cellsPerPixel;
+            worldX = _viewCenterX +
+                ((pixelX - (_texWidth * 0.5f)) * _cellsPerPixel);
             worldY = _viewCenterY +
-                ((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel;
+                (((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel);
             return true;
         }
 
@@ -751,9 +900,9 @@ namespace Fodinae.UI
             float pixelX = ((localPoint.x - rect.xMin) / rect.width) * _texWidth;
             float pixelY = ((localPoint.y - rect.yMin) / rect.height) * _texHeight;
             _viewCenterX = worldX -
-                (pixelX - (_texWidth * 0.5f)) * _cellsPerPixel;
+                ((pixelX - (_texWidth * 0.5f)) * _cellsPerPixel);
             _viewCenterY = worldY -
-                ((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel;
+                (((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel);
         }
 
         private void ClampViewCenter()

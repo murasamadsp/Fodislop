@@ -237,7 +237,10 @@ namespace Fodinae.Effekseer
                 if (decoded.Atlas != null)
                 {
                     decoded.Atlas.name = $"EffekseerTex_{serverPath}";
-                    decoded.Atlas.filterMode = FilterMode.Point;
+                    RuntimeTextureFactory.ApplySampling(
+                        decoded.Atlas,
+                        FilterMode.Point,
+                        TextureWrapMode.Repeat);
                     return decoded.Atlas;
                 }
 
@@ -245,17 +248,15 @@ namespace Fodinae.Effekseer
                     $"Animated effect texture '{serverPath}' contains no decodable frames.");
             }
 
-            // PNG or other single-frame format
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (tex.LoadImage(bytes))
-            {
-                tex.name = $"EffekseerTex_{serverPath}";
-                tex.filterMode = FilterMode.Point;
-                return tex;
-            }
-
-            UnityEngine.Object.Destroy(tex);
-            throw new InvalidDataException($"Effect texture '{serverPath}' could not be decoded.");
+            // Single-frame images are normalized to the same explicit runtime
+            // format as terrain and UI textures.
+            return RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+                bytes,
+                $"EffekseerTex_{serverPath}",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Repeat,
+                makeNoLongerReadable: true);
         }
     }
 }

@@ -23,10 +23,6 @@ namespace Fodinae.Game.Managers
         {
         }
 
-        internal void SetAsPending()
-        {
-        }
-
         private bool _isInitialized;
         private string _worldCodeName = string.Empty;
         private int _worldWidth;
@@ -106,6 +102,7 @@ namespace Fodinae.Game.Managers
                     Directory.CreateDirectory(directory);
                 }
 
+                CreateBackup(path, worldCodeName);
                 _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
                 _mapFilePath = path;
                 _isInitialized = true;
@@ -130,6 +127,19 @@ namespace Fodinae.Game.Managers
                 _mapFilePath = null;
                 throw;
             }
+        }
+
+        private static void CreateBackup(string mapPath, string worldCodeName)
+        {
+            if (!File.Exists(mapPath))
+            {
+                return;
+            }
+
+            string backupPath = Path.Combine(
+                Application.persistentDataPath,
+                worldCodeName + BackupMapSuffix);
+            File.Copy(mapPath, backupPath, overwrite: true);
         }
 
         public bool IsInitialized() => _isInitialized;
@@ -189,11 +199,13 @@ namespace Fodinae.Game.Managers
 
             if (startX < 0 || startY < 0 || startX >= _worldWidth || startY >= _worldHeight)
             {
-                throw new ArgumentOutOfRangeException(
-                    nameof(startX),
+                string message =
                     "[MapStorage] Region " +
                     $"({startX},{startY}) {width}x{height} " +
-                    $"is outside world bounds {_worldWidth}x{_worldHeight}.");
+                    $"is outside world bounds {_worldWidth}x{_worldHeight}.";
+                throw new ArgumentOutOfRangeException(
+                    nameof(startX),
+                    message);
             }
 
             int appliedWidth = Math.Min(width, _worldWidth - startX);
@@ -235,6 +247,12 @@ namespace Fodinae.Game.Managers
                 Revision++;
                 TerrainRenderer.OnRegionChanged(startX, startY, width, height);
             }
+
+            // SetRegion materializes chunks synchronously, so WorldLayer's
+            // asynchronous disk-load notification is not emitted. Consumers
+            // such as the minimap may already have cached these chunks as
+            // unavailable; notify them after the packet has been applied.
+            _cellLayer.NotifyRegionLoaded(startX, startY, appliedWidth, appliedHeight);
         }
 
         /// <summary>

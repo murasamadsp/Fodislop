@@ -12,54 +12,62 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8f04d80c6c2047f4bb5c838c3e3d9a12, type: 3}
   m_Name: GraphicsQualityProfile
   m_EditorClassIdentifier: 
+  _veryLow:
+    LightingMinimumPixelsPerCell: 1
+    LightingMaximumTextureDimension: 384
+    LightingMaximumLightCount: 64
+    LightingMaximumRaySteps: 12
+    LightingUpdatesPerSecond: 15
+    LightingCascadeAtlasLimit: 384
+    RenderScale: 0.65
+    VSyncCount: 0
+    AntiAliasing: 0
   _low:
-    LightingPixelsPerCell: 1
+    LightingMinimumPixelsPerCell: 1
     LightingMaximumTextureDimension: 512
     LightingMaximumLightCount: 128
     LightingMaximumRaySteps: 20
     LightingUpdatesPerSecond: 20
-    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
-    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
-    BounceStrength: 0.3
     LightingCascadeAtlasLimit: 512
     RenderScale: 0.8
     VSyncCount: 0
     AntiAliasing: 0
   _medium:
-    LightingPixelsPerCell: 2
+    LightingMinimumPixelsPerCell: 2
     LightingMaximumTextureDimension: 768
     LightingMaximumLightCount: 256
     LightingMaximumRaySteps: 28
     LightingUpdatesPerSecond: 24
-    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
-    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
-    BounceStrength: 0.3
     LightingCascadeAtlasLimit: 768
     RenderScale: 0.9
     VSyncCount: 1
     AntiAliasing: 0
   _high:
-    LightingPixelsPerCell: 4
+    LightingMinimumPixelsPerCell: 4
     LightingMaximumTextureDimension: 1536
     LightingMaximumLightCount: 512
     LightingMaximumRaySteps: 40
     LightingUpdatesPerSecond: 60
-    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
-    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
-    BounceStrength: 0.35
     LightingCascadeAtlasLimit: 1536
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
+  _veryHigh:
+    LightingMinimumPixelsPerCell: 6
+    LightingMaximumTextureDimension: 1792
+    LightingMaximumLightCount: 768
+    LightingMaximumRaySteps: 52
+    LightingUpdatesPerSecond: 60
+    LightingCascadeAtlasLimit: 1792
+    RenderScale: 1
+    VSyncCount: 1
+    AntiAliasing: 0
   _ultra:
-    LightingPixelsPerCell: 8
+    LightingMinimumPixelsPerCell: 8
     LightingMaximumTextureDimension: 2048
     LightingMaximumLightCount: 1024
     LightingMaximumRaySteps: 64
     LightingUpdatesPerSecond: 60
-    EmptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
-    SolidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
-    BounceStrength: 0.4
     LightingCascadeAtlasLimit: 2048
     RenderScale: 1
     VSyncCount: 1

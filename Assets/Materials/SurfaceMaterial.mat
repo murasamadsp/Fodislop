@@ -70,7 +70,6 @@ Material:
     - _SrcBlend: 5
     - _SrcBlendAlpha: 1
     - _Surface: 1
-    - _UseLight2D: 0
     - _XRMotionVectorsPass: 1
     - _ZWrite: 0
     m_Colors:

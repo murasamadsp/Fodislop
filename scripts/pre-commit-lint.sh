@@ -53,10 +53,21 @@ for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     fi
 done
 
-# Find all generated Assembly-CSharp project files
-PROJECTS=$(find . -maxdepth 1 -name "Assembly-CSharp*.csproj")
+# Build the runtime project before editor projects. The editor assembly references
+# Assembly-CSharp.dll, so filesystem-dependent find order can otherwise validate
+# editor code against a stale runtime assembly and report false missing members.
+PROJECTS=()
+if [ -f "./Assembly-CSharp.csproj" ]; then
+    PROJECTS+=("./Assembly-CSharp.csproj")
+fi
 
-if [ -z "$PROJECTS" ]; then
+while IFS= read -r PROJECT_FILE; do
+    if [ "$PROJECT_FILE" != "./Assembly-CSharp.csproj" ]; then
+        PROJECTS+=("$PROJECT_FILE")
+    fi
+done < <(find . -maxdepth 1 -name "Assembly-CSharp*.csproj" | sort)
+
+if [ "${#PROJECTS[@]}" -eq 0 ]; then
     echo "Notice: No Assembly-CSharp*.csproj files found in repository root."
     echo "Skipping C# Roslyn analyzer checks."
     exit 0
@@ -67,7 +78,7 @@ HAS_WARNINGS=0
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-for PROJECT_FILE in $PROJECTS; do
+for PROJECT_FILE in "${PROJECTS[@]}"; do
     PROJECT_NAME=$(basename "$PROJECT_FILE")
     LOG_FILE="$TMP_DIR/$PROJECT_NAME.log"
 

@@ -32,6 +32,7 @@ namespace Fodinae
 
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
+        private readonly ConcurrentDictionary<string, byte> _missingAssets = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? _loopCts;
 
         public int PendingAssetCount => _pendingRequests.Count;
@@ -46,6 +47,7 @@ namespace Fodinae
         private IConnectionService _connectionService = null!;
 
         private bool _assetSubscriptionEstablished;
+        private IConnectionService? _subscribedConnection;
 
         public bool IsAssetSubscriptionEstablished => _assetSubscriptionEstablished;
 
@@ -60,6 +62,16 @@ namespace Fodinae
             _loopCts?.Cancel();
             _loopCts?.Dispose();
             _cache.Clear();
+            _missingAssets.Clear();
+
+            foreach (KeyValuePair<string, TaskCompletionSource<byte[]>> pending in _pendingRequests)
+            {
+                if (_pendingRequests.TryRemove(pending.Key, out TaskCompletionSource<byte[]>? request))
+                {
+                    request.TrySetException(
+                        new ObjectDisposedException(nameof(ClientAssetLoader)));
+                }
+            }
 
             UnsubscribeFromConnection();
         }
@@ -71,9 +83,17 @@ namespace Fodinae
         /// </summary>
         public void EnsureAssetSubscription()
         {
-            if (_assetSubscriptionEstablished)
+            if (ServiceLocator.IsInitialized)
             {
-                return;
+                _connectionService = ServiceLocator.Resolve<IConnectionService>() ??
+                    throw new InvalidOperationException(
+                        "ClientAssetLoader requires IConnectionService in the active resolver.");
+            }
+
+            if (_subscribedConnection != null)
+            {
+                _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+                _subscribedConnection = null;
             }
 
             if (_connectionService == null)
@@ -82,19 +102,25 @@ namespace Fodinae
                     "ClientAssetLoader requires IConnectionService before subscription.");
             }
 
+            // Rebind after domain reloads: the connection service may be a new
+            // instance while this loader and its boolean state survived.
             _connectionService.OnPacketReceived -= OnPacketReceived;
             _connectionService.OnPacketReceived += OnPacketReceived;
+            _subscribedConnection = _connectionService;
             _assetSubscriptionEstablished = true;
+            _missingAssets.Clear();
         }
 
         private void UnsubscribeFromConnection()
         {
-            if (!_assetSubscriptionEstablished || _connectionService == null)
+            if (_subscribedConnection == null)
             {
+                _assetSubscriptionEstablished = false;
                 return;
             }
 
-            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+            _subscribedConnection = null;
             _assetSubscriptionEstablished = false;
         }
 
@@ -103,7 +129,13 @@ namespace Fodinae
             CancellationToken cancellationToken = default,
             int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
-            return _cache.GetBytesAsync(filename, cancellationToken, timeoutSeconds);
+            string cleanFilename = filename.TrimStart('/').ToLowerInvariant();
+            if (IsAudioBank(cleanFilename) && _missingAssets.ContainsKey(cleanFilename))
+            {
+                return UniTask.FromResult<byte[]?>(null);
+            }
+
+            return _cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
         }
 
         public async UniTask<string> GetAssetPathAsync(
@@ -112,15 +144,33 @@ namespace Fodinae
             int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             var cleanFilename = filename.TrimStart('/').ToLowerInvariant();
+            if (IsAudioBank(cleanFilename) && _missingAssets.ContainsKey(cleanFilename))
+            {
+                throw new FileNotFoundException(
+                    $"Optional audio asset '{cleanFilename}' is unavailable.",
+                    cleanFilename);
+            }
+
             byte[]? bytes = await GetAssetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
             if (bytes == null || bytes.Length == 0 || !PersistentAssetCache.HasAsset(cleanFilename))
             {
+                if (IsAudioBank(cleanFilename))
+                {
+                    _missingAssets.TryAdd(cleanFilename, 0);
+                }
+
                 throw new FileNotFoundException(
                     $"Required asset '{cleanFilename}' could not be loaded or persisted.",
                     cleanFilename);
             }
 
             return PersistentAssetCache.GetAssetPath(cleanFilename);
+        }
+
+        public bool IsKnownMissing(string filename)
+        {
+            string cleanFilename = filename.TrimStart('/').ToLowerInvariant();
+            return _missingAssets.ContainsKey(cleanFilename);
         }
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
@@ -232,7 +282,15 @@ namespace Fodinae
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"[ClientAssetLoader] Error fetching asset {filename}: {ex.Message}");
+                    if (IsAudioBank(filename))
+                    {
+                        Debug.Log(
+                            $"[ClientAssetLoader] Optional audio asset '{filename}' unavailable; skipping.");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[ClientAssetLoader] Error fetching asset {filename}: {ex.Message}");
+                    }
                 }
             }
 
@@ -256,6 +314,11 @@ namespace Fodinae
                 }
             }
 
+            if (IsAudioBank(filename))
+            {
+                _missingAssets.TryAdd(filename, 0);
+            }
+
             return null;
         }
 
@@ -266,8 +329,23 @@ namespace Fodinae
                 return false;
             }
 
+            if (filename.EndsWith(".webp.bytes", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             string ext = Path.GetExtension(filename).ToLowerInvariant();
-            return string.IsNullOrEmpty(ext) || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp" || ext == ".tga" || ext == ".bmp";
+            return string.IsNullOrEmpty(ext) || ext == ".png" || ext == ".jpg" ||
+                ext == ".jpeg" || ext == ".webp" || ext == ".gif" ||
+                ext == ".exr";
+        }
+
+        private static bool IsAudioBank(string filename)
+        {
+            return string.Equals(
+                Path.GetExtension(filename),
+                ".bank",
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private async UniTaskVoid ProcessBatchLoop(CancellationToken ct)
@@ -324,43 +402,73 @@ namespace Fodinae
 
         private async void OnPacketReceived(ServerPacket obj)
         {
-            if (obj.Payload is RuntimeAssetPacket assetPacket)
+            if (obj.Payload is not RuntimeAssetPacket assetPacket)
             {
-                string filename = assetPacket.Filename.TrimStart('/').ToLowerInvariant();
-                if (_pendingRequests.TryRemove(filename, out var tcs))
+                return;
+            }
+
+            string filename;
+            try
+            {
+                filename = string.IsNullOrWhiteSpace(assetPacket.Filename)
+                    ? throw new InvalidDataException("Server returned an asset packet without a filename.")
+                    : assetPacket.Filename.TrimStart('/').ToLowerInvariant();
+            }
+            catch (Exception exception)
+            {
+                _connectionService.TriggerDisconnect(
+                    $"Invalid runtime asset packet: {exception.Message}");
+                return;
+            }
+
+            if (!_pendingRequests.TryRemove(filename, out var tcs))
+            {
+                return;
+            }
+
+            try
+            {
+                byte[]? contents = assetPacket.Contents;
+
+                // A conditional asset response may omit the body entirely or
+                // serialize it as an empty array. Both forms mean "use the
+                // cached representation" when the server supplied an ETag.
+                if ((contents == null || contents.Length == 0) &&
+                    !string.IsNullOrEmpty(assetPacket.ETag))
                 {
-                    if (assetPacket.Contents.Length == 0 && !string.IsNullOrEmpty(assetPacket.ETag))
+                    byte[]? cachedAsset = await GetAssetAsync(assetPacket.Filename).ConfigureAwait(false);
+                    if (cachedAsset == null || cachedAsset.Length == 0)
                     {
-                        var cachedAsset = await GetAssetAsync(assetPacket.Filename).ConfigureAwait(false);
-
-                        // // Старое поведение: подставлять пустой массив при отсутствии кэша (отключено).
-                        // tcs.TrySetResult(cachedAsset ?? Array.Empty<byte>());
-
-                        if (cachedAsset == null)
-                        {
-                            var noAssetEx = new Exception($"Asset '{filename}' is not cached and server returned empty contents");
-                            tcs.TrySetException(noAssetEx);
-                            return;
-                        }
-
-                        tcs.TrySetResult(cachedAsset);
+                        throw new InvalidDataException(
+                            $"Asset '{filename}' is not cached and server returned empty contents.");
                     }
-                    else
-                    {
-                        if (assetPacket.Contents == null || assetPacket.Contents.Length == 0)
-                        {
-                            var invalidPacket = new InvalidDataException(
-                                $"Server returned empty asset contents for '{filename}' without a usable ETag/cache entry.");
-                            tcs.TrySetException(invalidPacket);
-                            _connectionService.TriggerDisconnect(invalidPacket.Message);
-                            return;
-                        }
 
-                        var etag = Calculate(assetPacket.Contents);
-                        await SaveAssetAsync(assetPacket.Filename, assetPacket.Contents, etag ?? string.Empty).ConfigureAwait(false);
-                        tcs.TrySetResult(assetPacket.Contents);
-                    }
+                    tcs.TrySetResult(cachedAsset);
+                    return;
                 }
+
+                if (contents == null || contents.Length == 0)
+                {
+                    throw new InvalidDataException(
+                        $"Server returned empty asset contents for '{filename}' without a usable ETag/cache entry.");
+                }
+
+                string etag = Calculate(contents) ??
+                    throw new InvalidDataException(
+                        $"Asset '{filename}' produced no ETag after download.");
+                await SaveAssetAsync(assetPacket.Filename, contents, etag).ConfigureAwait(false);
+                _missingAssets.TryRemove(assetPacket.Filename, out _);
+                tcs.TrySetResult(contents);
+            }
+            catch (Exception exception)
+            {
+                tcs.TrySetException(exception);
+
+                // A missing optional asset is a request-scoped failure. It must
+                // propagate to the caller so required assets can fail fast, but
+                // it must not disconnect an otherwise healthy game session.
+                // Optional callers deliberately catch this and continue without
+                // their visual decoration.
             }
         }
 

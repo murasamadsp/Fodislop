@@ -32,12 +32,50 @@ namespace Fodinae
         private readonly LinkedList<int> _lruList;
         private readonly HashSet<int> _dirtyChunks;
         private readonly HashSet<int> _loadingChunks;
+        private readonly object _loadingLock = new object();
         private bool _disposed;
 
         private FileStream? _fileStream;
 
         public WorldLayer(string filePath, int WIDTH_CHUNKS, int HEIGHT_CHUNKS, int CHUNK_SIZE = 32, int maxRamChunks = 1000)
         {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new ArgumentException("World layer file path is required.", nameof(filePath));
+            }
+
+            if (WIDTH_CHUNKS <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(WIDTH_CHUNKS),
+                    WIDTH_CHUNKS,
+                    "World layer width must be positive.");
+            }
+
+            if (HEIGHT_CHUNKS <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(HEIGHT_CHUNKS),
+                    HEIGHT_CHUNKS,
+                    "World layer height must be positive.");
+            }
+
+            if (CHUNK_SIZE <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(CHUNK_SIZE),
+                    CHUNK_SIZE,
+                    "World layer chunk size must be positive.");
+            }
+
+            if (maxRamChunks <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxRamChunks),
+                    maxRamChunks,
+                    "World layer RAM cache size must be positive.");
+            }
+
             _filePath = filePath;
             _widthChunks = WIDTH_CHUNKS;
             _heightChunks = HEIGHT_CHUNKS;
@@ -67,6 +105,45 @@ namespace Fodinae
         public int MaxChunksInMemory => _maxChunksInMemory;
 
         public event Action<int, int, int, int>? ChunkLoaded;
+
+        public void NotifyRegionLoaded(int startX, int startY, int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(width),
+                    $"Loaded region must be positive: ({startX},{startY}) {width}x{height}.");
+            }
+
+            int worldWidth = checked(_widthChunks * _chunkSize);
+            int worldHeight = checked(_heightChunks * _chunkSize);
+            long endX = (long)startX + width;
+            long endY = (long)startY + height;
+            if (startX < 0 || startY < 0 || endX > worldWidth || endY > worldHeight)
+            {
+                string message = $"Loaded region ({startX},{startY}) {width}x{height} is outside " +
+                    $"the layer of {worldWidth}x{worldHeight} cells.";
+                throw new ArgumentOutOfRangeException(
+                    nameof(startX),
+                    message);
+            }
+
+            int firstChunkX = startX / _chunkSize;
+            int firstChunkY = startY / _chunkSize;
+            int lastChunkX = ((int)endX - 1) / _chunkSize;
+            int lastChunkY = ((int)endY - 1) / _chunkSize;
+            for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
+            {
+                for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
+                {
+                    ChunkLoaded?.Invoke(
+                        chunkX * _chunkSize,
+                        chunkY * _chunkSize,
+                        _chunkSize,
+                        _chunkSize);
+                }
+            }
+        }
 
         public T this[int x, int y]
         {
@@ -148,7 +225,14 @@ namespace Fodinae
 
             T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
 
-            if (chunk != null && !EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
+            if (chunk == null)
+            {
+                throw new InvalidDataException(
+                    $"World layer '{_filePath}' cannot write cell ({x}, {y}) " +
+                    $"because chunk {chunkIndex} is not loaded or persisted.");
+            }
+
+            if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
             {
                 chunk[localIndex] = value;
                 MarkDirty(chunkIndex);
@@ -180,6 +264,10 @@ namespace Fodinae
                     chunk = LoadChunkFromDisk(chunkIndex);
                     if (chunk == null)
                     {
+                        // Sparse layers are expected while the server streams
+                        // regions. A synchronous write materializes the chunk;
+                        // read-only streaming still keeps missing chunks
+                        // unloaded and visibly distinct from empty cells.
                         chunk = new T[_chunkArea];
                     }
 
@@ -201,9 +289,14 @@ namespace Fodinae
             }
             else
             {
-                if (!_loadingChunks.Contains(chunkIndex))
+                bool shouldStartLoad;
+                lock (_loadingLock)
                 {
-                    _loadingChunks.Add(chunkIndex);
+                    shouldStartLoad = _loadingChunks.Add(chunkIndex);
+                }
+
+                if (shouldStartLoad)
+                {
                     LoadChunkAsync(chunkIndex).Forget();
                 }
 
@@ -333,7 +426,10 @@ namespace Fodinae
             _lruIndexMap.Clear();
             _lruList.Clear();
             _dirtyChunks.Clear();
-            _loadingChunks.Clear();
+            lock (_loadingLock)
+            {
+                _loadingChunks.Clear();
+            }
 
             if (disposeFailure != null)
             {
@@ -448,25 +544,25 @@ namespace Fodinae
             catch (IOException ioEx)
             {
                 Debug.LogError($"[WorldLayer] Disk I/O error loading chunk {chunkIndex}: {ioEx.Message}");
-                _loadingChunks.Remove(chunkIndex);
+                ClearLoadingChunk(chunkIndex);
                 throw;
             }
             catch (ObjectDisposedException disposedEx)
             {
                 Debug.LogWarning($"[WorldLayer] Stream disposed while loading chunk {chunkIndex}: {disposedEx.Message}");
-                _loadingChunks.Remove(chunkIndex);
+                ClearLoadingChunk(chunkIndex);
                 throw;
             }
             catch (UnauthorizedAccessException authEx)
             {
                 Debug.LogError($"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
-                _loadingChunks.Remove(chunkIndex);
+                ClearLoadingChunk(chunkIndex);
                 throw;
             }
             catch (OutOfMemoryException)
             {
                 Debug.LogError($"[WorldLayer] Out of memory while loading chunk {chunkIndex}.");
-                _loadingChunks.Remove(chunkIndex);
+                ClearLoadingChunk(chunkIndex);
                 throw;
             }
 
@@ -474,7 +570,7 @@ namespace Fodinae
 
             if (_disposed)
             {
-                _loadingChunks.Remove(chunkIndex);
+                ClearLoadingChunk(chunkIndex);
                 return;
             }
 
@@ -483,11 +579,11 @@ namespace Fodinae
             // do not append a second LRU node for the same chunk.
             if (_loadedChunks.ContainsKey(chunkIndex))
             {
-                _loadingChunks.Remove(chunkIndex);
+                ClearLoadingChunk(chunkIndex);
                 return;
             }
 
-            _loadingChunks.Remove(chunkIndex);
+            ClearLoadingChunk(chunkIndex);
 
             // A sparse map is expected while the server is streaming regions.
             // Missing data is not an empty chunk: keep it unloaded so consumers
@@ -506,6 +602,14 @@ namespace Fodinae
                 chunkY * _chunkSize,
                 _chunkSize,
                 _chunkSize);
+        }
+
+        private void ClearLoadingChunk(int chunkIndex)
+        {
+            lock (_loadingLock)
+            {
+                _loadingChunks.Remove(chunkIndex);
+            }
         }
 
         private void AddToCache(int chunkIndex, T[] chunk)
@@ -595,14 +699,16 @@ namespace Fodinae
         {
             if (_fileStream == null)
             {
-                return;
+                throw new ObjectDisposedException(
+                    nameof(WorldLayer<T>),
+                    $"World layer '{_filePath}' has no open file stream.");
             }
 
             lock (_ioLock)
             {
                 if (_disposed)
                 {
-                    return;
+                    throw new ObjectDisposedException(nameof(WorldLayer<T>));
                 }
 
                 _fileStream.Seek(0, SeekOrigin.End);

@@ -7,7 +7,6 @@ using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
-using Fodinae.Player.Input;
 using Fodinae.Player.Interfaces;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -45,6 +44,7 @@ namespace Fodinae.Player.Logic
         private float _lastMoveTime;
         private float _lastDigTime;
         private Direction? _lastSentDirection;
+        private bool _movementValidationFailed;
         [Inject]
         private IWorldDataStorage? _storage;
 
@@ -56,6 +56,9 @@ namespace Fodinae.Player.Logic
 
         [Inject]
         private IMapDataProvider? _mapDataProvider;
+
+        [Inject]
+        private IConnectionService? _connectionService;
 
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
@@ -96,7 +99,9 @@ namespace Fodinae.Player.Logic
                 }
             }
 
-            _input = GetComponent<IPlayerInput>() ?? gameObject.AddComponent<PlayerInputHandler>();
+            _input = GetComponent<IPlayerInput>() ??
+                throw new InvalidOperationException(
+                    "PlayerMovementController requires an IPlayerInput component on the player prefab.");
         }
 
         protected void OnDestroy()
@@ -132,7 +137,24 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            ApplyMovement();
+            if (_movementValidationFailed)
+            {
+                return;
+            }
+
+            try
+            {
+                ApplyMovement();
+            }
+            catch (InvalidOperationException exception)
+            {
+                _movementValidationFailed = true;
+                Debug.LogError(
+                    $"[PlayerMovementController] Authoritative movement metadata is invalid: {exception.Message}");
+                _connectionService?.TriggerDisconnect(exception.Message);
+                return;
+            }
+
             HandleDigInput();
 
             if (_input.WantsToToggleAutoDig)
@@ -179,6 +201,16 @@ namespace Fodinae.Player.Logic
         public void Initialize(uint botId)
         {
             BotId = botId;
+            HasServerPosition = false;
+            IsGameplayVisible = false;
+            _lastSentDirection = null;
+            _lastMoveTime = 0f;
+            _lastDigTime = 0f;
+            foreach (SpriteRenderer renderer in _playerRenderers)
+            {
+                renderer.enabled = false;
+            }
+
             if (_robot != null)
             {
                 _robot.Initialize(botId);

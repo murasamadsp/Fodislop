@@ -12,6 +12,9 @@ using Fodinae.World.Terrain;
 using TMPro;
 using UnityEngine;
 using VContainer;
+using ArgumentOutOfRangeException = System.ArgumentOutOfRangeException;
+using InvalidOperationException = System.InvalidOperationException;
+using OperationCanceledException = System.OperationCanceledException;
 
 namespace Fodinae.Game
 {
@@ -257,7 +260,7 @@ namespace Fodinae.Game
 
         protected void Start()
         {
-            InitializeDynamicLightSettings();
+            TryInitializeDynamicLightSettings();
 
             Vector3 snappedPos = new Vector3(
                 Mathf.Floor(transform.position.x) + 0.5f,
@@ -269,6 +272,9 @@ namespace Fodinae.Game
             _smoothPosition = snappedPos;
             _smoothAngle = transform.eulerAngles.z;
 
+            // This is an intentional offline/DummyConnection identity skin for
+            // the local player, not an implicit rendering fallback. Keep it in
+            // the asset contract; it must never be removed during default cleanup.
             if (string.IsNullOrEmpty(_skinPath) && IsLocalPlayer)
             {
                 _skinPath = "Skin/bee.png";
@@ -290,6 +296,8 @@ namespace Fodinae.Game
 
         protected void Update()
         {
+            TryInitializeDynamicLightSettings();
+
             if (_tentacles == null)
             {
                 _tentaclesSettled = true;
@@ -484,6 +492,21 @@ namespace Fodinae.Game
             _dynamicLightSettingsLoaded = lighting?.IsRuntimeConfigReady == true;
         }
 
+        private void TryInitializeDynamicLightSettings()
+        {
+            if (_dynamicLightSettingsLoaded)
+            {
+                return;
+            }
+
+            if (_projectDefaults == null)
+            {
+                return;
+            }
+
+            InitializeDynamicLightSettings();
+        }
+
         private void CreateTentacles(Texture2D tailTexture)
         {
             ClearTentacles();
@@ -662,7 +685,10 @@ namespace Fodinae.Game
                 1 => 180f,
                 2 => 90f,
                 3 => 0f,
-                _ => 0f,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(rotation),
+                    rotation,
+                    $"[{TAG}] Unsupported robot rotation value for bot {_botId}."),
             };
         }
 
@@ -672,7 +698,31 @@ namespace Fodinae.Game
             _cts?.Dispose();
             _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
+            if (!ServiceLocator.IsInitialized)
+            {
+                WaitForServicesAndLoadMetadataAsync(_cts.Token).Forget();
+                return;
+            }
+
             LoadMetadataAssetsAsync(_cts.Token).Forget();
+        }
+
+        private async UniTaskVoid WaitForServicesAndLoadMetadataAsync(CancellationToken token)
+        {
+            try
+            {
+                await UniTask.WaitUntil(
+                    () => ServiceLocator.IsInitialized,
+                    cancellationToken: token);
+                if (!token.IsCancellationRequested)
+                {
+                    LoadMetadataAssetsAsync(token).Forget();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Object teardown or domain reload cancelled the deferred load.
+            }
         }
 
         private async UniTaskVoid LoadMetadataAssetsAsync(CancellationToken token)
@@ -694,19 +744,24 @@ namespace Fodinae.Game
                 return;
             }
 
-            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            if (loader == null)
+            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+                throw new InvalidOperationException(
+                    $"{TAG} Asset loader is required for skin load on bot {_botId}.");
+            Texture2D? skinTexture = await TryLoadOptionalTextureAsync(
+                loader,
+                _skinPath,
+                token);
+            if (token.IsCancellationRequested)
             {
-                Debug.LogWarning($"{TAG} ClientAssetLoader not available for skin load on bot {_botId}");
                 return;
             }
 
-            var skinTexture = await loader.GetTextureAsync(_skinPath, token);
-            if (token.IsCancellationRequested || skinTexture == null || _spriteRenderer == null)
+            SpriteRenderer spriteRenderer = _spriteRenderer ?? throw new InvalidOperationException(
+                $"{TAG} SpriteRenderer is missing for bot {_botId} skin load.");
+            if (skinTexture == null)
             {
                 return;
             }
-
 
             if (_skinSprite != null)
             {
@@ -714,7 +769,7 @@ namespace Fodinae.Game
             }
 
             _skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
-            _spriteRenderer.sprite = _skinSprite;
+            spriteRenderer.sprite = _skinSprite;
         }
 
         private async UniTaskVoid LoadTailAsync(CancellationToken token)
@@ -725,28 +780,25 @@ namespace Fodinae.Game
                 return;
             }
 
-            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            if (loader == null)
-            {
-                Debug.LogWarning($"{TAG} ClientAssetLoader not available for tail load on bot {_botId}");
-                return;
-            }
-
-            var tailTexture = await loader.GetTextureAsync(_tailPath, token);
+            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+                throw new InvalidOperationException(
+                    $"{TAG} Asset loader is required for tail load on bot {_botId}.");
+            Texture2D? tailTexture = await TryLoadOptionalTextureAsync(
+                loader,
+                _tailPath,
+                token);
             if (token.IsCancellationRequested)
             {
                 return;
             }
 
-            if (tailTexture != null)
+            if (tailTexture == null)
             {
-                CreateTentacles(tailTexture);
-            }
-            else
-            {
-                Debug.LogWarning($"{TAG} Tail texture not found for bot {_botId}: {_tailPath}");
                 ClearTentacles();
+                return;
             }
+
+            CreateTentacles(tailTexture);
         }
 
         private async UniTaskVoid LoadClanAsync(CancellationToken token)
@@ -756,15 +808,22 @@ namespace Fodinae.Game
                 return;
             }
 
-            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            if (loader == null)
+            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+                throw new InvalidOperationException(
+                    $"{TAG} Asset loader is required for clan load on bot {_botId}.");
+            string clanPath = $"/Clan/{_clanId}";
+            Texture2D? clanTexture = await TryLoadOptionalTextureAsync(
+                loader,
+                clanPath,
+                token);
+            if (token.IsCancellationRequested)
             {
-                Debug.LogWarning($"{TAG} ClientAssetLoader not available for clan load on bot {_botId}");
                 return;
             }
 
-            var clanTexture = await loader.GetTextureAsync($"/Clan/{_clanId}", token);
-            if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
+            SpriteRenderer clanRenderer = _clanRenderer ?? throw new InvalidOperationException(
+                $"{TAG} Clan SpriteRenderer is missing for bot {_botId}.");
+            if (clanTexture == null)
             {
                 return;
             }
@@ -776,7 +835,28 @@ namespace Fodinae.Game
             }
 
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
-            _clanRenderer.sprite = _clanSprite;
+            clanRenderer.sprite = _clanSprite;
+        }
+
+        private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
+            IAssetLoader loader,
+            string filename,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await loader.GetTextureAsync(filename, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogWarning(
+                    $"{TAG} Optional texture '{filename}' was skipped: {exception.Message}");
+                return null;
+            }
         }
 
 #if UNITY_EDITOR

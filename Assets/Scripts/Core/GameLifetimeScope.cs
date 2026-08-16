@@ -9,6 +9,7 @@ using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Networking.Connection.Client;
 using Fodinae.Player.Logic;
+using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Inventory.Interfaces;
@@ -37,6 +38,9 @@ namespace Fodinae.Core
 
             IProjectDefaults projectDefaults = ProjectDefaultsLoader.LoadRequired();
             builder.RegisterInstance(projectDefaults);
+            GraphicsQualityProfile graphicsQualityProfile =
+                GraphicsQualityProfileLoader.LoadRequired();
+            builder.RegisterInstance(graphicsQualityProfile);
 
             UIDocument? uiDocument = FindAnyObjectByType<UIDocument>(
                 FindObjectsInactive.Include);
@@ -49,7 +53,6 @@ namespace Fodinae.Core
             builder.RegisterInstance(uiDocument);
 
             var newStorage = new MapStorage();
-            newStorage.SetAsPending();
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
 
             builder.RegisterBuildCallback(_ => ServiceLocator.Initialize(_));
@@ -59,6 +62,7 @@ namespace Fodinae.Core
             builder.Register<InventoryModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<PlayerStatsModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<LightingGeometryRegistry>(Lifetime.Singleton);
+            builder.Register<GraphicsSettingsController>(Lifetime.Singleton);
 
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
@@ -101,6 +105,7 @@ namespace Fodinae.Core
             RegisterManager<DiagnosticRunner>(builder);
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
+            RegisterManager<SurfaceRenderer>(builder);
 
             builder.RegisterBuildCallback(InjectSceneBehaviours);
 

@@ -14,6 +14,7 @@ public static class ProjectRuntimeContracts
     public static class ResourcePaths
     {
         public const string Configuration = "Configuration";
+        public const string GraphicsQualityProfile = "GraphicsQualityProfile";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
         public const string MainMenuUxml = "UI/MainMenu";

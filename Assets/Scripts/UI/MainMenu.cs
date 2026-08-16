@@ -39,6 +39,7 @@ namespace Fodinae
         {
             if (_built)
             {
+                RebindGameManager();
                 SubscribePlayButton();
                 return;
             }
@@ -95,6 +96,14 @@ namespace Fodinae
             Debug.Log($"[MainMenu] UI BUILT: rootChildren={_root.childCount}, panel={(_doc.panelSettings != null ? _doc.panelSettings.name : "NULL")}");
         }
 
+        protected void Update()
+        {
+            if (_built && _gameManager == null && ServiceLocator.IsInitialized)
+            {
+                RebindGameManager();
+            }
+        }
+
         protected void OnDisable()
         {
             if (_playButtonSubscribed && _playButton != null)
@@ -113,6 +122,35 @@ namespace Fodinae
 
             _playButton.clicked += OnPlayButtonClicked;
             _playButtonSubscribed = true;
+        }
+
+        private void RebindGameManager()
+        {
+            if (!ServiceLocator.IsInitialized)
+            {
+                if (_gameManager != null)
+                {
+                    _gameManager.OnWorldLoaded -= OnWorldLoaded;
+                    _gameManager = null;
+                }
+
+                return;
+            }
+
+            GameManager? current = ServiceLocator.Resolve<GameManager>();
+            if (current == null)
+            {
+                return;
+            }
+
+            if (_gameManager != null && !ReferenceEquals(_gameManager, current))
+            {
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            }
+
+            _gameManager = current;
+            _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            _gameManager.OnWorldLoaded += OnWorldLoaded;
         }
 
         protected void OnDestroy()

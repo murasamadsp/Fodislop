@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.IO;
 using System.Text;
 using Fodinae.Core;
@@ -71,7 +72,8 @@ namespace Fodinae
                 return;
             }
 
-            var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            MapStorage ms = ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException("MapStorage is unavailable for diagnostics.");
             var lighting = TerrariaLightingEngine.Instance;
             string line =
                 $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
@@ -81,7 +83,7 @@ namespace Fodinae
                 $"mono={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1}MB " +
                 $"gc={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1}MB " +
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
-                $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0} " +
+                $"chunks={ms.CellLayer?.GetLoadedCount() ?? 0} " +
                 $"lightingSolves={lighting?.SolveCount ?? 0} " +
                 $"lightingContactAOSolves={lighting?.ContactOcclusionSolveCount ?? 0} " +
                 $"dynamicLights={lighting?.DynamicLightCount ?? 0} " +
@@ -130,11 +132,11 @@ namespace Fodinae
             W(sb, "PacketHandler", ServiceLocator.Resolve<PacketHandler>());
 
             sb.AppendLine("\n[MAP]");
-            var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            sb.AppendLine(ms != null
-                ? $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}"
-                : "  NULL");
-            if (ms?.CellLayer != null)
+            MapStorage ms = ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException("MapStorage is unavailable for diagnostics.");
+            sb.AppendLine(
+                $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}");
+            if (ms.CellLayer != null)
             {
                 sb.AppendLine($"  CellChunks loaded={ms.CellLayer.GetLoadedCount()} dirty={ms.CellLayer.GetDirtyCount()} max={ms.CellLayer.MaxChunksInMemory}");
             }

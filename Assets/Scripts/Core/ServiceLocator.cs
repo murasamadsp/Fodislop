@@ -20,7 +20,7 @@ namespace Fodinae.Core
 
         public static void Initialize(IObjectResolver resolver)
         {
-            _resolver = resolver;
+            _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
         }
 
         /// <summary>
@@ -31,7 +31,7 @@ namespace Fodinae.Core
         {
             if (instance == null)
             {
-                return;
+                throw new ArgumentNullException(nameof(instance));
             }
 
             if (_resolver == null)

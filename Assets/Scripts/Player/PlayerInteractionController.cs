@@ -16,6 +16,7 @@ namespace Fodinae.Player
     public class PlayerInteractionController : MonoBehaviour
     {
         private Camera? _mainCamera;
+        private UIDocument[] _uiDocuments = [];
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
         private IMapDataProvider _mapManager = null!;
@@ -27,6 +28,7 @@ namespace Fodinae.Player
         protected void Awake()
         {
             _mainCamera = Camera.main;
+            RefreshUiDocuments();
             if (Keyboard.current != null)
             {
                 _cachedAllKeys = Keyboard.current.allKeys;
@@ -96,11 +98,20 @@ namespace Fodinae.Player
 
         // Клик по миру шлётся только если указатель не над UI-элементом.
         // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
-        private static bool IsPointerOverUI(Vector2 mousePos)
+        private bool IsPointerOverUI(Vector2 mousePos)
         {
-            var docs = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
-            foreach (var doc in docs)
+            if (_uiDocuments.Length == 0 || !HasLiveUiDocument())
             {
+                RefreshUiDocuments();
+            }
+
+            foreach (UIDocument doc in _uiDocuments)
+            {
+                if (doc == null || !doc.isActiveAndEnabled)
+                {
+                    continue;
+                }
+
                 var root = doc.rootVisualElement;
                 if (root?.panel == null)
                 {
@@ -117,6 +128,24 @@ namespace Fodinae.Player
             }
 
             return false;
+        }
+
+        private bool HasLiveUiDocument()
+        {
+            for (int i = 0; i < _uiDocuments.Length; i++)
+            {
+                if (_uiDocuments[i] != null && _uiDocuments[i].isActiveAndEnabled)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void RefreshUiDocuments()
+        {
+            _uiDocuments = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
         }
 
         private void HandleKeyboardInput()

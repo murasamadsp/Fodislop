@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -31,7 +32,7 @@ namespace Fodinae.World.Terrain
         public void BuildFull(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int minX, int minY, int meshWidth, int meshHeight, int worldWidth, int worldHeight,
             List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
-            MapManager mapManager, WorldTextureManager textureManager)
+            MapManager mapManager, ITextureService textureManager)
         {
             int vIdx = 0;
             for (int x = 0; x < meshWidth; x++)
@@ -48,7 +49,7 @@ namespace Fodinae.World.Terrain
 
         private void FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int worldWidth, int worldHeight, bool isBackground, ref int vIdx, List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
-            MapManager mapManager, WorldTextureManager textureManager)
+            MapManager mapManager, ITextureService textureManager)
         {
             if (unityY < 0 || unityY >= worldHeight)
             {
@@ -88,14 +89,33 @@ namespace Fodinae.World.Terrain
             int atlasIndex = data.AtlasIndex;
             if (atlasIndex < 0 || atlasIndex >= subMeshIndices.Length)
             {
-                vIdx += 4;
-                return;
+                if (subMeshIndices.Length == 0 || atlases.Count == 0)
+                {
+                    vIdx += 4;
+                    return;
+                }
+
+                // Keep an untextured cell in the first available submesh. The
+                // shader identifies the zero atlas rect and draws the explicit
+                // missing-texture diagnostic instead of dropping the geometry.
+                atlasIndex = 0;
             }
 
-            if (data.AtlasRect.z <= 0f || data.AtlasRect.w <= 0f || data.UVTileSize <= 0f)
+            bool hasTexture = data.AtlasRect.z > 0f &&
+                data.AtlasRect.w > 0f &&
+                data.UVTileSize > 0f;
+            if (!hasTexture)
             {
-                vIdx += 4;
-                return;
+                // Missing server textures are an explicit diagnostic state. Keep
+                // the cell in the mesh so the world remains spatially truthful;
+                // Terrain.shader renders its deterministic diagnostic fill.
+                atlasIndex = 0;
+                data.AtlasRect = Vector4.zero;
+                data.UVTileSize = 1f / atlases[0].Size;
+                data.Animation = CellAnimationType.None;
+                data.AnimationSpeed = 0f;
+                data.AnimationFrameCount = 1;
+                data.FrameHeightTiles = 1f;
             }
 
             float zOffset = isBackground ? 0.1f : 0.0f;
@@ -159,6 +179,13 @@ namespace Fodinae.World.Terrain
             Vector4 atlasRect = data.AtlasRect;
             bool useFallback = useColorLod || atlasRect.z < 0.0001f;
             Color color = useFallback ? data.MinimapColor : Color.white;
+            if (atlasRect.z < 0.0001f)
+            {
+                // The diagnostic shader branch needs a visible coverage value
+                // even when the server supplied no minimap color.
+                color.a = 1f;
+            }
+
             float animOffset = 0f;
             if (!useFallback && data.Animation == CellAnimationType.Blinking)
             {
@@ -195,9 +222,12 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx].UV3 = worldPosVec;
             _vertexBuffer[vIdx].UV4 = animDataVec;
             bool isGlowing = (data.Properties & CellConfigProperties.Glowing) != 0;
-            Color materialColor = data.MinimapColor.maxColorComponent > 0.05f
-                ? data.MinimapColor
-                : new Color(0.5f, 0.5f, 0.5f, 1f);
+
+            // The server-provided minimap color is also the material albedo
+            // used by the lighting field. Do not silently turn a missing or
+            // black server color into gray; that hides broken cell metadata
+            // and makes lighting appear to work with invented input.
+            Color materialColor = data.MinimapColor;
             Color32 materialColor32 = materialColor;
             int packedLightingColor = materialColor32.r |
                 (materialColor32.g << 8) |

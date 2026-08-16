@@ -7,9 +7,12 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-    [Serializable, VolumeComponentMenu("Fodinae/Eigengrau")]
+    [Serializable]
+    [VolumeComponentMenu("Fodinae/Eigengrau")]
     public class EigengrauComponent : VolumeComponent, IPostProcessComponent
     {
+        // Keep the serialized Volume parameter names stable for existing profiles.
+#pragma warning disable SA1307
         [Tooltip("Strength of fine animated film grain in near-black areas. This is the effect's only strength control.")]
         public ClampedFloatParameter intensity = PostProcessDefaults.EigengrauIntensity();
 
@@ -27,5 +30,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;
+#pragma warning restore SA1307
     }
 }

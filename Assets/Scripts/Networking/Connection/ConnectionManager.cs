@@ -161,7 +161,7 @@ namespace Fodinae.Networking.Connection
             ClearPendingPackets();
 
             _mapManager.ResetWorldState();
-            (_worldStorage as MapStorage)?.Dispose();
+            _worldStorage.Dispose();
         }
 
         public void TriggerDisconnect(string reason)
@@ -241,7 +241,7 @@ namespace Fodinae.Networking.Connection
             ClearPendingPackets();
 
             _mapManager.ResetWorldState();
-            (_worldStorage as MapStorage)?.Dispose();
+            _worldStorage.Dispose();
             _gameManager?.DeauthorizeUI();
 
             if (_shouldAutoReconnect && !_serverInitiatedDisconnect)

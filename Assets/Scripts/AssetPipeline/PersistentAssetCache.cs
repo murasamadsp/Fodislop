@@ -128,6 +128,21 @@ namespace Fodinae
             return File.Exists(GetAssetPath(filename));
         }
 
+        public static void RemoveAsset(string filename)
+        {
+            string assetPath = GetAssetPath(filename);
+            string etagPath = GetETagPath(filename);
+            if (File.Exists(assetPath))
+            {
+                File.Delete(assetPath);
+            }
+
+            if (File.Exists(etagPath))
+            {
+                File.Delete(etagPath);
+            }
+        }
+
         // ═══════════════════════════════════════════════════════════
         //  Private Helpers
         // ═══════════════════════════════════════════════════════════

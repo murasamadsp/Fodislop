@@ -438,9 +438,11 @@ namespace Fodinae.Game
             {
                 // Task canceled cleanly
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogError($"[ServerAudioEvent] Failed to load visual for {_effectType}: {ex.Message}");
+                // Server audio may reference an optional visual asset. A
+                // missing visual must not turn a valid audio event into a
+                // blocking error or a noisy gameplay log.
                 MarkVisualCompleted();
             }
         }

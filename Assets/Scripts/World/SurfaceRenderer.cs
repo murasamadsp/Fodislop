@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.World.Lighting;
 using UnityEngine;
@@ -14,39 +15,37 @@ namespace Fodinae.World
     public class SurfaceRenderer : MonoBehaviour, ILightingGeometryContributor
     {
         private const string SurfaceShaderName = ProjectRuntimeContracts.ShaderNames.WorldSurface;
+        private const string TransitObjectName = "SurfaceTransit";
+        private const string PerspectiveObjectName = "SurfacePerspective";
+        private const string RedRockObjectName = "SurfaceRedrock";
+        private const string RedRockKeyword = "FODINAE_SURFACE_REDROCK";
+        private const string TransitKeyword = "FODINAE_SURFACE_TRANSIT";
+        private const string PerspectiveKeyword = "FODINAE_SURFACE_PERSPECTIVE";
         private const float TransitHeight = 2f;
         private const float PerspectiveHeight = 2f;
         private const float TransitTileWidth = 32f;
         private const float PerspectiveTileWidth = 5f;
-        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
-        private static readonly int WrapBaseMapId = Shader.PropertyToID("_WrapBaseMap");
-        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-        private static readonly int EmissionStrengthId = Shader.PropertyToID("_EmissionStrength");
-        private static readonly int OccupancyId = Shader.PropertyToID("_Occupancy");
+        private const float BoundaryOverscan = 2f;
         private static readonly int[] QuadTriangles =
         [
             0, 1, 2, 3, 2, 1,
         ];
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+        private static readonly int EmissionStrengthId = Shader.PropertyToID("_EmissionStrength");
+        private static readonly int OccupancyId = Shader.PropertyToID("_Occupancy");
+        private static readonly int BaseMapTileCountId =
+            Shader.PropertyToID("_BaseMapTileCount");
+        private static readonly int WorldSizeId = Shader.PropertyToID("_WorldSize");
 
         [Header("Local Assets")]
         [SerializeField]
         private Texture2D? _transitTexture;
         [SerializeField]
         private Texture2D? _perspectiveTexture;
+        [SerializeField]
+        private Texture2D? _redRockTexture;
 
-        [Header("Lighting")]
-        [SerializeField]
-        [ColorUsage(showAlpha: false, hdr: true)]
-        private Color _transitEmissionColor = new(1f, 0.7f, 0.35f, 1f);
-        [SerializeField]
-        [Range(0f, 8f)]
-        private float _transitEmissionStrength = 0.35f;
-        [SerializeField]
-        [ColorUsage(showAlpha: false, hdr: true)]
-        private Color _perspectiveEmissionColor = new(0.45f, 0.65f, 1f, 1f);
-        [SerializeField]
-        [Range(0f, 8f)]
-        private float _perspectiveEmissionStrength = 0.12f;
         [Header("Rendering")]
         [SerializeField]
         private int _transitSortingOrder = -501;
@@ -54,17 +53,30 @@ namespace Fodinae.World
         private int _perspectiveSortingOrder = -502;
 
         [Inject]
-        private MapManager? _mapManager;
+        private MapManager _mapManager = null!;
         [Inject]
-        private LightingGeometryRegistry? _lightingGeometryRegistry;
+        private LightingGeometryRegistry _lightingGeometryRegistry = null!;
+        [Inject]
+        private IClientConfigManager _clientConfigManager = null!;
+
+        private readonly Vector3[] _boundaryVertices = new Vector3[12];
+        private readonly Vector2[] _boundaryUv = new Vector2[12];
+        private readonly Vector2[] _boundaryLightingData = new Vector2[12];
+        private readonly int[] _boundaryTriangles = new int[18];
+        private readonly Vector3[] _quadVertices = new Vector3[4];
+        private readonly Vector2[] _quadUv = new Vector2[4];
+        private readonly Vector2[] _quadLightingData = new Vector2[4];
 
         private Camera? _mainCamera;
         private Mesh? _transitMesh;
         private Mesh? _perspectiveMesh;
+        private Mesh? _redRockMesh;
         private Mesh? _transitLightingMesh;
         private Mesh? _perspectiveLightingMesh;
+        private Mesh? _redRockLightingMesh;
         private Material? _transitMaterial;
         private Material? _perspectiveMaterial;
+        private Material? _redRockMaterial;
         private ulong _lightingGeometryRevision = 1;
         private int _lastWorldWidth = int.MinValue;
         private int _lastWorldHeight = int.MinValue;
@@ -74,26 +86,125 @@ namespace Fodinae.World
         private bool _initialized;
         private bool _registered;
 
+        private enum SurfaceKind
+        {
+            RedRock,
+            Transit,
+            Perspective,
+        }
+
         public ulong LightingGeometryRevision => _lightingGeometryRevision;
 
-        public void SetLocalAssets(Texture2D? transitTexture, Texture2D? perspectiveTexture)
+        public void ApplyClientConfig()
+        {
+            if (!_initialized)
+            {
+                return;
+            }
+
+            ClientConfig config = _clientConfigManager.Config ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer requires an initialized ClientConfig.");
+            Material transitMaterial = _transitMaterial ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer transit material is not initialized.");
+            Material perspectiveMaterial = _perspectiveMaterial ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer perspective material is not initialized.");
+            Material redRockMaterial = _redRockMaterial ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer redrock material is not initialized.");
+
+            ApplyMaterialConfig(
+                transitMaterial,
+                config.TransitEmissionColor,
+                config.TransitEmissionStrength,
+                config.SurfaceOccupancy);
+            ApplyMaterialConfig(
+                perspectiveMaterial,
+                config.PerspectiveEmissionColor,
+                config.PerspectiveEmissionStrength,
+                occupancy: 0f);
+            ApplyMaterialConfig(
+                redRockMaterial,
+                Color.clear,
+                emissionStrength: 0f,
+                occupancy: 1f);
+            _lightingGeometryRevision++;
+        }
+
+        public void SetLocalAssets(
+            Texture2D? transitTexture,
+            Texture2D? perspectiveTexture,
+            Texture2D? redRockTexture)
         {
             if (_initialized)
             {
+                if (_transitTexture == transitTexture &&
+                    _perspectiveTexture == perspectiveTexture &&
+                    _redRockTexture == redRockTexture)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException(
                     "Surface assets cannot be replaced after SurfaceRenderer initialization.");
             }
 
             _transitTexture = transitTexture;
             _perspectiveTexture = perspectiveTexture;
+            _redRockTexture = redRockTexture;
+        }
+
+        public void RenderLightingFields(
+            CommandBuffer commandBuffer,
+            in LightingFieldContext context)
+        {
+            if (!_initialized || _transitLightingMesh == null ||
+                _perspectiveLightingMesh == null || _redRockLightingMesh == null ||
+                _transitMaterial == null || _perspectiveMaterial == null ||
+                _redRockMaterial == null)
+            {
+                throw new InvalidOperationException(
+                    "Surface lighting fields cannot be rendered before surface initialization.");
+            }
+
+            Rect lightingRect = Rect.MinMaxRect(
+                context.WorldRect.x,
+                context.WorldRect.y,
+                context.WorldRect.x + context.WorldRect.z,
+                context.WorldRect.y + context.WorldRect.w);
+            UpdateBoundaryMesh(
+                _redRockLightingMesh,
+                lightingRect,
+                _mapManager.WorldWidth,
+                _mapManager.WorldHeight);
+            UpdateTransitMesh(
+                _transitLightingMesh,
+                lightingRect,
+                _mapManager.WorldHeight);
+            UpdatePerspectiveMesh(
+                _perspectiveLightingMesh,
+                lightingRect,
+                _mapManager.WorldHeight);
+
+            DrawLightingMesh(commandBuffer, _redRockLightingMesh, _redRockMaterial);
+            DrawLightingMesh(commandBuffer, _perspectiveLightingMesh, _perspectiveMaterial);
+            DrawLightingMesh(commandBuffer, _transitLightingMesh, _transitMaterial);
+        }
+
+        protected void OnEnable()
+        {
+            if (_initialized && !_registered && _lightingGeometryRegistry != null)
+            {
+                _lightingGeometryRegistry.Register(this);
+                _registered = true;
+            }
         }
 
         protected void LateUpdate()
         {
-            MapManager mapManager = _mapManager ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer requires MapManager injection.");
-            if (!mapManager.IsWorldInitialized)
+            if (!_mapManager.IsWorldInitialized)
             {
                 return;
             }
@@ -103,8 +214,8 @@ namespace Fodinae.World
             Camera mainCamera = _mainCamera ??= Camera.main ??
                 throw new InvalidOperationException(
                     "SurfaceRenderer requires a tagged Main Camera.");
-            if (_lastWorldWidth == mapManager.WorldWidth &&
-                _lastWorldHeight == mapManager.WorldHeight &&
+            if (_lastWorldWidth == _mapManager.WorldWidth &&
+                _lastWorldHeight == _mapManager.WorldHeight &&
                 _lastCameraPosition == mainCamera.transform.position &&
                 Mathf.Approximately(_lastCameraOrthoSize, mainCamera.orthographicSize) &&
                 Mathf.Approximately(_lastCameraAspect, mainCamera.aspect))
@@ -112,57 +223,39 @@ namespace Fodinae.World
                 return;
             }
 
-            RebuildBands(mapManager.WorldWidth, mapManager.WorldHeight, mainCamera);
+            RebuildVisibleGeometry(
+                _mapManager.WorldWidth,
+                _mapManager.WorldHeight,
+                mainCamera);
         }
 
-        public void RenderLightingFields(
-            CommandBuffer commandBuffer,
-            in LightingFieldContext context)
+        protected void OnDisable()
         {
-            if (!_initialized || _transitLightingMesh == null ||
-                _perspectiveLightingMesh == null ||
-                _transitMaterial == null || _perspectiveMaterial == null)
-            {
-                throw new InvalidOperationException(
-                    "Surface lighting fields cannot be rendered before surface initialization.");
-            }
-
-            int transitPass = RequireLightingPass(_transitMaterial);
-            int perspectivePass = RequireLightingPass(_perspectiveMaterial);
-            commandBuffer.DrawMesh(
-                _perspectiveLightingMesh,
-                transform.localToWorldMatrix,
-                _perspectiveMaterial,
-                submeshIndex: 0,
-                shaderPass: perspectivePass);
-            commandBuffer.DrawMesh(
-                _transitLightingMesh,
-                transform.localToWorldMatrix,
-                _transitMaterial,
-                submeshIndex: 0,
-                shaderPass: transitPass);
+            UnregisterLightingContributor();
         }
 
         protected void OnDestroy()
         {
-            if (_registered)
-            {
-                _lightingGeometryRegistry?.Unregister(this);
-                _registered = false;
-            }
-
+            UnregisterLightingContributor();
             DestroyOwnedObject(_transitMesh);
             DestroyOwnedObject(_perspectiveMesh);
+            DestroyOwnedObject(_redRockMesh);
             DestroyOwnedObject(_transitLightingMesh);
             DestroyOwnedObject(_perspectiveLightingMesh);
+            DestroyOwnedObject(_redRockLightingMesh);
             DestroyOwnedObject(_transitMaterial);
             DestroyOwnedObject(_perspectiveMaterial);
-            _transitMesh = null;
-            _perspectiveMesh = null;
-            _transitLightingMesh = null;
-            _perspectiveLightingMesh = null;
-            _transitMaterial = null;
-            _perspectiveMaterial = null;
+            DestroyOwnedObject(_redRockMaterial);
+
+            // Runtime children belong to the parent GameObject and Unity restores them
+            // across domain reloads. Destroying them here during a reload can leave the
+            // restored SurfaceRenderer bound to objects pending destruction.
+            if (!Application.isPlaying)
+            {
+                DestroyOwnedChild(TransitObjectName);
+                DestroyOwnedChild(PerspectiveObjectName);
+                DestroyOwnedChild(RedRockObjectName);
+            }
         }
 
         private void EnsureInitialized()
@@ -178,6 +271,19 @@ namespace Fodinae.World
             Texture2D perspectiveTexture = _perspectiveTexture ??
                 throw new InvalidOperationException(
                     "SurfaceRenderer perspective texture is not assigned.");
+            Texture2D redRockTexture = _redRockTexture ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer redrock texture is not assigned.");
+            ClientConfig clientConfig = _clientConfigManager.Config ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer requires an initialized ClientConfig.");
+            if (_mapManager.WorldWidth <= 0 || _mapManager.WorldHeight <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"SurfaceRenderer requires valid world dimensions, received " +
+                    $"{_mapManager.WorldWidth}x{_mapManager.WorldHeight}.");
+            }
+
             Shader surfaceShader = Shader.Find(SurfaceShaderName);
             if (surfaceShader == null || !surfaceShader.isSupported)
             {
@@ -189,43 +295,65 @@ namespace Fodinae.World
                 surfaceShader,
                 "World Surface Transit",
                 transitTexture,
-                _transitEmissionColor,
-                _transitEmissionStrength,
-                occupancy: 1f,
-                wrapBaseMap: true);
+                clientConfig.TransitEmissionColor,
+                clientConfig.TransitEmissionStrength,
+                clientConfig.SurfaceOccupancy,
+                Vector2.one,
+                new Vector2(_mapManager.WorldWidth, _mapManager.WorldHeight),
+                SurfaceKind.Transit);
             _perspectiveMaterial = CreateMaterial(
                 surfaceShader,
                 "World Surface Perspective",
                 perspectiveTexture,
-                _perspectiveEmissionColor,
-                _perspectiveEmissionStrength,
+                clientConfig.PerspectiveEmissionColor,
+                clientConfig.PerspectiveEmissionStrength,
                 occupancy: 0f,
-                wrapBaseMap: true);
-            _transitMesh = CreateBandMesh("World Surface Transit Mesh");
-            _perspectiveMesh = CreateBandMesh("World Surface Perspective Mesh");
-            _transitLightingMesh = CreateBandMesh("World Surface Transit Lighting Mesh");
-            _perspectiveLightingMesh = CreateBandMesh(
-                "World Surface Perspective Lighting Mesh");
+                baseMapTileCount: Vector2.one,
+                worldSize: new Vector2(_mapManager.WorldWidth, _mapManager.WorldHeight),
+                kind: SurfaceKind.Perspective);
+            _redRockMaterial = CreateMaterial(
+                surfaceShader,
+                "World Surface Redrock",
+                redRockTexture,
+                Color.clear,
+                emissionStrength: 0f,
+                occupancy: 1f,
+                baseMapTileCount: GetTerrainSheetTileCount(redRockTexture),
+                worldSize: new Vector2(_mapManager.WorldWidth, _mapManager.WorldHeight),
+                kind: SurfaceKind.RedRock);
 
-            CreateBandObject(
-                "SurfaceTransit",
+            _transitMesh = CreateMesh("World Surface Transit Mesh");
+            _perspectiveMesh = CreateMesh("World Surface Perspective Mesh");
+            _redRockMesh = CreateMesh("World Surface Redrock Mesh");
+            _transitLightingMesh = CreateMesh("World Surface Transit Lighting Mesh");
+            _perspectiveLightingMesh = CreateMesh("World Surface Perspective Lighting Mesh");
+            _redRockLightingMesh = CreateMesh("World Surface Redrock Lighting Mesh");
+
+            BindBandObject(
+                TransitObjectName,
                 _transitMesh,
                 _transitMaterial,
                 _transitSortingOrder);
-            CreateBandObject(
-                "SurfacePerspective",
+            BindBandObject(
+                PerspectiveObjectName,
                 _perspectiveMesh,
                 _perspectiveMaterial,
                 _perspectiveSortingOrder);
-            LightingGeometryRegistry registry = _lightingGeometryRegistry ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer requires LightingGeometryRegistry injection.");
-            registry.Register(this);
+            BindBandObject(
+                RedRockObjectName,
+                _redRockMesh,
+                _redRockMaterial,
+                _transitSortingOrder);
+
+            _lightingGeometryRegistry.Register(this);
             _registered = true;
             _initialized = true;
         }
 
-        private void RebuildBands(int worldWidth, int worldHeight, Camera mainCamera)
+        private void RebuildVisibleGeometry(
+            int worldWidth,
+            int worldHeight,
+            Camera mainCamera)
         {
             if (worldWidth <= 0 || worldHeight <= 0)
             {
@@ -233,72 +361,236 @@ namespace Fodinae.World
                     $"SurfaceRenderer received invalid world dimensions {worldWidth}x{worldHeight}.");
             }
 
-            float halfHeight = mainCamera.orthographicSize;
-            float halfWidth = halfHeight * mainCamera.aspect;
-            float cameraLeft = mainCamera.transform.position.x - halfWidth;
-            float cameraRight = mainCamera.transform.position.x + halfWidth;
-            float surfaceLeft = Mathf.Clamp(cameraLeft, 0f, worldWidth);
-            float surfaceRight = Mathf.Clamp(cameraRight, surfaceLeft, worldWidth);
-            bool worldDimensionsChanged =
-                _lastWorldWidth != worldWidth || _lastWorldHeight != worldHeight;
+            float halfHeight = mainCamera.orthographicSize + BoundaryOverscan;
+            float halfWidth = (mainCamera.orthographicSize * mainCamera.aspect) +
+                BoundaryOverscan;
+            Vector3 cameraPosition = mainCamera.transform.position;
+            Rect visibleRect = Rect.MinMaxRect(
+                cameraPosition.x - halfWidth,
+                cameraPosition.y - halfHeight,
+                cameraPosition.x + halfWidth,
+                cameraPosition.y + halfHeight);
 
-            if (worldDimensionsChanged)
+            UpdateBoundaryMesh(_redRockMesh!, visibleRect, worldWidth, worldHeight);
+            UpdateTransitMesh(_transitMesh!, visibleRect, worldHeight);
+            UpdatePerspectiveMesh(_perspectiveMesh!, visibleRect, worldHeight);
+
+            if (_lastWorldWidth != worldWidth || _lastWorldHeight != worldHeight)
             {
-                UpdateTopBandMesh(
-                    _transitLightingMesh!,
-                    0f,
-                    worldWidth,
-                    bottom: worldHeight,
-                    thickness: TransitHeight,
-                    tileLength: TransitTileWidth,
-                    lightSampleY: worldHeight - 0.5f);
-                UpdateTopBandMesh(
-                    _perspectiveLightingMesh!,
-                    0f,
-                    worldWidth,
-                    bottom: worldHeight + TransitHeight,
-                    thickness: PerspectiveHeight,
-                    tileLength: PerspectiveTileWidth,
-                    lightSampleY: worldHeight - 0.5f);
+                SetMaterialWorldSize(worldWidth, worldHeight);
                 _lightingGeometryRevision++;
             }
 
-            UpdateTopBandMesh(
-                _transitMesh!,
-                surfaceLeft,
-                surfaceRight,
-                bottom: worldHeight,
-                thickness: TransitHeight,
-                tileLength: TransitTileWidth,
-                lightSampleY: worldHeight - 0.5f);
-            UpdateTopBandMesh(
-                _perspectiveMesh!,
-                surfaceLeft,
-                surfaceRight,
-                bottom: worldHeight + TransitHeight,
-                thickness: PerspectiveHeight,
-                tileLength: PerspectiveTileWidth,
-                lightSampleY: worldHeight - 0.5f);
             _lastWorldWidth = worldWidth;
             _lastWorldHeight = worldHeight;
-            _lastCameraPosition = mainCamera.transform.position;
+            _lastCameraPosition = cameraPosition;
             _lastCameraOrthoSize = mainCamera.orthographicSize;
             _lastCameraAspect = mainCamera.aspect;
         }
 
-        private void CreateBandObject(
+        private void UpdateBoundaryMesh(
+            Mesh mesh,
+            Rect coverageRect,
+            int worldWidth,
+            int worldHeight)
+        {
+            int vertexCount = 0;
+            int indexCount = 0;
+            AppendBoundaryQuad(
+                coverageRect.xMin,
+                coverageRect.yMin,
+                Mathf.Min(coverageRect.xMax, 0f),
+                Mathf.Min(coverageRect.yMax, worldHeight),
+                ref vertexCount,
+                ref indexCount);
+            AppendBoundaryQuad(
+                Mathf.Max(coverageRect.xMin, worldWidth),
+                coverageRect.yMin,
+                coverageRect.xMax,
+                Mathf.Min(coverageRect.yMax, worldHeight),
+                ref vertexCount,
+                ref indexCount);
+            AppendBoundaryQuad(
+                Mathf.Max(coverageRect.xMin, 0f),
+                coverageRect.yMin,
+                Mathf.Min(coverageRect.xMax, worldWidth),
+                Mathf.Min(coverageRect.yMax, 0f),
+                ref vertexCount,
+                ref indexCount);
+
+            mesh.Clear(keepVertexLayout: false);
+            if (vertexCount == 0)
+            {
+                return;
+            }
+
+            mesh.SetVertices(_boundaryVertices, 0, vertexCount);
+            mesh.SetUVs(channel: 0, _boundaryUv, 0, vertexCount);
+            mesh.SetUVs(channel: 1, _boundaryLightingData, 0, vertexCount);
+            mesh.SetTriangles(
+                _boundaryTriangles,
+                trianglesStart: 0,
+                trianglesLength: indexCount,
+                submesh: 0,
+                calculateBounds: true);
+        }
+
+        private void AppendBoundaryQuad(
+            float left,
+            float bottom,
+            float right,
+            float top,
+            ref int vertexCount,
+            ref int indexCount)
+        {
+            if (right <= left || top <= bottom)
+            {
+                return;
+            }
+
+            int firstVertex = vertexCount;
+            WriteBoundaryVertex(left, bottom, ref vertexCount);
+            WriteBoundaryVertex(left, top, ref vertexCount);
+            WriteBoundaryVertex(right, bottom, ref vertexCount);
+            WriteBoundaryVertex(right, top, ref vertexCount);
+            _boundaryTriangles[indexCount++] = firstVertex;
+            _boundaryTriangles[indexCount++] = firstVertex + 1;
+            _boundaryTriangles[indexCount++] = firstVertex + 2;
+            _boundaryTriangles[indexCount++] = firstVertex + 3;
+            _boundaryTriangles[indexCount++] = firstVertex + 2;
+            _boundaryTriangles[indexCount++] = firstVertex + 1;
+        }
+
+        private void WriteBoundaryVertex(float x, float y, ref int vertexCount)
+        {
+            _boundaryVertices[vertexCount] = new Vector3(x, y, 0f);
+            _boundaryUv[vertexCount] = new Vector2(x, y);
+            _boundaryLightingData[vertexCount] = Vector2.zero;
+            vertexCount++;
+        }
+
+        private void UpdateTransitMesh(Mesh mesh, Rect coverageRect, int worldHeight)
+        {
+            UpdateBandMesh(
+                mesh,
+                coverageRect,
+                bottom: worldHeight,
+                top: worldHeight + TransitHeight,
+                tileWidth: TransitTileWidth,
+                uvProjectionHeight: TransitHeight,
+                emissionMask: 1f);
+        }
+
+        private void UpdatePerspectiveMesh(Mesh mesh, Rect coverageRect, int worldHeight)
+        {
+            float bottom = worldHeight + TransitHeight;
+            UpdateBandMesh(
+                mesh,
+                coverageRect,
+                bottom,
+                top: bottom + PerspectiveHeight,
+                tileWidth: PerspectiveTileWidth,
+                uvProjectionHeight: PerspectiveHeight,
+                emissionMask: 1f);
+        }
+
+        private void UpdateBandMesh(
+            Mesh mesh,
+            Rect coverageRect,
+            float bottom,
+            float top,
+            float tileWidth,
+            float uvProjectionHeight,
+            float emissionMask)
+        {
+            float clippedBottom = Mathf.Max(coverageRect.yMin, bottom);
+            float clippedTop = Mathf.Min(coverageRect.yMax, top);
+            if (coverageRect.xMax <= coverageRect.xMin ||
+                clippedTop <= clippedBottom || tileWidth <= 0f ||
+                uvProjectionHeight <= 0f)
+            {
+                mesh.Clear(keepVertexLayout: false);
+                return;
+            }
+
+            float left = coverageRect.xMin;
+            float right = coverageRect.xMax;
+            _quadVertices[0] = new Vector3(left, clippedBottom, 0f);
+            _quadVertices[1] = new Vector3(left, clippedTop, 0f);
+            _quadVertices[2] = new Vector3(right, clippedBottom, 0f);
+            _quadVertices[3] = new Vector3(right, clippedTop, 0f);
+            float uLeft = left / tileWidth;
+            float uRight = right / tileWidth;
+            float vBottom = (clippedBottom - bottom) / uvProjectionHeight;
+            float vTop = (clippedTop - bottom) / uvProjectionHeight;
+            _quadUv[0] = new Vector2(uLeft, vBottom);
+            _quadUv[1] = new Vector2(uLeft, vTop);
+            _quadUv[2] = new Vector2(uRight, vBottom);
+            _quadUv[3] = new Vector2(uRight, vTop);
+            Vector2 lightingData = new(emissionMask, 0f);
+            _quadLightingData[0] = lightingData;
+            _quadLightingData[1] = lightingData;
+            _quadLightingData[2] = lightingData;
+            _quadLightingData[3] = lightingData;
+
+            mesh.Clear(keepVertexLayout: false);
+            mesh.SetVertices(_quadVertices);
+            mesh.SetUVs(channel: 0, _quadUv);
+            mesh.SetUVs(channel: 1, _quadLightingData);
+            mesh.SetTriangles(QuadTriangles, submesh: 0, calculateBounds: true);
+        }
+
+        private void BindBandObject(
             string objectName,
             Mesh mesh,
             Material material,
             int sortingOrder)
         {
-            var bandObject = new GameObject(objectName);
-            bandObject.transform.SetParent(transform, worldPositionStays: false);
-            MeshFilter meshFilter = bandObject.AddComponent<MeshFilter>();
-            MeshRenderer meshRenderer = bandObject.AddComponent<MeshRenderer>();
+            Transform? existingTransform = transform.Find(objectName);
+            GameObject bandObject;
+            if (existingTransform == null)
+            {
+                bandObject = new GameObject(objectName);
+                bandObject.transform.SetParent(transform, worldPositionStays: false);
+            }
+            else
+            {
+                bandObject = existingTransform.gameObject;
+            }
+
+            bandObject.layer = gameObject.layer;
+            bandObject.transform.SetLocalPositionAndRotation(
+                Vector3.zero,
+                Quaternion.identity);
+            bandObject.transform.localScale = Vector3.one;
+            MeshFilter meshFilter = GetOrAddComponent<MeshFilter>(bandObject);
+            MeshRenderer meshRenderer = GetOrAddComponent<MeshRenderer>(bandObject);
             meshFilter.sharedMesh = mesh;
             meshRenderer.sharedMaterial = material;
             meshRenderer.sortingOrder = sortingOrder;
+            bandObject.SetActive(true);
+        }
+
+        private static T GetOrAddComponent<T>(GameObject gameObject)
+            where T : Component
+        {
+            T? component = gameObject.GetComponent<T>();
+
+            // Unity objects can be "fake null" after a domain reload. The null-coalescing
+            // operator checks only the managed reference and therefore is invalid here.
+            if (component == null)
+            {
+                component = gameObject.AddComponent<T>();
+            }
+
+            if (component == null)
+            {
+                throw new MissingComponentException(
+                    $"Failed to attach required component {typeof(T).Name} to " +
+                    $"surface object '{gameObject.name}'.");
+            }
+
+            return component;
         }
 
         private static Material CreateMaterial(
@@ -308,22 +600,70 @@ namespace Fodinae.World
             Color emissionColor,
             float emissionStrength,
             float occupancy,
-            bool wrapBaseMap)
+            Vector2 baseMapTileCount,
+            Vector2 worldSize,
+            SurfaceKind kind)
         {
             var material = new Material(shader)
             {
                 name = materialName,
                 hideFlags = HideFlags.DontSave,
             };
+            RequireShaderProperties(material);
             material.SetTexture(BaseMapId, texture);
-            material.SetFloat(WrapBaseMapId, wrapBaseMap ? 1f : 0f);
             material.SetColor(EmissionColorId, emissionColor);
             material.SetFloat(EmissionStrengthId, emissionStrength);
             material.SetFloat(OccupancyId, occupancy);
+            material.SetVector(
+                BaseMapTileCountId,
+                new Vector4(baseMapTileCount.x, baseMapTileCount.y, 0f, 0f));
+            material.SetVector(
+                WorldSizeId,
+                new Vector4(worldSize.x, worldSize.y, 0f, 0f));
+            material.EnableKeyword(kind switch
+            {
+                SurfaceKind.RedRock => RedRockKeyword,
+                SurfaceKind.Transit => TransitKeyword,
+                SurfaceKind.Perspective => PerspectiveKeyword,
+                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown surface kind."),
+            });
             return material;
         }
 
-        private static Mesh CreateBandMesh(string meshName)
+        private static void RequireShaderProperties(Material material)
+        {
+            string[] requiredProperties =
+            [
+                "_BaseMap",
+                "_EmissionColor",
+                "_EmissionStrength",
+                "_Occupancy",
+                "_BaseMapTileCount",
+                "_WorldSize",
+            ];
+            foreach (string propertyName in requiredProperties)
+            {
+                if (!material.HasProperty(propertyName))
+                {
+                    throw new InvalidOperationException(
+                        $"World surface shader '{material.shader.name}' is missing required property " +
+                        $"'{propertyName}'. Client graphics settings cannot be applied.");
+                }
+            }
+        }
+
+        private static void ApplyMaterialConfig(
+            Material material,
+            Color emissionColor,
+            float emissionStrength,
+            float occupancy)
+        {
+            material.SetColor(EmissionColorId, emissionColor);
+            material.SetFloat(EmissionStrengthId, emissionStrength);
+            material.SetFloat(OccupancyId, occupancy);
+        }
+
+        private static Mesh CreateMesh(string meshName)
         {
             var mesh = new Mesh
             {
@@ -334,49 +674,48 @@ namespace Fodinae.World
             return mesh;
         }
 
-        private static void UpdateTopBandMesh(
-            Mesh mesh,
-            float left,
-            float right,
-            float bottom,
-            float thickness,
-            float tileLength,
-            float lightSampleY)
+        private static Vector2 GetTerrainSheetTileCount(Texture2D texture)
         {
-            Vector3[] vertices =
-            [
-                new(left, bottom, 0f),
-                new(left, bottom + thickness, 0f),
-                new(right, bottom, 0f),
-                new(right, bottom + thickness, 0f),
-            ];
-            float uLeft = -(left - (Mathf.Floor(left / tileLength) * tileLength)) /
-                tileLength;
-            float uRight = uLeft + ((left - right) / tileLength);
-            Vector2[] uv =
-            [
-                new(uLeft, 0f),
-                new(uLeft, 1f),
-                new(uRight, 0f),
-                new(uRight, 1f),
-            ];
-            Vector2[] lightingData =
-            [
-                new(1f, lightSampleY - bottom),
-                new(1f, lightSampleY - (bottom + thickness)),
-                new(1f, lightSampleY - bottom),
-                new(1f, lightSampleY - (bottom + thickness)),
-            ];
+            const int tileSize = RenderingConstants.CELL_SIZE;
+            if (texture.width <= 0 || texture.height <= 0 ||
+                texture.width % tileSize != 0 || texture.height % tileSize != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Surface terrain sheet '{texture.name}' dimensions " +
+                    $"{texture.width}x{texture.height} must be positive multiples " +
+                    $"of the terrain tile size {tileSize}.");
+            }
 
-            mesh.Clear(keepVertexLayout: false);
-            mesh.SetVertices(vertices);
-            mesh.SetUVs(channel: 0, uv);
-            mesh.SetUVs(channel: 1, lightingData);
-            mesh.SetTriangles(QuadTriangles, submesh: 0, calculateBounds: true);
+            return new Vector2(texture.width / tileSize, texture.height / tileSize);
         }
 
-        private static int RequireLightingPass(Material material)
+        private void SetMaterialWorldSize(int worldWidth, int worldHeight)
         {
+            Material transitMaterial = _transitMaterial ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer transit material is not initialized.");
+            Material perspectiveMaterial = _perspectiveMaterial ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer perspective material is not initialized.");
+            Material redRockMaterial = _redRockMaterial ??
+                throw new InvalidOperationException(
+                    "SurfaceRenderer redrock material is not initialized.");
+            Vector4 worldSize = new(worldWidth, worldHeight, 0f, 0f);
+            transitMaterial.SetVector(WorldSizeId, worldSize);
+            perspectiveMaterial.SetVector(WorldSizeId, worldSize);
+            redRockMaterial.SetVector(WorldSizeId, worldSize);
+        }
+
+        private static void DrawLightingMesh(
+            CommandBuffer commandBuffer,
+            Mesh mesh,
+            Material material)
+        {
+            if (mesh.vertexCount == 0)
+            {
+                return;
+            }
+
             int pass = material.FindPass("LightingMaterialField");
             if (pass < 0)
             {
@@ -384,7 +723,32 @@ namespace Fodinae.World
                     $"Surface material '{material.name}' is missing LightingMaterialField pass.");
             }
 
-            return pass;
+            commandBuffer.DrawMesh(
+                mesh,
+                Matrix4x4.identity,
+                material,
+                submeshIndex: 0,
+                shaderPass: pass);
+        }
+
+        private void UnregisterLightingContributor()
+        {
+            if (!_registered)
+            {
+                return;
+            }
+
+            _lightingGeometryRegistry?.Unregister(this);
+            _registered = false;
+        }
+
+        private void DestroyOwnedChild(string objectName)
+        {
+            Transform? ownedChild = transform.Find(objectName);
+            if (ownedChild != null)
+            {
+                DestroyOwnedObject(ownedChild.gameObject);
+            }
         }
 
         private static void DestroyOwnedObject(UnityEngine.Object? ownedObject)

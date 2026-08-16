@@ -12,12 +12,9 @@ namespace Fodinae.Networking.Processors
     {
         public void Process(MapRegionPacket packet)
         {
-            var storage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (storage == null)
-            {
+            MapStorage storage = ServiceLocator.Resolve<MapStorage>() ??
                 throw new InvalidOperationException(
                     "[MapRegionProcessor] MapStorage is not registered while processing a map region.");
-            }
 
             if (!storage.IsReady || storage.CellLayer == null)
             {

@@ -17,6 +17,8 @@ namespace Fodinae.Core
         private ClientDefaultsGroup _client = new();
         [SerializeField]
         private LightingDefaultsGroup _lighting = new();
+        [SerializeField]
+        private ShaderDefaultsGroup _shaders = new();
 
         public int SchemaVersion => _schemaVersion;
 
@@ -27,7 +29,8 @@ namespace Fodinae.Core
                 _schemaVersion,
                 Hash128.Compute(JsonUtility.ToJson(this)).ToString(),
                 _client.CreateSnapshot(),
-                _lighting.CreateSnapshot());
+                _lighting.CreateSnapshot(),
+                _shaders.CreateSnapshot());
         }
 
         public void Validate()
@@ -41,6 +44,7 @@ namespace Fodinae.Core
 
             _client.Validate();
             _lighting.Validate();
+            _shaders.Validate();
         }
 
         [Serializable]
@@ -62,12 +66,6 @@ namespace Fodinae.Core
             private float _uiScale;
             [SerializeField]
             private int _graphicsQuality;
-            [SerializeField]
-            private float _renderScale;
-            [SerializeField]
-            private int _vSyncCount;
-            [SerializeField]
-            private int _antiAliasing;
 
             public ClientDefaultsSnapshot CreateSnapshot()
             {
@@ -79,10 +77,7 @@ namespace Fodinae.Core
                     _voiceVolume,
                     _uiVolume,
                     _uiScale,
-                    _graphicsQuality,
-                    _renderScale,
-                    _vSyncCount,
-                    _antiAliasing);
+                    _graphicsQuality);
             }
 
             public void Validate()
@@ -94,18 +89,13 @@ namespace Fodinae.Core
                 ValidateRange(_voiceVolume, 0f, 1f, nameof(_voiceVolume));
                 ValidateRange(_uiVolume, 0f, 1f, nameof(_uiVolume));
                 ValidateRange(_uiScale, 0.5f, 2f, nameof(_uiScale));
-                ValidateRange(_renderScale, 0.1f, 4f, nameof(_renderScale));
                 ValidateRange(_graphicsQuality, 0, 3, nameof(_graphicsQuality));
-                ValidateRange(_vSyncCount, 0, 4, nameof(_vSyncCount));
-                ValidateRange(_antiAliasing, 0, 8, nameof(_antiAliasing));
             }
         }
 
         [Serializable]
         private sealed class LightingDefaultsGroup
         {
-            [SerializeField]
-            private TerrariaLightingEngine.QualityPreset _quality;
             [SerializeField]
             private bool _ambientOcclusionEnabled;
             [SerializeField]
@@ -150,7 +140,6 @@ namespace Fodinae.Core
             public LightingDefaultsSnapshot CreateSnapshot()
             {
                 return new LightingDefaultsSnapshot(
-                    _quality,
                     _ambientOcclusionEnabled,
                     _diffuseBounceEnabled,
                     _ambientIntensity,
@@ -175,7 +164,6 @@ namespace Fodinae.Core
 
             public void Validate()
             {
-                ValidateRange((int)_quality, 0, 3, nameof(_quality));
                 ValidateRange(_ambientIntensity, 0f, 1f, nameof(_ambientIntensity));
                 ValidateRange(_emissionScale, 0.1f, 8f, nameof(_emissionScale));
                 ValidateColor(_ambientColor, nameof(_ambientColor));
@@ -229,6 +217,165 @@ namespace Fodinae.Core
                     1f,
                     LightingConfigLimits.DynamicLightUpdatesPerSecond,
                     nameof(_dynamicLightUpdatesPerSecond));
+            }
+
+            private static void ValidateColor(Color value, string name)
+            {
+                ValidateRange(value.r, 0f, float.MaxValue, $"{name}.r");
+                ValidateRange(value.g, 0f, float.MaxValue, $"{name}.g");
+                ValidateRange(value.b, 0f, float.MaxValue, $"{name}.b");
+                ValidateRange(value.a, 0f, float.MaxValue, $"{name}.a");
+            }
+        }
+
+        [Serializable]
+        private sealed class ShaderDefaultsGroup
+        {
+            [SerializeField]
+            private Vector2 _terrainFlowScale;
+            [SerializeField]
+            private float _terrainShimmerSpeedScale;
+            [SerializeField]
+            private float _terrainPulseSpeedScale;
+            [SerializeField]
+            private Color _terrainShimmerColor;
+            [SerializeField]
+            private Color _terrainDebugColor;
+            [SerializeField]
+            private bool _terrainDebugMode;
+            [SerializeField]
+            private float _bloomThreshold;
+            [SerializeField]
+            private float _bloomScatter;
+            [SerializeField]
+            private Color _bloomTint;
+            [SerializeField]
+            private Color _transitEmissionColor;
+            [SerializeField]
+            private float _transitEmissionStrength;
+            [SerializeField]
+            private Color _perspectiveEmissionColor;
+            [SerializeField]
+            private float _perspectiveEmissionStrength;
+            [SerializeField]
+            private float _surfaceOccupancy;
+            [SerializeField]
+            private float _bloomIntensity;
+            [SerializeField]
+            private float _vignetteIntensity;
+            [SerializeField]
+            private Color _vignetteColor;
+            [SerializeField]
+            private float _vignetteSmoothness;
+            [SerializeField]
+            private Vector2 _vignetteCenter;
+            [SerializeField]
+            private float _chromaticAberrationIntensity;
+            [SerializeField]
+            private float _colorGradingExposure;
+            [SerializeField]
+            private Color _colorGradingFilter;
+            [SerializeField]
+            private float _colorGradingContrast;
+            [SerializeField]
+            private float _colorGradingSaturation;
+            [SerializeField]
+            private bool _colorGradingToneMapping;
+            [SerializeField]
+            private float _colorGradingToneMappingWhitePoint;
+            [SerializeField]
+            private float _eigengrauIntensity;
+            [SerializeField]
+            private Color _eigengrauColor;
+            [SerializeField]
+            private float _eigengrauDarknessThreshold;
+            [SerializeField]
+            private float _eigengrauNoiseScale;
+            [SerializeField]
+            private float _eigengrauAnimationSpeed;
+            [SerializeField]
+            private float _motionBlurIntensity;
+            [SerializeField]
+            private int _motionBlurMaxSamples;
+
+            public ShaderDefaultsSnapshot CreateSnapshot() => new(
+                _terrainFlowScale,
+                _terrainShimmerSpeedScale,
+                _terrainPulseSpeedScale,
+                _terrainShimmerColor,
+                _terrainDebugColor,
+                _terrainDebugMode,
+                _bloomThreshold,
+                _bloomScatter,
+                _bloomTint,
+                _transitEmissionColor,
+                _transitEmissionStrength,
+                _perspectiveEmissionColor,
+                _perspectiveEmissionStrength,
+                _surfaceOccupancy,
+                _bloomIntensity,
+                _vignetteIntensity,
+                _vignetteColor,
+                _vignetteSmoothness,
+                _vignetteCenter,
+                _chromaticAberrationIntensity,
+                _colorGradingExposure,
+                _colorGradingFilter,
+                _colorGradingContrast,
+                _colorGradingSaturation,
+                _colorGradingToneMapping,
+                _colorGradingToneMappingWhitePoint,
+                _eigengrauIntensity,
+                _eigengrauColor,
+                _eigengrauDarknessThreshold,
+                _eigengrauNoiseScale,
+                _eigengrauAnimationSpeed,
+                _motionBlurIntensity,
+                _motionBlurMaxSamples);
+
+            public void Validate()
+            {
+                ValidateRange(_terrainFlowScale.x, 0.001f, 1024f, nameof(_terrainFlowScale.x));
+                ValidateRange(_terrainFlowScale.y, 0.001f, 1024f, nameof(_terrainFlowScale.y));
+                ValidateRange(_terrainShimmerSpeedScale, 0f, 10f, nameof(_terrainShimmerSpeedScale));
+                ValidateRange(_terrainPulseSpeedScale, 0f, 10f, nameof(_terrainPulseSpeedScale));
+                ValidateColor(_terrainShimmerColor, nameof(_terrainShimmerColor));
+                ValidateColor(_terrainDebugColor, nameof(_terrainDebugColor));
+                ValidateRange(_bloomThreshold, 0f, 2f, nameof(_bloomThreshold));
+                ValidateRange(_bloomScatter, 0.1f, 1f, nameof(_bloomScatter));
+                ValidateColor(_bloomTint, nameof(_bloomTint));
+                ValidateColor(_transitEmissionColor, nameof(_transitEmissionColor));
+                ValidateRange(_transitEmissionStrength, 0f, 8f, nameof(_transitEmissionStrength));
+                ValidateColor(_perspectiveEmissionColor, nameof(_perspectiveEmissionColor));
+                ValidateRange(_perspectiveEmissionStrength, 0f, 8f, nameof(_perspectiveEmissionStrength));
+                ValidateRange(_surfaceOccupancy, 0f, 1f, nameof(_surfaceOccupancy));
+                ValidateRange(_bloomIntensity, 0f, 5f, nameof(_bloomIntensity));
+                ValidateRange(_vignetteIntensity, 0f, 1f, nameof(_vignetteIntensity));
+                ValidateColor(_vignetteColor, nameof(_vignetteColor));
+                ValidateRange(_vignetteSmoothness, 0.01f, 1f, nameof(_vignetteSmoothness));
+                ValidateRange(_vignetteCenter.x, 0f, 1f, nameof(_vignetteCenter.x));
+                ValidateRange(_vignetteCenter.y, 0f, 1f, nameof(_vignetteCenter.y));
+                ValidateRange(_chromaticAberrationIntensity, 0f, 1f, nameof(_chromaticAberrationIntensity));
+                ValidateRange(_colorGradingExposure, -4f, 4f, nameof(_colorGradingExposure));
+                ValidateColor(_colorGradingFilter, nameof(_colorGradingFilter));
+                ValidateRange(_colorGradingContrast, -1f, 1f, nameof(_colorGradingContrast));
+                ValidateRange(_colorGradingSaturation, 0f, 2f, nameof(_colorGradingSaturation));
+                ValidateRange(
+                    _colorGradingToneMappingWhitePoint,
+                    0.25f,
+                    8f,
+                    nameof(_colorGradingToneMappingWhitePoint));
+                ValidateColor(_eigengrauColor, nameof(_eigengrauColor));
+                ValidateRange(
+                    _eigengrauDarknessThreshold,
+                    0.02f,
+                    0.75f,
+                    nameof(_eigengrauDarknessThreshold));
+                ValidateRange(_eigengrauNoiseScale, 0.75f, 2f, nameof(_eigengrauNoiseScale));
+                ValidateRange(_eigengrauAnimationSpeed, 1f, 60f, nameof(_eigengrauAnimationSpeed));
+                ValidateRange(_eigengrauIntensity, 0f, 1f, nameof(_eigengrauIntensity));
+                ValidateRange(_motionBlurIntensity, 0f, 1f, nameof(_motionBlurIntensity));
+                ValidateRange(_motionBlurMaxSamples, 2, 32, nameof(_motionBlurMaxSamples));
             }
 
             private static void ValidateColor(Color value, string name)

@@ -6,6 +6,7 @@ using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Player.Logic;
+using Fodinae.UI;
 using Fodinae.World.Lighting;
 using MinesServer.Data;
 using Unity.Profiling;
@@ -38,8 +39,6 @@ namespace Fodinae.World.Terrain
         [SerializeField]
         private Shader? _terrainShader;
         [SerializeField]
-        private Color _shimmerHighlightColor = Color.white;
-        [SerializeField]
         private string _sortingLayerName = "Default";
         [SerializeField]
         private int _sortingOrder = -1000;
@@ -57,6 +56,9 @@ namespace Fodinae.World.Terrain
 
         [Inject]
         private ITextureService? _textureService;
+
+        [Inject]
+        private IClientConfigManager? _clientConfigManager;
 
         private Mesh? _mesh;
         private Camera? _mainCamera;
@@ -76,14 +78,16 @@ namespace Fodinae.World.Terrain
         private int _lastRequestedHeight;
         private float _lastViewportSizeChangeTime;
         private bool _isInitialized = false;
-        private bool _subscribedEvents = false;
         private bool _needsRefresh = false;
         private bool _textureRefreshPending;
         private float _nextTextureRefreshTime;
         private bool _useColorLod = false;
         private int _lastAtlasCount = -1;
         private bool _lightingBindingValidated;
+        private bool _fatalBuildError;
         private WorldLayer<CellType>? _subscribedCellLayer;
+        private WorldTextureManager? _subscribedTextureManager;
+        private MapManager? _subscribedMapManager;
 
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
@@ -121,6 +125,34 @@ namespace Fodinae.World.Terrain
             _mesh != null &&
             _mesh.vertexCount > 0 &&
             _materials.Length > 0;
+
+        public void ApplyClientConfig()
+        {
+            IClientConfigManager clientConfigManager = _clientConfigManager ??
+                throw new InvalidOperationException(
+                    "TerrainRenderer requires IClientConfigManager injection.");
+            ClientConfig config = clientConfigManager.Config ??
+                throw new InvalidOperationException(
+                    "TerrainRenderer requires an initialized ClientConfig.");
+            if (_materials.Length == 0)
+            {
+                // The config is the source of truth. Atlas materials are created
+                // asynchronously when the first server textures arrive and read
+                // this config during creation; an early UI change must not make
+                // the pause menu fail just because that pipeline is not ready.
+                return;
+            }
+
+            foreach (Material material in _materials)
+            {
+                material.SetVector("_FlowScale", config.TerrainFlowScale);
+                material.SetFloat("_ShimmerSpeedScale", config.TerrainShimmerSpeedScale);
+                material.SetFloat("_PulseSpeedScale", config.TerrainPulseSpeedScale);
+                material.SetColor("_ShimmerColor", config.TerrainShimmerColor);
+                material.SetColor("_DebugColor", config.TerrainDebugColor);
+                material.SetFloat("_DebugMode", config.TerrainDebugMode ? 1f : 0f);
+            }
+        }
 
         public static void OnCellChanged(int x, int y)
         {
@@ -217,44 +249,49 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            _mainCamera = Camera.main;
-            if (_mainCamera == null)
-            {
-                _mainCamera = FindAnyObjectByType<Camera>(FindObjectsInactive.Include);
-            }
+            _mainCamera = Camera.main ??
+                throw new InvalidOperationException(
+                    "TerrainRenderer requires a tagged Main Camera.");
         }
 
         public void EnsureSubscriptions()
         {
             SubscribeToCellLayer();
-            if (_subscribedEvents)
+            if (_subscribedTextureManager != null)
             {
-                return;
+                _subscribedTextureManager.OnTextureLoaded -= OnTextureLoaded;
             }
 
-            if (_textureService is WorldTextureManager wtm)
+            _subscribedTextureManager = _textureService as WorldTextureManager;
+            if (_subscribedTextureManager != null)
             {
-                wtm.OnTextureLoaded += OnTextureLoaded;
+                _subscribedTextureManager.OnTextureLoaded += OnTextureLoaded;
             }
 
-            if (_mapManager != null)
+            if (_subscribedMapManager != null)
             {
-                _mapManager.OnWorldDataLoaded += OnWorldDataLoaded;
+                _subscribedMapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
             }
 
-            _subscribedEvents = true;
+            _subscribedMapManager = _mapManager;
+            if (_subscribedMapManager != null)
+            {
+                _subscribedMapManager.OnWorldDataLoaded += OnWorldDataLoaded;
+            }
         }
 
         protected void OnDestroy()
         {
-            if (_textureService is WorldTextureManager wtm)
+            if (_subscribedTextureManager != null)
             {
-                wtm.OnTextureLoaded -= OnTextureLoaded;
+                _subscribedTextureManager.OnTextureLoaded -= OnTextureLoaded;
+                _subscribedTextureManager = null;
             }
 
-            if (_mapManager != null)
+            if (_subscribedMapManager != null)
             {
-                _mapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
+                _subscribedMapManager.OnWorldDataLoaded -= OnWorldDataLoaded;
+                _subscribedMapManager = null;
             }
 
             if (_subscribedCellLayer != null)
@@ -358,6 +395,11 @@ namespace Fodinae.World.Terrain
 
         protected void LateUpdate()
         {
+            if (_fatalBuildError)
+            {
+                return;
+            }
+
             using var terrainLateUpdateMarker = TerrainLateUpdateMarker.Auto();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
@@ -529,6 +571,7 @@ namespace Fodinae.World.Terrain
                 lightingMinY,
                 lightingWidth,
                 lightingHeight,
+                _mainCamera,
                 _storage,
                 _mapManager);
             ValidateLightingBinding();
@@ -663,18 +706,19 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 4, $"[TerrainDiag] UpdateVertexAttributes min=({minX},{minY}) size={_meshWidth}x{_meshHeight}");
             }
 
-            var wtm = _textureService as WorldTextureManager;
-            if (wtm == null || _mapManager == null || _storage == null)
+            ITextureService textureService = _textureService ??
+                throw new InvalidOperationException("TerrainRenderer requires ITextureService injection.");
+            if (_mapManager == null || _storage == null)
             {
                 if ((_diagLogged & (1 << 5)) == 0)
                 {
-                    LogDiag(1 << 5, $"[TerrainDiag] BAIL: wtm={(wtm == null ? "NULL" : "ok")} mapManager={(_mapManager == null ? "NULL" : "ok")}");
+                    LogDiag(1 << 5, $"[TerrainDiag] BAIL: textureService=ok mapManager={(_mapManager == null ? "NULL" : "ok")}");
                 }
 
                 return;
             }
 
-            var atlases = wtm.GetAllAtlases();
+            var atlases = textureService.GetAllAtlases();
             if (atlases == null || atlases.Count == 0)
             {
                 LogDiag(1 << 6, "[TerrainDiag] BAIL: atlases empty");
@@ -689,6 +733,12 @@ namespace Fodinae.World.Terrain
             bool materialsChanged = false;
             if (atlases.Count != _lastAtlasCount)
             {
+                IClientConfigManager clientConfigManager = _clientConfigManager ??
+                    throw new InvalidOperationException(
+                        "TerrainRenderer requires IClientConfigManager injection.");
+                ClientConfig clientConfig = clientConfigManager.Config ??
+                    throw new InvalidOperationException(
+                        "TerrainRenderer requires an initialized ClientConfig.");
                 _lastAtlasCount = atlases.Count;
                 _lightingBindingValidated = false;
                 _cellCache.ClearCaches();
@@ -699,7 +749,25 @@ namespace Fodinae.World.Terrain
                 for (int i = 0; i < atlases.Count; i++)
                 {
                     _subMeshIndices[i] = new List<int>(estimatedPerAtlas);
-                    _materials[i] = new Material(_terrainShader);
+                    Shader terrainShader = _terrainShader ??
+                        throw new InvalidOperationException(
+                            "Terrain shader was not initialized before atlas material creation.");
+                    _materials[i] = new Material(terrainShader);
+                    RequireShaderProperties(_materials[i]);
+                    _materials[i].SetVector("_FlowScale", clientConfig.TerrainFlowScale);
+                    _materials[i].SetFloat(
+                        "_ShimmerSpeedScale",
+                        clientConfig.TerrainShimmerSpeedScale);
+                    _materials[i].SetFloat(
+                        "_PulseSpeedScale",
+                        clientConfig.TerrainPulseSpeedScale);
+                    _materials[i].SetColor(
+                        "_ShimmerColor",
+                        clientConfig.TerrainShimmerColor);
+                    _materials[i].SetColor("_DebugColor", clientConfig.TerrainDebugColor);
+                    _materials[i].SetFloat(
+                        "_DebugMode",
+                        clientConfig.TerrainDebugMode ? 1f : 0f);
                     if (_materials[i].FindPass("Universal2D") < 0 ||
                         _materials[i].FindPass("LightingMaterialField") < 0)
                     {
@@ -725,7 +793,7 @@ namespace Fodinae.World.Terrain
                 }
             }
 
-            wtm.FlushDirtyAtlases();
+            textureService.FlushDirtyAtlases();
 
             try
             {
@@ -740,11 +808,11 @@ namespace Fodinae.World.Terrain
                 {
                     if (canScrollCache)
                     {
-                        _cellCache.ScrollAndFill(cacheDeltaX, cacheDeltaY, _storage, _mapManager, wtm, atlases);
+                        _cellCache.ScrollAndFill(cacheDeltaX, cacheDeltaY, _storage, _mapManager, textureService, atlases);
                     }
                     else
                     {
-                        _cellCache.PopulateFull(minX, minY, _storage, _mapManager, wtm, atlases);
+                        _cellCache.PopulateFull(minX, minY, _storage, _mapManager, textureService, atlases);
                     }
                 }
 
@@ -774,7 +842,7 @@ namespace Fodinae.World.Terrain
 
                 using (MeshBuildMarker.Auto())
                 {
-                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, wtm);
+                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
                 }
 
                 if (_mesh != null)
@@ -805,13 +873,15 @@ namespace Fodinae.World.Terrain
                                 2f));
                         if ((_diagLogged & (1 << 8)) == 0)
                         {
-                            LogDiag(
-                                1 << 8,
+                            string diagnostic =
                                 "[TerrainDiag] BuildFull: grid=(" +
                                 $"{_lastGridPos.x},{_lastGridPos.y}) " +
                                 $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
                                 $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} " +
-                                $"bounds={_mesh.bounds} transform={transform.position}");
+                                $"bounds={_mesh.bounds} transform={transform.position}";
+                            LogDiag(
+                                1 << 8,
+                                diagnostic);
                         }
 
                         for (int i = 0; i < atlases.Count; i++)
@@ -819,13 +889,12 @@ namespace Fodinae.World.Terrain
                             var atlasTex = atlases[i].Texture;
                             if (_materials[i].GetTexture("_BaseMap") != atlasTex)
                             {
-                                _materials[i].SetColor("_ShimmerColor", _shimmerHighlightColor);
                                 _materials[i].SetTexture("_BaseMap", atlasTex);
                             }
 
-                            if (_materials[i].GetTexture("_FlowMap") != wtm.FlowMapTexture)
+                            if (_materials[i].GetTexture("_FlowMap") != textureService.FlowMapTexture)
                             {
-                                _materials[i].SetTexture("_FlowMap", wtm.FlowMapTexture);
+                                _materials[i].SetTexture("_FlowMap", textureService.FlowMapTexture);
                             }
 
                             _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
@@ -837,14 +906,17 @@ namespace Fodinae.World.Terrain
             }
             catch (Exception ex)
             {
+                _fatalBuildError = true;
                 Debug.LogError(
                     $"[TerrainRenderer] Build failed: grid=({minX},{minY}) " +
                     $"size={_meshWidth}x{_meshHeight}, world=" +
                     $"{_mapManager?.WorldWidth ?? 0}x{_mapManager?.WorldHeight ?? 0}, " +
-                    $"atlases={(_textureService as WorldTextureManager)?.GetAllAtlases().Count ?? 0}, " +
+                    $"atlases={_textureService?.GetAllAtlases().Count ?? 0}, " +
                     $"storageReady={_storage?.IsReady ?? false}.");
                 Debug.LogException(ex);
-                _needsRefresh = true;
+                GameErrorUI.ReportFatal(
+                    "Terrain rendering failed because world texture metadata is invalid.",
+                    ex);
             }
 
             bool needReassignMaterials = materialsChanged;
@@ -871,6 +943,30 @@ namespace Fodinae.World.Terrain
             if (needReassignMaterials && _meshRenderer != null)
             {
                 _meshRenderer.sharedMaterials = _materials;
+            }
+        }
+
+        private static void RequireShaderProperties(Material material)
+        {
+            string[] requiredProperties =
+            [
+                "_BaseMap",
+                "_FlowMap",
+                "_FlowScale",
+                "_ShimmerSpeedScale",
+                "_PulseSpeedScale",
+                "_ShimmerColor",
+                "_DebugColor",
+                "_DebugMode",
+            ];
+            foreach (string propertyName in requiredProperties)
+            {
+                if (!material.HasProperty(propertyName))
+                {
+                    throw new InvalidOperationException(
+                        $"Terrain shader '{material.shader.name}' is missing required property " +
+                        $"'{propertyName}'. Client graphics settings cannot be applied.");
+                }
             }
         }
 

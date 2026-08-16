@@ -11,4 +11,6 @@ public interface IProjectDefaults
     ClientDefaultsSnapshot Client { get; }
 
     LightingDefaultsSnapshot Lighting { get; }
+
+    ShaderDefaultsSnapshot Shaders { get; }
 }

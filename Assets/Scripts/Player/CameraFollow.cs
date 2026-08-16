@@ -40,6 +40,7 @@ namespace Fodinae.Player
 
         private float _originalZ;
         private Camera? _camera;
+        private PlayerMovementController? _subscribedPlayer;
         private float _targetZoom;
         private float _currentZoom;
         private float _lastZoom;
@@ -49,7 +50,6 @@ namespace Fodinae.Player
         private bool _cameraNullLogged;
         private bool _scrollNullLogged;
         private bool _hasSnappedToServerPosition;
-        private bool _playerEventSubscribed;
         private bool _localPlayerSpawnSubscription;
         private Vector3 _followVelocity;
         [Inject]
@@ -62,6 +62,11 @@ namespace Fodinae.Player
         }
 
         protected void Start()
+        {
+            InitializeRuntime();
+        }
+
+        private void InitializeRuntime()
         {
             _originalZ = transform.position.z;
             _camera = GetComponent<Camera>();
@@ -93,10 +98,10 @@ namespace Fodinae.Player
                 }
             }
 
-            if (PlayerMovementController.LocalPlayer != null && !_playerEventSubscribed)
+            PlayerMovementController? localPlayer = PlayerMovementController.LocalPlayer;
+            if (localPlayer != null)
             {
-                PlayerMovementController.LocalPlayer.OnPlayerMoved += HandlePlayerMoved;
-                _playerEventSubscribed = true;
+                SubscribeToPlayer(localPlayer);
             }
 
             if (!_localPlayerSpawnSubscription)
@@ -130,10 +135,10 @@ namespace Fodinae.Player
                 Instance = null;
             }
 
-            if (PlayerMovementController.LocalPlayer != null && _playerEventSubscribed)
+            if (_subscribedPlayer != null)
             {
-                PlayerMovementController.LocalPlayer.OnPlayerMoved -= HandlePlayerMoved;
-                _playerEventSubscribed = false;
+                _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+                _subscribedPlayer = null;
             }
 
             if (_localPlayerSpawnSubscription)
@@ -180,13 +185,26 @@ namespace Fodinae.Player
                 _target = player.transform;
             }
 
-            if (!_playerEventSubscribed)
-            {
-                player.OnPlayerMoved += HandlePlayerMoved;
-                _playerEventSubscribed = true;
-            }
+            SubscribeToPlayer(player);
 
             SnapToTarget();
+        }
+
+        private void SubscribeToPlayer(PlayerMovementController player)
+        {
+            if (ReferenceEquals(_subscribedPlayer, player))
+            {
+                return;
+            }
+
+            if (_subscribedPlayer != null)
+            {
+                _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+            }
+
+            _subscribedPlayer = player;
+            _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+            _subscribedPlayer.OnPlayerMoved += HandlePlayerMoved;
         }
 
         protected void LateUpdate()
@@ -343,7 +361,9 @@ namespace Fodinae.Player
         public void SetScrollEnabled(bool enabled) => _scrollEnabled = enabled;
         public void Reinitialize()
         {
-            Start();
+            DisposeScrollAction();
+            _hasSnappedToServerPosition = false;
+            InitializeRuntime();
         }
 
 #if UNITY_EDITOR

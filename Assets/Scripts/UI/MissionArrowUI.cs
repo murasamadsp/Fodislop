@@ -22,7 +22,7 @@ namespace Fodinae.UI
         private ushort? _targetY;
         private bool _initialized;
         [Inject]
-        private IPlayerStats _playerStats = null!;
+        private PlayerStatsModel _playerStats = null!;
         [Inject]
         private MapManager _mapManager = null!;
 
@@ -62,7 +62,7 @@ namespace Fodinae.UI
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);
 
-            var stats = _playerStats as PlayerStatsModel;
+            PlayerStatsModel stats = _playerStats;
             if (stats != null)
             {
                 stats.OnMissionArrowChanged += OnArrowChanged;
@@ -80,10 +80,9 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            var existing = _playerStats as PlayerStatsModel;
-            if (existing != null)
+            if (_playerStats != null)
             {
-                existing.OnMissionArrowChanged -= OnArrowChanged;
+                _playerStats.OnMissionArrowChanged -= OnArrowChanged;
             }
 
             _arrow?.RemoveFromHierarchy();
@@ -92,9 +91,14 @@ namespace Fodinae.UI
 
         private void OnArrowChanged()
         {
+            if (!isActiveAndEnabled || !_initialized || _arrow == null || _playerStats == null)
+            {
+                return;
+            }
+
             Debug.Log("[MissionArrowUI] OnArrowChanged fired");
-            var stats = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
-            if (stats == null || !stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
+            PlayerStatsModel stats = _playerStats;
+            if (!stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
             {
                 Debug.Log("[MissionArrowUI] Arrow cleared (null target)");
                 _targetX = null;

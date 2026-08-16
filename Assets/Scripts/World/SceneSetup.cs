@@ -1,6 +1,9 @@
 #nullable enable
 
 using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using Fodinae.Core.Interfaces;
 using Fodinae.UI;
 using UnityEngine;
 
@@ -13,40 +16,17 @@ namespace Fodinae.World
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {
-        [Header("Local Surface Assets")]
-        [SerializeField]
-        private Texture2D? _transitTexture;
-        [SerializeField]
-        private Texture2D? _perspectiveTexture;
-
         private WorldBackgroundSetup? _backgroundSetup;
         private bool _surfaceRendererSetup;
-
-#if UNITY_EDITOR
-        private void OnValidate()
-        {
-            ResolveEditorSurfaceAssets();
-        }
-
-        private void ResolveEditorSurfaceAssets()
-        {
-            _transitTexture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
-                "Assets/Textures/transit.png");
-            _perspectiveTexture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(
-                "Assets/Textures/perspective.png");
-        }
-#endif
+        private bool _surfaceRendererSetupStarted;
 
         protected void Awake()
         {
-#if UNITY_EDITOR
-            ResolveEditorSurfaceAssets();
-#endif
             SetupWorldBackground();
             SetupWorldMapController();
             SetupMinimapController();
             SetupWorldAudioController();
-            TrySetupSurfaceRenderer();
+            TryStartSurfaceRendererSetup();
         }
 
         protected void Update()
@@ -57,7 +37,7 @@ namespace Fodinae.World
                 return;
             }
 
-            TrySetupSurfaceRenderer();
+            TryStartSurfaceRendererSetup();
         }
 
         private void SetupMinimapController()
@@ -86,29 +66,61 @@ namespace Fodinae.World
             audioGO.AddComponent<Audio.Spatial.WorldAudioController>();
         }
 
-        private void TrySetupSurfaceRenderer()
+        private void TryStartSurfaceRendererSetup()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_surfaceRendererSetupStarted || !Fodinae.Core.ServiceLocator.IsInitialized)
             {
                 return;
             }
 
-            if (_transitTexture == null || _perspectiveTexture == null)
-            {
+            _surfaceRendererSetupStarted = true;
+            SetupSurfaceRendererAsync(this.GetCancellationTokenOnDestroy()).Forget();
+        }
+
+        private async UniTask SetupSurfaceRendererAsync(CancellationToken cancellationToken)
+        {
+            ITextureStorageService textureStorage =
+                Fodinae.Core.ServiceLocator.Resolve<ITextureStorageService>() ??
                 throw new InvalidOperationException(
-                    "SceneSetup requires serialized transit and perspective surface textures.");
-            }
+                    "SceneSetup requires ITextureStorageService for local surface assets.");
+            Texture2D transitTexture = await textureStorage.GetTextureAsync(
+                "transit.png",
+                cancellationToken) ??
+                throw new InvalidOperationException(
+                    "Required local surface texture 'transit.png' could not be decoded.");
+            Texture2D perspectiveTexture = await textureStorage.GetTextureAsync(
+                "perspective.png",
+                cancellationToken) ??
+                throw new InvalidOperationException(
+                    "Required local surface texture 'perspective.png' could not be decoded.");
+            Texture2D redRockTexture = await textureStorage.GetTextureAsync(
+                "Cells/117.png",
+                cancellationToken) ??
+                throw new InvalidOperationException(
+                    "Required local surface texture 'Cells/117.png' could not be decoded.");
+            cancellationToken.ThrowIfCancellationRequested();
 
-            SurfaceRenderer? surfaceRenderer = FindAnyObjectByType<SurfaceRenderer>();
-            if (surfaceRenderer == null)
-            {
-                var surfaceGO = new GameObject("SurfaceRenderer");
-                surfaceGO.transform.SetParent(transform);
-                surfaceRenderer = surfaceGO.AddComponent<SurfaceRenderer>();
-            }
+            RuntimeTextureFactory.ApplySampling(
+                transitTexture,
+                FilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            RuntimeTextureFactory.ApplySampling(
+                perspectiveTexture,
+                FilterMode.Bilinear,
+                TextureWrapMode.Clamp);
+            RuntimeTextureFactory.ApplySampling(
+                redRockTexture,
+                FilterMode.Point,
+                TextureWrapMode.Clamp);
 
-            Fodinae.Core.ServiceLocator.Inject(surfaceRenderer);
-            surfaceRenderer.SetLocalAssets(_transitTexture, _perspectiveTexture);
+            SurfaceRenderer surfaceRenderer =
+                Fodinae.Core.ServiceLocator.Resolve<SurfaceRenderer>() ??
+                throw new InvalidOperationException(
+                    "SceneSetup requires the registered SurfaceRenderer.");
+            surfaceRenderer.SetLocalAssets(
+                transitTexture,
+                perspectiveTexture,
+                redRockTexture);
             _surfaceRendererSetup = true;
         }
 

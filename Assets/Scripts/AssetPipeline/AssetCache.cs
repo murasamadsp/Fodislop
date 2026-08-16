@@ -11,7 +11,6 @@ using Fodinae.Core;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Fodinae
 {
@@ -104,13 +103,15 @@ namespace Fodinae
                 return;
             }
 
-            entry.Dispose();
+            entry.ReleaseAllReferences();
             RemoveTrackedSize(filename);
             if (_decodedEntrySizes.TryRemove(filename, out var decodedSize))
             {
                 Interlocked.Add(ref _totalDecodedBytes, -decodedSize);
             }
+
             RebuildAccessOrder();
+            RequestUnusedAssetsCollection();
         }
 
         /// <summary>Clear all cached entries.</summary>
@@ -118,7 +119,7 @@ namespace Fodinae
         {
             foreach (var entry in _entries.Values.ToArray())
             {
-                entry.Dispose();
+                entry.ReleaseAllReferences();
             }
 
             _entries.Clear();
@@ -129,8 +130,14 @@ namespace Fodinae
                 // drain access order queue
             }
 
+            while (_decodedAccessOrder.TryDequeue(out _))
+            {
+                // drain decoded access order queue
+            }
+
             Interlocked.Exchange(ref _totalBytes, 0);
             Interlocked.Exchange(ref _totalDecodedBytes, 0);
+            RequestUnusedAssetsCollection();
         }
 
         /// <summary>Set the maximum cache size in bytes. Default is 256 MB.</summary>
@@ -198,13 +205,23 @@ namespace Fodinae
                 trimmed = true;
             }
 
-            if (trimmed && Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 1) == 0)
+            if (trimmed)
             {
-                Resources.UnloadUnusedAssets().completed += _ =>
-                {
-                    Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 0);
-                };
+                RequestUnusedAssetsCollection();
             }
+        }
+
+        private void RequestUnusedAssetsCollection()
+        {
+            if (Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 1) != 0)
+            {
+                return;
+            }
+
+            Resources.UnloadUnusedAssets().completed += _ =>
+            {
+                Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 0);
+            };
         }
 
         private void RemoveTrackedSize(string filename)
@@ -237,9 +254,15 @@ namespace Fodinae
                     break;
                 }
 
-                if (_entries.TryRemove(oldest, out var entry))
+                if (_entries.TryGetValue(oldest, out var entry))
                 {
-                    entry.Dispose();
+                    // The raw-byte budget must not evict decoded Unity objects.
+                    // Renderers and UI may still hold those objects even after
+                    // the cache stops retaining the source payload.
+                    entry.ReleaseRawBytes();
+                }
+                else
+                {
                     RemoveTrackedSize(oldest);
                 }
             }
@@ -280,57 +303,16 @@ namespace Fodinae
                 _cache = cache;
             }
 
-            internal void Dispose()
+            internal void ReleaseAllReferences()
             {
                 lock (_lock)
                 {
-                    var texture = _texture;
-                    var sprites = _sprites;
-
                     _texture = null;
                     _sprites = null;
+                    _audio = null;
                     _spriteFps = 0f;
                     _spriteFrameHeight = 0;
                     _spriteFrameCount = 0;
-
-                    if (sprites != null)
-                    {
-                        var textures = new HashSet<Texture2D>();
-                        for (int i = 0; i < sprites.Length; i++)
-                        {
-                            if (sprites[i] == null)
-                            {
-                                continue;
-                            }
-
-                            if (sprites[i].texture != null)
-                            {
-                                textures.Add(sprites[i].texture);
-                            }
-
-                            UnityEngine.Object.Destroy(sprites[i]);
-                        }
-
-                        foreach (var spriteTexture in textures)
-                        {
-                            if (spriteTexture != texture)
-                            {
-                                UnityEngine.Object.Destroy(spriteTexture);
-                            }
-                        }
-                    }
-
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-
-                    if (_audio != null)
-                    {
-                        UnityEngine.Object.Destroy(_audio);
-                        _audio = null;
-                    }
-
                     _bytes = null;
                 }
             }
@@ -553,19 +535,21 @@ namespace Fodinae
 
             // ── Private Static Methods ──
 
-            private static async UniTask<AnimatedSpriteData> AwaitAnimatedSprites(Task<Sprite[]?> task)
+            private async UniTask<AnimatedSpriteData> AwaitAnimatedSprites(Task<Sprite[]?> task)
             {
                 var frames = await task;
-
-                // NOTE: cache entry will have the correct FPS stored; but since we returned a
-                // promise, the stored values are stale for awaiters. This path is rare (concurrent
-                // first requests) — the primary path is the fast-return above.
                 if (frames == null)
                 {
                     throw new InvalidOperationException("Sprite frames were not decoded (null).");
                 }
 
-                return new AnimatedSpriteData(frames, 10f, 0);
+                lock (_lock)
+                {
+                    return new AnimatedSpriteData(
+                        frames,
+                        _spriteFps,
+                        _spriteFrameHeight);
+                }
             }
 
             private static async UniTask<T> AwaitTask<T>(Task<T> task)
@@ -637,8 +621,11 @@ namespace Fodinae
                         animationFrameCount = decoded.FrameCount;
                         if (result != null)
                         {
-                            result.name = $"Cache_GIF_{DateTime.Now.Ticks}|FPS={decoded.FPS}|FrameHeight={decoded.FrameHeight}";
-                            result.filterMode = FilterMode.Point;
+                            result.name = $"Cache_GIF_{DateTime.Now.Ticks}";
+                            RuntimeTextureFactory.ApplySampling(
+                                result,
+                                FilterMode.Point,
+                                TextureWrapMode.Clamp);
                         }
                     }
                     else if (containerType == AnimationContainerDecoder.ContainerType.WebP)
@@ -650,25 +637,28 @@ namespace Fodinae
                         animationFrameCount = decoded.FrameCount;
                         if (result != null)
                         {
-                            result.name = $"Cache_WebP_{DateTime.Now.Ticks}|FPS={decoded.FPS}|FrameHeight={decoded.FrameHeight}";
-                            result.filterMode = FilterMode.Point;
+                            result.name = $"Cache_WebP_{DateTime.Now.Ticks}";
+                            RuntimeTextureFactory.ApplySampling(
+                                result,
+                                FilterMode.Point,
+                                TextureWrapMode.Clamp);
                         }
                     }
                     else
                     {
-                        // PNG or fallback via Unity ImageConversion
-                        result = new Texture2D(2, 2);
-                        bool markNonReadable = SystemInfo.copyTextureSupport != CopyTextureSupport.None;
-                        if (result.LoadImage(bytes, markNonReadable))
-                        {
-                            result.name = $"Cache_Tex_{DateTime.Now.Ticks}";
-                            result.filterMode = FilterMode.Point;
-                        }
-                        else
-                        {
-                            UnityEngine.Object.Destroy(result);
-                            result = null;
-                        }
+                        // ImageConversion.LoadImage changes PNGs to ARGB32.
+                        // Canonicalize every decoded image to RGBA32 so Metal
+                        // can copy it into the RGBA32 terrain atlas without
+                        // relying on API-specific format compatibility.
+                        bool makeNoLongerReadable =
+                            RuntimeTextureFactory.SupportsTexture2DGpuCopy;
+                        result = RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+                            bytes,
+                            $"Cache_Tex_{DateTime.Now.Ticks}",
+                            RuntimeTextureColorSpace.Srgb,
+                            FilterMode.Point,
+                            TextureWrapMode.Clamp,
+                            makeNoLongerReadable: makeNoLongerReadable);
                     }
 
                     TaskCompletionSource<Texture2D?>? texPromise;
@@ -699,7 +689,7 @@ namespace Fodinae
                 ReleaseRawBytes();
                 lock (_lock)
                 {
-                    _texturePromise?.TrySetException(ex ?? new Exception("Texture decode failed"));
+                    _texturePromise?.TrySetException(ex);
                     _texturePromise = null;
                 }
             }
@@ -743,7 +733,7 @@ namespace Fodinae
                 ReleaseRawBytes();
                 lock (_lock)
                 {
-                    _audioPromise?.TrySetException(ex ?? new Exception("Audio decode failed"));
+                    _audioPromise?.TrySetException(ex);
                     _audioPromise = null;
                 }
             }
@@ -841,8 +831,11 @@ namespace Fodinae
                     {
                         fps = anim.FPS;
                         frameHeight = anim.FrameHeight;
-                        anim.Atlas.name = $"Cache_Animation_{DateTime.Now.Ticks}|FPS={fps}|FrameHeight={frameHeight}";
-                        anim.Atlas.filterMode = FilterMode.Point;
+                        anim.Atlas.name = $"Cache_Animation_{DateTime.Now.Ticks}";
+                        RuntimeTextureFactory.ApplySampling(
+                            anim.Atlas,
+                            FilterMode.Point,
+                            TextureWrapMode.Clamp);
                         result = AnimationContainerDecoder.Decode(
                             anim.Atlas, anim.Atlas.width, anim.FrameHeight, anim.FrameCount);
                     }
@@ -880,12 +873,12 @@ namespace Fodinae
                 ReleaseRawBytes();
                 lock (_lock)
                 {
-                    _spritePromise?.TrySetException(ex ?? new Exception("Sprite decode failed"));
+                    _spritePromise?.TrySetException(ex);
                     _spritePromise = null;
                 }
             }
 
-            private void ReleaseRawBytes()
+            internal void ReleaseRawBytes()
             {
                 lock (_lock)
                 {

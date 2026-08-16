@@ -71,7 +71,7 @@ namespace Fodinae.UI
             }
 
             _mapToggleAction = new InputAction("MapToggle", binding: "<Keyboard>/m");
-            _mapToggleAction.performed += _ => ToggleMapMode();
+            _mapToggleAction.performed += OnMapTogglePerformed;
             _mapToggleAction.Enable();
             _initialized = true;
         }
@@ -79,12 +79,14 @@ namespace Fodinae.UI
         protected void OnDestroy()
         {
             DisposeMapToggleAction();
-            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            UnsubscribeFromPlayerSpawn();
         }
 
         protected void OnDisable()
         {
             DisposeMapToggleAction();
+            UnsubscribeFromPlayerSpawn();
+            _initialized = false;
         }
 
         private void DisposeMapToggleAction()
@@ -94,16 +96,32 @@ namespace Fodinae.UI
                 return;
             }
 
+            _mapToggleAction.performed -= OnMapTogglePerformed;
             _mapToggleAction.Disable();
             _mapToggleAction.Dispose();
             _mapToggleAction = null;
         }
 
+        private void OnMapTogglePerformed(InputAction.CallbackContext context)
+        {
+            ToggleMapMode();
+        }
+
         private void OnLocalPlayerSpawned(PlayerMovementController player)
         {
+            UnsubscribeFromPlayerSpawn();
+            _player = player;
+        }
+
+        private void UnsubscribeFromPlayerSpawn()
+        {
+            if (!_playerSpawnSubscription)
+            {
+                return;
+            }
+
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
             _playerSpawnSubscription = false;
-            _player = player;
         }
 
         private void ToggleMapMode()
@@ -119,8 +137,10 @@ namespace Fodinae.UI
                     "[WorldMapController] Map toggle was requested before the VContainer resolver was initialized.");
             }
 
-            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (mapStorage == null || !mapStorage.IsReady)
+            MapStorage mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException(
+                    "[WorldMapController] MapStorage is not registered.");
+            if (!mapStorage.IsReady)
             {
                 return;
             }
@@ -151,8 +171,10 @@ namespace Fodinae.UI
 
             _player = player;
 
-            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (mapStorage == null || !mapStorage.IsReady)
+            MapStorage mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException(
+                    "[WorldMapController] MapStorage is not registered.");
+            if (!mapStorage.IsReady)
             {
                 return;
             }

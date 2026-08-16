@@ -82,9 +82,12 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 - Серверные координаты: левый верхний угол `(0, 0)`, X вправо, Y вниз. Все преобразования — через `CoordinateUtils`; всегда учитывать `MapManager.WorldHeight`.
 - `MapManager` получает `WorldInitPacket`/`MapRegionPacket`; `MapStorage` хранит чанки 32×32, `persistentDataPath/*.mapb`, и уведомляет renderer через `OnCellChanged()`.
 - `WorldLayer<T>` — дисковый streaming, LRU RAM-кэш, RLE и append-only запись с компактификацией. Текстуры загружаются из файловой системы, не из Resources/Addressables.
-- `SingleMeshTerrainRenderer` рисует видимый мир одним mesh (7 UV-каналов, sorting order `-1000`) и обновляет изменения дифференциально. `SurfaceRenderer` обслуживает Transit/Perspective.
+- `SingleMeshTerrainRenderer` рисует видимый мир одним mesh (7 UV-каналов, sorting order `-1000`) и обновляет изменения дифференциально. `SurfaceRenderer` обслуживает закартовые поверхности и обязан регистрироваться/разрешаться через `GameLifetimeScope` до startup validation. `SceneSetup` только загружает его обязательные текстуры; вручную создавать второй `SurfaceRenderer` запрещено.
 - `TerrainCellCache` привязан к мировой сетке шагом 8: при движении сохранять пересечение и заполнять только новые полосы. Zoom-кэш квантовать по 32 клеткам, уменьшать через 0.4 с после стабилизации; не аллоцировать ресурсы каждый кадр.
 - `AnimationContainerDecoder` поддерживает PNG/GIF/WebP; анимация тайла не меняет его окклюзию или emission.
+- `CellConfigurationPacket.Animation` задаёт shader-анимацию и **не означает**, что PNG является frame-atlas. Только `FrameOffset > 0` задаёт высоту вертикального кадра в клетках; `FrameOffset == 0` легитимен для UV/color-анимаций. В частности, Lava использует animation type `4`, серверную скорость и намеренный `FrameOffset=0`: она скроллит UV единого tiled sheet. Не выводить frame count из `Animation != None` и не обнулять `AnimationSpeed` при отсутствии кадров.
+- Геометрия верхней закартовой поверхности фиксирована авторским контрактом: от верхней границы мира идут `Transit` высотой `2` world cells и шириной горизонтального тайла `32`, затем `Perspective` высотой `2` и шириной тайла `5`; выше остаётся фон/небо. Обе текстуры повторяются только по X и clamp'ятся по Y. Красноскал бесконечен только слева, справа и снизу карты, но не сверху. Эти размеры нельзя заменять размерами PNG или границей камеры.
+- Production runtime-текстуры создаются/декодируются только через `RuntimeTextureFactory`: канонический `RGBA32`, без mipmaps, с явно заданными color space, filter и wrap. Прямые `new Texture2D(...)` и `LoadImage(...)` вне фабрики запрещены. Terrain atlas copy предварительно проверяет точные размеры и совместимый graphics format; диагностическая случайная texture отсутствующего terrain-ассета — сознательная обязательная функция, не удалять.
 
 ### Игрок
 
@@ -136,12 +139,14 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 6. `FPSCounter.OnDestroy()` должен удалить созданный им `_ownedCanvas`.
 7. `ProgrammatorGrid` ширина контейнера: `COLS * (CELLSIZE + CELL_GAP * 2 + 2f)`; `+2f` обязателен из-за border.
 8. UI Toolkit не поддерживает `calc()`: использовать готовое число или inline-стиль из C#.
+9. Shader-анимация terrain и frame-atlas — независимые признаки: `AnimationSpeed` применяется и при одном texture frame; `FrameOffset=0` нельзя превращать в скрытую высоту кадра.
 
 ## 6. Workflow и диагностика
 
 - **Кэш Unity никогда не считать причиной дефекта.** Не списывать ошибки на `Library/`, кэш импорта, кэш шейдеров или layout-кэш редактора. Причину искать в исходном коде, сериализованных данных, настройках проекта и фактическом runtime-состоянии; очистка кэша не является исправлением.
+- **Перекомпиляция не является универсальным объяснением.** Нельзя объяснять визуальный или runtime-дефект только тем, что «Unity не перекомпилировал скрипты», «сборка старая» или «нужно обновить домен». Сначала обязательно проверить саму реализацию, сериализованные ссылки/настройки, фактические параметры объектов и диагностические логи. Перекомпиляцию можно указать только как отдельно подтверждённый blocker после доказательства, что исполняемый код действительно отличается от исходников.
 
-- Основная сцена — `Assets/Scenes/MainGame.unity`; offline режим даёт `DummyConnection`.
+- Сейчас в репозитории одна production-сцена — `Assets/Scenes/MainGame.unity`; offline режим даёт `DummyConnection`. Обязательная следующая архитектурная миграция — две отдельные production-сцены для главного меню и игры. До выполнения миграции не утверждать, что разделение уже существует; переносить объекты и менять Build Settings только через Unity MCP/Editor API, не текстовой правкой YAML.
 - Сборка: `BuildScript.BuildMacOS` из `Assets/Editor/`; стандартный Build Settings не копирует текстуры.
 - Сцена должна содержать/инициализировать `TerrainMesh`, `SingleMeshTerrainRenderer`, `UIDocument`, `Main Camera`, `Global Light 2D`, `SceneSetup`, `MapManager`, `GameLifetimeScope`.
 - F12 пишет runtime snapshot в `diagnostic.txt`, F11 повторно сканирует `[Inject]` в `inject_diagnostic.txt`. Edit Mode: `Fodinae/Diagnostics/Validate Injections`. Статический анализ — `scripts/inject_analysis.py`.
@@ -153,6 +158,8 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 ```bash
 dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary 2>&1
 ```
+
+`scripts/pre-commit-lint.sh` обязан собирать `Assembly-CSharp.csproj` раньше `Assembly-CSharp-Editor.csproj`: editor assembly ссылается на runtime DLL, и обратный/недетерминированный порядок создаёт ложные missing-member ошибки против старой DLL.
 
 Все предупреждения `SA`, `CA`, `RCS`, `S`, `UNT` исправить до финального ответа. Не использовать `--no-verify` и не обходить pre-commit hooks; при зависании разобраться с причиной.
 

@@ -44,6 +44,7 @@ namespace Fodinae.UI
         {
             if (_initialized)
             {
+                RebindGameManager();
                 return;
             }
 
@@ -75,6 +76,35 @@ namespace Fodinae.UI
             Refresh();
         }
 
+        private void RebindGameManager()
+        {
+            if (!ServiceLocator.IsInitialized)
+            {
+                if (_gameManager != null)
+                {
+                    _gameManager.OnWorldLoaded -= OnWorldLoaded;
+                    _gameManager = null;
+                }
+
+                return;
+            }
+
+            GameManager? current = ServiceLocator.Resolve<GameManager>();
+            if (current == null)
+            {
+                return;
+            }
+
+            if (_gameManager != null && !ReferenceEquals(_gameManager, current))
+            {
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            }
+
+            _gameManager = current;
+            _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            _gameManager.OnWorldLoaded += OnWorldLoaded;
+        }
+
         private void OnDestroy()
         {
             _spinnerSchedule?.Pause();
@@ -88,6 +118,11 @@ namespace Fodinae.UI
 
         private void Update()
         {
+            if (_initialized && _gameManager == null)
+            {
+                RebindGameManager();
+            }
+
             if (!_initialized)
             {
                 TryInitialize();

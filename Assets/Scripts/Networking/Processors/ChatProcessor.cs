@@ -1,6 +1,6 @@
 #nullable enable
 
-using System.Linq;
+using System;
 using Fodinae.Core;
 using Fodinae.UI;
 using MinesServer.Networking.Server.Packets.Chat;
@@ -31,6 +31,14 @@ namespace Fodinae.Networking.Processors
 
         public void Process(ChatMutePacket packet)
         {
+            var globalChat = Fodinae.Core.ServiceLocator.Resolve<GlobalChatUI>();
+            if (globalChat == null)
+            {
+                throw new InvalidOperationException(
+                    "ChatMutePacket received before GlobalChatUI was initialized.");
+            }
+
+            globalChat.ApplyMute(packet);
         }
 
         public void Process(ChatListPacket packet)

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -57,6 +58,7 @@ namespace Fodinae.UI
         private long _lastRenderedStorageRevision = -1;
         private bool _chunkLoadRefreshRequested;
         private WorldLayer<CellType>? _subscribedCellLayer;
+        private bool _playerMoveSubscribed;
 
         // Toggle state
         private bool _isVisible = true;
@@ -70,21 +72,28 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            if (_uiSize < 3)
+            {
+                throw new InvalidOperationException(
+                    $"Minimap size must be at least 3 pixels for the player marker; got {_uiSize}.");
+            }
+
             // GameBootstrap (IPostStartable.PostStart) injects [Inject] fields only after
             // MonoBehaviour.Start, so _mapManager/_mapStorage are null here. Never disable
             // the component based on that: Update() -> TryInitialize() resolves them via
             // ServiceLocator and waits for the world to become ready. World dimensions are
             // computed there too (InitializeWorldState), so they are not duplicated here.
 
-            // Render at the on-screen display size so 1 world cell = 1 screen pixel.
-            // A lower-res texture upscaled with Point filtering produces jagged,
-            // shimmering cells; matching the display resolution removes that
-            // upscale aliasing entirely, and Bilinear covers canvas DPI scaling.
-            _minimapTexture = new Texture2D(_uiSize, _uiSize, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp,
-            };
+            // Every texel is a discrete world-cell sample. Bilinear filtering
+            // invents colors between adjacent cells and blurs unloaded chunk
+            // boundaries, so the display must preserve nearest-neighbour data.
+            _minimapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                _uiSize,
+                _uiSize,
+                "MinimapTexture",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp);
 
             _pixelColors = new Color32[_uiSize * _uiSize];
 
@@ -93,7 +102,7 @@ namespace Fodinae.UI
             _player = PlayerMovementController.LocalPlayer;
             if (_player != null)
             {
-                _player.OnPlayerMoved += OnPlayerMoved;
+                BindPlayer(_player);
             }
             else
             {
@@ -105,16 +114,13 @@ namespace Fodinae.UI
         {
             PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
             _player = player;
-            if (_player != null)
+            BindPlayer(player);
+            if (_ready)
             {
-                _player.OnPlayerMoved += OnPlayerMoved;
-                if (_ready)
+                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                if (_isVisible)
                 {
-                    UpdateCoordinatesText(_player.Position.x, _player.Position.y);
-                    if (_isVisible)
-                    {
-                        RefreshTexture(_player.Position.x, _player.Position.y);
-                    }
+                    RefreshTexture(_player.Position.x, _player.Position.y);
                 }
             }
         }
@@ -151,6 +157,13 @@ namespace Fodinae.UI
             {
                 _chunkLoadRefreshRequested = false;
                 RefreshTexture(_player.Position.x, _player.Position.y);
+                _initialRefreshDone = _lastRefreshHadLoadedCells;
+                if (_initialRefreshDone)
+                {
+                    _lastRenderedStorageRevision = _mapStorage?.Revision ??
+                        throw new InvalidOperationException(
+                            "Minimap storage was lost after a chunk loaded.");
+                }
             }
 
             if (Keyboard.current != null && Keyboard.current.nKey.wasPressedThisFrame)
@@ -166,15 +179,8 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_mapManager == null)
-            {
-                _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
-            }
-
-            if (_mapStorage == null)
-            {
-                _mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            }
+            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
 
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
@@ -186,7 +192,11 @@ namespace Fodinae.UI
                 return;
             }
 
-            _player ??= PlayerMovementController.LocalPlayer;
+            PlayerMovementController? localPlayer = PlayerMovementController.LocalPlayer;
+            if (localPlayer != null)
+            {
+                BindPlayer(localPlayer);
+            }
 
             if (!_ready)
             {
@@ -206,7 +216,7 @@ namespace Fodinae.UI
                 _initialRefreshDone = !_isVisible || _lastRefreshHadLoadedCells;
                 if (_initialRefreshDone)
                 {
-                    _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
+                    _lastRenderedStorageRevision = _mapStorage.Revision;
                 }
             }
         }
@@ -221,6 +231,12 @@ namespace Fodinae.UI
             for (int i = 0; i <= 255; i++)
             {
                 CellType cellType = (CellType)i;
+                if (cellType == CellType.Unloaded)
+                {
+                    _cellColors[cellType] = UnloadedColor;
+                    continue;
+                }
+
                 Color color = _mapManager.GetCellMinimapColor(cellType);
                 if (color.a < 0.01f)
                 {
@@ -336,6 +352,7 @@ namespace Fodinae.UI
         {
             if (_ready)
             {
+                RebindRuntimeSources();
                 SetVisible(_isVisible);
             }
         }
@@ -343,6 +360,70 @@ namespace Fodinae.UI
         protected void OnDisable()
         {
             SetVisible(false);
+        }
+
+        private void BindPlayer(PlayerMovementController player)
+        {
+            if (ReferenceEquals(_player, player) && _playerMoveSubscribed)
+            {
+                return;
+            }
+
+            if (_playerMoveSubscribed && _player != null)
+            {
+                _player.OnPlayerMoved -= OnPlayerMoved;
+            }
+
+            _player = player;
+            _player.OnPlayerMoved -= OnPlayerMoved;
+            _player.OnPlayerMoved += OnPlayerMoved;
+            _playerMoveSubscribed = true;
+        }
+
+        private void RebindRuntimeSources()
+        {
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                _ready = false;
+                return;
+            }
+
+            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
+            if (_mapManager == null || _mapStorage == null)
+            {
+                _ready = false;
+                return;
+            }
+
+            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+            if (_playerMoveSubscribed && _player != null)
+            {
+                _player.OnPlayerMoved -= OnPlayerMoved;
+                _playerMoveSubscribed = false;
+            }
+
+            _player = PlayerMovementController.LocalPlayer;
+            if (_player != null)
+            {
+                BindPlayer(_player);
+            }
+            else
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += OnPlayerSpawned;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                _subscribedCellLayer = null;
+            }
+
+            _cellLayer = null;
+            _cellSampler.Bind(null);
+            _cellSampler.Invalidate();
+            _ready = false;
+            InitializeWorldState();
         }
 
         private void OnPlayerMoved(Vector2Int oldPos, Vector2Int newPos)
@@ -377,7 +458,9 @@ namespace Fodinae.UI
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
                 RefreshTexture(newPos.x, newPos.y);
-                _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
+                MapStorage storage = _mapStorage ??
+                    throw new InvalidOperationException("Minimap storage was lost during refresh.");
+                _lastRenderedStorageRevision = storage.Revision;
             }
         }
 
@@ -434,7 +517,9 @@ namespace Fodinae.UI
                     if (_cellSampler.TryGetCell(serverX, serverY, out CellType cellType))
                     {
                         hasLoadedCells = true;
-                        colors[index++] = cellColors[cellType];
+                        colors[index++] = cellType == CellType.Unloaded
+                            ? UnloadedColor
+                            : cellColors[cellType];
                     }
                     else
                     {
@@ -488,6 +573,7 @@ namespace Fodinae.UI
             if (_player != null)
             {
                 _player.OnPlayerMoved -= OnPlayerMoved;
+                _playerMoveSubscribed = false;
             }
 
             if (_subscribedCellLayer != null)
@@ -511,7 +597,9 @@ namespace Fodinae.UI
                 _lastUpdateTime = Time.time;
                 _lastUpdatePos = _player.Position;
                 RefreshTexture(_player.Position.x, _player.Position.y);
-                _lastRenderedStorageRevision = _mapStorage?.Revision ?? -1;
+                MapStorage storage = _mapStorage ??
+                    throw new InvalidOperationException("Minimap storage was lost while becoming visible.");
+                _lastRenderedStorageRevision = storage.Revision;
             }
         }
 

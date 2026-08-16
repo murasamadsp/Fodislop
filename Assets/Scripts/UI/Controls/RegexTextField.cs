@@ -8,7 +8,7 @@ namespace Fodinae.UI.Controls
     public class RegexTextField : TextField
     {
         private int _lastCursorIndex;
-        private string _lastValidValue = string.Empty;
+        private string _lastValidValue;
         private string _regex = string.Empty;
         public string Regex
         {

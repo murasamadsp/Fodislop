@@ -7,9 +7,12 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-    [Serializable, VolumeComponentMenu("Fodinae/Color Grading")]
+    [Serializable]
+    [VolumeComponentMenu("Fodinae/Color Grading")]
     public class ColorGradingComponent : VolumeComponent, IPostProcessComponent
     {
+        // Keep the serialized Volume parameter names stable for existing profiles.
+#pragma warning disable SA1307
         [Tooltip("Exposure compensation in stops. Zero is neutral.")]
         public ClampedFloatParameter exposure = PostProcessDefaults.ColorGradingExposure();
 
@@ -34,5 +37,6 @@ namespace Fodinae.Rendering.PostProcessing
                                  contrast.value != 0f ||
                                  saturation.value != 1f;
         public bool IsTileCompatible() => true;
+#pragma warning restore SA1307
     }
 }

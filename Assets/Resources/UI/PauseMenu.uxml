@@ -1,6 +1,6 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="PauseOverlay" class="pause-overlay ui-overlay ui-overlay--modal">
-        <ui:VisualElement name="Dimmer" class="pause-dimmer" picking-mode="Ignore" />
+        <ui:VisualElement name="Dimmer" class="pause-dimmer" />
 
         <ui:VisualElement name="MainPage" class="pause-panel pause-page">
             <ui:Label text="Меню" class="pause-title" />

@@ -79,12 +79,15 @@ namespace Fodinae.Core
             _resolver.Resolve<FPSCounter>();
             _resolver.Resolve<DiagnosticRunner>();
             _resolver.Resolve<IInputBlocker>();
-            _resolver.Resolve<PostProcessController>();
+            PostProcessController postProcessController =
+                _resolver.Resolve<PostProcessController>();
+            postProcessController.EnsureVolumeSetup();
 
             var gameManager = _resolver.Resolve<GameManager>();
             _resolver.Resolve<ServerConfig>();
             var lightingEngine = _resolver.Resolve<TerrariaLightingEngine>();
             lightingEngine.EnsureInitialized();
+            _resolver.Resolve<SurfaceRenderer>();
             _resolver.Resolve<TextureStorageManager>();
             _resolver.Resolve<WorldTextureManager>();
             _resolver.Resolve<ServerAudioEventManager>();
@@ -212,6 +215,7 @@ namespace Fodinae.Core
             ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.Terrain);
             ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.DynamicEmission);
             ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.Velocity);
+            ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.WorldSurface);
 
             if (Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute) == null)
             {

@@ -200,7 +200,25 @@ namespace Fodinae.UI.HUD.Player.View
                 }
 
                 string name = ct.ToString().ToLowerInvariant();
-                var tex = await _assetLoader.GetTextureAsync("Crystals/" + name, cancellationToken);
+                Texture2D? tex;
+                try
+                {
+                    tex = await _assetLoader.GetTextureAsync(
+                        "Crystals/" + name,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning(
+                        $"[PlayerHUD] Optional crystal texture '{name}' was skipped: " +
+                        exception.Message);
+                    continue;
+                }
+
                 if (cancellationToken.IsCancellationRequested || this == null)
                 {
                     return;
@@ -691,6 +709,10 @@ namespace Fodinae.UI.HUD.Player.View
             var tex = Resources.Load<Texture2D>($"Skills/{skill}");
             if (tex != null)
             {
+                RuntimeTextureFactory.ApplySampling(
+                    tex,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
                 iconImage.image = tex;
             }
 

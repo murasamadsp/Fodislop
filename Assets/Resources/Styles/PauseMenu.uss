@@ -22,10 +22,10 @@
 }
 
 .pause-panel {
-    background-color: var(--color-panel-bg);
+    background-color: rgba(16, 18, 22, 0.97);
     border-width: 2px;
     border-color: var(--color-panel-border);
-    padding: 20px 30px;
+    padding: 24px 30px;
     flex-direction: column;
     align-items: center;
     width: 520px;
@@ -41,6 +41,8 @@
 .pause-settings {
     width: 760px;
     max-width: 90%;
+    padding-left: 28px;
+    padding-right: 28px;
 }
 
 .pause-page {
@@ -52,18 +54,21 @@
     -unity-font-style: bold;
     color: var(--color-accent);
     margin-bottom: 16px;
+    flex-shrink: 0;
 }
 
 .pause-slider-container {
     flex-direction: column;
-    margin-bottom: 12px;
+    margin-bottom: 18px;
+    padding-top: 4px;
     min-width: 240px;
 }
 
 .pause-slider-label {
     font-size: var(--font-size-md);
     color: var(--color-text);
-    margin-bottom: 4px;
+    margin-bottom: 8px;
+    white-space: normal;
 }
 
 .pause-scroll {
@@ -76,18 +81,20 @@
 .settings-layout {
     flex-direction: row;
     width: 100%;
-    height: 0;
     min-width: 0;
     min-height: 0;
     flex-grow: 1;
     flex-shrink: 1;
+    margin-bottom: 18px;
 }
 
 .settings-navigation {
     width: 150px;
     min-width: 150px;
     flex-shrink: 0;
-    padding-right: 12px;
+    padding-top: 6px;
+    padding-right: 18px;
+    margin-right: 2px;
     border-right-width: 1px;
     border-right-color: rgba(90, 90, 90, 0.65);
 }
@@ -97,30 +104,37 @@
     flex-direction: column;
     flex-grow: 1;
     flex-shrink: 1;
-    flex-basis: 0;
-    height: 0;
     min-width: 0;
     min-height: 0;
-    padding-left: 14px;
+    padding-left: 20px;
+    padding-right: 8px;
     overflow: hidden;
 }
 
 .settings-page {
     position: relative;
     width: 100%;
-    height: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    flex-basis: 0;
-    min-width: 0;
     min-height: 0;
+}
+
+.settings-page .unity-scroll-view__content-viewport {
+    padding-top: 6px;
+    padding-right: 14px;
+    padding-bottom: 28px;
+    padding-left: 2px;
+}
+
+.settings-page .unity-scroll-view__content-container {
+    padding-bottom: 18px;
 }
 
 .settings-tab {
     min-width: 0;
     width: 100%;
-    margin-bottom: 6px;
-    padding: 8px 10px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
     -unity-text-align: middle-left;
 }
 
@@ -138,31 +152,44 @@
     flex-direction: column;
     width: 100%;
     min-width: 0;
-    margin-bottom: 18px;
-    padding-bottom: 10px;
-    border-bottom-width: 1px;
-    border-bottom-color: rgba(90, 90, 90, 0.65);
+    margin-bottom: 22px;
+    padding: 14px 14px 16px 14px;
+    background-color: rgba(30, 34, 41, 0.92);
+    border-width: 1px;
+    border-color: rgba(105, 112, 125, 0.65);
+    border-radius: 3px;
 }
 
 .settings-section__title {
     color: var(--color-accent);
     font-size: var(--font-size-lg);
     -unity-font-style: bold;
-    margin-bottom: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(178, 166, 128, 0.55);
+}
+
+.settings-section .unity-label,
+.settings-section .unity-base-field__label,
+.settings-section .unity-toggle__label,
+.settings-section .unity-foldout__text {
+    color: rgba(245, 246, 248, 1);
 }
 
 .settings-section--advanced,
 .settings-section--debug {
-    background-color: rgba(0, 0, 0, 0.18);
+    background-color: rgba(24, 27, 33, 0.98);
     border-width: 1px;
     border-color: rgba(90, 90, 90, 0.65);
-    padding: 10px;
+    padding: 14px;
 }
 
 .settings-section--advanced .unity-foldout__content,
 .settings-section--debug .unity-foldout__content {
-    margin-top: 10px;
-    padding-left: 8px;
+    margin-top: 14px;
+    padding-left: 10px;
+    padding-right: 4px;
 }
 
 .settings-section--debug {
@@ -232,6 +259,12 @@
     color: var(--color-text);
     font-size: var(--font-size-md);
     -unity-text-align: middle-center;
+}
+
+#SettingsBack {
+    flex-shrink: 0;
+    margin-top: 4px;
+    margin-bottom: 0;
 }
 
 .pause-btn:hover {

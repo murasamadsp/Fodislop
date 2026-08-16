@@ -29,7 +29,10 @@ namespace Fodinae.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForDomainReload()
         {
-            Clear();
+            // Runtime renderers survive script-domain reloads and keep their
+            // sharedMaterial references. Destroying those materials here leaves
+            // the restored renderers bound to Unity fake-null objects.
+            _materials.Clear();
             _shader = null;
         }
 
@@ -45,8 +48,12 @@ namespace Fodinae.Core
                 return mat;
             }
 
-            mat = new Material(Shader);
-            mat.mainTexture = texture;
+            mat = new Material(Shader)
+            {
+                name = $"Shared Sprite Material ({texture.name})",
+                hideFlags = HideFlags.DontSave,
+                mainTexture = texture,
+            };
             _materials[texture] = mat;
             return mat;
         }

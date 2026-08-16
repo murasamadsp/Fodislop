@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae;
@@ -13,7 +14,6 @@ using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Fodinae.World
 {
@@ -119,10 +119,13 @@ namespace Fodinae.World
                 }
             }
 
-            _flowMapTexture = new Texture2D(12, 10, TextureFormat.RGBA32, false);
-            _flowMapTexture.name = "ShimmerFlowMap";
-            _flowMapTexture.filterMode = FilterMode.Bilinear;
-            _flowMapTexture.wrapMode = TextureWrapMode.Repeat;
+            _flowMapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                12,
+                10,
+                "ShimmerFlowMap",
+                RuntimeTextureColorSpace.Linear,
+                FilterMode.Bilinear,
+                TextureWrapMode.Repeat);
 
             var random = new System.Random(42);
             var pixels = new Color[12 * 10];
@@ -133,7 +136,7 @@ namespace Fodinae.World
             }
 
             _flowMapTexture.SetPixels(pixels);
-            _flowMapTexture.Apply(false, SystemInfo.copyTextureSupport != CopyTextureSupport.None);
+            _flowMapTexture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
         }
 
         public event Action<string, Texture2D>? OnTextureLoaded;
@@ -179,15 +182,10 @@ namespace Fodinae.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    float speed = textureInfo.ContainerFPS;
-                    MapManager? mmForAnim = null;
-                    if (speed <= 0)
-                    {
-                        mmForAnim = ServiceLocator.Resolve<MapManager>() ??
-                            throw new InvalidOperationException(
-                                "MapManager is required to resolve animation speed for a terrain texture.");
-                        speed = mmForAnim.GetAnimationSpeed(cellType);
-                    }
+                    MapManager mmForAnim = ServiceLocator.Resolve<MapManager>() ??
+                        throw new InvalidOperationException(
+                            "MapManager is required to resolve animation metadata for a terrain texture.");
+                    float speed = mmForAnim.GetAnimationSpeed(cellType);
 
                     if (speed <= 0)
                     {
@@ -196,9 +194,7 @@ namespace Fodinae.World
                     }
 
                     frameIndex = (int)(Time.realtimeSinceStartup * speed) % textureInfo.AnimationFrames;
-                    frameHeight = textureInfo.ContainerFPS > 0
-                        ? textureInfo.FrameSize
-                        : (mmForAnim ?? ServiceLocator.Resolve<MapManager>()!).GetAnimationFrameHeight(cellType);
+                    frameHeight = mmForAnim.GetAnimationFrameHeight(cellType);
                 }
 
                 foreach (var atlas in _atlases)
@@ -244,38 +240,21 @@ namespace Fodinae.World
         public float GetAnimationSpeedForCell(CellType cellType)
         {
             EnsureInitialized();
-            if (_textureCache.TryGetTexture(cellType, out var info))
-            {
-                if (info.ContainerFPS > 0)
-                {
-                    return info.ContainerFPS;
-                }
-
-                if (info.AnimationFrames <= 1)
-                {
-                    return 0f;
-                }
-
-                MapManager mmForSpeed = ServiceLocator.Resolve<MapManager>() ??
-                    throw new InvalidOperationException(
-                        "MapManager is required to resolve animation speed for a terrain texture.");
-                byte speed = mmForSpeed.GetAnimationSpeed(cellType);
-                if (speed <= 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Server animation speed for cell type {cellType} must be greater than zero.");
-                }
-
-                return speed;
-            }
-
             MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
                 throw new InvalidOperationException(
-                    "MapManager is required to resolve animation speed before terrain texture metadata is loaded.");
-            byte serverSpeed = mapManager.GetAnimationSpeed(cellType);
+                    "MapManager is required to resolve terrain animation metadata.");
+            if (!mapManager.HasAnimation(cellType))
+            {
+                return 0f;
+            }
 
-            // Zero is the valid server value for a static texture. It only becomes
-            // invalid when an actually animated texture needs a frame cadence.
+            byte serverSpeed = mapManager.GetAnimationSpeed(cellType);
+            if (serverSpeed == 0)
+            {
+                throw new InvalidDataException(
+                    $"Server animation speed for cell type {cellType} must be greater than zero.");
+            }
+
             return serverSpeed;
         }
 
@@ -360,9 +339,9 @@ namespace Fodinae.World
             }
 
 
-            var cachedTexture = _textureCache.GetCachedTexture(cellType);
-            if (cachedTexture != null)
+            if (_textureCache.TryGetTexture(cellType, out CellTextureInfo cachedTextureInfo))
             {
+                Texture2D cachedTexture = cachedTextureInfo.BaseTexture;
                 bool alreadyInAtlas = false;
                 foreach (var atlas in _atlases)
                 {
@@ -375,7 +354,10 @@ namespace Fodinae.World
 
                 if (!alreadyInAtlas)
                 {
-                    AddTextureToAtlas(cellType, cachedTexture);
+                    AddTextureToAtlas(
+                        cellType,
+                        cachedTexture,
+                        cachedTextureInfo.OwnsBaseTexture);
                 }
 
                 return;
@@ -384,9 +366,9 @@ namespace Fodinae.World
             Texture2D? texture = null;
             try
             {
-                ClientAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader ??
+                IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
                     throw new InvalidOperationException(
-                        "ClientAssetLoader is required to load terrain textures.");
+                        "IAssetLoader is required to load terrain textures.");
                 texture = await loader.GetTextureAsync(filename);
             }
             catch (Exception ex)
@@ -402,28 +384,27 @@ namespace Fodinae.World
                 }
 
                 await UniTask.SwitchToMainThread();
-                AddTextureToAtlas(cellType, texture);
+                AddTextureToAtlas(cellType, texture, ownsTexture: false);
+                return;
             }
-            else
-            {
-                // Missing server textures are an explicit visual diagnostic mode: keep
-                // the terrain mesh alive and make the missing cell type visible.
-                Debug.LogWarning($"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
-                texture = CreateMissingTexture(cellType);
-                AddTextureToAtlas(cellType, texture);
-            }
+
+            Debug.LogWarning(
+                $"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
+            texture = CreateMissingTexture(cellType);
+            AddTextureToAtlas(cellType, texture, ownsTexture: true);
         }
 
         private Texture2D CreateMissingTexture(CellType cellType)
         {
-            var texture = new Texture2D(_cellTextureSize, _cellTextureSize, TextureFormat.RGBA32, false)
-            {
-                name = $"MissingCell_{(int)cellType}",
-                filterMode = FilterMode.Point,
-                wrapMode = TextureWrapMode.Clamp,
-            };
+            Texture2D texture = RuntimeTextureFactory.CreateRgba32NoMip(
+                _cellTextureSize,
+                _cellTextureSize,
+                $"MissingCell_{(int)cellType}",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp);
             var random = new System.Random(unchecked((int)cellType * 397) ^ 0x5F3759DF);
-            var pixels = new Color[_cellTextureSize * _cellTextureSize];
+            Color[] pixels = new Color[_cellTextureSize * _cellTextureSize];
             for (int y = 0; y < _cellTextureSize; y++)
             {
                 for (int x = 0; x < _cellTextureSize; x++)
@@ -439,7 +420,10 @@ namespace Fodinae.World
             return texture;
         }
 
-        private void AddTextureToAtlas(CellType cellType, Texture2D texture)
+        private void AddTextureToAtlas(
+            CellType cellType,
+            Texture2D texture,
+            bool ownsTexture)
         {
             foreach (var atlas in _atlases)
             {
@@ -453,36 +437,28 @@ namespace Fodinae.World
                 throw new InvalidOperationException(
                     "MapManager is required to resolve terrain texture frame metadata.");
             int frameHeight = mmForFrame.GetAnimationFrameHeight(cellType);
-            float containerFPS = 0;
 
-            if (texture.name.Contains("|"))
-            {
-                string[] parts = texture.name.Split('|');
-                foreach (string part in parts)
-                {
-                    if (part.StartsWith("FPS="))
-                    {
-                        float.TryParse(part.Substring(4), out containerFPS);
-                    }
-                    else if (part.StartsWith("FrameHeight="))
-                    {
-                        int.TryParse(part.Substring(12), out frameHeight);
-                    }
-                }
-            }
-
-            int effectiveFrameHeight = frameHeight > 0 ? frameHeight : texture.height;
+            ValidateTerrainTextureDimensions(
+                cellType,
+                texture,
+                frameHeight);
+            bool hasFrameAtlas = frameHeight > 0;
+            int effectiveFrameHeight = hasFrameAtlas
+                ? frameHeight
+                : texture.height;
 
             var textureInfo = new CellTextureInfo
             {
                 CellType = cellType,
                 BaseTexture = texture,
+                OwnsBaseTexture = ownsTexture,
                 HasVariations = texture.width > _cellTextureSize || effectiveFrameHeight > _cellTextureSize,
                 VariationCount = 1,
-                AnimationFrames = frameHeight > 0 ? texture.height / frameHeight : 1,
+                AnimationFrames = hasFrameAtlas
+                    ? texture.height / frameHeight
+                    : 1,
                 FramesPerRow = 1,
                 FrameSize = effectiveFrameHeight,
-                ContainerFPS = containerFPS,
             };
 
             if (_currentAtlas == null)
@@ -517,6 +493,37 @@ namespace Fodinae.World
             _textureCache.AddTexture(cellType, textureInfo);
             TextureRevision++;
             OnTextureLoaded?.Invoke($"Cells/{(int)cellType}.png", texture);
+        }
+
+        private void ValidateTerrainTextureDimensions(
+            CellType cellType,
+            Texture2D texture,
+            int frameHeight)
+        {
+            if (texture.width <= 0 || texture.height <= 0 ||
+                texture.width % _cellTextureSize != 0 ||
+                texture.height % _cellTextureSize != 0)
+            {
+                throw new InvalidDataException(
+                    $"Terrain texture for {cellType} has invalid dimensions " +
+                    $"{texture.width}x{texture.height}; both dimensions must be positive " +
+                    $"multiples of {_cellTextureSize} pixels.");
+            }
+
+            // FrameOffset=0 explicitly means that the server animation operates
+            // on UV/color data and the texture is not a vertically stacked frame atlas.
+            if (frameHeight == 0)
+            {
+                return;
+            }
+
+            if (frameHeight % _cellTextureSize != 0 || texture.height % frameHeight != 0)
+            {
+                throw new InvalidDataException(
+                    $"Terrain texture for {cellType} has height {texture.height} and " +
+                    $"frame height {frameHeight}; both must align to " +
+                    $"{_cellTextureSize}-pixel cells and frames must divide the atlas exactly.");
+            }
         }
 
         private static CellVariation CalculateVariation(CellTextureInfo textureInfo, int globalX, int globalY)

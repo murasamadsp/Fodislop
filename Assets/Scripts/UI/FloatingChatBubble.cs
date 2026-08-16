@@ -1,8 +1,8 @@
 #nullable enable
 
-using UnityEngine;
 using Fodinae.Core;
 using Fodinae.Rendering.PostProcessing;
+using UnityEngine;
 
 namespace Fodinae.UI
 {

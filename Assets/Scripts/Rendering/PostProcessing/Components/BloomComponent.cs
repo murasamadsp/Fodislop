@@ -7,9 +7,13 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-    [Serializable, VolumeComponentMenu("Fodinae/Bloom")]
+    [Serializable]
+    [VolumeComponentMenu("Fodinae/Bloom")]
     public class BloomComponent : VolumeComponent, IPostProcessComponent
     {
+        // Unity Volume serialization and the existing profile use these stable
+        // lower-case field names; changing them would orphan serialized overrides.
+#pragma warning disable SA1307
         [Tooltip("Strength of the glow added around pixels brighter than Threshold.")]
         public ClampedFloatParameter intensity = PostProcessDefaults.BloomIntensity();
 
@@ -24,5 +28,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;
+#pragma warning restore SA1307
     }
 }

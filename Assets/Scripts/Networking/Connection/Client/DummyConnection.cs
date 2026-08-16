@@ -121,6 +121,7 @@ namespace MinesServer.Networking.Connection.Client
                 new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
             };
         }
+
         // Depth warning/damage feature disabled in DummyConnection
         // private const int _maxDepth = 200;
         // private bool _depthWarningActive;
@@ -1036,13 +1037,7 @@ namespace MinesServer.Networking.Connection.Client
             _worldLayer?.Dispose();
             _worldLayer = null;
 
-            string? mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
-            if (string.IsNullOrEmpty(mapbPath) || !File.Exists(mapbPath))
-            {
-                throw new FileNotFoundException(
-                    $"Prebaked map file for '{PrebakedWorldCodeName}' was not found.",
-                    mapbPath);
-            }
+            string mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
 
             (int worldWidth, int worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
             if (worldWidth <= 0 || worldHeight <= 0)
@@ -1116,11 +1111,9 @@ namespace MinesServer.Networking.Connection.Client
             SendPingMock().Forget();
             SendDailyBonusMock().Forget();
 
-            OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
-            {
-                [CellType.Empty] = 100,
-                [CellType.Road] = 20,
-            })));
+            OnReceived?.Invoke(new ServerPacket(
+                new MovementSpeedPacket(CreateTestMovementSpeeds(_cellConfigs!))));
+
             // Depth warning/damage feature disabled in DummyConnection
             // OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
@@ -1954,6 +1947,26 @@ namespace MinesServer.Networking.Connection.Client
             return configs;
         }
 
+        private static Dictionary<CellType, ushort> CreateTestMovementSpeeds(
+            CellConfigurationPacket[] configurations)
+        {
+            var speeds = new Dictionary<CellType, ushort>(configurations.Length);
+            for (int index = 0; index < configurations.Length; index++)
+            {
+                CellConfigurationPacket configuration = configurations[index];
+                if (configuration.Properties == CellConfigProperties.None &&
+                    index != (int)CellType.Empty)
+                {
+                    continue;
+                }
+
+                bool passable = (configuration.Properties & CellConfigProperties.Passable) != 0;
+                speeds[(CellType)index] = (ushort)(passable ? 20 : 100);
+            }
+
+            return speeds;
+        }
+
         private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
             int color = unchecked((int)0xFF808080), CellAnimationType animation = CellAnimationType.None,
             byte animationSpeed = 0, byte frameOffset = 0, CellDistortionType distortion = (CellDistortionType)0)
@@ -1970,7 +1983,7 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
-        private static string? GetProjectServerMapFile(string worldCodeName)
+        private static string GetProjectServerMapFile(string worldCodeName)
         {
             string streamingDirectory = Path.Combine(
                 Application.streamingAssetsPath,
@@ -1988,7 +2001,9 @@ namespace MinesServer.Networking.Connection.Client
                 $"{worldCodeName}_cells.zip");
             if (!File.Exists(projectArchivePath))
             {
-                return null;
+                throw new FileNotFoundException(
+                    $"Dummy server map '{worldCodeName}' is missing both the mapb file and its zip archive.",
+                    projectMapPath);
             }
 
             try
@@ -2004,10 +2019,9 @@ namespace MinesServer.Networking.Connection.Client
                 ZipArchiveEntry? mapEntry = archive.GetEntry($"{worldCodeName}_cells.mapb");
                 if (mapEntry == null)
                 {
-                    Debug.LogError(
-                        $"[DummyConnection] Project server archive '{projectArchivePath}' " +
-                        $"does not contain '{worldCodeName}_cells.mapb'.");
-                    return null;
+                    throw new InvalidDataException(
+                        $"Dummy server archive '{projectArchivePath}' does not contain " +
+                        $"'{worldCodeName}_cells.mapb'.");
                 }
 
                 var cachedInfo = new FileInfo(serverMapPath);
@@ -2022,9 +2036,9 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
-                Debug.LogError(
-                    $"[DummyConnection] Failed to open project server map: {ex.Message}");
-                return null;
+                throw new InvalidDataException(
+                    $"Failed to open dummy server map '{worldCodeName}'.",
+                    ex);
             }
         }
 

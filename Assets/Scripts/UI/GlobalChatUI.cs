@@ -23,6 +23,7 @@ namespace Fodinae.UI
         private VisualElement? _tree;
         private VisualElement? _panel;
         private ScrollView? _scrollView;
+        private Label? _muteStatus;
         private TextField? _inputField;
         private VisualElement? _internalInput;
         private Button? _sendButton;
@@ -30,6 +31,7 @@ namespace Fodinae.UI
         private VisualElement? _colorGrid;
         private System.Drawing.Color _currentColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private bool _isOpen = false;
+        private long _mutedUntilUnixMilliseconds = -1;
         private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker? _blinker;
         private CancellationTokenSource? _idleCts;
@@ -136,6 +138,8 @@ namespace Fodinae.UI
                 return;
             }
 
+            RefreshMuteState();
+
             bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
 
             if (Keyboard.current.tabKey.wasPressedThisFrame)
@@ -185,6 +189,7 @@ namespace Fodinae.UI
                 tree.pickingMode = PickingMode.Ignore;
                 _tree = tree;
                 _panel = tree.Q<VisualElement>("ChatPanel");
+                _muteStatus = tree.Q<Label>("ChatMuteStatus");
                 _scrollView = tree.Q<ScrollView>("ChatScroll");
                 _inputField = tree.Q<TextField>("ChatInput");
                 _sendButton = tree.Q<Button>("SendButton");
@@ -252,7 +257,7 @@ namespace Fodinae.UI
 
         private void OnSendClicked()
         {
-            if (_inputField == null)
+            if (_inputField == null || IsMuted())
             {
                 return;
             }
@@ -374,6 +379,90 @@ namespace Fodinae.UI
             }
 
             _scrollView.scrollOffset = new Vector2(0, float.MaxValue);
+        }
+
+        public void ApplyMute(ChatMutePacket packet)
+        {
+            _mutedUntilUnixMilliseconds = packet.EndsAt;
+            string reason = string.IsNullOrWhiteSpace(packet.Reason)
+                ? "Причина не указана"
+                : packet.Reason.Trim();
+            string moderator = string.IsNullOrWhiteSpace(packet.ModeratorName)
+                ? "сервером"
+                : packet.ModeratorName.Trim();
+            string duration = packet.EndsAt <= 0
+                ? "навсегда"
+                : $"до {FormatMuteEnd(packet.EndsAt)}";
+            SetMuteStatus($"Чат заблокирован {moderator}: {reason} ({duration})");
+            RefreshMuteState();
+            AddSystemMessage("Вы получили блокировку чата.");
+        }
+
+        private bool IsMuted()
+        {
+            return _mutedUntilUnixMilliseconds == 0 ||
+                _mutedUntilUnixMilliseconds > DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        }
+
+        private void RefreshMuteState()
+        {
+            bool muted = IsMuted();
+            if (!muted && _mutedUntilUnixMilliseconds > 0)
+            {
+                _mutedUntilUnixMilliseconds = -1;
+                SetMuteStatus(string.Empty);
+            }
+
+            _inputField?.SetEnabled(!muted);
+            _sendButton?.SetEnabled(!muted);
+            _colorButton?.SetEnabled(!muted);
+        }
+
+        private void SetMuteStatus(string message)
+        {
+            if (_muteStatus == null)
+            {
+                return;
+            }
+
+            _muteStatus.text = message;
+            _muteStatus.style.display = string.IsNullOrEmpty(message)
+                ? DisplayStyle.None
+                : DisplayStyle.Flex;
+        }
+
+        private void AddSystemMessage(string message)
+        {
+            if (_scrollView == null)
+            {
+                return;
+            }
+
+            var label = new Label(message);
+            label.AddToClassList("gchat-message");
+            _scrollView.Add(label);
+            while (_scrollView.childCount > MAX_MESSAGES)
+            {
+                _scrollView.RemoveAt(0);
+            }
+
+            _scrollView.scrollOffset = new Vector2(0, float.MaxValue);
+        }
+
+        private static string FormatMuteEnd(long unixMilliseconds)
+        {
+            try
+            {
+                return DateTimeOffset.FromUnixTimeMilliseconds(unixMilliseconds)
+                    .ToLocalTime()
+                    .ToString("g");
+            }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                throw new InvalidOperationException(
+                    "Chat mute packet contains an invalid expiry timestamp.",
+                    exception);
+            }
         }
 
         private void ToggleColorGrid()

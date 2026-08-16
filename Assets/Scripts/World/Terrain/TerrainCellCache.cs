@@ -62,7 +62,7 @@ namespace Fodinae.World.Terrain
             return _cellCache[x, y];
         }
 
-        public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
+        public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
         {
             if (wtm == null)
             {
@@ -120,7 +120,7 @@ namespace Fodinae.World.Terrain
             wtm.RequestTexture(CellType.Empty);
         }
 
-        public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
+        public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
         {
             if (wtm == null)
             {
@@ -228,7 +228,12 @@ namespace Fodinae.World.Terrain
 
             if (gridX < 0 || gridX >= worldWidth || unityY < 0)
             {
-                return CellType.RedRock;
+                // The infinite redrock shell is rendered by SurfaceRenderer's
+                // boundary shader. It is not terrain data and must never be
+                // converted into a server CellType: doing so asks the texture
+                // cache for RedRock metadata/animation outside the world and
+                // can fail when the server has not configured that cell type.
+                return CellType.Unloaded;
             }
 
             int serverY = CoordinateUtils.UnityToServerY(unityY, worldHeight);
@@ -246,7 +251,7 @@ namespace Fodinae.World.Terrain
             return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
         }
 
-        public CellMetadata GetMetadata(CellType type, MapManager mm, WorldTextureManager wtm, List<TextureAtlas> atlases)
+        public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
         {
             if (_metadataCache.TryGetValue(type, out var meta))
             {
@@ -323,7 +328,7 @@ namespace Fodinae.World.Terrain
             int cx,
             int cy,
             MapManager mm,
-            WorldTextureManager wtm,
+            ITextureService wtm,
             List<TextureAtlas> atlases)
         {
             for (int dy = -1; dy <= 1; dy++)

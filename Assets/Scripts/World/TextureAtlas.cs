@@ -9,7 +9,6 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Data;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Fodinae.World
 {
@@ -37,19 +36,44 @@ namespace Fodinae.World
 
         public TextureAtlas(int size, int cellSize, int padding)
         {
+            if (size <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(size), size, "Atlas size must be positive.");
+            }
+
+            if (cellSize <= 0 || size < cellSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(cellSize),
+                    cellSize,
+                    $"Atlas cell size must be positive and fit inside the atlas ({size}).");
+            }
+
+            if (padding < 0 || padding >= size)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(padding),
+                    padding,
+                    $"Atlas padding must be in the range [0, {size - 1}].");
+            }
+
             Size = size;
             CELL_SIZE = cellSize;
             Padding = padding;
 
-            _atlasTexture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            _atlasTexture.filterMode = FilterMode.Point;
-            _atlasTexture.wrapMode = TextureWrapMode.Clamp;
+            _atlasTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                size,
+                size,
+                $"TerrainAtlas_{size}",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp);
 
             // The CPU fallback needs an initialized pixel store. On platforms
             // with GPU texture copies, every occupied rectangle is uploaded
             // directly and allocating a full-size zero buffer here only adds
             // a large startup memory spike (64 MiB for a 4096² atlas).
-            if (SystemInfo.copyTextureSupport == CopyTextureSupport.None)
+            if (!RuntimeTextureFactory.SupportsTexture2DGpuCopy)
             {
                 _atlasTexture.SetPixels32(new Color32[size * size]);
                 _atlasTexture.Apply(false, false);
@@ -149,12 +173,16 @@ namespace Fodinae.World
 
             if (tilesPerRow <= 0)
             {
-                tilesPerRow = 1;
+                throw new InvalidOperationException(
+                    $"Atlas cell {cellType} has invalid width {subAtlasWidth} " +
+                    $"for terrain tile size {TERRAIN_TILE_SIZE}.");
             }
 
             if (tilesPerColumn <= 0)
             {
-                tilesPerColumn = 1;
+                throw new InvalidOperationException(
+                    $"Atlas cell {cellType} has invalid height {effectiveSubAtlasHeight} " +
+                    $"for terrain tile size {TERRAIN_TILE_SIZE}.");
             }
 
             int wrappedX = ((globalX % tilesPerRow) + tilesPerRow) % tilesPerRow;
@@ -218,12 +246,13 @@ namespace Fodinae.World
         {
             if (!_cells.TryGetValue(cellType, out var cell))
             {
-                Debug.LogError($"[TextureAtlas] Cell type {cellType} not found in atlas. Call TryAddTexture first.");
-                return;
+                throw new InvalidOperationException(
+                    $"Cell type {cellType} has no reserved atlas rectangle. " +
+                    "TryAddTexture must succeed before the texture is copied.");
             }
 
             var rect = cell.Rectangle;
-            if (SystemInfo.copyTextureSupport == CopyTextureSupport.None)
+            if (!RuntimeTextureFactory.SupportsTexture2DGpuCopy)
             {
                 EnsurePixelBuffer();
                 var sourcePixels = texture.GetPixels32();
@@ -261,11 +290,12 @@ namespace Fodinae.World
             }
 
             bool uploadedDirectly = dirtyTextures.Count > 0 &&
-                SystemInfo.copyTextureSupport != CopyTextureSupport.None;
+                RuntimeTextureFactory.SupportsTexture2DGpuCopy;
             if (uploadedDirectly)
             {
                 foreach (var (_, texture, rect) in dirtyTextures)
                 {
+                    ValidateGpuCopySource(texture, rect);
                     Graphics.CopyTexture(
                         texture, 0, 0, 0, 0, texture.width, texture.height,
                         _atlasTexture, 0, 0, rect.X, rect.Y);
@@ -346,13 +376,14 @@ namespace Fodinae.World
 
         private async UniTask CopyTexturesToAtlas(List<(Texture2D texture, Rectangle rect)> textures)
         {
-            if (SystemInfo.copyTextureSupport != CopyTextureSupport.None)
+            if (RuntimeTextureFactory.SupportsTexture2DGpuCopy)
             {
                 await UniTask.SwitchToMainThread();
                 if (_atlasTexture != null)
                 {
                     foreach (var (texture, rect) in textures)
                     {
+                        ValidateGpuCopySource(texture, rect);
                         Graphics.CopyTexture(
                             texture, 0, 0, 0, 0, texture.width, texture.height,
                             _atlasTexture, 0, 0, rect.X, rect.Y);
@@ -401,7 +432,25 @@ namespace Fodinae.World
         {
             if (_atlasPixels == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    $"CPU pixel storage is unavailable for {Size}x{Size} atlas.");
+            }
+
+            if (sourcePixels.Length != checked(width * height))
+            {
+                throw new InvalidOperationException(
+                    $"Source pixel count {sourcePixels.Length} does not match " +
+                    $"the declared texture size {width}x{height}.");
+            }
+
+            if (width != destination.Width || height != destination.Height ||
+                destination.X < 0 || destination.Y < 0 ||
+                destination.X + width > Size || destination.Y + height > Size)
+            {
+                throw new InvalidOperationException(
+                    $"Texture {width}x{height} cannot be copied into atlas rectangle " +
+                    $"({destination.X}, {destination.Y}, " +
+                    $"{destination.Width}, {destination.Height}) in {Size}x{Size} atlas.");
             }
 
             for (int y = 0; y < height; y++)
@@ -412,12 +461,33 @@ namespace Fodinae.World
                     int destX = destination.X + x;
                     int destY = destination.Y + y;
                     int destIndex = (destY * Size) + destX;
-
-                    if (destIndex >= 0 && destIndex < _atlasPixels.Length && sourceIndex < sourcePixels.Length)
-                    {
-                        _atlasPixels[destIndex] = sourcePixels[sourceIndex];
-                    }
+                    _atlasPixels[destIndex] = sourcePixels[sourceIndex];
                 }
+            }
+        }
+
+        private void ValidateGpuCopySource(Texture2D source, Rectangle destination)
+        {
+            Texture2D atlasTexture = _atlasTexture ??
+                throw new ObjectDisposedException(
+                    nameof(TextureAtlas),
+                    "Cannot upload into a disposed terrain atlas.");
+            if (source.width != destination.Width ||
+                source.height != destination.Height)
+            {
+                throw new InvalidOperationException(
+                    $"Terrain texture '{source.name}' is {source.width}x{source.height}, " +
+                    $"but its reserved atlas rectangle is " +
+                    $"{destination.Width}x{destination.Height}.");
+            }
+
+            if (source.graphicsFormat != atlasTexture.graphicsFormat)
+            {
+                throw new InvalidOperationException(
+                    $"Terrain texture '{source.name}' uses GPU format " +
+                    $"{source.graphicsFormat}, but atlas '{atlasTexture.name}' uses " +
+                    $"{atlasTexture.graphicsFormat}. Runtime image decoding must " +
+                    "canonicalize terrain textures before Graphics.CopyTexture.");
             }
         }
 

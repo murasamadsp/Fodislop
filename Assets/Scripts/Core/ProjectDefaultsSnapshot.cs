@@ -1,7 +1,6 @@
 #nullable enable
 
 using Fodinae.Core.Interfaces;
-using Fodinae.World.Lighting;
 using UnityEngine;
 
 namespace Fodinae.Core;
@@ -12,12 +11,14 @@ public sealed class ProjectDefaultsSnapshot : IProjectDefaults
         int schemaVersion,
         string contentHash,
         ClientDefaultsSnapshot client,
-        LightingDefaultsSnapshot lighting)
+        LightingDefaultsSnapshot lighting,
+        ShaderDefaultsSnapshot shaders)
     {
         SchemaVersion = schemaVersion;
         ContentHash = contentHash;
         Client = client;
         Lighting = lighting;
+        Shaders = shaders;
     }
 
     public int SchemaVersion { get; }
@@ -27,6 +28,8 @@ public sealed class ProjectDefaultsSnapshot : IProjectDefaults
     public ClientDefaultsSnapshot Client { get; }
 
     public LightingDefaultsSnapshot Lighting { get; }
+
+    public ShaderDefaultsSnapshot Shaders { get; }
 }
 
 public readonly record struct ClientDefaultsSnapshot(
@@ -37,13 +40,9 @@ public readonly record struct ClientDefaultsSnapshot(
     float VoiceVolume,
     float UiVolume,
     float UiScale,
-    int GraphicsQuality,
-    float RenderScale,
-    int VSyncCount,
-    int AntiAliasing);
+    int GraphicsQuality);
 
 public readonly record struct LightingDefaultsSnapshot(
-    TerrariaLightingEngine.QualityPreset Quality,
     bool AmbientOcclusionEnabled,
     bool DiffuseBounceEnabled,
     float AmbientIntensity,
@@ -64,3 +63,38 @@ public readonly record struct LightingDefaultsSnapshot(
     float DynamicLightIntensity,
     Color DynamicLightColor,
     float DynamicLightUpdatesPerSecond);
+
+public readonly record struct ShaderDefaultsSnapshot(
+    Vector2 TerrainFlowScale,
+    float TerrainShimmerSpeedScale,
+    float TerrainPulseSpeedScale,
+    Color TerrainShimmerColor,
+    Color TerrainDebugColor,
+    bool TerrainDebugMode,
+    float BloomThreshold,
+    float BloomScatter,
+    Color BloomTint,
+    Color TransitEmissionColor,
+    float TransitEmissionStrength,
+    Color PerspectiveEmissionColor,
+    float PerspectiveEmissionStrength,
+    float SurfaceOccupancy,
+    float BloomIntensity,
+    float VignetteIntensity,
+    Color VignetteColor,
+    float VignetteSmoothness,
+    Vector2 VignetteCenter,
+    float ChromaticAberrationIntensity,
+    float ColorGradingExposure,
+    Color ColorGradingFilter,
+    float ColorGradingContrast,
+    float ColorGradingSaturation,
+    bool ColorGradingToneMapping,
+    float ColorGradingToneMappingWhitePoint,
+    float EigengrauIntensity,
+    Color EigengrauColor,
+    float EigengrauDarknessThreshold,
+    float EigengrauNoiseScale,
+    float EigengrauAnimationSpeed,
+    float MotionBlurIntensity,
+    int MotionBlurMaxSamples);

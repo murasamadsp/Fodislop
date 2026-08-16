@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Game;
 using UnityEngine;
@@ -109,6 +110,13 @@ namespace Fodinae.Rendering.PostProcessing
             _motionBlur = stack.GetComponent<MotionBlurComponent>();
         }
 
+        private static T RequireComponent<T>(T? component, string componentName)
+            where T : VolumeComponent
+        {
+            return component ?? throw new InvalidOperationException(
+                $"Post-process VolumeStack is missing required component '{componentName}'.");
+        }
+
         public static void SetMainCamera(Camera? camera)
         {
             _mainCamera = camera;
@@ -196,211 +204,6 @@ namespace Fodinae.Rendering.PostProcessing
                 pixelVelocity.y / Mathf.Max(camera.pixelHeight, 1));
         }
 
-        /* Legacy ScriptableRenderPass path removed from compilation: this project targets Unity 6 Render Graph only.
-            private RTHandle? _intermediateColorRT;
-            private RTHandle? _bloomPrefilterRT;
-            private RTHandle? _velocityRT;
-            private readonly RTHandle[] _bloomDownPyramid = new RTHandle[5];
-            private readonly RTHandle[] _bloomUpPyramid = new RTHandle[5];
-
-            public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-            {
-                if (renderingData.cameraData.renderType != CameraRenderType.Base ||
-                    renderingData.cameraData.camera.cameraType != CameraType.Game ||
-                    renderingData.cameraData.camera != _mainCamera)
-                {
-                    return;
-                }
-
-                var stack = VolumeManager.instance.stack;
-                var bloom = stack.GetComponent<BloomComponent>();
-                var vignette = stack.GetComponent<VignetteComponent>();
-                var ca = stack.GetComponent<ChromaticAberrationComponent>();
-                var cg = stack.GetComponent<ColorGradingComponent>();
-                var eigengrau = stack.GetComponent<EigengrauComponent>();
-                var mb = stack.GetComponent<MotionBlurComponent>();
-
-                bool bloomActive = bloom != null && bloom.active && bloom.IsActive();
-                bool vignetteActive = vignette != null && vignette.active && vignette.IsActive();
-                bool caActive = ca != null && ca.active && ca.IsActive();
-                bool cgActive = cg != null && cg.active && cg.IsActive();
-                bool eigengrauActive = eigengrau != null && eigengrau.active && eigengrau.IsActive();
-                bool mbActive = mb != null && mb.active && mb.IsActive();
-
-                if (!bloomActive && !vignetteActive && !caActive && !cgActive && !eigengrauActive && !mbActive)
-                {
-                    return;
-                }
-
-                var cmd = CommandBufferPool.Get(PASS_NAME);
-                cmd.Clear();
-
-                var desc = renderingData.cameraData.cameraTargetDescriptor;
-                desc.depthBufferBits = 0;
-                desc.msaaSamples = 1;
-                desc.bindMS = false;
-                desc.enableRandomWrite = true;
-
-                RenderingUtils.ReAllocIfNeeded(ref _intermediateColorRT, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_PPIntermediateColor");
-                RenderingUtils.ReAllocIfNeeded(ref _bloomPrefilterRT, desc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_PPBloomPrefilter");
-
-                int width = desc.width;
-                int height = desc.height;
-
-                if (mbActive && _velocityMaterial != null)
-                {
-                    var velocityDesc = desc;
-                    velocityDesc.enableRandomWrite = false;
-                    velocityDesc.graphicsFormat = GraphicsFormat.R16G16_SFloat;
-                    RenderingUtils.ReAllocIfNeeded(
-                        ref _velocityRT,
-                        velocityDesc,
-                        FilterMode.Point,
-                        TextureWrapMode.Clamp,
-                        name: "_PPRobotVelocity");
-
-                    cmd.SetRenderTarget(_velocityRT);
-                    cmd.ClearRenderTarget(false, true, Color.clear);
-                    cmd.SetViewProjectionMatrices(
-                        renderingData.cameraData.camera.worldToCameraMatrix,
-                        GL.GetGPUProjectionMatrix(renderingData.cameraData.camera.projectionMatrix, true));
-                    IReadOnlyList<MotionBlurTag> tags = MotionBlurTag.ActiveTags;
-                    for (int i = 0; i < tags.Count; i++)
-                    {
-                        var tag = tags[i];
-                        if (!TryGetRemoteRobotRenderer(tag, out var spriteRenderer))
-                        {
-                            continue;
-                        }
-
-                        Vector2 uvVelocity = CalculateUvVelocity(tag, renderingData.cameraData.camera);
-                        cmd.SetGlobalVector(VelocityPropID, new Vector4(uvVelocity.x, uvVelocity.y, 0f, 0f));
-                        cmd.SetGlobalTexture(VelocitySpriteTextureID, spriteRenderer.sprite.texture);
-                        cmd.DrawRenderer(spriteRenderer, _velocityMaterial, 0, 0);
-                    }
-                }
-
-                cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
-
-                if (bloomActive)
-                {
-                    cmd.SetComputeFloatParam(_postProcessCS, BloomThresholdID, bloom.threshold.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, BloomScatterID, bloom.scatter.value);
-                    cmd.SetComputeVectorParam(_postProcessCS, BloomTintID, bloom.tint.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, BloomIntensityID, bloom.intensity.value);
-
-                    cmd.SetComputeTextureParam(_postProcessCS, _kernelPrefilter, InputTexID, renderingData.cameraData.renderer.cameraColorTargetHandle);
-                    cmd.SetComputeTextureParam(_postProcessCS, _kernelPrefilter, DestTexID, _bloomPrefilterRT);
-                    cmd.DispatchCompute(_postProcessCS, _kernelPrefilter, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-
-                    int dw = width;
-                    int dh = height;
-                    int sourceWidth = width;
-                    int sourceHeight = height;
-
-                    RTHandle currentSrc = _bloomPrefilterRT;
-                    for (int i = 0; i < 5; i++)
-                    {
-                        dw = Mathf.Max(1, dw / 2);
-                        dh = Mathf.Max(1, dh / 2);
-
-                        var levelDesc = desc;
-                        levelDesc.width = dw;
-                        levelDesc.height = dh;
-
-                        RenderingUtils.ReAllocIfNeeded(ref _bloomDownPyramid[i], levelDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: BloomDownNames[i]);
-                        RenderingUtils.ReAllocIfNeeded(ref _bloomUpPyramid[i], levelDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: BloomUpNames[i]);
-
-                        cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(dw, dh, 1f / dw, 1f / dh));
-                        cmd.SetComputeVectorParam(
-                            _postProcessCS,
-                            SourceTexelSizeID,
-                            new Vector4(1f / sourceWidth, 1f / sourceHeight, sourceWidth, sourceHeight));
-                        cmd.SetComputeTextureParam(_postProcessCS, _kernelDownsample, SourceTexID, currentSrc);
-                        cmd.SetComputeTextureParam(_postProcessCS, _kernelDownsample, DestTexID, _bloomDownPyramid[i]);
-                        cmd.DispatchCompute(_postProcessCS, _kernelDownsample, Mathf.CeilToInt(dw / 8f), Mathf.CeilToInt(dh / 8f), 1);
-
-                        currentSrc = _bloomDownPyramid[i];
-                        sourceWidth = dw;
-                        sourceHeight = dh;
-                    }
-
-                    RTHandle currentUp = _bloomDownPyramid[4];
-                    for (int i = 3; i >= 0; i--)
-                    {
-                        int uw = _bloomDownPyramid[i].rt.width;
-                        int uh = _bloomDownPyramid[i].rt.height;
-
-                        cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(uw, uh, 1f / uw, 1f / uh));
-                        cmd.SetComputeVectorParam(
-                            _postProcessCS,
-                            SourceTexelSizeID,
-                            new Vector4(1f / currentUp.rt.width, 1f / currentUp.rt.height, currentUp.rt.width, currentUp.rt.height));
-                        cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, SourceTexID, currentUp);
-                        cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, BaseTexID, _bloomDownPyramid[i]);
-                        cmd.SetComputeTextureParam(_postProcessCS, _kernelUpsample, DestTexID, _bloomUpPyramid[i]);
-                        cmd.DispatchCompute(_postProcessCS, _kernelUpsample, Mathf.CeilToInt(uw / 8f), Mathf.CeilToInt(uh / 8f), 1);
-
-                        currentUp = _bloomUpPyramid[i];
-                    }
-
-                    cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, BloomTexID, currentUp);
-                }
-                else
-                {
-                    cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, BloomTexID, Texture2D.blackTexture);
-                }
-
-                cmd.SetComputeVectorParam(_postProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
-
-                cmd.SetComputeFloatParam(_postProcessCS, VignetteIntensityID, vignetteActive ? vignette.intensity.value : 0f);
-                if (vignetteActive)
-                {
-                    cmd.SetComputeVectorParam(_postProcessCS, VignetteColorID, vignette.color.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, VignetteSmoothnessID, vignette.smoothness.value);
-                    cmd.SetComputeVectorParam(_postProcessCS, VignetteCenterID, vignette.center.value);
-                }
-
-                cmd.SetComputeFloatParam(_postProcessCS, ChromaticAberrationIntensityID, caActive ? ca.intensity.value : 0f);
-
-                cmd.SetComputeFloatParam(_postProcessCS, ExposureID, cgActive ? cg.exposure.value : 0f);
-                cmd.SetComputeVectorParam(_postProcessCS, ColorFilterID, cgActive ? cg.colorFilter.value : Color.white);
-                cmd.SetComputeFloatParam(_postProcessCS, ContrastID, cgActive ? cg.contrast.value : 0f);
-                cmd.SetComputeFloatParam(_postProcessCS, SaturationID, cgActive ? cg.saturation.value : 1f);
-
-                cmd.SetComputeFloatParam(_postProcessCS, EigengrauIntensityID, eigengrauActive && eigengrau != null ? eigengrau.intensity.value : 0f);
-                if (eigengrauActive && eigengrau != null)
-                {
-                    cmd.SetComputeVectorParam(_postProcessCS, EigengrauColorID, eigengrau.color.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, EigengrauDarknessThresholdID, eigengrau.darknessThreshold.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, EigengrauNoiseScaleID, eigengrau.noiseScale.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, EigengrauAnimationSpeedID, eigengrau.animationSpeed.value);
-                    cmd.SetComputeFloatParam(_postProcessCS, TimeID, Time.time);
-                }
-
-                cmd.SetComputeFloatParam(_postProcessCS, MotionBlurIntensityID, mbActive ? mb.intensity.value : 0f);
-                cmd.SetComputeIntParam(_postProcessCS, MotionBlurMaxSamplesID, mbActive ? mb.maxSamples.value : 8);
-
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, InputTexID, renderingData.cameraData.renderer.cameraColorTargetHandle);
-                cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, OutputTexID, _intermediateColorRT);
-                if (mbActive && _velocityRT != null && _velocityMaterial != null)
-                {
-                    cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, VelocityTexID, _velocityRT);
-                }
-                else
-                {
-                    cmd.SetComputeTextureParam(_postProcessCS, _kernelComposite, VelocityTexID, Texture2D.blackTexture);
-                }
-
-                cmd.DispatchCompute(_postProcessCS, _kernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-
-                cmd.Blit(_intermediateColorRT, renderingData.cameraData.renderer.cameraColorTargetHandle);
-
-                context.ExecuteCommandBuffer(cmd);
-                CommandBufferPool.Release(cmd);
-            }
-        */
-
         private class PassData
         {
             public ComputeShader PostProcessCS = null!;
@@ -467,19 +270,25 @@ namespace Fodinae.Rendering.PostProcessing
 
             var stack = VolumeManager.instance.stack;
             RefreshVolumeComponents(stack);
-            BloomComponent? bloom = _bloom;
-            VignetteComponent? vignette = _vignette;
-            ChromaticAberrationComponent? ca = _chromaticAberration;
-            ColorGradingComponent? cg = _colorGrading;
-            EigengrauComponent? eigengrau = _eigengrau;
-            MotionBlurComponent? mb = _motionBlur;
+            BloomComponent bloom = RequireComponent(_bloom, nameof(BloomComponent));
+            VignetteComponent vignette = RequireComponent(_vignette, nameof(VignetteComponent));
+            ChromaticAberrationComponent ca = RequireComponent(
+                _chromaticAberration,
+                nameof(ChromaticAberrationComponent));
+            ColorGradingComponent cg = RequireComponent(
+                _colorGrading,
+                nameof(ColorGradingComponent));
+            EigengrauComponent eigengrau = RequireComponent(
+                _eigengrau,
+                nameof(EigengrauComponent));
+            MotionBlurComponent mb = RequireComponent(_motionBlur, nameof(MotionBlurComponent));
 
-            bool bloomActive = bloom != null && bloom.active && bloom.IsActive();
-            bool vignetteActive = vignette != null && vignette.active && vignette.IsActive();
-            bool caActive = ca != null && ca.active && ca.IsActive();
-            bool cgActive = cg != null && cg.active && cg.IsActive();
-            bool eigengrauActive = eigengrau != null && eigengrau.active && eigengrau.IsActive();
-            bool mbActive = mb != null && mb.active && mb.IsActive();
+            bool bloomActive = bloom.active && bloom.IsActive();
+            bool vignetteActive = vignette.active && vignette.IsActive();
+            bool caActive = ca.active && ca.IsActive();
+            bool cgActive = cg.active && cg.IsActive();
+            bool eigengrauActive = eigengrau.active && eigengrau.IsActive();
+            bool mbActive = mb.active && mb.IsActive();
 
             // A neutral volume must not allocate or dispatch a full-screen compute
             // pass. Tone mapping is represented by an active ColorGradingComponent,
@@ -587,57 +396,39 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.VelocityTexture = velocityTexture;
 
                 passData.BloomActive = bloomActive;
-                if (bloom != null && bloomActive)
-                {
-                    passData.BloomThreshold = bloom.threshold.value;
-                    passData.BloomScatter = bloom.scatter.value;
-                    passData.BloomTint = bloom.tint.value;
-                    passData.BloomIntensity = bloom.intensity.value;
-                }
+                passData.BloomThreshold = bloom.threshold.value;
+                passData.BloomScatter = bloom.scatter.value;
+                passData.BloomTint = bloom.tint.value;
+                passData.BloomIntensity = bloom.intensity.value;
 
                 passData.VignetteActive = vignetteActive;
-                if (vignette != null && vignetteActive)
-                {
-                    passData.VignetteIntensity = vignette.intensity.value;
-                    passData.VignetteColor = vignette.color.value;
-                    passData.VignetteSmoothness = vignette.smoothness.value;
-                    passData.VignetteCenter = vignette.center.value;
-                }
+                passData.VignetteIntensity = vignette.intensity.value;
+                passData.VignetteColor = vignette.color.value;
+                passData.VignetteSmoothness = vignette.smoothness.value;
+                passData.VignetteCenter = vignette.center.value;
 
                 passData.CaActive = caActive;
-                if (ca != null && caActive)
-                {
-                    passData.CaIntensity = ca.intensity.value;
-                }
+                passData.CaIntensity = ca.intensity.value;
 
                 passData.CgActive = cgActive;
-                if (cg != null && cgActive)
-                {
-                    passData.Exposure = cg.exposure.value;
-                    passData.ColorFilter = cg.colorFilter.value;
-                    passData.Contrast = cg.contrast.value;
-                    passData.Saturation = cg.saturation.value;
-                    passData.ToneMappingEnabled = cg.toneMapping.value;
-                    passData.ToneMappingWhitePoint = cg.toneMappingWhitePoint.value;
-                }
+                passData.Exposure = cg.exposure.value;
+                passData.ColorFilter = cg.colorFilter.value;
+                passData.Contrast = cg.contrast.value;
+                passData.Saturation = cg.saturation.value;
+                passData.ToneMappingEnabled = cg.toneMapping.value;
+                passData.ToneMappingWhitePoint = cg.toneMappingWhitePoint.value;
 
                 passData.EigengrauActive = eigengrauActive;
-                if (eigengrau != null && eigengrauActive)
-                {
-                    passData.EigengrauIntensity = eigengrau.intensity.value;
-                    passData.EigengrauColor = eigengrau.color.value;
-                    passData.EigengrauDarknessThreshold = eigengrau.darknessThreshold.value;
-                    passData.EigengrauNoiseScale = eigengrau.noiseScale.value;
-                    passData.EigengrauAnimationSpeed = eigengrau.animationSpeed.value;
-                }
+                passData.EigengrauIntensity = eigengrau.intensity.value;
+                passData.EigengrauColor = eigengrau.color.value;
+                passData.EigengrauDarknessThreshold = eigengrau.darknessThreshold.value;
+                passData.EigengrauNoiseScale = eigengrau.noiseScale.value;
+                passData.EigengrauAnimationSpeed = eigengrau.animationSpeed.value;
 
                 passData.MbActive = mbActive;
                 passData.RenderRobotVelocity = renderRobotVelocity;
-                if (mb != null && mbActive)
-                {
-                    passData.MbIntensity = mb.intensity.value;
-                    passData.MbMaxSamples = mb.maxSamples.value;
-                }
+                passData.MbIntensity = mb.intensity.value;
+                passData.MbMaxSamples = mb.maxSamples.value;
 
                 builder.UseTexture(passData.ColorTexture, AccessFlags.ReadWrite);
                 builder.UseTexture(passData.IntermediateTexture, AccessFlags.Write);
@@ -807,7 +598,7 @@ namespace Fodinae.Rendering.PostProcessing
                     }
 
                     cmd.SetComputeFloatParam(data.PostProcessCS, MotionBlurIntensityID, data.MbActive ? data.MbIntensity : 0f);
-                    cmd.SetComputeIntParam(data.PostProcessCS, MotionBlurMaxSamplesID, data.MbActive ? data.MbMaxSamples : 8);
+                    cmd.SetComputeIntParam(data.PostProcessCS, MotionBlurMaxSamplesID, data.MbMaxSamples);
 
                     cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, InputTexID, data.ColorTexture);
                     cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, OutputTexID, data.IntermediateTexture);

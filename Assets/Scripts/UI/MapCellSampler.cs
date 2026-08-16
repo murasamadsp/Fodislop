@@ -58,9 +58,12 @@ namespace Fodinae.UI
             if (!_chunks.TryGetValue(chunkIndex, out CellType[]? chunk))
             {
                 chunk = _layer.GetChunk(chunkIndex, createIfMissing: false, touchLru: false);
-                _chunks[chunkIndex] = chunk;
-                _chunkOrder.Enqueue(chunkIndex);
-                TrimCache();
+                if (chunk != null)
+                {
+                    _chunks[chunkIndex] = chunk;
+                    _chunkOrder.Enqueue(chunkIndex);
+                    TrimCache();
+                }
             }
 
             if (chunk == null)

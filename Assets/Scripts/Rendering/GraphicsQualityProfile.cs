@@ -2,23 +2,28 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Fodinae.Rendering
 {
-    public enum GraphicsQualityTier
+    public enum GraphicsPreset
     {
+        VeryLow,
         Low,
         Medium,
         High,
+        VeryHigh,
         Ultra,
+        Custom,
     }
 
     [Serializable]
-    public struct GraphicsQualitySettings
+    public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
     {
+        [FormerlySerializedAs("LightingPixelsPerCell")]
         [Min(1)]
-        [Tooltip("Количество lighting-пикселей на одну физическую клетку. Выше — точнее и дороже.")]
-        public int LightingPixelsPerCell;
+        [Tooltip("Нижняя граница lighting-пикселей на клетку. Фактическое разрешение считается от render target базовой камеры.")]
+        public int LightingMinimumPixelsPerCell;
         [Min(128)]
         [Tooltip("Максимальный размер lighting field в пикселях.")]
         public int LightingMaximumTextureDimension;
@@ -55,7 +60,7 @@ namespace Fodinae.Rendering
             int vSyncCount,
             int antiAliasing)
         {
-            LightingPixelsPerCell = lightingPixelsPerCell;
+            LightingMinimumPixelsPerCell = lightingPixelsPerCell;
             LightingMaximumTextureDimension = lightingMaximumTextureDimension;
             LightingMaximumLightCount = lightingMaximumLightCount;
             LightingMaximumRaySteps = lightingMaximumRaySteps;
@@ -65,38 +70,119 @@ namespace Fodinae.Rendering
             VSyncCount = vSyncCount;
             AntiAliasing = antiAliasing;
         }
+
+        public readonly bool Equals(GraphicsQualitySettings other)
+        {
+            return LightingMinimumPixelsPerCell == other.LightingMinimumPixelsPerCell &&
+                LightingMaximumTextureDimension == other.LightingMaximumTextureDimension &&
+                LightingMaximumLightCount == other.LightingMaximumLightCount &&
+                LightingMaximumRaySteps == other.LightingMaximumRaySteps &&
+                LightingUpdatesPerSecond.Equals(other.LightingUpdatesPerSecond) &&
+                LightingCascadeAtlasLimit == other.LightingCascadeAtlasLimit &&
+                RenderScale.Equals(other.RenderScale) &&
+                VSyncCount == other.VSyncCount &&
+                AntiAliasing == other.AntiAliasing;
+        }
+
+        public override readonly bool Equals(object? obj)
+        {
+            return obj is GraphicsQualitySettings other && Equals(other);
+        }
+
+        public override readonly int GetHashCode()
+        {
+            return CalculateHash(this);
+        }
+
+        private static int CalculateHash(GraphicsQualitySettings settings)
+        {
+            HashCode hash = default;
+            hash.Add(settings.LightingMinimumPixelsPerCell);
+            hash.Add(settings.LightingMaximumTextureDimension);
+            hash.Add(settings.LightingMaximumLightCount);
+            hash.Add(settings.LightingMaximumRaySteps);
+            hash.Add(settings.LightingUpdatesPerSecond);
+            hash.Add(settings.LightingCascadeAtlasLimit);
+            hash.Add(settings.RenderScale);
+            hash.Add(settings.VSyncCount);
+            hash.Add(settings.AntiAliasing);
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(
+            GraphicsQualitySettings left,
+            GraphicsQualitySettings right)
+        {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(
+            GraphicsQualitySettings left,
+            GraphicsQualitySettings right)
+        {
+            return !left.Equals(right);
+        }
     }
 
     [CreateAssetMenu(fileName = "GraphicsQualityProfile", menuName = "Fodinae/Graphics Quality Profile")]
     public sealed class GraphicsQualityProfile : ScriptableObject
     {
-        [SerializeField]
-        private GraphicsQualitySettings _low = new(1, 512, 128, 20, 60f, 512, 0.75f, 1, 0);
-        [SerializeField]
-        private GraphicsQualitySettings _medium = new(2, 768, 256, 28, 60f, 768, 0.85f, 1, 0);
-        [SerializeField]
-        private GraphicsQualitySettings _high = new(4, 1536, 512, 40, 60f, 1536, 1f, 1, 0);
-        [SerializeField]
-        private GraphicsQualitySettings _ultra = new(4, 2048, 1024, 64, 60f, 2048, 1f, 1, 0);
+        public const int StandardPresetCount = (int)GraphicsPreset.Custom;
 
-        public GraphicsQualitySettings Get(GraphicsQualityTier tier)
+        [SerializeField]
+        private GraphicsQualitySettings _veryLow;
+        [SerializeField]
+        private GraphicsQualitySettings _low;
+        [SerializeField]
+        private GraphicsQualitySettings _medium;
+        [SerializeField]
+        private GraphicsQualitySettings _high;
+        [SerializeField]
+        private GraphicsQualitySettings _veryHigh;
+        [SerializeField]
+        private GraphicsQualitySettings _ultra;
+
+        public GraphicsQualitySettings Get(GraphicsPreset preset)
         {
-            GraphicsQualitySettings settings = tier switch
+            GraphicsQualitySettings settings = preset switch
             {
-                GraphicsQualityTier.Low => _low,
-                GraphicsQualityTier.Medium => _medium,
-                GraphicsQualityTier.High => _high,
-                GraphicsQualityTier.Ultra => _ultra,
-                _ => throw new ArgumentOutOfRangeException(nameof(tier), tier, "Unknown graphics quality tier."),
+                GraphicsPreset.VeryLow => _veryLow,
+                GraphicsPreset.Low => _low,
+                GraphicsPreset.Medium => _medium,
+                GraphicsPreset.High => _high,
+                GraphicsPreset.VeryHigh => _veryHigh,
+                GraphicsPreset.Ultra => _ultra,
+                GraphicsPreset.Custom => throw new ArgumentException(
+                    "Custom graphics settings are stored in ClientConfig, not in the immutable profile.",
+                    nameof(preset)),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(preset),
+                    preset,
+                    "Unknown graphics preset."),
             };
 
-            Validate(settings, tier);
+            ValidateSettings(settings, preset.ToString());
             return settings;
         }
 
-        private static void Validate(GraphicsQualitySettings settings, GraphicsQualityTier tier)
+        public void Validate()
         {
-            if (settings.LightingPixelsPerCell < 1 ||
+            for (int index = 0; index < StandardPresetCount; index++)
+            {
+                _ = Get((GraphicsPreset)index);
+            }
+        }
+
+        public static bool IsStandard(GraphicsPreset preset)
+        {
+            return preset is >= GraphicsPreset.VeryLow and <= GraphicsPreset.Ultra;
+        }
+
+        public static void ValidateSettings(
+            GraphicsQualitySettings settings,
+            string context)
+        {
+            if (settings.LightingMinimumPixelsPerCell < 1 ||
                 settings.LightingMaximumTextureDimension < 128 ||
                 settings.LightingMaximumLightCount < 1 ||
                 settings.LightingMaximumRaySteps < 1 ||
@@ -107,7 +193,7 @@ namespace Fodinae.Rendering
                 settings.AntiAliasing is < 0 or > 8)
             {
                 throw new InvalidOperationException(
-                    $"Graphics quality profile '{tier}' contains invalid quality settings.");
+                    $"Graphics quality settings '{context}' contain invalid technical values.");
             }
         }
     }
