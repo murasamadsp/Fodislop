@@ -59,8 +59,6 @@ namespace Fodinae.Game
         private const float MinimumSmoothTime = 0.05f;
         private const float MaximumSmoothTime = 0.15f;
         private const float DynamicLightPositionEpsilon = 0.00390625f;
-        private static readonly Vector3 NicknameAnchorOffset = new(0.5f, 0.5f, 0f);
-
         private bool _isMetadataLoaded = false;
         private CancellationTokenSource? _cts;
         private float _targetAngle = 0f;
@@ -599,12 +597,19 @@ namespace Fodinae.Game
 
             if (_nicknameText != null)
             {
-                // World-space labels use the robot's top-right corner as their
-                // origin. TopLeft alignment makes the nickname grow rightward
-                // instead of centering it over the robot and causing overlap.
+                SpriteRenderer spriteRenderer = _spriteRenderer ??
+                    throw new InvalidOperationException(
+                        $"{TAG} SpriteRenderer is required to anchor nickname for bot {_botId}.");
+                Bounds spriteBounds = spriteRenderer.bounds;
+                Vector3 topRight = new(spriteBounds.max.x, spriteBounds.max.y, position.z);
+
+                // World-space labels use the actual rendered sprite bounds, not a
+                // fixed offset from the robot pivot. TopLeft alignment makes the
+                // nickname grow rightward from the robot's top-right corner.
                 _nicknameText.transform.SetPositionAndRotation(
-                    position + NicknameAnchorOffset,
+                    topRight,
                     Quaternion.identity);
+                _nicknameText.transform.localScale = new Vector3(1f, -1f, 1f);
             }
 
             if (_clanRenderer != null)

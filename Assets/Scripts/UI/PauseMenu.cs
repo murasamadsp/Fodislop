@@ -479,9 +479,24 @@ namespace Fodinae.UI
                 _networkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
+            debugSection.Add(CreateButton("Вступить в клан", () =>
+            {
+                _networkService.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Выйти из клана", () =>
+            {
+                _networkService.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
             debugSection.Add(CreateButton("Тест: Стрелка миссии", () =>
             {
                 _networkService.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Миссии", () =>
+            {
+                _networkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
                 CloseMenu();
             }));
             debugSection.Add(CreateButton("Стены ✗", () =>
