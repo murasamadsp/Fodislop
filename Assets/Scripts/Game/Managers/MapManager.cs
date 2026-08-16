@@ -98,16 +98,17 @@ namespace Fodinae.Game.Managers
         protected void OnDestroy()
         {
             IsWorldInitialized = false;
-            if (_hasWorldStorage)
+            if (_hasWorldStorage && _worldStorage != null)
             {
                 _worldStorage.Dispose();
-                _hasWorldStorage = false;
             }
+
+            _hasWorldStorage = false;
         }
 
         protected void OnApplicationPause(bool pauseStatus)
         {
-            if (pauseStatus && _hasWorldStorage)
+            if (pauseStatus && _hasWorldStorage && _worldStorage != null)
             {
                 _worldStorage.Flush();
             }
@@ -115,7 +116,7 @@ namespace Fodinae.Game.Managers
 
         protected void OnApplicationQuit()
         {
-            if (_hasWorldStorage)
+            if (_hasWorldStorage && _worldStorage != null)
             {
                 _worldStorage.Flush();
             }
@@ -123,7 +124,7 @@ namespace Fodinae.Game.Managers
 
         protected void OnLowMemory()
         {
-            if (_hasWorldStorage)
+            if (_hasWorldStorage && _worldStorage != null)
             {
                 _worldStorage.Flush();
             }

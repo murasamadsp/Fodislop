@@ -574,11 +574,13 @@ namespace Fodinae.World
         private static T GetOrAddComponent<T>(GameObject gameObject)
             where T : Component
         {
-            T? component = gameObject.GetComponent<T>();
+            T? component;
+            bool found = gameObject.TryGetComponent(out component);
 
-            // Unity objects can be "fake null" after a domain reload. The null-coalescing
-            // operator checks only the managed reference and therefore is invalid here.
-            if (component == null)
+            // TryGetComponent performs the native lookup again. This matters after a
+            // domain reload, where a restored child can retain a stale managed reference
+            // even though its native component was removed during teardown.
+            if (!found || component == null)
             {
                 component = gameObject.AddComponent<T>();
             }

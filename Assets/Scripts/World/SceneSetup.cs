@@ -79,49 +79,62 @@ namespace Fodinae.World
 
         private async UniTask SetupSurfaceRendererAsync(CancellationToken cancellationToken)
         {
-            ITextureStorageService textureStorage =
-                Fodinae.Core.ServiceLocator.Resolve<ITextureStorageService>() ??
-                throw new InvalidOperationException(
-                    "SceneSetup requires ITextureStorageService for local surface assets.");
-            Texture2D transitTexture = await textureStorage.GetTextureAsync(
-                "transit.png",
-                cancellationToken) ??
-                throw new InvalidOperationException(
-                    "Required local surface texture 'transit.png' could not be decoded.");
-            Texture2D perspectiveTexture = await textureStorage.GetTextureAsync(
-                "perspective.png",
-                cancellationToken) ??
-                throw new InvalidOperationException(
-                    "Required local surface texture 'perspective.png' could not be decoded.");
-            Texture2D redRockTexture = await textureStorage.GetTextureAsync(
-                "Cells/117.png",
-                cancellationToken) ??
-                throw new InvalidOperationException(
-                    "Required local surface texture 'Cells/117.png' could not be decoded.");
-            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                ITextureStorageService textureStorage =
+                    Fodinae.Core.ServiceLocator.Resolve<ITextureStorageService>() ??
+                    throw new InvalidOperationException(
+                        "SceneSetup requires ITextureStorageService for local surface assets.");
+                Texture2D transitTexture = await textureStorage.GetTextureAsync(
+                    "transit.png",
+                    cancellationToken) ??
+                    throw new InvalidOperationException(
+                        "Required local surface texture 'transit.png' could not be decoded.");
+                Texture2D perspectiveTexture = await textureStorage.GetTextureAsync(
+                    "perspective.png",
+                    cancellationToken) ??
+                    throw new InvalidOperationException(
+                        "Required local surface texture 'perspective.png' could not be decoded.");
+                Texture2D redRockTexture = await textureStorage.GetTextureAsync(
+                    "Cells/117.png",
+                    cancellationToken) ??
+                    throw new InvalidOperationException(
+                        "Required local surface texture 'Cells/117.png' could not be decoded.");
+                cancellationToken.ThrowIfCancellationRequested();
 
-            RuntimeTextureFactory.ApplySampling(
-                transitTexture,
-                FilterMode.Bilinear,
-                TextureWrapMode.Clamp);
-            RuntimeTextureFactory.ApplySampling(
-                perspectiveTexture,
-                FilterMode.Bilinear,
-                TextureWrapMode.Clamp);
-            RuntimeTextureFactory.ApplySampling(
-                redRockTexture,
-                FilterMode.Point,
-                TextureWrapMode.Clamp);
+                RuntimeTextureFactory.ApplySampling(
+                    transitTexture,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp);
+                RuntimeTextureFactory.ApplySampling(
+                    perspectiveTexture,
+                    FilterMode.Bilinear,
+                    TextureWrapMode.Clamp);
+                RuntimeTextureFactory.ApplySampling(
+                    redRockTexture,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
 
-            SurfaceRenderer surfaceRenderer =
-                Fodinae.Core.ServiceLocator.Resolve<SurfaceRenderer>() ??
-                throw new InvalidOperationException(
-                    "SceneSetup requires the registered SurfaceRenderer.");
-            surfaceRenderer.SetLocalAssets(
-                transitTexture,
-                perspectiveTexture,
-                redRockTexture);
-            _surfaceRendererSetup = true;
+                SurfaceRenderer surfaceRenderer =
+                    Fodinae.Core.ServiceLocator.Resolve<SurfaceRenderer>() ??
+                    throw new InvalidOperationException(
+                        "SceneSetup requires the registered SurfaceRenderer.");
+                surfaceRenderer.SetLocalAssets(
+                    transitTexture,
+                    perspectiveTexture,
+                    redRockTexture);
+                _surfaceRendererSetup = true;
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation is the expected teardown path during a domain reload.
+            }
+            finally
+            {
+                // Domain reload cancels the task while preserving this component.
+                // Never leave the guard latched, otherwise the surface is lost forever.
+                _surfaceRendererSetupStarted = false;
+            }
         }
 
         private void SetupWorldMapController()

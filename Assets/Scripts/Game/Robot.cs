@@ -95,6 +95,9 @@ namespace Fodinae.Game
         private bool _hasUpdatedLabels;
         private Vector3 _lastLabelsPosition;
         private bool _dynamicLightSettingsLoaded;
+        private bool _hasPendingServerPosition;
+        private ushort _pendingServerX;
+        private ushort _pendingServerY;
         [Inject]
         private TentacleBatchRenderer _tentacleBatchRenderer = null!;
 
@@ -299,6 +302,7 @@ namespace Fodinae.Game
         protected void Update()
         {
             TryInitializeDynamicLightSettings();
+            ApplyPendingServerPosition();
 
             if (_tentacles == null)
             {
@@ -614,9 +618,12 @@ namespace Fodinae.Game
 
         public void Initialize(uint botId)
         {
-            InitializeDynamicLightSettings();
+            TryInitializeDynamicLightSettings();
             _botId = botId;
-            ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
+            if (ServiceLocator.IsInitialized)
+            {
+                ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
+            }
 
             _isMetadataLoaded = false;
             if (_spriteRenderer != null)
@@ -669,11 +676,34 @@ namespace Fodinae.Game
 
         public void SetPosition(ushort x, ushort y)
         {
-            var mm = ServiceLocator.Resolve<MapManager>();
-            if (mm != null)
+            if (!ServiceLocator.IsInitialized)
             {
-                _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, mm.WorldHeight);
+                _pendingServerX = x;
+                _pendingServerY = y;
+                _hasPendingServerPosition = true;
+                return;
             }
+
+            ApplyServerPosition(x, y);
+        }
+
+        private void ApplyPendingServerPosition()
+        {
+            if (!_hasPendingServerPosition || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            ApplyServerPosition(_pendingServerX, _pendingServerY);
+            _hasPendingServerPosition = false;
+        }
+
+        private void ApplyServerPosition(ushort x, ushort y)
+        {
+            MapManager mm = ServiceLocator.Resolve<MapManager>() ??
+                throw new InvalidOperationException(
+                    $"{TAG} MapManager is required to apply position for bot {_botId}.");
+            _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, mm.WorldHeight);
 
             // Only update target position from server for remote robots.
             // Local player manages its own target position via PlayerMovementController.
@@ -746,7 +776,7 @@ namespace Fodinae.Game
 
         private async UniTaskVoid LoadSkinAsync(CancellationToken token)
         {
-            if (string.IsNullOrEmpty(_skinPath))
+            if (string.IsNullOrEmpty(_skinPath) || !ServiceLocator.IsInitialized)
             {
                 return;
             }
@@ -781,7 +811,7 @@ namespace Fodinae.Game
 
         private async UniTaskVoid LoadTailAsync(CancellationToken token)
         {
-            if (string.IsNullOrEmpty(_tailPath))
+            if (string.IsNullOrEmpty(_tailPath) || !ServiceLocator.IsInitialized)
             {
                 ClearTentacles();
                 return;
@@ -810,7 +840,7 @@ namespace Fodinae.Game
 
         private async UniTaskVoid LoadClanAsync(CancellationToken token)
         {
-            if (_clanId == 0)
+            if (_clanId == 0 || !ServiceLocator.IsInitialized)
             {
                 return;
             }
