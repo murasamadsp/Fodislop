@@ -214,23 +214,40 @@ namespace Fodinae.Game
 
         private void InitializeVisualElements()
         {
-            var textGo = new GameObject("Nickname");
-            textGo.transform.SetParent(transform);
-            _nicknameText = textGo.AddComponent<TextMeshPro>();
-            _nicknameText.alignment = TextAlignmentOptions.TopLeft;
-            _nicknameText.rectTransform.pivot = new Vector2(0f, 1f);
-            _nicknameText.fontSize = 6.4f;
-            _nicknameText.textWrappingMode = TextWrappingModes.NoWrap;
-            _nicknameText.overflowMode = TextOverflowModes.Overflow;
-            _nicknameText.color = Color.white;
+            Transform? existingNickname = transform.Find("Nickname");
+            if (IsLocalPlayer)
+            {
+                if (existingNickname != null)
+                {
+                    existingNickname.gameObject.SetActive(false);
+                }
+            }
+            else
+            {
+                GameObject textGo = existingNickname != null
+                    ? existingNickname.gameObject
+                    : new GameObject("Nickname");
+                textGo.transform.SetParent(transform);
+                _nicknameText = textGo.GetComponent<TextMeshPro>() ??
+                    textGo.AddComponent<TextMeshPro>();
+                textGo.SetActive(true);
+                _nicknameText.alignment = TextAlignmentOptions.TopLeft;
+                _nicknameText.rectTransform.pivot = new Vector2(0f, 1f);
+                _nicknameText.fontSize = 6.4f;
+                _nicknameText.textWrappingMode = TextWrappingModes.NoWrap;
+                _nicknameText.overflowMode = TextOverflowModes.Overflow;
+                _nicknameText.color = Color.white;
 
-            // The serialized prefab name is not authoritative. Hide it until
-            // the server sends current robot metadata, otherwise an old name
-            // is visible for one or more frames during connection/reload.
-            _nicknameText.text = string.Empty;
+                // The serialized prefab name is not authoritative. Hide it until
+                // the server sends current robot metadata, otherwise an old name
+                // is visible for one or more frames during connection/reload.
+                _nicknameText.text = string.Empty;
 
-            var textRenderer = textGo.GetComponent<MeshRenderer>();
-            UnityRenderLayerContracts.ApplyWorldUI(textRenderer, 100);
+                MeshRenderer textRenderer = _nicknameText.GetComponent<MeshRenderer>() ??
+                    throw new InvalidOperationException(
+                        $"{TAG} Nickname MeshRenderer is missing for bot {_botId}.");
+                UnityRenderLayerContracts.ApplyWorldUI(textRenderer, 100);
+            }
 
             var clanGo = new GameObject("ClanIcon");
             clanGo.transform.SetParent(transform);
@@ -677,7 +694,7 @@ namespace Fodinae.Game
 
             if (_nicknameText != null)
             {
-                _nicknameText.text = nickname;
+                _nicknameText.text = IsLocalPlayer ? string.Empty : nickname;
             }
 
             LoadMetadataAssets();

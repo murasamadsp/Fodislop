@@ -1068,11 +1068,9 @@ namespace MinesServer.Networking.Connection.Client
                 })));
 
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
-            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(_mockBotId, 999, 1, "Skin/bee.png", "Tail/default.png", "Darkar25")));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-            HandleRobotInfoMock(_mockBotId).Forget();
-            RunCircularBots(0).Forget();
+            RunCircularBots(6).Forget();
             _x = 25;
             _y = 50;
             SendMapChunksAround(_x, _y);
@@ -2147,27 +2145,32 @@ namespace MinesServer.Networking.Connection.Client
                 $"Prebaked map '{path}' contains invalid dimensions.");
         }
 
-        private async UniTaskVoid HandleRobotInfoMock(ushort botId)
-        {
-            await UniTask.Delay(2000);
-            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 999, 1, "Skin/bee.png", "Tail/default.png", "BeeBot")));
-        }
-
         private async UniTaskVoid RunCircularBots(int count)
         {
             const int BASE_ID = 1000;
+            const float CENTER_X = 30f;
+            const float CENTER_Y = 50f;
+            string[] names =
+            [
+                "Mira",
+                "Kite",
+                "Rook",
+                "Nova",
+                "Iris",
+                "Vex",
+            ];
 
-            var bots = new List<(ushort id, float cx, float cy, float r, float a, float speed)>();
+            var bots = new List<(ushort id, string name, float cx, float cy, float r, float a, float speed)>();
             for (int i = 0; i < count; i++)
             {
                 ushort botId = (ushort)(BASE_ID + i);
                 OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
-                    "Skin/bee.png", "Tail/default.png", $"")));
+                    "Skin/bee.png", "Tail/default.png", names[i % names.Length])));
 
-                float radius = (float)((_rng.NextDouble() * 4.5) + 0.5);
-                float angle = (float)(_rng.NextDouble() * Math.PI * 2);
-                float speed = 0.3f + (float)((_rng.NextDouble() * 0.2) - 0.1);
-                bots.Add((botId, 50f, 50f, radius, angle, speed));
+                float radius = 2.5f + (i % 3);
+                float angle = (float)(i * (Math.PI * 2d / count));
+                float speed = 0.45f + ((i % 2) * 0.1f);
+                bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
             }
 
             while (_status == ConnectionStatus.Connected)
@@ -2187,7 +2190,7 @@ namespace MinesServer.Networking.Connection.Client
                         _ => 3,
                     };
                     positions.Add(new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot));
-                    bots[i] = (b.id, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
+                    bots[i] = (b.id, b.name, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
                 }
 
                 OnReceived?.Invoke(new ServerPacket(new HBPacket(positions.ToArray())));
