@@ -354,12 +354,14 @@ namespace Fodinae.UI
                 throw new InvalidOperationException("[PauseMenu] GraphicsScroll is missing from PauseMenu.uxml.");
             ScrollView displayScroll = menuTree.Q<ScrollView>("DisplayScroll") ??
                 throw new InvalidOperationException("[PauseMenu] DisplayScroll is missing from PauseMenu.uxml.");
+            ScrollView effectsScroll = menuTree.Q<ScrollView>("EffectsScroll") ??
+                throw new InvalidOperationException("[PauseMenu] EffectsScroll is missing from PauseMenu.uxml.");
             ScrollView audioScroll = menuTree.Q<ScrollView>("AudioScroll") ??
                 throw new InvalidOperationException("[PauseMenu] AudioScroll is missing from PauseMenu.uxml.");
             ScrollView interfaceScroll = menuTree.Q<ScrollView>("InterfaceScroll") ??
                 throw new InvalidOperationException("[PauseMenu] InterfaceScroll is missing from PauseMenu.uxml.");
-            ScrollView debugScroll = menuTree.Q<ScrollView>("DebugScroll") ??
-                throw new InvalidOperationException("[PauseMenu] DebugScroll is missing from PauseMenu.uxml.");
+            ScrollView advancedScroll = menuTree.Q<ScrollView>("AdvancedScroll") ??
+                throw new InvalidOperationException("[PauseMenu] AdvancedScroll is missing from PauseMenu.uxml.");
             Button settingsBack = menuTree.Q<Button>("SettingsBack") ??
                 throw new InvalidOperationException("[PauseMenu] SettingsBack is missing from PauseMenu.uxml.");
             settingsBack.clicked += CloseSettings;
@@ -368,28 +370,32 @@ namespace Fodinae.UI
                 throw new InvalidOperationException("[PauseMenu] GraphicsTab is missing from PauseMenu.uxml.");
             Button displayTab = menuTree.Q<Button>("DisplayTab") ??
                 throw new InvalidOperationException("[PauseMenu] DisplayTab is missing from PauseMenu.uxml.");
+            Button effectsTab = menuTree.Q<Button>("EffectsTab") ??
+                throw new InvalidOperationException("[PauseMenu] EffectsTab is missing from PauseMenu.uxml.");
             Button audioTab = menuTree.Q<Button>("AudioTab") ??
                 throw new InvalidOperationException("[PauseMenu] AudioTab is missing from PauseMenu.uxml.");
             Button interfaceTab = menuTree.Q<Button>("InterfaceTab") ??
                 throw new InvalidOperationException("[PauseMenu] InterfaceTab is missing from PauseMenu.uxml.");
-            Button debugTab = menuTree.Q<Button>("DebugTab") ??
-                throw new InvalidOperationException("[PauseMenu] DebugTab is missing from PauseMenu.uxml.");
+            Button advancedTab = menuTree.Q<Button>("AdvancedTab") ??
+                throw new InvalidOperationException("[PauseMenu] AdvancedTab is missing from PauseMenu.uxml.");
 
             VisualElement[] settingsPages =
             [
                 graphicsScroll,
                 displayScroll,
+                effectsScroll,
                 audioScroll,
                 interfaceScroll,
-                debugScroll,
+                advancedScroll,
             ];
             Button[] settingsTabs =
             [
                 graphicsTab,
                 displayTab,
+                effectsTab,
                 audioTab,
                 interfaceTab,
-                debugTab,
+                advancedTab,
             ];
             void ShowSettingsPage(int index)
             {
@@ -404,85 +410,34 @@ namespace Fodinae.UI
 
             graphicsTab.clicked += () => ShowSettingsPage(0);
             displayTab.clicked += () => ShowSettingsPage(1);
-            audioTab.clicked += () => ShowSettingsPage(2);
-            interfaceTab.clicked += () => ShowSettingsPage(3);
-            debugTab.clicked += () => ShowSettingsPage(4);
-
-#if !UNITY_EDITOR && !DEVELOPMENT_BUILD
-            debugTab.style.display = DisplayStyle.None;
-#endif
+            effectsTab.clicked += () => ShowSettingsPage(2);
+            audioTab.clicked += () => ShowSettingsPage(3);
+            interfaceTab.clicked += () => ShowSettingsPage(4);
+            advancedTab.clicked += () => ShowSettingsPage(5);
             root.Add(menuTree);
 
             _mainPageScroll.Add(CreateButton("Продолжить", CloseMenu));
             _mainPageScroll.Add(CreateButton("Настройки", OpenSettings));
             _mainPageScroll.Add(CreateButton("Выйти", QuitGame));
 
-            var debugDivider = new Label("═════ Отладка ═════");
-            debugDivider.AddToClassList("pause-debug-divider");
-            _mainPageScroll.Add(debugDivider);
-
-            _mainPageScroll.Add(CreateButton("Тест: Kick сервером", () =>
-            {
-                _connectionService.TriggerDisconnect("Тестовый дисконнект от сервера");
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Тест: Reconnect", () =>
-            {
-                _connectionService.TriggerReconnect("Сервер перезагружается");
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Тест: Открыть URL", () =>
-            {
-                _networkService.Send(new ElementClickPacket("open_url_test", 0, System.Array.Empty<StringPairPacket>()));
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Тест модального окна", () =>
-            {
-                _networkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Вступить в клан", () =>
-            {
-                _networkService.Send(new ElementClickPacket("join_clan", 0, System.Array.Empty<StringPairPacket>()));
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Выйти из клана", () =>
-            {
-                _networkService.Send(new ElementClickPacket("leave_clan", 0, System.Array.Empty<StringPairPacket>()));
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Тест: Стрелка миссии", () =>
-            {
-                _networkService.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Миссии", () =>
-            {
-                _networkService.Send(new ElementClickPacket("open_missions", 0, System.Array.Empty<StringPairPacket>()));
-                CloseMenu();
-            }));
-
-            _mainPageScroll.Add(CreateButton("Стены ✗", () =>
-            {
-                var player = PlayerMovementController.LocalPlayer;
-                if (player != null)
-                {
-                    player.IgnoreCollision = !player.IgnoreCollision;
-                    CloseMenu();
-                }
-            }));
-
-            VisualElement displaySection = CreateSettingsSection("Экран");
-            VisualElement graphicsSection = CreateSettingsSection("Графика");
-            VisualElement audioSection = CreateSettingsSection("Звук");
-            VisualElement interfaceSection = CreateSettingsSection("Интерфейс");
+            VisualElement displaySection = CreateSettingsSection(
+                "Экран",
+                "Разрешение, режим окна и частота кадров.");
+            VisualElement graphicsSection = CreateSettingsSection(
+                "Графика",
+                "Готовые профили качества. Изменение параметров переводит профиль в «Пользовательский».");
+            VisualElement postProcessSection = CreateSettingsSection(
+                "Постобработка",
+                "Эффекты изображения: свечение, цвет, зернистость и размытие движения.");
+            VisualElement worldMaterialsSection = CreateSettingsSection(
+                "Материалы мира",
+                "Визуальные параметры поверхности мира и дальних областей.");
+            VisualElement audioSection = CreateSettingsSection(
+                "Звук",
+                "Громкость отдельных звуковых шин. Отсутствующий аудиоконтент не блокирует игру.");
+            VisualElement interfaceSection = CreateSettingsSection(
+                "Интерфейс",
+                "Масштаб и отображение элементов игрового интерфейса.");
             var advancedGraphicsSection = new Foldout
             {
                 text = "Освещение",
@@ -491,14 +446,53 @@ namespace Fodinae.UI
             advancedGraphicsSection.AddToClassList("settings-section");
             advancedGraphicsSection.AddToClassList("settings-section--advanced");
 
+            postProcessSection.AddToClassList("settings-section--effects");
+            worldMaterialsSection.AddToClassList("settings-section--advanced");
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             var debugSection = new Foldout
             {
-                text = "Debug",
+                text = "Инструменты разработчика",
                 value = false,
             };
             debugSection.AddToClassList("settings-section");
             debugSection.AddToClassList("settings-section--debug");
+
+            debugSection.Add(CreateLabel("Инструменты разработчика"));
+            debugSection.Add(CreateButton("Тест: Kick сервером", () =>
+            {
+                _connectionService.TriggerDisconnect("Тестовый дисконнект от сервера");
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Тест: Reconnect", () =>
+            {
+                _connectionService.TriggerReconnect("Сервер перезагружается");
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Тест: Открыть URL", () =>
+            {
+                _networkService.Send(new ElementClickPacket("open_url_test", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Тест модального окна", () =>
+            {
+                _networkService.Send(new ElementClickPacket("test_modal", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Тест: Стрелка миссии", () =>
+            {
+                _networkService.Send(new ElementClickPacket("test_mission_arrow", 0, System.Array.Empty<StringPairPacket>()));
+                CloseMenu();
+            }));
+            debugSection.Add(CreateButton("Стены ✗", () =>
+            {
+                PlayerMovementController? player = PlayerMovementController.LocalPlayer;
+                if (player != null)
+                {
+                    player.IgnoreCollision = !player.IgnoreCollision;
+                    CloseMenu();
+                }
+            }));
 #endif
 
             audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master));
@@ -1513,13 +1507,25 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
+
+            MoveChildrenStartingAt(
+                graphicsSection,
+                "Визуальные эффекты",
+                postProcessSection);
+            MoveChildrenStartingAt(
+                postProcessSection,
+                "Материалы мира",
+                worldMaterialsSection);
+
             displayScroll.contentContainer.Add(displaySection);
             graphicsScroll.contentContainer.Add(graphicsSection);
-            graphicsScroll.contentContainer.Add(advancedGraphicsSection);
+            effectsScroll.contentContainer.Add(postProcessSection);
             audioScroll.contentContainer.Add(audioSection);
             interfaceScroll.contentContainer.Add(interfaceSection);
+            advancedScroll.contentContainer.Add(advancedGraphicsSection);
+            advancedScroll.contentContainer.Add(worldMaterialsSection);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            debugScroll.contentContainer.Add(debugSection);
+            advancedScroll.contentContainer.Add(debugSection);
 #endif
 
             // Apply the initial page after all dynamic content has been attached.
@@ -1592,7 +1598,7 @@ namespace Fodinae.UI
             return label;
         }
 
-        private static VisualElement CreateSettingsSection(string title)
+        private static VisualElement CreateSettingsSection(string title, string description)
         {
             var section = new VisualElement();
             section.AddToClassList("settings-section");
@@ -1600,7 +1606,41 @@ namespace Fodinae.UI
             var heading = new Label(title);
             heading.AddToClassList("settings-section__title");
             section.Add(heading);
+
+            var descriptionLabel = new Label(description);
+            descriptionLabel.AddToClassList("settings-section__description");
+            section.Add(descriptionLabel);
             return section;
+        }
+
+        private static void MoveChildrenStartingAt(
+            VisualElement source,
+            string markerText,
+            VisualElement destination)
+        {
+            int markerIndex = -1;
+            for (int index = 0; index < source.childCount; index++)
+            {
+                if (source.ElementAt(index) is Label label &&
+                    string.Equals(label.text, markerText, StringComparison.Ordinal))
+                {
+                    markerIndex = index;
+                    break;
+                }
+            }
+
+            if (markerIndex < 0)
+            {
+                throw new InvalidOperationException(
+                    $"[PauseMenu] Settings marker '{markerText}' was not built.");
+            }
+
+            while (markerIndex < source.childCount)
+            {
+                VisualElement child = source.ElementAt(markerIndex);
+                source.RemoveAt(markerIndex);
+                destination.Add(child);
+            }
         }
 
         private void ToggleMenu()

@@ -143,7 +143,7 @@
     color: rgba(20, 20, 20, 1);
 }
 
-.settings-tab--debug {
+.settings-tab--advanced {
     margin-top: auto;
     border-color: rgba(190, 120, 70, 0.75);
 }
@@ -170,6 +170,14 @@
     border-bottom-color: rgba(178, 166, 128, 0.55);
 }
 
+.settings-section__description {
+    color: rgba(190, 196, 205, 1);
+    font-size: var(--font-size-sm);
+    white-space: normal;
+    margin-bottom: 16px;
+    padding-bottom: 2px;
+}
+
 .settings-section .unity-label,
 .settings-section .unity-base-field__label,
 .settings-section .unity-toggle__label,
@@ -188,6 +196,11 @@
 .settings-section--custom {
     background-color: rgba(35, 31, 24, 0.98);
     border-color: rgba(205, 170, 90, 0.8);
+}
+
+.settings-section--effects {
+    background-color: rgba(29, 34, 44, 0.96);
+    border-color: rgba(105, 145, 190, 0.75);
 }
 
 .settings-section--custom .unity-foldout__content {
@@ -280,12 +293,4 @@
 
 .pause-btn:hover {
     background-color: var(--btn-hover);
-}
-
-.pause-debug-divider {
-    font-size: 12px;
-    color: rgb(128, 128, 128);
-    margin-top: 10px;
-    margin-bottom: 6px;
-    -unity-text-align: middle-center;
 }
