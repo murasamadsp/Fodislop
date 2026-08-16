@@ -59,6 +59,7 @@ namespace Fodinae.Game
         private const float MinimumSmoothTime = 0.05f;
         private const float MaximumSmoothTime = 0.15f;
         private const float DynamicLightPositionEpsilon = 0.00390625f;
+        private static readonly Vector3 NicknameAnchorOffset = new(0.5f, 0.5f, 0f);
 
         private bool _isMetadataLoaded = false;
         private CancellationTokenSource? _cts;
@@ -215,7 +216,8 @@ namespace Fodinae.Game
             var textGo = new GameObject("Nickname");
             textGo.transform.SetParent(transform);
             _nicknameText = textGo.AddComponent<TextMeshPro>();
-            _nicknameText.alignment = TextAlignmentOptions.Center;
+            _nicknameText.alignment = TextAlignmentOptions.TopLeft;
+            _nicknameText.rectTransform.pivot = new Vector2(0f, 1f);
             _nicknameText.fontSize = 6.4f;
             _nicknameText.textWrappingMode = TextWrappingModes.NoWrap;
             _nicknameText.overflowMode = TextOverflowModes.Overflow;
@@ -593,7 +595,12 @@ namespace Fodinae.Game
 
             if (_nicknameText != null)
             {
-                _nicknameText.transform.SetPositionAndRotation(position + new Vector3(0f, 0.5f, 0f), Quaternion.identity);
+                // World-space labels use the robot's top-right corner as their
+                // origin. TopLeft alignment makes the nickname grow rightward
+                // instead of centering it over the robot and causing overlap.
+                _nicknameText.transform.SetPositionAndRotation(
+                    position + NicknameAnchorOffset,
+                    Quaternion.identity);
             }
 
             if (_clanRenderer != null)
