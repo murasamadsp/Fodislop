@@ -224,6 +224,11 @@ namespace Fodinae.Game
             _nicknameText.overflowMode = TextOverflowModes.Overflow;
             _nicknameText.color = Color.white;
 
+            // The serialized prefab name is not authoritative. Hide it until
+            // the server sends current robot metadata, otherwise an old name
+            // is visible for one or more frames during connection/reload.
+            _nicknameText.text = string.Empty;
+
             var textRenderer = textGo.GetComponent<MeshRenderer>();
             UnityRenderLayerContracts.ApplyWorldUI(textRenderer, 100);
 
@@ -609,7 +614,6 @@ namespace Fodinae.Game
                 _nicknameText.transform.SetPositionAndRotation(
                     topRight,
                     Quaternion.identity);
-                _nicknameText.transform.localScale = new Vector3(1f, -1f, 1f);
             }
 
             if (_clanRenderer != null)
