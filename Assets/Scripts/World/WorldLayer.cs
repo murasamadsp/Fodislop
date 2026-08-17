@@ -653,15 +653,26 @@ namespace Fodinae
             }
 
             int oldestIndex = _lruList.Last.Value;
-            if (_dirtyChunks.Contains(oldestIndex))
+            if (_dirtyChunks.Remove(oldestIndex) && _loadedChunks.TryGetValue(oldestIndex, out T[]? dirtyChunk))
             {
-                SaveChunkToDisk(oldestIndex, _loadedChunks[oldestIndex]);
-                _dirtyChunks.Remove(oldestIndex);
+                SaveChunkAsync(oldestIndex, dirtyChunk).Forget();
             }
 
             _loadedChunks.Remove(oldestIndex);
             _lruIndexMap.Remove(oldestIndex);
             _lruList.RemoveLast();
+        }
+
+        private async Cysharp.Threading.Tasks.UniTaskVoid SaveChunkAsync(int chunkIndex, T[] chunk)
+        {
+            try
+            {
+                await Cysharp.Threading.Tasks.UniTask.RunOnThreadPool(() => SaveChunkToDisk(chunkIndex, chunk));
+            }
+            catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException || ex is UnauthorizedAccessException)
+            {
+                Debug.LogError($"[WorldLayer] Background disk save failed for chunk {chunkIndex}: {ex.Message}");
+            }
         }
 
         private void MarkDirty(int chunkIndex)

@@ -23,6 +23,7 @@ using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
+using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
@@ -36,14 +37,31 @@ namespace Fodinae.Core
         {
             EnsureRuntimeUiInput();
 
-            IProjectDefaults projectDefaults = ProjectDefaultsLoader.LoadRequired();
-            builder.RegisterInstance(projectDefaults);
-            GraphicsQualityProfile graphicsQualityProfile =
-                GraphicsQualityProfileLoader.LoadRequired();
-            builder.RegisterInstance(graphicsQualityProfile);
+            Scene ownScene = gameObject.scene;
 
-            UIDocument? uiDocument = FindAnyObjectByType<UIDocument>(
-                FindObjectsInactive.Include);
+            // Additive scene loads don't switch the active scene, and managers not already
+            // present in ownScene get created via RegisterComponentOnNewGameObject — Unity
+            // places new GameObjects into whatever scene is active. ownScene isn't fully
+            // loaded yet at this point (Configure runs as part of the load itself, so
+            // SceneManager.SetActiveScene would throw here); GameBootstrap.PostStart applies
+            // it once the scene is actually loaded and managers start getting resolved.
+            builder.RegisterInstance(ownScene);
+
+            // IProjectDefaults/GraphicsQualityProfile are registered by BootstrapLifetimeScope
+            // (parent scope) — ClientConfigManager, now Bootstrap-tier, injects them, and child
+            // scopes resolve unregistered types from the parent automatically.
+
+            UIDocument? uiDocument = null;
+            foreach (UIDocument candidate in FindObjectsByType<UIDocument>(
+                FindObjectsInactive.Include))
+            {
+                if (candidate.gameObject.scene == ownScene)
+                {
+                    uiDocument = candidate;
+                    break;
+                }
+            }
+
             if (uiDocument == null || uiDocument.panelSettings == null)
             {
                 throw new InvalidOperationException(
@@ -66,13 +84,9 @@ namespace Fodinae.Core
 
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
-            RegisterManager<ClientAssetLoader>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<AudioSystem>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldTextureManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<ConnectionManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PacketHandler>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<NetworkService>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GameManager>(builder);
             RegisterManager<VFXPool>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PackManager>(builder).AsImplementedInterfaces().AsSelf();
@@ -96,7 +110,6 @@ namespace Fodinae.Core
             }
 
             RegisterManager<ServerConfig>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<ClientConfigManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TextureStorageManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder);
             RegisterManager<UIInputManager>(builder);
@@ -107,7 +120,7 @@ namespace Fodinae.Core
             RegisterManager<TerrariaLightingEngine>(builder);
             RegisterManager<SurfaceRenderer>(builder);
 
-            builder.RegisterBuildCallback(InjectSceneBehaviours);
+            builder.RegisterBuildCallback(resolver => InjectSceneBehaviours(resolver, ownScene));
 
             // Инициализация ПОСЛЕ сборки графа: резолв менеджеров, инжект scene-компонентов,
             // сборка UI, валидация. IPostStart вызывается в player-loop фазе PostStartup,
@@ -131,12 +144,12 @@ namespace Fodinae.Core
             }
         }
 
-        private static void InjectSceneBehaviours(IObjectResolver resolver)
+        private static void InjectSceneBehaviours(IObjectResolver resolver, Scene ownScene)
         {
             foreach (MonoBehaviour behaviour in FindObjectsByType<MonoBehaviour>(
                 FindObjectsInactive.Include))
             {
-                if (behaviour is LifetimeScope)
+                if (behaviour is LifetimeScope || behaviour.gameObject.scene != ownScene)
                 {
                     continue;
                 }

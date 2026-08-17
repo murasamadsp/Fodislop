@@ -103,7 +103,7 @@ namespace Fodinae.Game.Managers
                 }
 
                 CreateBackup(path, worldCodeName);
-                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
+                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE, maxRamChunks: 2000);
                 _mapFilePath = path;
                 _isInitialized = true;
                 IsDisposed = false;

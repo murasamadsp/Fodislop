@@ -9,6 +9,7 @@ namespace Fodinae.Rendering.PostProcessing
 {
     [Serializable]
     [VolumeComponentMenu("Fodinae/Eigengrau")]
+    [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class EigengrauComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.

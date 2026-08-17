@@ -17,6 +17,7 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
@@ -36,18 +37,27 @@ namespace Fodinae.Core
     public sealed class GameBootstrap : IPostStartable
     {
         private readonly IObjectResolver _resolver;
+        private readonly Scene _ownScene;
 
-        public GameBootstrap(IObjectResolver resolver)
+        public GameBootstrap(IObjectResolver resolver, Scene ownScene)
         {
             _resolver = resolver;
+            _ownScene = ownScene;
         }
 
         public void PostStart()
         {
+            // Managers not already present in the scene get created lazily on first
+            // Resolve() below via RegisterComponentOnNewGameObject, and Unity places new
+            // GameObjects into whatever scene is active. Additive loads don't switch the
+            // active scene on their own, so without this, managers created here would land
+            // in whatever scene loaded us (e.g. a menu) and get destroyed when it unloads.
+            SceneManager.SetActiveScene(_ownScene);
+
             _resolver.Resolve<ConnectionManager>();
             var networkService = _resolver.Resolve<NetworkService>();
             networkService.EnsureConnectionSubscription();
-            if (!networkService.IsConnectionSubscriptionEstablished)
+            if (!networkService.IsConnectionSubscriptionEstablished && Application.isPlaying)
             {
                 throw new InvalidOperationException(
                     "NetworkService failed to subscribe to the connection packet stream.");
@@ -60,7 +70,7 @@ namespace Fodinae.Core
             if (assetLoader is ClientAssetLoader clientAssetLoader)
             {
                 clientAssetLoader.EnsureAssetSubscription();
-                if (!clientAssetLoader.IsAssetSubscriptionEstablished)
+                if (!clientAssetLoader.IsAssetSubscriptionEstablished && Application.isPlaying)
                 {
                     throw new InvalidOperationException(
                         "ClientAssetLoader failed to subscribe to the connection packet stream.");

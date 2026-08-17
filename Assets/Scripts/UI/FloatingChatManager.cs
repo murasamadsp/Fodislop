@@ -20,7 +20,10 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            _camera ??= Camera.main;
+            if (_camera == null)
+            {
+                _camera = Camera.main;
+            }
             if (_bubblePrefab != null)
             {
                 return;
@@ -46,7 +49,10 @@ namespace Fodinae.UI
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
             TryInitialize();
-            _camera ??= Camera.main;
+            if (_camera == null)
+            {
+                _camera = Camera.main;
+            }
             var robotManager = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
             var robot = robotManager?.GetOrCreateRobot(packet.BotId);
             if (robot == null)

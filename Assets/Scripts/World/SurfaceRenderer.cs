@@ -209,9 +209,17 @@ namespace Fodinae.World
                 return;
             }
 
-            EnsureInitialized();
+            if (!EnsureInitialized())
+            {
+                return;
+            }
 
-            Camera mainCamera = _mainCamera ??= Camera.main ??
+            if (_mainCamera == null)
+            {
+                _mainCamera = Camera.main;
+            }
+
+            Camera mainCamera = _mainCamera ??
                 throw new InvalidOperationException(
                     "SurfaceRenderer requires a tagged Main Camera.");
             if (_lastWorldWidth == _mapManager.WorldWidth &&
@@ -258,22 +266,23 @@ namespace Fodinae.World
             }
         }
 
-        private void EnsureInitialized()
+        private bool EnsureInitialized()
         {
             if (_initialized)
             {
-                return;
+                return true;
             }
 
-            Texture2D transitTexture = _transitTexture ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer transit texture is not assigned.");
-            Texture2D perspectiveTexture = _perspectiveTexture ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer perspective texture is not assigned.");
-            Texture2D redRockTexture = _redRockTexture ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer redrock texture is not assigned.");
+            // SceneSetup assigns these asynchronously via SetLocalAssets() once its texture
+            // load completes; a null here means "still loading", not a failure.
+            if (_transitTexture == null || _perspectiveTexture == null || _redRockTexture == null)
+            {
+                return false;
+            }
+
+            Texture2D transitTexture = _transitTexture;
+            Texture2D perspectiveTexture = _perspectiveTexture;
+            Texture2D redRockTexture = _redRockTexture;
             ClientConfig clientConfig = _clientConfigManager.Config ??
                 throw new InvalidOperationException(
                     "SurfaceRenderer requires an initialized ClientConfig.");
@@ -348,6 +357,7 @@ namespace Fodinae.World
             _lightingGeometryRegistry.Register(this);
             _registered = true;
             _initialized = true;
+            return true;
         }
 
         private void RebuildVisibleGeometry(

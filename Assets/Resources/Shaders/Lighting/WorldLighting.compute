@@ -4,11 +4,12 @@
 #pragma kernel ResolveDirect
 #pragma kernel SolveDiffuseBounce
 #pragma kernel CompositeLighting
+#pragma kernel ResolveAndComposite
 
 #define PI2 6.28318530718
-#define MAX_INTERVAL_STEPS 64
-#define CONTACT_DIRECTION_COUNT 16
-#define CONTACT_SAMPLE_COUNT 3
+#define MAX_INTERVAL_STEPS 8
+#define CONTACT_DIRECTION_COUNT 8
+#define CONTACT_SAMPLE_COUNT 2
 
 Texture2D<float4> _MaterialField;
 Texture2D<float4> _EmissionField;
@@ -136,13 +137,36 @@ float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
     return length(rayDirection * cellsPerPixel * pathLengthInPixels);
 }
 
+struct DynamicLight
+{
+    float4 positionRadius;
+    float4 colorIntensity;
+};
+StructuredBuffer<DynamicLight> _DynamicLights;
+int _DynamicLightCount;
+
 float4 SampleEmission(float2 pixelPosition, float mipLevel)
 {
-    float4 emission = 0.0;
-    emission = _EmissionField.SampleLevel(
+    float4 emission = _EmissionField.SampleLevel(
         sampler_LinearClamp,
         MaterialUv(pixelPosition),
         mipLevel);
+
+    float2 worldPos = _WorldRect.xy + (pixelPosition / float2(_FieldSize)) * _WorldRect.zw;
+    [loop]
+    for (int i = 0; i < _DynamicLightCount; i++)
+    {
+        DynamicLight light = _DynamicLights[i];
+        float dist = length(worldPos - light.positionRadius.xy);
+        float radius = max(light.positionRadius.w, 4.0 * _CellSize);
+        if (dist < radius)
+        {
+            float atten = saturate(1.0 - (dist / radius));
+            atten = atten * atten;
+            emission.rgb += light.colorIntensity.rgb * (light.colorIntensity.a * atten);
+        }
+    }
+
     return emission;
 }
 
@@ -263,8 +287,10 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
             ? 0.0
             : saturate(SampleOccupancy(samplePosition, samplingMip));
         float4 emission = SampleEmission(samplePosition, samplingMip);
+        float totalDistanceCells = pathLength.x + pathLength.y;
+        float distanceFalloff = 1.0 / (1.0 + 0.08 * totalDistanceCells + 0.003 * totalDistanceCells * totalDistanceCells);
         float3 emittedRadiance =
-            max(emission.rgb, 0.0) * physicalStepLength * _EmissionScale;
+            max(emission.rgb, 0.0) * physicalStepLength * _EmissionScale * distanceFalloff;
         radiance += currentTransmission * emittedRadiance;
         pathLength += float2(1.0 - occupancy, occupancy) * physicalStepLength;
     }
@@ -361,8 +387,8 @@ void SolveContactOcclusion(uint3 dispatchId : SV_DispatchThreadID)
     float2 pixelsPerCell = float2(_FieldSize) /
         max(regionCellCount, float2(0.0001, 0.0001));
     float occludedAngle = 0.0;
-    const float3 sampleDistances = float3(0.33, 0.66, 1.0);
-    const float3 sampleWeights = float3(0.55, 0.30, 0.15);
+    const float2 sampleDistances = float2(0.45, 1.0);
+    const float2 sampleWeights = float2(0.65, 0.35);
     [unroll]
     for (int direction = 0; direction < CONTACT_DIRECTION_COUNT; direction++)
     {
@@ -397,7 +423,7 @@ void SolveContactOcclusion(uint3 dispatchId : SV_DispatchThreadID)
             directionOcclusion += occupancy * sampleWeights[sampleIndex];
         }
 
-        occludedAngle += directionOcclusion / 16.0;
+        occludedAngle += directionOcclusion / float(CONTACT_DIRECTION_COUNT);
     }
 
     float cavity = pow(saturate(occludedAngle), 1.6);
@@ -635,5 +661,99 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
             output *= maximumLight / outputPeak;
         }
     }
+    _Result[pixel] = float4(output, ao);
+}
+
+[numthreads(8, 8, 1)]
+void ResolveAndComposite(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (any(dispatchId.xy >= (uint2)_FieldSize))
+    {
+        return;
+    }
+
+    int2 pixel = int2(dispatchId.xy);
+    float2 uv = (float2(pixel) + 0.5) / float2(_FieldSize);
+    int probeIndex = pixel.y * _FieldSize.x + pixel.x;
+
+    if (_DebugView >= 1 && _DebugView <= 3)
+    {
+        int2 materialPixel = pixel;
+        if (_MaterialYFlip != 0)
+        {
+            materialPixel.y = _FieldSize.y - 1 - materialPixel.y;
+        }
+
+        if (_DebugView == 1)
+        {
+            float4 material = _MaterialField.Load(int3(materialPixel, 0)).rgba;
+            _Result[pixel] = float4(material.aaa, 1.0);
+            return;
+        }
+        if (_DebugView == 2)
+        {
+            float4 material = _MaterialField.Load(int3(materialPixel, 0)).rgba;
+            _Result[pixel] = float4(material.rgb, 1.0);
+            return;
+        }
+        if (_DebugView == 3)
+        {
+            float4 emission = _EmissionField.Load(int3(materialPixel, 0)).rgba;
+            _Result[pixel] = float4(emission.rgb, 1.0);
+            return;
+        }
+    }
+
+    float4 normalData = SampleAutomaticSurfaceNormal(float2(pixel) + 0.5);
+    float3 radiance = 0.0;
+    [unroll]
+    for (int direction = 0; direction < 4; direction++)
+    {
+        int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
+        uint3 packedInterval = _RadianceAtlas[atlasIndex];
+        float angle = (float(direction) + 0.5) * PI2 / 4.0;
+        float raySine;
+        float rayCosine;
+        sincos(angle, raySine, rayCosine);
+        radiance += UnpackRadiance(packedInterval.xy) * SurfaceLambert(
+            normalData,
+            float2(rayCosine, raySine));
+    }
+    float3 directOutput = radiance * 0.25;
+
+    float ao = _EnableContactOcclusion != 0
+        ? _ContactOcclusionTexture[pixel]
+        : 1.0;
+
+    float3 bounce = _EnableDiffuseBounce != 0
+        ? _BounceInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb * ao
+        : 0.0;
+
+    float3 result = (_AmbientColor.rgb * ao) + directOutput + bounce;
+
+    if (_DebugView == 4 || _DebugView == 5)
+    {
+        result = directOutput;
+    }
+    else if (_DebugView == 6)
+    {
+        result = bounce;
+    }
+    else if (_DebugView == 7)
+    {
+        result = ao.xxx;
+    }
+
+    float3 output = max(result, 0.0);
+    if (_DebugView == 0 && _EnableFinalLightingClamp != 0)
+    {
+        float maximumLight = max(_MaximumLightMultiplier, 0.0001);
+        float outputPeak = Max3(output);
+        if (outputPeak > maximumLight)
+        {
+            output *= maximumLight / outputPeak;
+        }
+    }
+
     _Result[pixel] = float4(output, ao);
 }

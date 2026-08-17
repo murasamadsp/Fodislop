@@ -93,7 +93,7 @@ namespace Fodinae.Game.Managers
             IsStandaloneMode = true;
         }
 
-        private IWorldDataStorage WorldStorage => _worldStorage;
+        public IWorldDataStorage WorldStorage => _worldStorage;
 
         protected void OnDestroy()
         {

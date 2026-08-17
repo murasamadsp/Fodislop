@@ -10,6 +10,7 @@ using VContainer;
 
 namespace Fodinae.Player
 {
+    [ExecuteAlways]
     public class CameraFollow : MonoBehaviour
     {
         public static CameraFollow? Instance { get; private set; }
@@ -21,6 +22,8 @@ namespace Fodinae.Player
         }
 
         [Header("Follow Settings")]
+        public const float DefaultOrthographicSize = 7f;
+        public const float DefaultCameraDepthZ = -10f;
         [SerializeField]
         private Transform? _target;
         [SerializeField]
@@ -209,6 +212,23 @@ namespace Fodinae.Player
 
         protected void LateUpdate()
         {
+            if (!Application.isPlaying)
+            {
+                _camera ??= GetComponent<Camera>();
+                if (_camera != null)
+                {
+                    _camera.orthographicSize = DefaultOrthographicSize;
+                }
+
+                var player = PlayerMovementController.LocalPlayer ?? FindAnyObjectByType<PlayerMovementController>();
+                if (player != null)
+                {
+                    transform.position = new Vector3(player.transform.position.x, player.transform.position.y, DefaultCameraDepthZ);
+                }
+
+                return;
+            }
+
             HandleZoom();
             HandleFollow();
         }
@@ -247,16 +267,7 @@ namespace Fodinae.Player
                 return;
             }
 
-            float scrollInput = 0f;
-            try
-            {
-                scrollInput = _scrollAction.ReadValue<Vector2>().y;
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[CameraFollow] Error reading scroll input: {e.Message}");
-                return;
-            }
+            float scrollInput = _scrollAction.ReadValue<Vector2>().y;
 
             if (Mathf.Abs(scrollInput) > 0.01f)
             {

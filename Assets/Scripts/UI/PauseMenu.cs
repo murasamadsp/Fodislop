@@ -78,15 +78,13 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            EnsureEscapeAction();
             TryInitialize();
         }
 
         protected void OnEnable()
         {
-            if (_initialized)
-            {
-                EnsureEscapeAction();
-            }
+            EnsureEscapeAction();
         }
 
         protected void Update()
@@ -94,6 +92,11 @@ namespace Fodinae.UI
             if (!_initialized)
             {
                 TryInitialize();
+            }
+
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame && (_escapeAction == null || !_escapeAction.enabled))
+            {
+                ToggleMenu();
             }
         }
 
@@ -104,14 +107,28 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null ||
-                _clientConfig == null || _networkService == null ||
+            _doc ??= ServiceLocator.Resolve<UIDocument>() ?? FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
+            if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null)
+            {
+                return;
+            }
+
+            _clientConfig ??= ServiceLocator.Resolve<IClientConfigManager>();
+            _networkService ??= ServiceLocator.Resolve<INetworkService>();
+            _audioSystem ??= ServiceLocator.Resolve<IAudioSystem>();
+            _connectionService ??= ServiceLocator.Resolve<IConnectionService>();
+            _inputBlocker ??= ServiceLocator.Resolve<IInputBlocker>();
+            _lightingEngine ??= ServiceLocator.Resolve<TerrariaLightingEngine>();
+            _postProcessController ??= ServiceLocator.Resolve<PostProcessController>();
+            _terrainRenderer ??= ServiceLocator.Resolve<TerrainRenderer>();
+            _graphicsSettings ??= ServiceLocator.Resolve<GraphicsSettingsController>();
+
+            if (_clientConfig == null || _networkService == null ||
                 _audioSystem == null || _connectionService == null || _inputBlocker == null ||
                 _lightingEngine == null || _postProcessController == null || _terrainRenderer == null ||
                 _graphicsSettings == null)
             {
-                throw new InvalidOperationException(
-                    "[PauseMenu] Required DI services and UIDocument must be initialized before building pause menu.");
+                return;
             }
 
             EnsureEscapeAction();
@@ -418,6 +435,7 @@ namespace Fodinae.UI
 
             _mainPageScroll.Add(CreateButton("Продолжить", CloseMenu));
             _mainPageScroll.Add(CreateButton("Настройки", OpenSettings));
+            _mainPageScroll.Add(CreateButton("В главное меню", ExitToMainMenu));
             _mainPageScroll.Add(CreateButton("Выйти", QuitGame));
 
             VisualElement displaySection = CreateSettingsSection(
@@ -1807,10 +1825,30 @@ namespace Fodinae.UI
 
         private void QuitGame()
         {
-            ShowQuitConfirmation();
+            ShowConfirmation(
+                "Выход из игры",
+                "Вы уверены, что хотите выйти?",
+                "Выйти",
+                () =>
+                {
+#if UNITY_EDITOR
+                    Debug.Log("[PauseMenu] Выход из игры");
+#else
+                    Application.Quit();
+#endif
+                });
         }
 
-        private void ShowQuitConfirmation()
+        private void ExitToMainMenu()
+        {
+            ShowConfirmation(
+                "Выйти в главное меню",
+                "Вы уверены? Текущая сессия будет закрыта.",
+                "В меню",
+                () => BootstrapLifetimeScope.Instance?.ReturnToMainMenu());
+        }
+
+        private void ShowConfirmation(string title, string description, string confirmText, Action onConfirm)
         {
             if (_doc == null)
             {
@@ -1820,7 +1858,7 @@ namespace Fodinae.UI
             var root = _doc.rootVisualElement;
 
             var overlay = new VisualElement();
-            overlay.name = "QuitConfirmOverlay";
+            overlay.name = "ConfirmOverlay";
             overlay.AddToClassList("pause-confirm-overlay");
             overlay.AddToClassList("ui-overlay");
             overlay.AddToClassList("ui-overlay--modal");
@@ -1830,11 +1868,11 @@ namespace Fodinae.UI
             panel.AddToClassList("ui-panel");
             panel.AddToClassList("ui-panel--modal");
 
-            var titleLabel = new Label("Выход из игры");
+            var titleLabel = new Label(title);
             titleLabel.AddToClassList("pause-confirm-title");
             panel.Add(titleLabel);
 
-            var descLabel = new Label("Вы уверены, что хотите выйти?");
+            var descLabel = new Label(description);
             descLabel.AddToClassList("pause-confirm-desc");
             panel.Add(descLabel);
 
@@ -1845,13 +1883,9 @@ namespace Fodinae.UI
             var confirmBtn = new Button(() =>
             {
                 root.Remove(overlay);
-#if UNITY_EDITOR
-                Debug.Log("[PauseMenu] Выход из игры");
-#else
-                Application.Quit();
-#endif
+                onConfirm();
             });
-            confirmBtn.text = "Выйти";
+            confirmBtn.text = confirmText;
             confirmBtn.AddToClassList("pause-btn-confirm");
 
             var cancelBtn = new Button(() => root.Remove(overlay));

@@ -70,9 +70,15 @@ namespace Fodinae.UI
                 return;
             }
 
+            _doc ??= FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
                 _serverConfig == null || _inputBlocker == null)
             {
+                if (!Application.isPlaying)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException(
                     "[GlobalChatUI] Required DI services and UIDocument must be initialized before building chat UI.");
             }
@@ -90,13 +96,16 @@ namespace Fodinae.UI
                 ApplyServerConfig();
             }
 
-            try
+            if (Application.isPlaying)
             {
-                _networkService.Send(new QueryChatHistoryPacket("global", 0));
-            }
-            catch (Exception ex)
-            {
-                GameErrorUI.ReportError("Не удалось запросить историю чата", ex);
+                try
+                {
+                    _networkService.Send(new QueryChatHistoryPacket("global", 0));
+                }
+                catch (Exception ex)
+                {
+                    GameErrorUI.ReportError("Не удалось запросить историю чата", ex);
+                }
             }
         }
 

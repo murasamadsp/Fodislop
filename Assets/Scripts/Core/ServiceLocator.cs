@@ -43,7 +43,7 @@ namespace Fodinae.Core
             _resolver.Inject(instance);
         }
 
-        public static T? Resolve<T>()
+        public static T Resolve<T>()
             where T : class
         {
             if (_resolver == null)
@@ -60,6 +60,45 @@ namespace Fodinae.Core
             {
                 Debug.LogException(ex);
                 throw;
+            }
+        }
+
+        public static bool TryResolve<T>(out T? instance)
+            where T : class
+        {
+            if (_resolver == null)
+            {
+                instance = null;
+                return false;
+            }
+
+            try
+            {
+                instance = _resolver.Resolve<T>();
+                return instance != null;
+            }
+            catch
+            {
+                instance = null;
+                return false;
+            }
+        }
+
+        public static T? TryResolve<T>()
+            where T : class
+        {
+            if (_resolver == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return _resolver.Resolve<T>();
+            }
+            catch
+            {
+                return null;
             }
         }
     }

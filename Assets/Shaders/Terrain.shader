@@ -431,6 +431,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 color        : COLOR;
                 float4 worldPosAttr : TEXCOORD3;
                 float4 animData     : TEXCOORD4;
+                float4 packedData   : TEXCOORD5;
                 float4 glowAttr     : TEXCOORD6;
             };
 
@@ -441,8 +442,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 color        : COLOR;
                 float4 worldPos     : TEXCOORD1;
                 float4 animData     : TEXCOORD2;
-                float4 glowData     : TEXCOORD3;
-                nointerpolation float isForeground : TEXCOORD4;
+                float4 packedData   : TEXCOORD3;
+                float4 glowData     : TEXCOORD4;
+                nointerpolation float isForeground : TEXCOORD5;
             };
 
             struct MaterialFieldOutput
@@ -459,6 +461,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.color = input.color;
                 output.worldPos = input.worldPosAttr;
                 output.animData = input.animData;
+                output.packedData = input.packedData;
                 output.glowData = input.glowAttr;
                 output.isForeground = input.positionOS.z < 0.05 ? 1.0 : 0.0;
                 return output;
@@ -516,9 +519,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 bool hasRoundedPhysicalContour = (lightingFlags & 32u) != 0u;
                 bool isPhysicalMass = (lightingFlags & 64u) != 0u;
                 float occupancy = isPhysicalMass ? isForeground : 0.0;
+                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.zw : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
-                        input.uv,
+                        contourUV,
                         solidBoundaryMask,
                         solidDiagonalMask)
                     : 1.0;

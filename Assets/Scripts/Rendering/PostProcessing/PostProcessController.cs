@@ -234,7 +234,10 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = Camera.main;
+            }
             var mainCam = _mainCamera;
             if (mainCam != null)
             {
@@ -362,7 +365,10 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
-            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = Camera.main;
+            }
             Camera? mainCamera = _configuredMainCamera;
             if (mainCamera == null)
             {
@@ -505,13 +511,10 @@ namespace Fodinae.Rendering.PostProcessing
 
         private static void ValidateProfileComponents(VolumeProfile profile)
         {
-            for (int index = 0; index < profile.components.Count; index++)
+            int removed = profile.components.RemoveAll(c => c == null);
+            if (removed > 0)
             {
-                if (profile.components[index] == null)
-                {
-                    throw new InvalidOperationException(
-                        $"Post-process VolumeProfile '{profile.name}' contains a null component at index {index}.");
-                }
+                Debug.LogWarning($"[PostProcessController] Cleaned up {removed} null/missing component(s) from VolumeProfile '{profile.name}'.");
             }
         }
 

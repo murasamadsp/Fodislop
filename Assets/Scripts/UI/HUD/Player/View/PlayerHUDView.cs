@@ -231,6 +231,13 @@ namespace Fodinae.UI.HUD.Player.View
             }
         }
 
+        public void InitializeEditorPreview(UIDocument doc)
+        {
+            _doc = doc;
+            _model = new PlayerStatsModel();
+            InitializeHUD();
+        }
+
         private void InitializeHUD()
         {
             _tooltip = new Tooltip();
@@ -1121,7 +1128,10 @@ namespace Fodinae.UI.HUD.Player.View
             _buildingsPopup = CreatePopup("Мои здания");
             _faqPopup = CreatePopup("FAQ");
             _programmatorGrid = gameObject.AddComponent<ProgrammatorGrid>();
-            Fodinae.Core.ServiceLocator.Inject(_programmatorGrid);
+            if (Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                Fodinae.Core.ServiceLocator.Inject(_programmatorGrid);
+            }
             root.Add(_respawnPopup);
             root.Add(_buildingsPopup);
             root.Add(_faqPopup);

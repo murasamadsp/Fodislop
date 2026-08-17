@@ -17,7 +17,6 @@ using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Shared;
 using UnityEngine;
-using VContainer;
 
 namespace Fodinae.Networking.Connection
 {
@@ -49,13 +48,6 @@ namespace Fodinae.Networking.Connection
         // и для диагностики в ReconnectUI. НЕ УДАЛЯТЬ (см. HandleServerDisconnect).
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052", Justification = "Хранит причину дисконнекта для реконнект-статуса")]
         private string _disconnectReason = string.Empty;
-
-        [Inject]
-        private IWorldDataStorage _worldStorage = null!;
-        [Inject]
-        private MapManager _mapManager = null!;
-        [Inject]
-        private GameManager _gameManager = null!;
 
         protected void Awake()
         {
@@ -133,7 +125,7 @@ namespace Fodinae.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            _gameManager?.SetState(Game.Managers.GameState.Connecting);
+            ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Connecting);
 
             Connection = new DummyConnection();
             Connection.OnReceived += OnReceived;
@@ -160,8 +152,8 @@ namespace Fodinae.Networking.Connection
 
             ClearPendingPackets();
 
-            _mapManager.ResetWorldState();
-            _worldStorage.Dispose();
+            ServiceLocator.Resolve<MapManager>()?.ResetWorldState();
+            ServiceLocator.Resolve<IWorldDataStorage>()?.Dispose();
         }
 
         public void TriggerDisconnect(string reason)
@@ -197,7 +189,7 @@ namespace Fodinae.Networking.Connection
             _serverInitiatedDisconnect = true;
             _disconnectReason = reason;
             Disconnect();
-            _gameManager?.DeauthorizeUI();
+            ServiceLocator.Resolve<GameManager>()?.DeauthorizeUI();
             ReconnectUI.Instance?.ShowDisconnectReason(reason);
         }
 
@@ -208,7 +200,7 @@ namespace Fodinae.Networking.Connection
             _reconnectCountdown = ReconnectInterval;
             _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
             Disconnect();
-            _gameManager?.SetState(Game.Managers.GameState.Disconnected);
+            ServiceLocator.Resolve<GameManager>()?.SetState(Game.Managers.GameState.Disconnected);
             ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
         }
 
@@ -240,15 +232,16 @@ namespace Fodinae.Networking.Connection
         {
             ClearPendingPackets();
 
-            _mapManager.ResetWorldState();
-            _worldStorage.Dispose();
-            _gameManager?.DeauthorizeUI();
+            ServiceLocator.Resolve<MapManager>()?.ResetWorldState();
+            ServiceLocator.Resolve<IWorldDataStorage>()?.Dispose();
+            GameManager? gameManager = ServiceLocator.Resolve<GameManager>();
+            gameManager?.DeauthorizeUI();
 
             if (_shouldAutoReconnect && !_serverInitiatedDisconnect)
             {
                 _reconnectCountdown = ReconnectInterval;
                 _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
-                _gameManager?.SetState(Game.Managers.GameState.Disconnected);
+                gameManager?.SetState(Game.Managers.GameState.Disconnected);
                 ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
             }
         }

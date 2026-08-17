@@ -16,6 +16,7 @@ using VContainer;
 
 namespace Fodinae.World.Terrain
 {
+    [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [DefaultExecutionOrder(100)]
     public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
@@ -92,7 +93,7 @@ namespace Fodinae.World.Terrain
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
             new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 4),
@@ -204,7 +205,6 @@ namespace Fodinae.World.Terrain
                 minimumUnityY <= _lastGridPos.y + _meshHeight;
             if (affectsCachedTerrain)
             {
-                _lightingGeometryRevision++;
                 _needsRefresh = true;
             }
         }
@@ -252,6 +252,42 @@ namespace Fodinae.World.Terrain
             _mainCamera = Camera.main ??
                 throw new InvalidOperationException(
                     "TerrainRenderer requires a tagged Main Camera.");
+        }
+
+        public void InitializeEditorPreview(IWorldDataStorage storage, MapManager mapManager, ITextureService textureService)
+        {
+            _storage = storage;
+            _mapManager = mapManager;
+            _textureService = textureService;
+            Instance = this;
+            _meshFilter ??= GetComponent<MeshFilter>();
+            _meshRenderer ??= GetComponent<MeshRenderer>();
+            if (_mainCamera == null)
+            {
+                _mainCamera = Camera.main ?? UnityEngine.Object.FindAnyObjectByType<Camera>();
+            }
+
+            InitializeShader();
+            if (_mesh == null)
+            {
+                _mesh = new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 };
+                _mesh.MarkDynamic();
+            }
+
+            if (_meshFilter != null)
+            {
+                _meshFilter.sharedMesh = _mesh;
+            }
+
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = true;
+                _meshRenderer.sortingLayerName = _sortingLayerName;
+                _meshRenderer.sortingOrder = _sortingOrder;
+            }
+
+            EnsureSubscriptions();
+            _needsRefresh = true;
         }
 
         public void EnsureSubscriptions()
@@ -403,17 +439,49 @@ namespace Fodinae.World.Terrain
             using var terrainLateUpdateMarker = TerrainLateUpdateMarker.Auto();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
-                if ((_diagLogged & (1 << 0)) == 0)
+                if (!Application.isPlaying)
                 {
-                    LogDiag(1 << 0, $"[TerrainDiag] gate BLOCKED: mapManager={(_mapManager == null ? "NULL" : "ok")}, storage={(_storage == null ? "NULL" : (_storage.IsReady ? "ready" : "NOT_READY"))}");
+                    if (ServiceLocator.IsInitialized)
+                    {
+                        _mapManager ??= ServiceLocator.Resolve<MapManager>();
+                        _storage ??= ServiceLocator.Resolve<IWorldDataStorage>();
+                        _textureService ??= ServiceLocator.Resolve<ITextureService>();
+                    }
+                    else
+                    {
+                        _mapManager ??= UnityEngine.Object.FindAnyObjectByType<MapManager>(FindObjectsInactive.Include);
+                        _storage ??= _mapManager != null ? _mapManager.WorldStorage : null;
+                        _textureService ??= UnityEngine.Object.FindAnyObjectByType<WorldTextureManager>(FindObjectsInactive.Include);
+                    }
+
+                    if (_storage != null && _mapManager != null && _textureService != null && _storage.IsReady)
+                    {
+                        EnsureSubscriptions();
+                        _needsRefresh = true;
+                    }
                 }
 
-                return;
+                if (_mapManager == null || _storage == null || !_storage.IsReady)
+                {
+                    return;
+                }
             }
 
             if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
             {
-                return;
+                if (!Application.isPlaying)
+                {
+                    var pmc = PlayerMovementController.LocalPlayer ?? UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>(FindObjectsInactive.Include);
+                    if (pmc != null && !pmc.HasServerPosition && _storage != null && _mapManager != null)
+                    {
+                        pmc.InitializeEditorPreview(_storage, _mapManager);
+                    }
+                }
+
+                if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+                {
+                    return;
+                }
             }
 
             if ((_diagLogged & (1 << 1)) == 0)
@@ -421,15 +489,31 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
             }
 
-            if (_meshFilter != null && _meshFilter.sharedMesh != _mesh)
+            InitializeShader();
+            _meshFilter ??= GetComponent<MeshFilter>();
+            _meshRenderer ??= GetComponent<MeshRenderer>();
+            if (_mesh == null)
+            {
+                _mesh = new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 };
+                _mesh.MarkDynamic();
+                if (_meshFilter != null)
+                {
+                    _meshFilter.sharedMesh = _mesh;
+                }
+            }
+            else if (_meshFilter != null && _meshFilter.sharedMesh != _mesh)
             {
                 _meshFilter.sharedMesh = _mesh;
             }
 
             if (_mainCamera == null)
             {
-                LogDiag(1 << 2, "[TerrainDiag] camera NULL");
-                return;
+                _mainCamera = Camera.main ?? UnityEngine.Object.FindAnyObjectByType<Camera>();
+                if (_mainCamera == null)
+                {
+                    LogDiag(1 << 2, "[TerrainDiag] camera NULL");
+                    return;
+                }
             }
 
             if (_textureRefreshPending && Time.unscaledTime >= _nextTextureRefreshTime)
@@ -444,9 +528,19 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             }
 
-            TerrariaLightingEngine lightingEngine = TerrariaLightingEngine.Instance ??
+            TerrariaLightingEngine? lightingEngine = TerrariaLightingEngine.Instance ??
+                (ServiceLocator.IsInitialized ? ServiceLocator.TryResolve<TerrariaLightingEngine>() : null) ??
+                UnityEngine.Object.FindAnyObjectByType<TerrariaLightingEngine>(FindObjectsInactive.Include);
+            if (lightingEngine == null)
+            {
+                if (!Application.isPlaying)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException(
                     "TerrariaLightingEngine was not initialized by GameLifetimeScope.");
+            }
             int effectiveViewportPadding = _viewportPadding;
             int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
                 TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
@@ -565,10 +659,10 @@ namespace Fodinae.World.Terrain
             // executing it from an unsafe RenderGraph pass would leak that
             // state into the following terrain draw.
             int lightingPadding = requiredLightingPadding;
-            int lightingMinX = viewportMinX - lightingPadding;
-            int lightingMinY = viewportMinY - lightingPadding;
-            int lightingWidth = viewportWidth + (lightingPadding * 2);
-            int lightingHeight = viewportHeight + (lightingPadding * 2);
+            int lightingMinX = currentGridPos.x - lightingPadding;
+            int lightingMinY = currentGridPos.y - lightingPadding;
+            int lightingWidth = _meshWidth + (lightingPadding * 2);
+            int lightingHeight = _meshHeight + (lightingPadding * 2);
             lightingEngine.UpdateLighting(
                 lightingMinX,
                 lightingMinY,
@@ -688,6 +782,7 @@ namespace Fodinae.World.Terrain
                     $"Terrain material '{_materials[0].name}' is missing the LightingMaterialField pass.");
             }
 
+            commandBuffer.BeginSample("Fodinae.Terrain.RenderMaterialFields");
             for (int subMeshIndex = 0; subMeshIndex < subMeshCount; subMeshIndex++)
             {
                 Material material = _materials[subMeshIndex];
@@ -698,6 +793,7 @@ namespace Fodinae.World.Terrain
                     subMeshIndex,
                     materialFieldPass);
             }
+            commandBuffer.EndSample("Fodinae.Terrain.RenderMaterialFields");
         }
 
         private void UpdateVertexAttributes(int minX, int minY)
@@ -805,6 +901,7 @@ namespace Fodinae.World.Terrain
                     _cellCache.CacheMinX != int.MinValue &&
                     Mathf.Abs(cacheDeltaX) < _cellCache.CacheWidth &&
                     Mathf.Abs(cacheDeltaY) < _cellCache.CacheHeight;
+                long swCache = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (CacheMarker.Auto())
                 {
                     if (canScrollCache)
@@ -816,19 +913,21 @@ namespace Fodinae.World.Terrain
                         _cellCache.PopulateFull(minX, minY, _storage, _mapManager, textureService, atlases);
                     }
                 }
+                FrameProfiler.TerrainCacheTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swCache) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 using (PrecalculateMarker.Auto())
                 {
                     if (canScrollCache)
                     {
-                        _precalc.PrecalculateIncremental(_cellCache, _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY);
+                        _precalc.PrecalculateIncremental(_cellCache, _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY, _mapManager.WorldWidth, _mapManager.WorldHeight);
                     }
                     else
                     {
-                        _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight);
+                        _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight);
                     }
                 }
 
+                long swFlood = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (FloodFillMarker.Auto())
                 {
                     if (canScrollCache)
@@ -840,19 +939,27 @@ namespace Fodinae.World.Terrain
                         _backgroundFloodFill.ComputeFull(this);
                     }
                 }
+                FrameProfiler.TerrainFloodFillTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swFlood) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
+                long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (MeshBuildMarker.Auto())
                 {
                     _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
                 }
+                FrameProfiler.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 if (_mesh != null)
                 {
+                    long swUpload = System.Diagnostics.Stopwatch.GetTimestamp();
                     using (MeshUploadMarker.Auto())
                     {
-                        _mesh.Clear();
-                        _mesh.subMeshCount = atlases.Count;
-                        _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+                        if (_mesh.vertexCount != _meshBuilder.VertexBuffer.Length || _mesh.subMeshCount != atlases.Count)
+                        {
+                            _mesh.Clear();
+                            _mesh.subMeshCount = atlases.Count;
+                            _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+                        }
+
                         _mesh.SetVertexBufferData(
                             _meshBuilder.VertexBuffer,
                             0,
@@ -860,6 +967,8 @@ namespace Fodinae.World.Terrain
                             _meshBuilder.VertexBuffer.Length,
                             0,
                             UPLOAD_FLAGS);
+                    }
+                    FrameProfiler.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                         // The terrain is a regular viewport-sized grid. Scanning
                         // every vertex after each rebuild is wasted CPU work and
@@ -885,21 +994,20 @@ namespace Fodinae.World.Terrain
                                 diagnostic);
                         }
 
-                        for (int i = 0; i < atlases.Count; i++)
+                    for (int i = 0; i < atlases.Count; i++)
+                    {
+                        var atlasTex = atlases[i].Texture;
+                        if (_materials[i].GetTexture("_BaseMap") != atlasTex)
                         {
-                            var atlasTex = atlases[i].Texture;
-                            if (_materials[i].GetTexture("_BaseMap") != atlasTex)
-                            {
-                                _materials[i].SetTexture("_BaseMap", atlasTex);
-                            }
-
-                            if (_materials[i].GetTexture("_FlowMap") != textureService.FlowMapTexture)
-                            {
-                                _materials[i].SetTexture("_FlowMap", textureService.FlowMapTexture);
-                            }
-
-                            _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+                            _materials[i].SetTexture("_BaseMap", atlasTex);
                         }
+
+                        if (_materials[i].GetTexture("_FlowMap") != textureService.FlowMapTexture)
+                        {
+                            _materials[i].SetTexture("_FlowMap", textureService.FlowMapTexture);
+                        }
+
+                        _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                     }
                 }
 

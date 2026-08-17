@@ -1,7 +1,9 @@
 #nullable enable
 
 using Fodinae.Core;
+using Fodinae.World.Lighting;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Fodinae.UI
@@ -79,8 +81,33 @@ namespace Fodinae.UI
             }
         }
 
+        private bool _showDetailedProfiler;
+        private int _currentDebugViewIndex;
+
         protected void Update()
         {
+            FrameProfiler.BeginFrame();
+
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.f3Key.wasPressedThisFrame)
+                {
+                    _showDetailedProfiler = !_showDetailedProfiler;
+                }
+
+                if (keyboard.f2Key.wasPressedThisFrame)
+                {
+                    var engine = TerrariaLightingEngine.Instance;
+                    if (engine != null)
+                    {
+                        _currentDebugViewIndex = (_currentDebugViewIndex + 1) % 6;
+                        var view = (TerrariaLightingEngine.DebugView)_currentDebugViewIndex;
+                        engine.SetDebugView(view);
+                    }
+                }
+            }
+
             _runningSum -= _frameTimes[_frameIndex];
             _frameTimes[_frameIndex] = Time.unscaledDeltaTime;
             _runningSum += _frameTimes[_frameIndex];
@@ -88,10 +115,27 @@ namespace Fodinae.UI
             float avg = _runningSum / SAMPLE_SIZE;
             float fps = avg > 0f ? 1f / avg : 0f;
             CurrentFps = fps;
+
             if (_fpsText != null && Time.unscaledTime >= _nextDisplayUpdate)
             {
-                _nextDisplayUpdate = Time.unscaledTime + 0.25f;
-                _fpsText.text = $"FPS: {fps:F1}  Ping: {_pingMs}ms  Online: {_onlinePlayers}  Prg: {_onlineProgrammator}";
+                _nextDisplayUpdate = Time.unscaledTime + 0.1f;
+                float frameTimeMs = avg * 1000f;
+                if (!_showDetailedProfiler)
+                {
+                    _fpsText.text = $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_pingMs}ms  Online: {_onlinePlayers}  [F3 for details]";
+                }
+                else
+                {
+                    var engine = TerrariaLightingEngine.Instance;
+                    string debugViewStr = engine != null ? engine.ActiveDebugView.ToString() : "Off";
+                    float gcAllocKb = FrameProfiler.GcAllocPerFrameBytes / 1024f;
+
+                    _fpsText.text =
+                        $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_pingMs}ms  Online: {_onlinePlayers}\n" +
+                        $"<color=#aaffaa>[Terrain CPU]</color> Mesh: {FrameProfiler.TerrainMeshTimeMs:F2}ms | Flood: {FrameProfiler.TerrainFloodFillTimeMs:F2}ms | Cache: {FrameProfiler.TerrainCacheTimeMs:F2}ms | Upload: {FrameProfiler.TerrainGpuUploadTimeMs:F2}ms\n" +
+                        $"<color=#ffffaa>[Lighting GPU]</color> Solve: {FrameProfiler.LightingSolveTimeMs:F2}ms | DynLights: {FrameProfiler.ActiveDynamicLights} | View: {debugViewStr} [F2]\n" +
+                        $"<color=#ffaaff>[Memory]</color> GC: {gcAllocKb:F1} KB/f | [F3 to close]";
+                }
             }
         }
 

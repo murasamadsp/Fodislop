@@ -114,6 +114,11 @@ namespace Fodinae.Audio.Backend
         {
             if (_backend == null)
             {
+                if (!Application.isPlaying)
+                {
+                    return 1f;
+                }
+
                 throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
             }
 
@@ -124,6 +129,11 @@ namespace Fodinae.Audio.Backend
         {
             if (_backend == null)
             {
+                if (!Application.isPlaying)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
             }
 

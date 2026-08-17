@@ -839,6 +839,27 @@ namespace Fodinae.Game
             spriteRenderer.sprite = _skinSprite;
         }
 
+        public void EnsureEditorPreviewVisual()
+        {
+            if (_spriteRenderer != null && _spriteRenderer.sprite == null)
+            {
+                var botTex = Resources.Load<Texture2D>("Textures/bot") ?? Resources.Load<Texture2D>("bot");
+                if (botTex != null)
+                {
+                    _skinSprite = Sprite.Create(botTex, new Rect(0, 0, botTex.width, botTex.height), new Vector2(0.5f, 0.5f), 16);
+                }
+                else
+                {
+                    var tex = Texture2D.whiteTexture;
+                    _skinSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16);
+                }
+
+                _spriteRenderer.sprite = _skinSprite;
+                _spriteRenderer.color = new Color(0.2f, 0.65f, 0.95f, 1f);
+                _spriteRenderer.enabled = true;
+            }
+        }
+
         private async UniTaskVoid LoadTailAsync(CancellationToken token)
         {
             if (string.IsNullOrEmpty(_tailPath) || !ServiceLocator.IsInitialized)

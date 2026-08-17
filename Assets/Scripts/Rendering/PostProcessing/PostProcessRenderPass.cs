@@ -491,15 +491,18 @@ namespace Fodinae.Rendering.PostProcessing
                         cmd.SetComputeVectorParam(data.PostProcessCS, BloomTintID, data.BloomTint);
                         cmd.SetComputeFloatParam(data.PostProcessCS, BloomIntensityID, data.BloomIntensity);
 
+                        cmd.BeginSample("Fodinae.PostProcess.Bloom.Prefilter");
                         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, InputTexID, data.ColorTexture);
                         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, DestTexID, data.BloomPrefilterTexture);
                         cmd.DispatchCompute(data.PostProcessCS, data.KernelPrefilter, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                        cmd.EndSample("Fodinae.PostProcess.Bloom.Prefilter");
 
                         int downWidth = width;
                         int downHeight = height;
                         int sourceWidth = width;
                         int sourceHeight = height;
                         TextureHandle currentSource = data.BloomPrefilterTexture;
+                        cmd.BeginSample("Fodinae.PostProcess.Bloom.Downsample");
                         for (int i = 0; i < data.BloomDownTextures.Length; i++)
                         {
                             downWidth = Mathf.Max(1, downWidth / 2);
@@ -524,10 +527,12 @@ namespace Fodinae.Rendering.PostProcessing
                             sourceWidth = downWidth;
                             sourceHeight = downHeight;
                         }
+                        cmd.EndSample("Fodinae.PostProcess.Bloom.Downsample");
 
                         TextureHandle currentUp = data.BloomDownTextures[^1];
                         int currentUpWidth = downWidth;
                         int currentUpHeight = downHeight;
+                        cmd.BeginSample("Fodinae.PostProcess.Bloom.Upsample");
                         for (int i = data.BloomUpTextures.Length - 1; i >= 0; i--)
                         {
                             int upWidth = Mathf.Max(1, width >> (i + 1));
@@ -553,6 +558,7 @@ namespace Fodinae.Rendering.PostProcessing
                             currentUpWidth = upWidth;
                             currentUpHeight = upHeight;
                         }
+                        cmd.EndSample("Fodinae.PostProcess.Bloom.Upsample");
 
                         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, BloomTexID, currentUp);
                     }
@@ -600,6 +606,7 @@ namespace Fodinae.Rendering.PostProcessing
                     cmd.SetComputeFloatParam(data.PostProcessCS, MotionBlurIntensityID, data.MbActive ? data.MbIntensity : 0f);
                     cmd.SetComputeIntParam(data.PostProcessCS, MotionBlurMaxSamplesID, data.MbMaxSamples);
 
+                    cmd.BeginSample("Fodinae.PostProcess.Composite");
                     cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, InputTexID, data.ColorTexture);
                     cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, OutputTexID, data.IntermediateTexture);
                     if (data.RenderRobotVelocity)
@@ -612,7 +619,11 @@ namespace Fodinae.Rendering.PostProcessing
                     }
 
                     cmd.DispatchCompute(data.PostProcessCS, data.KernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                    cmd.EndSample("Fodinae.PostProcess.Composite");
+
+                    cmd.BeginSample("Fodinae.PostProcess.BlitBack");
                     Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
+                    cmd.EndSample("Fodinae.PostProcess.BlitBack");
                 });
             }
         }

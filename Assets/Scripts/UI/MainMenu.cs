@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -11,16 +12,16 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.GUI;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
-using VContainer;
 
 namespace Fodinae
 {
+    [ExecuteAlways]
     [RequireComponent(typeof(UIDocument))]
     public class MainMenu : MonoBehaviour
     {
-        [Inject]
-        private IConnectionService _connectionService = null!;
+        private const string GameSceneName = "MainGame";
 
         [SerializeField]
         private Texture2D? _loaderTexture;
@@ -35,23 +36,35 @@ namespace Fodinae
         private bool _built;
         private bool _playButtonSubscribed;
 
+        protected void OnValidate()
+        {
+            if (!Application.isPlaying)
+            {
+                _built = false;
+            }
+        }
         protected void OnEnable()
         {
-            if (_built)
-            {
-                RebindGameManager();
-                SubscribePlayButton();
-                return;
-            }
-
             _doc = GetComponent<UIDocument>();
             if (_doc == null || _doc.rootVisualElement == null)
             {
+                if (!Application.isPlaying)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException(
                     "MainMenu requires a UIDocument with a ready rootVisualElement.");
             }
 
             _root = _doc.rootVisualElement;
+
+            if (_built && Application.isPlaying)
+            {
+                RebindGameManager();
+                SubscribePlayButton();
+                return;
+            }
 
             var mainMenuUXML = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
             if (mainMenuUXML == null)
@@ -85,7 +98,7 @@ namespace Fodinae
 
             SubscribePlayButton();
 
-            if (_loaderImage != null)
+            if (_loaderImage != null && Application.isPlaying)
             {
                 Texture2D texture = _loaderTexture ?? throw new InvalidOperationException(
                     "MainMenu requires an explicit loader texture assigned in the scene.");
@@ -198,6 +211,8 @@ namespace Fodinae
             {
                 _gameManager.OnWorldLoaded -= OnWorldLoaded;
             }
+
+            SceneManager.UnloadSceneAsync(gameObject.scene).ToUniTask().Forget();
         }
 
         private void OnPlayButtonClicked()
@@ -206,14 +221,27 @@ namespace Fodinae
 
             HideMenu();
 
-            _gameManager ??= ServiceLocator.Resolve<GameManager>();
+            LoadGameSceneAsync().Forget();
+        }
+
+        private async UniTaskVoid LoadGameSceneAsync()
+        {
+            AsyncOperation? loadOp = SceneManager.LoadSceneAsync(GameSceneName, LoadSceneMode.Additive);
+            if (loadOp == null)
+            {
+                throw new InvalidOperationException($"Failed to start loading scene '{GameSceneName}'.");
+            }
+
+            await loadOp.ToUniTask();
+
+            _gameManager = ServiceLocator.Resolve<GameManager>();
             if (_gameManager != null)
             {
                 _gameManager.OnWorldLoaded -= OnWorldLoaded;
                 _gameManager.OnWorldLoaded += OnWorldLoaded;
             }
 
-            var connectionService = _connectionService ?? ServiceLocator.Resolve<IConnectionService>();
+            var connectionService = ServiceLocator.Resolve<IConnectionService>();
             if (connectionService != null && !connectionService.IsConnected)
             {
                 connectionService.Connect(oldClient: false);

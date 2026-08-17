@@ -137,8 +137,14 @@ namespace Fodinae.UI.HUD.Inventory.View
                 return;
             }
 
+            _doc ??= FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null)
             {
+                if (!Application.isPlaying)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException(
                     "[InventoryUI] UIDocument must be injected and have a root before initialization.");
             }
@@ -146,8 +152,15 @@ namespace Fodinae.UI.HUD.Inventory.View
             IInventoryModel? model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
             if (model == null)
             {
-                throw new InvalidOperationException(
-                    "Inventory model was not registered before InventoryView initialization.");
+                if (!Application.isPlaying)
+                {
+                    model = new InventoryModel();
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        "Inventory model was not registered before InventoryView initialization.");
+                }
             }
 
             _model = model;

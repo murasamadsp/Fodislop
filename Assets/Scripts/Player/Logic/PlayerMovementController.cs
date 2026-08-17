@@ -21,6 +21,7 @@ using VContainer;
 
 namespace Fodinae.Player.Logic
 {
+    [ExecuteAlways]
     public class PlayerMovementController : MonoBehaviour
     {
         [Header("Movement Settings")]
@@ -71,6 +72,23 @@ namespace Fodinae.Player.Logic
         {
             LocalPlayer = null;
             OnLocalPlayerSpawned = null;
+        }
+
+        public void InitializeEditorPreview(IWorldDataStorage storage, IMapDataProvider mapDataProvider)
+        {
+            LocalPlayer = this;
+            _storage = storage;
+            _mapDataProvider = mapDataProvider;
+            _robot = GetComponent<Robot>();
+            _playerRenderers = GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
+            foreach (var renderer in _playerRenderers)
+            {
+                renderer.enabled = true;
+            }
+
+            _robot?.EnsureEditorPreviewVisual();
+            UpdateServerPosition(new Vector2Int(64, 64));
+            SetGameplayVisible();
         }
 
         protected void Awake()

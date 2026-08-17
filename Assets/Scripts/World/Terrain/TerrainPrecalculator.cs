@@ -31,30 +31,30 @@ namespace Fodinae.World.Terrain
             }
         }
 
-        public void PrecalculateFull(TerrainCellCache cellCache, int meshWidth, int meshHeight)
+        public void PrecalculateFull(TerrainCellCache cellCache, int meshWidth, int meshHeight, int worldWidth, int worldHeight)
         {
             EnsureCapacity(meshWidth, meshHeight);
 
             int gw = meshWidth + 1;
             int gh = meshHeight + 1;
-            for (int x = 0; x < gw; x++)
+            System.Threading.Tasks.Parallel.For(0, gw, x =>
             {
                 for (int y = 0; y < gh; y++)
                 {
-                    CalculateVertexNode(cellCache, x, y);
+                    CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
                 }
-            }
+            });
 
-            for (int x = 0; x < meshWidth; x++)
+            System.Threading.Tasks.Parallel.For(0, meshWidth, x =>
             {
                 for (int y = 0; y < meshHeight; y++)
                 {
                     CalculateCellNode(cellCache, x, y);
                 }
-            }
+            });
         }
 
-        public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy)
+        public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy, int worldWidth, int worldHeight)
         {
             EnsureCapacity(meshWidth, meshHeight);
 
@@ -100,7 +100,7 @@ namespace Fodinae.World.Terrain
                     {
                         for (int y = 0; y < gh; y++)
                         {
-                            CalculateVertexNode(cellCache, x, y);
+                            CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
                         }
                     }
                 }
@@ -126,7 +126,7 @@ namespace Fodinae.World.Terrain
                         {
                             for (int x = xStart; x < xEnd; x++)
                             {
-                                CalculateVertexNode(cellCache, x, y);
+                                CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
                             }
                         }
                     }
@@ -198,7 +198,7 @@ namespace Fodinae.World.Terrain
             }
         }
 
-        private void CalculateVertexNode(TerrainCellCache cellCache, int x, int y)
+        private void CalculateVertexNode(TerrainCellCache cellCache, int x, int y, int worldWidth = int.MaxValue, int worldHeight = int.MaxValue)
         {
             int cx = x + 1;
             int cy = y + 1;
@@ -209,6 +209,13 @@ namespace Fodinae.World.Terrain
 
             int worldX = cellCache.CacheMinX + x;
             int worldY = cellCache.CacheMinY + y;
+
+            if (worldX <= 0 || worldX >= worldWidth || worldY <= 0 || worldY >= worldHeight)
+            {
+                GridVertexOffsets[x, y] = Vector3.zero;
+                return;
+            }
+
             float rx = RandXd(worldX, worldY) / 16f;
             float ry = RandYd(worldX, worldY) / 16f;
 

@@ -17,6 +17,9 @@ namespace Fodinae.World.Terrain
         private float _cellSize;
         public TerrainVertex[] VertexBuffer => _vertexBuffer;
 
+        private int[] _bgAtlasIndices = Array.Empty<int>();
+        private int[] _fgAtlasIndices = Array.Empty<int>();
+
         public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
         {
             _cellSize = cellSize;
@@ -27,6 +30,13 @@ namespace Fodinae.World.Terrain
             {
                 _vertexBuffer = new TerrainVertex[vertCount];
             }
+
+            int singleLayerQuads = meshWidth * meshHeight;
+            if (_bgAtlasIndices.Length != singleLayerQuads)
+            {
+                _bgAtlasIndices = new int[singleLayerQuads];
+                _fgAtlasIndices = new int[singleLayerQuads];
+            }
         }
 
         public void BuildFull(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
@@ -34,33 +44,65 @@ namespace Fodinae.World.Terrain
             List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
         {
-            int vIdx = 0;
-            for (int x = 0; x < meshWidth; x++)
+            if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
+            {
+                return;
+            }
+
+            EnsureCapacity(meshWidth, meshHeight, _cellSize);
+
+            System.Threading.Tasks.Parallel.For(0, meshWidth, x =>
             {
                 int gridX = minX + x;
                 for (int y = 0; y < meshHeight; y++)
                 {
                     int unityY = minY + y;
-                    FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, ref vIdx, atlases, subMeshIndices, useColorLod, mapManager, textureManager);
-                    FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, ref vIdx, atlases, subMeshIndices, useColorLod, mapManager, textureManager);
+                    int quadIdx = (x * meshHeight) + y;
+                    int baseIdx = quadIdx * 8;
+                    _bgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, baseIdx, atlases, useColorLod, mapManager, textureManager);
+                    _fgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, baseIdx + 4, atlases, useColorLod, mapManager, textureManager);
+                }
+            });
+
+            // Ultra-fast flat index collection without dictionary or cache lookups
+            int totalQuads = meshWidth * meshHeight;
+            for (int i = 0; i < totalQuads; i++)
+            {
+                int bgAtlas = _bgAtlasIndices[i];
+                if (bgAtlas >= 0 && bgAtlas < subMeshIndices.Length)
+                {
+                    var bgList = subMeshIndices[bgAtlas];
+                    int baseIdx = i * 8;
+                    bgList.Add(baseIdx + 0);
+                    bgList.Add(baseIdx + 3);
+                    bgList.Add(baseIdx + 2);
+                    bgList.Add(baseIdx + 2);
+                    bgList.Add(baseIdx + 1);
+                    bgList.Add(baseIdx + 0);
+                }
+
+                int fgAtlas = _fgAtlasIndices[i];
+                if (fgAtlas >= 0 && fgAtlas < subMeshIndices.Length)
+                {
+                    var fgList = subMeshIndices[fgAtlas];
+                    int fgIdx = (i * 8) + 4;
+                    fgList.Add(fgIdx + 0);
+                    fgList.Add(fgIdx + 3);
+                    fgList.Add(fgIdx + 2);
+                    fgList.Add(fgIdx + 2);
+                    fgList.Add(fgIdx + 1);
+                    fgList.Add(fgIdx + 0);
                 }
             }
         }
 
-        private void FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
-            int worldWidth, int worldHeight, bool isBackground, ref int vIdx, List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
+        private int FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
+            int worldWidth, int worldHeight, bool isBackground, int vIdx, List<TextureAtlas> atlases, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
         {
-            if (unityY < 0 || unityY >= worldHeight)
+            if (unityY < 0 || unityY >= worldHeight || gridX < 0 || gridX >= worldWidth)
             {
-                vIdx += 4;
-                return;
-            }
-
-            if (gridX < 0 || gridX >= worldWidth)
-            {
-                vIdx += 4;
-                return;
+                return -1;
             }
 
             int cx = x + 1;
@@ -71,51 +113,69 @@ namespace Fodinae.World.Terrain
             CellType cellFgType = ccd.Type;
             if (ccd.State != TerrainCellState.Loaded)
             {
-                vIdx += 4;
-                return;
+                return -1;
             }
 
             CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
             bool isSameCell = !isBackground || cellType == cellFgType;
             if (isBackground && (cellType == cellFgType || cellType == CellType.Unloaded))
             {
-                vIdx += 4;
-                return;
+                return -1;
             }
 
-            CachedCellData data = isSameCell
-                ? ccd
-                : cellCache.GetNeighborCacheEntry(cellType, cx, cy, mapManager, textureManager, atlases);
-            int atlasIndex = data.AtlasIndex;
-            if (atlasIndex < 0 || atlasIndex >= subMeshIndices.Length)
-            {
-                if (subMeshIndices.Length == 0 || atlases.Count == 0)
-                {
-                    vIdx += 4;
-                    return;
-                }
+            Vector4 atlasRect;
+            float uvTileSize;
+            CellAnimationType animType;
+            float animSpeed;
+            int animFrames;
+            float frameHeight;
+            bool hasTileGroup;
+            CellConfigProperties props;
+            Color minimapColor;
+            int atlasIndex;
 
-                // Keep an untextured cell in the first available submesh. The
-                // shader identifies the zero atlas rect and draws the explicit
-                // missing-texture diagnostic instead of dropping the geometry.
+            if (isSameCell)
+            {
+                atlasRect = ccd.AtlasRect;
+                uvTileSize = ccd.UVTileSize;
+                animType = ccd.Animation;
+                animSpeed = ccd.AnimationSpeed;
+                animFrames = ccd.AnimationFrameCount;
+                frameHeight = ccd.FrameHeightTiles;
+                hasTileGroup = ccd.HasTileGroup;
+                props = ccd.Properties;
+                minimapColor = ccd.MinimapColor;
+                atlasIndex = ccd.AtlasIndex;
+            }
+            else
+            {
+                var meta = cellCache.GetMetadata(cellType, mapManager, textureManager, atlases);
+                atlasRect = meta.AtlasRect;
+                uvTileSize = meta.UVTileSize;
+                animType = meta.Animation;
+                animSpeed = meta.AnimationSpeed;
+                animFrames = meta.AnimationFrameCount;
+                frameHeight = meta.FrameHeightTiles;
+                hasTileGroup = meta.HasTileGroup;
+                props = meta.Properties;
+                minimapColor = meta.MinimapColor;
+                atlasIndex = meta.AtlasIndex;
+            }
+
+            if (atlasIndex < 0 || atlasIndex >= atlases.Count)
+            {
                 atlasIndex = 0;
             }
 
-            bool hasTexture = data.AtlasRect.z > 0f &&
-                data.AtlasRect.w > 0f &&
-                data.UVTileSize > 0f;
+            bool hasTexture = atlasRect.z > 0f && atlasRect.w > 0f && uvTileSize > 0f;
             if (!hasTexture)
             {
-                // Missing server textures are an explicit diagnostic state. Keep
-                // the cell in the mesh so the world remains spatially truthful;
-                // Terrain.shader renders its deterministic diagnostic fill.
-                atlasIndex = 0;
-                data.AtlasRect = Vector4.zero;
-                data.UVTileSize = 1f / atlases[0].Size;
-                data.Animation = CellAnimationType.None;
-                data.AnimationSpeed = 0f;
-                data.AnimationFrameCount = 1;
-                data.FrameHeightTiles = 1f;
+                atlasRect = Vector4.zero;
+                uvTileSize = atlases.Count > 0 ? (1f / atlases[0].Size) : 0f;
+                animType = CellAnimationType.None;
+                animSpeed = 0f;
+                animFrames = 1;
+                frameHeight = 1f;
             }
 
             float zOffset = isBackground ? 0.1f : 0.0f;
@@ -145,9 +205,9 @@ namespace Fodinae.World.Terrain
             Vector2 uv3 = new Vector2(0, 1);
 
             int descriptor = isSameCell ? precalc.CellTilingDescriptors[x, y] : 0;
-            float packedW = data.HasTileGroup ? 1f : 0f;
+            float packedW = hasTileGroup ? 1f : 0f;
 
-            if (data.HasTileGroup && descriptor != 0)
+            if (hasTileGroup && descriptor != 0)
             {
                 if ((descriptor & 0x40) != 0)
                 {
@@ -176,18 +236,15 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 2].UV0 = uv2;
             _vertexBuffer[vIdx + 3].UV0 = uv3;
 
-            Vector4 atlasRect = data.AtlasRect;
             bool useFallback = useColorLod || atlasRect.z < 0.0001f;
-            Color color = useFallback ? data.MinimapColor : Color.white;
+            Color color = useFallback ? minimapColor : Color.white;
             if (atlasRect.z < 0.0001f)
             {
-                // The diagnostic shader branch needs a visible coverage value
-                // even when the server supplied no minimap color.
                 color.a = 1f;
             }
 
             float animOffset = 0f;
-            if (!useFallback && data.Animation == CellAnimationType.Blinking)
+            if (!useFallback && animType == CellAnimationType.Blinking)
             {
                 uint seed = (uint)((gridX * 374761397) + (serverY * 668265263));
                 seed = (seed ^ (seed >> 13)) * 1274126177;
@@ -198,14 +255,14 @@ namespace Fodinae.World.Terrain
             bool isPhysicalMass =
                 !isBackground &&
                 cellFgType != CellType.Empty &&
-                ((data.Properties & CellConfigProperties.DropsShadow) != 0 ||
-                 (data.Properties & CellConfigProperties.Passable) == 0);
+                ((props & CellConfigProperties.DropsShadow) != 0 ||
+                 (props & CellConfigProperties.Passable) == 0);
             Vector4 animDataVec = new(
-                (float)data.Animation,
-                data.AnimationSpeed,
+                (float)animType,
+                animSpeed,
                 animOffset,
                 isPhysicalMass ? 1f : 0f);
-            Vector4 tileSizeVec = new Vector4(data.UVTileSize, data.UVTileSize, (float)data.AnimationFrameCount, data.FrameHeightTiles);
+            Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
             Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
             bool isRelief = isSameCell && precalc.CellIsRelief[x, y];
@@ -221,13 +278,9 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx].UV2 = tileSizeVec;
             _vertexBuffer[vIdx].UV3 = worldPosVec;
             _vertexBuffer[vIdx].UV4 = animDataVec;
-            bool isGlowing = (data.Properties & CellConfigProperties.Glowing) != 0;
+            bool isGlowing = (props & CellConfigProperties.Glowing) != 0;
 
-            // The server-provided minimap color is also the material albedo
-            // used by the lighting field. Do not silently turn a missing or
-            // black server color into gray; that hides broken cell metadata
-            // and makes lighting appear to work with invented input.
-            Color materialColor = data.MinimapColor;
+            Color materialColor = minimapColor;
             Color32 materialColor32 = materialColor;
             int packedLightingColor = materialColor32.r |
                 (materialColor32.g << 8) |
@@ -309,14 +362,7 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 2].UV6 = glowVec;
             _vertexBuffer[vIdx + 3].UV6 = glowVec;
 
-            var indices = subMeshIndices[atlasIndex];
-            indices.Add(vIdx + 0);
-            indices.Add(vIdx + 3);
-            indices.Add(vIdx + 2);
-            indices.Add(vIdx + 2);
-            indices.Add(vIdx + 1);
-            indices.Add(vIdx + 0);
-            vIdx += 4;
+            return atlasIndex;
         }
     }
 }

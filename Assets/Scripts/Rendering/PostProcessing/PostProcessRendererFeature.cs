@@ -72,7 +72,11 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = Camera.main;
+            }
+
             if (_mainCamera == null)
             {
                 return;
