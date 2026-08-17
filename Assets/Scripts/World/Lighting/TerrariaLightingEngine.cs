@@ -1276,7 +1276,7 @@ namespace Fodinae.World.Lighting
             _contactOcclusionSolveCount++;
         }
 
-        internal static bool ShouldDispatchContactOcclusion(
+        public static bool ShouldDispatchContactOcclusion(
             bool ambientOcclusionEnabled,
             bool geometryOrRegionChanged,
             bool ambientOcclusionSettingsChanged)

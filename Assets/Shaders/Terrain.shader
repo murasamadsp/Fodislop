@@ -39,6 +39,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "TerrainTileAddressing.hlsl"
 
+            #define EPS 0.0001
+
             struct Attributes
             {
                 float4 positionOS   : POSITION;
@@ -254,7 +256,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                     if (outsideX || outsideY)
                     {
-                        float2 stepPos = gPos + stepUV;
+                        float2 stepPos = input.worldPos.xy + stepUV;
                         float2 wrappedStep;
                         float stepVariantY = fmod(abs(stepPos.y), tilesCount.y);
                         wrappedStep.y = floor(tilesCount.y - EPS - stepVariantY);
