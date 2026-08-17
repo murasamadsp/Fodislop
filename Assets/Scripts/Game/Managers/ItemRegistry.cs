@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using MinesServer.Data;
@@ -12,6 +13,12 @@ namespace Fodinae.Game.Managers
         private const string TAG = "[ItemRegistry]";
         private static readonly Dictionary<ItemType, Texture2D> _iconCache = new();
         private static readonly HashSet<ItemType> _missingIconWarned = new();
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Clear();
+        }
 
         public static string GetName(ItemType type) => type.ToString();
 
@@ -46,10 +53,22 @@ namespace Fodinae.Game.Managers
                 return null;
             }
 
-            var tex = new Texture2D(2, 2);
-            if (!tex.LoadImage(File.ReadAllBytes(path), markNonReadable: true))
+            Texture2D tex;
+            try
             {
-                Object.Destroy(tex);
+                tex = RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+                    File.ReadAllBytes(path),
+                    $"ItemIcon_{type}",
+                    RuntimeTextureColorSpace.Srgb,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp,
+                    makeNoLongerReadable: true);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"{TAG} Local icon '{path}' for item type '{type}' is corrupt; " +
+                    $"will use the server texture if available. {exception.Message}");
                 return null;
             }
 
@@ -59,14 +78,8 @@ namespace Fodinae.Game.Managers
 
         public static void Clear()
         {
-            foreach (var texture in _iconCache.Values)
-            {
-                if (texture != null)
-                {
-                    Object.Destroy(texture);
-                }
-            }
-
+            // Inventory views can retain these runtime textures across a domain
+            // reload. Reset lookup state without destroying live UI resources.
             _iconCache.Clear();
             _missingIconWarned.Clear();
         }

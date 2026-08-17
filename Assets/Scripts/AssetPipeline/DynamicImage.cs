@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -23,29 +24,60 @@ namespace Fodinae
 
         public void LoadImageFromServer(string assetFilename, string etag)
         {
-            // The Action that tells the loader how to apply the texture to this specific Image component.
-            Action<Texture2D> applyAction = (texture) =>
-            {
-                if (this != null && _image != null && texture != null)
-                {
-                    if (_runtimeSprite != null)
-                    {
-                        Destroy(_runtimeSprite);
-                        _runtimeSprite = null;
-                    }
-
-                    var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
-                    _runtimeSprite = sprite;
-                    _image.sprite = sprite;
-                }
-            };
-
-            // Get a cancellation token that is cancelled when this GameObject is destroyed.
             var cancellationToken = this.GetCancellationTokenOnDestroy();
+            LoadAndApplyTextureAsync(assetFilename, cancellationToken).Forget();
+        }
 
-            // Start the loading process and "forget" it. The loader handles the rest.
-            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            loader?.LoadAndApplyTexture(applyAction, assetFilename, cancellationToken).Forget();
+        private async UniTask LoadAndApplyTextureAsync(
+            string assetFilename,
+            CancellationToken cancellationToken)
+        {
+            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+                throw new InvalidOperationException(
+                    "DynamicImage loading requires a registered IAssetLoader.");
+            Texture2D? texture;
+            try
+            {
+                texture = await loader.GetTextureAsync(assetFilename, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"[DynamicImage] Optional image '{assetFilename}' was skipped: {exception.Message}");
+                return;
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (texture == null)
+            {
+                Debug.LogWarning(
+                    $"[DynamicImage] Optional image '{assetFilename}' returned no texture; skipped.");
+                return;
+            }
+
+            Image image = _image ?? throw new InvalidOperationException(
+                "DynamicImage image component was not initialized before loading.");
+            if (_runtimeSprite != null)
+            {
+                Destroy(_runtimeSprite);
+                _runtimeSprite = null;
+            }
+
+            Sprite sprite = Sprite.Create(
+                texture,
+                new Rect(0, 0, texture.width, texture.height),
+                new Vector2(0.5f, 0.5f),
+                RenderingConstants.PIXELS_PER_UNIT);
+            _runtimeSprite = sprite;
+            image.sprite = sprite;
         }
 
         protected void OnDestroy()

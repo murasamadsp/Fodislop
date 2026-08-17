@@ -23,16 +23,14 @@ namespace Fodinae.Game.Managers
         {
         }
 
-        internal void SetAsPending()
-        {
-        }
-
         private bool _isInitialized;
-        private string? _worldCodeName;
+        private string _worldCodeName = string.Empty;
+        private int _worldWidth;
+        private int _worldHeight;
 
         public WorldLayer<CellType>? CellLayer => _cellLayer;
 
-        public string MapFilePath => _mapFilePath ?? string.Empty;
+        public string MapFilePath => _mapFilePath ?? throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
         public string BackupMapFilePath
         {
@@ -54,17 +52,20 @@ namespace Fodinae.Game.Managers
 
         public bool IsDisposed { get; private set; }
 
-#if UNITY_EDITOR
         public void EnsureEditorInitialized()
         {
+#if UNITY_EDITOR
             if (_isInitialized || Application.isPlaying)
             {
                 return;
             }
 
             InitWorld("EditorPreview", 128, 128);
-        }
+#else
+            throw new InvalidOperationException(
+                "[MapStorage] EnsureEditorInitialized is available only in the Unity Editor.");
 #endif
+        }
 
         public void InitWorld(string worldCodeName, int width, int height)
         {
@@ -72,25 +73,24 @@ namespace Fodinae.Game.Managers
 
             if (string.IsNullOrEmpty(worldCodeName))
             {
-                Debug.LogError("[MapStorage] World code name cannot be null or empty");
-                return;
+                throw new ArgumentException("[MapStorage] World code name cannot be null or empty", nameof(worldCodeName));
             }
 
             if (width <= 0 || height <= 0)
             {
-                Debug.LogError($"[MapStorage] Invalid world dimensions: {width}x{height}");
-                return;
+                throw new ArgumentOutOfRangeException($"[MapStorage] Invalid world dimensions: {width}x{height}");
             }
 
             _worldCodeName = worldCodeName;
+            _worldWidth = width;
+            _worldHeight = height;
             const int CHUNK_SIZE = 32;
             int widthChunks = (width + CHUNK_SIZE - 1) / CHUNK_SIZE;
             int heightChunks = (height + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
             if (widthChunks <= 0 || heightChunks <= 0)
             {
-                Debug.LogError($"[MapStorage] Invalid chunk calculation: {widthChunks}x{heightChunks}");
-                return;
+                throw new ArgumentOutOfRangeException($"[MapStorage] Invalid chunk calculation: {widthChunks}x{heightChunks}");
             }
 
             string path = Path.Combine(Application.persistentDataPath, worldCodeName + MapExtension);
@@ -102,6 +102,7 @@ namespace Fodinae.Game.Managers
                     Directory.CreateDirectory(directory);
                 }
 
+                CreateBackup(path, worldCodeName);
                 _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE);
                 _mapFilePath = path;
                 _isInitialized = true;
@@ -110,33 +111,46 @@ namespace Fodinae.Game.Managers
             }
             catch (IOException ioEx)
             {
-                Debug.LogError($"[MapStorage] Could not open map file '{path}': {ioEx.Message}");
                 _cellLayer = null;
                 _mapFilePath = null;
+                throw new IOException($"[MapStorage] Could not open map file '{path}': {ioEx.Message}", ioEx);
             }
             catch (UnauthorizedAccessException authEx)
             {
-                Debug.LogError($"[MapStorage] Access denied for map file '{path}': {authEx.Message}");
                 _cellLayer = null;
                 _mapFilePath = null;
+                throw new UnauthorizedAccessException($"[MapStorage] Access denied for map file '{path}': {authEx.Message}", authEx);
             }
             catch (OutOfMemoryException)
             {
-                Debug.LogError($"[MapStorage] Out of memory while opening map file '{path}'.");
                 _cellLayer = null;
                 _mapFilePath = null;
+                throw;
             }
+        }
+
+        private static void CreateBackup(string mapPath, string worldCodeName)
+        {
+            if (!File.Exists(mapPath))
+            {
+                return;
+            }
+
+            string backupPath = Path.Combine(
+                Application.persistentDataPath,
+                worldCodeName + BackupMapSuffix);
+            File.Copy(mapPath, backupPath, overwrite: true);
         }
 
         public bool IsInitialized() => _isInitialized;
 
-        public string GetWorldCodeName() => _worldCodeName ?? string.Empty;
+        public string GetWorldCodeName() => _worldCodeName;
 
         public CellType GetCell(int x, int y)
         {
             if (!_isInitialized || _cellLayer == null)
             {
-                return CellType.Unloaded;
+                throw new InvalidOperationException("[MapStorage] GetCell called before world initialization");
             }
 
             return _cellLayer.GetCell(x, y, touchLru: true);
@@ -144,8 +158,13 @@ namespace Fodinae.Game.Managers
 
         public void SetCell(int x, int y, CellType type)
         {
-            if (!_isInitialized || _cellLayer == null ||
-                _cellLayer.GetCellSync(x, y, touchLru: true) == type)
+            if (!_isInitialized || _cellLayer == null)
+            {
+                throw new InvalidOperationException(
+                    $"[MapStorage] SetCell called before world initialization: ({x},{y}).");
+            }
+
+            if (_cellLayer.GetCellSync(x, y, touchLru: true) == type)
             {
                 return;
             }
@@ -162,10 +181,41 @@ namespace Fodinae.Game.Managers
             int height,
             CellType[] cells)
         {
-            if (!_isInitialized || _cellLayer == null ||
-                width <= 0 || height <= 0 || cells.Length < width * height)
+            if (!_isInitialized || _cellLayer == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    $"[MapStorage] SetRegion called before world initialization: " +
+                    $"({startX},{startY}) {width}x{height}.");
+            }
+
+            long expectedCellCount = (long)width * height;
+            if (width <= 0 || height <= 0 || cells.Length < expectedCellCount)
+            {
+                throw new ArgumentException(
+                    $"[MapStorage] Invalid region ({startX},{startY}) {width}x{height}: " +
+                    $"payload has {cells.Length} cells, expected at least {expectedCellCount}.",
+                    nameof(cells));
+            }
+
+            if (startX < 0 || startY < 0 || startX >= _worldWidth || startY >= _worldHeight)
+            {
+                string message =
+                    "[MapStorage] Region " +
+                    $"({startX},{startY}) {width}x{height} " +
+                    $"is outside world bounds {_worldWidth}x{_worldHeight}.";
+                throw new ArgumentOutOfRangeException(
+                    nameof(startX),
+                    message);
+            }
+
+            int appliedWidth = Math.Min(width, _worldWidth - startX);
+            int appliedHeight = Math.Min(height, _worldHeight - startY);
+            if (appliedWidth != width || appliedHeight != height)
+            {
+                Debug.LogWarning(
+                    $"[MapStorage] Clipping padded edge region ({startX},{startY}) " +
+                    $"{width}x{height} to {appliedWidth}x{appliedHeight} " +
+                    $"for world {_worldWidth}x{_worldHeight}.");
             }
 
             bool changed = false;
@@ -174,9 +224,14 @@ namespace Fodinae.Game.Managers
             {
                 for (int x = 0; x < width; x++)
                 {
+                    CellType type = cells[index++];
+                    if (x >= appliedWidth || y >= appliedHeight)
+                    {
+                        continue;
+                    }
+
                     int worldX = startX + x;
                     int worldY = startY + y;
-                    CellType type = cells[index++];
                     if (_cellLayer.GetCellSync(worldX, worldY, touchLru: true) == type)
                     {
                         continue;
@@ -192,6 +247,12 @@ namespace Fodinae.Game.Managers
                 Revision++;
                 TerrainRenderer.OnRegionChanged(startX, startY, width, height);
             }
+
+            // SetRegion materializes chunks synchronously, so WorldLayer's
+            // asynchronous disk-load notification is not emitted. Consumers
+            // such as the minimap may already have cached these chunks as
+            // unavailable; notify them after the packet has been applied.
+            _cellLayer.NotifyRegionLoaded(startX, startY, appliedWidth, appliedHeight);
         }
 
         /// <summary>
@@ -211,29 +272,54 @@ namespace Fodinae.Game.Managers
             {
                 _cellLayer.Flush(flushToDisk: true);
             }
-            catch (IOException ioEx)
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is UnauthorizedAccessException ||
+                ex is ObjectDisposedException)
             {
-                Debug.LogError($"[MapStorage] Map flush failed; dirty chunks were retained: {ioEx.Message}");
-            }
-            catch (UnauthorizedAccessException authEx)
-            {
-                Debug.LogError($"[MapStorage] Map flush access denied; dirty chunks were retained: {authEx.Message}");
-            }
-            catch (ObjectDisposedException disposedEx)
-            {
-                Debug.LogError($"[MapStorage] Map stream was disposed before flush: {disposedEx.Message}");
+                throw new IOException(
+                    $"[MapStorage] Failed to persist map '{MapFilePath}'. " +
+                    "The world cannot continue with unsaved chunks.",
+                    ex);
             }
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "SonarAnalyzer.CSharp",
+            "S3877",
+            Justification = "Persistent map close failures must propagate instead of becoming silent data loss.")]
         public void Dispose()
         {
-            _cellLayer?.Dispose();
-            _cellLayer = null;
-            _isInitialized = false;
-            _worldCodeName = string.Empty;
-            _mapFilePath = null;
-            IsDisposed = true;
-            Revision++;
+            Exception? disposeFailure = null;
+            try
+            {
+                _cellLayer?.Dispose();
+            }
+            catch (Exception ex) when (
+                ex is IOException ||
+                ex is UnauthorizedAccessException ||
+                ex is ObjectDisposedException)
+            {
+                disposeFailure = ex;
+            }
+            finally
+            {
+                _cellLayer = null;
+                _isInitialized = false;
+                _worldCodeName = string.Empty;
+                _worldWidth = 0;
+                _worldHeight = 0;
+                _mapFilePath = null;
+                IsDisposed = true;
+                Revision++;
+            }
+
+            if (disposeFailure != null)
+            {
+                throw new IOException(
+                    "[MapStorage] Failed to close the persistent world map after flushing.",
+                    disposeFailure);
+            }
         }
     }
 }

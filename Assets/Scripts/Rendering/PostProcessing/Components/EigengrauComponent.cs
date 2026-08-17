@@ -7,25 +7,29 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-    [Serializable, VolumeComponentMenu("Fodinae/Eigengrau")]
+    [Serializable]
+    [VolumeComponentMenu("Fodinae/Eigengrau")]
     public class EigengrauComponent : VolumeComponent, IPostProcessComponent
     {
+        // Keep the serialized Volume parameter names stable for existing profiles.
+#pragma warning disable SA1307
         [Tooltip("Strength of fine animated film grain in near-black areas. This is the effect's only strength control.")]
-        public ClampedFloatParameter intensity = new(0.2f, 0f, 1f);
+        public ClampedFloatParameter intensity = PostProcessDefaults.EigengrauIntensity();
 
         [Tooltip("Subtle tint of the grain in near-black areas.")]
-        public ColorParameter color = new(new Color(0.018f, 0.02f, 0.028f, 1f));
+        public ColorParameter color = PostProcessDefaults.EigengrauColor();
 
         [Tooltip("Maximum perceptual (sRGB) luminance affected by Eigengrau. Fully lit pixels are excluded.")]
-        public ClampedFloatParameter darknessThreshold = new(0.18f, 0.02f, 0.75f);
+        public ClampedFloatParameter darknessThreshold = PostProcessDefaults.EigengrauDarknessThreshold();
 
         [Tooltip("Film-grain size in physical screen pixels.")]
-        public ClampedFloatParameter noiseScale = new(1f, 0.75f, 2f);
+        public ClampedFloatParameter noiseScale = PostProcessDefaults.EigengrauNoiseScale();
 
         [Tooltip("How many independent grain patterns are generated per second.")]
-        public ClampedFloatParameter animationSpeed = new(18f, 1f, 60f);
+        public ClampedFloatParameter animationSpeed = PostProcessDefaults.EigengrauAnimationSpeed();
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;
+#pragma warning restore SA1307
     }
 }

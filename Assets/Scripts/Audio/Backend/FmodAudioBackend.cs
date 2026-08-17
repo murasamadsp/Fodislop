@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Core;
 using Fodinae.Core;
@@ -18,7 +19,7 @@ namespace Fodinae.Audio.Backend
     /// Оптимизация памяти:
     /// 1. Банки загружаются через loadBankFile с диска (persistentDataPath кэш или StreamingAssets).
     /// 2. Метаданные весят единицы КБ.
-    /// 3. Сэмплы загружаются в RAM только для активно воспроизводимых событий через loadSampleData().
+    /// 3. Сэмплы используются только если уже были заранее загружены FMOD.
     /// </summary>
     public sealed class FmodAudioBackend
     {
@@ -32,6 +33,7 @@ namespace Fodinae.Audio.Backend
 
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
         private readonly ConcurrentDictionary<string, FMOD.Studio.Bank> _loadedBanks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _unavailableBanks = new(StringComparer.OrdinalIgnoreCase);
 
         private const string BANK_PATH = "banks";
 
@@ -48,12 +50,39 @@ namespace Fodinae.Audio.Backend
 
         public async UniTaskVoid LoadRequiredBanksAsync()
         {
-            foreach (var bankName in _requiredBanks)
+            try
             {
-                await EnsureBankLoadedAsync(bankName);
-            }
+                foreach (var bankName in _requiredBanks)
+                {
+                    try
+                    {
+                        await EnsureBankLoadedAsync(bankName);
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogWarning(
+                            $"[FmodAudioBackend] FMOD bank '{bankName}' could not be loaded; " +
+                            $"continuing with the remaining banks: {exception.Message}");
+                    }
+                }
 
-            MapBuses();
+                MapBuses();
+
+                // Missing FMOD content is a supported no-audio state. Do not
+                // surface it as a gameplay warning or make callers wait for it.
+            }
+            catch (OperationCanceledException)
+            {
+                // Audio initialization may be interrupted during domain reload
+                // or teardown; no audio service needs to be kept alive then.
+            }
+            catch (Exception exception)
+            {
+                // FMOD is optional presentation. A failed bank must not become
+                // an unobserved UniTaskVoid exception or block gameplay startup.
+                Debug.LogWarning(
+                    $"[FmodAudioBackend] Audio initialization skipped: {exception.Message}");
+            }
         }
 
         /// <summary>
@@ -67,6 +96,11 @@ namespace Fodinae.Audio.Backend
                 return true;
             }
 
+            if (_unavailableBanks.Contains(cleanBankName))
+            {
+                return false;
+            }
+
             string? bankFilePath = null;
             var localPath = System.IO.Path.Combine(Application.streamingAssetsPath, "Audio", $"{cleanBankName}.bank");
 
@@ -76,30 +110,64 @@ namespace Fodinae.Audio.Backend
             }
             else
             {
+                if (!ServiceLocator.IsInitialized)
+                {
+                    return false;
+                }
+
                 var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
                 if (assetLoader != null)
                 {
                     var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
+                    if (assetLoader.IsKnownMissing(relativeRemotePath))
+                    {
+                        _unavailableBanks.Add(cleanBankName);
+                        return false;
+                    }
+
                     try
                     {
                         bankFilePath = await assetLoader.GetAssetPathAsync(relativeRemotePath);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        Debug.LogWarning($"[FmodAudioBackend] Ошибка загрузки банка '{cleanBankName}' с CDN: {ex.Message}");
+                        return false;
                     }
+                }
+                else
+                {
+                    return false;
                 }
             }
 
             if (string.IsNullOrEmpty(bankFilePath) || !System.IO.File.Exists(bankFilePath))
             {
-                Debug.LogWarning($"[FmodAudioBackend] Банк '{cleanBankName}' не найден ни локально, ни в кэше CDN");
+                _unavailableBanks.Add(cleanBankName);
                 return false;
             }
 
+            if (!IsFmodBank(bankFilePath))
+            {
+                Debug.LogWarning(
+                    $"[FmodAudioBackend] Ignoring invalid audio bank '{bankFilePath}'.");
+                if (bankFilePath.Equals(
+                    PersistentAssetCache.GetAssetPath($"banks/{cleanBankName}.bank"),
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    PersistentAssetCache.RemoveAsset($"banks/{cleanBankName}.bank");
+                }
+
+                _unavailableBanks.Add(cleanBankName);
+                return false;
+            }
+
+            // Bank discovery is optional presentation work. NORMAL may synchronously
+            // load sample data on the main thread; a missing/late audio asset must
+            // never freeze world simulation. NONBLOCKING leaves sample loading to
+            // FMOD's streamer, while CreateVoice below rejects non-resident samples.
             FMOD.RESULT result = FMODUnity.RuntimeManager.StudioSystem.loadBankFile(
                 bankFilePath,
-                FMOD.Studio.LOAD_BANK_FLAGS.NORMAL,
+                FMOD.Studio.LOAD_BANK_FLAGS.NONBLOCKING,
                 out var bank);
 
             if (result == FMOD.RESULT.OK)
@@ -113,8 +181,20 @@ namespace Fodinae.Audio.Backend
                 return true;
             }
 
-            Debug.LogWarning($"[FmodAudioBackend] Ошибка loadBankFile для '{cleanBankName}': {result}");
+            Debug.LogWarning(
+                $"[FmodAudioBackend] FMOD loadBankFile failed for '{cleanBankName}': {result}.");
+            _unavailableBanks.Add(cleanBankName);
             return false;
+        }
+
+        private static bool IsFmodBank(string path)
+        {
+            Span<byte> header = stackalloc byte[12];
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            int read = stream.Read(header);
+            return read == header.Length &&
+                header[..4].SequenceEqual("RIFF"u8) &&
+                header[8..12].SequenceEqual("FEV "u8);
         }
 
         public void UnloadBank(string bankName)
@@ -145,10 +225,6 @@ namespace Fodinae.Audio.Backend
                 if (FMODUnity.RuntimeManager.StudioSystem.getBus(kvp.Value, out var bus) == FMOD.RESULT.OK)
                 {
                     _fmodBuses[kvp.Key] = bus;
-                }
-                else
-                {
-                    Debug.LogWarning($"[FmodAudioBackend] Шина '{kvp.Value}' не найдена в FMOD Studio.");
                 }
             }
 
@@ -187,7 +263,17 @@ namespace Fodinae.Audio.Backend
 
             if (FMODUnity.RuntimeManager.StudioSystem.getEvent(fmodPath, out var eventDescription) != FMOD.RESULT.OK)
             {
-                Debug.LogWarning($"[FmodAudioBackend] Описание события '{fmodPath}' не найдено.");
+                // Audio is optional for offline/editor runs. A missing event is a
+                // no-op; the world must not produce a warning or block on FMOD.
+                return null;
+            }
+
+            // Never request sample loading from the game loop. FMOD can block
+            // updateForStart while loading samples, which produces a visible
+            // hitch. Events whose samples are not already resident are skipped.
+            eventDescription.getSampleLoadingState(out FMOD.Studio.LOADING_STATE sampleState);
+            if (sampleState != FMOD.Studio.LOADING_STATE.LOADED)
+            {
                 return null;
             }
 
@@ -231,7 +317,12 @@ namespace Fodinae.Audio.Backend
 
             if (FMODUnity.RuntimeManager.StudioSystem.getEvent(fullPath, out var eventDescription) != FMOD.RESULT.OK)
             {
-                Debug.LogWarning($"[FmodAudioBackend] Snapshot '{fullPath}' не найден.");
+                return null;
+            }
+
+            eventDescription.getSampleLoadingState(out FMOD.Studio.LOADING_STATE sampleState);
+            if (sampleState != FMOD.Studio.LOADING_STATE.LOADED)
+            {
                 return null;
             }
 

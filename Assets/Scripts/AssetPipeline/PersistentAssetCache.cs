@@ -1,14 +1,12 @@
 #nullable enable
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Fodinae
 {
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any I/O failure without crashing the asset loading pipeline.")]
     public static class PersistentAssetCache
     {
         private static string _cachePath = string.Empty;
@@ -25,205 +23,123 @@ namespace Fodinae
 
         public static byte[]? GetAsset(string filename)
         {
-            try
+            string assetPath = GetAssetPath(filename);
+            if (File.Exists(assetPath))
             {
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot get asset: filename is null or empty");
-                    return null;
-                }
-
-                var assetPath = GetAssetPath(filename);
-                if (File.Exists(assetPath))
-                {
-                    return File.ReadAllBytes(assetPath);
-                }
-
-                return null;
+                return File.ReadAllBytes(assetPath);
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[PersistentAssetCache] Failed to get asset '{filename}': {ex.Message}");
-                return null;
-            }
+
+            return null;
         }
 
         public static async Task<byte[]?> GetAssetAsync(string filename)
         {
-            try
+            string assetPath = GetAssetPath(filename);
+            if (File.Exists(assetPath))
             {
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot get asset: filename is null or empty");
-                    return null;
-                }
-
-                var assetPath = GetAssetPath(filename);
-                if (File.Exists(assetPath))
-                {
-                    return await File.ReadAllBytesAsync(assetPath);
-                }
-
-                return null;
+                return await File.ReadAllBytesAsync(assetPath);
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[PersistentAssetCache] Failed to get asset '{filename}': {ex.Message}");
-                return null;
-            }
+
+            return null;
         }
 
         public static void SaveAsset(string filename, byte[] data, string etag)
         {
-            try
+            InitializeCachePath();
+
+            if (string.IsNullOrWhiteSpace(filename))
             {
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot save asset: filename is null or empty");
-                    return;
-                }
-
-                if (data == null || data.Length == 0)
-                {
-                    Debug.LogError($"[PersistentAssetCache] Cannot save asset '{filename}': data is null or empty");
-                    return;
-                }
-
-                var assetPath = GetAssetPath(filename);
-                var etagPath = GetETagPath(filename);
-
-                var directory = Path.GetDirectoryName(assetPath);
-                if (!Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                WriteAtomically(assetPath, data);
-                WriteAtomically(etagPath, etag ?? string.Empty);
+                throw new ArgumentException("Asset filename cannot be empty.", nameof(filename));
             }
-            catch (Exception ex)
+
+            if (data == null || data.Length == 0)
             {
-                Debug.LogError($"[PersistentAssetCache] Failed to save asset '{filename}': {ex.Message}");
-                throw;
+                throw new ArgumentException("Asset data cannot be null or empty.", nameof(data));
             }
+
+            string assetPath = GetAssetPath(filename);
+            string etagPath = GetETagPath(filename);
+
+            string? directory = Path.GetDirectoryName(assetPath);
+            if (directory == null)
+            {
+                throw new InvalidOperationException(
+                    $"Asset cache path has no parent directory: '{assetPath}'.");
+            }
+
+            Directory.CreateDirectory(directory);
+            WriteAtomically(assetPath, data);
+            WriteAtomically(etagPath, etag);
         }
 
         public static async Task SaveAssetAsync(string filename, byte[] data, string etag)
         {
-            try
+            InitializeCachePath();
+
+            if (string.IsNullOrWhiteSpace(filename))
             {
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot save asset: filename is null or empty");
-                    return;
-                }
-
-                if (data == null || data.Length == 0)
-                {
-                    Debug.LogError($"[PersistentAssetCache] Cannot save asset '{filename}': data is null or empty");
-                    return;
-                }
-
-                var assetPath = GetAssetPath(filename);
-                var etagPath = GetETagPath(filename);
-
-                var directory = Path.GetDirectoryName(assetPath);
-                if (!Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                await WriteAtomicallyAsync(assetPath, data);
-                await WriteAtomicallyAsync(etagPath, etag ?? string.Empty);
+                throw new ArgumentException("Asset filename cannot be empty.", nameof(filename));
             }
-            catch (Exception ex)
+
+            if (data == null || data.Length == 0)
             {
-                Debug.LogError($"[PersistentAssetCache] Failed to save asset '{filename}': {ex.Message}");
-                throw;
+                throw new ArgumentException("Asset data cannot be null or empty.", nameof(data));
             }
+
+            string assetPath = GetAssetPath(filename);
+            string etagPath = GetETagPath(filename);
+
+            string? directory = Path.GetDirectoryName(assetPath);
+            if (directory == null)
+            {
+                throw new InvalidOperationException(
+                    $"Asset cache path has no parent directory: '{assetPath}'.");
+            }
+
+            Directory.CreateDirectory(directory);
+            await WriteAtomicallyAsync(assetPath, data);
+            await WriteAtomicallyAsync(etagPath, etag);
         }
 
         public static string? GetETag(string filename)
         {
-            try
+            string etagPath = GetETagPath(filename);
+            if (File.Exists(etagPath))
             {
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot get ETag: filename is null or empty");
-                    return null;
-                }
-
-                var etagPath = GetETagPath(filename);
-                if (File.Exists(etagPath))
-                {
-                    return File.ReadAllText(etagPath);
-                }
-
-                return null;
+                return File.ReadAllText(etagPath);
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[PersistentAssetCache] Failed to get ETag for '{filename}': {ex.Message}");
-                return null;
-            }
+
+            return null;
         }
 
         public static async Task<string?> GetETagAsync(string filename)
         {
-            try
+            string etagPath = GetETagPath(filename);
+            if (File.Exists(etagPath))
             {
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot get ETag: filename is null or empty");
-                    return null;
-                }
-
-                var etagPath = GetETagPath(filename);
-                if (File.Exists(etagPath))
-                {
-                    return await File.ReadAllTextAsync(etagPath);
-                }
-
-                return null;
+                return await File.ReadAllTextAsync(etagPath);
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[PersistentAssetCache] Failed to get ETag for '{filename}': {ex.Message}");
-                return null;
-            }
+
+            return null;
         }
 
         public static bool HasAsset(string filename)
         {
-            try
+            return File.Exists(GetAssetPath(filename));
+        }
+
+        public static void RemoveAsset(string filename)
+        {
+            string assetPath = GetAssetPath(filename);
+            string etagPath = GetETagPath(filename);
+            if (File.Exists(assetPath))
             {
-                // Ensure cache is initialized
-                InitializeCachePath();
-
-                if (string.IsNullOrEmpty(filename))
-                {
-                    Debug.LogError("[PersistentAssetCache] Cannot check asset existence: filename is null or empty");
-                    return false;
-                }
-
-                return File.Exists(GetAssetPath(filename));
+                File.Delete(assetPath);
             }
-            catch (Exception ex)
+
+            if (File.Exists(etagPath))
             {
-                Debug.LogError($"[PersistentAssetCache] Failed to check asset existence for '{filename}': {ex.Message}");
-                return false;
+                File.Delete(etagPath);
             }
         }
 
@@ -238,59 +154,23 @@ namespace Fodinae
                 return;
             }
 
-            try
+            string persistentPath = Application.persistentDataPath;
+            if (string.IsNullOrWhiteSpace(persistentPath))
             {
-                // Validate that Application.persistentDataPath is valid
-                var persistentPath = Application.persistentDataPath;
-
-                // Check if the persistent data path is valid and not empty
-                if (string.IsNullOrEmpty(persistentPath) || !Directory.Exists(Path.GetDirectoryName(persistentPath)))
-                {
-                    Debug.LogWarning($"[PersistentAssetCache] Invalid persistent data path: '{persistentPath}'. Falling back to application data directory.");
-
-                    // Fallback to a safe directory
-                    persistentPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Fodinae", "AssetCache");
-                }
-
-                _cachePath = Path.Combine(persistentPath, "AssetCache");
-
-                // Ensure the cache directory exists
-                if (!Directory.Exists(_cachePath))
-                {
-                    try
-                    {
-                        Directory.CreateDirectory(_cachePath);
-                        Debug.Log($"[PersistentAssetCache] Created cache directory: {_cachePath}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[PersistentAssetCache] Failed to create cache directory '{_cachePath}': {ex.Message}");
-
-                        // Fallback to temp directory if we can't create the cache directory
-                        _cachePath = Path.Combine(Path.GetTempPath(), "FodinaeAssetCache");
-                        if (!Directory.Exists(_cachePath))
-                        {
-                            Directory.CreateDirectory(_cachePath);
-                            Debug.Log($"[PersistentAssetCache] Using fallback temp directory: {_cachePath}");
-                        }
-                    }
-                }
-
-                _isInitialized = true;
+                throw new InvalidOperationException(
+                    "Application.persistentDataPath is required for the persistent asset cache.");
             }
-            catch (Exception ex)
+
+            string? parentPath = Path.GetDirectoryName(persistentPath);
+            if (string.IsNullOrWhiteSpace(parentPath) || !Directory.Exists(parentPath))
             {
-                Debug.LogError($"[PersistentAssetCache] Failed to initialize cache path: {ex.Message}");
-
-                // Emergency fallback
-                _cachePath = Path.Combine(Path.GetTempPath(), "FodinaeAssetCache");
-                if (!Directory.Exists(_cachePath))
-                {
-                    Directory.CreateDirectory(_cachePath);
-                }
-
-                _isInitialized = true;
+                throw new DirectoryNotFoundException(
+                    $"Persistent data parent directory '{parentPath}' does not exist.");
             }
+
+            _cachePath = Path.Combine(persistentPath, "AssetCache");
+            Directory.CreateDirectory(_cachePath);
+            _isInitialized = true;
         }
 
         public static string GetAssetPath(string filename)

@@ -47,9 +47,10 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client
 {
-    public class DummyConnection : IServerConnection
+    public class DummyConnection : IServerConnection, IOfflineConnection
     {
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
+        private int _lifecycleVersion;
 
         public ConnectionStatus ConnectionStatus => _status;
 
@@ -121,14 +122,18 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
-        private const int _maxDepth = 200;
-        private bool _depthWarningActive;
+        // Depth warning/damage feature disabled in DummyConnection
+        // private const int _maxDepth = 200;
+        // private bool _depthWarningActive;
 
         private byte _clientMasterVolume = 255;
         private readonly Dictionary<string, byte> _clientSoundVolumes = new();
         private RendererMode _clientRenderer = RendererMode.Default;
         private readonly List<StringPairPacket> _clientKeybinds = new();
         private readonly List<string> _clientUnrenderedTextures = new();
+        private float _digCooldown = 0.3f;
+        private int _maxGlobalChatLength = 50;
+        private int _maxLocalChatLength = 20;
 
         private static readonly System.Random _rng = new();
 
@@ -175,12 +180,17 @@ namespace MinesServer.Networking.Connection.Client
             OnConnecting?.Invoke();
 
             // Run asynchronously, but stay on the Unity Main Thread
-            ConnectAsync().Forget();
+            ConnectAsync(++_lifecycleVersion).Forget();
         }
 
-        private async UniTaskVoid ConnectAsync()
+        private async UniTaskVoid ConnectAsync(int lifecycleVersion)
         {
             await UniTask.Yield();
+
+            if (_status != ConnectionStatus.Connecting || lifecycleVersion != _lifecycleVersion)
+            {
+                return;
+            }
 
             _status = ConnectionStatus.Connected;
             OnConnected?.Invoke();
@@ -188,22 +198,31 @@ namespace MinesServer.Networking.Connection.Client
 
         public void Disconnect()
         {
-            if (_status != ConnectionStatus.Connected)
+            if (_status == ConnectionStatus.Disconnected)
             {
+                _worldLayer?.Dispose();
+                _worldLayer = null;
                 return;
             }
 
+            _lifecycleVersion++;
             _worldLayer?.Dispose();
             _worldLayer = null;
 
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
-            DisconnectAsync().Forget();
+            DisconnectAsync(_lifecycleVersion).Forget();
         }
 
-        private async UniTaskVoid DisconnectAsync()
+        private async UniTaskVoid DisconnectAsync(int lifecycleVersion)
         {
             await UniTask.Delay(100);
+
+            if (lifecycleVersion != _lifecycleVersion || _status != ConnectionStatus.Disconnecting)
+            {
+                return;
+            }
+
             _status = ConnectionStatus.Disconnected;
             OnDisconnected?.Invoke();
         }
@@ -687,8 +706,8 @@ namespace MinesServer.Networking.Connection.Client
                 ushort frontY = _y;
                 switch (_rot)
                 {
-                    case Direction.Up: frontY++; break;
-                    case Direction.Down: frontY--; break;
+                    case Direction.Up: frontY--; break;
+                    case Direction.Down: frontY++; break;
                     case Direction.Left: frontX--; break;
                     case Direction.Right: frontX++; break;
                 }
@@ -1018,20 +1037,13 @@ namespace MinesServer.Networking.Connection.Client
             _worldLayer?.Dispose();
             _worldLayer = null;
 
-            string? mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
-            if (string.IsNullOrEmpty(mapbPath) || !File.Exists(mapbPath))
-            {
-                Debug.LogError($"[DummyConnection] Prebaked map file for '{PrebakedWorldCodeName}' not found! Fail-fast without fallbacks.");
-                TriggerDisconnect($"Prebaked map file for '{PrebakedWorldCodeName}' not found");
-                return;
-            }
+            string mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
 
             (int worldWidth, int worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
             if (worldWidth <= 0 || worldHeight <= 0)
             {
-                Debug.LogError($"[DummyConnection] Prebaked map file '{mapbPath}' has invalid dimensions ({worldWidth}x{worldHeight}). Fail-fast!");
-                TriggerDisconnect("Invalid prebaked map dimensions");
-                return;
+                throw new InvalidDataException(
+                    $"Prebaked map file '{mapbPath}' has invalid dimensions ({worldWidth}x{worldHeight}).");
             }
 
             int widthChunks = (worldWidth + 31) / 32;
@@ -1056,11 +1068,16 @@ namespace MinesServer.Networking.Connection.Client
                 })));
 
             OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
-            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(_mockBotId, 999, 1, "Skin/bee.png", "Tail/default.png", "Darkar25")));
+            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(
+                _mockBotId,
+                999,
+                1,
+                "Skin/bee.png",
+                "Tail/default.png",
+                string.Empty)));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-            HandleRobotInfoMock(_mockBotId).Forget();
-            RunCircularBots(0).Forget();
+            RunCircularBots(6).Forget();
             _x = 25;
             _y = 50;
             SendMapChunksAround(_x, _y);
@@ -1099,12 +1116,11 @@ namespace MinesServer.Networking.Connection.Client
             SendPingMock().Forget();
             SendDailyBonusMock().Forget();
 
-            OnReceived?.Invoke(new ServerPacket(new MovementSpeedPacket(new Dictionary<CellType, ushort>
-            {
-                [CellType.Empty] = 100,
-                [CellType.Road] = 20,
-            })));
-            OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
+            OnReceived?.Invoke(new ServerPacket(
+                new MovementSpeedPacket(CreateTestMovementSpeeds(_cellConfigs!))));
+
+            // Depth warning/damage feature disabled in DummyConnection
+            // OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
             var inventoryData = new Dictionary<ItemType, long>();
             foreach (var type in ItemRegistry.AllTypes)
@@ -1146,6 +1162,9 @@ namespace MinesServer.Networking.Connection.Client
                 _clientRenderer,
                 _clientKeybinds,
                 _clientUnrenderedTextures)));
+
+            var serverConfig = ServiceLocator.Resolve<ServerConfig>();
+            serverConfig?.ApplyValues(_digCooldown, _maxGlobalChatLength, _maxLocalChatLength);
         }
 
         private void SendMissionWindow()
@@ -1354,51 +1373,51 @@ namespace MinesServer.Networking.Connection.Client
                     OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket(tag)));
                 }
 
-                // Depth warning check
-                if (_y > _maxDepth)
-                {
-                    if (!_depthWarningActive)
-                    {
-                        _depthWarningActive = true;
-                        OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
-                            0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
-                    }
-                }
-                else
-                {
-                    if (_depthWarningActive)
-                    {
-                        _depthWarningActive = false;
-                        OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
-                    }
-                }
+                // Depth warning check disabled
+                // if (_y > _maxDepth)
+                // {
+                //     if (!_depthWarningActive)
+                //     {
+                //         _depthWarningActive = true;
+                //         OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
+                //             0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
+                //     }
+                // }
+                // else
+                // {
+                //     if (_depthWarningActive)
+                //     {
+                //         _depthWarningActive = false;
+                //         OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
+                //     }
+                // }
 
-                // Depth damage
-                if (_y > _maxDepth)
-                {
-                    int blocksBelow = _y - _maxDepth;
-                    int damage = (((blocksBelow - 1) / 10) + 1) * 10;
-                    _health = Math.Max(0, _health - damage);
-                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
-                    if (_health <= 0)
-                    {
-                        const ushort SPAWN_X = 25;
-                        const ushort SPAWN_Y = 50;
-                        var deathX = _x;
-                        var deathY = _y;
-                        _x = SPAWN_X;
-                        _y = SPAWN_Y;
-                        _rot = Direction.Up;
-                        _health = 500;
-                        OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                        OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
-                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                        {
-                            new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
-                            new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
-                        })));
-                    }
-                }
+                // Depth damage disabled
+                // if (_y > _maxDepth)
+                // {
+                //     int blocksBelow = _y - _maxDepth;
+                //     int damage = (((blocksBelow - 1) / 10) + 1) * 10;
+                //     _health = Math.Max(0, _health - damage);
+                //     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
+                //     if (_health <= 0)
+                //     {
+                //         const ushort SPAWN_X = 25;
+                //         const ushort SPAWN_Y = 50;
+                //         var deathX = _x;
+                //         var deathY = _y;
+                //         _x = SPAWN_X;
+                //         _y = SPAWN_Y;
+                //         _rot = Direction.Up;
+                //         _health = 500;
+                //         OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
+                //         OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
+                //         OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                //         {
+                //             new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
+                //             new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
+                //         })));
+                //     }
+                // }
             }
         }
 
@@ -1933,6 +1952,26 @@ namespace MinesServer.Networking.Connection.Client
             return configs;
         }
 
+        private static Dictionary<CellType, ushort> CreateTestMovementSpeeds(
+            CellConfigurationPacket[] configurations)
+        {
+            var speeds = new Dictionary<CellType, ushort>(configurations.Length);
+            for (int index = 0; index < configurations.Length; index++)
+            {
+                CellConfigurationPacket configuration = configurations[index];
+                if (configuration.Properties == CellConfigProperties.None &&
+                    index != (int)CellType.Empty)
+                {
+                    continue;
+                }
+
+                bool passable = (configuration.Properties & CellConfigProperties.Passable) != 0;
+                speeds[(CellType)index] = (ushort)(passable ? 20 : 100);
+            }
+
+            return speeds;
+        }
+
         private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
             int color = unchecked((int)0xFF808080), CellAnimationType animation = CellAnimationType.None,
             byte animationSpeed = 0, byte frameOffset = 0, CellDistortionType distortion = (CellDistortionType)0)
@@ -1949,7 +1988,7 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
-        private static string? GetProjectServerMapFile(string worldCodeName)
+        private static string GetProjectServerMapFile(string worldCodeName)
         {
             string streamingDirectory = Path.Combine(
                 Application.streamingAssetsPath,
@@ -1967,7 +2006,9 @@ namespace MinesServer.Networking.Connection.Client
                 $"{worldCodeName}_cells.zip");
             if (!File.Exists(projectArchivePath))
             {
-                return null;
+                throw new FileNotFoundException(
+                    $"Dummy server map '{worldCodeName}' is missing both the mapb file and its zip archive.",
+                    projectMapPath);
             }
 
             try
@@ -1983,10 +2024,9 @@ namespace MinesServer.Networking.Connection.Client
                 ZipArchiveEntry? mapEntry = archive.GetEntry($"{worldCodeName}_cells.mapb");
                 if (mapEntry == null)
                 {
-                    Debug.LogError(
-                        $"[DummyConnection] Project server archive '{projectArchivePath}' " +
-                        $"does not contain '{worldCodeName}_cells.mapb'.");
-                    return null;
+                    throw new InvalidDataException(
+                        $"Dummy server archive '{projectArchivePath}' does not contain " +
+                        $"'{worldCodeName}_cells.mapb'.");
                 }
 
                 var cachedInfo = new FileInfo(serverMapPath);
@@ -2001,9 +2041,9 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
-                Debug.LogError(
-                    $"[DummyConnection] Failed to open project server map: {ex.Message}");
-                return null;
+                throw new InvalidDataException(
+                    $"Failed to open dummy server map '{worldCodeName}'.",
+                    ex);
             }
         }
 
@@ -2013,7 +2053,8 @@ namespace MinesServer.Networking.Connection.Client
             const int StreamingRadiusChunks = 4;
             if (_worldLayer == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Cannot stream map chunks before the DummyConnection world layer is initialized.");
             }
 
             int centerChunkX = serverX / ChunkSize;
@@ -2102,33 +2143,41 @@ namespace MinesServer.Networking.Connection.Client
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[DummyConnection] Failed reading map dimensions: {ex.Message}");
+                throw new InvalidDataException(
+                    $"Failed reading prebaked map dimensions from '{path}'.",
+                    ex);
             }
 
-            return (0, 0);
-        }
-
-        private async UniTaskVoid HandleRobotInfoMock(ushort botId)
-        {
-            await UniTask.Delay(2000);
-            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 999, 1, "Skin/bee.png", "Tail/default.png", "BeeBot")));
+            throw new InvalidDataException(
+                $"Prebaked map '{path}' contains invalid dimensions.");
         }
 
         private async UniTaskVoid RunCircularBots(int count)
         {
             const int BASE_ID = 1000;
+            const float CENTER_X = 30f;
+            const float CENTER_Y = 50f;
+            string[] names =
+            [
+                "Mira",
+                "Kite",
+                "Rook",
+                "Nova",
+                "Iris",
+                "Vex",
+            ];
 
-            var bots = new List<(ushort id, float cx, float cy, float r, float a, float speed)>();
+            var bots = new List<(ushort id, string name, float cx, float cy, float r, float a, float speed)>();
             for (int i = 0; i < count; i++)
             {
                 ushort botId = (ushort)(BASE_ID + i);
                 OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
-                    "Skin/bee.png", "Tail/default.png", $"")));
+                    "Skin/bee.png", "Tail/default.png", names[i % names.Length])));
 
-                float radius = (float)((_rng.NextDouble() * 4.5) + 0.5);
-                float angle = (float)(_rng.NextDouble() * Math.PI * 2);
-                float speed = 0.3f + (float)((_rng.NextDouble() * 0.2) - 0.1);
-                bots.Add((botId, 50f, 50f, radius, angle, speed));
+                float radius = 2.5f + (i % 3);
+                float angle = (float)(i * (Math.PI * 2d / count));
+                float speed = 0.45f + ((i % 2) * 0.1f);
+                bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
             }
 
             while (_status == ConnectionStatus.Connected)
@@ -2148,11 +2197,11 @@ namespace MinesServer.Networking.Connection.Client
                         _ => 3,
                     };
                     positions.Add(new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot));
-                    bots[i] = (b.id, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
+                    bots[i] = (b.id, b.name, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
                 }
 
                 OnReceived?.Invoke(new ServerPacket(new HBPacket(positions.ToArray())));
-                await UniTask.Delay(20);
+                await UniTask.Delay(100);
             }
         }
 

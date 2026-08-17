@@ -319,11 +319,13 @@ namespace Fodinae.Game
             {
                 var service = ServiceLocator.Resolve<IRobotService>();
                 var sourceBot = service is RobotManager manager ? manager.GetOrCreateRobot(_sourceBotId) : null;
-                pos = sourceBot != null ? sourceBot.transform.position : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
+                pos = sourceBot != null
+                    ? sourceBot.transform.position
+                    : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
             }
             else
             {
-                pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY);
+                pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
             }
 
             if (_gameObject != null)
@@ -436,9 +438,11 @@ namespace Fodinae.Game
             {
                 // Task canceled cleanly
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogError($"[ServerAudioEvent] Failed to load visual for {_effectType}: {ex.Message}");
+                // Server audio may reference an optional visual asset. A
+                // missing visual must not turn a valid audio event into a
+                // blocking error or a noisy gameplay log.
                 MarkVisualCompleted();
             }
         }
@@ -494,7 +498,7 @@ namespace Fodinae.Game
                 }
                 else if (_hasAttractorPosition)
                 {
-                    var attractorPos = CoordinateUtils.ServerToUnityPos(_attractorX, _attractorY);
+                    var attractorPos = CoordinateUtils.ServerToUnityPos(_attractorX, _attractorY, GetWorldHeight());
                     _effekseerHandle.SetTargetLocation(attractorPos);
                 }
 
@@ -518,6 +522,14 @@ namespace Fodinae.Game
                 MarkVisualCompleted();
                 return false;
             }
+        }
+
+        private static int GetWorldHeight()
+        {
+            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+                throw new InvalidOperationException(
+                    "[ServerAudioEvent] MapManager is required for server-to-world coordinate conversion.");
+            return mapManager.WorldHeight;
         }
 
         private void MarkVisualCompleted()

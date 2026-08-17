@@ -13,6 +13,7 @@ RWTexture2D<float4> _DestTex;
 RWTexture2D<float4> _OutputTex;
 
 SamplerState sampler_LinearClamp;
+SamplerState sampler_PointClamp;
 
 float4 _ScreenSize; // x=width, y=height, z=1/width, w=1/height
 float4 _SourceTexelSize; // xy=1/source size, zw=source size
@@ -32,6 +33,8 @@ float _Exposure;
 float4 _ColorFilter;
 float _Contrast;
 float _Saturation;
+int _ToneMappingEnabled;
+float _ToneMappingWhitePoint;
 
 float _EigengrauIntensity;
 float4 _EigengrauColor;
@@ -56,13 +59,21 @@ float LinearToPerceptual(float linearValue)
         : 1.055 * pow(linearValue, 1.0 / 2.4) - 0.055;
 }
 
-float3 CompressHdrHighlights(float3 color)
+float3 ToneMapHdrAces(float3 color, float whitePoint)
 {
-    // Preserve every SDR value exactly, including AO and shadow darkness.
-    // Only HDR highlights are normalized, using one shared RGB scale so
-    // emissive colors retain their hue instead of clipping per channel.
-    float peak = max(max(color.r, color.g), color.b);
-    return color / max(peak, 1.0);
+    // ACES fitted shoulder: HDR values are compressed continuously instead
+    // of being divided by the brightest pixel or clipped per channel.
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    float3 mapped = (color * (a * color + b)) /
+        (color * (c * color + d) + e);
+    float white = max(whitePoint, 0.001);
+    float whiteMapped = (white * (a * white + b)) /
+        (white * (c * white + d) + e);
+    return saturate(mapped / max(whiteMapped, 0.001));
 }
 
 float Hash31(float3 p)
@@ -166,8 +177,8 @@ void BloomUpsample(uint3 id : SV_DispatchThreadID)
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(0.0,  texel.y), 0) * 2.0;
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(0.0, -texel.y), 0) * 2.0;
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2( texel.x,  texel.y), 0);
-    lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(-texel.x,  texel.y), 0);
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2( texel.x, -texel.y), 0);
+    lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(-texel.x,  texel.y), 0);
     lowRes += _SourceTex.SampleLevel(sampler_LinearClamp, uv + float2(-texel.x, -texel.y), 0);
     lowRes *= 1.0 / 16.0;
 
@@ -188,14 +199,14 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         float2 distFromCenter = uv - float2(0.5, 0.5);
         float2 offset = distFromCenter * _ChromaticAberrationIntensity * 0.02;
 
-        float r = _InputTex.SampleLevel(sampler_LinearClamp, uv - offset, 0).r;
-        float g = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0).g;
-        float b = _InputTex.SampleLevel(sampler_LinearClamp, uv + offset, 0).b;
+        float r = _InputTex.SampleLevel(sampler_PointClamp, uv - offset, 0).r;
+        float g = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).g;
+        float b = _InputTex.SampleLevel(sampler_PointClamp, uv + offset, 0).b;
         color = float3(r, g, b);
     }
     else
     {
-        color = _InputTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
+        color = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).rgb;
     }
 
     // 2. Motion Blur (if velocity texture present and intensity > 0)
@@ -213,7 +224,7 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
                 float2 sampleVelocity = _VelocityTex.SampleLevel(sampler_LinearClamp, sampleUV, 0).xy;
                 float velocityAgreement = dot(sampleVelocity, vel) / max(dot(vel, vel), 0.0000001);
                 float sampleWeight = step(0.5, velocityAgreement);
-                accumulated += _InputTex.SampleLevel(sampler_LinearClamp, sampleUV, 0).rgb * sampleWeight;
+                accumulated += _InputTex.SampleLevel(sampler_PointClamp, sampleUV, 0).rgb * sampleWeight;
                 accumulatedWeight += sampleWeight;
             }
             color = accumulated / accumulatedWeight;
@@ -256,9 +267,11 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     }
 
     // Convert the HDR world/bloom result into a stable SDR range before
-    // display-referred film grain. Without this, bright channels clip
-    // independently and destroy hue on emissive terrain and robot lights.
-    color = CompressHdrHighlights(max(color, 0.0));
+    // display-referred film grain using a dynamic shoulder curve.
+    if (_ToneMappingEnabled != 0)
+    {
+        color = ToneMapHdrAces(max(color, 0.0), _ToneMappingWhitePoint);
+    }
 
     // 6. Eigengrau: fine, zero-mean film grain in dark areas. This is not a
     // bright overlay and contains no low-frequency or scrolling texture.

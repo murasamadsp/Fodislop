@@ -82,6 +82,7 @@ namespace Fodinae.World
             {
                 _columnFrontiers[x] = new List<(int X, int Y)>(Math.Min(height, 64));
             }
+
             _fbpwCurrentGen = 1;
         }
 
@@ -172,7 +173,6 @@ namespace Fodinae.World
                         }
                     }
                 }
-
             });
 
             for (int x = 0; x < w; x++)
@@ -436,6 +436,7 @@ namespace Fodinae.World
                                     local.AppendTo(_fbpwNextFrontier);
                                 }
                             }
+
                             local.Dispose();
                         });
                 }

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
@@ -39,11 +40,10 @@ namespace Fodinae.Game
             }
 
             var clanGo = new GameObject("ClanIcon");
-            clanGo.layer = LayerMask.NameToLayer(PostProcessRendererFeature.WorldUiLayerName);
             clanGo.transform.SetParent(transform);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
-            _clanRenderer.sortingOrder = 10; // Ensure it's on top of the pack
+            UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 10);
         }
 
         public void Initialize(PackType packType, byte variant, byte linkedClan)
@@ -90,7 +90,10 @@ namespace Fodinae.Game
                 return;
             }
 
-            var packTexture = await loader.GetTextureAsync(packPath, token);
+            Texture2D? packTexture = await TryLoadOptionalTextureAsync(
+                loader,
+                packPath,
+                token);
             if (token.IsCancellationRequested || _spriteRenderer == null)
             {
                 return;
@@ -167,7 +170,10 @@ namespace Fodinae.Game
                 return;
             }
 
-            var clanTexture = await loader.GetTextureAsync($"Clan/{_linkedClan}", token);
+            Texture2D? clanTexture = await TryLoadOptionalTextureAsync(
+                loader,
+                $"Clan/{_linkedClan}",
+                token);
             if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
             {
                 return;
@@ -183,6 +189,27 @@ namespace Fodinae.Game
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
 
             UpdateClanPosition();
+        }
+
+        private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
+            ClientAssetLoader loader,
+            string filename,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await loader.GetTextureAsync(filename, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    $"[Pack] Optional texture '{filename}' was skipped: {exception.Message}");
+                return null;
+            }
         }
 
         private void UpdateClanPosition()

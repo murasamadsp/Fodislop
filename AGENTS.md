@@ -68,14 +68,26 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 - `WindowBinding` использует SmartFormat. Inventory — модель/presenter/view, 9×6 + хотбар; HUD включает HP, энергию, баффы, авто-копку и Programmator. Chat состоит из global/local/floating компонентов.
 - `MainMenu` загружает `Resources/UI/MainMenu.uxml`; после сборки UI фиксированный `PanelSettings` нужно восстановить, иначе элементы могут отображаться, но не принимать события.
 
+#### Идиоматика UI Toolkit (обязательна для нового/переписываемого кода)
+
+1. **Один источник стилей** — `PanelSettings.themeUss` → `FodinaeTheme.tss`, который `@import`'ит все `Resources/Styles/*.uss`. Запрещено в контроллерах делать `element.styleSheets.Add(Resources.Load<StyleSheet>(...))` и дублировать уже импортированные стили.
+2. **Структура в UXML, не в коде.** Статическая разметка (контейнеры, кнопки, панели) — в `.uxml` в `Resources/UI/`; код через `VisualTreeAsset.CloneTree()` и `tree.Q<T>("Name")` только привязывает обработчики и data-bound контент. Конструкция `new VisualElement()` в C# — только для динамических списков/сеток.
+3. **Размер панели — дело PanelSettings, не кода.** Запрещено выставлять `root.style.width/height` из `Screen.width/height` и полагаться на абсолютные `top/left` координаты. Рут и контейнеры растягиваются через `position:absolute; left/right/top/bottom:0` или `flex-grow:1` в USS; центрирование — flexbox (`align-items/justify-content`).
+4. **Переключение видимости — `display:Flex/None`** через класс или inline-стиль на существующем элементе UXML. Не добавлять/удалять оверлеи из иерархии на каждом кадре и не играться `pickingMode` для «прозрачности» — модальные/фоновые слои задаются z-порядком в UXML и USS.
+5. **Сборка UI один раз** (guard по флагу в `OnEnable`/`Start`), а не при каждом показе. `clicked`/`RegisterCallback` подписывать один раз; при `OnDisable` — отписываться.
+6. **`Screen.width` ненадёжен в редакторе** — до первого layout панель может дать NaN; причина некликабельности. Диагностировать по `root.layout` (конечный размер ≠ NaN) и `element.worldBound`. После `CloneTree` не модифицировать `root` кроме `Add(tree)`.
+
 ### Мир и координаты
 
 - Серверные координаты: левый верхний угол `(0, 0)`, X вправо, Y вниз. Все преобразования — через `CoordinateUtils`; всегда учитывать `MapManager.WorldHeight`.
 - `MapManager` получает `WorldInitPacket`/`MapRegionPacket`; `MapStorage` хранит чанки 32×32, `persistentDataPath/*.mapb`, и уведомляет renderer через `OnCellChanged()`.
 - `WorldLayer<T>` — дисковый streaming, LRU RAM-кэш, RLE и append-only запись с компактификацией. Текстуры загружаются из файловой системы, не из Resources/Addressables.
-- `SingleMeshTerrainRenderer` рисует видимый мир одним mesh (7 UV-каналов, sorting order `-1000`) и обновляет изменения дифференциально. `SurfaceRenderer` обслуживает Transit/Perspective.
+- `SingleMeshTerrainRenderer` рисует видимый мир одним mesh (7 UV-каналов, sorting order `-1000`) и обновляет изменения дифференциально. `SurfaceRenderer` обслуживает закартовые поверхности и обязан регистрироваться/разрешаться через `GameLifetimeScope` до startup validation. `SceneSetup` только загружает его обязательные текстуры; вручную создавать второй `SurfaceRenderer` запрещено.
 - `TerrainCellCache` привязан к мировой сетке шагом 8: при движении сохранять пересечение и заполнять только новые полосы. Zoom-кэш квантовать по 32 клеткам, уменьшать через 0.4 с после стабилизации; не аллоцировать ресурсы каждый кадр.
 - `AnimationContainerDecoder` поддерживает PNG/GIF/WebP; анимация тайла не меняет его окклюзию или emission.
+- `CellConfigurationPacket.Animation` задаёт shader-анимацию и **не означает**, что PNG является frame-atlas. Только `FrameOffset > 0` задаёт высоту вертикального кадра в клетках; `FrameOffset == 0` легитимен для UV/color-анимаций. В частности, Lava использует animation type `4`, серверную скорость и намеренный `FrameOffset=0`: она скроллит UV единого tiled sheet. Не выводить frame count из `Animation != None` и не обнулять `AnimationSpeed` при отсутствии кадров.
+- Геометрия верхней закартовой поверхности фиксирована авторским контрактом: от верхней границы мира идут `Transit` высотой `2` world cells и шириной горизонтального тайла `32`, затем `Perspective` высотой `2` и шириной тайла `5`; выше остаётся фон/небо. Обе текстуры повторяются только по X и clamp'ятся по Y. Красноскал бесконечен только слева, справа и снизу карты, но не сверху. Эти размеры нельзя заменять размерами PNG или границей камеры.
+- Production runtime-текстуры создаются/декодируются только через `RuntimeTextureFactory`: канонический `RGBA32`, без mipmaps, с явно заданными color space, filter и wrap. Прямые `new Texture2D(...)` и `LoadImage(...)` вне фабрики запрещены. Terrain atlas copy предварительно проверяет точные размеры и совместимый graphics format; диагностическая случайная texture отсутствующего terrain-ассета — сознательная обязательная функция, не удалять.
 
 ### Игрок
 
@@ -95,13 +107,14 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 
 ### Lighting и terrain invariants
 
+- Активный lighting-пайплайн — GPU Radiance Cascades из `WorldLighting.compute`: `LightingMaterialField`/`EmissionField → SolveCascade → ResolveDirect → SolveDiffuseBounce → CompositeLighting`. Не возвращать старые SDF/raymarch/AO-neighbour/blur проходы, CPU sweep, GPU readback или runtime fallback.
 - Единственный источник emission — серверный `CellConfigProperties.Glowing` (в Dummy выставлять тот же флаг), не `CellType` и не клиентские allow/deny-листы. Цвет можно брать из `CellConfigurationPacket.Color`.
-- Используются world-anchored emissive clusters 2×2 и per-tile списки источников; нельзя возвращать CPU sweep или глобальный цикл «каждый пиксель × все источники». Mesh получает один `RequiredTerrainPadding` под viewport, радиус света и safe border.
-- Visibility строится height-aware SDF cone tracing с интеграцией optical thickness: opaque блок закрывает свет, alpha пропускает пропорционально. Высота отвечает за длину тени, cone radius — за penumbra, coverage/density — за пропускание.
-- Receiver self-skip разрешён только внутри исходной клетки; после выхода из неё соседние opaque samples снова поглощают свет. Ambient добавляется ровно один раз.
-- `OcclusionCoverage` в `Terrain.shader` — единственный источник формы окклюдера; CPU-чтение сырого alpha запрещено. Coverage/SDF проходят через `ToOcclusionGrid` и `_OcclusionYFlip = SystemInfo.graphicsUVStartsAtTop`; spatial mismatch исправлять не коэффициентами.
-- SDF: `InitializeSdfSeeds → JumpFloodSdf → FinalizeSdf`, кэш по региону, revision карты/атласа и lighting settings. `FilterLighting` — только edge-aware reconstruction direct light; AO хранится в alpha, ambient/AO не смешивать с direct visibility. Eigengrau не часть lighting reconstruction.
-- Профили `Low/Medium/High/Ultra` меняют только разрешение, лимит источников, шаги SDF и частоту обновления. Профиль хранится в `PlayerPrefs` под `WorldLightingQuality`, источник пресетов — `TerrariaLightingEngine.ApplyQualityPreset`; Ultra: 8 texel/cell, до 2048, 64 шага. Normal map/Lambert пока не реализованы.
+- `MaterialField.rgb` — surface albedo для одного diffuse bounce, `MaterialField.a` — физическая occupancy; `EmissionField` содержит излучение. Альфа атласа, visual blending, анимации и песок поверх валуна не меняют физическую массу. Соседние `DropsShadow`-клетки образуют единый контур без внутренних границ.
+- Beer–Lambert extinction — **ослабление света**, итоговая surviving fraction — **пропускание света**. Direct radiance, transmission и AO — разные величины; не называть поглощение или visibility «AO». Receiver self-skip разрешён только внутри исходной клетки, после выхода соседняя масса снова ослабляет свет.
+- Новый обязательный трек описан в корневом `LIGHTING_AO_PLAN.md`: удалить legacy `nearSolidPath` pseudo-AO и добавить отдельный полноразрешённый contact/cavity AO из occupancy. AO даёт слабую тень у открытой границы, более сильную в 90° углах/щелях, не создаёт швов внутри массива и влияет только на ambient и diffuse bounce, но не на direct radiance/emission.
+- AO хранится отдельно в persistent `RHalf`, публикуется в alpha итоговой `_WorldLightTexture` и пересчитывается только при geometry revision, смене региона/размера поля или AO-настроек. Изменение источников света AO не пересчитывает. Ambient добавляется ровно один раз; Eigengrau не относится к lighting reconstruction.
+- Статическое поле геометрии растеризуется фактическим terrain mesh одним command buffer; динамические источники добавляются GPU draw. Незагруженные и выходящие за границы мира клетки не должны попадать в submesh indices или подставлять cell type `0`.
+- Сохранять внешний контракт `TerrariaLightingEngine`: `_WorldLightTexture`, `_WorldLightRect`, `InvalidateCell`. Профили `Low/Medium/High/Ultra` меняют только качество/стоимость существующего алгоритма; отдельные визуальные пресеты и скрытые fallback-коэффициенты запрещены. Normal map/Lambert пока не реализованы.
 
 ## 4. Unity, YAML и код
 
@@ -109,7 +122,7 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 - Имя файла Unity-скрипта должно совпадать с классом. После создания/переименования проверять `MonoScript.GetClass()` в Editor: `dotnet build` этого не проверяет.
 - `VolumeProfile.Add<T>()` создаёт component только в памяти; editor-код обязан вызвать `AssetDatabase.AddObjectToAsset()` до `SaveAssets()`.
 - `Renderer2D.asset` содержит ровно одну активную `PostProcessRendererFeature`. Post-process применяется к базовой камере; world-space UI на слое `UI` рисуется отдельной Overlay `WorldUICamera` без post-process; UI Toolkit/Screen Space Overlay идёт позже.
-- Внутренний URP HDR (`supportsHDR`) включён для lighting/bloom, HDR display отключён через `SdrOutputEnforcer`. Не отключать URP HDR ради SDR.
+- Внутренний URP HDR (`supportsHDR`) включён для lighting/bloom, HDR display отключён (`PlayerSettings.allowHDRDisplaySupport = false`). Не отключать URP HDR ради SDR.
 - Motion blur строит velocity только для удалённых `Robot` с `MotionBlurTag`; локального игрока исключать. Передавать реальные sprite texture и GPU matrices; teleport delta сбрасывать.
 - Terrain material не затемнять relief/connectivity или `u-v`/`u+v` градиентами; затемнение только через `_WorldLightTexture`.
 - DI — VContainer; singleton-паттерн только `Instance + Awake`, без `SingletonMonoBehaviour`. Асинхронность — UniTask, связь — `Action`.
@@ -126,10 +139,14 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 6. `FPSCounter.OnDestroy()` должен удалить созданный им `_ownedCanvas`.
 7. `ProgrammatorGrid` ширина контейнера: `COLS * (CELLSIZE + CELL_GAP * 2 + 2f)`; `+2f` обязателен из-за border.
 8. UI Toolkit не поддерживает `calc()`: использовать готовое число или inline-стиль из C#.
+9. Shader-анимация terrain и frame-atlas — независимые признаки: `AnimationSpeed` применяется и при одном texture frame; `FrameOffset=0` нельзя превращать в скрытую высоту кадра.
 
 ## 6. Workflow и диагностика
 
-- Основная сцена — `Assets/Scenes/MainGame.unity`; offline режим даёт `DummyConnection`.
+- **Кэш Unity никогда не считать причиной дефекта.** Не списывать ошибки на `Library/`, кэш импорта, кэш шейдеров или layout-кэш редактора. Причину искать в исходном коде, сериализованных данных, настройках проекта и фактическом runtime-состоянии; очистка кэша не является исправлением.
+- **Перекомпиляция не является универсальным объяснением.** Нельзя объяснять визуальный или runtime-дефект только тем, что «Unity не перекомпилировал скрипты», «сборка старая» или «нужно обновить домен». Сначала обязательно проверить саму реализацию, сериализованные ссылки/настройки, фактические параметры объектов и диагностические логи. Перекомпиляцию можно указать только как отдельно подтверждённый blocker после доказательства, что исполняемый код действительно отличается от исходников.
+
+- Сейчас в репозитории одна production-сцена — `Assets/Scenes/MainGame.unity`; offline режим даёт `DummyConnection`. Обязательная следующая архитектурная миграция — две отдельные production-сцены для главного меню и игры. До выполнения миграции не утверждать, что разделение уже существует; переносить объекты и менять Build Settings только через Unity MCP/Editor API, не текстовой правкой YAML.
 - Сборка: `BuildScript.BuildMacOS` из `Assets/Editor/`; стандартный Build Settings не копирует текстуры.
 - Сцена должна содержать/инициализировать `TerrainMesh`, `SingleMeshTerrainRenderer`, `UIDocument`, `Main Camera`, `Global Light 2D`, `SceneSetup`, `MapManager`, `GameLifetimeScope`.
 - F12 пишет runtime snapshot в `diagnostic.txt`, F11 повторно сканирует `[Inject]` в `inject_diagnostic.txt`. Edit Mode: `Fodinae/Diagnostics/Validate Injections`. Статический анализ — `scripts/inject_analysis.py`.
@@ -142,6 +159,8 @@ CompositionRoot и `SingletonMonoBehaviour` удалены. Единственн
 dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary 2>&1
 ```
 
+`scripts/pre-commit-lint.sh` обязан собирать `Assembly-CSharp.csproj` раньше `Assembly-CSharp-Editor.csproj`: editor assembly ссылается на runtime DLL, и обратный/недетерминированный порядок создаёт ложные missing-member ошибки против старой DLL.
+
 Все предупреждения `SA`, `CA`, `RCS`, `S`, `UNT` исправить до финального ответа. Не использовать `--no-verify` и не обходить pre-commit hooks; при зависании разобраться с причиной.
 
 `Directory.Build.props` подключает анализаторы, `.stylecop.json` отключает нерелевантные Unity-правила, `.editorconfig` задаёт severity. Для `[Inject]` полей использовать `= null!;`.
@@ -152,6 +171,13 @@ dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -n
 - Проверки (build/lint) запускать осмысленно, не без необходимости.
 - Не выбирать ленивые фоллбеки и временные решения.
 - **Запрещено вручную менять префабы, ассеты и сцены.**
+- **Запрещено «дрочить Unity» и команды:** не запускать Unity вручную через
+  shell/batchmode, `osascript`, GUI automation или принудительный Refresh; не
+  повторять build/restore/poll-команды без нового диагностического основания и
+  не ждать зависшие процессы бесконечными циклами. Editor, Console, Play Mode,
+  scene state и импорт проверять только через Unity MCP. Если Unity MCP не
+  подключён или не экспонирует нужный инструмент, остановиться, назвать точный
+  blocker и запросить восстановление MCP, а не обходить его ручным управлением.
 
 ## 9. Принцип No Implicit Defaults и Fail-Fast
 

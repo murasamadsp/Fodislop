@@ -33,15 +33,13 @@ namespace Fodinae.UI
 
         protected void Awake()
         {
-            Canvas canvas = FindAnyObjectByType<Canvas>();
-            if (canvas == null)
-            {
-                GameObject canvasGO = new GameObject("FPSCanvas");
-                canvas = canvasGO.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvasGO.AddComponent<CanvasScaler>();
-                _ownedCanvas = canvas;
-            }
+            GameObject canvasGO = new GameObject("FPSCanvas");
+            Canvas canvas = canvasGO.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = 1000;
+            canvasGO.AddComponent<CanvasScaler>();
+            _ownedCanvas = canvas;
 
             GameObject textGO = new GameObject("FPSLabel");
             textGO.transform.SetParent(canvas.transform, false);

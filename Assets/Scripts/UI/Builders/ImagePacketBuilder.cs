@@ -33,22 +33,54 @@ namespace Fodinae.UI.Builders
                 cts.Dispose();
             });
 
-            LoadImage(element, imagePacket.URI, cts.Token);
+            LoadImage(element, imagePacket.URI, cts.Token).Forget();
 
             return element;
         }
 
-        private static void LoadImage(VisualElement element, string uri, CancellationToken token)
+        private static async UniTask LoadImage(
+            VisualElement element,
+            string uri,
+            CancellationToken token)
         {
-            var loader = Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
-            loader?.LoadAndApplyTexture(
-                (texture) =>
+            IAssetLoader loader = Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() ??
+                throw new InvalidOperationException(
+                    "Image packet loading requires a registered IAssetLoader.");
+            Texture2D? texture;
+            try
             {
-                if (element != null && texture != null)
-                {
-                    element.style.backgroundImage = new StyleBackground(texture);
-                }
-            }, uri, token).Forget();
+                texture = await loader.GetTextureAsync(uri, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                // Packet images are optional presentation assets. A missing
+                // icon must not become an unhandled UniTaskVoid exception or
+                // block the entire packet window.
+                Debug.LogWarning(
+                    $"[ImagePacketBuilder] Optional image '{uri}' was skipped: {exception.Message}");
+                return;
+            }
+
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            if (texture == null)
+            {
+                Debug.LogWarning(
+                    $"[ImagePacketBuilder] Optional image '{uri}' returned no texture; skipped.");
+                return;
+            }
+
+            if (element != null)
+            {
+                element.style.backgroundImage = new StyleBackground(texture);
+            }
         }
     }
 }

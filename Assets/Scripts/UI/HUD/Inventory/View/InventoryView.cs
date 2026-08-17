@@ -51,10 +51,11 @@ namespace Fodinae.UI.HUD.Inventory.View
         private VisualElement _tooltipBg = null!;
         private Label _tooltipName = null!;
         private Label _tooltipDesc = null!;
+        private bool _initialized;
 
         protected void Start()
         {
-            InitializeInventory();
+            TryInitialize();
         }
 
         protected void OnDestroy()
@@ -68,6 +69,15 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         protected void Update()
         {
+            if (!_initialized)
+            {
+                TryInitialize();
+                if (!_initialized)
+                {
+                    return;
+                }
+            }
+
             if (Keyboard.current == null)
             {
                 return;
@@ -120,20 +130,34 @@ namespace Fodinae.UI.HUD.Inventory.View
             }
         }
 
-        private void InitializeInventory()
+        private void TryInitialize()
         {
-            _model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
-            if (_model == null)
+            if (_initialized || !Fodinae.Core.ServiceLocator.IsInitialized)
             {
-                Debug.LogError("[InventoryUI] IInventoryModel not registered in DI");
                 return;
             }
 
-            _model.OnSlotChanged += RefreshSlot;
-            _model.OnSlotSelected += OnModelSlotSelected;
+            if (_doc == null || _doc.rootVisualElement == null)
+            {
+                throw new InvalidOperationException(
+                    "[InventoryUI] UIDocument must be injected and have a root before initialization.");
+            }
+
+            IInventoryModel? model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
+            if (model == null)
+            {
+                throw new InvalidOperationException(
+                    "Inventory model was not registered before InventoryView initialization.");
+            }
+
+            _model = model;
+
+            model.OnSlotChanged += RefreshSlot;
+            model.OnSlotSelected += OnModelSlotSelected;
 
             CreateTooltip(_doc.rootVisualElement);
             BuildUI();
+            _initialized = true;
         }
 
         private void OnModelSlotSelected(int slotIndex)
@@ -197,11 +221,6 @@ namespace Fodinae.UI.HUD.Inventory.View
         private void BuildUI()
         {
             var root = _doc.rootVisualElement;
-            var invUss = Resources.Load<StyleSheet>("Styles/Inventory");
-            if (invUss != null)
-            {
-                root.styleSheets.Add(invUss);
-            }
 
             CreateFullInventoryPanel(root);
             CreateHotbar(root);
