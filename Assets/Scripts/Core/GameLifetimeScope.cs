@@ -104,7 +104,11 @@ namespace Fodinae.Core
                 networkService.EnsureConnectionSubscription();
                 resolver.Resolve<MapManager>();
                 resolver.Resolve<PacketHandler>();
-                resolver.Resolve<IAssetLoader>();
+                var assetLoader = resolver.Resolve<IAssetLoader>();
+                if (assetLoader is ClientAssetLoader clientAssetLoader)
+                {
+                    clientAssetLoader.EnsurePacketSubscription();
+                }
                 resolver.Resolve<IAudioSystem>();
                 resolver.Resolve<GameManager>();
                 resolver.Resolve<ServerConfig>();

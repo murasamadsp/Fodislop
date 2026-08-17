@@ -36,6 +36,7 @@ namespace Fodinae
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
         private CancellationTokenSource? _loopCts;
+        private bool _packetSubscribed;
 
         public int PendingAssetCount => _pendingRequests.Count;
         public int QueuedAssetCount => _requestQueue.Count;
@@ -85,9 +86,10 @@ namespace Fodinae
                 _errorTexture = null;
             }
 
-            if (_connectionService is ConnectionManager cm)
+            if (_connectionService is ConnectionManager cm && _packetSubscribed)
             {
                 cm.OnPacketReceived -= OnPacketReceived;
+                _packetSubscribed = false;
             }
         }
 
@@ -157,6 +159,21 @@ namespace Fodinae
         public void ClearCache()
         {
             _cache.Clear();
+        }
+
+        public void EnsurePacketSubscription()
+        {
+            if (_packetSubscribed)
+            {
+                return;
+            }
+
+            if (_connectionService is ConnectionManager cm)
+            {
+                cm.OnPacketReceived -= OnPacketReceived;
+                cm.OnPacketReceived += OnPacketReceived;
+                _packetSubscribed = true;
+            }
         }
 
         private static async UniTask<byte[]?> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
