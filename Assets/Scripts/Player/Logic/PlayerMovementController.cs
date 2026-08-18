@@ -7,7 +7,6 @@ using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
-using Fodinae.Player.Input;
 using Fodinae.Player.Interfaces;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -30,11 +29,14 @@ namespace Fodinae.Player.Logic
 
         public uint BotId { get; private set; }
         public Vector2Int Position { get; private set; }
-        public Direction LastDirection => _lastSentDirection ?? Direction.Up;
+        public bool HasServerPosition { get; private set; }
+        public bool IsGameplayVisible { get; private set; }
+        public Direction LastDirection => _lastSentDirection ?? Direction.Down;
         public event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
 
         private Robot? _robot;
         private IPlayerInput? _input;
+        private SpriteRenderer[] _playerRenderers = Array.Empty<SpriteRenderer>();
 
         private bool _autoDig = false;
         private bool _aggression = false;
@@ -42,6 +44,7 @@ namespace Fodinae.Player.Logic
         private float _lastMoveTime;
         private float _lastDigTime;
         private Direction? _lastSentDirection;
+        private bool _movementValidationFailed;
         [Inject]
         private IWorldDataStorage? _storage;
 
@@ -55,10 +58,20 @@ namespace Fodinae.Player.Logic
         private IMapDataProvider? _mapDataProvider;
 
         [Inject]
+        private IConnectionService? _connectionService;
+
+        [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
 
         public static PlayerMovementController? LocalPlayer { get; private set; }
         public static event Action<PlayerMovementController>? OnLocalPlayerSpawned;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            LocalPlayer = null;
+            OnLocalPlayerSpawned = null;
+        }
 
         protected void Awake()
         {
@@ -77,15 +90,18 @@ namespace Fodinae.Player.Logic
                 _robot.MoveSpeed = _moveSpeed;
             }
 
-            _input = GetComponent<IPlayerInput>() ?? gameObject.AddComponent<PlayerInputHandler>();
-
-            if (!TryGetComponent<RobotHeadlight>(out var headlight))
+            _playerRenderers = GetComponentsInChildren<SpriteRenderer>(includeInactive: true);
+            if (Application.isPlaying)
             {
-                headlight = gameObject.AddComponent<RobotHeadlight>();
+                foreach (SpriteRenderer renderer in _playerRenderers)
+                {
+                    renderer.enabled = false;
+                }
             }
 
-            bool useLight2D = PlayerPrefs.GetInt("UseLight2D", 1) == 1;
-            headlight.SetEnabled(useLight2D);
+            _input = GetComponent<IPlayerInput>() ??
+                throw new InvalidOperationException(
+                    "PlayerMovementController requires an IPlayerInput component on the player prefab.");
         }
 
         protected void OnDestroy()
@@ -98,32 +114,47 @@ namespace Fodinae.Player.Logic
 
         protected void Start()
         {
-            Vector3 targetGridPos = new(
-                Mathf.Floor(transform.position.x) + 0.5f,
-                Mathf.Floor(transform.position.y) + 0.5f,
-                transform.position.z);
-            transform.position = targetGridPos;
-            if (_robot is not null)
-            {
-                _robot.TargetPosition = targetGridPos;
-            }
-
-            if (_mapDataProvider != null)
-            {
-                Position = CoordinateUtils.UnityToServerPos(transform.position, _mapDataProvider.WorldHeight);
-            }
-
             _lastSentDirection = null;
         }
 
         protected void Update()
         {
+            if (!HasServerPosition)
+            {
+                return;
+            }
+
             if (_input == null || (_inputBlocker != null && _inputBlocker.IsInputBlocked))
             {
                 return;
             }
 
-            ApplyMovement();
+            // The player object can exist during the connection/world-init gap.
+            // Input is intentionally ignored until the authoritative map layer
+            // is ready; movement validation must never probe an uninitialized map.
+            if (_storage == null || !_storage.IsReady)
+            {
+                return;
+            }
+
+            if (_movementValidationFailed)
+            {
+                return;
+            }
+
+            try
+            {
+                ApplyMovement();
+            }
+            catch (InvalidOperationException exception)
+            {
+                _movementValidationFailed = true;
+                Debug.LogError(
+                    $"[PlayerMovementController] Authoritative movement metadata is invalid: {exception.Message}");
+                _connectionService?.TriggerDisconnect(exception.Message);
+                return;
+            }
+
             HandleDigInput();
 
             if (_input.WantsToToggleAutoDig)
@@ -170,6 +201,16 @@ namespace Fodinae.Player.Logic
         public void Initialize(uint botId)
         {
             BotId = botId;
+            HasServerPosition = false;
+            IsGameplayVisible = false;
+            _lastSentDirection = null;
+            _lastMoveTime = 0f;
+            _lastDigTime = 0f;
+            foreach (SpriteRenderer renderer in _playerRenderers)
+            {
+                renderer.enabled = false;
+            }
+
             if (_robot != null)
             {
                 _robot.Initialize(botId);
@@ -234,16 +275,23 @@ namespace Fodinae.Player.Logic
 
         public void UpdateServerPosition(Vector2Int position)
         {
-            Vector2Int oldPos = Position;
-            Position = position;
-
             if (_mapDataProvider == null)
             {
-                Debug.LogError("[PlayerMovementController] Cannot update server position: MapDataProvider is null!");
-                return;
+                throw new InvalidOperationException(
+                    "[PlayerMovementController] IMapDataProvider is required before applying server position.");
             }
 
             int worldHeight = _mapDataProvider.WorldHeight;
+            if (worldHeight <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"[PlayerMovementController] Cannot apply server position {position}: " +
+                    $"world height is {worldHeight}.");
+            }
+
+            Vector2Int oldPos = Position;
+            Position = position;
+            HasServerPosition = true;
             Vector3 targetWorldPos = CoordinateUtils.ServerToUnityPos(position.x, position.y, worldHeight, transform.position.z);
             transform.position = targetWorldPos;
             if (_robot is not null)
@@ -254,19 +302,28 @@ namespace Fodinae.Player.Logic
             OnPlayerMoved?.Invoke(oldPos, Position);
         }
 
-        private void ApplyMovement()
+        public void SetGameplayVisible()
         {
-            // _robot может быть null если PlayerMovementController создан VContainer'ом
-            // отдельно от префаба Player. Пробуем получить его лениво.
-            if (_robot is null)
+            if (!HasServerPosition)
             {
-                _robot = GetComponent<Robot>();
-                if (_robot is not null)
-                {
-                    _robot.MoveSpeed = _moveSpeed;
-                }
+                throw new InvalidOperationException(
+                    "[PlayerMovementController] Cannot show player before server position is synchronized.");
             }
 
+            if (IsGameplayVisible)
+            {
+                return;
+            }
+
+            IsGameplayVisible = true;
+            foreach (SpriteRenderer renderer in _playerRenderers)
+            {
+                renderer.enabled = true;
+            }
+        }
+
+        private void ApplyMovement()
+        {
             if (_robot is null || _input is null)
             {
                 return;
@@ -303,16 +360,18 @@ namespace Fodinae.Player.Logic
                     ushort currentServerY = (ushort)Mathf.Clamp(Position.y, 0, ushort.MaxValue);
 
                     var storage = _storage;
-                    if (storage == null)
+                    if (storage == null || !storage.IsReady)
                     {
                         return;
                     }
 
                     var currentCellType = storage.GetCell(currentX, currentServerY);
-                    float cooldown = _mapDataProvider != null ? _mapDataProvider.GetMoveCooldown(currentCellType) : 0.2f;
-                    if (_input.IsCtrlPressed && _mapDataProvider != null)
+                    var mapDataProvider = _mapDataProvider ?? throw new InvalidOperationException(
+                        "[PlayerMovementController] IMapDataProvider is required for movement validation.");
+                    float cooldown = mapDataProvider.GetMoveCooldown(currentCellType);
+                    if (_input.IsCtrlPressed)
                     {
-                        cooldown = _mapDataProvider.GetMoveCooldown(CellType.Empty);
+                        cooldown = mapDataProvider.GetMoveCooldown(CellType.Empty);
                     }
 
                     if (cooldown > 0)
@@ -418,13 +477,15 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            float digCooldown = _serverConfig != null ? _serverConfig.DigCooldown : 0.2f;
+            var serverConfig = _serverConfig ?? throw new InvalidOperationException(
+                "[PlayerMovementController] IServerConfig is required for dig cooldown.");
+            float digCooldown = serverConfig.DigCooldown;
             if (!_input.WantsToDig || Time.time - _lastDigTime < digCooldown)
             {
                 return;
             }
 
-            Direction dir = _lastSentDirection ?? Direction.Up;
+            Direction dir = _lastSentDirection ?? Direction.Down;
             Vector2Int digOffset = dir switch
             {
                 Direction.Down => new Vector2Int(0, 1),
@@ -444,8 +505,13 @@ namespace Fodinae.Player.Logic
 #if UNITY_EDITOR
         protected void OnDrawGizmos()
         {
+            if (_mapDataProvider == null || _mapDataProvider.WorldHeight <= 0 || !HasServerPosition)
+            {
+                return;
+            }
+
             Gizmos.color = Color.cyan;
-            int worldHeight = _mapDataProvider != null ? _mapDataProvider.WorldHeight : 0;
+            int worldHeight = _mapDataProvider.WorldHeight;
             Vector3 gridPos = CoordinateUtils.ServerToUnityPos(Position.x, Position.y, worldHeight, transform.position.z);
             Gizmos.DrawWireCube(gridPos, new Vector3(1f, 1f, 0.1f));
 

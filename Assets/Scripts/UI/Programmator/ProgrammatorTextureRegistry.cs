@@ -20,6 +20,10 @@ namespace Fodinae.UI.Programmator
             tex = Resources.Load<Texture2D>($"Programmator/{(int)action}");
             if (tex != null)
             {
+                RuntimeTextureFactory.ApplySampling(
+                    tex,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
                 _cache[action] = tex;
             }
 

@@ -133,8 +133,13 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetBasket(uint capacity, long[] contents)
         {
+            if (contents == null)
+            {
+                throw new ArgumentNullException(nameof(contents), "[PlayerStatsModel] Basket contents from server are null");
+            }
+
             BasketCapacity = capacity;
-            BasketContents = contents ?? Array.Empty<long>();
+            BasketContents = contents;
             int maxPct = 0;
             for (int i = 0; i < BasketContents.Length; i++)
             {

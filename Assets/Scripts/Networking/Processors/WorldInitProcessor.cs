@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -15,8 +16,8 @@ namespace Fodinae.Networking.Processors
             var mm = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
             if (mm == null)
             {
-                Debug.LogError("[WorldInitProcessor] MapManager is null — cannot process WorldInitPacket");
-                return;
+                throw new InvalidOperationException(
+                    "MapManager is not registered; cannot process WorldInitPacket.");
             }
 
             mm.LoadWorldInit(packet);

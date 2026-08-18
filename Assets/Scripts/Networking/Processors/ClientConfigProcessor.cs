@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Audio.Core;
 using Fodinae.Core;
@@ -26,11 +27,15 @@ namespace Fodinae.Networking.Processors
         {
             Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
             var audio = Fodinae.Core.ServiceLocator.Resolve<IAudioSystem>();
+            IClientConfigManager configManager = Fodinae.Core.ServiceLocator.Resolve<IClientConfigManager>() ??
+                throw new InvalidOperationException("Client config manager is required before processing ClientConfigPacket.");
+            ClientConfig clientConfig = configManager.Config ??
+                throw new InvalidOperationException("Client config must be initialized before processing ClientConfigPacket.");
             if (audio != null)
             {
                 float masterVol = packet.SoundConfig.Master / 255f;
                 audio.SetBusVolume(AudioBusType.Master, masterVol);
-                PlayerPrefs.SetFloat("Audio_Master", masterVol);
+                clientConfig.MasterVolume = masterVol;
 
                 foreach (var kv in packet.SoundConfig.IndividualSounds)
                 {
@@ -39,12 +44,29 @@ namespace Fodinae.Networking.Processors
                     {
                         float vol = kv.Value / 255f;
                         audio.SetBusVolume(bus, vol);
-                        PlayerPrefs.SetFloat($"Audio_{bus}", vol);
+                        switch (bus)
+                        {
+                            case AudioBusType.SFX:
+                                clientConfig.SfxVolume = vol;
+                                break;
+                            case AudioBusType.Music:
+                                clientConfig.MusicVolume = vol;
+                                break;
+                            case AudioBusType.Voice:
+                                clientConfig.VoiceVolume = vol;
+                                break;
+                            case AudioBusType.Ambience:
+                                clientConfig.AmbienceVolume = vol;
+                                break;
+                            case AudioBusType.UI:
+                                clientConfig.UiVolume = vol;
+                                break;
+                        }
                     }
                 }
-            }
 
-            PlayerPrefs.Save();
+                configManager.Save();
+            }
 
             if (packet.Keybinds.Count > 0)
             {

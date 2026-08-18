@@ -3,34 +3,31 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.World;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Fodinae.Networking.Connection.Client
 {
     /// <summary>
     /// Manager for storing and caching textures downloaded from the server or loaded locally.
-    /// Provides thread-safe async access with in-memory caching and fallback texture generation.
+    /// Provides thread-safe async access with in-memory caching.
     /// Writes downloaded assets to persistentDataPath to prevent Unity AssetDatabase reloads in Editor.
     /// </summary>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch file and texture loading exceptions to fall back to random texture generation.")]
     public class TextureStorageManager : MonoBehaviour, ITextureStorageService
     {
         [SerializeField]
-        private bool _enableDebugLogging = false;
+        private bool _enableDebugLogging;
 
-        [SerializeField]
-        private int _fallbackTextureSize = 64;
-
-        private readonly ConcurrentDictionary<string, Texture2D> _textureCache = new();
-        private readonly ConcurrentDictionary<string, string> _resolvedPathsCache = new();
+        private readonly ConcurrentDictionary<string, Texture2D> _textureCache =
+            new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, string> _resolvedPathsCache =
+            new(StringComparer.OrdinalIgnoreCase);
 
         private string? _textureFolderPath;
         private bool _folderInitialized;
@@ -39,68 +36,86 @@ namespace Fodinae.Networking.Connection.Client
         /// Get a texture by filename asynchronously.
         /// </summary>
         /// <param name="filename">The texture filename (e.g. "cells/1.png", "clan/4.png").</param>
-        /// <returns>Loaded Texture2D, or fallback texture if loading failed.</returns>
-        public async UniTask<Texture2D?> GetTextureAsync(string filename)
+        /// <returns>Loaded Texture2D.</returns>
+        public async UniTask<Texture2D?> GetTextureAsync(
+            string filename,
+            CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrEmpty(filename))
-            {
-                if (_enableDebugLogging)
-                {
-                    Debug.LogWarning("[TextureStorageManager] Requested texture with null or empty filename");
-                }
-
-                return GetOrCreateFallbackTexture("empty");
-            }
+            string normalizedFilename = NormalizeRelativeTexturePath(filename);
 
             // Return cached texture if available
-            if (_textureCache.TryGetValue(filename, out var cachedTexture) && cachedTexture != null)
+            if (_textureCache.TryGetValue(normalizedFilename, out var cachedTexture) &&
+                cachedTexture != null)
             {
                 return cachedTexture;
             }
 
             // Try to load from disk
-            var rawData = await LoadTextureFromStorage(filename);
+            var rawData = await LoadTextureFromStorage(
+                normalizedFilename,
+                cancellationToken);
 
-            if (rawData != null && rawData.Length > 0)
+            if (rawData == null)
             {
-                try
-                {
-                    var texture = new Texture2D(2, 2);
-                    if (texture.LoadImage(rawData, markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None))
-                    {
-                        texture.name = filename;
-                        var storedTexture = _textureCache.GetOrAdd(filename, texture);
-                        if (ReferenceEquals(storedTexture, texture))
-                        {
-                            return texture;
-                        }
-
-                        // Another request won the race while this image was
-                        // decoding. Do not leak the duplicate native texture.
-                        UnityEngine.Object.Destroy(texture);
-                        return storedTexture;
-                    }
-                    else
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"[TextureStorageManager] Failed to decode texture '{filename}': {ex.Message}");
-                }
+                throw new FileNotFoundException(
+                    $"Required texture '{normalizedFilename}' was not found in texture storage.",
+                    normalizedFilename);
             }
 
-            // This is an intentional visual fallback for a missing or corrupt
-            // optional texture asset. The high-variance image makes the bad
-            // asset obvious while keeping renderers alive; it never replaces
-            // map state, cell configuration, or any other gameplay data.
-            if (_enableDebugLogging)
+            if (rawData.Length == 0)
             {
-                Debug.LogWarning($"[TextureStorageManager] Fallback texture created for: {filename}");
+                throw new InvalidDataException(
+                    $"Texture '{normalizedFilename}' is empty.");
             }
 
-            return GetOrCreateFallbackTexture(filename);
+            await UniTask.SwitchToMainThread(cancellationToken);
+            Texture2D texture = DecodeTexture(normalizedFilename, rawData);
+            bool cacheOwnsTexture = false;
+            try
+            {
+                texture.name = normalizedFilename;
+                RuntimeTextureFactory.ApplySampling(
+                    texture,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+                Texture2D storedTexture = _textureCache.GetOrAdd(
+                    normalizedFilename,
+                    texture);
+                cacheOwnsTexture = ReferenceEquals(storedTexture, texture);
+                return storedTexture;
+            }
+            finally
+            {
+                if (!cacheOwnsTexture)
+                {
+                    UnityEngine.Object.Destroy(texture);
+                }
+            }
+        }
+
+        private static Texture2D DecodeTexture(string filename, byte[] data)
+        {
+            AnimationContainerDecoder.ContainerType containerType =
+                AnimationContainerDecoder.DetectType(data);
+            if (containerType == AnimationContainerDecoder.ContainerType.GIF ||
+                containerType == AnimationContainerDecoder.ContainerType.WebP)
+            {
+                AnimationContainerDecoder.DecodedAnimation animation =
+                    containerType == AnimationContainerDecoder.ContainerType.GIF
+                        ? AnimationContainerDecoder.DecodeGif(data)
+                        : AnimationContainerDecoder.DecodeWebP(data);
+                return animation.Atlas ?? throw new InvalidDataException(
+                    $"Texture '{filename}' produced no animation atlas.");
+            }
+
+            bool makeNoLongerReadable = RuntimeTextureFactory.SupportsTexture2DGpuCopy;
+            return RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+                data,
+                filename,
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp,
+                makeNoLongerReadable: makeNoLongerReadable);
         }
 
         /// <summary>
@@ -110,7 +125,7 @@ namespace Fodinae.Networking.Connection.Client
         /// <returns>PNG/WEBP bytes, or null if not found.</returns>
         public async UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default)
         {
-            var data = await LoadTextureFromStorage(filename);
+            var data = await LoadTextureFromStorage(filename, cancellationToken);
             if (data != null)
             {
                 OnTextureLoaded?.Invoke(filename);
@@ -121,97 +136,78 @@ namespace Fodinae.Networking.Connection.Client
 
         public event Action<string>? OnTextureLoaded;
 
-        private Texture2D GetOrCreateFallbackTexture(string cacheKey)
-        {
-            if (_textureCache.TryGetValue(cacheKey, out Texture2D? cachedTexture) &&
-                cachedTexture != null)
-            {
-                return cachedTexture;
-            }
-
-            Texture2D fallback = CreateFallbackTexture(cacheKey);
-            Texture2D cachedFallback = _textureCache.GetOrAdd(cacheKey, fallback);
-            if (ReferenceEquals(cachedFallback, fallback))
-            {
-                return fallback;
-            }
-
-            UnityEngine.Object.Destroy(fallback);
-            return cachedFallback;
-        }
-
-        /// <summary>
-        /// Creates a deliberately conspicuous renderer-safe placeholder for an
-        /// unavailable texture asset. This fallback is local visual diagnostics
-        /// only and is cached exactly like a successfully decoded texture.
-        /// </summary>
-        private Texture2D CreateFallbackTexture(string filename)
-        {
-            byte[]? rawData = GenerateRandomTexture();
-            var texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize)
-            {
-                name = $"Fallback_{filename}",
-            };
-
-            if (rawData != null)
-            {
-                texture.LoadImage(
-                    rawData,
-                    markNonReadable: SystemInfo.copyTextureSupport != CopyTextureSupport.None);
-            }
-
-            return texture;
-        }
-
         /// <summary>
         /// Load texture file bytes from storage asynchronously.
         /// Searches persistentDataPath first (dynamic downloads), then bundled Assets/Textures (read-only).
         /// </summary>
-        private async UniTask<byte[]?> LoadTextureFromStorage(string filename)
+        private async UniTask<byte[]?> LoadTextureFromStorage(
+            string filename,
+            CancellationToken cancellationToken = default)
         {
-            try
+            string normalizedFilename = NormalizeRelativeTexturePath(filename);
+            if (!_folderInitialized)
             {
-                if (!_folderInitialized)
-                {
-                    InitializeTextureFolderPath();
-                }
-
-                if (!_resolvedPathsCache.TryGetValue(filename, out var fullPath))
-                {
-                    fullPath = ResolveTextureFullPath(filename);
-                    if (!string.IsNullOrEmpty(fullPath))
-                    {
-                        _resolvedPathsCache.TryAdd(filename, fullPath);
-                    }
-                }
-
-                if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
-                {
-                    if (_enableDebugLogging)
-                    {
-                        Debug.LogWarning($"[TextureStorageManager] File not found for: {filename}");
-                    }
-
-                    return null;
-                }
-
-                // Load file asynchronously
-                using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
-                var buffer = new byte[fileStream.Length];
-                await fileStream.ReadAsync(buffer, 0, buffer.Length);
-
-                return buffer;
+                InitializeTextureFolderPath();
             }
-            catch (Exception ex)
+
+            if (!_resolvedPathsCache.TryGetValue(normalizedFilename, out var fullPath))
             {
-                Debug.LogError($"[TextureStorageManager] Failed to load texture from storage: {ex.Message}");
+                fullPath = ResolveTextureFullPath(normalizedFilename);
+                if (!string.IsNullOrEmpty(fullPath))
+                {
+                    _resolvedPathsCache.TryAdd(normalizedFilename, fullPath);
+                }
+            }
+
+            if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
+            {
+                if (_enableDebugLogging)
+                {
+                    Debug.LogWarning(
+                        $"[TextureStorageManager] File not found for: {normalizedFilename}");
+                }
+
                 return null;
             }
+
+            using var fileStream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                4096,
+                true);
+
+            if (fileStream.Length > int.MaxValue)
+            {
+                throw new InvalidDataException(
+                    $"Texture '{filename}' exceeds the supported size.");
+            }
+
+            var buffer = new byte[(int)fileStream.Length];
+            int offset = 0;
+            while (offset < buffer.Length)
+            {
+                int bytesRead = await fileStream.ReadAsync(
+                    buffer,
+                    offset,
+                    buffer.Length - offset,
+                    cancellationToken);
+                if (bytesRead == 0)
+                {
+                    throw new EndOfStreamException(
+                        $"Texture '{normalizedFilename}' ended after {offset} of {buffer.Length} bytes.");
+                }
+
+                offset += bytesRead;
+            }
+
+            return buffer;
         }
 
         private string? ResolveTextureFullPath(string filename)
         {
-            var normalizedFilename = filename.TrimStart('/');
+            string normalizedFilename = NormalizeRelativeTexturePath(filename);
 
             // 1. Search persistentDataPath/Textures (dynamic downloads)
             if (!string.IsNullOrEmpty(_textureFolderPath) && Directory.Exists(_textureFolderPath))
@@ -255,7 +251,10 @@ namespace Fodinae.Networking.Connection.Client
                 }
                 else if (Directory.Exists(currentDir))
                 {
-                    // case-insensitive fallback for macOS
+                    // Asset protocol paths are normalized to lowercase, while
+                    // bundled folders retain their authored casing (for example
+                    // "skin" versus "Skin"). Resolve that protocol/filesystem
+                    // boundary explicitly on case-sensitive build hosts.
                     var sub = Directory.GetDirectories(currentDir)
                         .FirstOrDefault(d => string.Equals(
                             Path.GetFileName(d), seg,
@@ -283,17 +282,23 @@ namespace Fodinae.Networking.Connection.Client
                 return leafExact;
             }
 
-            // Wildcard match (any extension), prefer webp -> gif -> png
+            // An explicit extension is a format contract. Do not silently
+            // substitute another encoded asset when that exact file is absent.
+            if (!string.IsNullOrEmpty(Path.GetExtension(leafName)))
+            {
+                return null;
+            }
+
+            // Extensionless terrain requests deliberately select the available
+            // encoded representation in the documented priority order.
             if (Directory.Exists(currentDir))
             {
                 var files = Directory.GetFiles(currentDir, leafNameWithoutExt + ".*")
                     .Where(f => !f.EndsWith(".meta", StringComparison.OrdinalIgnoreCase)
-                             && !f.EndsWith(".asset", StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(f =>
-                    {
-                        string ext = Path.GetExtension(f).ToLowerInvariant();
-                        return ext switch { ".webp" => 0, ".gif" => 1, ".png" => 2, _ => 3 };
-                    }).ToArray();
+                             && !f.EndsWith(".asset", StringComparison.OrdinalIgnoreCase)
+                             && GetTextureFilePriority(f) != int.MaxValue)
+                    .OrderBy(GetTextureFilePriority)
+                    .ToArray();
 
                 if (files.Length > 0)
                 {
@@ -304,42 +309,55 @@ namespace Fodinae.Networking.Connection.Client
             return null;
         }
 
-        /// <summary>
-        /// Generates the random pixels used by the legitimate missing-texture
-        /// placeholder. Randomness prevents the fallback from being mistaken
-        /// for authored terrain or a successfully downloaded asset.
-        /// </summary>
-        private byte[]? GenerateRandomTexture()
+        private static int GetTextureFilePriority(string path)
         {
-            Texture2D? texture = null;
-            try
+            if (path.EndsWith(".webp.bytes", StringComparison.OrdinalIgnoreCase))
             {
-                texture = new Texture2D(_fallbackTextureSize, _fallbackTextureSize);
-                var colors = new Color[_fallbackTextureSize * _fallbackTextureSize];
-                for (int i = 0; i < colors.Length; i++)
-                {
-                    colors[i] = new Color(
-                        UnityEngine.Random.value,
-                        UnityEngine.Random.value,
-                        UnityEngine.Random.value);
-                }
+                return 0;
+            }
 
-                texture.SetPixels(colors);
-                texture.Apply();
-                return ImageConversion.EncodeToPNG(texture);
-            }
-            catch (Exception ex)
+            string extension = Path.GetExtension(path).ToLowerInvariant();
+            return extension switch
             {
-                Debug.LogError($"[TextureStorageManager] Failed to generate random texture: {ex.Message}");
-                return null;
-            }
-            finally
+                ".webp" => 0,
+                ".gif" => 1,
+                ".png" => 2,
+                ".jpg" or ".jpeg" => 3,
+                ".exr" => 4,
+                _ => int.MaxValue,
+            };
+        }
+
+        private static string NormalizeRelativeTexturePath(string filename)
+        {
+            if (string.IsNullOrWhiteSpace(filename))
             {
-                if (texture != null)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
+                throw new ArgumentException(
+                    "Texture filename cannot be null or whitespace.",
+                    nameof(filename));
             }
+
+            if (Path.IsPathRooted(filename))
+            {
+                throw new ArgumentException(
+                    $"Texture filename must be relative: '{filename}'.",
+                    nameof(filename));
+            }
+
+            string normalized = filename.Replace('\\', '/');
+            string[] segments = normalized.Split('/');
+            if (segments.Length == 0 ||
+                segments.Any(segment =>
+                    string.IsNullOrWhiteSpace(segment) ||
+                    segment == "." ||
+                    segment == ".."))
+            {
+                throw new ArgumentException(
+                    $"Texture filename contains an invalid path segment: '{filename}'.",
+                    nameof(filename));
+            }
+
+            return string.Join("/", segments);
         }
 
         /// <summary>
@@ -352,27 +370,22 @@ namespace Fodinae.Networking.Connection.Client
                 return;
             }
 
-            try
+            string persistentDataPath = Application.persistentDataPath;
+            if (string.IsNullOrWhiteSpace(persistentDataPath))
             {
-                var persistentPath = Path.Combine(Application.persistentDataPath, "Textures");
-                if (!Directory.Exists(persistentPath))
-                {
-                    Directory.CreateDirectory(persistentPath);
-                }
-
-                _textureFolderPath = persistentPath;
-                if (_enableDebugLogging)
-                {
-                    Debug.Log($"[TextureStorageManager] Initialized texture folder: {persistentPath}");
-                }
-
-                _folderInitialized = true;
+                throw new InvalidOperationException(
+                    "Application.persistentDataPath is required for texture storage.");
             }
-            catch (Exception ex)
+
+            string persistentPath = Path.Combine(persistentDataPath, "Textures");
+            Directory.CreateDirectory(persistentPath);
+            _textureFolderPath = persistentPath;
+            if (_enableDebugLogging)
             {
-                Debug.LogError($"[TextureStorageManager] Failed to initialize texture folder: {ex.Message}");
-                _folderInitialized = true;
+                Debug.Log($"[TextureStorageManager] Initialized texture folder: {persistentPath}");
             }
+
+            _folderInitialized = true;
         }
 
         /// <summary>
@@ -380,21 +393,11 @@ namespace Fodinae.Networking.Connection.Client
         /// </summary>
         public void ClearCache()
         {
-            var textures = new HashSet<Texture2D>();
-            foreach (var texture in _textureCache.Values)
-            {
-                if (texture != null)
-                {
-                    textures.Add(texture);
-                }
-            }
-
+            // Loaded textures can still be referenced by renderers and UI when
+            // this service is rebuilt after a domain reload. Clearing ownership
+            // must not invalidate those live Unity objects.
             _textureCache.Clear();
             _resolvedPathsCache.Clear();
-            foreach (var texture in textures)
-            {
-                UnityEngine.Object.Destroy(texture);
-            }
 
             if (_enableDebugLogging)
             {

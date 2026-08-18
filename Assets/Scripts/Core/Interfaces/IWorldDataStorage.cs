@@ -16,6 +16,7 @@ namespace Fodinae.Core.Interfaces
         CellType GetCell(int x, int y);
         void InitWorld(string worldCodeName, int width, int height);
         void Dispose();
+        void Flush();
         bool IsInitialized();
         string GetWorldCodeName();
 

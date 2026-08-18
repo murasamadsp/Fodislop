@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Game.Managers;
 using UnityEngine;
@@ -8,9 +9,6 @@ namespace Fodinae.World
 {
     public static class CoordinateUtils
     {
-        private static int _cachedHeight;
-        private static int _lastFrame = -1;
-
         private static int ResolveHeight(int worldHeight)
         {
             if (worldHeight > 0)
@@ -18,55 +16,49 @@ namespace Fodinae.World
                 return worldHeight;
             }
 
-            int frame = Time.frameCount;
-            if (_lastFrame == frame)
-            {
-                return _cachedHeight;
-            }
-
-            _lastFrame = frame;
             var mm = ServiceLocator.Resolve<MapManager>();
             if (mm != null && mm.WorldHeight > 0)
             {
-                _cachedHeight = mm.WorldHeight;
-            }
-            else
-            {
-                _cachedHeight = 128;
+                return mm.WorldHeight;
             }
 
-            return _cachedHeight;
+            throw new InvalidOperationException(
+                "[CoordinateUtils] World height is required for coordinate conversion, " +
+                "but WorldInitPacket has not initialized MapManager.");
         }
 
         /// <summary>
         /// Converts Server Y to Unity World Y (Centered on cell).
         /// </summary>
-        public static float ServerToUnityY(int serverY, int worldHeight = 0)
+        public static float ServerToUnityY(int serverY, int worldHeight)
         {
             int h = ResolveHeight(worldHeight);
             return (h - 1 - serverY) + 0.5f;
         }
 
         /// <summary>
-        /// Converts Unity World Y to Server Y with modulo wrapping.
+        /// Converts Unity World Y to Server Y. Coordinates outside the loaded
+        /// world are invalid and must never wrap into another row.
         /// </summary>
-        public static int UnityToServerY(float unityY, int worldHeight = 0)
+        public static int UnityToServerY(float unityY, int worldHeight)
         {
             int h = ResolveHeight(worldHeight);
             int y = Mathf.FloorToInt(unityY);
-            int serverY = (h - 1 - y) % h;
-            if (serverY < 0)
+            if (y < 0 || y >= h)
             {
-                serverY += h;
+                throw new ArgumentOutOfRangeException(
+                    nameof(unityY),
+                    unityY,
+                    $"Unity Y must map inside the world height [0, {h}).");
             }
 
-            return serverY;
+            return h - 1 - y;
         }
 
         /// <summary>
         /// Converts Server position to Unity World position (Center of cell).
         /// </summary>
-        public static Vector3 ServerToUnityPos(int x, int y, int worldHeight = 0, float z = 0f)
+        public static Vector3 ServerToUnityPos(int x, int y, int worldHeight, float z = 0f)
         {
             return new Vector3(x + 0.5f, ServerToUnityY(y, worldHeight), z);
         }
@@ -74,7 +66,7 @@ namespace Fodinae.World
         /// <summary>
         /// Converts Unity World position to Server Grid position.
         /// </summary>
-        public static Vector2Int UnityToServerPos(Vector3 unityPos, int worldHeight = 0)
+        public static Vector2Int UnityToServerPos(Vector3 unityPos, int worldHeight)
         {
             return new Vector2Int(Mathf.FloorToInt(unityPos.x), UnityToServerY(unityPos.y, worldHeight));
         }

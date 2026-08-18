@@ -7,10 +7,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
+using Fodinae.Core;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Fodinae
 {
@@ -25,9 +25,6 @@ namespace Fodinae
     /// </summary>
     public sealed class AssetCache
     {
-        private const long DEFAULT_MAX_BYTES = 256L * 1024 * 1024; // 256 MB
-        private const long DEFAULT_MAX_DECODED_BYTES = 256L * 1024 * 1024;
-
         private readonly ConcurrentDictionary<string, CacheEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, long> _entrySizes = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentQueue<string> _accessOrder = new();
@@ -35,8 +32,8 @@ namespace Fodinae
         private readonly ConcurrentQueue<string> _decodedAccessOrder = new();
         private readonly Func<string, CancellationToken, int, UniTask<byte[]?>> _bytesLoader;
         private long _totalBytes;
-        private long _maxBytes = DEFAULT_MAX_BYTES;
-        private long _maxDecodedBytes = DEFAULT_MAX_DECODED_BYTES;
+        private long _maxBytes = ProjectRuntimeContracts.AssetCacheCapacityBytes;
+        private long _maxDecodedBytes = ProjectRuntimeContracts.DecodedAssetCacheCapacityBytes;
         private long _totalDecodedBytes;
         private int _unloadUnusedAssetsRequested;
 
@@ -46,28 +43,40 @@ namespace Fodinae
         }
 
         /// <summary>Retrieve raw bytes. Cached and deduplicated.</summary>
-        public UniTask<byte[]?> GetBytesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
+        public UniTask<byte[]?> GetBytesAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetBytesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve a decoded Texture2D. Cached after first decode.</summary>
-        public UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 5)
+        public UniTask<Texture2D?> GetTextureAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetTextureAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve a decoded AudioClip from WAV bytes. Cached after first decode.</summary>
-        public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<AudioClip?> GetAudioAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAudioAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
         }
 
         /// <summary>Retrieve an animated Sprite[] from GIF/WebP. Cached after first decode.</summary>
-        public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<Sprite[]?> GetSpritesAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -77,7 +86,10 @@ namespace Fodinae
         /// Retrieve animated sprites WITH metadata (FPS, frame height).
         /// Use this when you need accurate animation timing from the source file.
         /// </summary>
-        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken ct = default, int timeoutSeconds = 10)
+        public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(
+            string filename,
+            CancellationToken ct = default,
+            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAnimatedSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -91,13 +103,15 @@ namespace Fodinae
                 return;
             }
 
-            entry.Dispose();
+            entry.ReleaseAllReferences();
             RemoveTrackedSize(filename);
             if (_decodedEntrySizes.TryRemove(filename, out var decodedSize))
             {
                 Interlocked.Add(ref _totalDecodedBytes, -decodedSize);
             }
+
             RebuildAccessOrder();
+            RequestUnusedAssetsCollection();
         }
 
         /// <summary>Clear all cached entries.</summary>
@@ -105,7 +119,7 @@ namespace Fodinae
         {
             foreach (var entry in _entries.Values.ToArray())
             {
-                entry.Dispose();
+                entry.ReleaseAllReferences();
             }
 
             _entries.Clear();
@@ -116,8 +130,14 @@ namespace Fodinae
                 // drain access order queue
             }
 
+            while (_decodedAccessOrder.TryDequeue(out _))
+            {
+                // drain decoded access order queue
+            }
+
             Interlocked.Exchange(ref _totalBytes, 0);
             Interlocked.Exchange(ref _totalDecodedBytes, 0);
+            RequestUnusedAssetsCollection();
         }
 
         /// <summary>Set the maximum cache size in bytes. Default is 256 MB.</summary>
@@ -185,13 +205,23 @@ namespace Fodinae
                 trimmed = true;
             }
 
-            if (trimmed && Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 1) == 0)
+            if (trimmed)
             {
-                Resources.UnloadUnusedAssets().completed += _ =>
-                {
-                    Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 0);
-                };
+                RequestUnusedAssetsCollection();
             }
+        }
+
+        private void RequestUnusedAssetsCollection()
+        {
+            if (Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 1) != 0)
+            {
+                return;
+            }
+
+            Resources.UnloadUnusedAssets().completed += _ =>
+            {
+                Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 0);
+            };
         }
 
         private void RemoveTrackedSize(string filename)
@@ -224,9 +254,15 @@ namespace Fodinae
                     break;
                 }
 
-                if (_entries.TryRemove(oldest, out var entry))
+                if (_entries.TryGetValue(oldest, out var entry))
                 {
-                    entry.Dispose();
+                    // The raw-byte budget must not evict decoded Unity objects.
+                    // Renderers and UI may still hold those objects even after
+                    // the cache stops retaining the source payload.
+                    entry.ReleaseRawBytes();
+                }
+                else
+                {
                     RemoveTrackedSize(oldest);
                 }
             }
@@ -267,57 +303,16 @@ namespace Fodinae
                 _cache = cache;
             }
 
-            internal void Dispose()
+            internal void ReleaseAllReferences()
             {
                 lock (_lock)
                 {
-                    var texture = _texture;
-                    var sprites = _sprites;
-
                     _texture = null;
                     _sprites = null;
+                    _audio = null;
                     _spriteFps = 0f;
                     _spriteFrameHeight = 0;
                     _spriteFrameCount = 0;
-
-                    if (sprites != null)
-                    {
-                        var textures = new HashSet<Texture2D>();
-                        for (int i = 0; i < sprites.Length; i++)
-                        {
-                            if (sprites[i] == null)
-                            {
-                                continue;
-                            }
-
-                            if (sprites[i].texture != null)
-                            {
-                                textures.Add(sprites[i].texture);
-                            }
-
-                            UnityEngine.Object.Destroy(sprites[i]);
-                        }
-
-                        foreach (var spriteTexture in textures)
-                        {
-                            if (spriteTexture != texture)
-                            {
-                                UnityEngine.Object.Destroy(spriteTexture);
-                            }
-                        }
-                    }
-
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-
-                    if (_audio != null)
-                    {
-                        UnityEngine.Object.Destroy(_audio);
-                        _audio = null;
-                    }
-
                     _bytes = null;
                 }
             }
@@ -540,14 +535,21 @@ namespace Fodinae
 
             // ── Private Static Methods ──
 
-            private static async UniTask<AnimatedSpriteData> AwaitAnimatedSprites(Task<Sprite[]?> task)
+            private async UniTask<AnimatedSpriteData> AwaitAnimatedSprites(Task<Sprite[]?> task)
             {
                 var frames = await task;
+                if (frames == null)
+                {
+                    throw new InvalidOperationException("Sprite frames were not decoded (null).");
+                }
 
-                // NOTE: cache entry will have the correct FPS stored; but since we returned a
-                // promise, the stored values are stale for awaiters. This path is rare (concurrent
-                // first requests) — the primary path is the fast-return above.
-                return new AnimatedSpriteData(frames ?? Array.Empty<Sprite>(), 10f, 0);
+                lock (_lock)
+                {
+                    return new AnimatedSpriteData(
+                        frames,
+                        _spriteFps,
+                        _spriteFrameHeight);
+                }
             }
 
             private static async UniTask<T> AwaitTask<T>(Task<T> task)
@@ -596,8 +598,9 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailTexture(new Exception("Empty or null bytes"));
-                        return null;
+                        var emptyEx = new InvalidOperationException($"Empty or null bytes for texture '{_filename}'.");
+                        FailTexture(emptyEx);
+                        throw emptyEx;
                     }
 
                     // Decode on the main thread (Unity API requirement)
@@ -618,8 +621,11 @@ namespace Fodinae
                         animationFrameCount = decoded.FrameCount;
                         if (result != null)
                         {
-                            result.name = $"Cache_GIF_{DateTime.Now.Ticks}|FPS={decoded.FPS}|FrameHeight={decoded.FrameHeight}";
-                            result.filterMode = FilterMode.Point;
+                            result.name = $"Cache_GIF_{DateTime.Now.Ticks}";
+                            RuntimeTextureFactory.ApplySampling(
+                                result,
+                                FilterMode.Point,
+                                TextureWrapMode.Clamp);
                         }
                     }
                     else if (containerType == AnimationContainerDecoder.ContainerType.WebP)
@@ -631,25 +637,28 @@ namespace Fodinae
                         animationFrameCount = decoded.FrameCount;
                         if (result != null)
                         {
-                            result.name = $"Cache_WebP_{DateTime.Now.Ticks}|FPS={decoded.FPS}|FrameHeight={decoded.FrameHeight}";
-                            result.filterMode = FilterMode.Point;
+                            result.name = $"Cache_WebP_{DateTime.Now.Ticks}";
+                            RuntimeTextureFactory.ApplySampling(
+                                result,
+                                FilterMode.Point,
+                                TextureWrapMode.Clamp);
                         }
                     }
                     else
                     {
-                        // PNG or fallback via Unity ImageConversion
-                        result = new Texture2D(2, 2);
-                        bool markNonReadable = SystemInfo.copyTextureSupport != CopyTextureSupport.None;
-                        if (result.LoadImage(bytes, markNonReadable))
-                        {
-                            result.name = $"Cache_Tex_{DateTime.Now.Ticks}";
-                            result.filterMode = FilterMode.Point;
-                        }
-                        else
-                        {
-                            UnityEngine.Object.Destroy(result);
-                            result = null;
-                        }
+                        // ImageConversion.LoadImage changes PNGs to ARGB32.
+                        // Canonicalize every decoded image to RGBA32 so Metal
+                        // can copy it into the RGBA32 terrain atlas without
+                        // relying on API-specific format compatibility.
+                        bool makeNoLongerReadable =
+                            RuntimeTextureFactory.SupportsTexture2DGpuCopy;
+                        result = RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+                            bytes,
+                            $"Cache_Tex_{DateTime.Now.Ticks}",
+                            RuntimeTextureColorSpace.Srgb,
+                            FilterMode.Point,
+                            TextureWrapMode.Clamp,
+                            makeNoLongerReadable: makeNoLongerReadable);
                     }
 
                     TaskCompletionSource<Texture2D?>? texPromise;
@@ -680,7 +689,7 @@ namespace Fodinae
                 ReleaseRawBytes();
                 lock (_lock)
                 {
-                    _texturePromise?.TrySetException(ex ?? new Exception("Texture decode failed"));
+                    _texturePromise?.TrySetException(ex);
                     _texturePromise = null;
                 }
             }
@@ -692,8 +701,9 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailAudio(new Exception("Empty or null bytes"));
-                        return null;
+                        var emptyEx = new InvalidOperationException($"Empty or null bytes for audio '{_filename}'.");
+                        FailAudio(emptyEx);
+                        throw emptyEx;
                     }
 
                     UnityEngine.Debug.LogWarning("[AssetCache] WavUtility is deprecated. Decoding wav is not supported.");
@@ -706,9 +716,10 @@ namespace Fodinae
                         _audioPromise = null;
                     }
 
-                    audioPromise?.TrySetResult(clip);
+                    var unsupportedEx = new NotSupportedException($"WAV decoding is not supported for '{_filename}'.");
+                    audioPromise?.TrySetException(unsupportedEx);
                     ReleaseRawBytes();
-                    return clip;
+                    throw unsupportedEx;
                 }
                 catch (Exception ex)
                 {
@@ -722,7 +733,7 @@ namespace Fodinae
                 ReleaseRawBytes();
                 lock (_lock)
                 {
-                    _audioPromise?.TrySetException(ex ?? new Exception("Audio decode failed"));
+                    _audioPromise?.TrySetException(ex);
                     _audioPromise = null;
                 }
             }
@@ -732,7 +743,12 @@ namespace Fodinae
                 var frames = await DecodeSprites(loader);
                 lock (_lock)
                 {
-                    return new AnimatedSpriteData(frames ?? Array.Empty<Sprite>(), _spriteFps, _spriteFrameHeight);
+                    if (frames == null)
+                    {
+                        throw new InvalidOperationException("Sprite frames were not decoded (null).");
+                    }
+
+                    return new AnimatedSpriteData(frames, _spriteFps, _spriteFrameHeight);
                 }
             }
 
@@ -783,8 +799,9 @@ namespace Fodinae
                     var bytes = await GetBytesAsync(loader);
                     if (bytes == null || bytes.Length == 0)
                     {
-                        FailSprites(new Exception("Empty or null bytes"));
-                        return null;
+                        var emptyEx = new InvalidOperationException($"Empty or null bytes for sprites '{_filename}'.");
+                        FailSprites(emptyEx);
+                        throw emptyEx;
                     }
 
                     // Decode GIF/WebP on the main thread
@@ -807,21 +824,24 @@ namespace Fodinae
                     }
 
                     Sprite[] result;
-                    float fps = 10f;
+                    float fps;
                     int frameHeight = 0;
 
                     if (anim.Atlas != null && anim.FrameCount > 0)
                     {
                         fps = anim.FPS;
                         frameHeight = anim.FrameHeight;
-                        anim.Atlas.name = $"Cache_Animation_{DateTime.Now.Ticks}|FPS={fps}|FrameHeight={frameHeight}";
-                        anim.Atlas.filterMode = FilterMode.Point;
+                        anim.Atlas.name = $"Cache_Animation_{DateTime.Now.Ticks}";
+                        RuntimeTextureFactory.ApplySampling(
+                            anim.Atlas,
+                            FilterMode.Point,
+                            TextureWrapMode.Clamp);
                         result = AnimationContainerDecoder.Decode(
                             anim.Atlas, anim.Atlas.width, anim.FrameHeight, anim.FrameCount);
                     }
                     else
                     {
-                        result = Array.Empty<Sprite>();
+                        throw new InvalidOperationException($"Unknown or empty animation container for '{_filename}'.");
                     }
 
                     TaskCompletionSource<Sprite[]?>? spritePromise;
@@ -853,12 +873,12 @@ namespace Fodinae
                 ReleaseRawBytes();
                 lock (_lock)
                 {
-                    _spritePromise?.TrySetException(ex ?? new Exception("Sprite decode failed"));
+                    _spritePromise?.TrySetException(ex);
                     _spritePromise = null;
                 }
             }
 
-            private void ReleaseRawBytes()
+            internal void ReleaseRawBytes()
             {
                 lock (_lock)
                 {

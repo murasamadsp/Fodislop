@@ -2,13 +2,17 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 {
     Properties
     {
-        [MainTexture] _BaseMap ("Texture Atlas", 2D) = "white" {}
-        _FlowMap ("Shimmer Flow Map", 2D) = "gray" {}
-        _ShimmerColor ("Shimmer Color", Color) = (1,1,1,1)
-        _FallbackColor ("Fallback Color", Color) = (1, 1, 0, 1)
-        _DebugColor ("Debug Color", Color) = (1, 0, 1, 1)
+        // Runtime materials must inject both textures. Neutral shader values
+        // deliberately make a missing injection visible instead of rendering
+        // an implicit white/gray world.
+        [MainTexture] _BaseMap ("Texture Atlas", 2D) = "black" {}
+        _FlowMap ("Shimmer Flow Map", 2D) = "black" {}
+        _ShimmerColor ("Shimmer Color", Color) = (0,0,0,0)
+        _FlowScale ("Flow Scale", Vector) = (0,0,0,0)
+        _ShimmerSpeedScale ("Shimmer Speed Scale", Float) = 0
+        _PulseSpeedScale ("Pulse Speed Scale", Float) = 0
+        _DebugColor ("Debug Color", Color) = (0,0,0,0)
         [ToggleUI] _DebugMode ("Debug Mode", Float) = 0
-        [ToggleUI] _UseLight2D ("Use Light2D", Float) = 0
     }
     SubShader
     {
@@ -33,6 +37,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "TerrainTileAddressing.hlsl"
+
+            #define EPS 0.0001
 
             struct Attributes
             {
@@ -68,10 +75,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _ShimmerColor;
-                float4 _FallbackColor;
+                float4 _FlowScale;
+                float _ShimmerSpeedScale;
+                float _PulseSpeedScale;
                 float4 _DebugColor;
                 float _DebugMode;
-                float _UseLight2D;
             CBUFFER_END
 
             Texture2D<float4> _WorldLightTexture;
@@ -79,15 +87,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             float4 _WorldLightRect;
             float4 _WorldLightTextureSize;
             int _WorldLightDebugView;
+            float2 GetWorldLightUv(float2 worldPos)
+            {
+                float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
+                return saturate((worldPos - _WorldLightRect.xy) / rectSize);
+            }
 
             float3 GetTerrariaLightColor(float2 worldPos)
             {
-                if (_UseLight2D <= 0.5)
-                {
-                    return float3(1.0, 1.0, 1.0);
-                }
-
-                float2 lightUV = (worldPos - _WorldLightRect.xy) / _WorldLightRect.zw;
+                float2 lightUV = GetWorldLightUv(worldPos);
                 if (_WorldLightDebugView != 0)
                 {
                     int2 debugPixel = clamp(
@@ -120,9 +128,29 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
 
+            float MissingTextureHash(float2 position)
+            {
+                float3 p = frac(float3(position, position.x + position.y) *
+                    float3(0.1031, 0.1030, 0.0973));
+                p += dot(p, p.yzx + 33.33);
+                return frac((p.x + p.y) * p.z);
+            }
+
+            float3 SampleMissingTexture(float2 worldPosition)
+            {
+                float2 cell = floor(worldPosition);
+                float hue = MissingTextureHash(cell);
+                float value = lerp(0.35, 0.8, MissingTextureHash(cell + 17.0));
+                float saturation = lerp(0.55, 0.9, MissingTextureHash(cell + 43.0));
+                return HsvToRgb(float3(hue, saturation, value));
+            }
+
             float3 SampleFlowMap(float2 worldPos)
             {
-                return SAMPLE_TEXTURE2D(_FlowMap, sampler_FlowMap, worldPos / float2(12.0, 10.0)).rgb;
+                return SAMPLE_TEXTURE2D(
+                    _FlowMap,
+                    sampler_FlowMap,
+                    worldPos / _FlowScale.xy).rgb;
             }
 
             Varyings vert (Attributes input)
@@ -162,7 +190,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     }
 
                     float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
-                    return half4(input.color.rgb * worldLight, input.color.a);
+                    float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
+                    return half4(diagnosticTexture * worldLight, input.color.a);
                 }
                 if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
 
@@ -179,7 +208,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 {
                     if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
                     float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
-                    return half4(input.color.rgb * worldLight, input.color.a);
+                    return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
                 }
 
                 float frameCount = input.tileSizeUV.z;
@@ -189,7 +218,6 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (frameCount > 1.5)
                 {
                     float speed = input.animData.y;
-                    if (speed <= 0) speed = 5;
                     float frameIndex = floor(fmod(_Time.y * speed, frameCount));
                     animOffsetUV = frameIndex * frameHeightTiles * tileSizeUV.y;
                 }
@@ -197,24 +225,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float2 tilesCount = ceil(subAtlasSizeUV / tileSizeUV - 0.0001);
                 tilesCount = max(tilesCount, 1.0);
 
-                float2 gPos = floor(input.worldPos.xy + 0.001);
-                float2 wrapped;
                 bool isTiling = fmod(input.worldPos.w, 2.0) > 0.5;
-
-                const float EPS = 0.0001;
-                float variantY = fmod(abs(gPos.y), tilesCount.y);
-                wrapped.y = floor(tilesCount.y - EPS - variantY);
-
-                if (isTiling)
-                {
-                    wrapped.x = floor(input.worldPos.z + EPS);
-                }
-                else
-                {
-                    wrapped.x = floor(fmod(abs(gPos.x), tilesCount.x) + EPS);
-                }
-
-                wrapped = clamp(wrapped, 0.0, tilesCount - 1.0);
+                float2 wrapped = FodinaeResolveTerrainTileIndex(
+                    input.worldPos.xy,
+                    tilesCount,
+                    input.worldPos.z,
+                    isTiling ? 1.0 : 0.0);
                 float2 tileOffsetUV = wrapped * tileSizeUV;
                 float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
                 float2 quadUV = input.uv;
@@ -240,7 +256,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                     if (outsideX || outsideY)
                     {
-                        float2 stepPos = gPos + stepUV;
+                        float2 stepPos = input.worldPos.xy + stepUV;
                         float2 wrappedStep;
                         float stepVariantY = fmod(abs(stepPos.y), tilesCount.y);
                         wrappedStep.y = floor(tilesCount.y - EPS - stepVariantY);
@@ -276,12 +292,18 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (isScrollAnimated)
                 {
                     float speed = input.animData.y;
-                    if (speed <= 0) speed = 5;
                     float scrollUV = fmod(_Time.y * speed * tileSizeUV.y * 0.05, subAtlasSizeUV.y);
                     finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
                 }
 
-                half4 texColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, finalUV);
+                // Terrain atlases are uploaded without mipmaps and are pixel art.
+                // Do not let the platform-selected material sampler introduce
+                // bilinear filtering between neighbouring atlas cells.
+                half4 texColor = SAMPLE_TEXTURE2D_LOD(
+                    _BaseMap,
+                    sampler_BaseMap,
+                    finalUV,
+                    0);
 
                 if (texColor.a < 0.05)
                 {
@@ -299,7 +321,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (animType == 1) // Blinking
                 {
-                    float pulse = 0.5 + 0.5 * sin(_Time.y * speed * 0.5 + offset);
+                    float pulse = 0.5 + 0.5 * sin(
+                        _Time.y * speed * _PulseSpeedScale + offset);
                     finalRgb *= pulse;
                 }
                 else if (animType == 2) // Shimmer
@@ -311,7 +334,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     float hueAngle = flowHsv.x * 6.28318548;
                     float chroma = max(flowSample.r, max(flowSample.g, flowSample.b)) - min(flowSample.r, min(flowSample.g, flowSample.b));
 
-                    float wave = sin(-(hueAngle + _Time.y * speed * 0.05));
+                    float wave = sin(-(hueAngle + _Time.y * speed * _ShimmerSpeedScale));
                     wave = (wave + 1.0) * 0.5;
                     float waveCubed = wave * wave * wave;
 
@@ -491,7 +514,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     ? saturate(frac(input.glowData.y) * 4.0)
                     : 0.0;
                 bool hasRoundedPhysicalContour = (lightingFlags & 32u) != 0u;
-                float occupancy = step(0.5, input.animData.w) * isForeground;
+                bool isPhysicalMass = (lightingFlags & 64u) != 0u;
+                float occupancy = isPhysicalMass ? isForeground : 0.0;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
                         input.uv,

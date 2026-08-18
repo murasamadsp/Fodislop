@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
@@ -22,10 +23,13 @@ namespace Fodinae.Game.Managers
         private PackManager _packManager = null!;
         private IRobotService _robotService = null!;
         private IServerAudioService _audioService = null!;
+        private bool _hasWorldStorage;
+
         [Inject]
         public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
         {
             _worldStorage = worldStorage;
+            _hasWorldStorage = true;
             _packManager = packManager;
             _robotService = robotService;
             _audioService = audioService;
@@ -47,17 +51,6 @@ namespace Fodinae.Game.Managers
         public Action? OnWorldInitialized { get; set; }
         public Action? OnWorldDataLoaded { get; set; }
 
-        private static readonly CellConfigurationPacket _fallbackConfig = new CellConfigurationPacket
-        {
-            Animation = CellAnimationType.None,
-            AnimationSpeed = 0,
-            Color = 0,
-            FrameOffset = 0,
-            Properties = CellConfigProperties.None,
-            Distortion = (CellDistortionType)0,
-            ReliefGroup = 0,
-        };
-
         private CellConfigurationPacket[]? _cellConfigurations;
         private Dictionary<CellType, int> _cellToTileGroup = new();
         private Dictionary<CellType, ushort> _cellMoveSpeeds = new();
@@ -66,37 +59,75 @@ namespace Fodinae.Game.Managers
         private ushort _width;
         private ushort _height;
 
-        private bool _nullConfigWarned;
         private float _nextMapFlushTime;
         private const float DurableMapFlushInterval = 5f;
         public bool IsWorldInitialized { get; private set; }
 
-        public bool IsStandaloneMode { get; set; } = false;
+        public bool IsStandaloneMode { get; set; }
+
+        public void ResetWorldState()
+        {
+            IsWorldInitialized = false;
+            _cellConfigurations = null;
+            _cellToTileGroup.Clear();
+            _cellMoveSpeeds.Clear();
+            _worldCodeName = string.Empty;
+            _worldDisplayName = string.Empty;
+            _width = 0;
+            _height = 0;
+        }
+
+        public void InitializeEditorPreview(MapStorage storage)
+        {
+            if (Application.isPlaying)
+            {
+                throw new InvalidOperationException(
+                    "[MapManager] Editor preview initialization is forbidden in Play Mode.");
+            }
+
+            _worldStorage = storage ?? throw new ArgumentNullException(nameof(storage));
+            _hasWorldStorage = true;
+            _packManager = null!;
+            _robotService = null!;
+            _audioService = null!;
+            IsStandaloneMode = true;
+        }
 
         private IWorldDataStorage WorldStorage => _worldStorage;
 
         protected void OnDestroy()
         {
             IsWorldInitialized = false;
-            (_worldStorage as MapStorage)?.Dispose();
+            if (_hasWorldStorage && _worldStorage != null)
+            {
+                _worldStorage.Dispose();
+            }
+
+            _hasWorldStorage = false;
         }
 
         protected void OnApplicationPause(bool pauseStatus)
         {
-            if (pauseStatus)
+            if (pauseStatus && _hasWorldStorage && _worldStorage != null)
             {
-                (_worldStorage as MapStorage)?.Flush();
+                _worldStorage.Flush();
             }
         }
 
         protected void OnApplicationQuit()
         {
-            (_worldStorage as MapStorage)?.Flush();
+            if (_hasWorldStorage && _worldStorage != null)
+            {
+                _worldStorage.Flush();
+            }
         }
 
         protected void OnLowMemory()
         {
-            (_worldStorage as MapStorage)?.Flush();
+            if (_hasWorldStorage && _worldStorage != null)
+            {
+                _worldStorage.Flush();
+            }
         }
 
         protected void Update()
@@ -107,8 +138,7 @@ namespace Fodinae.Game.Managers
             }
 
             _nextMapFlushTime = Time.unscaledTime + DurableMapFlushInterval;
-            var storage = _worldStorage as MapStorage;
-            if (storage?.HasDirtyChunks == true)
+            if (_worldStorage is MapStorage storage && storage.HasDirtyChunks)
             {
                 storage.Flush();
             }
@@ -123,21 +153,21 @@ namespace Fodinae.Game.Managers
 
             if (packet == null)
             {
-                Debug.LogError("[MapManager] LoadWorldInit called with null packet");
-                return;
+                throw new ArgumentNullException(nameof(packet), "WorldInitPacket is required.");
             }
 
             if (string.IsNullOrEmpty(packet.CodeName))
             {
-                Debug.LogError("[MapManager] LoadWorldInit called with null or empty world code name");
-                return;
+                throw new InvalidDataException("WorldInitPacket.CodeName is required.");
             }
 
             if (packet.Width <= 0 || packet.Height <= 0)
             {
-                Debug.LogError($"[MapManager] Invalid dimensions: {packet.Width}x{packet.Height}");
-                return;
+                throw new InvalidDataException(
+                    $"WorldInitPacket dimensions are invalid: {packet.Width}x{packet.Height}.");
             }
+
+            ValidateCellConfigurations(packet.Cells);
 
             _worldCodeName = packet.CodeName;
             _worldDisplayName = packet.DisplayName;
@@ -167,23 +197,60 @@ namespace Fodinae.Game.Managers
             var storage = WorldStorage;
             if (storage == null)
             {
-                Debug.LogError("[MapManager] WorldStorage is null — IWorldDataStorage not registered");
-                return;
+                throw new InvalidOperationException(
+                    "WorldStorage is not registered; cannot initialize the world.");
             }
 
 
-            storage.InitWorld(packet.CodeName, _width, _height);
+            try
+            {
+                storage.InitWorld(packet.CodeName, _width, _height);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError(
+                    $"[MapManager] Failed to initialize world '{packet.CodeName}' " +
+                    $"({_width}x{_height}) in storage.");
+                Debug.LogException(ex);
+                throw;
+            }
 
             if (!storage.IsReady)
             {
-                Debug.LogError($"[MapManager] MapStorage.InitWorld failed: IsReady=false, IsInitialized={storage.IsInitialized()}, CellLayer={(storage.CellLayer != null ? "ok" : "NULL")}");
-                return;
+                throw new InvalidDataException(
+                    $"World storage initialization completed without readiness: " +
+                    $"IsInitialized={storage.IsInitialized()}, CellLayer={(storage.CellLayer != null ? "ok" : "NULL")}.");
             }
 
             IsWorldInitialized = true;
             OnWorldInitialized?.Invoke();
             OnWorldDataLoaded?.Invoke();
             Debug.Assert(IsWorldInitialized, "[MapManager] IsWorldInitialized must be true at the end of LoadWorldInit");
+        }
+
+        private static void ValidateCellConfigurations(CellConfigurationPacket[]? configurations)
+        {
+            if (configurations == null || configurations.Length == 0)
+            {
+                throw new InvalidDataException(
+                    "WorldInitPacket.Cells is missing or empty; terrain cannot be initialized.");
+            }
+
+            for (int index = 0; index < configurations.Length; index++)
+            {
+                CellConfigurationPacket configuration = configurations[index];
+                if (configuration.Animation == CellAnimationType.None)
+                {
+                    continue;
+                }
+
+                if (configuration.AnimationSpeed == 0)
+                {
+                    throw new InvalidDataException(
+                        $"WorldInitPacket.Cells[{index}] ({(CellType)index}) declares " +
+                        "an animated texture with AnimationSpeed=0.");
+                }
+            }
         }
 
         public void UpdateMovementSpeeds(MovementSpeedPacket packet)
@@ -196,19 +263,33 @@ namespace Fodinae.Game.Managers
 
         public float GetMoveCooldown(CellType cellType)
         {
-            if (_cellMoveSpeeds.TryGetValue(cellType, out ushort speed) && speed > 0)
+            if (!_cellMoveSpeeds.TryGetValue(cellType, out ushort speed))
             {
-                return speed / 1000f;
+                throw new InvalidOperationException(
+                    $"Movement cooldown for cell type '{cellType}' was not received from the server.");
             }
 
-            return 0f;
+            if (speed == 0)
+            {
+                throw new InvalidDataException(
+                    $"Movement cooldown for cell type '{cellType}' must be greater than zero.");
+            }
+
+            return speed / 1000f;
         }
 
         public CellConfigurationPacket GetCellConfig(CellType type)
         {
-            if (_cellConfigurations == null || (int)type < 0 || (int)type >= _cellConfigurations.Length)
+            if (_cellConfigurations == null)
             {
-                return _fallbackConfig;
+                throw new InvalidOperationException(
+                    $"Cell configuration requested for '{type}' before WorldInitPacket was loaded.");
+            }
+
+            if ((int)type < 0 || (int)type >= _cellConfigurations.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Cell type '{type}' has no server configuration. Config count: {_cellConfigurations.Length}.");
             }
 
             return _cellConfigurations[(int)type];
@@ -218,13 +299,8 @@ namespace Fodinae.Game.Managers
         {
             if (_cellConfigurations == null)
             {
-                if (!_nullConfigWarned)
-                {
-                    _nullConfigWarned = true;
-                    Debug.LogWarning("[MapManager] GetConfigLength called but _cellConfigurations is null (показано один раз)");
-                }
-
-                return -1;
+                throw new InvalidOperationException(
+                    "Cell configuration count requested before WorldInitPacket was loaded.");
             }
 
             return _cellConfigurations.Length;
@@ -365,7 +441,7 @@ namespace Fodinae.Game.Managers
                 if (cam != null && Application.isPlaying)
                 {
                     Vector3 camPos = cam.transform.position;
-                    const int range = GameConstants.Debug.COLLISION_DEBUG_RANGE;
+                    const int range = GameConstants.Debug.CollisionDebugRange;
                     int startX = Mathf.FloorToInt(camPos.x) - range;
                     int startY = Mathf.FloorToInt(camPos.y) - range;
 
@@ -373,6 +449,11 @@ namespace Fodinae.Game.Managers
                     {
                         for (int y = startY; y < startY + (range * 2); y++)
                         {
+                            if (y < 0 || y >= WorldHeight)
+                            {
+                                continue;
+                            }
+
                             int worldX = x;
                             int worldY = CoordinateUtils.UnityToServerY(y, WorldHeight);
 

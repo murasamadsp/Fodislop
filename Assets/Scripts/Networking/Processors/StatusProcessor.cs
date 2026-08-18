@@ -38,9 +38,9 @@ namespace Fodinae.Networking.Processors
 
         public void Process(OutdatedClientPacket packet)
         {
-            Debug.LogError($"[StatusProcessor] Клиент устарел: {packet.Name}");
-            Debug.LogError($"[StatusProcessor] {packet.Description}");
-            Debug.LogError($"[StatusProcessor] Скачать: {packet.UpdateURL}");
+            string detail = $"\u0412\u0435\u0440\u0441\u0438\u044f: {packet.Name}\n{packet.Description}\n\u0421\u043a\u0430\u0447\u0430\u0442\u044c: {packet.UpdateURL}";
+            Debug.LogError($"[StatusProcessor] \u041a\u043b\u0438\u0435\u043d\u0442 \u0443\u0441\u0442\u0430\u0440\u0435\u043b: {packet.Name}");
+            GameErrorUI.ReportFatal(detail);
             Application.OpenURL(packet.UpdateURL);
         }
 
@@ -49,6 +49,7 @@ namespace Fodinae.Networking.Processors
             var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
             if (stats == null)
             {
+                GameErrorUI.ReportError("IPlayerStats не зарегистрирован — статус-линия не добавлена");
                 return;
             }
 

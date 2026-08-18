@@ -1,8 +1,8 @@
 #nullable enable
 
+using System;
 using System.IO;
 using System.Text;
-using Effekseer;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
@@ -26,6 +26,7 @@ namespace Fodinae
         private static readonly string LogPath = Path.Combine(Application.dataPath, "..", "diagnostic.txt");
         private static readonly string MemoryLogPath = Path.Combine(Application.dataPath, "..", "memory_growth.txt");
         private float _nextMemorySampleTime;
+        private Camera? _mainCamera;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EnsureCreated()
@@ -42,12 +43,20 @@ namespace Fodinae
             go.AddComponent<DiagnosticRunner>();
         }
 
+        protected void Awake()
+        {
+            _mainCamera = Camera.main;
+        }
+
         protected void Update()
         {
             if (Time.unscaledTime >= _nextMemorySampleTime)
             {
                 _nextMemorySampleTime = Time.unscaledTime + 5f;
-                WriteMemorySample();
+                if (ServiceLocator.IsInitialized)
+                {
+                    WriteMemorySample();
+                }
             }
 
             if (Keyboard.current != null && Keyboard.current.f12Key.wasPressedThisFrame)
@@ -58,7 +67,13 @@ namespace Fodinae
 
         private static void WriteMemorySample()
         {
-            var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
+            if (!ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            MapStorage ms = ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException("MapStorage is unavailable for diagnostics.");
             var lighting = TerrariaLightingEngine.Instance;
             string line =
                 $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
@@ -68,8 +83,12 @@ namespace Fodinae
                 $"mono={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1}MB " +
                 $"gc={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1}MB " +
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
-                $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0} " +
+                $"chunks={ms.CellLayer?.GetLoadedCount() ?? 0} " +
                 $"lightingSolves={lighting?.SolveCount ?? 0} " +
+                $"lightingContactAOSolves={lighting?.ContactOcclusionSolveCount ?? 0} " +
+                $"dynamicLights={lighting?.DynamicLightCount ?? 0} " +
+                $"dynamicUploaded={lighting?.UploadedDynamicLightCount ?? 0} " +
+                $"dynamicDropped={lighting?.DroppedDynamicLightCount ?? 0} " +
                 $"lightingField={lighting?.FieldWidth ?? 0}x{lighting?.FieldHeight ?? 0} " +
                 $"lightingAtlas={lighting?.AtlasEntryCount ?? 0}\n";
 
@@ -78,6 +97,13 @@ namespace Fodinae
 
         private void WriteSnapshot()
         {
+            if (!ServiceLocator.IsInitialized)
+            {
+                Debug.LogWarning(
+                    "[DiagnosticRunner] Snapshot skipped: VContainer resolver is not initialized yet.");
+                return;
+            }
+
             var sb = new StringBuilder();
             sb.AppendLine($"=== SNAPSHOT frame={Time.frameCount} time={Time.time:F2}s ===");
 
@@ -88,10 +114,7 @@ namespace Fodinae
             sb.AppendLine($"  MonoUsed={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1} MB");
             sb.AppendLine($"  MonoHeap={Profiler.GetMonoHeapSizeLong() / (1024f * 1024f):F1} MB");
             sb.AppendLine($"  GCHeap={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1} MB");
-            sb.AppendLine($"  TextureObjects={Resources.FindObjectsOfTypeAll<Texture2D>().Length}");
-            sb.AppendLine($"  RenderTextureObjects={Resources.FindObjectsOfTypeAll<RenderTexture>().Length}");
-            sb.AppendLine($"  MeshObjects={Resources.FindObjectsOfTypeAll<Mesh>().Length}");
-            sb.AppendLine($"  EffekseerAssets={Resources.FindObjectsOfTypeAll<EffekseerEffectAsset>().Length}");
+            sb.AppendLine("  Unity resource object counts omitted; diagnostics do not scan the heap.");
             sb.AppendLine($"  ActiveRuntimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount}");
 
             sb.AppendLine("\n[SERVICES]");
@@ -109,11 +132,11 @@ namespace Fodinae
             W(sb, "PacketHandler", ServiceLocator.Resolve<PacketHandler>());
 
             sb.AppendLine("\n[MAP]");
-            var ms = ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            sb.AppendLine(ms != null
-                ? $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}"
-                : "  NULL");
-            if (ms?.CellLayer != null)
+            MapStorage ms = ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException("MapStorage is unavailable for diagnostics.");
+            sb.AppendLine(
+                $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}");
+            if (ms.CellLayer != null)
             {
                 sb.AppendLine($"  CellChunks loaded={ms.CellLayer.GetLoadedCount()} dirty={ms.CellLayer.GetDirtyCount()} max={ms.CellLayer.MaxChunksInMemory}");
             }
@@ -169,7 +192,7 @@ namespace Fodinae
             }
 
             sb.AppendLine("\n[CAMERA]");
-            var cam = Camera.main;
+            var cam = _mainCamera;
             sb.AppendLine(cam != null
                 ? $"  pos={cam.transform.position} ortho={cam.orthographic} size={cam.orthographicSize} active={cam.gameObject.activeInHierarchy}"
                 : "  NULL");

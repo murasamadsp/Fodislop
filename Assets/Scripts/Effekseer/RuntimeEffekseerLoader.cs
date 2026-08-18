@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Cysharp.Threading.Tasks;
 using Effekseer;
 using Effekseer.Internal;
@@ -56,9 +57,9 @@ namespace Fodinae.Effekseer
         /// <returns>
         /// A loaded <see cref="EffekseerEffectAsset"/> with textures populated,
         /// registered in <see cref="EffekseerSystem"/> and ready to play.
-        /// Returns null if the .efk data is invalid or loading fails.
+        /// Invalid data or missing resources throw and never produce a partial effect.
         /// </returns>
-        public static async UniTask<EffekseerEffectAsset?> LoadEffectAsync(
+        public static async UniTask<EffekseerEffectAsset> LoadEffectAsync(
             byte[] efkBytes,
             string effectName,
             Func<string, string>? texturePathMapper = null,
@@ -67,29 +68,30 @@ namespace Fodinae.Effekseer
         {
             if (efkBytes == null || efkBytes.Length < 4)
             {
-                Debug.LogError("[RuntimeEffekseerLoader] Invalid or empty .efk data");
-                return null;
+                throw new ArgumentException(
+                    "Effect data is empty or too short to be a valid .efk file.",
+                    nameof(efkBytes));
             }
 
             if (!EffekseerSystem.IsValid)
             {
-                Debug.LogError("[RuntimeEffekseerLoader] EffekseerSystem is not initialized");
-                return null;
+                throw new InvalidOperationException(
+                    "EffekseerSystem must be initialized before loading a runtime effect.");
             }
 
             var loader = clientAssetLoader ?? (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader);
             if (loader == null)
             {
-                Debug.LogError("[RuntimeEffekseerLoader] No ClientAssetLoader available");
-                return null;
+                throw new InvalidOperationException(
+                    "A ClientAssetLoader is required to load runtime effect textures.");
             }
 
             // ----- 1. Parse resource paths from the .efk binary -----
             var resourcePath = new EffekseerResourcePath();
             if (!EffekseerEffectAsset.ReadResourcePath(efkBytes, ref resourcePath))
             {
-                Debug.LogError($"[RuntimeEffekseerLoader] Failed to parse .efk resource paths for '{effectName}'");
-                return null;
+                throw new InvalidDataException(
+                    $"Failed to parse .efk resource paths for effect '{effectName}'.");
             }
 
             // ----- 2. Create the asset container -----
@@ -112,18 +114,11 @@ namespace Fodinae.Effekseer
                     }
 
                     var tex = await DownloadTextureAsync(loader, serverPath, textureTimeoutSeconds);
-                    if (tex != null)
+                    textureResources.Add(new EffekseerTextureResource
                     {
-                        textureResources.Add(new EffekseerTextureResource
-                        {
-                            path = rawPath,
-                            texture = tex,
-                        });
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[RuntimeEffekseerLoader] Failed to download texture '{serverPath}' (from '{rawPath}') for effect '{effectName}'");
-                    }
+                        path = rawPath,
+                        texture = tex,
+                    });
                 }
 
                 asset.textureResources = textureResources.ToArray();
@@ -215,7 +210,7 @@ namespace Fodinae.Effekseer
         /// <summary>
         /// Download a single texture from the server and decode it into a Texture2D.
         /// </summary>
-        private static async UniTask<Texture2D?> DownloadTextureAsync(
+        private static async UniTask<Texture2D> DownloadTextureAsync(
             ClientAssetLoader loader,
             string serverPath,
             int timeoutSeconds)
@@ -226,7 +221,8 @@ namespace Fodinae.Effekseer
 
             if (bytes == null || bytes.Length == 0)
             {
-                return null;
+                throw new FileNotFoundException(
+                    $"Effect texture '{serverPath}' was not returned by the asset loader.");
             }
 
             // Detect & decode animated container (GIF/WebP) or plain PNG
@@ -241,24 +237,26 @@ namespace Fodinae.Effekseer
                 if (decoded.Atlas != null)
                 {
                     decoded.Atlas.name = $"EffekseerTex_{serverPath}";
-                    decoded.Atlas.filterMode = FilterMode.Point;
+                    RuntimeTextureFactory.ApplySampling(
+                        decoded.Atlas,
+                        FilterMode.Point,
+                        TextureWrapMode.Repeat);
                     return decoded.Atlas;
                 }
 
-                return null;
+                throw new InvalidDataException(
+                    $"Animated effect texture '{serverPath}' contains no decodable frames.");
             }
 
-            // PNG or other single-frame format
-            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (tex.LoadImage(bytes))
-            {
-                tex.name = $"EffekseerTex_{serverPath}";
-                tex.filterMode = FilterMode.Point;
-                return tex;
-            }
-
-            UnityEngine.Object.Destroy(tex);
-            return null;
+            // Single-frame images are normalized to the same explicit runtime
+            // format as terrain and UI textures.
+            return RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+                bytes,
+                $"EffekseerTex_{serverPath}",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Repeat,
+                makeNoLongerReadable: true);
         }
     }
 }

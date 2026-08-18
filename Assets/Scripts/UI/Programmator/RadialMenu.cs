@@ -44,7 +44,6 @@ namespace Fodinae.UI.Programmator
         public RadialMenu()
         {
             _root = new VisualElement();
-            AttachStyles(_root);
             _root.AddToClassList("prog-radial-root");
             _root.pickingMode = PickingMode.Ignore;
 
@@ -84,15 +83,6 @@ namespace Fodinae.UI.Programmator
             _backButton.RegisterCallback<PointerDownEvent>(_ => OnBackClicked?.Invoke());
 
             _root.Add(_backButton);
-        }
-
-        internal static void AttachStyles(VisualElement root)
-        {
-            var uss = Resources.Load<StyleSheet>("Styles/Programmator");
-            if (uss != null)
-            {
-                root.styleSheets.Add(uss);
-            }
         }
 
         /// <summary>

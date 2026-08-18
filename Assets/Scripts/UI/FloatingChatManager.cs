@@ -15,7 +15,16 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            _camera = Camera.main;
+            TryInitialize();
+        }
+
+        private void TryInitialize()
+        {
+            _camera ??= Camera.main;
+            if (_bubblePrefab != null)
+            {
+                return;
+            }
 
             var prefabGo = new GameObject("ChatBubblePrefab");
             prefabGo.transform.SetParent(transform);
@@ -36,6 +45,8 @@ namespace Fodinae.UI
 
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
+            TryInitialize();
+            _camera ??= Camera.main;
             var robotManager = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
             var robot = robotManager?.GetOrCreateRobot(packet.BotId);
             if (robot == null)
@@ -62,11 +73,6 @@ namespace Fodinae.UI
 
         private bool IsInCameraView(Vector3 worldPos)
         {
-            if (_camera == null)
-            {
-                _camera = Camera.main;
-            }
-
             if (_camera == null)
             {
                 return false;

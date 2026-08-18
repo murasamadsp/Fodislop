@@ -31,7 +31,8 @@ namespace Fodinae.World.Terrain
 
         public void BuildFull(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int minX, int minY, int meshWidth, int meshHeight, int worldWidth, int worldHeight,
-            List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod)
+            List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
+            MapManager mapManager, ITextureService textureManager)
         {
             int vIdx = 0;
             for (int x = 0; x < meshWidth; x++)
@@ -40,16 +41,23 @@ namespace Fodinae.World.Terrain
                 for (int y = 0; y < meshHeight; y++)
                 {
                     int unityY = minY + y;
-                    FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, ref vIdx, atlases, subMeshIndices, useColorLod);
-                    FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, ref vIdx, atlases, subMeshIndices, useColorLod);
+                    FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, ref vIdx, atlases, subMeshIndices, useColorLod, mapManager, textureManager);
+                    FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, ref vIdx, atlases, subMeshIndices, useColorLod, mapManager, textureManager);
                 }
             }
         }
 
         private void FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
-            int worldWidth, int worldHeight, bool isBackground, ref int vIdx, List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod)
+            int worldWidth, int worldHeight, bool isBackground, ref int vIdx, List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
+            MapManager mapManager, ITextureService textureManager)
         {
-            if (gridX < 0 || gridX >= worldWidth || unityY < 0 || unityY >= worldHeight)
+            if (unityY < 0 || unityY >= worldHeight)
+            {
+                vIdx += 4;
+                return;
+            }
+
+            if (gridX < 0 || gridX >= worldWidth)
             {
                 vIdx += 4;
                 return;
@@ -61,7 +69,7 @@ namespace Fodinae.World.Terrain
 
             CachedCellData ccd = cellCache.GetCellData(cx, cy);
             CellType cellFgType = ccd.Type;
-            if (cellFgType == CellType.Unloaded)
+            if (ccd.State != TerrainCellState.Loaded)
             {
                 vIdx += 4;
                 return;
@@ -71,22 +79,43 @@ namespace Fodinae.World.Terrain
             bool isSameCell = !isBackground || cellType == cellFgType;
             if (isBackground && (cellType == cellFgType || cellType == CellType.Unloaded))
             {
-                cellType = CellType.Unloaded;
-                isSameCell = false;
+                vIdx += 4;
+                return;
             }
 
-            CachedCellData localFallback = default;
-
-            // Since we moved this logic out of TerrainRenderer, we need to manually lookup MapManager / Texture Manager if needed.
-            // For now, this fallback entry can be calculated within TerrainCellCache
-            var mm = ServiceLocator.Resolve<MapManager>();
-            var wtm = ServiceLocator.Resolve<ITextureService>() as WorldTextureManager;
-
-            ref CachedCellData data = ref (isSameCell ? ref ccd : ref cellCache.GetNeighborCacheEntryRef(cellType, cx, cy, mm, wtm, atlases, ref localFallback));
+            CachedCellData data = isSameCell
+                ? ccd
+                : cellCache.GetNeighborCacheEntry(cellType, cx, cy, mapManager, textureManager, atlases);
             int atlasIndex = data.AtlasIndex;
             if (atlasIndex < 0 || atlasIndex >= subMeshIndices.Length)
             {
+                if (subMeshIndices.Length == 0 || atlases.Count == 0)
+                {
+                    vIdx += 4;
+                    return;
+                }
+
+                // Keep an untextured cell in the first available submesh. The
+                // shader identifies the zero atlas rect and draws the explicit
+                // missing-texture diagnostic instead of dropping the geometry.
                 atlasIndex = 0;
+            }
+
+            bool hasTexture = data.AtlasRect.z > 0f &&
+                data.AtlasRect.w > 0f &&
+                data.UVTileSize > 0f;
+            if (!hasTexture)
+            {
+                // Missing server textures are an explicit diagnostic state. Keep
+                // the cell in the mesh so the world remains spatially truthful;
+                // Terrain.shader renders its deterministic diagnostic fill.
+                atlasIndex = 0;
+                data.AtlasRect = Vector4.zero;
+                data.UVTileSize = 1f / atlases[0].Size;
+                data.Animation = CellAnimationType.None;
+                data.AnimationSpeed = 0f;
+                data.AnimationFrameCount = 1;
+                data.FrameHeightTiles = 1f;
             }
 
             float zOffset = isBackground ? 0.1f : 0.0f;
@@ -150,6 +179,13 @@ namespace Fodinae.World.Terrain
             Vector4 atlasRect = data.AtlasRect;
             bool useFallback = useColorLod || atlasRect.z < 0.0001f;
             Color color = useFallback ? data.MinimapColor : Color.white;
+            if (atlasRect.z < 0.0001f)
+            {
+                // The diagnostic shader branch needs a visible coverage value
+                // even when the server supplied no minimap color.
+                color.a = 1f;
+            }
+
             float animOffset = 0f;
             if (!useFallback && data.Animation == CellAnimationType.Blinking)
             {
@@ -159,14 +195,16 @@ namespace Fodinae.World.Terrain
                 animOffset = (seed % 6283) / 1000f;
             }
 
-            bool castsLightingShadow =
+            bool isPhysicalMass =
                 !isBackground &&
-                (data.Properties & CellConfigProperties.DropsShadow) != 0;
+                cellFgType != CellType.Empty &&
+                ((data.Properties & CellConfigProperties.DropsShadow) != 0 ||
+                 (data.Properties & CellConfigProperties.Passable) == 0);
             Vector4 animDataVec = new(
                 (float)data.Animation,
                 data.AnimationSpeed,
                 animOffset,
-                castsLightingShadow ? 1f : 0f);
+                isPhysicalMass ? 1f : 0f);
             Vector4 tileSizeVec = new Vector4(data.UVTileSize, data.UVTileSize, (float)data.AnimationFrameCount, data.FrameHeightTiles);
             Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
@@ -184,9 +222,12 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx].UV3 = worldPosVec;
             _vertexBuffer[vIdx].UV4 = animDataVec;
             bool isGlowing = (data.Properties & CellConfigProperties.Glowing) != 0;
-            Color materialColor = data.MinimapColor.maxColorComponent > 0.05f
-                ? data.MinimapColor
-                : new Color(0.5f, 0.5f, 0.5f, 1f);
+
+            // The server-provided minimap color is also the material albedo
+            // used by the lighting field. Do not silently turn a missing or
+            // black server color into gray; that hides broken cell metadata
+            // and makes lighting appear to work with invented input.
+            Color materialColor = data.MinimapColor;
             Color32 materialColor32 = materialColor;
             int packedLightingColor = materialColor32.r |
                 (materialColor32.g << 8) |
@@ -256,6 +297,7 @@ namespace Fodinae.World.Terrain
             float packedLightingFlags = solidBoundaryMask +
                 (isGlowing ? 16f : 0f) +
                 (hasRoundedPhysicalContour ? 32f : 0f) +
+                (isPhysicalMass ? 64f : 0f) +
                 (emissionPower * 0.25f);
             Vector4 glowVec = new Vector4(
                 packedLightingColor,

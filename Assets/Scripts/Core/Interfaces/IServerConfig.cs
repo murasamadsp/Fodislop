@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+
 namespace Fodinae.Core.Interfaces
 {
     public interface IServerConfig
@@ -7,5 +9,7 @@ namespace Fodinae.Core.Interfaces
         float DigCooldown { get; }
         int MaxGlobalChatLength { get; }
         int MaxLocalChatLength { get; }
+        bool IsInitialized { get; }
+        event Action OnInitialized;
     }
 }

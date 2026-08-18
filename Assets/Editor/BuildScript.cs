@@ -75,16 +75,84 @@ namespace Fodinae.Editor
                 return;
             }
 
+            CopyRuntimeTextures(target, output);
             Log($"Build succeeded: {output}");
         }
 
+        private static void CopyRuntimeTextures(BuildTarget target, string playerPath)
+        {
+            string source = Path.GetFullPath(Path.Combine("Assets", "Textures"));
+            if (!Directory.Exists(source))
+            {
+                throw new DirectoryNotFoundException(
+                    $"Required runtime texture directory does not exist: {source}");
+            }
+
+            string playerDirectory = Path.GetDirectoryName(playerPath) ??
+                throw new InvalidOperationException(
+                    $"Player output has no parent directory: {playerPath}");
+            string dataPath = target switch
+            {
+                BuildTarget.StandaloneOSX => Path.Combine(
+                    playerPath,
+                    "Contents",
+                    "Resources",
+                    "Data"),
+                BuildTarget.StandaloneWindows64 => Path.Combine(
+                    playerDirectory,
+                    $"{Path.GetFileNameWithoutExtension(playerPath)}_Data"),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(target),
+                    target,
+                    "Runtime texture destination is not defined for this build target."),
+            };
+            if (!Directory.Exists(dataPath))
+            {
+                throw new DirectoryNotFoundException(
+                    $"Unity player data directory does not exist after build: {dataPath}");
+            }
+
+            string destination = Path.Combine(dataPath, "Textures");
+            if (Directory.Exists(destination))
+            {
+                Directory.Delete(destination, recursive: true);
+            }
+
+            Directory.CreateDirectory(destination);
+            int copiedFileCount = 0;
+            foreach (string sourceFile in Directory.EnumerateFiles(
+                         source,
+                         "*",
+                         SearchOption.AllDirectories))
+            {
+                if (sourceFile.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string relativePath = Path.GetRelativePath(source, sourceFile);
+                string destinationFile = Path.Combine(destination, relativePath);
+                string destinationDirectory = Path.GetDirectoryName(destinationFile) ??
+                    throw new InvalidOperationException(
+                        $"Runtime texture destination has no parent: {destinationFile}");
+                Directory.CreateDirectory(destinationDirectory);
+                File.Copy(sourceFile, destinationFile, overwrite: true);
+                copiedFileCount++;
+            }
+
+            if (copiedFileCount == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Runtime texture copy produced no files from {source}.");
+            }
+
+            Log($"Copied {copiedFileCount} runtime texture files to {destination}.");
+        }
+
         /// <summary>
-        /// The macOS target architecture lives in the macOS build module
-        /// (UnityEditor.OSXStandalone), which contributors on Windows-only
-        /// installs may not have. Resolve it reflectively so this editor
-        /// assembly keeps compiling everywhere; fall back to the project
-        /// default (which already produces a working Apple Silicon build)
-        /// when the module is absent.
+        /// The macOS target architecture lives in the macOS build module.
+        /// Resolve it reflectively so the editor assembly keeps compiling
+        /// without a direct platform-module reference.
         /// </summary>
         private static void TrySetAppleSiliconArchitecture()
         {
@@ -92,22 +160,23 @@ namespace Fodinae.Editor
             {
                 Type settings =
                     Type.GetType("UnityEditor.OSXStandalone.UserBuildSettings, UnityEditor.OSXStandalone.Extensions")
-                    ?? Type.GetType("UnityEditor.OSXStandalone.UserBuildSettings, UnityEditor");
+                    ?? Type.GetType("UnityEditor.OSXStandalone.UserBuildSettings, UnityEditor")
+                    ?? throw new InvalidOperationException(
+                        "Unity macOS build module does not expose UserBuildSettings.");
 
-                var property = settings?.GetProperty("architecture");
-                if (property == null)
-                {
-                    Log("macOS build module unavailable — using project default architecture.");
-                    return;
-                }
+                var property = settings.GetProperty("architecture") ??
+                    throw new InvalidOperationException(
+                        "Unity macOS build settings do not expose architecture.");
 
                 // MacOSArchitecture enum: x64 = 0, ARM64 = 1, x64ARM64 (Universal) = 2.
                 property.SetValue(null, Enum.ToObject(property.PropertyType, 1));
                 Log("macOS target architecture set to Apple Silicon (ARM64).");
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                Log($"Could not set macOS architecture ({e.Message}); using project default.");
+                throw new InvalidOperationException(
+                    "Failed to configure the required Apple Silicon macOS build architecture.",
+                    exception);
             }
         }
 

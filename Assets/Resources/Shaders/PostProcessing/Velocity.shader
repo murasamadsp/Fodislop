@@ -2,7 +2,9 @@ Shader "Fodinae/PostProcessing/Velocity"
 {
     Properties
     {
-        [PerRendererData] _VelocitySpriteTexture ("Sprite Texture", 2D) = "white" {}
+        // PostProcessRenderPass injects the real robot sprite texture. A
+        // neutral default must not create a full-screen velocity mask.
+        [PerRendererData] _VelocitySpriteTexture ("Sprite Texture", 2D) = "black" {}
     }
     SubShader
     {

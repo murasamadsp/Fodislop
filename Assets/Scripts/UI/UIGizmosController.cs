@@ -1,8 +1,6 @@
 #nullable enable
 
-#if UNITY_EDITOR
 using Fodinae.World;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -17,6 +15,9 @@ namespace Fodinae.UI
     [DisallowMultipleComponent]
     public sealed class UIGizmosController : MonoBehaviour
     {
+        // These names are part of the editor debug inspector surface and are
+        // intentionally kept stable for existing editor layouts.
+#pragma warning disable SA1307
         public bool drawContainers = true;
         public bool drawCells = true;
         public bool drawWorldUI = true;
@@ -24,6 +25,7 @@ namespace Fodinae.UI
         public Color containerColor = new Color(0.2f, 0.8f, 1f, 0.9f);
         public Color cellColor = new Color(1f, 0.6f, 0.2f, 0.9f);
         public Color worldUIColor = new Color(0.8f, 0.2f, 1f, 0.9f);
+#pragma warning restore SA1307
 
         private void OnDrawGizmos()
         {
@@ -152,4 +154,3 @@ namespace Fodinae.UI
         }
     }
 }
-#endif

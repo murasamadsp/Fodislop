@@ -1,16 +1,14 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
-using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
-using Fodinae.Networking.Connection;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
 
 namespace Fodinae.World
 {
+    [ExecuteAlways]
     [RequireComponent(typeof(MapManager))]
     public class StandaloneWorldInitializer : MonoBehaviour
     {
@@ -19,16 +17,13 @@ namespace Fodinae.World
         private bool _enableStandaloneMode = true;
 
         [SerializeField]
-        private int _testWorldWidth = 128;
+        private int _testWorldWidth;
 
         [SerializeField]
-        private int _testWorldHeight = 128;
+        private int _testWorldHeight;
 
         [SerializeField]
-        private string _testWorldName = "Standalone_Test_World";
-
-        [SerializeField]
-        private float _checkInterval = 2.0f;
+        private string _testWorldName = string.Empty;
 
         [Header("Debug Settings")]
         [SerializeField]
@@ -36,47 +31,35 @@ namespace Fodinae.World
 
         private MapManager? _mapManager;
         private bool _initializationAttempted = false;
-        private bool _isInitialized = false;
-        private float _startTime;
+        private MapStorage? _previewStorage;
 
         [ContextMenu("Force Standalone Initialization")]
         public void ForceStandaloneInitialization()
         {
             _initializationAttempted = false;
-            _isInitialized = false;
             AttemptStandaloneInitialization();
         }
 
         protected void Awake()
         {
-            if (!Application.isPlaying)
+            if (Application.isPlaying)
             {
                 enabled = false;
                 return;
             }
 
             _mapManager = GetComponent<MapManager>();
-            if (_enableDebugLogging)
+            if (_enableDebugLogging && !Application.isPlaying)
             {
-                Debug.Log("[StandaloneWorldInitializer] AWAKE CALLED");
-            }
-
-            if (!enabled)
-            {
-                enabled = true;
+                Debug.Log("[StandaloneWorldInitializer] Editor preview awake");
             }
         }
 
         protected void OnEnable()
         {
-            if (!Application.isPlaying)
+            if (Application.isPlaying)
             {
                 return;
-            }
-
-            if (_enableDebugLogging)
-            {
-                Debug.Log("[StandaloneWorldInitializer] ONENABLE CALLED");
             }
 
             if (!_enableStandaloneMode)
@@ -84,63 +67,14 @@ namespace Fodinae.World
                 return;
             }
 
-            _startTime = Time.time;
-            InvokeRepeating(nameof(CheckInitializationTimeout), _checkInterval, _checkInterval);
-        }
-
-        protected void Start()
-        {
-            if (!Application.isPlaying)
-            {
-                return;
-            }
-
-            if (_enableDebugLogging)
-            {
-                Debug.Log("[StandaloneWorldInitializer] START CALLED");
-            }
+            AttemptStandaloneInitialization();
         }
 
         protected void OnDisable()
         {
             CancelInvoke();
-        }
-
-        private void CheckInitializationTimeout()
-        {
-            if (!Application.isPlaying || _initializationAttempted || _isInitialized)
-            {
-                return;
-            }
-
-            if (_mapManager != null && _mapManager.IsWorldInitialized)
-            {
-                if (_enableDebugLogging)
-                {
-                    Debug.Log("[StandaloneWorldInitializer] World already initialized, skipping standalone mode");
-                }
-
-                _isInitialized = true;
-                enabled = false;
-                return;
-            }
-
-            var cm = ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (cm != null && cm.Connection != null &&
-                cm.Connection.ConnectionStatus == MinesServer.Networking.Shared.ConnectionStatus.Connected)
-            {
-                if (_enableDebugLogging)
-                {
-                    Debug.Log("[StandaloneWorldInitializer] Server connected, waiting for world data");
-                }
-
-                return;
-            }
-
-            if (Time.time - _startTime >= _checkInterval * 3)
-            {
-                AttemptStandaloneInitialization();
-            }
+            _previewStorage?.Dispose();
+            _previewStorage = null;
         }
 
         private void AttemptStandaloneInitialization()
@@ -152,13 +86,32 @@ namespace Fodinae.World
 
             _initializationAttempted = true;
 
-            if (_mapManager != null && _mapManager.IsWorldInitialized)
+            if (Application.isPlaying)
             {
-                if (_enableDebugLogging)
-                {
-                    Debug.Log("[StandaloneWorldInitializer] World already initialized, aborting standalone init");
-                }
+                throw new InvalidOperationException(
+                    "[StandaloneWorldInitializer] Preview initialization is forbidden in Play Mode.");
+            }
 
+            if (_mapManager == null)
+            {
+                throw new InvalidOperationException(
+                    "[StandaloneWorldInitializer] Preview requires MapManager on the same GameObject.");
+            }
+
+            if (_testWorldWidth <= 0 || _testWorldHeight <= 0 || string.IsNullOrWhiteSpace(_testWorldName))
+            {
+                throw new InvalidOperationException(
+                    "[StandaloneWorldInitializer] Preview world name and positive dimensions must be configured explicitly.");
+            }
+
+            if (_testWorldWidth > ushort.MaxValue || _testWorldHeight > ushort.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    $"[StandaloneWorldInitializer] Preview dimensions {_testWorldWidth}x{_testWorldHeight} exceed packet limits.");
+            }
+
+            if (_mapManager.IsWorldInitialized)
+            {
                 return;
             }
 
@@ -169,6 +122,8 @@ namespace Fodinae.World
 
             try
             {
+                _previewStorage = new MapStorage();
+                _mapManager.InitializeEditorPreview(_previewStorage);
                 var cellConfigurations = CreateTestCellConfigurations();
                 var worldInitPacket = new WorldInitPacket
                 {
@@ -183,7 +138,9 @@ namespace Fodinae.World
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[StandaloneWorldInitializer] Failed to create standalone world: {ex.Message}");
+                _initializationAttempted = false;
+                Debug.LogError($"[StandaloneWorldInitializer] Preview initialization failed: {ex.Message}");
+                Debug.LogException(ex);
             }
         }
 

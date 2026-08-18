@@ -3,34 +3,52 @@
 
 set -e
 
-# Use current environment HOME or fallback to user home directory
-export HOME="${HOME:-~}"
-export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$HOME}"
+# Keep dotnet's first-run state outside the repository when the caller has not
+# supplied a location. Never overwrite HOME: it is unrelated to this check.
+LINT_DOTNET_HOME="${DOTNET_CLI_HOME:-${TMPDIR:-/tmp}/fodislop-dotnet-cli}"
+export DOTNET_CLI_HOME="$LINT_DOTNET_HOME"
 
 echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
-echo "Environment: CI=${CI:-false}, OS=$(uname -s), HOME=$HOME"
+echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
-# Step 0: Automatically update section 2 (Project Structure) in AGENTS.md via Node.js
-if [ -f "scripts/update-agents-structure.js" ]; then
-    node scripts/update-agents-structure.js >/dev/null 2>&1 || true
-    if [ -f "AGENTS.md" ]; then
-        git add AGENTS.md 2>/dev/null || true
-    fi
+PLATFORM="$(uname -s)"
+if [ "$PLATFORM" != "Windows_NT" ] && [ "$CI" != "true" ]; then
+    echo "Notice: Skipping C# build checks on $PLATFORM (Unity-generated .NET Framework 4.7.1 csproj is not buildable outside Windows)."
+    echo "Run Unity Editor or Windows CI for full analyzer validation."
+    exit 0
 fi
+
+ensure_restore_assets() {
+    local project_file="$1"
+    local project_name
+    local assets_file
+
+    project_name="$(basename "$project_file" .csproj)"
+    assets_file="Temp/obj/$project_name/project.assets.json"
+    if [ -f "$assets_file" ]; then
+        return 0
+    fi
+
+    echo "Missing NuGet assets: $assets_file, restoring..."
+    if ! dotnet restore "$project_file" --ignore-failed-sources --disable-parallel >/dev/null 2>&1; then
+        echo "Auto-restore failed for $project_file"
+        echo "Run manually: dotnet restore $project_file --ignore-failed-sources --disable-parallel"
+        exit 1
+    fi
+
+    if [ ! -f "$assets_file" ]; then
+        echo "NuGet assets still missing after restore: $assets_file"
+        exit 1
+    fi
+}
 
 # Build all sub-projects first so DLL references in Temp/bin/Debug exist before Assembly-CSharp build
 DEPENDENCIES=(
-    "MinesServer.Data.csproj"
-    "MinesServer.Utils.csproj"
-    "MinesServer.Networking.csproj"
-    "MinesServer.Networking.Connection.csproj"
-    "MinesServer.Networking.Connection.Client.csproj"
     "Effekseer.csproj"
     "EffekseerEditor.csproj"
     "Effekseer.URP.csproj"
     "UniTask.csproj"
     "UniTask.Linq.csproj"
-    "UniTask.Editor.csproj"
     "UniTask.DOTween.csproj"
     "UniTask.Addressables.csproj"
     "UniTask.TextMeshPro.csproj"
@@ -39,16 +57,35 @@ DEPENDENCIES=(
 
 echo "--- Step 1: Building sub-project dependencies ---"
 for DEPENDENCY in "${DEPENDENCIES[@]}"; do
-    if [ -f "$DEPENDENCY" ]; then
-        echo "Building $DEPENDENCY..."
-        dotnet build "$DEPENDENCY" -clp:NoSummary >/dev/null 2>&1 || true
+    if [ ! -f "$DEPENDENCY" ]; then
+        continue
+    fi
+    if ! dotnet restore "$DEPENDENCY" --ignore-failed-sources --disable-parallel >/dev/null 2>&1; then
+        echo "Skipping $DEPENDENCY: restore failed (likely missing targeting pack on this platform)"
+        continue
+    fi
+    echo "Building $DEPENDENCY..."
+    if ! dotnet build "$DEPENDENCY" --no-restore -maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false -clp:NoSummary >/dev/null 2>&1; then
+        echo "Skipping $DEPENDENCY: build failed (likely missing targeting pack on this platform)"
+        continue
     fi
 done
 
-# Find all generated Assembly-CSharp project files
-PROJECTS=$(find . -maxdepth 1 -name "Assembly-CSharp*.csproj")
+# Build the runtime project before editor projects. The editor assembly references
+# Assembly-CSharp.dll, so filesystem-dependent find order can otherwise validate
+# editor code against a stale runtime assembly and report false missing members.
+PROJECTS=()
+if [ -f "./Assembly-CSharp.csproj" ]; then
+    PROJECTS+=("./Assembly-CSharp.csproj")
+fi
 
-if [ -z "$PROJECTS" ]; then
+while IFS= read -r PROJECT_FILE; do
+    if [ "$PROJECT_FILE" != "./Assembly-CSharp.csproj" ]; then
+        PROJECTS+=("$PROJECT_FILE")
+    fi
+done < <(find . -maxdepth 1 -name "Assembly-CSharp*.csproj" | sort)
+
+if [ "${#PROJECTS[@]}" -eq 0 ]; then
     echo "Notice: No Assembly-CSharp*.csproj files found in repository root."
     echo "Skipping C# Roslyn analyzer checks."
     exit 0
@@ -59,14 +96,21 @@ HAS_WARNINGS=0
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-for PROJECT_FILE in $PROJECTS; do
+for PROJECT_FILE in "${PROJECTS[@]}"; do
     PROJECT_NAME=$(basename "$PROJECT_FILE")
     LOG_FILE="$TMP_DIR/$PROJECT_NAME.log"
+
+    ensure_restore_assets "$PROJECT_FILE"
 
     echo "Running full C# Roslyn analyzer check for $PROJECT_NAME..."
 
     # Build sequentially and capture all build output
-    dotnet build "$PROJECT_FILE" --no-dependencies -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary > "$LOG_FILE" 2>&1 || true
+    if ! dotnet build "$PROJECT_FILE" --no-restore --no-dependencies -maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false -clp:NoSummary > "$LOG_FILE" 2>&1; then
+        HAS_WARNINGS=1
+        echo "Build failed for $PROJECT_NAME; full output follows:"
+        cat "$LOG_FILE"
+        continue
+    fi
 
     if [ -f "$LOG_FILE" ]; then
         BUILD_LOG=$(cat "$LOG_FILE")

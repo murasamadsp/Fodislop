@@ -58,6 +58,12 @@
     margin-bottom: 4px;
 }
 
+.gchat-mute-status {
+    color: rgb(255, 190, 100);
+    margin-bottom: 6px;
+    white-space: normal;
+}
+
 .gchat-scroll {
     flex-grow: 1;
     margin-bottom: 6px;
