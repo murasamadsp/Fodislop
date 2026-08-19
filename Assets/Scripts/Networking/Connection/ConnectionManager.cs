@@ -201,14 +201,14 @@ namespace Fodinae.Networking.Connection
             {
                 Debug.LogWarning(
                     "[Connection] Client config is not initialized yet; using DummyConnection (offline stub).");
-                return new DummyConnection();
+                return new DummyConnection(_session);
             }
 
             if (ConnectionTransportConfig.SelectTransport(config.UseDummyConnection) == ConnectionTransportKind.Dummy)
             {
                 Debug.Log(
                     "[Connection] Transport: DummyConnection (offline stub). Set UseDummyConnection=false in client config for the real server.");
-                return new DummyConnection();
+                return new DummyConnection(_session);
             }
 
             if (!ConnectionTransportConfig.TryResolveEndpoint(

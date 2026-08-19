@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Audio.Core;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Information;
@@ -23,11 +24,18 @@ namespace Fodinae.Networking.Processors
             ["ui"] = AudioBusType.UI,
         };
 
+        private readonly ISessionContainer _session;
+
+        public ClientConfigProcessor(ISessionContainer session)
+        {
+            _session = session;
+        }
+
         public void Process(ClientConfigPacket packet)
         {
             Debug.Log($"[ClientConfig] Received: master={packet.SoundConfig.Master}, sounds={packet.SoundConfig.IndividualSounds.Count}, keybinds={packet.Keybinds.Count}");
-            var audio = Fodinae.Core.ServiceLocator.Resolve<IAudioSystem>();
-            IClientConfigManager configManager = Fodinae.Core.ServiceLocator.Resolve<IClientConfigManager>() ??
+            var audio = _session.TryResolve<IAudioSystem>();
+            IClientConfigManager configManager = _session.TryResolve<IClientConfigManager>() ??
                 throw new InvalidOperationException("Client config manager is required before processing ClientConfigPacket.");
             ClientConfig clientConfig = configManager.Config ??
                 throw new InvalidOperationException("Client config must be initialized before processing ClientConfigPacket.");

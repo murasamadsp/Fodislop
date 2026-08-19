@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
@@ -39,23 +40,39 @@ namespace Fodinae.Networking
         public bool IsInputBlocked => ChatInput.IsFocused || (_windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen));
         public string? TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
 
-        private static readonly WorldInitProcessor WorldInit = new();
-        private static readonly RobotInfoProcessor RobotInfo = new();
-        private static readonly MapRegionProcessor MapRegion = new();
-        private static readonly AudioPacketProcessor Audio = new();
-        private static readonly PlayerInfoProcessor PlayerInfo = new();
         private static readonly PlayerStateProcessor PlayerState = new();
-        private static readonly RobotPositionProcessor RobotPosition = new();
-        private static readonly ChatProcessor Chat = new();
-        private static readonly MissionProcessor Mission = new();
-        private static readonly PackProcessor Pack = new();
-        private static readonly ConnectionProcessor Connection = new();
         private static readonly OpenURLProcessor OpenURL = new();
-        private static readonly ClientConfigProcessor ClientConfig = new();
-        private static readonly MissionArrowProcessor MissionArrow = new();
-        private readonly WindowPacketProcessor _windowProcessor = new();
         private bool _isInitialized;
         private bool _isSubscribed;
+
+        [Inject]
+        private ISessionContainer _session = null!;
+        [Inject]
+        private WorldInitProcessor _worldInit = null!;
+        [Inject]
+        private RobotInfoProcessor _robotInfo = null!;
+        [Inject]
+        private MapRegionProcessor _mapRegion = null!;
+        [Inject]
+        private AudioPacketProcessor _audio = null!;
+        [Inject]
+        private PlayerInfoProcessor _playerInfo = null!;
+        [Inject]
+        private RobotPositionProcessor _robotPosition = null!;
+        [Inject]
+        private ChatProcessor _chat = null!;
+        [Inject]
+        private MissionProcessor _mission = null!;
+        [Inject]
+        private PackProcessor _pack = null!;
+        [Inject]
+        private ConnectionProcessor _connection = null!;
+        [Inject]
+        private ClientConfigProcessor _clientConfig = null!;
+        [Inject]
+        private MissionArrowProcessor _missionArrow = null!;
+        [Inject]
+        private WindowPacketProcessor _windowProcessor = null!;
 
         [Inject]
         private INetworkService _networkService = null!;
@@ -103,7 +120,8 @@ namespace Fodinae.Networking
             }
 
             if (_mapDataProvider == null || _mapStorageInterface == null ||
-                _uiDocument == null || _networkService == null)
+                _uiDocument == null || _networkService == null ||
+                _windowProcessor == null || _session == null)
             {
                 return false;
             }
@@ -124,9 +142,9 @@ namespace Fodinae.Networking
 
         private void TrySubscribeToNetworkService()
         {
-            if (Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_networkService == null && _session != null)
             {
-                _networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>() ??
+                _networkService = _session.TryResolve<INetworkService>() ??
                     throw new InvalidOperationException(
                         "PacketHandler requires INetworkService in the active resolver.");
             }
@@ -140,16 +158,16 @@ namespace Fodinae.Networking
             // intentional: after a domain reload the injected service can be a
             // new instance while PacketHandler's _isSubscribed flag survives.
             // The old guard would then leave the new dispatcher empty.
-            _networkService.Subscribe<WorldInitPacket>(WorldInit.Process);
-            _networkService.Subscribe<RobotInfoPacket>(RobotInfo.Process);
-            _networkService.Subscribe<PlayerInfoPacket>(PlayerInfo.Process);
-            _networkService.Subscribe<MovementSpeedPacket>(PlayerInfo.Process);
+            _networkService.Subscribe<WorldInitPacket>(_worldInit.Process);
+            _networkService.Subscribe<RobotInfoPacket>(_robotInfo.Process);
+            _networkService.Subscribe<PlayerInfoPacket>(_playerInfo.Process);
+            _networkService.Subscribe<MovementSpeedPacket>(_playerInfo.Process);
             _networkService.Subscribe<OpenWindowPacket>(_windowProcessor.Process);
             _networkService.Subscribe<CloseWindowPacket>(_windowProcessor.Process);
-            _networkService.Subscribe<RobotPositionPacket>(RobotPosition.Process);
-            _networkService.Subscribe<MapRegionPacket>(MapRegion.Process);
-            _networkService.Subscribe<PackPacket>(Pack.Process);
-            _networkService.Subscribe<RemovePackPacket>(Pack.Process);
+            _networkService.Subscribe<RobotPositionPacket>(_robotPosition.Process);
+            _networkService.Subscribe<MapRegionPacket>(_mapRegion.Process);
+            _networkService.Subscribe<PackPacket>(_pack.Process);
+            _networkService.Subscribe<RemovePackPacket>(_pack.Process);
 
             _networkService.Subscribe<LevelPacket>(_playerStats.Process);
             _networkService.Subscribe<HealthPacket>(_playerStats.Process);
@@ -162,16 +180,16 @@ namespace Fodinae.Networking
             _networkService.Subscribe<AggressionStatePacket>(PlayerState.Process);
             _networkService.Subscribe<SkillProgressPacket>(_playerStats.Process);
             _networkService.Subscribe<DailyBonusStatePacket>(_playerStats.Process);
-            _networkService.Subscribe<TeleportPacket>(PlayerInfo.Process);
-            _networkService.Subscribe<ChatMessageListPacket>(Chat.Process);
-            _networkService.Subscribe<LocalChatMessagePacket>(Chat.Process);
-            _networkService.Subscribe<ChatMutePacket>(Chat.Process);
-            _networkService.Subscribe<ChatListPacket>(Chat.Process);
+            _networkService.Subscribe<TeleportPacket>(_playerInfo.Process);
+            _networkService.Subscribe<ChatMessageListPacket>(_chat.Process);
+            _networkService.Subscribe<LocalChatMessagePacket>(_chat.Process);
+            _networkService.Subscribe<ChatMutePacket>(_chat.Process);
+            _networkService.Subscribe<ChatListPacket>(_chat.Process);
 
             _networkService.Subscribe<OnlinePacket>(_status.Process);
             _networkService.Subscribe<PingPacket>(_status.Process);
             _networkService.Subscribe<OutdatedClientPacket>(_status.Process);
-            _networkService.Subscribe<AudioPacket>(Audio.Process);
+            _networkService.Subscribe<AudioPacket>(_audio.Process);
             _networkService.Subscribe<InventoryPacket>(_inventory.Process);
             _networkService.Subscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
             _networkService.Subscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);
@@ -181,14 +199,14 @@ namespace Fodinae.Networking
             _networkService.Subscribe<ModalWindowPacket>(_windowProcessor.HandleModalWindow);
             _networkService.Subscribe<ShowClanPacket>(_clan.Process);
             _networkService.Subscribe<HideClanPacket>(_clan.Process);
-            _networkService.Subscribe<MissionInitPacket>(Mission.Process);
-            _networkService.Subscribe<MissionProgressPacket>(Mission.Process);
-            _networkService.Subscribe<DisconnectPacket>(Connection.Process);
-            _networkService.Subscribe<ReconnectPacket>(Connection.Process);
+            _networkService.Subscribe<MissionInitPacket>(_mission.Process);
+            _networkService.Subscribe<MissionProgressPacket>(_mission.Process);
+            _networkService.Subscribe<DisconnectPacket>(_connection.Process);
+            _networkService.Subscribe<ReconnectPacket>(_connection.Process);
             _networkService.Subscribe<AuthTokenPacket>(HandleAuthTokenPacket);
             _networkService.Subscribe<OpenURLPacket>(OpenURL.Process);
-            _networkService.Subscribe<ClientConfigPacket>(ClientConfig.Process);
-            _networkService.Subscribe<MissionArrowPacket>(MissionArrow.Process);
+            _networkService.Subscribe<ClientConfigPacket>(_clientConfig.Process);
+            _networkService.Subscribe<MissionArrowPacket>(_missionArrow.Process);
 
             _isSubscribed = true;
         }
@@ -202,23 +220,23 @@ namespace Fodinae.Networking
 
             if (_networkService != null)
             {
-                _networkService.Unsubscribe<WorldInitPacket>(WorldInit.Process);
-                _networkService.Unsubscribe<RobotInfoPacket>(RobotInfo.Process);
-                _networkService.Unsubscribe<PlayerInfoPacket>(PlayerInfo.Process);
-                _networkService.Unsubscribe<MovementSpeedPacket>(PlayerInfo.Process);
+                _networkService.Unsubscribe<WorldInitPacket>(_worldInit.Process);
+                _networkService.Unsubscribe<RobotInfoPacket>(_robotInfo.Process);
+                _networkService.Unsubscribe<PlayerInfoPacket>(_playerInfo.Process);
+                _networkService.Unsubscribe<MovementSpeedPacket>(_playerInfo.Process);
                 _networkService.Unsubscribe<OpenWindowPacket>(_windowProcessor.Process);
                 _networkService.Unsubscribe<CloseWindowPacket>(_windowProcessor.Process);
-                _networkService.Unsubscribe<RobotPositionPacket>(RobotPosition.Process);
-                _networkService.Unsubscribe<MapRegionPacket>(MapRegion.Process);
-                _networkService.Unsubscribe<PackPacket>(Pack.Process);
-                _networkService.Unsubscribe<RemovePackPacket>(Pack.Process);
+                _networkService.Unsubscribe<RobotPositionPacket>(_robotPosition.Process);
+                _networkService.Unsubscribe<MapRegionPacket>(_mapRegion.Process);
+                _networkService.Unsubscribe<PackPacket>(_pack.Process);
+                _networkService.Unsubscribe<RemovePackPacket>(_pack.Process);
                 _networkService.Unsubscribe<SkillProgressPacket>(_playerStats.Process);
                 _networkService.Unsubscribe<AutoMineStatePacket>(PlayerState.Process);
                 _networkService.Unsubscribe<AggressionStatePacket>(PlayerState.Process);
-                _networkService.Unsubscribe<ChatMessageListPacket>(Chat.Process);
-                _networkService.Unsubscribe<LocalChatMessagePacket>(Chat.Process);
-                _networkService.Unsubscribe<ChatMutePacket>(Chat.Process);
-                _networkService.Unsubscribe<ChatListPacket>(Chat.Process);
+                _networkService.Unsubscribe<ChatMessageListPacket>(_chat.Process);
+                _networkService.Unsubscribe<LocalChatMessagePacket>(_chat.Process);
+                _networkService.Unsubscribe<ChatMutePacket>(_chat.Process);
+                _networkService.Unsubscribe<ChatListPacket>(_chat.Process);
 
                 _networkService.Unsubscribe<LevelPacket>(_playerStats.Process);
                 _networkService.Unsubscribe<HealthPacket>(_playerStats.Process);
@@ -230,12 +248,12 @@ namespace Fodinae.Networking
                 _networkService.Unsubscribe<PingPacket>(_status.Process);
 
                 _networkService.Unsubscribe<OutdatedClientPacket>(_status.Process);
-                _networkService.Unsubscribe<AudioPacket>(Audio.Process);
+                _networkService.Unsubscribe<AudioPacket>(_audio.Process);
                 _networkService.Unsubscribe<InventoryPacket>(_inventory.Process);
                 _networkService.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
                 _networkService.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);
                 _networkService.Unsubscribe<DailyBonusStatePacket>(_playerStats.Process);
-                _networkService.Unsubscribe<TeleportPacket>(PlayerInfo.Process);
+                _networkService.Unsubscribe<TeleportPacket>(_playerInfo.Process);
                 _networkService.Unsubscribe<AddStatusLinePacket>(_status.Process);
                 _networkService.Unsubscribe<ClearStatusLinePacket>(_status.Process);
                 _networkService.Unsubscribe<ClearStatusPacket>(_status.Process);
@@ -243,14 +261,14 @@ namespace Fodinae.Networking
                 _networkService.Unsubscribe<ShowClanPacket>(_clan.Process);
                 _networkService.Unsubscribe<HideClanPacket>(_clan.Process);
                 _networkService.Unsubscribe<MaxDepthPacket>(_playerStats.Process);
-                _networkService.Unsubscribe<MissionInitPacket>(Mission.Process);
-                _networkService.Unsubscribe<MissionProgressPacket>(Mission.Process);
-                _networkService.Unsubscribe<DisconnectPacket>(Connection.Process);
-                _networkService.Unsubscribe<ReconnectPacket>(Connection.Process);
+                _networkService.Unsubscribe<MissionInitPacket>(_mission.Process);
+                _networkService.Unsubscribe<MissionProgressPacket>(_mission.Process);
+                _networkService.Unsubscribe<DisconnectPacket>(_connection.Process);
+                _networkService.Unsubscribe<ReconnectPacket>(_connection.Process);
                 _networkService.Unsubscribe<AuthTokenPacket>(HandleAuthTokenPacket);
                 _networkService.Unsubscribe<OpenURLPacket>(OpenURL.Process);
-                _networkService.Unsubscribe<ClientConfigPacket>(ClientConfig.Process);
-                _networkService.Unsubscribe<MissionArrowPacket>(MissionArrow.Process);
+                _networkService.Unsubscribe<ClientConfigPacket>(_clientConfig.Process);
+                _networkService.Unsubscribe<MissionArrowPacket>(_missionArrow.Process);
             }
 
             _isSubscribed = false;

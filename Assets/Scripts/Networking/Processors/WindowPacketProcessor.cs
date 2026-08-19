@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.UI;
 using Fodinae.UI.Binding;
@@ -22,9 +22,15 @@ namespace Fodinae.Networking.Processors
     /// </summary>
     public class WindowPacketProcessor : IPacketProcessor<OpenWindowPacket>, IPacketProcessor<CloseWindowPacket>, IInputBlocker
     {
+        private readonly ISessionContainer _session;
         private UIDocument _uiDocument = null!;
         private ModalWindowHandler _modalWindowHandler = null!;
         private readonly List<(string tag, VisualElement root, WindowBinding binding, List<VisualElement> clickableElements)> _openWindows = new();
+
+        public WindowPacketProcessor(ISessionContainer session)
+        {
+            _session = session;
+        }
 
         public bool HasOpenWindows => _openWindows.Count > 0;
         public string? TopWindowTag => _openWindows.Count > 0 ? _openWindows[^1].tag : null;
@@ -68,7 +74,7 @@ namespace Fodinae.Networking.Processors
             _uiDocument.rootVisualElement.Add(element);
 
 
-            var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
+            var uiInputManager = _session.TryResolve<UIInputManager>();
             if (uiInputManager != null)
             {
                 uiInputManager.PushModal(element);
@@ -96,7 +102,7 @@ namespace Fodinae.Networking.Processors
             var (_, root, binding, _) = _openWindows[^1];
             binding.Dispose();
 
-            var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
+            var uiInputManager = _session.TryResolve<UIInputManager>();
             if (uiInputManager != null)
             {
                 uiInputManager.PopModal(root);
@@ -155,7 +161,7 @@ namespace Fodinae.Networking.Processors
             var inputRoot = ClickContextResolver.ResolveRoot(clickedElement, windowRoot, clickContext);
             var inputValues = ClickContextResolver.CollectInputValues(inputRoot);
 
-            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
+            var networkService = _session.TryResolve<INetworkService>();
             networkService?.Send(new ElementClickPacket(windowTag, elementIndex, inputValues));
         }
 

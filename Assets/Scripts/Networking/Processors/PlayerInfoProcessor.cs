@@ -1,7 +1,7 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
@@ -16,15 +16,22 @@ namespace Fodinae.Networking.Processors
 {
     public class PlayerInfoProcessor : IPacketProcessor<PlayerInfoPacket>, IPacketProcessor<MovementSpeedPacket>, IPacketProcessor<TeleportPacket>
     {
+        private readonly ISessionContainer _session;
+
+        public PlayerInfoProcessor(ISessionContainer session)
+        {
+            _session = session;
+        }
+
         public void Process(PlayerInfoPacket packet)
         {
-            var rm = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
+            var rm = _session.TryResolve<RobotManager>();
             if (rm != null)
             {
                 rm.SetLocalPlayerBotId(packet.BotId);
             }
 
-            var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var s = _session.TryResolve<IPlayerStats>();
             if (s != null)
             {
                 s.SetNickname(packet.Nickname);
@@ -44,7 +51,7 @@ namespace Fodinae.Networking.Processors
 
         public void Process(MovementSpeedPacket packet)
         {
-            var map = Fodinae.Core.ServiceLocator.Resolve<IMapDataProvider>();
+            var map = _session.TryResolve<IMapDataProvider>();
             map?.UpdateMovementSpeeds(packet);
         }
 

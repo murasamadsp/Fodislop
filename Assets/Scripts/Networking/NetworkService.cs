@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking.Connection;
@@ -34,6 +34,8 @@ namespace Fodinae.Networking
 
         [Inject]
         private IConnectionService _connectionService = null!;
+        [Inject]
+        private ISessionContainer _session = null!;
         private IConnectionService? _subscribedConnection;
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
@@ -73,9 +75,9 @@ namespace Fodinae.Networking
         /// </summary>
         public void EnsureConnectionSubscription()
         {
-            if (ServiceLocator.IsInitialized)
+            if (_connectionService == null && _session != null)
             {
-                _connectionService = ServiceLocator.Resolve<IConnectionService>() ??
+                _connectionService = _session.TryResolve<IConnectionService>() ??
                     throw new InvalidOperationException(
                         "NetworkService requires IConnectionService in the active resolver.");
             }
@@ -152,7 +154,9 @@ namespace Fodinae.Networking
 
         public void Send(IRootClientPacket packet)
         {
-            var connectionService = Fodinae.Core.ServiceLocator.Resolve<IConnectionService>()!;
+            var connectionService = _connectionService ??
+                throw new InvalidOperationException(
+                    "NetworkService requires IConnectionService before sending.");
             var timestamp = (uint)DateTimeOffset.UtcNow.Ticks;
             connectionService.Send(new ClientPacket(timestamp, packet));
         }

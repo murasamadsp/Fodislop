@@ -1,6 +1,6 @@
 #nullable enable
 
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets;
@@ -17,9 +17,16 @@ namespace Fodinae.Networking.Processors
     /// </summary>
     public class RobotInfoProcessor : IPacketProcessor<RobotInfoPacket>
     {
+        private readonly ISessionContainer _session;
+
+        public RobotInfoProcessor(ISessionContainer session)
+        {
+            _session = session;
+        }
+
         public void Process(RobotInfoPacket packet)
         {
-            var mgr = ServiceLocator.Resolve<IRobotService>();
+            var mgr = _session.TryResolve<IRobotService>();
             var metadata = new RobotMetadata(
                 packet.PlayerId,
                 packet.ClanId,
