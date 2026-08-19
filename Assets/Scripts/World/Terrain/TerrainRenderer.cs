@@ -82,6 +82,13 @@ namespace Fodinae.World.Terrain
         private bool _needsRefresh = false;
         private bool _textureRefreshPending;
         private float _nextTextureRefreshTime;
+
+        // Дебаунс пересборки меша при приходе текстур. Раньше был жёсткий +1с после
+        // ПЕРВОЙ текстуры: все остальные (их десятки — по типу клетки) копились и
+        // применялись разом через секунду — мир стоял серым. Теперь таймер переустанавли-
+        // вается на КАЖДОМ приходе (см. OnTextureLoaded): меш пересобирается через этот
+        // интервал после затихания потока, батча приходы, но не задерживает отрисовку.
+        private const float TextureRefreshDebounceSeconds = 0.1f;
         private bool _useColorLod = false;
         private int _lastAtlasCount = -1;
         private bool _lightingBindingValidated;
@@ -244,14 +251,26 @@ namespace Fodinae.World.Terrain
 
         protected void Start()
         {
-            if (_mainCamera != null)
+            // При аддитивной загрузке MainGame Camera.main на момент Awake указывает на
+            // камеру меню (MenuSceneryCamera), которая ещё активна. Меш строится вокруг
+            // _mainCamera, поэтому привязываемся к активной камере СВОЕЙ сцены в первую
+            // очередь — иначе террейн считает границы по меню-камере до её выгрузки.
+            Camera? ownSceneCamera = null;
+            foreach (Camera cam in FindObjectsByType<Camera>(FindObjectsInactive.Include))
             {
-                return;
+                if (cam.isActiveAndEnabled && cam.gameObject.scene == gameObject.scene)
+                {
+                    ownSceneCamera = cam;
+                    break;
+                }
             }
 
-            _mainCamera = Camera.main ??
+            _mainCamera = ownSceneCamera ?? Camera.main ?? _mainCamera;
+            if (_mainCamera == null)
+            {
                 throw new InvalidOperationException(
                     "TerrainRenderer requires a tagged Main Camera.");
+            }
         }
 
         public void InitializeEditorPreview(IWorldDataStorage storage, MapManager mapManager, ITextureService textureService)
@@ -391,8 +410,12 @@ namespace Fodinae.World.Terrain
 
                 // Cell textures arrive independently. Rebuilding the complete
                 // viewport mesh for every arrival caused hundreds of native
-                // mesh uploads while the world asset set streamed in.
+                // mesh uploads while the world asset set streamed in — но рефреш
+                // не должен ждать секунду: таймер сдвигается на каждом приходе,
+                // и меш пересобирается через TextureRefreshDebounceSeconds после
+                // затихания потока текстур.
                 _textureRefreshPending = true;
+                _nextTextureRefreshTime = Time.unscaledTime + TextureRefreshDebounceSeconds;
             }
         }
 
@@ -519,7 +542,6 @@ namespace Fodinae.World.Terrain
             if (_textureRefreshPending && Time.unscaledTime >= _nextTextureRefreshTime)
             {
                 _textureRefreshPending = false;
-                _nextTextureRefreshTime = Time.unscaledTime + 1f;
                 _needsRefresh = true;
             }
 
@@ -541,6 +563,7 @@ namespace Fodinae.World.Terrain
                 throw new InvalidOperationException(
                     "TerrariaLightingEngine was not initialized by GameLifetimeScope.");
             }
+
             int effectiveViewportPadding = _viewportPadding;
             int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
                 TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
@@ -640,15 +663,13 @@ namespace Fodinae.World.Terrain
             if (terrainWasRebuilt)
             {
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
-                if (!_needsRefresh)
-                {
-                    // The lighting material field is rasterized from this
-                    // mesh. A streamed chunk can change occupancy at the
-                    // cache edge without changing the camera lighting
-                    // region, so every successful mesh rebuild must publish a
-                    // new geometry revision for normal/AO caches as well.
-                    _lightingGeometryRevision++;
-                }
+
+                // The lighting material field is rasterized from this mesh. A streamed
+                // chunk can change occupancy at the cache edge without changing the
+                // camera lighting region, so every successful mesh rebuild — including
+                // ones triggered only by _needsRefresh — must publish a new geometry
+                // revision for normal/AO caches as well.
+                _lightingGeometryRevision++;
 
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
@@ -663,16 +684,21 @@ namespace Fodinae.World.Terrain
             int lightingMinY = currentGridPos.y - lightingPadding;
             int lightingWidth = _meshWidth + (lightingPadding * 2);
             int lightingHeight = _meshHeight + (lightingPadding * 2);
-            lightingEngine.UpdateLighting(
-                lightingMinX,
-                lightingMinY,
-                lightingWidth,
-                lightingHeight,
-                _mainCamera,
-                _storage,
-                _mapManager);
-            ValidateLightingBinding();
+            if (_mainCamera != null && _mainCamera.orthographic)
+            {
+                lightingEngine.UpdateLighting(
+                    lightingMinX,
+                    lightingMinY,
+                    lightingWidth,
+                    lightingHeight,
+                    _mainCamera,
+                    _storage,
+                    _mapManager);
+                ValidateLightingBinding();
+            }
         }
+
+
 
         private void ValidateLightingBinding()
         {
@@ -726,13 +752,15 @@ namespace Fodinae.World.Terrain
                 return allocated;
             }
 
-            // Zoom changes continuously. Growing the mesh immediately at each
-            // 32-cell boundary turns one zoom gesture into several full CPU
-            // rebuilds. Keep the previous mesh while the viewport is moving
-            // and allocate once after the zoom settles.
+            // Growing must happen immediately: keeping the smaller mesh while
+            // zooming out leaves the newly-visible edges of the screen
+            // unrendered until the debounce below expires. Only shrinking is
+            // debounced — zoom changes continuously, and shrinking immediately
+            // at each 32-cell boundary would turn one zoom gesture into
+            // several full CPU rebuilds for no visible benefit.
             if (requested > current)
             {
-                return viewportSizeSettled ? allocated : current;
+                return allocated;
             }
 
             return viewportSizeSettled && current - requested >= DimensionAllocationQuantum
@@ -793,6 +821,7 @@ namespace Fodinae.World.Terrain
                     subMeshIndex,
                     materialFieldPass);
             }
+
             commandBuffer.EndSample("Fodinae.Terrain.RenderMaterialFields");
         }
 
@@ -913,6 +942,7 @@ namespace Fodinae.World.Terrain
                         _cellCache.PopulateFull(minX, minY, _storage, _mapManager, textureService, atlases);
                     }
                 }
+
                 FrameProfiler.TerrainCacheTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swCache) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 using (PrecalculateMarker.Auto())
@@ -939,6 +969,7 @@ namespace Fodinae.World.Terrain
                         _backgroundFloodFill.ComputeFull(this);
                     }
                 }
+
                 FrameProfiler.TerrainFloodFillTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swFlood) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -946,6 +977,7 @@ namespace Fodinae.World.Terrain
                 {
                     _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
                 }
+
                 FrameProfiler.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 if (_mesh != null)
@@ -968,31 +1000,32 @@ namespace Fodinae.World.Terrain
                             0,
                             UPLOAD_FLAGS);
                     }
+
                     FrameProfiler.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
-                        // The terrain is a regular viewport-sized grid. Scanning
-                        // every vertex after each rebuild is wasted CPU work and
-                        // becomes noticeable with the bounded terrain cache. Keep a
-                        // conservative local-space bound that also contains the
-                        // relief offsets and the two terrain layers.
-                        _mesh.bounds = new Bounds(
-                            new Vector3(_meshWidth * _cellSize * 0.5f, _meshHeight * _cellSize * 0.5f, 0f),
-                            new Vector3(
-                                (_meshWidth * _cellSize) + (_cellSize * 2f),
-                                (_meshHeight * _cellSize) + (_cellSize * 2f),
-                                2f));
-                        if ((_diagLogged & (1 << 8)) == 0)
-                        {
-                            string diagnostic =
-                                "[TerrainDiag] BuildFull: grid=(" +
-                                $"{_lastGridPos.x},{_lastGridPos.y}) " +
-                                $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
-                                $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} " +
-                                $"bounds={_mesh.bounds} transform={transform.position}";
-                            LogDiag(
-                                1 << 8,
-                                diagnostic);
-                        }
+                    // The terrain is a regular viewport-sized grid. Scanning
+                    // every vertex after each rebuild is wasted CPU work and
+                    // becomes noticeable with the bounded terrain cache. Keep a
+                    // conservative local-space bound that also contains the
+                    // relief offsets and the two terrain layers.
+                    _mesh.bounds = new Bounds(
+                        new Vector3(_meshWidth * _cellSize * 0.5f, _meshHeight * _cellSize * 0.5f, 0f),
+                        new Vector3(
+                            (_meshWidth * _cellSize) + (_cellSize * 2f),
+                            (_meshHeight * _cellSize) + (_cellSize * 2f),
+                            2f));
+                    if ((_diagLogged & (1 << 8)) == 0)
+                    {
+                        string diagnostic =
+                            "[TerrainDiag] BuildFull: grid=(" +
+                            $"{_lastGridPos.x},{_lastGridPos.y}) " +
+                            $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
+                            $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} " +
+                            $"bounds={_mesh.bounds} transform={transform.position}";
+                        LogDiag(
+                            1 << 8,
+                            diagnostic);
+                    }
 
                     for (int i = 0; i < atlases.Count; i++)
                     {

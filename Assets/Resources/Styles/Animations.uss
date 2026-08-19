@@ -1,0 +1,59 @@
+/* ═══════════════════════════════════════════════════════════
+   Animations.uss — Нативные переходы и анимации UI Toolkit
+   ═══════════════════════════════════════════════════════════ */
+
+/* Плавный отклик кнопок при наведении */
+.sci-fi-btn-gold,
+.sci-fi-btn-cyan,
+.sci-fi-btn-dark,
+.sci-fi-slot,
+.sci-fi-clickable {
+    transition: background-color 0.15s ease-out, border-color 0.15s ease-out, translate 0.15s ease-out, scale 0.15s ease-out;
+}
+
+.sci-fi-btn-gold:hover,
+.sci-fi-btn-cyan:hover,
+.sci-fi-clickable:hover {
+    translate: 0 -1px;
+}
+
+.sci-fi-btn-gold:active,
+.sci-fi-btn-cyan:active,
+.sci-fi-clickable:active {
+    translate: 0 1px;
+    scale: 0.98 0.98;
+}
+
+/* Модальные окна: плавное появление */
+.sci-fi-window-anim {
+    transition: opacity 0.2s ease-out, scale 0.2s ease-out;
+}
+
+.sci-fi-window-anim--hidden {
+    opacity: 0;
+    scale: 0.96 0.96;
+}
+
+.sci-fi-window-anim--shown {
+    opacity: 1;
+    scale: 1 1;
+}
+
+/* Слоты инвентаря */
+.sci-fi-slot {
+    background-color: rgba(14, 22, 32, 0.85);
+    border-width: 1px;
+    border-color: var(--scifi-border-subtle);
+    border-radius: 3px;
+}
+
+.sci-fi-slot:hover {
+    background-color: rgba(26, 40, 58, 0.95);
+    border-color: var(--scifi-border-tech);
+}
+
+.sci-fi-slot--selected {
+    border-color: var(--scifi-gold);
+    border-width: 2px;
+    background-color: rgba(242, 169, 0, 0.15);
+}

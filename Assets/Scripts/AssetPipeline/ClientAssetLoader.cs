@@ -402,6 +402,27 @@ namespace Fodinae
 
         private async void OnPacketReceived(ServerPacket obj)
         {
+            // Outer try-catch is mandatory: in an async void method, any exception
+            // that escapes all catch blocks is thrown on the SynchronizationContext
+            // and crashes Unity.  The inner catch propagates to the TaskCompletionSource
+            // for the caller, but if TrySetException returns false (TCS already
+            // completed), the exception would be unhandled without this guard.
+            try
+            {
+                await HandleAssetPacketAsync(obj);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during teardown or domain reload.
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
+        private async UniTask HandleAssetPacketAsync(ServerPacket obj)
+        {
             if (obj.Payload is not RuntimeAssetPacket assetPacket)
             {
                 return;

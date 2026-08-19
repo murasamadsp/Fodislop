@@ -74,13 +74,10 @@ namespace Fodinae.UI
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
                 _serverConfig == null || _inputBlocker == null)
             {
-                if (!Application.isPlaying)
-                {
-                    return;
-                }
-
-                throw new InvalidOperationException(
-                    "[GlobalChatUI] Required DI services and UIDocument must be initialized before building chat UI.");
+                // Не бросаем: DI-инъекция может прийти позже (PostStart/сборка scope после
+                // этого Start). Update ретраит TryInitialize — ждём готовности молча,
+                // иначе каждый кадр до инжекта будет сыпать исключениями.
+                return;
             }
 
             _initialized = true;
@@ -174,7 +171,9 @@ namespace Fodinae.UI
             if (Keyboard.current.enterKey.wasPressedThisFrame ||
                 Keyboard.current.numpadEnterKey.wasPressedThisFrame)
             {
-                if (!inputBlocked)
+                // IsInputBlocked теперь включает ChatInput.IsFocused, поэтому «не
+                // заблокировано» или «печатаем в чате» — разрешаем отправку.
+                if (!inputBlocked || ChatInput.IsFocused)
                 {
                     OnSendClicked();
                 }
@@ -466,11 +465,13 @@ namespace Fodinae.UI
                     .ToLocalTime()
                     .ToString("g");
             }
-            catch (ArgumentOutOfRangeException exception)
+            catch (ArgumentOutOfRangeException)
             {
-                throw new InvalidOperationException(
-                    "Chat mute packet contains an invalid expiry timestamp.",
-                    exception);
+                // Серверный ввод не должен ронять клиент: битый timestamp в пакете
+                // мута — это данные, а не контрактная ошибка. Отображаем как есть.
+                Debug.LogWarning(
+                    $"[GlobalChat] Mute packet contains invalid expiry timestamp: {unixMilliseconds}");
+                return unixMilliseconds.ToString();
             }
         }
 

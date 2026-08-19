@@ -61,7 +61,12 @@ namespace Fodinae.Networking.Processors
             element.style.top = new Length(50, LengthUnit.Percent);
             element.style.translate = new Translate(new Length(-50, LengthUnit.Percent), new Length(-50, LengthUnit.Percent));
 
+            element.AddToClassList("sci-fi-panel");
+            element.AddToClassList("sci-fi-panel--tech");
+            element.AddToClassList("sci-fi-window-anim");
+
             _uiDocument.rootVisualElement.Add(element);
+
 
             var uiInputManager = Fodinae.Core.ServiceLocator.Resolve<UIInputManager>();
             if (uiInputManager != null)
@@ -160,8 +165,19 @@ namespace Fodinae.Networking.Processors
 
             foreach (var (_, root, binding, _) in _openWindows)
             {
-                binding.Dispose();
-                _uiDocument.rootVisualElement.Remove(root);
+                try
+                {
+                    binding.Dispose();
+                    if (_uiDocument != null && _uiDocument.rootVisualElement != null)
+                    {
+                        _uiDocument.rootVisualElement.Remove(root);
+                    }
+                }
+                catch
+                {
+                    // Teardown can race with scene unload: the UIDocument panel may
+                    // already be destroyed when PacketHandler.OnDestroy runs.
+                }
             }
 
             _openWindows.Clear();

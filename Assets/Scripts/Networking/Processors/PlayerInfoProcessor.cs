@@ -21,7 +21,7 @@ namespace Fodinae.Networking.Processors
             var rm = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
             if (rm != null)
             {
-                rm.LocalPlayerBotId = packet.BotId;
+                rm.SetLocalPlayerBotId(packet.BotId);
             }
 
             var s = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();

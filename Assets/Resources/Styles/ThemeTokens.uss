@@ -1,0 +1,208 @@
+/* ═══════════════════════════════════════════════════════════
+   ThemeTokens.uss — Централизованные токены дизайна Fodinae
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+    /* ── Палитра глубокого космоса и шахты ── */
+    --scifi-void: #05080b;
+    --scifi-bg-dark: rgba(7, 12, 16, 0.94);
+    --scifi-bg-panel: rgba(14, 22, 32, 0.92);
+    --scifi-bg-card: rgba(20, 32, 46, 0.85);
+
+    /* ── Фирменные акценты ── */
+    --scifi-gold: #f2a900;
+    --scifi-gold-bright: #ffd043;
+    --scifi-gold-dim: rgba(242, 169, 0, 0.25);
+
+    --scifi-cyan: #26c6da;
+    --scifi-cyan-bright: #1ee6b5;
+    --scifi-cyan-dim: rgba(38, 198, 218, 0.2);
+
+    --scifi-red: #e74c3c;
+    --scifi-red-dim: rgba(231, 76, 60, 0.25);
+
+    --scifi-green: #2ecc71;
+    --scifi-green-dim: rgba(46, 204, 113, 0.25);
+
+    /* ── Тексты и границы ── */
+    --scifi-text-white: #ffffff;
+    --scifi-text-dim: #7e8e9f;
+    --scifi-text-muted: #4e5e70;
+
+    --scifi-border-subtle: rgba(255, 255, 255, 0.08);
+    --scifi-border-tech: rgba(38, 198, 218, 0.35);
+    --scifi-border-gold: rgba(242, 169, 0, 0.4);
+
+    /* ── Шрифтовые ассеты ── */
+    --font-heading: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    --font-body: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
+    --font-mono: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Базовые Sci-Fi Компоненты и Контейнеры
+   ═══════════════════════════════════════════════════════════ */
+
+/* Панель из темного карбона с технологичной границей */
+.sci-fi-panel {
+    background-color: var(--scifi-bg-panel);
+    border-width: 1px;
+    border-color: var(--scifi-border-subtle);
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.sci-fi-panel--tech {
+    border-color: var(--scifi-border-tech);
+    background-color: var(--scifi-bg-dark);
+}
+
+.sci-fi-panel--gold {
+    border-color: var(--scifi-border-gold);
+}
+
+/* Заголовок панели со статусной полосой */
+.sci-fi-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--scifi-border-subtle);
+}
+
+.sci-fi-header-title {
+    -unity-font-definition: var(--font-heading);
+    color: var(--scifi-text-white);
+    font-size: 13px;
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Sci-Fi Кнопки
+   ═══════════════════════════════════════════════════════════ */
+
+.sci-fi-btn-gold {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    padding: 0 16px;
+    background-color: var(--scifi-gold);
+    border-width: 1px;
+    border-color: var(--scifi-gold);
+    border-radius: 3px;
+    color: var(--scifi-void);
+    -unity-font-definition: var(--font-heading);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-btn-gold:hover {
+    background-color: var(--scifi-gold-bright);
+    border-color: var(--scifi-gold-bright);
+}
+
+.sci-fi-btn-cyan {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 14px;
+    background-color: var(--scifi-cyan-dim);
+    border-width: 1px;
+    border-color: var(--scifi-border-tech);
+    border-radius: 3px;
+    color: var(--scifi-cyan);
+    -unity-font-definition: var(--font-heading);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-btn-cyan:hover {
+    background-color: rgba(38, 198, 218, 0.35);
+    border-color: var(--scifi-cyan-bright);
+    color: var(--scifi-cyan-bright);
+}
+
+.sci-fi-btn-dark {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    padding: 0 12px;
+    background-color: rgba(14, 22, 32, 0.85);
+    border-width: 1px;
+    border-color: var(--scifi-border-subtle);
+    border-radius: 3px;
+    color: var(--scifi-text-dim);
+    -unity-font-definition: var(--font-body);
+    font-size: 12px;
+}
+
+.sci-fi-btn-dark:hover {
+    background-color: rgba(26, 40, 58, 0.95);
+    border-color: var(--scifi-border-tech);
+    color: var(--scifi-text-white);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Sci-Fi Бейджи и Индикаторы
+   ═══════════════════════════════════════════════════════════ */
+
+.sci-fi-badge-mono {
+    -unity-font-definition: var(--font-mono);
+    background-color: var(--scifi-cyan-dim);
+    color: var(--scifi-cyan);
+    border-width: 1px;
+    border-color: var(--scifi-border-tech);
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-badge-gold {
+    -unity-font-definition: var(--font-mono);
+    background-color: var(--scifi-gold-dim);
+    color: var(--scifi-gold);
+    border-width: 1px;
+    border-color: var(--scifi-border-gold);
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    -unity-font-style: bold;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Sci-Fi Прогресс-бары
+   ═══════════════════════════════════════════════════════════ */
+
+.sci-fi-bar-track {
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-width: 1px;
+    border-color: var(--scifi-border-subtle);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.sci-fi-bar-fill-hp {
+    height: 100%;
+    background-color: var(--scifi-green);
+    border-radius: 1px;
+}
+
+.sci-fi-bar-fill-cyan {
+    height: 100%;
+    background-color: var(--scifi-cyan);
+    border-radius: 1px;
+}
+
+.sci-fi-bar-fill-gold {
+    height: 100%;
+    background-color: var(--scifi-gold);
+    border-radius: 1px;
+}

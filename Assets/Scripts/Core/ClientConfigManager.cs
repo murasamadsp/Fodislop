@@ -189,6 +189,9 @@ namespace Fodinae.Core
                 EigengrauAnimationSpeed = shaders.EigengrauAnimationSpeed,
                 MotionBlurIntensity = shaders.MotionBlurIntensity,
                 MotionBlurMaxSamples = shaders.MotionBlurMaxSamples,
+                UseDummyConnection = true,
+                ServerHost = "127.0.0.1",
+                ServerPort = 7777,
             };
             Debug.Log("[ClientConfigManager] Applied explicit ProjectDefaults config values.");
         }
@@ -370,6 +373,13 @@ namespace Fodinae.Core
             ValidateFloat(config.EigengrauAnimationSpeed, 1f, 60f, nameof(config.EigengrauAnimationSpeed));
             ValidateFloat(config.MotionBlurIntensity, 0f, 1f, nameof(config.MotionBlurIntensity));
             ValidateInt(config.MotionBlurMaxSamples, 2, 32, nameof(config.MotionBlurMaxSamples));
+            if (string.IsNullOrWhiteSpace(config.ServerHost))
+            {
+                throw new InvalidDataException(
+                    "Client config value 'ServerHost' must be a non-empty host name or IP address.");
+            }
+
+            ValidateInt(config.ServerPort, 1, 65535, nameof(config.ServerPort));
         }
 
         private bool Migrate(ClientConfig config)
@@ -473,6 +483,18 @@ namespace Fodinae.Core
                 // with a standard preset.
                 config.GraphicsPreset = GraphicsPreset.Custom;
                 config.SchemaVersion = 9;
+                migrated = true;
+            }
+
+            if (config.SchemaVersion < 10)
+            {
+                // Schema 10 added explicit network transport settings. The
+                // offline stub stays the default so existing local setups keep
+                // working without a server; real networking is one flag away.
+                config.UseDummyConnection = true;
+                config.ServerHost = "127.0.0.1";
+                config.ServerPort = 7777;
+                config.SchemaVersion = 10;
                 migrated = true;
             }
 

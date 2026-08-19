@@ -19,6 +19,8 @@ namespace Fodinae.Player
         private UIDocument[] _uiDocuments = [];
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
+        private UIDocument? _injectedUiDoc;
+        [Inject]
         private IMapDataProvider _mapManager = null!;
         [Inject]
         private INetworkService _networkService = null!;
@@ -28,7 +30,6 @@ namespace Fodinae.Player
         protected void Awake()
         {
             _mainCamera = Camera.main;
-            RefreshUiDocuments();
             if (Keyboard.current != null)
             {
                 _cachedAllKeys = Keyboard.current.allKeys;
@@ -100,26 +101,45 @@ namespace Fodinae.Player
         // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
         private bool IsPointerOverUI(Vector2 mousePos)
         {
+            var doc = _injectedUiDoc;
+            if (doc != null && doc.isActiveAndEnabled)
+            {
+                var root = doc.rootVisualElement;
+                if (root?.panel != null)
+                {
+                    // ScreenToPanel учитывает масштаб панели (ScaleWithScreenSize); ручной
+                    // флип Y без учёта масштаба мажет далеко от верхнего левого угла —
+                    // клики по UI внизу экрана проваливались в мир и двигали робота.
+                    var panelPos = RuntimePanelUtils.ScreenToPanel(root.panel, mousePos);
+                    var picked = root.panel.Pick(panelPos);
+                    if (picked != null && picked != root && picked is not TemplateContainer)
+                    {
+                        return true;
+                    }
+                }
+            }
+
             if (_uiDocuments.Length == 0 || !HasLiveUiDocument())
             {
                 RefreshUiDocuments();
             }
 
-            foreach (UIDocument doc in _uiDocuments)
+            foreach (UIDocument candidate in _uiDocuments)
             {
-                if (doc == null || !doc.isActiveAndEnabled)
+                if (candidate == null || !candidate.isActiveAndEnabled || candidate == doc)
                 {
                     continue;
                 }
 
-                var root = doc.rootVisualElement;
+                var root = candidate.rootVisualElement;
                 if (root?.panel == null)
                 {
                     continue;
                 }
 
-                // Input System gives bottom-left origin; UI Toolkit panels expect top-left.
-                var panelPos = new Vector2(mousePos.x, Screen.height - mousePos.y);
+                // ScreenToPanel переводит экранные координаты (низ-лево, как в Input
+                // System) в координаты панели с учётом её масштаба.
+                var panelPos = RuntimePanelUtils.ScreenToPanel(root.panel, mousePos);
                 var picked = root.panel.Pick(panelPos);
                 if (picked != null && picked != root && picked is not TemplateContainer)
                 {

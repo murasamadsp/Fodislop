@@ -18,6 +18,7 @@ namespace Fodinae.Player.Interfaces
         bool WantsToBuildWhite { get; }
         bool IsShiftPressed { get; }
         bool IsCtrlPressed { get; }
+        bool IsGamepadActive { get; }
         void SetMovementInput(Vector2 input);
     }
 }

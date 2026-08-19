@@ -2,6 +2,7 @@
 
 using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Backend;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
@@ -32,7 +33,12 @@ namespace Fodinae.Core
             Instance = this;
             DontDestroyOnLoad(gameObject);
             base.Awake();
+            if (Container != null)
+            {
+                Container.Resolve<ISessionContainer>().Set(Container);
+            }
         }
+
 
         protected void Start()
         {
@@ -72,6 +78,7 @@ namespace Fodinae.Core
             // MainGame's own child scope is gone with it; restore ServiceLocator to Bootstrap's
             // container so the fresh MainMenu instance (and anything else) can resolve again.
             ServiceLocator.Initialize(Container);
+            Container.Resolve<ISessionContainer>().Set(Container);
 
             await EnsureMainMenuLoadedAsync();
         }
@@ -80,6 +87,8 @@ namespace Fodinae.Core
         {
             builder.RegisterInstance(ProjectDefaultsLoader.LoadRequired());
             builder.RegisterInstance(GraphicsQualityProfileLoader.LoadRequired());
+
+            builder.Register<SessionContainer>(Lifetime.Singleton).AsImplementedInterfaces();
 
             RegisterManager<ConnectionManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<NetworkService>(builder).AsImplementedInterfaces().AsSelf();
@@ -91,7 +100,17 @@ namespace Fodinae.Core
         private RegistrationBuilder RegisterManager<T>(IContainerBuilder builder)
             where T : MonoBehaviour
         {
-            var existing = FindAnyObjectByType<T>(FindObjectsInactive.Include);
+            Scene ownScene = gameObject.scene;
+            T? existing = null;
+            foreach (T candidate in FindObjectsByType<T>(FindObjectsInactive.Include))
+            {
+                if (candidate.gameObject.scene == ownScene)
+                {
+                    existing = candidate;
+                    break;
+                }
+            }
+
             if (existing != null)
             {
                 return builder.RegisterComponent(existing);

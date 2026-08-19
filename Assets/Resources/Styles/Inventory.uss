@@ -1,125 +1,74 @@
 /* ═══════════════════════════════════════════════════════════
-   Inventory — стили инвентаря
+   Inventory & Hotbar — системные стили инвентаря Fodinae
    ═══════════════════════════════════════════════════════════ */
 
-.inventory-root {
+/* ─── Полный инвентарь (Overlay & Центрирование) ─── */
+
+.inv-full-panel {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    translate: -50% -50%;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
-    border-width: var(--panel-border-width);
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.6);
+    picking-mode: position;
+}
+
+.inv-full-bg {
+    background-color: rgba(14, 18, 26, 0.95);
+    border-width: 1px;
+    border-color: rgba(80, 140, 200, 0.5);
+    border-radius: 6px;
+    padding: 20px;
+    flex-direction: column;
+    align-items: center;
+    min-width: 560px;
+}
+
+.inv-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-width: 1px;
+    border-color: rgba(80, 140, 200, 0.3);
     border-radius: 4px;
-    padding: var(--panel-padding);
+    padding: 0;
+    justify-content: center;
+    align-items: center;
 }
 
-.inventory-grid {
-    flex-wrap: wrap;
-    width: 540px;
+.inv-close-btn:hover {
+    background-color: rgba(180, 40, 40, 0.8);
+    border-color: rgba(255, 80, 80, 0.8);
 }
 
-.inventory-cell {
-    width: var(--cell-size);
-    height: var(--cell-size);
-    background-color: rgba(38, 38, 38, 0.8);
-    border-color: var(--btn-border);
-    border-width: 1px;
-    border-radius: 3px;
-    margin: 5px;
+.inv-close-label {
+    font-size: 16px;
+    color: rgb(200, 200, 200);
     -unity-text-align: middle-center;
+    align-self: center;
+    justify-content: center;
 }
 
-.inventory-cell:hover {
-    border-color: var(--color-accent);
+.inv-title {
+    font-size: 16px;
+    -unity-font-style: bold;
+    color: rgb(220, 235, 255);
+    margin-bottom: 12px;
+    align-self: flex-start;
 }
 
-.inventory-cell.selected {
-    border-color: var(--color-accent);
-    background-color: rgba(178, 166, 128, 0.2);
-}
-
-.inventory-cell-icon {
-    width: 36px;
-    height: 36px;
-}
-
-.inventory-cell-count {
-    position: absolute;
-    bottom: 2px;
-    right: 4px;
-    font-size: 10px;
-    color: var(--color-text);
-}
-
-.hotbar-root {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    translate: -50% 0;
-    flex-direction: row;
-}
-
-.hotbar-cell {
-    width: var(--cell-size);
-    height: var(--cell-size);
-    background-color: rgba(38, 38, 38, 0.85);
-    border-color: var(--btn-border);
-    border-width: 1px;
-    border-radius: 3px;
-    margin: 2px;
-    -unity-text-align: middle-center;
-}
-
-.hotbar-cell.selected {
-    border-color: var(--color-accent);
-    background-color: rgba(178, 166, 128, 0.3);
-}
-
-.inventory-btn {
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    background-color: var(--btn-bg);
-    border-color: var(--btn-border);
-    border-width: 2px;
-    border-radius: 3px;
-    padding: 8px 16px;
-    font-size: 13px;
-    color: var(--color-text);
-    -unity-text-align: middle-center;
-}
-
-.inventory-btn:hover {
-    background-color: var(--btn-hover);
-}
-
-.inventory-hint {
-    position: absolute;
-    bottom: 55px;
-    right: 10px;
-    font-size: 11px;
-    color: var(--color-text-dim);
-    -unity-text-align: middle-right;
-}
-
-.inventory-context-menu {
-    position: absolute;
-    background-color: rgba(30, 30, 30, 0.95);
-    border-color: var(--color-panel-border);
-    border-width: 1px;
-    padding: 4px;
-    min-width: 150px;
-}
-
-.inventory-context-item {
-    padding: 6px 12px;
-    font-size: 13px;
-    color: var(--color-text);
-}
-
-.inventory-context-item:hover {
-    background-color: var(--btn-hover);
+.inv-separator {
+    height: 1px;
+    background-color: rgba(80, 140, 200, 0.3);
+    margin-top: 12px;
+    margin-bottom: 12px;
+    align-self: center;
 }
 
 /* ─── Сетка и ячейки ─── */
@@ -138,20 +87,27 @@
     height: 50px;
     justify-content: center;
     align-items: center;
-    margin-right: 10px;
-    margin-bottom: 10px;
-    background-color: rgb(38, 38, 38);
-    border-width: 2px;
-    border-color: rgb(102, 102, 102);
+    margin: 3px;
+    background-color: rgba(20, 26, 38, 0.85);
+    border-width: 1px;
+    border-color: rgba(80, 140, 200, 0.4);
+    border-radius: 4px;
+    picking-mode: position;
+}
+
+.inv-cell:hover {
+    border-color: rgba(80, 180, 255, 0.9);
+    background-color: rgba(30, 42, 62, 0.9);
 }
 
 .inv-cell--selected {
-    border-width: 3px;
+    border-width: 2px;
     border-color: rgb(255, 214, 0);
+    background-color: rgba(60, 50, 20, 0.4);
 }
 
 .inv-cell--highlight {
-    background-color: rgb(89, 89, 89);
+    background-color: rgba(50, 70, 100, 0.8);
 }
 
 .inv-icon {
@@ -165,8 +121,9 @@
     position: absolute;
     right: 3px;
     bottom: 2px;
-    font-size: 12px;
+    font-size: 11px;
     color: white;
+    -unity-font-style: bold;
 }
 
 .inv-floating {
@@ -177,83 +134,36 @@
     opacity: 0.8;
 }
 
-/* ─── Кнопка инвентаря ─── */
+/* ─── Хотбар ─── */
+
+.inv-hotbar {
+    position: absolute;
+    bottom: 16px;
+    left: 0;
+    right: 0;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    picking-mode: ignore;
+}
 
 .inv-button {
     width: 50px;
     height: 50px;
-    margin-bottom: 10px;
-    background-color: rgb(178, 166, 128);
-    border-width: 2px;
-    border-color: rgb(102, 102, 102);
+    margin: 3px;
+    background-color: rgba(30, 50, 75, 0.85);
+    border-width: 1px;
+    border-color: rgba(80, 180, 255, 0.5);
+    border-radius: 4px;
     padding: 0;
+    picking-mode: position;
+    justify-content: center;
+    align-items: center;
 }
 
 .inv-button:hover {
-    background-color: rgb(204, 191, 153);
-}
-
-/* ─── Хотбар и полная панель ─── */
-
-.inv-hotbar {
-    position: absolute;
-    bottom: 10px;
-    flex-direction: row;
-    align-items: center;
-}
-
-.inv-full-panel {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    justify-content: center;
-    align-items: center;
-}
-
-.inv-full-bg {
-    background-color: rgba(20, 20, 20, 0.85);
-    border-width: 4px;
-    border-color: rgb(89, 89, 89);
-    padding: 20px;
-    flex-direction: column;
-    align-items: center;
-}
-
-.inv-close-btn {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 24px;
-    height: 24px;
-    background-color: rgba(0, 0, 0, 0);
-    border-width: 0;
-    padding: 0;
-}
-
-.inv-close-label {
-    font-size: 20px;
-    color: rgb(178, 178, 178);
-    -unity-text-align: middle-center;
-    align-self: center;
-    justify-content: center;
-    flex-grow: 1;
-}
-
-.inv-title {
-    font-size: 18px;
-    -unity-font-style: bold;
-    color: white;
-    margin-bottom: 15px;
-    align-self: flex-start;
-}
-
-.inv-separator {
-    height: 2px;
-    background-color: rgb(89, 89, 89);
-    margin-top: 15px;
-    margin-bottom: 15px;
+    background-color: rgba(50, 85, 130, 0.95);
+    border-color: rgba(100, 210, 255, 0.9);
 }
 
 /* ─── Тултип выбранного предмета ─── */
@@ -266,19 +176,21 @@
     height: 36px;
     flex-direction: row;
     justify-content: center;
+    picking-mode: ignore;
 }
 
 .inv-tooltip-bg {
     flex-direction: row;
     align-items: center;
-    background-color: rgba(20, 20, 20, 0.9);
-    border-width: 2px;
-    border-color: rgb(89, 89, 89);
-    padding: 4px 8px;
+    background-color: rgba(14, 18, 26, 0.95);
+    border-width: 1px;
+    border-color: rgba(80, 140, 200, 0.5);
+    border-radius: 4px;
+    padding: 6px 12px;
 }
 
 .inv-tooltip-name {
-    font-size: 14px;
+    font-size: 13px;
     -unity-font-style: bold;
     color: rgb(255, 214, 0);
     margin-right: 10px;
@@ -286,31 +198,32 @@
 
 .inv-tooltip-desc {
     font-size: 12px;
-    color: white;
+    color: rgb(210, 225, 240);
 }
 
 /* ─── Контекстное меню ─── */
 
 .inv-context-menu {
     position: absolute;
-    background-color: rgba(31, 31, 31, 0.95);
+    background-color: rgba(14, 18, 26, 0.95);
     border-width: 1px;
-    border-color: rgb(89, 89, 89);
+    border-color: rgba(80, 140, 200, 0.5);
+    border-radius: 4px;
     padding: 4px 0;
     flex-direction: column;
-    min-width: 160px;
+    min-width: 150px;
 }
 
 .inv-context-btn {
     background-color: rgba(0, 0, 0, 0);
     border-width: 0;
     padding: 6px 12px;
-    color: white;
+    color: rgb(220, 235, 255);
     font-size: 13px;
     -unity-text-align: middle-left;
     min-height: 28px;
 }
 
 .inv-context-btn:hover {
-    background-color: rgb(64, 64, 89);
+    background-color: rgba(50, 85, 130, 0.8);
 }

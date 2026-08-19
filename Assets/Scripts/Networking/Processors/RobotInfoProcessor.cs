@@ -20,7 +20,13 @@ namespace Fodinae.Networking.Processors
         public void Process(RobotInfoPacket packet)
         {
             var mgr = ServiceLocator.Resolve<IRobotService>();
-            mgr?.UpdateRobotMetadata(packet.BotId, packet.PlayerId, packet.ClanId, packet.Name, packet.Skin, packet.Tail);
+            var metadata = new RobotMetadata(
+                packet.PlayerId,
+                packet.ClanId,
+                packet.Name,
+                packet.Skin,
+                packet.Tail);
+            mgr?.UpdateRobotMetadata(packet.BotId, metadata);
         }
     }
 }

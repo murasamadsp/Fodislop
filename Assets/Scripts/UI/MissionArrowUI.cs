@@ -48,8 +48,10 @@ namespace Fodinae.UI
 
             if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
             {
-                throw new InvalidOperationException(
-                    "[MissionArrowUI] Required DI services and UIDocument must be initialized before building the arrow.");
+                // Не бросаем: инъекция может завершиться после этого Start (PostStart).
+                // Update ретраит TryInitialize — ждём готовности молча, иначе каждый
+                // кадр до инжекта будет сыпать исключениями.
+                return;
             }
 
             _camera = Camera.main;
@@ -58,9 +60,10 @@ namespace Fodinae.UI
             _arrow.name = "MissionArrow";
             _arrow.AddToClassList("mission-arrow");
 
-            // Видимость — рантайм-состояние
+            // Видимость — рантайм-состояние. Вставляем в индекс 0: метка не должна
+            // перекрывать текст UI (раньше добавлялась последней — рисовалась поверх).
             _arrow.style.display = DisplayStyle.None;
-            _doc.rootVisualElement.Add(_arrow);
+            _doc.rootVisualElement.Insert(0, _arrow);
 
             PlayerStatsModel stats = _playerStats;
             if (stats != null)

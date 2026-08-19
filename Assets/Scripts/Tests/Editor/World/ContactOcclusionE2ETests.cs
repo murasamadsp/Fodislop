@@ -15,6 +15,7 @@ namespace Fodinae.Tests.World
         [Test]
         public void ContactOcclusionKernel_IsAvailable()
         {
+            RequireComputeShaders();
             ComputeShader shader = Resources.Load<ComputeShader>(
                 "Shaders/Lighting/WorldLighting");
             Assert.That(shader, Is.Not.Null);
@@ -24,6 +25,7 @@ namespace Fodinae.Tests.World
         [Test]
         public void ContactOcclusionKernel_UsesEightByEightThreads()
         {
+            RequireComputeShaders();
             ComputeShader shader = Resources.Load<ComputeShader>(
                 "Shaders/Lighting/WorldLighting");
             Assert.That(shader, Is.Not.Null);
@@ -164,6 +166,16 @@ namespace Fodinae.Tests.World
                     geometryOrRegionChanged: true,
                     ambientOcclusionSettingsChanged: true),
                 Is.False);
+        }
+
+        private static void RequireComputeShaders()
+        {
+            // В batch/-nographics (в т.ч. CI) compute shaders недоступны —
+            // ядро не компилируется, и HasKernel/FindKernel дают false/exception.
+            if (!SystemInfo.supportsComputeShaders)
+            {
+                Assert.Ignore("Contact AO GPU tests require compute shaders (unavailable in batch/-nographics mode).");
+            }
         }
 
         private static float[] RunContactOcclusion(

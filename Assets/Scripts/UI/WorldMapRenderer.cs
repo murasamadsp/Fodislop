@@ -400,9 +400,22 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (_canvas != null)
+            {
+                Rect canvasRect = _canvas.pixelRect;
+                int curW = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : Screen.width;
+                int curH = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : Screen.height;
+                if (curW > 0 && curH > 0 && (curW != _texWidth || curH != _texHeight))
+                {
+                    InitTexture();
+                    _renderRequested = true;
+                }
+            }
+
             HandleDrag();
             HandleFollowPlayer();
             HandleQueuedRender();
+
 
             _playerBlinkTimer += Time.deltaTime;
             if (_playerBlinkTimer >= 0.5f)
@@ -507,23 +520,20 @@ namespace Fodinae.UI
 
         private void InitTexture()
         {
-            const int BASE_RES = 512;
             Canvas canvas = _canvas ?? throw new InvalidOperationException(
                 "[WorldMapRenderer] Canvas must be created before the map texture.");
             Canvas.ForceUpdateCanvases();
             Rect canvasRect = canvas.pixelRect;
-            if (canvasRect.width <= 0f || canvasRect.height <= 0f)
-            {
-                throw new InvalidOperationException(
-                    $"[WorldMapRenderer] Canvas has invalid layout {canvasRect.width}x{canvasRect.height}.");
-            }
+            int width = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : (Screen.width > 0 ? Screen.width : 1920);
+            int height = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : (Screen.height > 0 ? Screen.height : 1080);
 
-            _texHeight = BASE_RES;
-            int canvasHeight = Mathf.RoundToInt(canvasRect.height);
-            int canvasWidth = Mathf.RoundToInt(canvasRect.width);
-            _texWidth = Mathf.Max(
-                1,
-                Mathf.RoundToInt(BASE_RES * ((float)canvasWidth / canvasHeight)));
+            _texWidth = Mathf.Max(1, width);
+            _texHeight = Mathf.Max(1, height);
+
+            if (_mapTexture != null)
+            {
+                Destroy(_mapTexture);
+            }
 
             // This texture is categorical map data: one texel represents one
             // sampled world cell. Bilinear filtering fabricates blended terrain
@@ -535,11 +545,16 @@ namespace Fodinae.UI
                 RuntimeTextureColorSpace.Srgb,
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
+
+            _pixelBuffer = new Color32[_texWidth * _texHeight];
+
             if (_rawImage != null)
             {
                 _rawImage.texture = _mapTexture;
             }
         }
+
+
 
         private void HandleDrag()
         {

@@ -238,6 +238,7 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 _mainCamera = Camera.main;
             }
+
             var mainCam = _mainCamera;
             if (mainCam != null)
             {
@@ -246,8 +247,20 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_volume == null)
             {
-                _volume = FindAnyObjectByType<Volume>(FindObjectsInactive.Include);
+                foreach (Volume vol in FindObjectsByType<Volume>(FindObjectsInactive.Include))
+                {
+                    if (vol.profile != null &&
+                        !vol.profile.name.Contains("MenuScenery", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _volume = vol;
+                        break;
+                    }
+                }
+
+
+                _volume ??= FindAnyObjectByType<Volume>(FindObjectsInactive.Include);
             }
+
 
             if (_volume == null)
             {
@@ -369,6 +382,7 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 _mainCamera = Camera.main;
             }
+
             Camera? mainCamera = _configuredMainCamera;
             if (mainCamera == null)
             {
@@ -501,13 +515,18 @@ namespace Fodinae.Rendering.PostProcessing
         {
             if (!profile.TryGet(out target) || target == null)
             {
-                throw new InvalidOperationException(
-                    $"Post-process VolumeProfile '{profile.name}' is missing " +
-                    $"the required '{typeof(T).Name}' component.");
+                target = profile.Add<T>(overrides: true);
+                if (target == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Post-process VolumeProfile '{profile.name}' is missing " +
+                        $"the required '{typeof(T).Name}' component and could not create it.");
+                }
             }
 
             EnableOverrides(target);
         }
+
 
         private static void ValidateProfileComponents(VolumeProfile profile)
         {

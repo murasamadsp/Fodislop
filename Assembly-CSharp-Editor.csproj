@@ -53,23 +53,43 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/Editor/CaptureMenuScenery.cs" />
+    <Compile Include="Assets/Editor/DumpShaderErrors.cs" />
+    <Compile Include="Assets/Editor/BuildPlanetMesh.cs" />
+    <Compile Include="Assets/Editor/BuildMenuSceneryRig.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/ClanProcessorTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalizationServiceTests.cs" />
+    <Compile Include="Assets/Editor/BuildSettingsFix.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/TileBitmaskConverterTests.cs" />
-    <Compile Include="Assets/Editor/ProjectDefaultsBuildValidator.cs" />
-    <Compile Include="Assets/Scripts/Tests/Editor/World/ContactOcclusionE2ETests.cs" />
-    <Compile Include="Assets/Editor/UnityRenderLayerValidator.cs" />
-    <Compile Include="Assets/Editor/CsProjFix.cs" />
-    <Compile Include="Assets/Scripts/Editor/TerrariaLightingEngineEditor.cs" />
-    <Compile Include="Assets/Editor/ConfigureGraphicsQualityProfile.cs" />
-    <Compile Include="Assets/Editor/FmodBankBuilder.cs" />
-    <Compile Include="Assets/Editor/BuildScript.cs" />
     <Compile Include="Assets/Editor/MapbConverter.cs" />
+    <Compile Include="Assets/Editor/TempSaveBootstrapScene.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/PlayerStatsProcessorTests.cs" />
+    <Compile Include="Assets/Editor/ArtCapturePaths.cs" />
+    <Compile Include="Assets/Editor/ProjectDefaultsBuildValidator.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/ReconnectBackoffTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/World/ContactOcclusionE2ETests.cs" />
     <Compile Include="Assets/Scripts/Editor/LightingEditModeTestRunner.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/CoordinateUtilsTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/StatusProcessorTests.cs" />
+    <Compile Include="Assets/Editor/UnityRenderLayerValidator.cs" />
+    <Compile Include="Assets/Editor/CaptureGameView.cs" />
     <Compile Include="Assets/Editor/PixelArtTextureImportPolicy.cs" />
+    <Compile Include="Assets/Editor/CsProjFix.cs" />
+    <Compile Include="Assets/Scripts/Editor/TerrariaLightingEngineEditor.cs" />
+    <Compile Include="Assets/Editor/PSOCollectionTool.cs" />
+    <Compile Include="Assets/Editor/ConfigureGraphicsQualityProfile.cs" />
+    <Compile Include="Assets/Editor/GeneratePlanetSurfaceTextures.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/ConnectionTransportConfigTests.cs" />
+    <Compile Include="Assets/Editor/FmodBankBuilder.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/InventoryModelTests.cs" />
+    <Compile Include="Assets/Editor/GenerateMainMenuArt.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementBoundaryTests.cs" />
     <Compile Include="Assets/Scripts/Editor/InjectValidator.cs" />
+    <Compile Include="Assets/Editor/BuildScript.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/World/WorldLayerRleTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/PlayerStatsModelTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/InventoryProcessorTests.cs" />
+    <Compile Include="Assets/Editor/GenerateFontAssets.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">
@@ -1296,16 +1316,8 @@
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.Common.Path.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Common.Path.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.2D.Sprite.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.2D.Sprite.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.InternalAPIEngineBridge.001">
-      <HintPath>Library/ScriptAssemblies/Unity.InternalAPIEngineBridge.001.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.UI.Analytics">
@@ -1316,10 +1328,6 @@
       <HintPath>Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="PsdPlugin">
-      <HintPath>Library/ScriptAssemblies/PsdPlugin.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.Rendering.LightTransport.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.Rendering.LightTransport.Editor.dll</HintPath>
       <Private>False</Private>
@@ -1328,20 +1336,8 @@
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.ShaderLibrary.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.IK.Runtime">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.IK.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="FMODUnity">
       <HintPath>Library/ScriptAssemblies/FMODUnity.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Animation.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Animation.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.InternalAPIEditorBridge.001">
-      <HintPath>Library/ScriptAssemblies/Unity.InternalAPIEditorBridge.001.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.RenderPipelines.Universal.2D.Editor.Overrides">
@@ -1352,24 +1348,12 @@
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.Common.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Common.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Timeline">
-      <HintPath>Library/ScriptAssemblies/Unity.Timeline.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.PathTracing.Runtime">
       <HintPath>Library/ScriptAssemblies/Unity.PathTracing.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.EditorCoroutines.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.EditorCoroutines.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Animation.Runtime">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Animation.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.RenderPipelines.Core.Runtime.Shared">
@@ -1404,10 +1388,6 @@
       <HintPath>Library/ScriptAssemblies/Unity.UnifiedRayTracing.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.Aseprite.Common">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Aseprite.Common.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="FMODUnityResonanceEditor">
       <HintPath>Library/ScriptAssemblies/FMODUnityResonanceEditor.dll</HintPath>
       <Private>False</Private>
@@ -1416,16 +1396,8 @@
       <HintPath>Library/ScriptAssemblies/Unity.Rider.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.Aseprite.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Aseprite.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.InternalAPIEditorBridge.ShaderGraph.Editor">
       <HintPath>Library/ScriptAssemblies/Unity.InternalAPIEditorBridge.ShaderGraph.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Psdimporter.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Psdimporter.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary">
@@ -1444,22 +1416,6 @@
       <HintPath>Library/ScriptAssemblies/Unity.TextMeshPro.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.Tilemap.Extras.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Tilemap.Extras.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Tilemap.Extras">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Tilemap.Extras.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.IK.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.IK.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.SpriteShape.Runtime">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.SpriteShape.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="FMODUnityResonance">
       <HintPath>Library/ScriptAssemblies/FMODUnityResonance.dll</HintPath>
       <Private>False</Private>
@@ -1468,16 +1424,8 @@
       <HintPath>Library/ScriptAssemblies/Unity.VisualStudio.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Unity.2D.Tilemap.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Unity.SurfaceCache.Runtime">
       <HintPath>Library/ScriptAssemblies/Unity.SurfaceCache.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.Common.Runtime">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.Common.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.Collections">
@@ -1490,10 +1438,6 @@
     </Reference>
     <Reference Include="Unity.RenderPipelines.GPUDriven.Runtime">
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.GPUDriven.Runtime.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.Timeline.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="MinesServer.Networking.Connection.Client">
@@ -1558,10 +1502,6 @@
     </Reference>
     <Reference Include="Unity.RenderPipelines.Core.Editor.Shared">
       <HintPath>Library/ScriptAssemblies/Unity.RenderPipelines.Core.Editor.Shared.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Unity.2D.SpriteShape.Editor">
-      <HintPath>Library/ScriptAssemblies/Unity.2D.SpriteShape.Editor.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.InputSystem">

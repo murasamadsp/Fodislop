@@ -2,12 +2,15 @@
 
 using System;
 using Fodinae.Audio.Backend;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Networking.Connection.Client;
+using Fodinae.Networking.Processors;
+using Fodinae.Player;
 using Fodinae.Player.Logic;
 using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
@@ -20,9 +23,8 @@ using Fodinae.UI.HUD.Player.View;
 using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
+using global::Fodinae.Core.Localization;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
@@ -33,19 +35,19 @@ namespace Fodinae.Core
     [DefaultExecutionOrder(-20000)]
     public class GameLifetimeScope : LifetimeScope
     {
+        private Scene _ownScene;
+
         protected override void Configure(IContainerBuilder builder)
         {
-            EnsureRuntimeUiInput();
-
-            Scene ownScene = gameObject.scene;
+            _ownScene = gameObject.scene;
 
             // Additive scene loads don't switch the active scene, and managers not already
-            // present in ownScene get created via RegisterComponentOnNewGameObject — Unity
-            // places new GameObjects into whatever scene is active. ownScene isn't fully
+            // present in _ownScene get created via RegisterComponentOnNewGameObject — Unity
+            // places new GameObjects into whatever scene is active. _ownScene isn't fully
             // loaded yet at this point (Configure runs as part of the load itself, so
             // SceneManager.SetActiveScene would throw here); GameBootstrap.PostStart applies
             // it once the scene is actually loaded and managers start getting resolved.
-            builder.RegisterInstance(ownScene);
+            builder.RegisterInstance(_ownScene);
 
             // IProjectDefaults/GraphicsQualityProfile are registered by BootstrapLifetimeScope
             // (parent scope) — ClientConfigManager, now Bootstrap-tier, injects them, and child
@@ -55,7 +57,7 @@ namespace Fodinae.Core
             foreach (UIDocument candidate in FindObjectsByType<UIDocument>(
                 FindObjectsInactive.Include))
             {
-                if (candidate.gameObject.scene == ownScene)
+                if (candidate.gameObject.scene == _ownScene)
                 {
                     uiDocument = candidate;
                     break;
@@ -74,6 +76,7 @@ namespace Fodinae.Core
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
 
             builder.RegisterBuildCallback(_ => ServiceLocator.Initialize(_));
+            builder.RegisterBuildCallback(container => container.Resolve<ISessionContainer>().Set(container));
 
             // Register (не RegisterInstance): VContainer сам конструирует и инжектит [Inject]-поля.
             // RegisterInstance НЕ инжектит уже созданные вручную объекты — _networkService остаётся null.
@@ -87,6 +90,10 @@ namespace Fodinae.Core
             RegisterManager<WorldTextureManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PacketHandler>(builder).AsImplementedInterfaces().AsSelf();
+            builder.Register<ClanProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
+            builder.Register<InventoryProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
+            builder.Register<PlayerStatsProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
+            builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
             RegisterManager<GameManager>(builder);
             RegisterManager<VFXPool>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PackManager>(builder).AsImplementedInterfaces().AsSelf();
@@ -96,8 +103,19 @@ namespace Fodinae.Core
             // PlayerMovementController живёт на PrefabInstance объекта Player (тег "Player") в сцене.
             // RegisterManager<T> через FindAnyObjectByType может не найти его надёжно до инициализации
             // сцены, что приводит к созданию нового пустого GO без Robot/SpriteRenderer/etc.
-            // Поэтому регистрируем явно через тег.
-            var playerGo = GameObject.FindGameObjectWithTag("Player");
+            // Поэтому регистрируем явно через тег. Scoped to _ownScene: FindGameObjectWithTag
+            // searches every loaded scene, and during an additive load MainMenu/Bootstrap are
+            // also loaded, so an unscoped lookup could bind the wrong scene's Player object.
+            GameObject? playerGo = null;
+            foreach (GameObject candidate in GameObject.FindGameObjectsWithTag("Player"))
+            {
+                if (candidate.scene == _ownScene)
+                {
+                    playerGo = candidate;
+                    break;
+                }
+            }
+
             var existingPmc = playerGo != null ? playerGo.GetComponent<PlayerMovementController>() : null;
             if (existingPmc != null)
             {
@@ -119,8 +137,16 @@ namespace Fodinae.Core
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
             RegisterManager<SurfaceRenderer>(builder);
+            RegisterManager<CameraFollow>(builder);
+            RegisterManager<PlayerHUDView>(builder);
+            RegisterManager<InventoryView>(builder);
+            RegisterManager<PauseMenu>(builder);
+            RegisterManager<MinimapController>(builder);
+            RegisterManager<DisplayManager>(builder);
+            builder.Register<LocalizationService>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
 
-            builder.RegisterBuildCallback(resolver => InjectSceneBehaviours(resolver, ownScene));
+
+
 
             // Инициализация ПОСЛЕ сборки графа: резолв менеджеров, инжект scene-компонентов,
             // сборка UI, валидация. IPostStart вызывается в player-loop фазе PostStartup,
@@ -129,45 +155,37 @@ namespace Fodinae.Core
             builder.RegisterEntryPoint<GameBootstrap>();
         }
 
-        private static void EnsureRuntimeUiInput()
-        {
-            EventSystem? eventSystem = FindAnyObjectByType<EventSystem>(FindObjectsInactive.Include);
-            if (eventSystem == null)
-            {
-                GameObject eventSystemObject = new("EventSystem");
-                eventSystem = eventSystemObject.AddComponent<EventSystem>();
-            }
-
-            if (eventSystem.GetComponent<InputSystemUIInputModule>() == null)
-            {
-                eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
-            }
-        }
-
-        private static void InjectSceneBehaviours(IObjectResolver resolver, Scene ownScene)
-        {
-            foreach (MonoBehaviour behaviour in FindObjectsByType<MonoBehaviour>(
-                FindObjectsInactive.Include))
-            {
-                if (behaviour is LifetimeScope || behaviour.gameObject.scene != ownScene)
-                {
-                    continue;
-                }
-
-                resolver.Inject(behaviour);
-            }
-        }
-
         private RegistrationBuilder RegisterManager<T>(IContainerBuilder builder)
             where T : MonoBehaviour
         {
-            var existing = FindAnyObjectByType<T>(FindObjectsInactive.Include);
+            T? existing = null;
+            foreach (T candidate in FindObjectsByType<T>(FindObjectsInactive.Include))
+            {
+                if (candidate.gameObject.scene == _ownScene)
+                {
+                    existing = candidate;
+                    break;
+                }
+            }
+
             if (existing != null)
             {
                 return builder.RegisterComponent(existing);
             }
 
-            return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton);
+            // Не создаём менеджер вручную через AddComponent прямо здесь: Configure
+            // выполняется ДО сборки контейнера, а AddComponent мгновенно дёргает
+            // Awake/OnEnable менеджера — в этот момент текущий контейнер ещё указывает
+            // на Bootstrap-скоуп, сцена не активна, а [Inject]-поля не заполнены. Отсюда
+            // весь класс багов "резолв из Awake во время Configure" (FPSCounter,
+            // TerrainRenderer-камера, PauseMenu и т.п.).
+            //
+            // RegisterComponentOnNewGameObject делегирует создание NewGameObjectProvider:
+            // неактивный GO -> AddComponent (Awake не вызывается) -> инъекция -> активация.
+            // Происходит это при первом резолве — в GameBootstrap.PostStart, когда граф
+            // построен, текущий контейнер указывает на игровой скоуп, а сцена уже активна.
+            return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)
+                .UnderTransform(transform);
         }
     }
 }

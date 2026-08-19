@@ -98,6 +98,8 @@ namespace Fodinae.Game
         private ushort _pendingServerY;
         [Inject]
         private TentacleBatchRenderer _tentacleBatchRenderer = null!;
+        [Inject]
+        private IObjectResolver _resolver = null!;
 
         public uint BotId => _botId;
         public int PlayerId => _playerId;
@@ -540,6 +542,16 @@ namespace Fodinae.Game
         private void CreateTentacles(Texture2D tailTexture)
         {
             ClearTentacles();
+            if (_tentacleBatchRenderer == null && _resolver != null)
+            {
+                _tentacleBatchRenderer = _resolver.Resolve<TentacleBatchRenderer>();
+            }
+
+            if (_tentacleBatchRenderer == null)
+            {
+                return;
+            }
+
             _tentacles = new Tentacle[4];
             _tentaclesSettled = false;
             float[] offsets = { -45f, -15f, 15f, 45f };
@@ -575,9 +587,9 @@ namespace Fodinae.Game
                 return;
             }
 
-            foreach (Tentacle tentacle in _tentacles)
+            foreach (Tentacle? tentacle in _tentacles)
             {
-                tentacle.SetActive(active);
+                tentacle?.SetActive(active);
             }
         }
 
@@ -588,9 +600,9 @@ namespace Fodinae.Game
                 return true;
             }
 
-            foreach (Tentacle tentacle in _tentacles)
+            foreach (Tentacle? tentacle in _tentacles)
             {
-                if (!tentacle.IsSettled)
+                if (tentacle != null && !tentacle.IsSettled)
                 {
                     return false;
                 }
@@ -608,9 +620,10 @@ namespace Fodinae.Game
 
             foreach (var tentacle in _tentacles)
             {
-                tentacle.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
+                tentacle?.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
             }
         }
+
 
         private void UpdateLabelsPosition()
         {
@@ -992,7 +1005,7 @@ namespace Fodinae.Game
             _cts?.Cancel();
             _cts?.Dispose();
 
-            _robotService?.UnregisterRobot(_botId, this);
+            _robotService?.UnregisterRobot(_botId);
 
             if (_skinSprite != null)
             {

@@ -36,7 +36,7 @@ namespace Fodinae.Networking
 {
     public partial class PacketHandler : MonoBehaviour, IInputBlocker
     {
-        public bool IsInputBlocked => _windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen);
+        public bool IsInputBlocked => ChatInput.IsFocused || (_windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen));
         public string? TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
 
         private static readonly WorldInitProcessor WorldInit = new();
@@ -44,13 +44,9 @@ namespace Fodinae.Networking
         private static readonly MapRegionProcessor MapRegion = new();
         private static readonly AudioPacketProcessor Audio = new();
         private static readonly PlayerInfoProcessor PlayerInfo = new();
-        private static readonly PlayerStatsProcessor PlayerStats = new();
         private static readonly PlayerStateProcessor PlayerState = new();
         private static readonly RobotPositionProcessor RobotPosition = new();
         private static readonly ChatProcessor Chat = new();
-        private static readonly StatusProcessor Status = new();
-        private static readonly InventoryProcessor Inventory = new();
-        private static readonly ClanProcessor Clan = new();
         private static readonly MissionProcessor Mission = new();
         private static readonly PackProcessor Pack = new();
         private static readonly ConnectionProcessor Connection = new();
@@ -71,6 +67,14 @@ namespace Fodinae.Networking
         private IMapDataProvider _mapDataProvider = null!;
         [Inject]
         private UIDocument _uiDocument = null!;
+        [Inject]
+        private PlayerStatsProcessor _playerStats = null!;
+        [Inject]
+        private StatusProcessor _status = null!;
+        [Inject]
+        private InventoryProcessor _inventory = null!;
+        [Inject]
+        private ClanProcessor _clan = null!;
         protected virtual void Awake()
         {
             TryInitialize();
@@ -147,36 +151,36 @@ namespace Fodinae.Networking
             _networkService.Subscribe<PackPacket>(Pack.Process);
             _networkService.Subscribe<RemovePackPacket>(Pack.Process);
 
-            _networkService.Subscribe<LevelPacket>(PlayerStats.Process);
-            _networkService.Subscribe<HealthPacket>(PlayerStats.Process);
-            _networkService.Subscribe<CurrencyPacket>(PlayerStats.Process);
-            _networkService.Subscribe<GeologyPacket>(PlayerStats.Process);
-            _networkService.Subscribe<BasketPacket>(PlayerStats.Process);
-            _networkService.Subscribe<MaxDepthPacket>(PlayerStats.Process);
+            _networkService.Subscribe<LevelPacket>(_playerStats.Process);
+            _networkService.Subscribe<HealthPacket>(_playerStats.Process);
+            _networkService.Subscribe<CurrencyPacket>(_playerStats.Process);
+            _networkService.Subscribe<GeologyPacket>(_playerStats.Process);
+            _networkService.Subscribe<BasketPacket>(_playerStats.Process);
+            _networkService.Subscribe<MaxDepthPacket>(_playerStats.Process);
 
             _networkService.Subscribe<AutoMineStatePacket>(PlayerState.Process);
             _networkService.Subscribe<AggressionStatePacket>(PlayerState.Process);
-            _networkService.Subscribe<SkillProgressPacket>(PlayerStats.Process);
-            _networkService.Subscribe<DailyBonusStatePacket>(PlayerStats.Process);
+            _networkService.Subscribe<SkillProgressPacket>(_playerStats.Process);
+            _networkService.Subscribe<DailyBonusStatePacket>(_playerStats.Process);
             _networkService.Subscribe<TeleportPacket>(PlayerInfo.Process);
             _networkService.Subscribe<ChatMessageListPacket>(Chat.Process);
             _networkService.Subscribe<LocalChatMessagePacket>(Chat.Process);
             _networkService.Subscribe<ChatMutePacket>(Chat.Process);
             _networkService.Subscribe<ChatListPacket>(Chat.Process);
 
-            _networkService.Subscribe<OnlinePacket>(Status.Process);
-            _networkService.Subscribe<PingPacket>(Status.Process);
-            _networkService.Subscribe<OutdatedClientPacket>(Status.Process);
+            _networkService.Subscribe<OnlinePacket>(_status.Process);
+            _networkService.Subscribe<PingPacket>(_status.Process);
+            _networkService.Subscribe<OutdatedClientPacket>(_status.Process);
             _networkService.Subscribe<AudioPacket>(Audio.Process);
-            _networkService.Subscribe<InventoryPacket>(Inventory.Process);
-            _networkService.Subscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(Inventory.Process);
-            _networkService.Subscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(Inventory.Process);
-            _networkService.Subscribe<AddStatusLinePacket>(Status.Process);
-            _networkService.Subscribe<ClearStatusLinePacket>(Status.Process);
-            _networkService.Subscribe<ClearStatusPacket>(Status.Process);
+            _networkService.Subscribe<InventoryPacket>(_inventory.Process);
+            _networkService.Subscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
+            _networkService.Subscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);
+            _networkService.Subscribe<AddStatusLinePacket>(_status.Process);
+            _networkService.Subscribe<ClearStatusLinePacket>(_status.Process);
+            _networkService.Subscribe<ClearStatusPacket>(_status.Process);
             _networkService.Subscribe<ModalWindowPacket>(_windowProcessor.HandleModalWindow);
-            _networkService.Subscribe<ShowClanPacket>(Clan.Process);
-            _networkService.Subscribe<HideClanPacket>(Clan.Process);
+            _networkService.Subscribe<ShowClanPacket>(_clan.Process);
+            _networkService.Subscribe<HideClanPacket>(_clan.Process);
             _networkService.Subscribe<MissionInitPacket>(Mission.Process);
             _networkService.Subscribe<MissionProgressPacket>(Mission.Process);
             _networkService.Subscribe<DisconnectPacket>(Connection.Process);
@@ -208,7 +212,7 @@ namespace Fodinae.Networking
                 _networkService.Unsubscribe<MapRegionPacket>(MapRegion.Process);
                 _networkService.Unsubscribe<PackPacket>(Pack.Process);
                 _networkService.Unsubscribe<RemovePackPacket>(Pack.Process);
-                _networkService.Unsubscribe<SkillProgressPacket>(PlayerStats.Process);
+                _networkService.Unsubscribe<SkillProgressPacket>(_playerStats.Process);
                 _networkService.Unsubscribe<AutoMineStatePacket>(PlayerState.Process);
                 _networkService.Unsubscribe<AggressionStatePacket>(PlayerState.Process);
                 _networkService.Unsubscribe<ChatMessageListPacket>(Chat.Process);
@@ -216,29 +220,29 @@ namespace Fodinae.Networking
                 _networkService.Unsubscribe<ChatMutePacket>(Chat.Process);
                 _networkService.Unsubscribe<ChatListPacket>(Chat.Process);
 
-                _networkService.Unsubscribe<LevelPacket>(PlayerStats.Process);
-                _networkService.Unsubscribe<HealthPacket>(PlayerStats.Process);
-                _networkService.Unsubscribe<CurrencyPacket>(PlayerStats.Process);
-                _networkService.Unsubscribe<GeologyPacket>(PlayerStats.Process);
-                _networkService.Unsubscribe<BasketPacket>(PlayerStats.Process);
+                _networkService.Unsubscribe<LevelPacket>(_playerStats.Process);
+                _networkService.Unsubscribe<HealthPacket>(_playerStats.Process);
+                _networkService.Unsubscribe<CurrencyPacket>(_playerStats.Process);
+                _networkService.Unsubscribe<GeologyPacket>(_playerStats.Process);
+                _networkService.Unsubscribe<BasketPacket>(_playerStats.Process);
 
-                _networkService.Unsubscribe<OnlinePacket>(Status.Process);
-                _networkService.Unsubscribe<PingPacket>(Status.Process);
+                _networkService.Unsubscribe<OnlinePacket>(_status.Process);
+                _networkService.Unsubscribe<PingPacket>(_status.Process);
 
-                _networkService.Unsubscribe<OutdatedClientPacket>(Status.Process);
+                _networkService.Unsubscribe<OutdatedClientPacket>(_status.Process);
                 _networkService.Unsubscribe<AudioPacket>(Audio.Process);
-                _networkService.Unsubscribe<InventoryPacket>(Inventory.Process);
-                _networkService.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(Inventory.Process);
-                _networkService.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(Inventory.Process);
-                _networkService.Unsubscribe<DailyBonusStatePacket>(PlayerStats.Process);
+                _networkService.Unsubscribe<InventoryPacket>(_inventory.Process);
+                _networkService.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>(_inventory.Process);
+                _networkService.Unsubscribe<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>(_inventory.Process);
+                _networkService.Unsubscribe<DailyBonusStatePacket>(_playerStats.Process);
                 _networkService.Unsubscribe<TeleportPacket>(PlayerInfo.Process);
-                _networkService.Unsubscribe<AddStatusLinePacket>(Status.Process);
-                _networkService.Unsubscribe<ClearStatusLinePacket>(Status.Process);
-                _networkService.Unsubscribe<ClearStatusPacket>(Status.Process);
+                _networkService.Unsubscribe<AddStatusLinePacket>(_status.Process);
+                _networkService.Unsubscribe<ClearStatusLinePacket>(_status.Process);
+                _networkService.Unsubscribe<ClearStatusPacket>(_status.Process);
                 _networkService.Unsubscribe<ModalWindowPacket>(_windowProcessor.HandleModalWindow);
-                _networkService.Unsubscribe<ShowClanPacket>(Clan.Process);
-                _networkService.Unsubscribe<HideClanPacket>(Clan.Process);
-                _networkService.Unsubscribe<MaxDepthPacket>(PlayerStats.Process);
+                _networkService.Unsubscribe<ShowClanPacket>(_clan.Process);
+                _networkService.Unsubscribe<HideClanPacket>(_clan.Process);
+                _networkService.Unsubscribe<MaxDepthPacket>(_playerStats.Process);
                 _networkService.Unsubscribe<MissionInitPacket>(Mission.Process);
                 _networkService.Unsubscribe<MissionProgressPacket>(Mission.Process);
                 _networkService.Unsubscribe<DisconnectPacket>(Connection.Process);

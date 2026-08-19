@@ -1,10 +1,464 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="MainMenuRoot" class="mm-root">
-        <ui:VisualElement name="LoaderContainer" class="mm-loader">
-            <ui:Image name="LoaderImage" class="mm-loader-image" />
+        <!-- Звёзды рисует шейдер на MenuDisplayBackdropCamera, а не эта картинка:
+             запечённые точки не могут мерцать. Элемент оставлен скрытым, чтобы
+             привязки в MainMenu.cs не отвалились. -->
+        <ui:Image name="SpaceBgImage" class="mm-space-bg" style="display: none;" />
+
+        <!-- МОНУМЕНТАЛЬНАЯ ПЛАНЕТАРНАЯ СИСТЕМА СПРАВА -->
+        <ui:VisualElement name="MainMenuPlanetContainer" class="mm-planet-system">
+            <ui:Image name="MainMenuPlanetImage" class="mm-planet-body" />
+
+            <!-- Метка станции на орбите. Позиция берётся из 3D-сцены каждый кадр
+                 (MenuSceneryController.TryGetStationViewportPosition), поэтому
+                 подпись едет вместе со светящейся точкой. Оформление то же, что
+                 у метки высадки: маркер + плашка mm-target-badge. -->
+            <ui:VisualElement name="MainMenuBeacon" class="mm-beacon">
+                <ui:VisualElement name="BeaconPing" class="mm-beacon-ping" />
+                <ui:VisualElement name="StationBadge" class="mm-target-badge mm-target-badge--right">
+                    <ui:Label class="mm-tb-title" text="ФЕД. БАЗА [HADES-ORBIT-1]" />
+                    <ui:Label class="mm-tb-coords" text="ОРБИТА 420 КМ // СТЫКОВКА ОТКРЫТА" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Прицел высадки с координатами -->
+            <ui:VisualElement name="TargetReticle" class="mm-target-reticle">
+                <ui:VisualElement class="mm-target-cross-v" />
+                <ui:VisualElement class="mm-target-cross-h" />
+                <ui:VisualElement class="mm-target-badge">
+                    <ui:Label class="mm-tb-title" text="СЕКТОР-09 [ВЫСАДКА]" />
+                    <ui:Label class="mm-tb-coords" text="42.18°N // 108.44°E // 0 М" />
+                </ui:VisualElement>
+            </ui:VisualElement>
         </ui:VisualElement>
+
+        <!-- ТЕНЕВОЙ ГРАДИЕНТ СЛЕВА -->
+        <ui:Image name="LoaderShade" class="mm-loader-shade" scale-mode="StretchToFill" />
+
+        <!-- ЭКРАН СПУСКА (ФАЗЫ ЗАГРУЗКИ) -->
+        <ui:VisualElement name="LoaderContainer" class="mm-loader" style="display: none;">
+            <ui:Image name="LoaderImage" class="mm-loader-image" />
+            <ui:VisualElement name="LoaderContent" class="mm-loader-content">
+                <ui:Label name="LoaderEyebrow" class="mm-eyebrow" text="ФАЗА СПУСКА 03 / 05" />
+                <ui:Label class="mm-heading-white" text="Подготавливаем" />
+                <ui:Label class="mm-heading-gold" text="точку высадки." />
+                <ui:Label name="LoaderSubtitle" class="mm-subtitle" text="Загрузка клиентских чанков, FMOD аудио-банков и компиляция шейдеров." />
+                <ui:VisualElement name="LoaderProgressTrack" class="mm-loader-progress-track">
+                    <ui:VisualElement name="LoaderProgressFill" class="mm-loader-progress-fill" />
+                </ui:VisualElement>
+                <ui:VisualElement name="LoaderProgressMeta" class="mm-loader-progress-meta">
+                    <ui:Label name="LoaderPhaseLabel" class="mm-loader-phase-label" text="Подключение к серверу..." />
+                    <ui:Label name="LoaderPhaseCount" class="mm-loader-phase-count" text="1 / 5" />
+                </ui:VisualElement>
+                <ui:VisualElement name="LoaderPhaseList" class="mm-loader-phases" />
+                <ui:Button name="CancelDescentButton" class="mm-btn-outline" text="ОТМЕНИТЬ СПУСК" style="margin-top: 16px; width: 180px;" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ВЕРХНИЙ ХЕДЕР (64px) -->
+        <ui:VisualElement name="MainMenuHeader" class="mm-header">
+            <ui:VisualElement name="MainMenuWordmark" class="mm-wordmark">
+                <ui:Image name="MainMenuPlanetIcon" class="mm-wordmark-icon" />
+                <ui:VisualElement class="mm-brand-text">
+                    <ui:Label class="mm-brand-title" text="FODINAE" />
+                    <ui:Label class="mm-brand-sub" text="ЭКСПЕДИЦИЯ В НЕДРА ПЛАНЕТЫ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="mm-header-right">
+                <ui:VisualElement name="MainMenuNetwork" class="mm-network">
+                    <ui:VisualElement name="MainMenuNetworkDot" class="mm-network-dot" />
+                    <ui:Label name="MainMenuNetworkLabel" text="СЕВЕРНАЯ ЕВРОПА (СТОКГОЛЬМ) · 38 МС" />
+                </ui:VisualElement>
+
+                <ui:Button name="UserPillButton" class="mm-user-pill">
+                    <ui:VisualElement class="mm-user-avatar">
+                        <ui:Label text="Ш" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="mm-user-meta">
+                        <ui:Label class="mm-user-name" text="ШАХТЁР-774 [DVM]" />
+                        <ui:Label class="mm-user-rank" text="РАНГ 4 · БУР TIER-2" />
+                    </ui:VisualElement>
+                </ui:Button>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ЛЕВАЯ КОЛОНКА МЕНЮ -->
         <ui:VisualElement name="MainMenuContainer" class="mm-menu">
-            <ui:Button name="PlayButton" class="mm-play-button" text="PLAY" />
+            <ui:Label class="mm-eyebrow" text="— БУРОВАЯ УСТАНОВКА // ГОТОВА К СПУСКУ" />
+            <ui:VisualElement class="mm-heading-group">
+                <ui:Label class="mm-heading-white" text="Планета ждёт" />
+                <ui:Label class="mm-heading-gold" text="под поверхностью." />
+            </ui:VisualElement>
+            <ui:Label class="mm-subtitle" text="Спускайся на неизведанные глубины. Бури породу, автоматизируй дронов, создавай кластеры и выживай в бесконечной шахте." />
+
+            <!-- Основные кнопки -->
+            <ui:VisualElement class="mm-button-group">
+                <ui:Button name="PlayButton" class="mm-btn-primary">
+                    <ui:Label class="mm-btn-primary-text" text="НАЧАТЬ СПУСК В ШАХТУ" />
+                    <ui:VisualElement class="mm-btn-primary-arrow-box">
+                        <ui:Label class="mm-btn-primary-arrow" text="↗" />
+                    </ui:VisualElement>
+                </ui:Button>
+
+                <ui:Button name="ServerSelectButton" class="mm-btn-secondary">
+                    <ui:Label text="ВЫБОР СЕРВЕРА" />
+                    <ui:Label class="mm-server-badge" text="4 В СЕТИ" />
+                </ui:Button>
+            </ui:VisualElement>
+
+            <!-- Подсказка клавиш с плашками kbd -->
+            <ui:VisualElement class="mm-hotkey-row">
+                <ui:Label class="mm-kbd-box" text="ENTER" />
+                <ui:Label class="mm-kbd-label" text="ВЫСАДКА" />
+                <ui:Label class="mm-kbd-dot" text="•" />
+                <ui:Label class="mm-kbd-box" text="ESC" />
+                <ui:Label class="mm-kbd-label" text="МЕНЮ" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ПРАВАЯ БОКОВАЯ ПАНЕЛЬ С КНОПКАМИ И СОЦСЕТЯМИ -->
+        <ui:VisualElement class="mm-sidebar">
+            <ui:Button name="SideChronicleButton" class="mm-side-btn" tooltip="Хроника событий">
+                <ui:Image name="SideChronicleIcon" class="mm-side-icon" />
+            </ui:Button>
+            <ui:Button name="SideSettingsButton" class="mm-side-btn" tooltip="Настройки системы">
+                <ui:Image name="SideSettingsIcon" class="mm-side-icon" />
+            </ui:Button>
+            <ui:Button name="SideRepairButton" class="mm-side-btn" tooltip="Проверка файлов">
+                <ui:Image name="SideRepairIcon" class="mm-side-icon" />
+            </ui:Button>
+            <ui:Button name="SideUpdateButton" class="mm-side-btn mm-side-btn--gold" tooltip="Обновление v0.9.0">
+                <ui:Image name="SideUpdateIcon" class="mm-side-icon" />
+                <ui:VisualElement class="mm-side-badge" />
+            </ui:Button>
+
+            <ui:VisualElement class="mm-sidebar-sep" />
+
+            <ui:Button name="SideDiscordButton" class="mm-side-btn" tooltip="Discord сообщество">
+                <ui:Image name="SideDiscordIcon" class="mm-side-icon" />
+            </ui:Button>
+            <ui:Button name="SideTelegramButton" class="mm-side-btn" tooltip="Telegram канал">
+                <ui:Image name="SideTelegramIcon" class="mm-side-icon" />
+            </ui:Button>
+            <ui:Button name="SideVkButton" class="mm-side-btn" tooltip="ВКонтакте">
+                <ui:Image name="SideVkIcon" class="mm-side-icon" />
+            </ui:Button>
+
+            <ui:VisualElement class="mm-sidebar-sep" />
+
+            <ui:Button name="SideExitButton" class="mm-side-btn mm-side-btn--danger" tooltip="Выход из игры">
+                <ui:Image name="SideExitIcon" class="mm-side-icon" />
+            </ui:Button>
+        </ui:VisualElement>
+
+        <!-- НИЖНИЙ ФУТЕР (48px) -->
+        <ui:VisualElement class="mm-footer">
+            <ui:VisualElement class="mm-route">
+                <ui:Label class="mm-route-item mm-route-item--active" text="• ОРБИТА" />
+                <ui:VisualElement class="mm-route-sep" />
+                <ui:Label class="mm-route-item" text="СПУСК" />
+                <ui:VisualElement class="mm-route-sep" />
+                <ui:Label class="mm-route-item" text="ПОВЕРХНОСТЬ" />
+            </ui:VisualElement>
+
+            <ui:Button name="NewsTickerButton" class="mm-news-ticker">
+                <ui:Label class="mm-ticker-tag" text="ХРОНИКА ↗" />
+                <ui:Label class="mm-ticker-text" text="В секторе Hades-Alpha активирован глубинный бур // Кластер стабилен" />
+            </ui:Button>
+
+            <ui:VisualElement class="mm-footer-meta">
+                <ui:Button name="FooterVersionButton" class="mm-footer-link" text="ВЕРСИЯ КЛИЕНТА 0.9.0 (АКТУАЛЬНА)" />
+                <ui:Label class="mm-footer-dot" text="•" />
+                <ui:Button name="FooterRepairButton" class="mm-footer-link" text="ЦЕЛОСТНОСТЬ: В НОРМЕ" />
+                <ui:Label class="mm-footer-dot" text="•" />
+                <ui:Label class="mm-footer-engine" text="URP 2D / C# 12 / FMOD" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- МОДАЛЬНЫЕ ОКНА (OVERLAY) -->
+        <ui:VisualElement name="ModalOverlay" class="mm-modal-overlay">
+
+            <!-- 1. Браузер серверов -->
+            <ui:VisualElement name="ServerBrowserModal" class="mm-modal-card">
+                <ui:VisualElement class="mm-modal-header">
+                    <ui:Label class="mm-modal-title" text="ВЫБОР СЕРВЕРА ШАХТЫ" />
+                    <ui:Button name="CloseServerModalButton" class="mm-modal-close" text="✕" />
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-body">
+                    <ui:Label class="mm-modal-desc" text="Выберите региональный кластер для подключения экспедиции:" />
+                    <ui:VisualElement class="mm-server-list">
+                        <ui:Button name="ServerItemHades" class="mm-server-card mm-server-card--active">
+                            <ui:VisualElement class="mm-sc-left">
+                                <ui:Label class="mm-sc-title" text="СЕВЕРНАЯ ЕВРОПА [HADES-ALPHA]" />
+                                <ui:Label class="mm-sc-desc" text="Стокгольм · Рекомендуемый пинг · Кластер 01" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-sc-right">
+                                <ui:Label class="mm-sc-ping" text="38 МС" />
+                                <ui:Label class="mm-sc-online" text="142 ШАХТЁРА" />
+                            </ui:VisualElement>
+                        </ui:Button>
+
+                        <ui:Button name="ServerItemTartarus" class="mm-server-card">
+                            <ui:VisualElement class="mm-sc-left">
+                                <ui:Label class="mm-sc-title" text="ВОСТОЧНАЯ ЕВРОПА [TARTARUS-02]" />
+                                <ui:Label class="mm-sc-desc" text="Варшава · Опытная зона раскопок · Кластер 02" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-sc-right">
+                                <ui:Label class="mm-sc-ping" text="52 МС" />
+                                <ui:Label class="mm-sc-online" text="89 ШАХТЁРОВ" />
+                            </ui:VisualElement>
+                        </ui:Button>
+
+                        <ui:Button name="ServerItemCyber" class="mm-server-card">
+                            <ui:VisualElement class="mm-sc-left">
+                                <ui:Label class="mm-sc-title" text="ЦЕНТРАЛЬНАЯ АЗИЯ [EREBUS-DEV]" />
+                                <ui:Label class="mm-sc-desc" text="Алматы · Тестовый полигон v0.9 · Кластер 03" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-sc-right">
+                                <ui:Label class="mm-sc-ping mm-sc-ping--yellow" text="84 МС" />
+                                <ui:Label class="mm-sc-online" text="34 ШАХТЁРА" />
+                            </ui:VisualElement>
+                        </ui:Button>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="ConfirmServerButton" class="mm-btn-gold" text="ВЫБРАТЬ И ЗАКРЫТЬ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- 2. Настройки (2 колонки) -->
+            <ui:VisualElement name="SettingsModal" class="mm-modal-card mm-modal-card--wide">
+                <ui:VisualElement class="mm-modal-header">
+                    <ui:Label class="mm-modal-title" text="ПАРАМЕТРЫ СИСТЕМЫ" />
+                    <ui:Button name="CloseSettingsModalButton" class="mm-modal-close" text="✕" />
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-settings-layout">
+                    <!-- Левая навигация -->
+                    <ui:VisualElement class="mm-settings-nav">
+                        <ui:Button name="SettingsTabGraphics" class="mm-nav-tab mm-nav-tab--active" text="ГРАФИКА" />
+                        <ui:Button name="SettingsTabAudio" class="mm-nav-tab" text="ЗВУК (FMOD)" />
+                        <ui:Button name="SettingsTabControls" class="mm-nav-tab" text="УПРАВЛЕНИЕ" />
+                        <ui:Button name="SettingsTabNetwork" class="mm-nav-tab" text="СЕТЬ И КЭШ" />
+                    </ui:VisualElement>
+
+                    <!-- Правый контент -->
+                    <ui:VisualElement class="mm-settings-content">
+                        <!-- Вкладка Графика -->
+                        <ui:VisualElement name="SettingsPaneGraphics" class="mm-tab-pane mm-tab-pane--active">
+                            <ui:VisualElement class="mm-card-box">
+                                <ui:Label class="mm-card-tag" text="ДИСПЛЕЙ И РЕНДЕРИНГ" />
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Режим экрана" />
+                                    <ui:Label class="mm-item-val" text="Полноэкранный (Borderless)" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Освещение Radiance Cascades" />
+                                    <ui:Label class="mm-item-val" text="ULTRA (4 каскада, 1 diffuse bounce)" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Post-processing &amp; Bloom" />
+                                    <ui:Label class="mm-item-val" text="URP HDR Включен" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+
+                        <!-- Вкладка Звук -->
+                        <ui:VisualElement name="SettingsPaneAudio" class="mm-tab-pane">
+                            <ui:VisualElement class="mm-card-box">
+                                <ui:Label class="mm-card-tag" text="FMOD STUDIO AUDIO BACKEND" />
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Мастер громкость" />
+                                    <ui:Label class="mm-item-val" text="100%" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Эффекты бурения (SFX)" />
+                                    <ui:Label class="mm-item-val" text="85%" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Пространственное 3D-позиционирование" />
+                                    <ui:Label class="mm-item-val" text="Активно" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+
+                        <!-- Вкладка Управление -->
+                        <ui:VisualElement name="SettingsPaneControls" class="mm-tab-pane">
+                            <ui:VisualElement class="mm-card-box">
+                                <ui:Label class="mm-card-tag" text="ПРИВЯЗКА КЛАВИШ" />
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Перемещение бура" />
+                                    <ui:Label class="mm-key-badge" text="W A S D" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Бурение породы" />
+                                    <ui:Label class="mm-key-badge" text="SPACE" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Авто-копка / Режим" />
+                                    <ui:Label class="mm-key-badge" text="E / L" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+
+                        <!-- Вкладка Сеть -->
+                        <ui:VisualElement name="SettingsPaneNetwork" class="mm-tab-pane">
+                            <ui:VisualElement class="mm-card-box">
+                                <ui:Label class="mm-card-tag" text="ПРОТОКОЛ И ПАМЯТЬ" />
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Протокол пакетов" />
+                                    <ui:Label class="mm-item-val" text="MinesProtocol v7 Binary" />
+                                </ui:VisualElement>
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="Дисковый кэш ассетов" />
+                                    <ui:Label class="mm-item-val" text="38.4 МБ (PersistentCache)" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="SaveSettingsButton" class="mm-btn-gold" text="СОХРАНИТЬ И ЗАКРЫТЬ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- 3. Хроника и таймлайн событий -->
+            <ui:VisualElement name="ChronicleModal" class="mm-modal-card">
+                <ui:VisualElement class="mm-modal-header">
+                    <ui:Label class="mm-modal-title" text="ХРОНИКА ЭКСПЕДИЦИЙ" />
+                    <ui:Button name="CloseChronicleModalButton" class="mm-modal-close" text="✕" />
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-body">
+                    <ui:VisualElement class="mm-timeline">
+                        <ui:VisualElement class="mm-timeline-spine" />
+
+                        <!-- Предстоящие события -->
+                        <ui:Label class="mm-timeline-section-title mm-timeline-section--purple" text="ПРЕДСТОЯЩИЕ СОБЫТИЯ" />
+                        <ui:VisualElement class="mm-timeline-card mm-tc--purple">
+                            <ui:VisualElement class="mm-timeline-bead mm-tb--purple" />
+                            <ui:VisualElement class="mm-tc-header">
+                                <ui:Label class="mm-tc-tag mm-tag--purple" text="СЕЗОННЫЙ ИВЕНТ" />
+                                <ui:Label class="mm-tc-date" text="ЧЕРЕЗ 4 ДНЯ" />
+                            </ui:VisualElement>
+                            <ui:Label class="mm-tc-title" text="Магматический Прорыв в глубинах Hades-09" />
+                            <ui:Label class="mm-tc-body" text="Повышенная концентрация лавы на горизонтах ниже 500м. Новые ресурсы и температурные буры." />
+                        </ui:VisualElement>
+
+                        <!-- Текущий патч -->
+                        <ui:Label class="mm-timeline-section-title mm-timeline-section--gold" text="ТЕКУЩИЙ ЭТАП" />
+                        <ui:VisualElement class="mm-timeline-card mm-tc--gold">
+                            <ui:VisualElement class="mm-timeline-bead mm-tb--gold" />
+                            <ui:VisualElement class="mm-tc-header">
+                                <ui:Label class="mm-tc-tag mm-tag--gold" text="ОБНОВЛЕНИЕ v0.9.0" />
+                                <ui:Label class="mm-tc-date" text="СЕГОДНЯ" />
+                            </ui:VisualElement>
+                            <ui:Label class="mm-tc-title mm-text--gold" text="Запуск Radiance Cascades 2D и Программатора Роботов" />
+                            <ui:Label class="mm-tc-body" text="Полный переход на честное динамическое 2D-освещение, контактный AO и визуальный редактор скриптов дронов." />
+                        </ui:VisualElement>
+
+                        <!-- Архив -->
+                        <ui:Label class="mm-timeline-section-title mm-timeline-section--dim" text="АРХИВ" />
+                        <ui:VisualElement class="mm-timeline-card mm-tc--dim">
+                            <ui:VisualElement class="mm-timeline-bead mm-tb--dim" />
+                            <ui:VisualElement class="mm-tc-header">
+                                <ui:Label class="mm-tc-tag" text="ПАТЧ v0.8.4" />
+                                <ui:Label class="mm-tc-date" text="14 АВГ" />
+                            </ui:VisualElement>
+                            <ui:Label class="mm-tc-title" text="Оптимизация SingleMeshTerrainRenderer и VContainer DI" />
+                            <ui:Label class="mm-tc-body" text="Внедрена пакетная отрисовка щупалец боссов и дифференциальное обновление чанков." />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="CloseChronicleFooterButton" class="mm-btn-gold" text="ПОНЯТНО" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- 4. Проверка и ремонт файлов -->
+            <ui:VisualElement name="RepairModal" class="mm-modal-card">
+                <ui:VisualElement class="mm-modal-header">
+                    <ui:Label class="mm-modal-title" text="ДИАГНОСТИКА И ЦЕЛОСТНОСТЬ ФАЙЛОВ" />
+                    <ui:Button name="CloseRepairModalButton" class="mm-modal-close" text="✕" />
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-body">
+                    <ui:Label class="mm-modal-desc" text="Автоматическая проверка контрольных сумм MD5 и структуры кэша:" />
+                    <ui:VisualElement class="mm-repair-log">
+                        <ui:Label class="mm-log-line" text="[1/4] Проверка StreamingAssets/FMOD/Master.bank ... OK" />
+                        <ui:Label class="mm-log-line" text="[2/4] Проверка StreamingAssets/FMOD/Master.strings.bank ... OK" />
+                        <ui:Label class="mm-log-line" text="[3/4] Проверка дискового кэша карт .mapb ... OK (32 чанка)" />
+                        <ui:Label class="mm-log-line" text="[4/4] Проверка шейдеров Radiance Cascades ... OK" />
+                        <ui:Label class="mm-log-line mm-log-line--success" text="✓ ВСЕ СИСТЕМЫ ГОТОВЫ К ЭКСПЕДИЦИИ // ОШИБОК НЕ ОБНАРУЖЕНО" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="RunFullRepairButton" class="mm-btn-outline" text="ПЕРЕПРОВЕРИТЬ КЭШ" style="margin-right: 12px;" />
+                    <ui:Button name="ConfirmRepairButton" class="mm-btn-gold" text="ЗАКРЫТЬ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- 5. Досье шахтера (Профиль) -->
+            <ui:VisualElement name="ProfileModal" class="mm-modal-card">
+                <ui:VisualElement class="mm-modal-header">
+                    <ui:Label class="mm-modal-title" text="ДОСЬЕ ШАХТЁРА" />
+                    <ui:Button name="CloseProfileModalButton" class="mm-modal-close" text="✕" />
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-body">
+                    <ui:VisualElement class="mm-profile-hero">
+                        <ui:VisualElement class="mm-profile-avatar">
+                            <ui:Label text="Ш" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-profile-info">
+                            <ui:Label class="mm-profile-name" text="ШАХТЁР-774 [DVM]" />
+                            <ui:Label class="mm-profile-clan" text="Клан: Deep Void Miners // Ранг 4" />
+                            <ui:Label class="mm-profile-uid" text="UID: 4195-F765-6275-458C" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                    <ui:VisualElement class="mm-card-box" style="margin-top: 16px;">
+                        <ui:Label class="mm-card-tag" text="СТАТИСТИКА РАСКОПОК" />
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="Глубина максимального спуска" />
+                            <ui:Label class="mm-item-val" text="1,480 метров" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="Добыто руды и минералов" />
+                            <ui:Label class="mm-item-val" text="428,950 ед." />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="Активных дронов в шахте" />
+                            <ui:Label class="mm-item-val" text="6 роботов" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="CloseProfileFooterButton" class="mm-btn-gold" text="ЗАКРЫТЬ ДОСЬЕ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- 6. Патч / Обновление -->
+            <ui:VisualElement name="UpdateModal" class="mm-modal-card">
+                <ui:VisualElement class="mm-modal-header">
+                    <ui:Label class="mm-modal-title" text="ОБНОВЛЕНИЕ КЛИЕНТА v0.9.0" />
+                    <ui:Button name="CloseUpdateModalButton" class="mm-modal-close" text="✕" />
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-body">
+                    <ui:Label class="mm-modal-desc" text="Доступен обязательный пакет обновления MinesProtocol v7:" />
+                    <ui:VisualElement class="mm-card-box">
+                        <ui:Label class="mm-card-tag" text="СПИСОК ИЗМЕНЕНИЙ" />
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="• Radiance Cascades 2D GPU Lighting" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="• FMOD Spatial 3D Audio Engine" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="• Внутриигровой визуальный Программатор роботов" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="ConfirmUpdateButton" class="mm-btn-gold" text="ЗАГРУЗИТЬ ОБНОВЛЕНИЕ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

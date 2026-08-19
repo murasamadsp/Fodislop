@@ -41,6 +41,8 @@ namespace Fodinae.UI
         private TerrainRenderer _terrainRenderer = null!;
         [Inject]
         private GraphicsSettingsController _graphicsSettings = null!;
+        [Inject]
+        private IObjectResolver _resolver = null!;
         private VisualElement? _menuPanel;
         private TemplateContainer? _menuTree;
         private VisualElement? _mainPage;
@@ -52,9 +54,15 @@ namespace Fodinae.UI
         private bool _originalScaleCaptured;
         private Button? _fullscreenButton;
         private bool _initialized;
+        private bool _initializationFailed;
 
         private float GetConfiguredBusVolume(AudioBusType busType)
         {
+            if (_clientConfig == null || _clientConfig.Config == null)
+            {
+                return 1f;
+            }
+
             return busType switch
             {
                 AudioBusType.Master => _clientConfig.Config.MasterVolume,
@@ -66,6 +74,7 @@ namespace Fodinae.UI
                 _ => throw new ArgumentOutOfRangeException(nameof(busType), busType, "Unsupported audio bus."),
             };
         }
+
 
         [Inject]
         private INetworkService _networkService = null!;
@@ -89,7 +98,7 @@ namespace Fodinae.UI
 
         protected void Update()
         {
-            if (!_initialized)
+            if (!_initialized && !_initializationFailed)
             {
                 TryInitialize();
             }
@@ -102,7 +111,7 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _initializationFailed || _resolver == null)
             {
                 return;
             }
@@ -123,7 +132,7 @@ namespace Fodinae.UI
             _terrainRenderer ??= ServiceLocator.Resolve<TerrainRenderer>();
             _graphicsSettings ??= ServiceLocator.Resolve<GraphicsSettingsController>();
 
-            if (_clientConfig == null || _networkService == null ||
+            if (_clientConfig == null || _clientConfig.Config == null || _networkService == null ||
                 _audioSystem == null || _connectionService == null || _inputBlocker == null ||
                 _lightingEngine == null || _postProcessController == null || _terrainRenderer == null ||
                 _graphicsSettings == null)
@@ -131,12 +140,36 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (!_lightingEngine.IsInitialized)
+            {
+                // Меню строится на геттерах освещения (AmbientIntensity, EmissionScale и т.д.),
+                // которые читают _runtimeConfig, создаваемый только в EnsureInitialized().
+                // Порядок Start не гарантирован — ждём готовности движка; TryInitialize
+                // ретраится из Update каждый кадр.
+                return;
+            }
+
+
             EnsureEscapeAction();
 
             _originalScale = _doc.panelSettings.scale;
             _originalScaleCaptured = true;
 
-            CreateMenu(_doc.rootVisualElement);
+            try
+            {
+                CreateMenu(_doc.rootVisualElement);
+            }
+            catch (InvalidOperationException exception)
+            {
+                // Обязательный контент меню (UXML/элементы) отсутствует или битый.
+                // Не бросаем из Update-ретрая: это зациклило бы исключения каждый кадр.
+                // Логируем один раз и помечаем как неинициализируемое — меню просто
+                // не откроется, игра продолжит работать.
+                Debug.LogError($"[PauseMenu] Cannot build menu: {exception.Message}");
+                _initializationFailed = true;
+                return;
+            }
+
             HideMenu();
 
             var savedScale = _clientConfig.Config.UiScale;
@@ -903,11 +936,14 @@ namespace Fodinae.UI
             {
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Мощность emission игрока",
-                    () => localRobot.DynamicLightIntensity,
+                    () => localRobot != null ? localRobot.DynamicLightIntensity : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
-                        localRobot.SetDynamicLightIntensity(value);
+                        if (localRobot != null)
+                        {
+                            localRobot.SetDynamicLightIntensity(value);
+                        }
                     },
                     0f,
                     4f,
@@ -926,10 +962,15 @@ namespace Fodinae.UI
 
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Цвет источника: красный",
-                    () => localRobot.DynamicLightColor.r,
+                    () => localRobot != null ? localRobot.DynamicLightColor.r : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
+                        if (localRobot == null)
+                        {
+                            return;
+                        }
+
                         Color color = localRobot.DynamicLightColor;
                         localRobot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
                     },
@@ -938,10 +979,15 @@ namespace Fodinae.UI
                     graphicsRefreshers));
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Цвет источника: зелёный",
-                    () => localRobot.DynamicLightColor.g,
+                    () => localRobot != null ? localRobot.DynamicLightColor.g : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
+                        if (localRobot == null)
+                        {
+                            return;
+                        }
+
                         Color color = localRobot.DynamicLightColor;
                         localRobot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
                     },
@@ -950,10 +996,15 @@ namespace Fodinae.UI
                     graphicsRefreshers));
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Цвет источника: синий",
-                    () => localRobot.DynamicLightColor.b,
+                    () => localRobot != null ? localRobot.DynamicLightColor.b : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
+                        if (localRobot == null)
+                        {
+                            return;
+                        }
+
                         Color color = localRobot.DynamicLightColor;
                         localRobot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
                     },
@@ -1784,12 +1835,14 @@ namespace Fodinae.UI
         {
             var context = new List<StringPairPacket>();
 
-            context.Add(new StringPairPacket("master_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Master) * 255)).ToString()));
-            context.Add(new StringPairPacket("sfx_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.SFX) * 255)).ToString()));
-            context.Add(new StringPairPacket("music_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Music) * 255)).ToString()));
-            context.Add(new StringPairPacket("ambience_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Ambience) * 255)).ToString()));
-            context.Add(new StringPairPacket("voice_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Voice) * 255)).ToString()));
-            context.Add(new StringPairPacket("ui_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.UI) * 255)).ToString()));
+            // Слайдеры громкости ограничены 0..1, но значение в конфиге может выйти
+            // за диапазон (старые/ручные правки) — clamp до байта, иначе переполнение.
+            context.Add(new StringPairPacket("master_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Master)) * 255).ToString()));
+            context.Add(new StringPairPacket("sfx_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.SFX)) * 255).ToString()));
+            context.Add(new StringPairPacket("music_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Music)) * 255).ToString()));
+            context.Add(new StringPairPacket("ambience_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Ambience)) * 255).ToString()));
+            context.Add(new StringPairPacket("voice_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Voice)) * 255).ToString()));
+            context.Add(new StringPairPacket("ui_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.UI)) * 255).ToString()));
 
             context.Add(new StringPairPacket("ui_scale", _clientConfig.Config.UiScale.ToString("F2")));
 

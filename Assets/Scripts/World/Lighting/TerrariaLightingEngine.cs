@@ -48,10 +48,6 @@ namespace Fodinae.World.Lighting
             Shader.PropertyToID("_AutomaticNormalInput");
         private static readonly int DynamicLightsId = Shader.PropertyToID("_DynamicLights");
         private static readonly int DynamicLightCountId = Shader.PropertyToID("_DynamicLightCount");
-        private static readonly int DynamicEmissionWorldRectId =
-            Shader.PropertyToID("_WorldRect");
-        private static readonly int DynamicEmissionFieldSizeId =
-            Shader.PropertyToID("_FieldSize");
         private static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
         private static readonly int DirectTextureId = Shader.PropertyToID("_DirectTexture");
         private static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
@@ -112,8 +108,6 @@ namespace Fodinae.World.Lighting
             new("Fodinae.Lighting.UpdateLighting.CPU");
         private static readonly ProfilerMarker DynamicUploadMarker =
             new("Fodinae.Lighting.DynamicLights.Upload.CPU");
-        private static readonly ProfilerMarker EmissionMarker =
-            new("Fodinae.Lighting.Emission.Record.CPU");
         private static readonly ProfilerMarker CascadeMarker =
             new("Fodinae.Lighting.Cascades.Record.CPU");
         private static readonly ProfilerMarker ResolveMarker =
@@ -179,7 +173,6 @@ namespace Fodinae.World.Lighting
         private readonly SortedDictionary<int, DynamicLightSource> _externalLights = new();
         private GraphicsQualitySettings _qualitySettings;
         private ComputeShader? _lightingCompute;
-        private Material? _dynamicEmissionMaterial;
         private ComputeBuffer? _dynamicLightBuffer;
         private ComputeBuffer? _radianceAtlas;
         private CommandBuffer? _lightingCommandBuffer;
@@ -231,13 +224,17 @@ namespace Fodinae.World.Lighting
 
         private bool _hasRenderedLightState;
         private bool _externalLightsDirty;
-        private uint _externalLightsRevision;
         private bool _initialized;
+
+        /// <summary>
+        /// True once EnsureInitialized has completed. Runtime lighting getters (and UI built
+        /// on top of them) must not be touched before this flag is set — _runtimeConfig is
+        /// only created during initialization.
+        /// </summary>
+        public bool IsInitialized => _initialized;
         private bool _hasStaticRadianceState;
         private uint _dynamicLightGeneration;
         private bool _dynamicSolveInProgress;
-        private int _dynamicSolveCascadeIndex;
-        private uint _dynamicSolveSourceRevision;
         [Header("Diffuse Bounce")]
         private bool _diffuseBounceEnabled;
         private float _dynamicLightUpdatesPerSecond;
@@ -446,7 +443,6 @@ namespace Fodinae.World.Lighting
             LoadComputeShaderOrThrow();
             ValidateGpuRequirements();
             ValidateMaterialFieldPass();
-            CreateDynamicEmissionMaterial();
             _lightingCommandBuffer = new CommandBuffer
             {
                 name = "Fodinae Radiance Cascades",
@@ -475,11 +471,6 @@ namespace Fodinae.World.Lighting
             ReleaseResources();
             _lightingCommandBuffer?.Release();
             _lightingCommandBuffer = null;
-            if (_dynamicEmissionMaterial != null)
-            {
-                DestroyLightingObject(_dynamicEmissionMaterial);
-                _dynamicEmissionMaterial = null;
-            }
         }
 
         private void Update()
@@ -519,7 +510,6 @@ namespace Fodinae.World.Lighting
 
             _externalLights[id] = source;
             _externalLightsDirty = true;
-            _externalLightsRevision++;
         }
 
         private static bool DynamicLightSourceApproximatelyEquals(
@@ -537,7 +527,6 @@ namespace Fodinae.World.Lighting
             if (_externalLights.Remove(id))
             {
                 _externalLightsDirty = true;
-                _externalLightsRevision++;
             }
         }
 
@@ -550,7 +539,6 @@ namespace Fodinae.World.Lighting
 
             _externalLights.Clear();
             _externalLightsDirty = true;
-            _externalLightsRevision++;
             _dynamicLightGeneration++;
         }
 
@@ -824,11 +812,18 @@ namespace Fodinae.World.Lighting
             TerrainRenderer terrainRenderer = TerrainRenderer.Instance ??
                 throw new InvalidOperationException(
                     "Radiance Cascades requires an active TerrainRenderer.");
+            if (camera == null || !camera.orthographic)
+            {
+                return;
+            }
+
             Vector4 lightingRegion = GetStableLightingRegion(
                 visibleMinX,
                 visibleMinY,
                 visibleWidth,
                 visibleHeight);
+
+
             bool regionChanged = lightingRegion != _lastVisibleRegion;
             _lastVisibleRegion = lightingRegion;
 
@@ -1334,75 +1329,6 @@ namespace Fodinae.World.Lighting
                 worldPositionX - worldRadius <= worldRect.x + worldRect.z &&
                 worldPositionY + worldRadius >= worldRect.y &&
                 worldPositionY - worldRadius <= worldRect.y + worldRect.w;
-        }
-
-        private void DrawDynamicEmission(
-            CommandBuffer commandBuffer,
-            Vector4 worldRect,
-            int dynamicLightCount)
-        {
-            if (dynamicLightCount == 0)
-            {
-                return;
-            }
-
-            _dynamicEmissionMaterial!.SetBuffer(DynamicLightsId, _dynamicLightBuffer!);
-            _dynamicEmissionMaterial.SetVector(
-                DynamicEmissionWorldRectId,
-                worldRect);
-            _dynamicEmissionMaterial.SetVector(
-                DynamicEmissionFieldSizeId,
-                new Vector4(_fieldWidth, _fieldHeight, 0f, 0f));
-            Matrix4x4 projection = Matrix4x4.Ortho(
-                worldRect.x,
-                worldRect.x + worldRect.z,
-                worldRect.y,
-                worldRect.y + worldRect.w,
-                -100f,
-                100f);
-            commandBuffer.SetViewProjectionMatrices(
-                Matrix4x4.identity,
-                GL.GetGPUProjectionMatrix(projection, renderIntoTexture: true));
-            commandBuffer.SetRenderTarget(_emissionField!);
-            commandBuffer.DrawProcedural(
-                Matrix4x4.identity,
-                _dynamicEmissionMaterial,
-                shaderPass: 0,
-                MeshTopology.Triangles,
-                vertexCount: 6,
-                instanceCount: dynamicLightCount);
-        }
-
-        private void PrepareEmissionField(
-            CommandBuffer commandBuffer,
-            Vector4 worldRect,
-            int dynamicLightCount,
-            bool dynamicLightsChanged)
-        {
-            using var emissionMarker = EmissionMarker.Auto();
-            if (!dynamicLightsChanged && dynamicLightCount == 0)
-            {
-                return;
-            }
-
-            if (dynamicLightCount == 0)
-            {
-                return;
-            }
-
-            commandBuffer.CopyTexture(
-                _staticEmissionField!,
-                0,
-                0,
-                _emissionField!,
-                0,
-                0);
-            commandBuffer.BeginSample("Fodinae.Lighting.DynamicEmission");
-            DrawDynamicEmission(
-                commandBuffer,
-                worldRect,
-                dynamicLightCount);
-            commandBuffer.EndSample("Fodinae.Lighting.DynamicEmission");
         }
 
         private void DispatchRadianceCascades(CommandBuffer commandBuffer)
@@ -1962,8 +1888,6 @@ namespace Fodinae.World.Lighting
                     $"orthographicSize={camera.orthographicSize}, aspect={camera.aspect}.");
             }
 
-            float cameraWorldHeight = camera.orthographicSize * 2f;
-            float cameraWorldWidth = cameraWorldHeight * camera.aspect;
             _requestedPixelsPerCell = Mathf.Clamp(
                 _qualitySettings.LightingMinimumPixelsPerCell,
                 1,
@@ -2306,24 +2230,6 @@ namespace Fodinae.World.Lighting
             finally
             {
                 DestroyLightingObject(validationMaterial);
-            }
-        }
-
-        private void CreateDynamicEmissionMaterial()
-        {
-            Shader dynamicEmissionShader = Shader.Find("Hidden/Fodinae/DynamicEmission") ??
-                Resources.Load<Shader>("Shaders/Lighting/DynamicEmission") ??
-                throw new InvalidOperationException("The dynamic emission shader is missing.");
-            _dynamicEmissionMaterial = new Material(dynamicEmissionShader)
-            {
-                name = "Dynamic Emission Material",
-            };
-            if (_dynamicEmissionMaterial.FindPass("DynamicEmission") < 0)
-            {
-                DestroyLightingObject(_dynamicEmissionMaterial);
-                _dynamicEmissionMaterial = null;
-                throw new InvalidOperationException(
-                    "The dynamic emission shader is missing the DynamicEmission pass.");
             }
         }
 

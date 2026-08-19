@@ -3,7 +3,7 @@
 using System;
 using System.IO;
 using System.Text;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game;
@@ -18,6 +18,7 @@ using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Profiling;
+using VContainer;
 
 namespace Fodinae
 {
@@ -27,6 +28,9 @@ namespace Fodinae
         private static readonly string MemoryLogPath = Path.Combine(Application.dataPath, "..", "memory_growth.txt");
         private float _nextMemorySampleTime;
         private Camera? _mainCamera;
+
+        [Inject]
+        private ISessionContainer _session = null!;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void EnsureCreated()
@@ -53,7 +57,7 @@ namespace Fodinae
             if (Time.unscaledTime >= _nextMemorySampleTime)
             {
                 _nextMemorySampleTime = Time.unscaledTime + 5f;
-                if (ServiceLocator.IsInitialized)
+                if (_session != null)
                 {
                     WriteMemorySample();
                 }
@@ -65,15 +69,14 @@ namespace Fodinae
             }
         }
 
-        private static void WriteMemorySample()
+        private void WriteMemorySample()
         {
-            if (!ServiceLocator.IsInitialized)
+            if (_session == null)
             {
                 return;
             }
 
-            MapStorage ms = ServiceLocator.Resolve<MapStorage>() ??
-                throw new InvalidOperationException("MapStorage is unavailable for diagnostics.");
+            MapStorage? ms = _session.TryResolve<MapStorage>();
             var lighting = TerrariaLightingEngine.Instance;
             string line =
                 $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
@@ -83,7 +86,7 @@ namespace Fodinae
                 $"mono={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1}MB " +
                 $"gc={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1}MB " +
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
-                $"chunks={ms.CellLayer?.GetLoadedCount() ?? 0} " +
+                $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0} " +
                 $"lightingSolves={lighting?.SolveCount ?? 0} " +
                 $"lightingContactAOSolves={lighting?.ContactOcclusionSolveCount ?? 0} " +
                 $"dynamicLights={lighting?.DynamicLightCount ?? 0} " +
@@ -97,10 +100,10 @@ namespace Fodinae
 
         private void WriteSnapshot()
         {
-            if (!ServiceLocator.IsInitialized)
+            if (_session == null)
             {
                 Debug.LogWarning(
-                    "[DiagnosticRunner] Snapshot skipped: VContainer resolver is not initialized yet.");
+                    "[DiagnosticRunner] Snapshot skipped: session container is not available yet.");
                 return;
             }
 
@@ -118,30 +121,36 @@ namespace Fodinae
             sb.AppendLine($"  ActiveRuntimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount}");
 
             sb.AppendLine("\n[SERVICES]");
-            W(sb, "IWorldDataStorage", ServiceLocator.Resolve<IWorldDataStorage>());
-            W(sb, "INetworkService", ServiceLocator.Resolve<INetworkService>());
-            W(sb, "IConnectionService", ServiceLocator.Resolve<IConnectionService>());
-            W(sb, "IMapDataProvider", ServiceLocator.Resolve<IMapDataProvider>());
-            W(sb, "IAssetLoader", ServiceLocator.Resolve<IAssetLoader>());
-            W(sb, "IInputBlocker", ServiceLocator.Resolve<IInputBlocker>());
-            W(sb, "IRobotService", ServiceLocator.Resolve<IRobotService>());
-            W(sb, "MapManager", ServiceLocator.Resolve<MapManager>());
-            W(sb, "GameManager", ServiceLocator.Resolve<GameManager>());
-            W(sb, "RobotManager", ServiceLocator.Resolve<RobotManager>());
-            W(sb, "PackManager", ServiceLocator.Resolve<PackManager>());
-            W(sb, "PacketHandler", ServiceLocator.Resolve<PacketHandler>());
+            W(sb, "IWorldDataStorage", _session.TryResolve<IWorldDataStorage>());
+            W(sb, "INetworkService", _session.TryResolve<INetworkService>());
+            W(sb, "IConnectionService", _session.TryResolve<IConnectionService>());
+            W(sb, "IMapDataProvider", _session.TryResolve<IMapDataProvider>());
+            W(sb, "IAssetLoader", _session.TryResolve<IAssetLoader>());
+            W(sb, "IInputBlocker", _session.TryResolve<IInputBlocker>());
+            W(sb, "IRobotService", _session.TryResolve<IRobotService>());
+            W(sb, "MapManager", _session.TryResolve<MapManager>());
+            W(sb, "GameManager", _session.TryResolve<GameManager>());
+            W(sb, "RobotManager", _session.TryResolve<RobotManager>());
+            W(sb, "PackManager", _session.TryResolve<PackManager>());
+            W(sb, "PacketHandler", _session.TryResolve<PacketHandler>());
 
             sb.AppendLine("\n[MAP]");
-            MapStorage ms = ServiceLocator.Resolve<MapStorage>() ??
-                throw new InvalidOperationException("MapStorage is unavailable for diagnostics.");
-            sb.AppendLine(
-                $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}");
-            if (ms.CellLayer != null)
+            MapStorage? ms = _session.TryResolve<MapStorage>();
+            if (ms != null)
             {
-                sb.AppendLine($"  CellChunks loaded={ms.CellLayer.GetLoadedCount()} dirty={ms.CellLayer.GetDirtyCount()} max={ms.CellLayer.MaxChunksInMemory}");
+                sb.AppendLine(
+                    $"  Ready={ms.IsReady} Disposed={ms.IsDisposed} Hash={ms.GetHashCode()}");
+                if (ms.CellLayer != null)
+                {
+                    sb.AppendLine($"  CellChunks loaded={ms.CellLayer.GetLoadedCount()} dirty={ms.CellLayer.GetDirtyCount()} max={ms.CellLayer.MaxChunksInMemory}");
+                }
+            }
+            else
+            {
+                sb.AppendLine("  NULL (not in world scene)");
             }
 
-            var mm = ServiceLocator.Resolve<MapManager>();
+            var mm = _session.TryResolve<MapManager>();
             sb.AppendLine(mm != null
                 ? $"  Initialized={mm.IsWorldInitialized} '{mm.WorldCodeName}' {mm.WorldWidth}x{mm.WorldHeight} Hash={mm.GetHashCode()}"
                 : "  NULL");
@@ -164,14 +173,14 @@ namespace Fodinae
             }
 
             sb.AppendLine("\n[INPUT]");
-            var bl = ServiceLocator.Resolve<IInputBlocker>();
+            var bl = _session.TryResolve<IInputBlocker>();
             sb.AppendLine($"  IInputBlocker: {(bl != null ? $"IsInputBlocked={bl.IsInputBlocked}" : "NULL")}");
             sb.AppendLine($"  Keyboard.current: {(Keyboard.current != null ? "OK" : "NULL")}");
             sb.AppendLine($"  ChatInput.IsFocused: {ChatInput.IsFocused}");
             sb.AppendLine($"  PauseMenu.IsMenuOpen: {Fodinae.UI.PauseMenu.IsMenuOpen}");
 
             sb.AppendLine("\n[GAME]");
-            var gm = ServiceLocator.Resolve<GameManager>();
+            var gm = _session.TryResolve<GameManager>();
             sb.AppendLine(gm != null
                 ? $"  State={gm.CurrentState} Authorized={gm.IsUIAuthorized}"
                 : "  NULL");

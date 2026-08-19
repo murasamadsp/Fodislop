@@ -1,5 +1,7 @@
 /* Fodinae Runtime Theme */
 @import url("unity-theme://default");
+@import url("../Resources/Styles/ThemeTokens.uss");
+@import url("../Resources/Styles/Animations.uss");
 @import url("../Resources/Styles/Theme.uss");
 @import url("../Resources/Styles/Panel.uss");
 @import url("../Resources/Styles/Button.uss");
@@ -12,7 +14,3 @@
 @import url("../Resources/Styles/PauseMenu.uss");
 @import url("../Resources/Styles/Modal.uss");
 
-.unity-button {
-    background-color: rgba(38, 38, 38, 1);
-    color: white;
-}

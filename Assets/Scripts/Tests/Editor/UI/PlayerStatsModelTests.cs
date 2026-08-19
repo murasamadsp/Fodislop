@@ -89,7 +89,11 @@ namespace Fodinae.Tests.UI
 
             _statsModel.ClearMission();
             Assert.IsFalse(_statsModel.IsMissionActive);
-            Assert.IsNull(_statsModel.MissionTitle);
+
+            // PlayerStatsModel использует string.Empty (как и остальные строковые поля),
+            // а не null, для сброшенных значений.
+            Assert.IsEmpty(_statsModel.MissionTitle);
+            Assert.IsEmpty(_statsModel.MissionDescription);
         }
     }
 }

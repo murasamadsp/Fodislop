@@ -32,8 +32,70 @@ namespace Fodinae.UI
         [Inject]
         private IServerConfig _serverConfig = null!;
 
+        private bool _initialized;
+
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+                if (!_initialized)
+                {
+                    return;
+                }
+            }
+
+            if (Keyboard.current == null)
+            {
+                return;
+            }
+
+            if (Keyboard.current.tKey.wasPressedThisFrame && !_isOpen && !ChatInput.IsFocused)
+            {
+                Show();
+                return;
+            }
+
+            if (!_isOpen)
+            {
+                return;
+            }
+
+            if (Keyboard.current.enterKey.wasPressedThisFrame ||
+                Keyboard.current.numpadEnterKey.wasPressedThisFrame)
+            {
+                SendMessage();
+                return;
+            }
+
+            if (Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                Hide();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null ||
+                _networkService == null || _serverConfig == null)
+            {
+                // Не бросаем: DI-инъекция может прийти позже (PostStart). Update
+                // ретраит TryInitialize — ждём готовности молча, иначе каждый кадр
+                // до инжекта будет сыпать исключениями.
+                return;
+            }
+
+            _initialized = true;
             _serverConfig.OnInitialized += ApplyServerConfig;
             CreateUI();
             if (_overlay != null)
@@ -115,37 +177,6 @@ namespace Fodinae.UI
                 {
                     _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
                 }
-            }
-        }
-
-        protected void Update()
-        {
-            if (Keyboard.current == null)
-            {
-                return;
-            }
-
-            if (Keyboard.current.tKey.wasPressedThisFrame && !_isOpen && !ChatInput.IsFocused)
-            {
-                Show();
-                return;
-            }
-
-            if (!_isOpen)
-            {
-                return;
-            }
-
-            if (Keyboard.current.enterKey.wasPressedThisFrame ||
-                Keyboard.current.numpadEnterKey.wasPressedThisFrame)
-            {
-                SendMessage();
-                return;
-            }
-
-            if (Keyboard.current.escapeKey.wasPressedThisFrame)
-            {
-                Hide();
             }
         }
 

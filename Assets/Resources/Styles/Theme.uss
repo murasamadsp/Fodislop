@@ -3,7 +3,10 @@
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-    /* ── Цвета ── */
+    /* ── Высококачественные Sci-Fi шрифты ── */
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
+
+    /* ── Цветовая палитра ── */
     --color-panel-bg: rgba(20, 20, 20, 0.9);
     --color-panel-border: rgba(90, 90, 90, 1);
     --color-accent: rgba(178, 166, 128, 1);
@@ -13,31 +16,25 @@
     --color-danger: rgba(200, 60, 60, 1);
     --color-success: rgba(60, 180, 60, 1);
 
-    /* ── Кнопки ── */
-    --btn-bg: rgba(38, 38, 38, 1);
-    --btn-hover: rgba(90, 90, 90, 1);
-    --btn-border: rgba(102, 102, 102, 1);
-    --btn-padding: 8px 20px;
-    --btn-min-width: 180px;
-    --btn-font-size: 14px;
-
     /* ── Размеры ── */
     --panel-padding: 12px;
     --panel-border-width: 2px;
     --cell-size: 50px;
     --cell-gap: 10px;
     --icon-size: 36px;
+}
 
-    /* ── Шрифты ── */
-    --font-size-sm: 12px;
-    --font-size-md: 14px;
-    --font-size-lg: 16px;
-    --font-size-xl: 20px;
+/* ─── Базовый переопределитель для всех текстовых элементов UI Toolkit ─── */
+Label,
+Button,
+TextField,
+.unity-text-element,
+.unity-label,
+.unity-button {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
 }
 
 /* ─── Полноэкранный root-контейнер UXML-клонов ─── */
-/* CloneTree() возвращает TemplateContainer без высоты; класс вешается */
-/* в коде на клон (tree.AddToClassList), чтобы он растянулся на панель. */
 .ui-fullscreen {
     position: absolute;
     left: 0;
@@ -47,8 +44,6 @@
     display: flex;
     flex-direction: column;
 }
-
-/* ─── Единый контракт контейнеров ─── */
 
 .ui-overlay {
     position: absolute;
@@ -79,7 +74,7 @@
 .ui-overlay-label {
     max-width: 900px;
     color: var(--color-text);
-    font-size: var(--font-size-lg);
+    font-size: 16px;
     white-space: normal;
     -unity-text-align: middle-center;
 }
@@ -128,25 +123,542 @@
     justify-content: center;
 }
 
-/* ─── Главное меню (MainMenu) ─── */
+/* ═══════════════════════════════════════════════════════════
+   ГЛАВНОЕ МЕНЮ (MAIN MENU) & LAUNCHER DESIGN SYSTEM
+   ═══════════════════════════════════════════════════════════ */
 
 .mm-root {
     flex-grow: 1;
     position: relative;
     display: flex;
     flex-direction: column;
-    background-color: rgba(10, 10, 10, 1);
+
+    /* Прозрачный: небо теперь рисует MenuDisplayBackdropCamera позади UI-оверлея.
+       Непрозрачный фон здесь полностью закрыл бы её. PanelSettings не чистит
+       цвет (m_ClearColor: 0), поэтому камера видна везде, где UI прозрачен. */
+    background-color: rgba(0, 0, 0, 0);
+    --mm-gold: rgb(245, 197, 66);
+    --mm-gold-light: rgb(255, 225, 120);
+    --mm-cyan: rgb(86, 221, 212);
+    --mm-text: rgb(244, 246, 250);
+    --mm-muted: rgb(149, 165, 181);
+    --mm-dim: rgb(90, 107, 124);
+    --mm-line: rgba(245, 197, 66, 0.25);
+    --mm-line-cyan: rgba(86, 221, 212, 0.25);
+    --mm-card-bg: rgba(14, 22, 38, 0.9);
 }
 
+/* ── Фон космоса ── */
+.mm-space-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.mm-loader-shade {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    picking-mode: ignore;
+}
+
+/* ── Планетарная система справа ── */
+/* Планета кадрируется правым краем экрана, а не висит целиком в пустоте.
+   Диск занимает ~70% ширины рендер-текстуры, поэтому отрицательный right
+   уводит его правый край примерно на 60px за кадр: тело выглядит слишком
+   большим, чтобы поместиться, и держит правый край композиции.
+   Смещение по вертикали убирает мёртвое центрирование. */
+.mm-planet-system {
+    position: absolute;
+    right: -60px;
+    top: 60px;
+    bottom: -260px;
+    width: 860px;
+    align-items: center;
+    justify-content: center;
+}
+
+
+.mm-planet-body {
+    width: 860px;
+    height: 860px;
+}
+
+/* Маркер орбитальной станции. Тот же язык, что и у метки высадки
+   (.mm-target-reticle): золотое кольцо + плашка .mm-target-badge. Отличается
+   только размером и отсутствием перекрестия - высадка это цель, база это
+   объект. left/top выставляются из кода по позиции станции в 3D-сцене. */
+.mm-beacon {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 13px;
+    height: 13px;
+    border-radius: 7px;
+    border-width: 1.5px;
+    border-color: var(--mm-gold);
+    align-items: center;
+    justify-content: center;
+}
+
+.mm-beacon-ping {
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 19px;
+    height: 19px;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: var(--mm-gold);
+}
+
+.mm-target-reticle {
+    position: absolute;
+    left: 250px;
+    top: 40%;
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    border-width: 1.5px;
+    border-color: var(--mm-gold);
+    align-items: center;
+    justify-content: center;
+}
+
+.mm-target-cross-v {
+    position: absolute;
+    top: -10px;
+    bottom: -10px;
+    width: 1.5px;
+    background-color: var(--mm-gold);
+}
+
+.mm-target-cross-h {
+    position: absolute;
+    left: -10px;
+    right: -10px;
+    height: 1.5px;
+    background-color: var(--mm-gold);
+}
+
+/* Плашка уведена влево от маркера: справа она ложилась прямо на диск и
+   читалась как случайное наложение, а не как выноска к точке высадки. */
+.mm-target-badge {
+    position: absolute;
+    right: 28px;
+    top: -10px;
+    background-color: rgba(10, 16, 28, 0.95);
+    border-width: 1px;
+    border-color: rgba(245, 197, 66, 0.4);
+    border-radius: 3px;
+    padding: 4px 10px;
+    flex-direction: column;
+}
+
+.mm-tb-title {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 10px;
+    -unity-font-style: bold;
+}
+
+.mm-tb-coords {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-cyan);
+    font-size: 9px;
+    margin-top: 2px;
+}
+
+/* Плашка справа от маркера - для станции, которая живёт у правого лимба:
+   слева она уезжала бы на диск планеты. */
+.mm-target-badge--right {
+    left: 28px;
+    right: auto;
+}
+
+/* Плашка над маркером - когда станция подходит к нижнему краю и снизу
+   ей уже некуда раскрыться, иначе она уезжает под футер. */
+.mm-target-badge--above {
+    top: auto;
+    bottom: 22px;
+}
+
+/* ── Header (64px) ── */
+.mm-header {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 64px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 48px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--mm-line-cyan);
+    background-color: rgba(6, 10, 18, 0.92);
+}
+
+.mm-wordmark {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mm-wordmark-icon {
+    width: 30px;
+    height: 30px;
+    margin-right: 12px;
+}
+
+.mm-brand-text {
+    flex-direction: column;
+}
+
+.mm-brand-title {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: white;
+    font-size: 19px;
+    -unity-font-style: bold;
+}
+
+.mm-brand-sub {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-cyan);
+    font-size: 9px;
+    margin-top: 2px;
+    -unity-font-style: bold;
+}
+
+.mm-header-right {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mm-network {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(14, 22, 38, 0.8);
+    border-width: 1px;
+    border-color: var(--mm-line-cyan);
+    border-radius: 14px;
+    padding: 5px 14px;
+    margin-right: 14px;
+}
+
+.mm-network-dot {
+    width: 7px;
+    height: 7px;
+    margin-right: 8px;
+    border-radius: 4px;
+    background-color: var(--mm-cyan);
+}
+
+.mm-network Label {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-muted);
+    font-size: 11px;
+}
+
+.mm-user-pill {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(14, 22, 38, 0.9);
+    border-width: 1.5px;
+    border-color: var(--mm-gold);
+    border-radius: 4px;
+    padding: 4px 14px;
+}
+
+.mm-user-pill:hover {
+    background-color: rgba(26, 40, 68, 0.95);
+    border-color: white;
+}
+
+.mm-user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background-color: var(--mm-gold);
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+}
+
+.mm-user-avatar Label {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: rgb(18, 12, 4);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.mm-user-meta {
+    flex-direction: column;
+}
+
+.mm-user-name {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: white;
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.mm-user-rank {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 9px;
+}
+
+/* ── Правая боковая панель (8 кнопок) ── */
+.mm-sidebar {
+    position: absolute;
+    right: 28px;
+    top: 84px;
+    flex-direction: column;
+    align-items: center;
+}
+
+.mm-side-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    background-color: rgba(14, 22, 38, 0.92);
+    border-width: 1.5px;
+    border-color: rgba(86, 221, 212, 0.4);
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+    padding: 0;
+}
+
+.mm-side-btn Label {
+    font-size: 16px;
+    color: var(--mm-text);
+}
+
+.mm-side-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.mm-side-btn:hover {
+    background-color: rgba(28, 44, 72, 1);
+    border-color: var(--mm-gold);
+}
+
+.mm-side-btn--gold {
+    border-color: var(--mm-gold);
+}
+
+.mm-side-btn--danger {
+    border-color: rgba(230, 57, 70, 0.7);
+}
+
+.mm-side-btn--danger:hover {
+    border-color: rgb(230, 57, 70);
+    background-color: rgba(60, 20, 25, 0.95);
+}
+
+.mm-side-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+    background-color: rgb(230, 57, 70);
+    border-width: 1px;
+    border-color: white;
+}
+
+.mm-sidebar-sep {
+    width: 22px;
+    height: 1.5px;
+    background-color: rgba(245, 197, 66, 0.3);
+    margin-bottom: 10px;
+}
+
+/* ── Левая колонка меню ── */
+.mm-menu {
+    position: absolute;
+    left: 64px;
+    top: 64px;
+    bottom: 48px;
+    justify-content: center;
+    align-items: flex-start;
+    width: 480px;
+}
+
+.mm-eyebrow {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-gold);
+    font-size: 12px;
+    -unity-font-style: bold;
+    margin-bottom: 12px;
+}
+
+.mm-heading-group {
+    flex-direction: column;
+    margin-bottom: 14px;
+}
+
+.mm-heading-white {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: white;
+    font-size: 40px;
+    -unity-font-style: bold;
+}
+
+.mm-heading-gold {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 40px;
+    -unity-font-style: bold;
+}
+
+.mm-subtitle {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-muted);
+    font-size: 14px;
+    white-space: normal;
+    max-width: 400px;
+    margin-bottom: 24px;
+}
+
+/* ── Кнопки меню ── */
+.mm-button-group {
+    flex-direction: column;
+    width: 380px;
+    margin-bottom: 14px;
+}
+
+Button.mm-btn-primary,
+Button#PlayButton {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    height: 54px;
+    padding: 0 14px 0 22px;
+    background-color: rgb(245, 197, 66);
+    border-width: 1px;
+    border-color: rgb(245, 197, 66);
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+Button.mm-btn-primary:hover,
+Button#PlayButton:hover {
+    background-color: rgb(255, 215, 95);
+}
+
+.mm-btn-primary-text {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: rgb(8, 10, 12);
+    font-size: 16px;
+    -unity-font-style: bold;
+}
+
+.mm-btn-primary-arrow-box {
+    width: 28px;
+    height: 28px;
+    background-color: rgb(8, 10, 12);
+    border-radius: 3px;
+    align-items: center;
+    justify-content: center;
+}
+
+.mm-btn-primary-arrow {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 15px;
+    -unity-font-style: bold;
+}
+
+Button.mm-btn-secondary,
+Button#ServerSelectButton {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    height: 46px;
+    padding: 0 16px 0 20px;
+    background-color: rgba(14, 22, 38, 0.9);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.38);
+    border-radius: 4px;
+}
+
+Button.mm-btn-secondary:hover,
+Button#ServerSelectButton:hover {
+    background-color: rgba(26, 40, 68, 0.95);
+    border-color: var(--mm-cyan);
+}
+
+Button.mm-btn-secondary Label,
+Button#ServerSelectButton Label {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: white;
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+.mm-server-badge {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    background-color: rgba(86, 221, 212, 0.15);
+    color: var(--mm-cyan);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.4);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    -unity-font-style: bold;
+}
+
+/* ── Подсказки клавиш с kbd ── */
+.mm-hotkey-row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.mm-kbd-box {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    background-color: rgba(255, 255, 255, 0.08);
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.18);
+    border-radius: 3px;
+    padding: 2px 6px;
+    color: var(--mm-muted);
+    font-size: 10px;
+    -unity-font-style: bold;
+    margin-right: 6px;
+}
+
+.mm-kbd-label {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-dim);
+    font-size: 11px;
+    margin-right: 10px;
+}
+
+.mm-kbd-dot {
+    color: var(--mm-dim);
+    font-size: 10px;
+    margin-right: 10px;
+}
+
+/* ── Лоадер и Спуск ── */
 .mm-loader {
     position: absolute;
     left: 0;
     top: 0;
     right: 0;
     bottom: 0;
-    align-items: stretch;
-    justify-content: center;
-    background-color: rgba(10, 10, 10, 1);
+    background-color: transparent;
+    display: none;
 }
 
 .mm-loader-image {
@@ -157,88 +669,654 @@
     bottom: 0;
 }
 
-.mm-menu {
-    position: relative;
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding-top: 200px;
-}
-
-.mm-play-button {
-    width: 200px;
-    height: 48px;
-    font-size: 20px;
-    letter-spacing: 2px;
-    background-color: var(--btn-bg);
-    color: var(--color-text);
-    border-width: 1px;
-    border-color: var(--btn-border);
-    border-radius: 4px;
-}
-
-.mm-play-button:hover {
-    background-color: var(--btn-hover);
-}
-
-.mm-play-button:active {
-    background-color: var(--color-accent);
-}
-
-/* ─── Индикатор загрузки (AssetLoadingIndicator) ─── */
-
-.loadind-root {
+.mm-loader-content {
     position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-}
-
-.loadind-overlay {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    flex-direction: column;
+    left: 64px;
+    top: 64px;
+    bottom: 48px;
     justify-content: center;
-    align-items: center;
-    padding: 40px;
-    background-color: rgba(0, 0, 0, 0.85);
+    width: 480px;
 }
 
-.loadind-title {
-    font-size: 24px;
+.mm-loader-progress-track {
+    width: 420px;
+    height: 5px;
+    background-color: rgba(146, 167, 176, 0.2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.mm-loader-progress-fill {
+    height: 100%;
+    width: 0%;
+    background-color: var(--mm-gold);
+}
+
+.mm-loader-progress-meta {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 420px;
     margin-bottom: 20px;
-    -unity-text-align: middle-center;
 }
 
-.loadind-spinner {
-    font-size: 48px;
-    margin-bottom: 20px;
-    -unity-text-align: middle-center;
-}
-
-.loadind-status {
-    font-size: 14px;
-    margin-bottom: 12px;
-    -unity-text-align: middle-center;
-}
-
-.loadind-progress {
+.mm-loader-phase-label {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-text);
     font-size: 12px;
-    color: rgba(179, 179, 179, 1);
+}
+
+.mm-loader-phase-count {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-muted);
+    font-size: 12px;
+}
+
+.mm-loader-phases {
+    flex-direction: column;
+}
+
+.mm-loader-phase-item {
+    flex-direction: row;
+    color: var(--mm-dim);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.mm-loader-phase-icon {
+    width: 20px;
+    color: var(--mm-dim);
+}
+
+.mm-loader-phase-item--done {
+    color: var(--mm-muted);
+}
+.mm-loader-phase-item--done .mm-loader-phase-icon {
+    color: var(--mm-cyan);
+}
+.mm-loader-phase-item--active {
+    color: white;
+}
+.mm-loader-phase-item--active .mm-loader-phase-icon {
+    color: var(--mm-gold);
+}
+
+/* ── Footer ── */
+.mm-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 48px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 48px;
+    border-top-width: 1px;
+    border-top-color: var(--mm-line-cyan);
+    background-color: rgba(6, 10, 18, 0.92);
+}
+
+.mm-route {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mm-route-item {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-dim);
+    font-size: 11px;
+}
+
+.mm-route-item--active {
+    color: var(--mm-gold);
+    -unity-font-style: bold;
+}
+
+.mm-route-sep {
+    width: 24px;
+    height: 1px;
+    margin: 0 8px;
+    background-color: var(--mm-line-cyan);
+}
+
+.mm-news-ticker {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(14, 22, 38, 0.8);
+    border-width: 1px;
+    border-color: var(--mm-line-cyan);
+    border-radius: 4px;
+    padding: 3px 14px;
+    max-width: 480px;
+}
+
+.mm-news-ticker:hover {
+    border-color: var(--mm-gold);
+    background-color: rgba(26, 40, 68, 0.95);
+}
+
+.mm-ticker-tag {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 11px;
+    -unity-font-style: bold;
+    margin-right: 8px;
+}
+
+.mm-ticker-text {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-text);
+    font-size: 11px;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.mm-footer-meta {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mm-footer-link {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    background-color: transparent;
+    border-width: 0;
+    color: var(--mm-muted);
+    font-size: 11px;
+    padding: 0;
+}
+
+.mm-footer-link:hover {
+    color: var(--mm-gold);
+}
+
+.mm-footer-dot {
+    color: var(--mm-dim);
+    margin: 0 8px;
+    font-size: 10px;
+}
+
+.mm-footer-engine {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-dim);
+    font-size: 11px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   МОДАЛЬНЫЕ ОКНА (MODAL DIALOGS)
+   ═══════════════════════════════════════════════════════════ */
+
+.mm-modal-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(2, 4, 8, 0.86);
+    align-items: center;
+    justify-content: center;
+    display: none;
+}
+
+.mm-modal-card {
+    width: 760px;
+    max-height: 84%;
+    background-color: rgba(10, 16, 28, 0.98);
+    border-width: 1.5px;
+    border-color: var(--mm-gold);
+    border-radius: 6px;
+    flex-direction: column;
+    display: none;
+}
+
+.mm-modal-card--wide {
+    width: 880px;
+}
+
+.mm-modal-header {
+    height: 52px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    background-color: rgba(14, 22, 38, 0.95);
+    border-bottom-width: 1.5px;
+    border-bottom-color: rgba(245, 197, 66, 0.3);
+}
+
+.mm-modal-title {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 14px;
+    -unity-font-style: bold;
+}
+
+.mm-modal-close {
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background-color: transparent;
+    border-width: 0;
+    color: var(--mm-muted);
+    font-size: 20px;
     -unity-text-align: middle-center;
 }
 
-/* ─── Стрелка миссии (MissionArrowUI) ─── */
+.mm-modal-close:hover {
+    color: white;
+    background-color: rgba(245, 197, 66, 0.2);
+}
 
-.mission-arrow {
+.mm-modal-body {
+    padding: 20px;
+    flex-grow: 1;
+}
+
+.mm-modal-desc {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-muted);
+    font-size: 13px;
+    margin-bottom: 14px;
+    white-space: normal;
+}
+
+.mm-modal-footer {
+    height: 56px;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 20px;
+    background-color: rgba(8, 14, 24, 0.95);
+    border-top-width: 1px;
+    border-top-color: rgba(245, 197, 66, 0.2);
+}
+
+Button.mm-btn-gold {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    background-color: var(--mm-gold);
+    color: rgb(8, 10, 12);
+    border-width: 1px;
+    border-color: var(--mm-gold);
+    border-radius: 4px;
+    padding: 8px 22px;
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+Button.mm-btn-gold:hover {
+    background-color: rgb(255, 215, 95);
+}
+
+Button.mm-btn-outline {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    background-color: rgba(14, 22, 38, 0.6);
+    color: var(--mm-text);
+    border-width: 1px;
+    border-color: var(--mm-gold);
+    border-radius: 4px;
+    padding: 8px 20px;
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+Button.mm-btn-outline:hover {
+    background-color: rgba(26, 40, 68, 0.85);
+    color: white;
+}
+
+/* ── Список серверов ── */
+.mm-server-list {
+    flex-direction: column;
+}
+
+.mm-server-card {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    background-color: rgba(14, 22, 38, 0.8);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.25);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+}
+
+.mm-server-card:hover {
+    background-color: rgba(26, 40, 68, 0.95);
+    border-color: var(--mm-gold);
+}
+
+.mm-server-card--active {
+    border-color: var(--mm-gold);
+    border-width: 1.5px;
+    background-color: rgba(30, 48, 80, 0.95);
+}
+
+.mm-sc-left {
+    flex-direction: column;
+}
+
+.mm-sc-title {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 14px;
+    -unity-font-style: bold;
+}
+
+.mm-sc-desc {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-muted);
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.mm-sc-right {
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.mm-sc-ping {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: rgb(82, 183, 136);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.mm-sc-ping--yellow {
+    color: var(--mm-gold);
+}
+
+.mm-sc-online {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-dim);
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+/* ── Настройки (2 колонки) ── */
+.mm-settings-layout {
+    flex-direction: row;
+    height: 380px;
+}
+
+.mm-settings-nav {
+    width: 180px;
+    background-color: rgba(8, 14, 24, 0.95);
+    border-right-width: 1.5px;
+    border-right-color: rgba(245, 197, 66, 0.2);
+    padding: 12px 0;
+    flex-direction: column;
+}
+
+.mm-nav-tab {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    background-color: transparent;
+    border-width: 0;
+    border-left-width: 3px;
+    border-left-color: transparent;
+    color: var(--mm-muted);
+    font-size: 12px;
+    -unity-font-style: bold;
+    padding: 10px 16px;
+    -unity-text-align: middle-left;
+}
+
+.mm-nav-tab:hover {
+    color: white;
+    background-color: rgba(245, 197, 66, 0.08);
+}
+
+.mm-nav-tab--active {
+    color: var(--mm-gold);
+    border-left-color: var(--mm-gold);
+    background-color: rgba(245, 197, 66, 0.15);
+}
+
+.mm-settings-content {
+    flex-grow: 1;
+    padding: 16px 20px;
+}
+
+.mm-tab-pane {
+    display: none;
+    flex-direction: column;
+}
+
+.mm-tab-pane--active {
+    display: flex;
+}
+
+.mm-card-box {
+    background-color: rgba(14, 22, 38, 0.7);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.25);
+    border-radius: 4px;
+    padding: 14px;
+    margin-bottom: 12px;
+}
+
+.mm-card-tag {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 10px;
+    -unity-font-style: bold;
+    margin-bottom: 10px;
+    padding-bottom: 4px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(245, 197, 66, 0.2);
+}
+
+.mm-row-item {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.mm-item-title {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: white;
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+.mm-item-desc {
+    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    color: var(--mm-muted);
+    font-size: 11px;
+}
+
+.mm-item-val {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-gold);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.mm-key-badge {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    background-color: rgba(8, 14, 24, 0.9);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.3);
+    border-radius: 3px;
+    padding: 3px 8px;
+    color: var(--mm-gold);
+    font-size: 11px;
+    -unity-font-style: bold;
+}
+
+/* ── Таймлайн Хроники ── */
+.mm-timeline {
+    position: relative;
+    padding-left: 28px;
+    flex-direction: column;
+}
+
+.mm-timeline-spine {
     position: absolute;
-    width: 20px;
-    height: 20px;
-    background-color: rgba(255, 217, 0, 0.9);
+    left: 10px;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background-color: var(--mm-gold);
+}
+
+.mm-timeline-section-title {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    font-size: 10px;
+    -unity-font-style: bold;
+    margin-bottom: 8px;
+    margin-top: 6px;
+}
+
+.mm-timeline-section--purple { color: rgb(192, 132, 252); }
+.mm-timeline-section--gold { color: var(--mm-gold); }
+.mm-timeline-section--dim { color: var(--mm-dim); }
+
+.mm-timeline-card {
+    position: relative;
+    background-color: rgba(14, 22, 38, 0.8);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.25);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 14px;
+}
+
+.mm-tc--purple { border-color: rgba(192, 132, 252, 0.4); }
+.mm-tc--gold { border-color: var(--mm-gold); }
+.mm-tc--dim { opacity: 0.75; }
+
+.mm-timeline-bead {
+    position: absolute;
+    left: -24px;
+    top: 14px;
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    background-color: rgb(8, 14, 24);
+    border-width: 2px;
+    border-color: var(--mm-gold);
+}
+
+.mm-tb--purple { border-color: rgb(192, 132, 252); }
+.mm-tb--gold { border-color: var(--mm-gold); }
+.mm-tb--dim { border-color: var(--mm-dim); }
+
+.mm-tc-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.mm-tc-tag {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    font-size: 10px;
+    -unity-font-style: bold;
+    color: var(--mm-muted);
+}
+
+.mm-tag--purple { color: rgb(192, 132, 252); }
+.mm-tag--gold { color: var(--mm-gold); }
+
+.mm-tc-date {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-muted);
+    font-size: 10px;
+}
+
+.mm-tc-title {
+    -unity-font: resource("Fonts/Exo2");
+    -unity-font-definition: resource("Fonts/Exo2");
+    color: white;
+    font-size: 13px;
+    -unity-font-style: bold;
+    margin-bottom: 4px;
+}
+
+.mm-text--gold { color: var(--mm-gold); }
+
+.mm-tc-body {
+    -unity-font: resource("Fonts/Exo2");
+    -unity-font-definition: resource("Fonts/Exo2");
+    color: var(--mm-muted);
+    font-size: 12px;
+    white-space: normal;
+}
+
+/* ── Лог Ремонта ── */
+.mm-repair-log {
+    background-color: rgb(8, 14, 24);
+    border-width: 1px;
+    border-color: rgba(86, 221, 212, 0.25);
+    border-radius: 4px;
+    padding: 12px;
+    flex-direction: column;
+}
+
+.mm-log-line {
+    -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
+    color: var(--mm-text);
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.mm-log-line--success {
+    color: rgb(82, 183, 136);
+    -unity-font-style: bold;
+    margin-top: 6px;
+}
+
+/* ── Профиль ── */
+.mm-profile-hero {
+    flex-direction: row;
+    align-items: center;
+    padding: 10px;
+}
+
+.mm-profile-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    background-color: var(--mm-gold);
+    align-items: center;
+    justify-content: center;
+    margin-right: 18px;
+}
+
+.mm-profile-avatar Label {
+    -unity-font: resource("Fonts/Unbounded");
+    -unity-font-definition: resource("Fonts/Unbounded");
+    color: rgb(18, 12, 4);
+    font-size: 24px;
+    -unity-font-style: bold;
+}
+
+.mm-profile-info {
+    flex-direction: column;
+}
+
+.mm-profile-name {
+    -unity-font: resource("Fonts/Unbounded");
+    -unity-font-definition: resource("Fonts/Unbounded");
+    color: white;
+    font-size: 16px;
+    -unity-font-style: bold;
+}
+
+.mm-profile-clan {
+    -unity-font: resource("Fonts/Exo2");
+    -unity-font-definition: resource("Fonts/Exo2");
+    color: var(--mm-gold);
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+.mm-profile-uid {
+    -unity-font: resource("Fonts/JetBrainsMono");
+    -unity-font-definition: resource("Fonts/JetBrainsMono");
+    color: var(--mm-muted);
+    font-size: 10px;
+    margin-top: 4px;
 }

@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.UI;
@@ -17,7 +16,14 @@ namespace Fodinae.Networking.Processors
 {
     public class InventoryProcessor : IPacketProcessor<InventoryPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket>, IPacketProcessor<MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket>
     {
-        private static IInventoryModel? Model => Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
+        private readonly IInventoryModel _model;
+
+        public InventoryProcessor(IInventoryModel model)
+        {
+            _model = model;
+        }
+
+        private IInventoryModel? Model => _model;
 
         public void Process(InventoryPacket packet)
         {

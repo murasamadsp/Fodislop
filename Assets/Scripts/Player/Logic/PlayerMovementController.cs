@@ -392,6 +392,11 @@ namespace Fodinae.Player.Logic
                         cooldown = mapDataProvider.GetMoveCooldown(CellType.Empty);
                     }
 
+                    if (_ignoreCollision)
+                    {
+                        cooldown = Mathf.Max(0.01f, cooldown / 10f);
+                    }
+
                     if (cooldown > 0)
                     {
                         _robot.MoveSpeed = 1f / cooldown;

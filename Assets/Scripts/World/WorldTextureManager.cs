@@ -39,6 +39,15 @@ namespace Fodinae.World
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private List<TextureAtlas> _atlases = null!;
 
+        // Tracked separately from _pendingRequests: that dictionary only gets populated
+        // after GetCellTextureCoordinate's first `await UniTask.SwitchToMainThread()`
+        // continuation resumes, so a request fired via RequestTexture this frame can read
+        // as "not pending" for part of a frame even though it has genuinely started. This
+        // set is written synchronously at the RequestTexture call site instead, so gameplay
+        // code (e.g. the world-loaded gate) can reliably tell "still loading" from "done".
+        private readonly ConcurrentDictionary<CellType, byte> _inFlightCellTypeRequests = new();
+        public int PendingCellTextureRequests => _inFlightCellTypeRequests.Count;
+
         private Texture2D? _cachedEmptyTexture;
 
         public uint TextureRevision { get; private set; }
@@ -145,12 +154,25 @@ namespace Fodinae.World
         {
             EnsureInitialized();
             if (_textureCache.TryGetTexture(cellType, out _) ||
-                _pendingRequests.ContainsKey(cellType))
+                _pendingRequests.ContainsKey(cellType) ||
+                !_inFlightCellTypeRequests.TryAdd(cellType, 0))
             {
                 return;
             }
 
-            GetCellTextureCoordinate(cellType, 0, 0).Forget();
+            TrackedRequestTextureAsync(cellType).Forget();
+        }
+
+        private async UniTaskVoid TrackedRequestTextureAsync(CellType cellType)
+        {
+            try
+            {
+                await GetCellTextureCoordinate(cellType, 0, 0);
+            }
+            finally
+            {
+                _inFlightCellTypeRequests.TryRemove(cellType, out _);
+            }
         }
 
         public AtlasCoordinate GetCellTextureCoordinate(CellType cellType)

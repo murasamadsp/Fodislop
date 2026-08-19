@@ -527,6 +527,7 @@ namespace Fodinae.Rendering.PostProcessing
                             sourceWidth = downWidth;
                             sourceHeight = downHeight;
                         }
+
                         cmd.EndSample("Fodinae.PostProcess.Bloom.Downsample");
 
                         TextureHandle currentUp = data.BloomDownTextures[^1];
@@ -558,6 +559,7 @@ namespace Fodinae.Rendering.PostProcessing
                             currentUpWidth = upWidth;
                             currentUpHeight = upHeight;
                         }
+
                         cmd.EndSample("Fodinae.PostProcess.Bloom.Upsample");
 
                         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, BloomTexID, currentUp);

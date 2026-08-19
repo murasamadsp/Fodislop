@@ -116,8 +116,10 @@ namespace Fodinae.UI.HUD.Player.View
             if (_doc == null || _doc.rootVisualElement == null || _model == null ||
                 _globalChatUI == null || _assetLoader == null || _networkService == null || _inputBlocker == null)
             {
-                throw new InvalidOperationException(
-                    "[PlayerHUD] Required DI services and UIDocument must be initialized before building HUD.");
+                // Не бросаем: инъекция может завершиться после этого Start (PostStart).
+                // Update ретраит TryStartInitialization — ждём готовности молча, иначе
+                // каждый кадр до инжекта будет сыпать исключениями.
+                return;
             }
 
             _initializationStarted = true;
@@ -292,21 +294,20 @@ namespace Fodinae.UI.HUD.Player.View
             var root = _doc.rootVisualElement;
             Debug.Log("[PlayerHUD] InitializeHUD complete, skills container created=" + (_skillContainer != null));
 
-            // Условная блокировка навигации: когда открыто окно — Tab/стрелки работают (IsInputBlocked),
-            // когда окна нет — блокируем, чтобы стрелки управляли движением.
+            // Клавиатурная навигация по интерфейсу вырезана насовсем: стрелки/WASD не
+            // должны двигать фокус по кнопкам, а Enter — активировать их. Подавляем
+            // навигационные события глобально (TrickleDown ловит их до фокус-контроллера).
             root.RegisterCallback<NavigationMoveEvent>(
-                evt =>
-            {
-                if (_inputBlocker != null && !_inputBlocker.IsInputBlocked)
-                {
-                    evt.StopPropagation();
-                }
-            }, TrickleDown.TrickleDown);
+                evt => evt.StopPropagation(), TrickleDown.TrickleDown);
 
             root.RegisterCallback<NavigationSubmitEvent>(
+                evt => evt.StopPropagation(), TrickleDown.TrickleDown);
+
+            // Tab тоже не должен перемещать фокус по кнопкам.
+            root.RegisterCallback<KeyDownEvent>(
                 evt =>
             {
-                if ((_inputBlocker == null || !_inputBlocker.IsInputBlocked) && !ChatInput.IsFocused)
+                if (evt.keyCode == KeyCode.Tab)
                 {
                     evt.StopPropagation();
                 }
@@ -1127,11 +1128,12 @@ namespace Fodinae.UI.HUD.Player.View
             _respawnPopup = CreateRespawnPopup();
             _buildingsPopup = CreatePopup("Мои здания");
             _faqPopup = CreatePopup("FAQ");
+
+            // ProgrammatorGrid сам ретраит UIDocument-инъекцию из Update, поэтому
+            // ручной Inject здесь не обязателен и безопасен при любом состоянии
+            // текущего контейнера.
             _programmatorGrid = gameObject.AddComponent<ProgrammatorGrid>();
-            if (Fodinae.Core.ServiceLocator.IsInitialized)
-            {
-                Fodinae.Core.ServiceLocator.Inject(_programmatorGrid);
-            }
+
             root.Add(_respawnPopup);
             root.Add(_buildingsPopup);
             root.Add(_faqPopup);

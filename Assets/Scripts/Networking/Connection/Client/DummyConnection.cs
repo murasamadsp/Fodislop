@@ -229,7 +229,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private async UniTaskVoid UpdatePosition()
         {
-            await UniTask.Delay(200);
+            await UniTask.Delay(IgnoreCollision ? 20 : 200);
             SendMapChunksAround(_x, _y);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
         }

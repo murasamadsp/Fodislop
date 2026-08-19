@@ -193,7 +193,13 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     float2 uv = (id.xy + 0.5) * _ScreenSize.zw;
 
     // 1. Chromatic Aberration
+    // Alpha was previously discarded here and the final write below hardcoded
+    // 1.0 - harmless for the opaque gameplay camera, but it meant any camera
+    // relying on this pass for a transparent composite (e.g. an offscreen UI
+    // render) always came out as a solid opaque block regardless of its own
+    // clear settings.
     float3 color;
+    float srcAlpha = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).a;
     if (_ChromaticAberrationIntensity > 0.001)
     {
         float2 distFromCenter = uv - float2(0.5, 0.5);
@@ -294,5 +300,5 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         color = max(0.0, color + grain * amplitude * grainTint);
     }
 
-    _OutputTex[id.xy] = float4(color, 1.0);
+    _OutputTex[id.xy] = float4(color, srcAlpha);
 }

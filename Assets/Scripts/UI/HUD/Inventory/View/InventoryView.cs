@@ -65,6 +65,20 @@ namespace Fodinae.UI.HUD.Inventory.View
                 _model.OnSlotChanged -= RefreshSlot;
                 _model.OnSlotSelected -= OnModelSlotSelected;
             }
+
+            // Снимаем drag-колбэки, чтобы не остались висячими при уничтожении
+            // во время перетаскивания предмета.
+            if (_doc != null && _doc.rootVisualElement != null)
+            {
+                _doc.rootVisualElement.UnregisterCallback<MouseMoveEvent>(OnDragMove);
+                _doc.rootVisualElement.UnregisterCallback<MouseUpEvent>(OnDragDrop);
+            }
+
+            if (_floatingItem != null && _floatingItem.parent != null)
+            {
+                _floatingItem.RemoveFromHierarchy();
+                _floatingItem = null;
+            }
         }
 
         protected void Update()
@@ -158,8 +172,10 @@ namespace Fodinae.UI.HUD.Inventory.View
                 }
                 else
                 {
-                    throw new InvalidOperationException(
-                        "Inventory model was not registered before InventoryView initialization.");
+                    // Не бросаем: модель может зарегистрироваться позже (порядок DI-сборки
+                    // не гарантирован). Update ретраит TryInitialize — ждём молча, иначе
+                    // каждый кадр до регистрации будет сыпать исключениями.
+                    return;
                 }
             }
 
@@ -255,13 +271,8 @@ namespace Fodinae.UI.HUD.Inventory.View
             _hotbarContainer.Add(_inventoryButton);
 
             root.Add(_hotbarContainer);
-
-            root.RegisterCallback<GeometryChangedEvent>(evt =>
-            {
-                const int w = (HOTBAR_COLS * CELLSIZE) + ((HOTBAR_COLS - 1) * CELL_GAP) + CELLSIZE + CELL_GAP;
-                _hotbarContainer.style.left = (root.resolvedStyle.width - w) / 2;
-            });
         }
+
 
         private void CreateFullInventoryPanel(VisualElement root)
         {

@@ -2,12 +2,14 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Game.Managers
 {
@@ -37,6 +39,13 @@ namespace Fodinae.Game.Managers
 
         public event Action<GameState>? OnGameStateChanged;
         public event Action? OnWorldLoaded;
+
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
+        [Inject]
+        private ITextureService _textureService = null!;
+        [Inject]
+        private IRobotService _robotService = null!;
 
         private GameObject? _uiRoot;
         private bool _worldLoadPending;
@@ -203,13 +212,37 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
+            // Terrain geometry being ready doesn't mean its textures (or robot sprites,
+            // loaded through the same pipeline) have actually arrived yet — without this,
+            // the loading screen hides while assets are still visibly popping in.
+            if (_assetLoader is ClientAssetLoader clientAssetLoader &&
+                (clientAssetLoader.PendingAssetCount > 0 || clientAssetLoader.QueuedAssetCount > 0))
+            {
+                return;
+            }
+
+            // ClientAssetLoader only tracks requests that have reached it — a cell texture
+            // RequestTexture() just fired this frame hasn't reached ClientAssetLoader yet
+            // (WorldTextureManager's own async chain yields once before enqueueing there).
+            // PendingCellTextureRequests is set synchronously at the RequestTexture call
+            // site, so it catches that gap.
+            if (_textureService.PendingCellTextureRequests > 0)
+            {
+                return;
+            }
+
             _worldLoadPending = false;
             _worldLoadPublished = true;
             IsWorldLoaded = true;
             SetState(GameState.InGame);
             player.SetGameplayVisible();
             CameraFollow.Instance?.SnapToTarget();
-            Debug.Log("[GameManager] World load completed: server position and terrain are ready.");
+            int robotCount = _robotService?.RobotCount ?? -1;
+            Debug.Log(
+                $"[GameManager] World load completed: server position and terrain are ready. " +
+                $"robots={robotCount}, pendingAssets={(_assetLoader is ClientAssetLoader c ? c.PendingAssetCount : -1)}, " +
+                $"queuedAssets={(_assetLoader is ClientAssetLoader c2 ? c2.QueuedAssetCount : -1)}, " +
+                $"pendingCellTextures={_textureService.PendingCellTextureRequests}");
             OnWorldLoaded?.Invoke();
         }
 

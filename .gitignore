@@ -516,6 +516,10 @@ memory_growth.txt
 /[Aa]ssets/StreamingAssets/WorldMaps/*.mapb.meta
 fmod_editor.log
 
+# Трассировка PSO (GraphicsStateCollection) — генерируется в редакторе
+/TracedCollection/
+/CacheMissCollection/
+
 # macOS system files
 .DS_Store
 .DS_Store?
@@ -525,3 +529,6 @@ fmod_editor.log
 ehthumbs.db
 Thumbs.db
 .dotnet_tmp/
+
+# Art self-inspection captures (written outside the asset tree on purpose)
+ArtCaptures/

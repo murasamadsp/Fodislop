@@ -221,7 +221,7 @@ namespace Fodinae.World.Terrain
 
             if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
             {
-                GridVertexOffsets[x, y] = new Vector3(rx - 3f / 16f, ry - 3f / 16f, 0);
+                GridVertexOffsets[x, y] = new Vector3(rx - (3f / 16f), ry - (3f / 16f), 0);
             }
             else if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))
             {
@@ -283,14 +283,14 @@ namespace Fodinae.World.Terrain
 
         private static float RandXd(int x, int y)
         {
-            int num = (5 * x + 11 * y) * (13 * x + 7 * y) % 3221;
-            return num * num % 7;
+            int num = (((5 * x) + (11 * y)) * ((13 * x) + (7 * y))) % 3221;
+            return (num * num) % 7;
         }
 
         private static float RandYd(int x, int y)
         {
-            int num = (17 * x + 19 * y) * (23 * x + 37 * y) % 3469;
-            return num * num % 7;
+            int num = (((17 * x) + (19 * y)) * ((23 * x) + (37 * y))) % 3469;
+            return (num * num) % 7;
         }
 
         private void CalculateCellNode(TerrainCellCache cellCache, int x, int y)
