@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Linq;
 using Fodinae;
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -18,10 +19,18 @@ namespace Fodinae.UI.Builders
             }
 
             var strOptions = strDropPkt.Values.ToList();
+            if (strOptions.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"String dropdown '{strDropPkt.Name}' has no options.");
+            }
+
             var defaultValue = strDropPkt.DefaultValue;
             if (!strOptions.Contains(defaultValue))
             {
-                defaultValue = strOptions.FirstOrDefault();
+                throw new InvalidOperationException(
+                    $"String dropdown '{strDropPkt.Name}' default '{defaultValue}' " +
+                    "is not present in its options.");
             }
 
             var strDrop = new DropdownField(strOptions, 0)

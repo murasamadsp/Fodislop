@@ -26,13 +26,22 @@ namespace Fodinae.Networking
     {
         public static NetworkService? Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         [Inject]
         private IConnectionService _connectionService = null!;
+        private IConnectionService? _subscribedConnection;
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
         private readonly Dictionary<Type, Subscription[]> _subscriberSnapshots = new();
         private readonly object _subscribersLock = new();
         private bool _connectionSubscribed;
+
+        public bool IsConnectionSubscriptionEstablished => _connectionSubscribed;
 
         protected void Awake()
         {
@@ -64,24 +73,45 @@ namespace Fodinae.Networking
         /// </summary>
         public void EnsureConnectionSubscription()
         {
-            if (_connectionSubscribed || _connectionService == null)
+            if (ServiceLocator.IsInitialized)
             {
+                _connectionService = ServiceLocator.Resolve<IConnectionService>() ??
+                    throw new InvalidOperationException(
+                        "NetworkService requires IConnectionService in the active resolver.");
+            }
+
+            if (_subscribedConnection != null)
+            {
+                _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+                _subscribedConnection = null;
+            }
+
+            if (_connectionService == null)
+            {
+                _connectionSubscribed = false;
                 return;
             }
 
+            // Rebind even when the local flag says "subscribed". During an
+            // editor/domain reload the ConnectionManager instance can be
+            // replaced while this component survives; the old boolean then
+            // describes a dead connection event source.
             _connectionService.OnPacketReceived -= OnPacketReceived;
             _connectionService.OnPacketReceived += OnPacketReceived;
+            _subscribedConnection = _connectionService;
             _connectionSubscribed = true;
         }
 
         private void UnsubscribeFromConnection()
         {
-            if (!_connectionSubscribed || _connectionService == null)
+            if (_subscribedConnection == null)
             {
+                _connectionSubscribed = false;
                 return;
             }
 
-            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+            _subscribedConnection = null;
             _connectionSubscribed = false;
         }
 
@@ -122,14 +152,9 @@ namespace Fodinae.Networking
 
         public void Send(IRootClientPacket packet)
         {
-            var connection = Fodinae.Core.ServiceLocator.Resolve<IConnectionService>() as ConnectionManager;
-            if (connection == null || connection.Connection == null)
-            {
-                return;
-            }
-
+            var connectionService = Fodinae.Core.ServiceLocator.Resolve<IConnectionService>()!;
             var timestamp = (uint)DateTimeOffset.UtcNow.Ticks;
-            connection.Connection.SendAsync(new ClientPacket(timestamp, packet));
+            connectionService.Send(new ClientPacket(timestamp, packet));
         }
 
         void INetworkService.Send(IRootClientPacket packet) => Send(packet);

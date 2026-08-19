@@ -109,7 +109,6 @@ namespace Fodinae.UI.Programmator
             _centerTex = ProgrammatorTextureRegistry.GetTexture(CenterClickOp);
 
             _root = new VisualElement();
-            RadialMenu.AttachStyles(_root);
             _root.AddToClassList("prog-joy-root");
             _root.pickingMode = PickingMode.Ignore;
 
@@ -317,6 +316,7 @@ namespace Fodinae.UI.Programmator
             {
                 return;
             }
+
             // Remove any existing Image child
             for (int i = item.childCount - 1; i >= 0; i--)
             {

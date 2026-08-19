@@ -145,3 +145,33 @@
     color: white;
     white-space: normal;
 }
+
+/* ─── Ошибка приложения ─── */
+
+.game-error-overlay {
+    padding: 32px;
+}
+
+.error-title {
+    margin-bottom: 16px;
+    color: var(--color-danger);
+    font-size: var(--font-size-xl);
+    -unity-text-align: middle-center;
+}
+
+.error-message {
+    max-width: 900px;
+    margin-bottom: 24px;
+    padding-left: 40px;
+    padding-right: 40px;
+    color: var(--color-text);
+    font-size: var(--font-size-md);
+    white-space: normal;
+    -unity-text-align: middle-center;
+}
+
+.error-close-button {
+    width: 120px;
+    height: 32px;
+    border-radius: 4px;
+}

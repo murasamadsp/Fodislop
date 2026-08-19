@@ -69,6 +69,11 @@ namespace Fodinae.UI.Programmator
 
         public static bool IsOpen { get; private set; }
 
+        protected void OnDestroy()
+        {
+            IsOpen = false;
+        }
+
         protected void Start()
         {
             CreateUI();
@@ -82,7 +87,6 @@ namespace Fodinae.UI.Programmator
         {
             _popup = new VisualElement();
             _popup.AddToClassList("prog-popup");
-            RadialMenu.AttachStyles(_popup);
 
             var dimmer = new VisualElement();
             dimmer.AddToClassList("prog-dimmer");

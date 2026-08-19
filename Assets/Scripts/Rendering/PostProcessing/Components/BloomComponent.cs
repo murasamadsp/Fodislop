@@ -7,22 +7,27 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-    [Serializable, VolumeComponentMenu("Fodinae/Bloom")]
+    [Serializable]
+    [VolumeComponentMenu("Fodinae/Bloom")]
     public class BloomComponent : VolumeComponent, IPostProcessComponent
     {
+        // Unity Volume serialization and the existing profile use these stable
+        // lower-case field names; changing them would orphan serialized overrides.
+#pragma warning disable SA1307
         [Tooltip("Strength of the glow added around pixels brighter than Threshold.")]
-        public ClampedFloatParameter intensity = new(0f, 0f, 5f);
+        public ClampedFloatParameter intensity = PostProcessDefaults.BloomIntensity();
 
         [Tooltip("Minimum source brightness that contributes to Bloom.")]
-        public ClampedFloatParameter threshold = new(0.9f, 0f, 2f);
+        public ClampedFloatParameter threshold = PostProcessDefaults.BloomThreshold();
 
         [Tooltip("How widely the glow spreads. It does not change brightness directly.")]
-        public ClampedFloatParameter scatter = new(0.7f, 0.1f, 1f);
+        public ClampedFloatParameter scatter = PostProcessDefaults.BloomScatter();
 
         [Tooltip("Color multiplier applied to the glow.")]
-        public ColorParameter tint = new(Color.white);
+        public ColorParameter tint = PostProcessDefaults.BloomTint();
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;
+#pragma warning restore SA1307
     }
 }

@@ -12,7 +12,7 @@ namespace Fodinae.Game;
 public class Tentacle
 {
     private const float SMOOTH_TIME = 0.08f;
-    private const float MAX_SEGMENT_DIST = 0.2f;
+    private const float MAX_SEGMENT_DIST = 0.21f;
     private const float START_WIDTH = 0.15f;
     private const float END_WIDTH = 0.02f;
 
@@ -25,6 +25,7 @@ public class Tentacle
     private readonly Vector3[] _renderPoints;
     private readonly Vector3[] _velocities;
     private readonly float[] _segmentLengths;
+    private bool _isActive = true;
 
     public Tentacle(TentacleBatchRenderer renderer, Texture2D texture, Vector3 startPosition, float wiggleOffset, int sliceIndex, int totalSlices)
     {
@@ -55,6 +56,35 @@ public class Tentacle
         return _renderPoints[index];
     }
 
+    public bool IsActive => _isActive;
+
+    public bool IsSettled
+    {
+        get
+        {
+            for (int i = 1; i < _velocities.Length; i++)
+            {
+                if (_velocities[i].sqrMagnitude > 1e-8f)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    public void SetActive(bool active)
+    {
+        if (_isActive == active)
+        {
+            return;
+        }
+
+        _isActive = active;
+        _renderer.MarkDirty(_texture);
+    }
+
     public void Snap(Vector3 position)
     {
         for (int i = 0; i < _positions.Length; i++)
@@ -63,10 +93,17 @@ public class Tentacle
             _renderPoints[i] = position;
             _velocities[i] = Vector3.zero;
         }
+
+        _renderer.MarkDirty(_texture);
     }
 
     public void Update(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
     {
+        if (!_isActive)
+        {
+            return;
+        }
+
         _positions[0] = rootPosition;
         _renderPoints[0] = rootPosition;
         _segmentLengths[0] = 0f;
@@ -83,7 +120,8 @@ public class Tentacle
         {
             _positions[i] = Vector3.SmoothDamp(_positions[i], targetPos, ref _velocities[i], SMOOTH_TIME, 50f, deltaTime);
 
-            float wiggle = Mathf.Sin((Time.time * 15f) + (i * 1.5f) + _wiggleOffset) * 0.1f * movementFactor;
+            float wiggleAmplitude = 0.025f + (0.13f * movementFactor);
+            float wiggle = Mathf.Sin((Time.time * 15f) + (i * 1.5f) + _wiggleOffset) * wiggleAmplitude;
             Vector3 direction = (_positions[i] - lastPos).normalized;
             if (direction == Vector3.zero)
             {
@@ -98,6 +136,8 @@ public class Tentacle
             lastPos = _positions[i];
             targetPos = _positions[i] + (MAX_SEGMENT_DIST * movementFactor * direction);
         }
+
+        _renderer.MarkDirty(_texture);
     }
 
     /// <summary>

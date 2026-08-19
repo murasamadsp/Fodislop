@@ -9,6 +9,7 @@ using Fodinae.UI;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
+using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Connection;
@@ -24,8 +25,15 @@ namespace Fodinae.Networking.Connection
     {
         public static ConnectionManager? Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         public IServerConnection? Connection { get; private set; }
         public bool IsConnected => Connection != null && Connection.ConnectionStatus != ConnectionStatus.Disconnected;
+        public bool IsOffline => Connection is IOfflineConnection;
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
 
@@ -44,6 +52,8 @@ namespace Fodinae.Networking.Connection
 
         [Inject]
         private IWorldDataStorage _worldStorage = null!;
+        [Inject]
+        private MapManager _mapManager = null!;
         [Inject]
         private GameManager _gameManager = null!;
 
@@ -70,10 +80,16 @@ namespace Fodinae.Networking.Connection
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[ConnectionManager] Error processing packet: {ex.Message}\n{ex.StackTrace}");
+                    Debug.LogException(
+                        new InvalidOperationException(
+                            "A server packet could not be processed. Disconnecting to avoid continuing with corrupted state.",
+                            ex));
+                    TriggerDisconnect("Client packet processing failed.");
+                    break;
                 }
 
-                if (processedCount >= 250 || (Time.realtimeSinceStartup - startTime) * 1000f > 33f)
+                if (processedCount >= ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame ||
+                    (Time.realtimeSinceStartup - startTime) * 1000f > 33f)
                 {
                     break;
                 }
@@ -107,6 +123,15 @@ namespace Fodinae.Networking.Connection
                 return;
             }
 
+            if (Connection != null)
+            {
+                Connection.OnReceived -= OnReceived;
+                Connection.OnConnected -= OnConnected;
+                Connection.OnDisconnected -= OnDisconnected;
+                (Connection as IDisposable)?.Dispose();
+                Connection = null;
+            }
+
             _useOldClient = oldClient;
             _gameManager?.SetState(Game.Managers.GameState.Connecting);
 
@@ -133,7 +158,37 @@ namespace Fodinae.Networking.Connection
             Connection.Disconnect();
             Connection = null;
 
-            (_worldStorage as MapStorage)?.Dispose();
+            ClearPendingPackets();
+
+            _mapManager.ResetWorldState();
+            _worldStorage.Dispose();
+        }
+
+        public void TriggerDisconnect(string reason)
+        {
+            if (Connection is IOfflineConnection offline)
+            {
+                offline.TriggerDisconnect(reason);
+                return;
+            }
+
+            Disconnect();
+        }
+
+        public void TriggerReconnect(string reason)
+        {
+            if (Connection is IOfflineConnection offline)
+            {
+                offline.TriggerReconnect(reason);
+                return;
+            }
+
+            Disconnect();
+        }
+
+        public void Send(ClientPacket packet)
+        {
+            Connection?.SendAsync(packet);
         }
 
         public void HandleServerDisconnect(string reason)
@@ -183,6 +238,10 @@ namespace Fodinae.Networking.Connection
 
         private void OnDisconnected()
         {
+            ClearPendingPackets();
+
+            _mapManager.ResetWorldState();
+            _worldStorage.Dispose();
             _gameManager?.DeauthorizeUI();
 
             if (_shouldAutoReconnect && !_serverInitiatedDisconnect)
@@ -191,6 +250,21 @@ namespace Fodinae.Networking.Connection
                 _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
                 _gameManager?.SetState(Game.Managers.GameState.Disconnected);
                 ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
+            }
+        }
+
+        private void ClearPendingPackets()
+        {
+            int discardedCount = 0;
+            while (_packetQueue.TryDequeue(out _))
+            {
+                discardedCount++;
+            }
+
+            if (discardedCount > 0)
+            {
+                Debug.LogWarning(
+                    $"[ConnectionManager] Discarded {discardedCount} stale packet(s) after disconnect.");
             }
         }
 

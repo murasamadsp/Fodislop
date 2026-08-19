@@ -11,6 +11,12 @@ namespace Fodinae.Networking.Auth
 
         public static event Action<string>? OnTokenChanged;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            OnTokenChanged = null;
+        }
+
         public static string LoadToken() => PlayerPrefs.GetString(PlayerPrefsKey, string.Empty);
 
         public static bool HasToken => PlayerPrefs.HasKey(PlayerPrefsKey);

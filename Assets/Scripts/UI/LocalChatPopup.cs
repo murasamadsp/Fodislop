@@ -18,6 +18,7 @@ namespace Fodinae.UI
     {
         [Inject]
         private UIDocument _doc = null!;
+        private VisualElement? _tree;
         private VisualElement? _overlay;
         private TextField? _inputField;
         private VisualElement? _internalInput;
@@ -31,76 +32,89 @@ namespace Fodinae.UI
         [Inject]
         private IServerConfig _serverConfig = null!;
 
-        protected void OnDestroy()
-        {
-            _idleCts?.Cancel();
-            _idleCts?.Dispose();
-        }
-
         protected void Start()
         {
+            _serverConfig.OnInitialized += ApplyServerConfig;
             CreateUI();
             if (_overlay != null)
             {
                 _overlay.style.display = DisplayStyle.None;
             }
+
+            if (_serverConfig.IsInitialized)
+            {
+                ApplyServerConfig();
+            }
+        }
+
+        protected void OnDestroy()
+        {
+            if (_serverConfig != null)
+            {
+                _serverConfig.OnInitialized -= ApplyServerConfig;
+            }
+
+            _idleCts?.Cancel();
+            _idleCts?.Dispose();
+            _blinker?.StopBlink();
+            _tree?.RemoveFromHierarchy();
+            _tree = null;
+        }
+
+        private void ApplyServerConfig()
+        {
+            if (_inputField != null && _serverConfig.IsInitialized)
+            {
+                _inputField.maxLength = _serverConfig.MaxLocalChatLength;
+            }
         }
 
         private void CreateUI()
         {
-            _overlay = new VisualElement();
-            _overlay.AddToClassList("lchat-overlay");
-
-            var prompt = new Label(">");
-            prompt.AddToClassList("lchat-prompt");
-            _overlay.Add(prompt);
-
-            _inputField = new TextField();
-            _inputField.selectAllOnFocus = false;
-            _inputField.selectAllOnMouseUp = false;
-            _inputField.AddToClassList("lchat-input");
-            _inputField.maxLength = _serverConfig.MaxLocalChatLength;
-            _overlay.Add(_inputField);
-
-            _inputField.RegisterCallback<FocusEvent>(_ =>
+            var uiUxml = Resources.Load<VisualTreeAsset>("UI/LocalChat");
+            if (uiUxml == null)
             {
-                StartBlink();
-                ChatInput.OnFocus();
-            });
-            _inputField.RegisterCallback<BlurEvent>(_ =>
-            {
-                StopBlink();
-                ChatInput.OnBlur();
-            });
-            _inputField.RegisterValueChangedCallback(_ => OnInputChanged());
+                return;
+            }
+
+            VisualElement tree = uiUxml.CloneTree();
+            tree.AddToClassList("ui-fullscreen");
+            tree.pickingMode = PickingMode.Ignore;
+            _tree = tree;
+            _overlay = tree.Q<VisualElement>("LocalChatOverlay");
+            _inputField = tree.Q<TextField>("LocalChatInput");
 
             if (_doc != null && _overlay != null)
             {
-                _doc.rootVisualElement.Add(_overlay);
+                _doc.rootVisualElement.Add(tree);
             }
 
-            _internalInput = _inputField.Q<VisualElement>(className: "unity-text-field__input");
-
-            if (_internalInput != null)
+            if (_inputField != null)
             {
-                _internalInput.AddToClassList("lchat-internal-input");
-            }
+                _inputField.selectAllOnFocus = false;
+                _inputField.selectAllOnMouseUp = false;
+                _inputField.RegisterCallback<FocusEvent>(_ =>
+                {
+                    StartBlink();
+                    ChatInput.OnFocus();
+                });
+                _inputField.RegisterCallback<BlurEvent>(_ =>
+                {
+                    StopBlink();
+                    ChatInput.OnBlur();
+                });
+                _inputField.RegisterValueChangedCallback(_ => OnInputChanged());
 
-            if (_inputField != null && _internalInput != null)
-            {
-                _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
-            }
+                _internalInput = _inputField.Q<VisualElement>(className: "unity-text-field__input");
+                if (_internalInput != null)
+                {
+                    _internalInput.AddToClassList("lchat-internal-input");
+                }
 
-            var uss = Resources.Load<StyleSheet>("chat-input");
-            if (uss != null && _inputField != null)
-            {
-                _inputField.styleSheets.Add(uss);
-            }
-
-            var chatUss = Resources.Load<StyleSheet>("Styles/Chat");
-            if (chatUss != null)
-            {
-                _overlay!.styleSheets.Add(chatUss);
+                if (_internalInput != null)
+                {
+                    _blinker = new Controls.ChatInputBlinker(_inputField, _internalInput);
+                }
             }
         }
 
@@ -145,10 +159,13 @@ namespace Fodinae.UI
             string text = _inputField.value.Trim();
             if (!string.IsNullOrEmpty(text))
             {
-                var chatMaxLen = _serverConfig.MaxLocalChatLength;
-                if (text.Length > chatMaxLen)
+                if (_serverConfig.IsInitialized)
                 {
-                    text = text.Substring(0, chatMaxLen);
+                    var chatMaxLen = _serverConfig.MaxLocalChatLength;
+                    if (text.Length > chatMaxLen)
+                    {
+                        text = text.Substring(0, chatMaxLen);
+                    }
                 }
 
                 _networkService.Send(new SendLocalChatMessagePacket(text));

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
@@ -21,6 +22,8 @@ namespace Fodinae.UI
         private InputAction? _mapToggleAction;
 
         private bool _isInMapMode;
+        private bool _initialized;
+        private bool _playerSpawnSubscription;
 
         // HUD elements
         private Fodinae.UI.HUD.Player.View.PlayerHUDView? _playerHud;
@@ -30,8 +33,32 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
             _cameraFollow = UnityEngine.Object.FindAnyObjectByType<CameraFollow>();
-            _player = UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>();
+            _player = PlayerMovementController.LocalPlayer;
+            if (_player == null && !_playerSpawnSubscription)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+                _playerSpawnSubscription = true;
+            }
+
             _terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
             _playerHud = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
             _inventory = UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>();
@@ -40,19 +67,61 @@ namespace Fodinae.UI
 
             if (_cameraFollow == null)
             {
-                Debug.LogError("[WorldMapController] CameraFollow not found");
-                enabled = false;
                 return;
             }
 
             _mapToggleAction = new InputAction("MapToggle", binding: "<Keyboard>/m");
-            _mapToggleAction.performed += _ => ToggleMapMode();
+            _mapToggleAction.performed += OnMapTogglePerformed;
             _mapToggleAction.Enable();
+            _initialized = true;
         }
 
         protected void OnDestroy()
         {
-            _mapToggleAction?.Dispose();
+            DisposeMapToggleAction();
+            UnsubscribeFromPlayerSpawn();
+        }
+
+        protected void OnDisable()
+        {
+            DisposeMapToggleAction();
+            UnsubscribeFromPlayerSpawn();
+            _initialized = false;
+        }
+
+        private void DisposeMapToggleAction()
+        {
+            if (_mapToggleAction == null)
+            {
+                return;
+            }
+
+            _mapToggleAction.performed -= OnMapTogglePerformed;
+            _mapToggleAction.Disable();
+            _mapToggleAction.Dispose();
+            _mapToggleAction = null;
+        }
+
+        private void OnMapTogglePerformed(InputAction.CallbackContext context)
+        {
+            ToggleMapMode();
+        }
+
+        private void OnLocalPlayerSpawned(PlayerMovementController player)
+        {
+            UnsubscribeFromPlayerSpawn();
+            _player = player;
+        }
+
+        private void UnsubscribeFromPlayerSpawn()
+        {
+            if (!_playerSpawnSubscription)
+            {
+                return;
+            }
+
+            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _playerSpawnSubscription = false;
         }
 
         private void ToggleMapMode()
@@ -62,8 +131,16 @@ namespace Fodinae.UI
                 return;
             }
 
-            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (mapStorage == null || !mapStorage.IsReady)
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                throw new InvalidOperationException(
+                    "[WorldMapController] Map toggle was requested before the VContainer resolver was initialized.");
+            }
+
+            MapStorage mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException(
+                    "[WorldMapController] MapStorage is not registered.");
+            if (!mapStorage.IsReady)
             {
                 return;
             }
@@ -85,8 +162,19 @@ namespace Fodinae.UI
                 return;
             }
 
-            var mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            if (mapStorage == null || !mapStorage.IsReady)
+            PlayerMovementController? player = _player ?? PlayerMovementController.LocalPlayer;
+            if (player == null || !player.HasServerPosition)
+            {
+                throw new InvalidOperationException(
+                    "[WorldMapController] Cannot enter map mode before the local player has a server position.");
+            }
+
+            _player = player;
+
+            MapStorage mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>() ??
+                throw new InvalidOperationException(
+                    "[WorldMapController] MapStorage is not registered.");
+            if (!mapStorage.IsReady)
             {
                 return;
             }
@@ -109,10 +197,7 @@ namespace Fodinae.UI
 
             SetHudVisible(false);
 
-            // Center map on player position
-            int CENTER_X = _player != null ? _player.Position.x : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldWidth ?? 64) / 2;
-            int CENTER_Y = _player != null ? _player.Position.y : (Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.WorldHeight ?? 64) / 2;
-            _mapRenderer.SetViewCenter(CENTER_X, CENTER_Y);
+            _mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
         }
 
         private void ExitMapMode()

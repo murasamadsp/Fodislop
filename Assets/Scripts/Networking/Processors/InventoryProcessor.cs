@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Core;
@@ -23,7 +24,8 @@ namespace Fodinae.Networking.Processors
             var model = Model;
             if (model == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Inventory model is not registered while processing InventoryPacket.");
             }
 
             var remaining = new Dictionary<MinesServer.Data.ItemType, long>(packet.Changes);
@@ -83,7 +85,8 @@ namespace Fodinae.Networking.Processors
             var model = Model;
             if (model == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Inventory model is not registered while processing SelectItemPacket.");
             }
 
             int slot = model.SelectedSlot;

@@ -7,7 +7,7 @@ namespace Fodinae.UI.HUD.Inventory.Model
 {
     public class ItemData
     {
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; set; }
         public Color IconColor { get; set; }
         public int Quantity { get; set; }
         public string Description { get; set; } = string.Empty;
@@ -21,6 +21,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
             Quantity = quantity;
         }
 
-        public ItemData Clone() => new ItemData(Name, IconColor, Quantity);
+        public ItemData Clone() => new ItemData(Name, IconColor, Quantity)
+        {
+            Description = Description,
+            ItemType = ItemType,
+            Icon = Icon,
+        };
     }
 }

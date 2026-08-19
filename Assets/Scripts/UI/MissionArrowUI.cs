@@ -1,7 +1,9 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Game.Managers;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.World;
 using UnityEngine;
@@ -18,11 +20,38 @@ namespace Fodinae.UI
         private Camera? _camera;
         private ushort? _targetX;
         private ushort? _targetY;
+        private bool _initialized;
         [Inject]
-        private IPlayerStats _playerStats = null!;
+        private PlayerStatsModel _playerStats = null!;
+        [Inject]
+        private MapManager _mapManager = null!;
 
         protected void Start()
         {
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_initialized)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
+            {
+                throw new InvalidOperationException(
+                    "[MissionArrowUI] Required DI services and UIDocument must be initialized before building the arrow.");
+            }
+
             _camera = Camera.main;
 
             _arrow = new VisualElement();
@@ -33,7 +62,7 @@ namespace Fodinae.UI
             _arrow.style.display = DisplayStyle.None;
             _doc.rootVisualElement.Add(_arrow);
 
-            var stats = _playerStats as PlayerStatsModel;
+            PlayerStatsModel stats = _playerStats;
             if (stats != null)
             {
                 stats.OnMissionArrowChanged += OnArrowChanged;
@@ -45,22 +74,31 @@ namespace Fodinae.UI
                     _arrow.style.display = DisplayStyle.Flex;
                 }
             }
+
+            _initialized = true;
         }
 
         protected void OnDestroy()
         {
-            var existing = _playerStats as PlayerStatsModel;
-            if (existing != null)
+            if (_playerStats != null)
             {
-                existing.OnMissionArrowChanged -= OnArrowChanged;
+                _playerStats.OnMissionArrowChanged -= OnArrowChanged;
             }
+
+            _arrow?.RemoveFromHierarchy();
+            _arrow = null;
         }
 
         private void OnArrowChanged()
         {
+            if (!isActiveAndEnabled || !_initialized || _arrow == null || _playerStats == null)
+            {
+                return;
+            }
+
             Debug.Log("[MissionArrowUI] OnArrowChanged fired");
-            var stats = ServiceLocator.Resolve<IPlayerStats>() as PlayerStatsModel;
-            if (stats == null || !stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
+            PlayerStatsModel stats = _playerStats;
+            if (!stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
             {
                 Debug.Log("[MissionArrowUI] Arrow cleared (null target)");
                 _targetX = null;
@@ -89,7 +127,10 @@ namespace Fodinae.UI
                 return;
             }
 
-            var worldPos = CoordinateUtils.ServerToUnityPos(_targetX.Value, _targetY.Value);
+            var worldPos = CoordinateUtils.ServerToUnityPos(
+                _targetX.Value,
+                _targetY.Value,
+                _mapManager.WorldHeight);
             var screenPos = _camera.WorldToScreenPoint(worldPos);
 
             if (_doc == null || _doc.rootVisualElement == null || _doc.rootVisualElement.panel == null || _arrow == null)

@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using Fodinae;
 using Fodinae.Audio.Backend;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
@@ -10,6 +9,7 @@ using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Networking.Connection.Client;
 using Fodinae.Player.Logic;
+using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Inventory.Interfaces;
@@ -21,6 +21,8 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
@@ -30,10 +32,16 @@ namespace Fodinae.Core
     [DefaultExecutionOrder(-20000)]
     public class GameLifetimeScope : LifetimeScope
     {
-        private readonly System.Collections.Generic.List<string> _injectionFailures = new();
-
         protected override void Configure(IContainerBuilder builder)
         {
+            EnsureRuntimeUiInput();
+
+            IProjectDefaults projectDefaults = ProjectDefaultsLoader.LoadRequired();
+            builder.RegisterInstance(projectDefaults);
+            GraphicsQualityProfile graphicsQualityProfile =
+                GraphicsQualityProfileLoader.LoadRequired();
+            builder.RegisterInstance(graphicsQualityProfile);
+
             UIDocument? uiDocument = FindAnyObjectByType<UIDocument>(
                 FindObjectsInactive.Include);
             if (uiDocument == null || uiDocument.panelSettings == null)
@@ -45,13 +53,16 @@ namespace Fodinae.Core
             builder.RegisterInstance(uiDocument);
 
             var newStorage = new MapStorage();
-            newStorage.SetAsPending();
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
+
+            builder.RegisterBuildCallback(_ => ServiceLocator.Initialize(_));
 
             // Register (не RegisterInstance): VContainer сам конструирует и инжектит [Inject]-поля.
             // RegisterInstance НЕ инжектит уже созданные вручную объекты — _networkService остаётся null.
             builder.Register<InventoryModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<PlayerStatsModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<LightingGeometryRegistry>(Lifetime.Singleton);
+            builder.Register<GraphicsSettingsController>(Lifetime.Singleton);
 
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
@@ -76,16 +87,16 @@ namespace Fodinae.Core
             var existingPmc = playerGo != null ? playerGo.GetComponent<PlayerMovementController>() : null;
             if (existingPmc != null)
             {
-                builder.RegisterInstance(existingPmc);
-                builder.RegisterBuildCallback(resolver => TryInject(resolver, existingPmc));
+                builder.RegisterComponent(existingPmc);
             }
             else
             {
-                // Фоллбэк: создаём новый GO (offline/тест режим без сцены)
-                builder.RegisterComponentOnNewGameObject<PlayerMovementController>(Lifetime.Singleton);
+                throw new InvalidOperationException(
+                    "The scene must contain a Player object tagged 'Player' with PlayerMovementController.");
             }
 
             RegisterManager<ServerConfig>(builder).AsImplementedInterfaces().AsSelf();
+            RegisterManager<ClientConfigManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TextureStorageManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder);
             RegisterManager<UIInputManager>(builder);
@@ -94,238 +105,53 @@ namespace Fodinae.Core
             RegisterManager<DiagnosticRunner>(builder);
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
+            RegisterManager<SurfaceRenderer>(builder);
 
-            builder.RegisterBuildCallback(resolver =>
-            {
-                ServiceLocator.Initialize(resolver);
+            builder.RegisterBuildCallback(InjectSceneBehaviours);
 
-                resolver.Resolve<ConnectionManager>();
-                var networkService = resolver.Resolve<NetworkService>();
-                networkService.EnsureConnectionSubscription();
-                resolver.Resolve<MapManager>();
-                resolver.Resolve<PacketHandler>();
-                var assetLoader = resolver.Resolve<IAssetLoader>();
-                if (assetLoader is ClientAssetLoader clientAssetLoader)
-                {
-                    clientAssetLoader.EnsurePacketSubscription();
-                }
-                resolver.Resolve<IAudioSystem>();
-                resolver.Resolve<GameManager>();
-                resolver.Resolve<ServerConfig>();
-                resolver.Resolve<TerrariaLightingEngine>();
-                resolver.Resolve<TextureStorageManager>();
-                resolver.Resolve<WorldTextureManager>();
-                resolver.Resolve<ServerAudioEventManager>();
-                resolver.Resolve<VFXPool>();
-                resolver.Resolve<PackManager>();
-                resolver.Resolve<RobotManager>();
-                resolver.Resolve<IPlayerStats>();
-                resolver.Resolve<PlayerMovementController>();
-
-                // UI-сервисы: явно резолвим, чтобы VContainer их инсталлировал
-                // (они не существуют в сцене и создаются здесь).
-                resolver.Resolve<GlobalChatUI>();
-                resolver.Resolve<FPSCounter>();
-                resolver.Resolve<FloatingChatManager>();
-                resolver.Resolve<DiagnosticRunner>();
-                resolver.Resolve<IInputBlocker>();
-                resolver.Resolve<PostProcessController>();
-
-                foreach (var terrain in FindObjectsByType<TerrainRenderer>())
-                {
-                    if (TryInject(resolver, terrain))
-                    {
-                        terrain.EnsureSubscriptions();
-                    }
-                }
-
-                // ВАЖНО: Include — HUD живёт под неактивным UIRoot до авторизации (GameManager.SetupUI),
-                // но его [Inject]-поля должны быть заполнены до Awake компонентов.
-                var allMonoBehaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
-                int injected = 0;
-                foreach (var mb in allMonoBehaviours)
-                {
-                    if (mb == null || mb is LifetimeScope || mb is GameLifetimeScope)
-                    {
-                        continue;
-                    }
-
-                    var ns = mb.GetType().Namespace;
-                    if (ns != null && (ns.StartsWith("UnityEngine") || ns.StartsWith("System") || ns.StartsWith("Unity.")))
-                    {
-                        continue;
-                    }
-
-                    if (TryInject(resolver, mb))
-                    {
-                        injected++;
-                    }
-                }
-
-                Debug.Log($"[GameLifetimeScope] Injected {injected} scene MonoBehaviours with [Inject] fields");
-
-                LogInjectionFailures();
-                ValidateStartup(resolver);
-            });
+            // Инициализация ПОСЛЕ сборки графа: резолв менеджеров, инжект scene-компонентов,
+            // сборка UI, валидация. IPostStart вызывается в player-loop фазе PostStartup,
+            // когда весь DI-граф уже построен — любой резолв в этот момент безопасен и
+            // не вызывает reentrancy Lazy-фабрик (в отличие от build-callback'а внутри Build()).
+            builder.RegisterEntryPoint<GameBootstrap>();
         }
 
-        private bool TryInject(IObjectResolver resolver, object target)
+        private static void EnsureRuntimeUiInput()
         {
-            try
+            EventSystem? eventSystem = FindAnyObjectByType<EventSystem>(FindObjectsInactive.Include);
+            if (eventSystem == null)
             {
-                resolver.Inject(target);
-                return true;
+                GameObject eventSystemObject = new("EventSystem");
+                eventSystem = eventSystemObject.AddComponent<EventSystem>();
             }
-            catch (VContainerException ex)
+
+            if (eventSystem.GetComponent<InputSystemUIInputModule>() == null)
             {
-                _injectionFailures.Add($"{target.GetType().Name}: {ex.Message}");
-                Debug.LogError($"[GameLifetimeScope] Injection failed for {target.GetType().Name}: {ex.Message}");
-                return false;
+                eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
             }
         }
 
-        private void LogInjectionFailures()
+        private static void InjectSceneBehaviours(IObjectResolver resolver)
         {
-            if (_injectionFailures.Count == 0)
+            foreach (MonoBehaviour behaviour in FindObjectsByType<MonoBehaviour>(
+                FindObjectsInactive.Include))
             {
-                return;
-            }
-
-            Debug.LogError(
-                $"[GameLifetimeScope] {_injectionFailures.Count} injection failure(s) during startup:\n- " +
-                string.Join("\n- ", _injectionFailures));
-        }
-
-        private void ValidateStartup(IObjectResolver resolver)
-        {
-            var errors = new System.Collections.Generic.List<string>();
-            var warnings = new System.Collections.Generic.List<string>();
-
-            if (_injectionFailures.Count > 0)
-            {
-                errors.Add($"{_injectionFailures.Count} dependency injection failure(s) occurred during startup");
-            }
-
-            if (resolver.Resolve<IConnectionService>() == null)
-            {
-                errors.Add("ConnectionManager is null after VContainer build");
-            }
-
-            if (resolver.Resolve<INetworkService>() == null)
-            {
-                errors.Add("NetworkService is null after VContainer build");
-            }
-
-            if (resolver.Resolve<IInputBlocker>() == null)
-            {
-                errors.Add("IInputBlocker is null after VContainer build — input blocking will NOT work");
-            }
-
-            if (resolver.Resolve<MapManager>() == null)
-            {
-                errors.Add("MapManager is null after VContainer build");
-            }
-
-            if (resolver.Resolve<IWorldDataStorage>() == null)
-            {
-                errors.Add("MapStorage is null after VContainer build");
-            }
-
-            if (resolver.Resolve<ITextureService>() == null)
-            {
-                errors.Add("WorldTextureManager is null after VContainer build");
-            }
-
-            if (resolver.Resolve<IAudioSystem>() == null)
-            {
-                errors.Add("AudioSystem is null after VContainer build");
-            }
-
-            if (resolver.Resolve<GameManager>() == null)
-            {
-                errors.Add("GameManager is null after VContainer build — UI will NOT be created");
-            }
-
-            if (resolver.Resolve<UIDocument>() == null)
-            {
-                errors.Add("UIDocument is null after VContainer build — UI will NOT be created");
-            }
-
-            var terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
-            if (terrain == null)
-            {
-                errors.Add("TerrainRenderer not found in scene — terrain mesh will NOT be rendered");
-            }
-
-            ValidateInjection(errors);
-
-            if (errors.Count > 0)
-            {
-                var msg = $"[GameLifetimeScope] FATAL STARTUP FAILURE: {errors.Count} critical systems failed:\n- " + string.Join("\n- ", errors);
-                Debug.LogError(msg);
-                return;
-            }
-
-            if (warnings.Count > 0)
-            {
-                Debug.LogWarning($"[GameLifetimeScope] Startup warnings:\n- " + string.Join("\n- ", warnings));
-            }
-
-            Debug.Log("[GameLifetimeScope] Startup validation PASSED — all critical systems are alive");
-        }
-
-        private void ValidateInjection(System.Collections.Generic.List<string> errors)
-        {
-            var injectAttr = typeof(VContainer.InjectAttribute);
-            const System.Reflection.BindingFlags bindFlags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
-            var criticalTypes = new System.Type[]
-            {
-                typeof(PacketHandler),
-                typeof(PauseMenu),
-                typeof(Fodinae.UI.HUD.Player.View.PlayerHUDView),
-                typeof(Fodinae.UI.HUD.Inventory.View.InventoryView),
-                typeof(PlayerMovementController),
-                typeof(MapManager),
-                typeof(WorldTextureManager),
-                typeof(ClientAssetLoader),
-                typeof(AudioSystem),
-                typeof(TerrainRenderer),
-            };
-
-            foreach (var type in criticalTypes)
-            {
-                var instance = UnityEngine.Object.FindAnyObjectByType(type, FindObjectsInactive.Include);
-                if (instance == null)
+                if (behaviour is LifetimeScope)
                 {
                     continue;
                 }
 
-                var fields = type.GetFields(bindFlags);
-                foreach (var field in fields)
-                {
-                    if (!System.Attribute.IsDefined(field, injectAttr))
-                    {
-                        continue;
-                    }
-
-                    var value = field.GetValue(instance);
-                    if (value == null)
-                    {
-                        errors.Add($"{type.Name}.{field.Name} is null — [Inject] failed (existing scene instance not injected)");
-                    }
-                }
+                resolver.Inject(behaviour);
             }
         }
 
         private RegistrationBuilder RegisterManager<T>(IContainerBuilder builder)
             where T : MonoBehaviour
         {
-            var existing = FindAnyObjectByType<T>();
+            var existing = FindAnyObjectByType<T>(FindObjectsInactive.Include);
             if (existing != null)
             {
-                var registration = builder.RegisterInstance(existing);
-                builder.RegisterBuildCallback(resolver => TryInject(resolver, existing));
-                return registration;
+                return builder.RegisterComponent(existing);
             }
 
             return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton);

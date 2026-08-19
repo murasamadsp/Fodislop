@@ -20,8 +20,25 @@ namespace Fodinae.Editor
             sb.AppendLine("=== INJECT VALIDATION (Edit Mode) ===\n");
 
             var monoBehaviours = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
+            var gameObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include);
             int totalInjectFields = 0;
             int nullInjectFields = 0;
+            int missingComponents = 0;
+
+            foreach (var gameObject in gameObjects)
+            {
+                var components = gameObject.GetComponents<Component>();
+                foreach (var component in components)
+                {
+                    if (component != null)
+                    {
+                        continue;
+                    }
+
+                    missingComponents++;
+                    sb.AppendLine($"[MISSING SCRIPT] '{GetHierarchyPath(gameObject)}'");
+                }
+            }
 
             foreach (var mb in monoBehaviours)
             {
@@ -71,6 +88,7 @@ namespace Fodinae.Editor
             sb.AppendLine($"Total [Inject] fields scanned: {totalInjectFields}");
             sb.AppendLine($"NULL (uninjected): {nullInjectFields}");
             sb.AppendLine($"OK: {totalInjectFields - nullInjectFields}");
+            sb.AppendLine($"Missing script components: {missingComponents}");
 
             if (nullInjectFields > 0)
             {
@@ -82,14 +100,29 @@ namespace Fodinae.Editor
             var path = Path.Combine(Application.dataPath, "..", LogPath);
             File.WriteAllText(path, sb.ToString());
 
-            if (nullInjectFields > 0)
+            if (nullInjectFields > 0 || missingComponents > 0)
             {
-                Debug.LogError($"[InjectValidator] {nullInjectFields}/{totalInjectFields} [Inject] fields are NULL. Report: {path}");
+                Debug.LogError(
+                    $"[InjectValidator] null injections={nullInjectFields}/{totalInjectFields}, " +
+                    $"missing scripts={missingComponents}. Report: {path}");
             }
             else
             {
                 Debug.Log($"[InjectValidator] All {totalInjectFields} [Inject] fields OK. Report: {path}");
             }
+        }
+
+        private static string GetHierarchyPath(GameObject gameObject)
+        {
+            var path = gameObject.name;
+            var current = gameObject.transform.parent;
+            while (current != null)
+            {
+                path = current.name + "/" + path;
+                current = current.parent;
+            }
+
+            return path;
         }
     }
 }

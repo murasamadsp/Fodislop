@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -16,11 +17,23 @@ namespace Fodinae.Core
             {
                 if (_shader == null)
                 {
-                    _shader = Shader.Find("Sprites/Default");
+                    _shader = Shader.Find("Sprites/Default") ??
+                        throw new InvalidOperationException(
+                            "SharedMaterialCache requires the supported 'Sprites/Default' shader.");
                 }
 
                 return _shader;
             }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            // Runtime renderers survive script-domain reloads and keep their
+            // sharedMaterial references. Destroying those materials here leaves
+            // the restored renderers bound to Unity fake-null objects.
+            _materials.Clear();
+            _shader = null;
         }
 
         public static Material? GetForTexture(Texture2D texture)
@@ -35,8 +48,12 @@ namespace Fodinae.Core
                 return mat;
             }
 
-            mat = new Material(Shader);
-            mat.mainTexture = texture;
+            mat = new Material(Shader)
+            {
+                name = $"Shared Sprite Material ({texture.name})",
+                hideFlags = HideFlags.DontSave,
+                mainTexture = texture,
+            };
             _materials[texture] = mat;
             return mat;
         }
@@ -47,7 +64,14 @@ namespace Fodinae.Core
             {
                 if (mat != null)
                 {
-                    Object.Destroy(mat);
+                    if (Application.isPlaying)
+                    {
+                        UnityEngine.Object.Destroy(mat);
+                    }
+                    else
+                    {
+                        UnityEngine.Object.DestroyImmediate(mat);
+                    }
                 }
             }
 

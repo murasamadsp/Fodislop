@@ -166,12 +166,12 @@ namespace Fodinae.World
     {
         public CellType CellType { get; set; }
         public Texture2D BaseTexture { get; set; }
+        public bool OwnsBaseTexture { get; set; }
         public bool HasVariations { get; set; }
         public int VariationCount { get; set; }
         public int AnimationFrames { get; set; }
         public int FramesPerRow { get; set; }
         public int FrameSize { get; set; }
-        public float ContainerFPS { get; set; }
 
         public bool HasAnimations => AnimationFrames > 1;
 

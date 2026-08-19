@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -19,8 +20,10 @@ namespace Fodinae.Game.Managers
         public void PlayEffect(AudioPacket packet)
         {
             var vfxType = MapAudioToVFX(packet.EffectType);
-            var vfxPool = ServiceLocator.Resolve<IVFXService>() as VFXPool;
-            var slot = vfxPool != null ? vfxPool.Acquire(vfxType) : null;
+            IVFXService vfxPool = ServiceLocator.Resolve<IVFXService>() ??
+                throw new InvalidOperationException(
+                    "Server audio effects require a registered IVFXService.");
+            VFXPool.PooledSlot? slot = vfxPool.Acquire(vfxType);
 
             var effect = new ServerAudioEvent(packet, slot);
             _activeEffects.Add(effect);

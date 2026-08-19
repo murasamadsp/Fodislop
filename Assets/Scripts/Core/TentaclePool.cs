@@ -10,6 +10,13 @@ public static class TentaclePool
     private static readonly Queue<LineRenderer> _pool = new();
     private static Transform? _parent;
 
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetForDomainReload()
+    {
+        Clear();
+        _parent = null;
+    }
+
     private static Transform? Parent
     {
         get
@@ -87,7 +94,14 @@ public static class TentaclePool
             var line = _pool.Dequeue();
             if (line != null)
             {
-                Object.Destroy(line.gameObject);
+                if (Application.isPlaying)
+                {
+                    Object.Destroy(line.gameObject);
+                }
+                else
+                {
+                    Object.DestroyImmediate(line.gameObject);
+                }
             }
         }
     }

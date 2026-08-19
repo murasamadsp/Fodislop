@@ -77,6 +77,7 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _buildingsPopup;
         private VisualElement? _faqPopup;
         private ProgrammatorGrid? _programmatorGrid;
+        private bool _initializationStarted;
 
         [Inject]
         private PlayerStatsModel _model = null!;
@@ -94,13 +95,54 @@ namespace Fodinae.UI.HUD.Player.View
 
         protected void Start()
         {
+            TryStartInitialization();
+        }
+
+        protected void Update()
+        {
+            if (!_initializationStarted)
+            {
+                TryStartInitialization();
+            }
+        }
+
+        private void TryStartInitialization()
+        {
+            if (_initializationStarted || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null || _model == null ||
+                _globalChatUI == null || _assetLoader == null || _networkService == null || _inputBlocker == null)
+            {
+                throw new InvalidOperationException(
+                    "[PlayerHUD] Required DI services and UIDocument must be initialized before building HUD.");
+            }
+
+            _initializationStarted = true;
             StartAsync(this.destroyCancellationToken).Forget();
         }
 
         private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
         {
             InitializeHUD();
-            await LoadCrystalTextures(cancellationToken);
+            try
+            {
+                await LoadCrystalTextures(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Crystal icons are optional HUD content. Keep the gameplay HUD
+                // alive and report the asset miss only to diagnostics; an optional
+                // visual asset must not cover or block the game UI.
+                Debug.LogWarning($"[PlayerHUD] Optional crystal textures unavailable: {ex.Message}");
+            }
+
             if (cancellationToken.IsCancellationRequested || this == null)
             {
                 return;
@@ -158,7 +200,25 @@ namespace Fodinae.UI.HUD.Player.View
                 }
 
                 string name = ct.ToString().ToLowerInvariant();
-                var tex = await _assetLoader.GetTextureAsync("Crystals/" + name, cancellationToken);
+                Texture2D? tex;
+                try
+                {
+                    tex = await _assetLoader.GetTextureAsync(
+                        "Crystals/" + name,
+                        cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning(
+                        $"[PlayerHUD] Optional crystal texture '{name}' was skipped: " +
+                        exception.Message);
+                    continue;
+                }
+
                 if (cancellationToken.IsCancellationRequested || this == null)
                 {
                     return;
@@ -649,6 +709,10 @@ namespace Fodinae.UI.HUD.Player.View
             var tex = Resources.Load<Texture2D>($"Skills/{skill}");
             if (tex != null)
             {
+                RuntimeTextureFactory.ApplySampling(
+                    tex,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
                 iconImage.image = tex;
             }
 

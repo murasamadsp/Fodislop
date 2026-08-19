@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Fodinae.Audio.Core;
@@ -24,11 +25,53 @@ namespace Fodinae.Audio.Backend
     {
         private const string TAG = "[AudioSystem]";
         private FmodAudioBackend _backend = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
+        private bool _configApplied;
+        private bool _configWaitLogged;
+
+        public bool IsInitialized => _backend != null;
 
         private void Awake()
         {
             _backend = new FmodAudioBackend();
             _backend.Initialize(this);
+        }
+
+        private void Start()
+        {
+            TryApplySavedBusVolumes();
+        }
+
+        private void Update()
+        {
+            if (!_configApplied)
+            {
+                TryApplySavedBusVolumes();
+            }
+        }
+
+        private void TryApplySavedBusVolumes()
+        {
+            if (_configApplied || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            if (_clientConfig == null || _clientConfig.Config == null)
+            {
+                if (!_configWaitLogged)
+                {
+                    Debug.Log(
+                        $"{TAG} Waiting for ClientConfigManager before applying audio settings.");
+                    _configWaitLogged = true;
+                }
+
+                return;
+            }
+
             ApplySavedBusVolumes();
         }
 
@@ -69,12 +112,22 @@ namespace Fodinae.Audio.Backend
 
         public float GetBusVolume(AudioBusType type)
         {
-            return _backend?.GetBusVolume(type) ?? 1f;
+            if (_backend == null)
+            {
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
+            }
+
+            return _backend.GetBusVolume(type);
         }
 
         public void SetBusVolume(AudioBusType type, float volume)
         {
-            _backend?.SetBusVolume(type, volume);
+            if (_backend == null)
+            {
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
+            }
+
+            _backend.SetBusVolume(type, volume);
         }
 
         /// <summary>
@@ -82,13 +135,12 @@ namespace Fodinae.Audio.Backend
         /// </summary>
         public async Cysharp.Threading.Tasks.UniTask<bool> EnsureBankLoadedAsync(string bankName)
         {
-            if (_backend != null)
+            if (_backend == null)
             {
-                return await _backend.EnsureBankLoadedAsync(bankName);
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
             }
 
-            Debug.LogWarning($"{TAG} Cannot load bank '{bankName}': backend not initialized");
-            return false;
+            return await _backend.EnsureBankLoadedAsync(bankName);
         }
 
         /// <summary>
@@ -96,13 +148,23 @@ namespace Fodinae.Audio.Backend
         /// </summary>
         public void UnloadBank(string bankName)
         {
-            _backend?.UnloadBank(bankName);
+            if (_backend == null)
+            {
+                throw new InvalidOperationException($"{TAG} Audio backend is not initialized");
+            }
+
+            _backend.UnloadBank(bankName);
         }
 
         /// <summary>Воспроизвести событие по имени с опциональной 3D-позицией.</summary>
         public AudioPlaybackHandle? Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName))
+            {
+                return null;
+            }
+
+            if (IsKnownMissingFeatureBank(eventName))
             {
                 return null;
             }
@@ -124,7 +186,9 @@ namespace Fodinae.Audio.Backend
                     return null;
                 }
 
-                Debug.LogWarning($"{TAG} Failed to play '{eventName}': backend returned null");
+                // Missing optional audio, an unloaded sample, or an unavailable
+                // feature bank is a valid no-audio state. The backend deliberately
+                // returns null without blocking the game loop.
             }
 
             return handle;
@@ -134,6 +198,11 @@ namespace Fodinae.Audio.Backend
         public AudioPlaybackHandle? PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName) || targetGameObject == null)
+            {
+                return null;
+            }
+
+            if (IsKnownMissingFeatureBank(eventName))
             {
                 return null;
             }
@@ -153,7 +222,7 @@ namespace Fodinae.Audio.Backend
                     return null;
                 }
 
-                Debug.LogWarning($"{TAG} Failed to play attached '{eventName}': backend returned null");
+                // Missing optional audio is intentionally a no-op.
             }
 
             return handle;
@@ -188,12 +257,25 @@ namespace Fodinae.Audio.Backend
                 return false;
             }
 
+            if (IsKnownMissingFeatureBank(eventName))
+            {
+                return false;
+            }
+
             if (_autoLoadInFlight || _autoLoadedBanks.Contains(bankName))
             {
                 return false;
             }
 
             return true;
+        }
+
+        private bool IsKnownMissingFeatureBank(string eventName)
+        {
+            string? bankName = GetFeatureBankName(eventName);
+            return _assetLoader is ClientAssetLoader loader &&
+                bankName != null &&
+                loader.IsKnownMissing($"banks/{bankName}.bank");
         }
 
         private bool _autoLoadInFlight;
@@ -219,11 +301,7 @@ namespace Fodinae.Audio.Backend
                 }
 
                 _autoLoadedBanks.Add(bankName);
-                var handle = _backend?.CreateVoice(eventName, layer, worldPosition, targetGameObject);
-                if (handle == null)
-                {
-                    Debug.LogWarning($"{TAG} Failed to play '{eventName}' after bank '{bankName}' load");
-                }
+                _backend?.CreateVoice(eventName, layer, worldPosition, targetGameObject);
             }
             finally
             {
@@ -240,11 +318,10 @@ namespace Fodinae.Audio.Backend
             }
 
             var handle = _backend?.PlaySnapshot(snapshotPath);
-            if (handle == null)
-            {
-                Debug.LogWarning($"{TAG} Failed to play snapshot '{snapshotPath}': backend returned null");
-            }
 
+            // Snapshots are optional in offline/editor builds. A missing bank,
+            // event, or unloaded sample is intentionally a no-op and must not
+            // block gameplay or flood the console.
             return handle;
         }
 
@@ -267,16 +344,23 @@ namespace Fodinae.Audio.Backend
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Применяет сохранённые в PlayerPrefs значения громкости для всех 6 шин FMOD Studio.
+        /// Применяет сохранённые локальные значения громкости для всех 6 шин FMOD Studio.
         /// </summary>
         public void ApplySavedBusVolumes()
         {
-            SetBusVolume(AudioBusType.Master, PlayerPrefs.GetFloat("Audio_Master", 1f));
-            SetBusVolume(AudioBusType.SFX, PlayerPrefs.GetFloat("Audio_SFX", PlayerPrefs.GetFloat("Audio_Sfx", 1f)));
-            SetBusVolume(AudioBusType.Music, PlayerPrefs.GetFloat("Audio_Music", PlayerPrefs.GetFloat("Audio_Ambient", 0.5f)));
-            SetBusVolume(AudioBusType.Voice, PlayerPrefs.GetFloat("Audio_Voice", 1f));
-            SetBusVolume(AudioBusType.Ambience, PlayerPrefs.GetFloat("Audio_Ambience", 0.7f));
-            SetBusVolume(AudioBusType.UI, PlayerPrefs.GetFloat("Audio_UI", 1f));
+            if (_clientConfig == null || _clientConfig.Config == null)
+            {
+                return;
+            }
+
+            var config = _clientConfig.Config;
+            SetBusVolume(AudioBusType.Master, config.MasterVolume);
+            SetBusVolume(AudioBusType.SFX, config.SfxVolume);
+            SetBusVolume(AudioBusType.Music, config.MusicVolume);
+            SetBusVolume(AudioBusType.Voice, config.VoiceVolume);
+            SetBusVolume(AudioBusType.Ambience, config.AmbienceVolume);
+            SetBusVolume(AudioBusType.UI, config.UiVolume);
+            _configApplied = true;
         }
     }
 }

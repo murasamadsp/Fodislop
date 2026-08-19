@@ -1,5 +1,30 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-8216507500566136753
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d41a4e37898c641a684eef4fef3833ee, type: 3}
+  m_Name: VignetteComponent
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.VignetteComponent
+  active: 0
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0
+  color:
+    m_OverrideState: 1
+    m_Value: {r: 0, g: 0, b: 0, a: 1}
+  smoothness:
+    m_OverrideState: 1
+    m_Value: 0.2
+  center:
+    m_OverrideState: 1
+    m_Value: {x: 0.5, y: 0.5}
 --- !u!114 &-8186968272690591729
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -404,6 +429,31 @@ MonoBehaviour:
   balance:
     m_OverrideState: 1
     m_Value: 0
+--- !u!114 &-3715729722380106029
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53740a32af32d41049052a46cc137dd7, type: 3}
+  m_Name: BloomComponent
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.BloomComponent
+  active: 0
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0
+  threshold:
+    m_OverrideState: 1
+    m_Value: 0.9
+  scatter:
+    m_OverrideState: 1
+    m_Value: 0.7
+  tint:
+    m_OverrideState: 1
+    m_Value: {r: 1, g: 1, b: 1, a: 1}
 --- !u!114 &-3386560400091697801
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -865,6 +915,25 @@ MonoBehaviour:
   chromaticAbberationIntensity:
     m_OverrideState: 1
     m_Value: 0.5
+--- !u!114 &7056487251985366309
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 996afb401c6ff45f882623218512cf5b, type: 3}
+  m_Name: MotionBlurComponent
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.MotionBlurComponent
+  active: 0
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0
+  maxSamples:
+    m_OverrideState: 1
+    m_Value: 8
 --- !u!114 &7933203426823181213
 MonoBehaviour:
   m_ObjectHideFlags: 3

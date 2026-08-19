@@ -6,28 +6,17 @@ namespace Fodinae
     {
         public static class World
         {
-            public const int DEFAULT_CHUNK_SIZE = 32;
-            public const float CELLSIZE = 1.0f;
-
-        }
-
-        public static class UI
-        {
-            public const float MINIMAP_UPDATE_DELAY = 0.033f; // 30 FPS
-            public const int MINIMAP_THRESHOLD = 8;
-            public const int MINIMAP_WIDTH = 128;
-            public const int MINIMAP_HEIGHT = 128;
+            public const float CellSize = 1f;
         }
 
         public static class Debug
         {
-            public const int COLLISION_DEBUG_RANGE = 10;
+            public const int CollisionDebugRange = 10;
         }
 
         public static class Movement
         {
-            public const float DEFAULT_MOVE_SPEED = 15f;
-            public const float REFERENCE_MOVE_SPEED = 25f;
+            public const float ReferenceMoveSpeed = 25f;
         }
     }
 }

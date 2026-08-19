@@ -18,11 +18,9 @@ namespace Fodinae.Game.Managers
 
         public void AddOrUpdatePack(ushort x, ushort y, PackType packType, byte variant, byte linkedClan)
         {
-            if (ServiceLocator.Resolve<MapManager>() == null)
-            {
-                Debug.LogWarning($"{TAG} MapManager not ready, skipping pack at ({x},{y})");
-                return;
-            }
+            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+                throw new System.InvalidOperationException(
+                    $"{TAG} MapManager is required for pack position ({x},{y}).");
 
             var pos = new Vector2Int(x, y);
             if (_packs.TryGetValue(pos, out var pack))
@@ -33,7 +31,7 @@ namespace Fodinae.Game.Managers
 
             var go = new GameObject($"Pack_{x}_{y}");
             go.transform.SetParent(transform);
-            go.transform.position = CoordinateUtils.ServerToUnityPos(x, y);
+            go.transform.position = CoordinateUtils.ServerToUnityPos(x, y, mapManager.WorldHeight);
             pack = go.AddComponent<Pack>();
             pack.Initialize(packType, variant, linkedClan);
             _packs[pos] = pack;

@@ -12,6 +12,14 @@ namespace Fodinae.Player
 {
     public class CameraFollow : MonoBehaviour
     {
+        public static CameraFollow? Instance { get; private set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            Instance = null;
+        }
+
         [Header("Follow Settings")]
         [SerializeField]
         private Transform? _target;
@@ -32,6 +40,7 @@ namespace Fodinae.Player
 
         private float _originalZ;
         private Camera? _camera;
+        private PlayerMovementController? _subscribedPlayer;
         private float _targetZoom;
         private float _currentZoom;
         private float _lastZoom;
@@ -40,16 +49,24 @@ namespace Fodinae.Player
         private bool _scrollEnabled = true;
         private bool _cameraNullLogged;
         private bool _scrollNullLogged;
+        private bool _hasSnappedToServerPosition;
+        private bool _localPlayerSpawnSubscription;
         private Vector3 _followVelocity;
         [Inject]
         private IInputBlocker _inputBlocker = null!;
 
         protected void Awake()
         {
+            Instance = this;
             _camera = GetComponent<Camera>();
         }
 
         protected void Start()
+        {
+            InitializeRuntime();
+        }
+
+        private void InitializeRuntime()
         {
             _originalZ = transform.position.z;
             _camera = GetComponent<Camera>();
@@ -81,8 +98,28 @@ namespace Fodinae.Player
                 }
             }
 
+            PlayerMovementController? localPlayer = PlayerMovementController.LocalPlayer;
+            if (localPlayer != null)
+            {
+                SubscribeToPlayer(localPlayer);
+            }
+
+            if (!_localPlayerSpawnSubscription)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += HandleLocalPlayerSpawned;
+                _localPlayerSpawnSubscription = true;
+            }
+
             SnapToTarget();
             InitializeInput();
+        }
+
+        protected void OnEnable()
+        {
+            if (_camera != null && _scrollAction == null)
+            {
+                InitializeInput();
+            }
         }
 
         private void InitializeInput()
@@ -93,8 +130,81 @@ namespace Fodinae.Player
 
         protected void OnDestroy()
         {
-            _scrollAction?.Disable();
-            _scrollAction?.Dispose();
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
+            if (_subscribedPlayer != null)
+            {
+                _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+                _subscribedPlayer = null;
+            }
+
+            if (_localPlayerSpawnSubscription)
+            {
+                PlayerMovementController.OnLocalPlayerSpawned -= HandleLocalPlayerSpawned;
+                _localPlayerSpawnSubscription = false;
+            }
+
+            DisposeScrollAction();
+        }
+
+        protected void OnDisable()
+        {
+            DisposeScrollAction();
+        }
+
+        private void DisposeScrollAction()
+        {
+            if (_scrollAction == null)
+            {
+                return;
+            }
+
+            _scrollAction.Disable();
+            _scrollAction.Dispose();
+            _scrollAction = null;
+        }
+
+        private void HandlePlayerMoved(Vector2Int oldPosition, Vector2Int newPosition)
+        {
+            if (_hasSnappedToServerPosition || oldPosition == newPosition)
+            {
+                return;
+            }
+
+            _hasSnappedToServerPosition = true;
+            SnapToTarget();
+        }
+
+        private void HandleLocalPlayerSpawned(PlayerMovementController player)
+        {
+            if (_target == null || _target == transform)
+            {
+                _target = player.transform;
+            }
+
+            SubscribeToPlayer(player);
+
+            SnapToTarget();
+        }
+
+        private void SubscribeToPlayer(PlayerMovementController player)
+        {
+            if (ReferenceEquals(_subscribedPlayer, player))
+            {
+                return;
+            }
+
+            if (_subscribedPlayer != null)
+            {
+                _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+            }
+
+            _subscribedPlayer = player;
+            _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
+            _subscribedPlayer.OnPlayerMoved += HandlePlayerMoved;
         }
 
         protected void LateUpdate()
@@ -166,6 +276,11 @@ namespace Fodinae.Player
 
         private void HandleFollow()
         {
+            if (PlayerMovementController.LocalPlayer is { HasServerPosition: false })
+            {
+                return;
+            }
+
             if (_target == null || _target == transform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
@@ -191,6 +306,11 @@ namespace Fodinae.Player
 
         public void SnapToTarget()
         {
+            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            {
+                return;
+            }
+
             if (_target == null || _target == transform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
@@ -205,6 +325,18 @@ namespace Fodinae.Player
                 transform.position = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
                 _followVelocity = Vector3.zero;
             }
+        }
+
+        public void SetGameplayReady()
+        {
+            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            {
+                throw new InvalidOperationException(
+                    "[CameraFollow] Cannot enable camera before the local server position is synchronized.");
+            }
+
+            SnapToTarget();
+            _hasSnappedToServerPosition = true;
         }
 
         public void SetTarget(Transform newTarget)
@@ -229,7 +361,9 @@ namespace Fodinae.Player
         public void SetScrollEnabled(bool enabled) => _scrollEnabled = enabled;
         public void Reinitialize()
         {
-            Start();
+            DisposeScrollAction();
+            _hasSnappedToServerPosition = false;
+            InitializeRuntime();
         }
 
 #if UNITY_EDITOR

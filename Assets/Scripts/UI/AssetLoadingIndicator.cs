@@ -2,40 +2,141 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Game.Managers;
+using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.UI
 {
     /// <summary>
-    /// Small bottom-right asset loading indicator. The details panel is opened
-    /// on demand so the HUD remains unobtrusive during normal gameplay.
+    /// LoaderContainer: защитный экран загрузки (fullscreen overlay) удерживается до
+    /// события <see cref="GameManager.OnWorldLoaded"/>. После загрузки мира скрывается,
+    /// оставляя маленькую «пимпочку» в правом нижнем углу — статус ассетов, FPS, пинг, версия.
     /// </summary>
     public sealed class AssetLoadingIndicator : MonoBehaviour
     {
-        private ClientAssetLoader? _assetLoader;
-        private FPSCounter? _fpsCounter;
-        private UIDocument? _document;
-        private VisualElement? _root;
-        private Button? _toggleButton;
-        private Label? _buttonLabel;
-        private Label? _summaryLabel;
-        private Label? _metricsLabel;
-        private Label? _detailsLabel;
-        private bool _detailsVisible;
-        private float _nextRefreshTime;
+        [Inject]
+        private ClientAssetLoader _assetLoader = null!;
 
-        private void Awake()
+        [Inject]
+        private FPSCounter _fpsCounter = null!;
+
+        [Inject]
+        private UIDocument _document = null!;
+
+        [Inject]
+        private TerrainRenderer _terrainRenderer = null!;
+
+        private GameManager? _gameManager;
+        private VisualElement? _root;
+        private VisualElement? _loadingOverlay;
+        private Label? _loadingSpinnerLabel;
+        private Label? _loadingStatusLabel;
+        private Label? _loadingProgressLabel;
+        private IVisualElementScheduledItem? _spinnerSchedule;
+        private bool _loadingOverlayVisible;
+        private float _nextRefreshTime;
+        private bool _initialized;
+
+        private void OnEnable()
         {
-            _assetLoader = ServiceLocator.Resolve<ClientAssetLoader>();
+            if (_initialized)
+            {
+                RebindGameManager();
+                return;
+            }
+
+            TryInitialize();
+        }
+
+        private void TryInitialize()
+        {
+            if (_initialized || !ServiceLocator.IsInitialized)
+            {
+                return;
+            }
+
+            _gameManager = ServiceLocator.Resolve<GameManager>();
+            if (_gameManager == null || _assetLoader == null || _fpsCounter == null || _document == null)
+            {
+                throw new InvalidOperationException("[AssetLoadingIndicator] Required [Inject] dependencies were not resolved — DI initialization failed.");
+            }
+
+            _initialized = true;
+            _gameManager.OnWorldLoaded += OnWorldLoaded;
+            CreateUI();
+
+            if (!_gameManager.IsWorldLoaded && _gameManager.IsUIAuthorized)
+            {
+                ShowLoadingOverlay();
+            }
+
+            Refresh();
+        }
+
+        private void RebindGameManager()
+        {
+            if (!ServiceLocator.IsInitialized)
+            {
+                if (_gameManager != null)
+                {
+                    _gameManager.OnWorldLoaded -= OnWorldLoaded;
+                    _gameManager = null;
+                }
+
+                return;
+            }
+
+            GameManager? current = ServiceLocator.Resolve<GameManager>();
+            if (current == null)
+            {
+                return;
+            }
+
+            if (_gameManager != null && !ReferenceEquals(_gameManager, current))
+            {
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            }
+
+            _gameManager = current;
+            _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            _gameManager.OnWorldLoaded += OnWorldLoaded;
+        }
+
+        private void OnDestroy()
+        {
+            _spinnerSchedule?.Pause();
+            if (_gameManager != null)
+            {
+                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+            }
+
+            _root?.RemoveFromHierarchy();
         }
 
         private void Update()
         {
+            if (_initialized && _gameManager == null)
+            {
+                RebindGameManager();
+            }
+
+            if (!_initialized)
+            {
+                TryInitialize();
+                return;
+            }
+
             if (_root == null)
             {
-                TryCreateUI();
                 return;
+            }
+
+            if (_loadingOverlayVisible && _loadingStatusLabel != null)
+            {
+                _loadingStatusLabel.text = GetLoadingStatusText();
             }
 
             if (Time.unscaledTime >= _nextRefreshTime)
@@ -45,121 +146,140 @@ namespace Fodinae.UI
             }
         }
 
-        private void OnDestroy()
+        private string GetLoadingStatusText()
         {
-            _root?.RemoveFromHierarchy();
+            if (_gameManager == null || !_gameManager.IsUIAuthorized)
+            {
+                return "Инициализация подключения...";
+            }
+
+            bool terrainReady = _terrainRenderer.IsReadyForGameplay;
+
+            if (!terrainReady)
+            {
+                return "Загрузка ландшафта...";
+            }
+
+            if (_assetLoader == null)
+            {
+                return "Загрузка ресурсов...";
+            }
+
+            int pending = _assetLoader.PendingAssetCount;
+            int queued = _assetLoader.QueuedAssetCount;
+
+            return pending > 0 || queued > 0
+                ? $"Загрузка ассетов: {pending} активных, {queued} в очереди"
+                : "Готово к игре";
         }
 
-        private void TryCreateUI()
+        private void OnWorldLoaded()
         {
-            _assetLoader ??= ServiceLocator.Resolve<ClientAssetLoader>();
-            _fpsCounter ??= FindAnyObjectByType<FPSCounter>();
-            _document ??= FindAnyObjectByType<UIDocument>();
-            if (_assetLoader == null || _document?.rootVisualElement == null)
+            HideLoadingOverlay();
+        }
+
+        private void ShowLoadingOverlay()
+        {
+            if (_loadingOverlay == null)
             {
                 return;
             }
 
-            _root = new VisualElement();
-            _root.AddToClassList("asset-status-root");
-
-            _toggleButton = new Button(ToggleDetails)
-            {
-                tooltip = "Состояние загрузки ассетов",
-            };
-            _toggleButton.AddToClassList("asset-status-button");
-            _buttonLabel = new Label("✓");
-            _buttonLabel.AddToClassList("asset-status-button-label");
-            _toggleButton.Add(_buttonLabel);
-            _root.Add(_toggleButton);
-
-            var panel = new VisualElement();
-            panel.AddToClassList("asset-status-panel");
-
-            _summaryLabel = new Label();
-            _summaryLabel.AddToClassList("asset-status-summary");
-            panel.Add(_summaryLabel);
-
-            _metricsLabel = new Label();
-            _metricsLabel.AddToClassList("asset-status-metrics");
-            panel.Add(_metricsLabel);
-
-            _detailsLabel = new Label();
-            _detailsLabel.AddToClassList("asset-status-details");
-            panel.Add(_detailsLabel);
-            panel.style.display = DisplayStyle.None;
-            _root.Add(panel);
-
-            _document.rootVisualElement.Add(_root);
-            Refresh();
+            _loadingOverlay.style.display = DisplayStyle.Flex;
+            _loadingOverlay.pickingMode = PickingMode.Position;
+            _loadingOverlayVisible = true;
         }
 
-        private void ToggleDetails()
+        private void HideLoadingOverlay()
         {
-            _detailsVisible = !_detailsVisible;
-            if (_root == null || _detailsLabel == null)
+            if (_loadingOverlay == null)
             {
                 return;
             }
 
-            var panel = _detailsLabel.parent;
-            if (panel != null)
+            _loadingOverlay.style.display = DisplayStyle.None;
+            _loadingOverlay.pickingMode = PickingMode.Ignore;
+            _loadingOverlayVisible = false;
+        }
+
+        private void CreateUI()
+        {
+            if (_document?.rootVisualElement == null)
             {
-                panel.style.display = _detailsVisible ? DisplayStyle.Flex : DisplayStyle.None;
+                return;
             }
 
+            var uiUxml = Resources.Load<VisualTreeAsset>("UI/AssetLoadingIndicator");
+            if (uiUxml == null)
+            {
+                return;
+            }
+
+            VisualElement tree = uiUxml.CloneTree();
+            tree.AddToClassList("ui-fullscreen");
+            _document.rootVisualElement.Add(tree);
+
+            _root = tree;
+            _loadingOverlay = tree.Q<VisualElement>("LoadingOverlay");
+            _loadingSpinnerLabel = tree.Q<Label>("SpinnerLabel");
+            _loadingStatusLabel = tree.Q<Label>("StatusLabel");
+            _loadingProgressLabel = tree.Q<Label>("ProgressLabel");
+
+            // This root is always present in the shared UIDocument. It must not
+            // become a transparent fullscreen input shield while hidden.
+            _root.pickingMode = PickingMode.Ignore;
+            if (_loadingOverlay != null)
+            {
+                _loadingOverlay.pickingMode = PickingMode.Ignore;
+            }
+
+            StartSpinner();
             Refresh();
+        }
+
+        private void StartSpinner()
+        {
+            if (_loadingSpinnerLabel == null)
+            {
+                return;
+            }
+
+            string[] frames = ["\u25D0", "\u25D3", "\u25D1", "\u25D2"];
+            _spinnerSchedule = _loadingSpinnerLabel.schedule.Execute(() =>
+            {
+                if (_loadingSpinnerLabel == null)
+                {
+                    return;
+                }
+
+                int frame = (int)(Time.unscaledTime * 4) % 4;
+                _loadingSpinnerLabel.text = frames[frame];
+            }).Every(250);
         }
 
         private void Refresh()
         {
-            if (_assetLoader == null || _buttonLabel == null || _summaryLabel == null ||
-                _metricsLabel == null || _detailsLabel == null)
+            if (_assetLoader == null || _loadingStatusLabel == null || _loadingProgressLabel == null)
+            {
+                return;
+            }
+
+            _loadingStatusLabel.text = GetLoadingStatusText();
+            UpdateProgressText();
+        }
+
+        private void UpdateProgressText()
+        {
+            if (_loadingProgressLabel == null || _assetLoader == null)
             {
                 return;
             }
 
             int pending = _assetLoader.PendingAssetCount;
             int queued = _assetLoader.QueuedAssetCount;
-            bool isLoading = pending > 0 || queued > 0;
-
-            _buttonLabel.text = isLoading ? $"↓ {pending}" : "✓";
-            _toggleButton?.EnableInClassList("asset-status-loading", isLoading);
-            _summaryLabel.text = isLoading
-                ? $"Загрузка ассетов: {pending} активных, {queued} в очереди"
-                : "Загрузка ассетов не выполняется";
-            _metricsLabel.text = $"Версия: {Application.version}\n" +
-                                 $"FPS: {_fpsCounter?.CurrentFps ?? 0f:F1}\n" +
-                                 $"Ping: {_fpsCounter?.PingMs ?? 0} ms\n" +
-                                 $"Online: {_fpsCounter?.OnlinePlayers ?? 0}";
-
-            if (!_detailsVisible)
-            {
-                return;
-            }
-
-            if (pending == 0)
-            {
-                _detailsLabel.text = queued > 0
-                    ? "Ожидание отправки запроса..."
-                    : "Нет активных загрузок.";
-                return;
-            }
-
-            string[] names = _assetLoader.GetPendingAssetNames();
-            int visibleCount = Math.Min(names.Length, 8);
-            string details = string.Empty;
-            for (int i = 0; i < visibleCount; i++)
-            {
-                details += $"• {names[i]}\n";
-            }
-
-            if (names.Length > visibleCount)
-            {
-                details += $"и ещё {names.Length - visibleCount}...";
-            }
-
-            _detailsLabel.text = details;
+            _loadingProgressLabel.text = pending > 0 || queued > 0
+                ? $"Активно: {pending}, В очереди: {queued}"
+                : string.Empty;
         }
     }
 }

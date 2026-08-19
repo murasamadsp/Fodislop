@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using UnityEngine;
 using VContainer;
 
@@ -9,9 +10,17 @@ namespace Fodinae.Core
     {
         private static IObjectResolver? _resolver;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
+        {
+            _resolver = null;
+        }
+
+        public static bool IsInitialized => _resolver != null;
+
         public static void Initialize(IObjectResolver resolver)
         {
-            _resolver = resolver;
+            _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
         }
 
         /// <summary>
@@ -22,10 +31,16 @@ namespace Fodinae.Core
         {
             if (instance == null)
             {
-                return;
+                throw new ArgumentNullException(nameof(instance));
             }
 
-            _resolver?.Inject(instance);
+            if (_resolver == null)
+            {
+                throw new InvalidOperationException(
+                    "ServiceLocator.Inject was called before the VContainer resolver was initialized.");
+            }
+
+            _resolver.Inject(instance);
         }
 
         public static T? Resolve<T>()
@@ -33,12 +48,8 @@ namespace Fodinae.Core
         {
             if (_resolver == null)
             {
-                if (typeof(MonoBehaviour).IsAssignableFrom(typeof(T)))
-                {
-                    return Object.FindAnyObjectByType(typeof(T)) as T;
-                }
-
-                return null;
+                throw new InvalidOperationException(
+                    $"ServiceLocator.Resolve<{typeof(T).Name}> was called before the VContainer resolver was initialized.");
             }
 
             try

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -40,68 +41,68 @@ namespace Fodinae.UI
         private WorldLayer<CellType>? _cellLayer;
         private int _worldWidth;
         private int _worldHeight;
-        private int _chunkSize;
-        private int _heightChunks;
 
         // Pixel buffer and cell color cache
         private Color32[]? _pixelColors;
         private readonly Dictionary<CellType, Color32> _cellColors = new(256);
 
         // Per-update chunk cache (reused, cleared each frame — allocation-free)
-        private readonly Dictionary<int, CellType[]?> _chunkCache = new();
+        private readonly MapCellSampler _cellSampler = new();
 
         // Throttle state
         private Vector2Int _lastUpdatePos; public Vector2Int LastUpdatePos => _lastUpdatePos;
         private float _lastUpdateTime;
         private bool _ready;
+        private bool _initialRefreshDone;
+        private bool _lastRefreshHadLoadedCells;
+        private long _lastRenderedStorageRevision = -1;
+        private bool _chunkLoadRefreshRequested;
+        private WorldLayer<CellType>? _subscribedCellLayer;
+        private bool _playerMoveSubscribed;
 
         // Toggle state
         private bool _isVisible = true;
-        private string _togglePrefKey = "MinimapVisible";
 
-        private const int TEXTURE_SIZE = GameConstants.UI.MINIMAP_WIDTH; // 128
         private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
 
-        private static readonly Color32 UnloadedColor = new(32, 32, 32, 255);
+        private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
         private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
         private static readonly Color32 MarkerColor = Color.white;
         private static readonly Color32 CenterColor = Color.red;
 
         protected void Start()
         {
-            if (_mapManager == null)
+            if (_uiSize < 3)
             {
-                Debug.LogError("[MinimapController] MapManager is null — minimap disabled");
-                enabled = false;
-                return;
+                throw new InvalidOperationException(
+                    $"Minimap size must be at least 3 pixels for the player marker; got {_uiSize}.");
             }
 
-            if (_mapStorage == null)
-            {
-                Debug.LogError("[MinimapController] MapStorage is null — minimap disabled");
-                enabled = false;
-                return;
-            }
+            // GameBootstrap (IPostStartable.PostStart) injects [Inject] fields only after
+            // MonoBehaviour.Start, so _mapManager/_mapStorage are null here. Never disable
+            // the component based on that: Update() -> TryInitialize() resolves them via
+            // ServiceLocator and waits for the world to become ready. World dimensions are
+            // computed there too (InitializeWorldState), so they are not duplicated here.
 
-            _worldWidth = _mapManager.WorldWidth;
-            _worldHeight = _mapManager.WorldHeight;
-            _chunkSize = _mapStorage.CellLayer != null ? _mapStorage.CellLayer.ChunkSize : 32;
-            _heightChunks = (_worldHeight + _chunkSize - 1) / _chunkSize;
+            // Every texel is a discrete world-cell sample. Bilinear filtering
+            // invents colors between adjacent cells and blurs unloaded chunk
+            // boundaries, so the display must preserve nearest-neighbour data.
+            _minimapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                _uiSize,
+                _uiSize,
+                "MinimapTexture",
+                RuntimeTextureColorSpace.Srgb,
+                FilterMode.Point,
+                TextureWrapMode.Clamp);
 
-            _minimapTexture = new Texture2D(TEXTURE_SIZE, TEXTURE_SIZE, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Point,
-                wrapMode = TextureWrapMode.Clamp,
-            };
-
-            _pixelColors = new Color32[TEXTURE_SIZE * TEXTURE_SIZE];
+            _pixelColors = new Color32[_uiSize * _uiSize];
 
             CreateUI();
 
             _player = PlayerMovementController.LocalPlayer;
             if (_player != null)
             {
-                _player.OnPlayerMoved += OnPlayerMoved;
+                BindPlayer(_player);
             }
             else
             {
@@ -113,16 +114,13 @@ namespace Fodinae.UI
         {
             PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
             _player = player;
-            if (_player != null)
+            BindPlayer(player);
+            if (_ready)
             {
-                _player.OnPlayerMoved += OnPlayerMoved;
-                if (_ready)
+                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                if (_isVisible)
                 {
-                    UpdateCoordinatesText(_player.Position.x, _player.Position.y);
-                    if (_isVisible)
-                    {
-                        RefreshTexture(_player.Position.x, _player.Position.y);
-                    }
+                    RefreshTexture(_player.Position.x, _player.Position.y);
                 }
             }
         }
@@ -133,9 +131,39 @@ namespace Fodinae.UI
         /// </summary>
         protected void Update()
         {
-            if (!_ready)
+            if (!_ready || _player == null || !_player.HasServerPosition || !_initialRefreshDone)
             {
                 TryInitialize();
+            }
+
+            if (_ready && _mapStorage != null &&
+                !ReferenceEquals(_cellLayer, _mapStorage.CellLayer))
+            {
+                _ready = false;
+                TryInitialize();
+            }
+
+            if (_ready && _initialRefreshDone && _isVisible &&
+                _player != null && _player.HasServerPosition &&
+                _mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)
+            {
+                _cellSampler.Invalidate();
+                RefreshTexture(_player.Position.x, _player.Position.y);
+                _lastRenderedStorageRevision = _mapStorage.Revision;
+            }
+
+            if (_chunkLoadRefreshRequested && _ready && _isVisible &&
+                _player != null && _player.HasServerPosition)
+            {
+                _chunkLoadRefreshRequested = false;
+                RefreshTexture(_player.Position.x, _player.Position.y);
+                _initialRefreshDone = _lastRefreshHadLoadedCells;
+                if (_initialRefreshDone)
+                {
+                    _lastRenderedStorageRevision = _mapStorage?.Revision ??
+                        throw new InvalidOperationException(
+                            "Minimap storage was lost after a chunk loaded.");
+                }
             }
 
             if (Keyboard.current != null && Keyboard.current.nKey.wasPressedThisFrame)
@@ -146,15 +174,13 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_mapManager == null)
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
             {
-                _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+                return;
             }
 
-            if (_mapStorage == null)
-            {
-                _mapStorage = Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>() as MapStorage;
-            }
+            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
 
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
@@ -166,14 +192,31 @@ namespace Fodinae.UI
                 return;
             }
 
-            InitializeWorldState();
+            PlayerMovementController? localPlayer = PlayerMovementController.LocalPlayer;
+            if (localPlayer != null)
+            {
+                BindPlayer(localPlayer);
+            }
 
-            if (_player != null)
+            if (!_ready)
+            {
+                InitializeWorldState();
+            }
+
+            if (_player != null && _player.HasServerPosition && !_initialRefreshDone)
             {
                 UpdateCoordinatesText(_player.Position.x, _player.Position.y);
                 if (_isVisible)
                 {
                     RefreshTexture(_player.Position.x, _player.Position.y);
+                }
+
+                _lastUpdatePos = _player.Position;
+                _lastUpdateTime = Time.time;
+                _initialRefreshDone = !_isVisible || _lastRefreshHadLoadedCells;
+                if (_initialRefreshDone)
+                {
+                    _lastRenderedStorageRevision = _mapStorage.Revision;
                 }
             }
         }
@@ -188,6 +231,12 @@ namespace Fodinae.UI
             for (int i = 0; i <= 255; i++)
             {
                 CellType cellType = (CellType)i;
+                if (cellType == CellType.Unloaded)
+                {
+                    _cellColors[cellType] = UnloadedColor;
+                    continue;
+                }
+
                 Color color = _mapManager.GetCellMinimapColor(cellType);
                 if (color.a < 0.01f)
                 {
@@ -211,10 +260,24 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (!ReferenceEquals(_subscribedCellLayer, _cellLayer))
+            {
+                if (_subscribedCellLayer != null)
+                {
+                    _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                }
+
+                _subscribedCellLayer = _cellLayer;
+                _subscribedCellLayer.ChunkLoaded += OnChunkLoaded;
+                _cellSampler.Bind(_cellLayer);
+                _cellSampler.Invalidate();
+                _chunkLoadRefreshRequested = true;
+                _initialRefreshDone = false;
+                _lastRenderedStorageRevision = -1;
+            }
+
             _worldWidth = _mapManager.WorldWidth;
             _worldHeight = _mapManager.WorldHeight;
-            _chunkSize = _cellLayer.ChunkSize;
-            _heightChunks = _cellLayer.HeightChunks;
             CacheCellColors();
             _ready = true;
             SetVisible(_isVisible);
@@ -230,8 +293,10 @@ namespace Fodinae.UI
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.overrideSorting = true;
 
-            // Draw above the world, but below the UI Toolkit HUD and its modal panels.
-            canvas.sortingOrder = -1;
+            // Runtime UI Toolkit occupies a full-screen panel. A negative
+            // overlay order places uGUI behind that panel even where its
+            // visual background is transparent.
+            canvas.sortingOrder = 10;
             canvasObj.AddComponent<CanvasScaler>();
 
             // Minimap image
@@ -287,6 +352,7 @@ namespace Fodinae.UI
         {
             if (_ready)
             {
+                RebindRuntimeSources();
                 SetVisible(_isVisible);
             }
         }
@@ -294,6 +360,70 @@ namespace Fodinae.UI
         protected void OnDisable()
         {
             SetVisible(false);
+        }
+
+        private void BindPlayer(PlayerMovementController player)
+        {
+            if (ReferenceEquals(_player, player) && _playerMoveSubscribed)
+            {
+                return;
+            }
+
+            if (_playerMoveSubscribed && _player != null)
+            {
+                _player.OnPlayerMoved -= OnPlayerMoved;
+            }
+
+            _player = player;
+            _player.OnPlayerMoved -= OnPlayerMoved;
+            _player.OnPlayerMoved += OnPlayerMoved;
+            _playerMoveSubscribed = true;
+        }
+
+        private void RebindRuntimeSources()
+        {
+            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                _ready = false;
+                return;
+            }
+
+            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
+            if (_mapManager == null || _mapStorage == null)
+            {
+                _ready = false;
+                return;
+            }
+
+            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+            if (_playerMoveSubscribed && _player != null)
+            {
+                _player.OnPlayerMoved -= OnPlayerMoved;
+                _playerMoveSubscribed = false;
+            }
+
+            _player = PlayerMovementController.LocalPlayer;
+            if (_player != null)
+            {
+                BindPlayer(_player);
+            }
+            else
+            {
+                PlayerMovementController.OnLocalPlayerSpawned += OnPlayerSpawned;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                _subscribedCellLayer = null;
+            }
+
+            _cellLayer = null;
+            _cellSampler.Bind(null);
+            _cellSampler.Invalidate();
+            _ready = false;
+            InitializeWorldState();
         }
 
         private void OnPlayerMoved(Vector2Int oldPos, Vector2Int newPos)
@@ -328,14 +458,23 @@ namespace Fodinae.UI
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
                 RefreshTexture(newPos.x, newPos.y);
+                MapStorage storage = _mapStorage ??
+                    throw new InvalidOperationException("Minimap storage was lost during refresh.");
+                _lastRenderedStorageRevision = storage.Revision;
             }
+        }
+
+        private void OnChunkLoaded(int serverX, int serverY, int width, int height)
+        {
+            _cellSampler.Invalidate();
+            _chunkLoadRefreshRequested = true;
         }
 
         private void RefreshTexture(int playerX, int playerY)
         {
-            const int HALF_SIZE = TEXTURE_SIZE / 2;
-            int minX = playerX - HALF_SIZE;
-            const int TEX_SIZE = TEXTURE_SIZE;
+            int halfSize = _uiSize / 2;
+            int minX = playerX - halfSize;
+            int texSize = _uiSize;
             Color32[]? colors = _pixelColors;
             if (colors == null)
             {
@@ -343,21 +482,20 @@ namespace Fodinae.UI
             }
 
             Dictionary<CellType, Color32> cellColors = _cellColors;
-            Dictionary<int, CellType[]?> cache = _chunkCache;
-            cache.Clear();
 
             int index = 0;
+            bool hasLoadedCells = false;
 
-            for (int texY = 0; texY < TEX_SIZE; texY++)
+            for (int texY = 0; texY < texSize; texY++)
             {
                 // texY = 0 is bottom of screen (deeper underground, larger Server Y)
-                // texY = TEX_SIZE - 1 is top of screen (towards surface, smaller Server Y)
-                int serverY = playerY + HALF_SIZE - texY;
+                // texY = texSize - 1 is top of screen (towards surface, smaller Server Y)
+                int serverY = playerY + halfSize - texY;
 
                 if (serverY < 0 || serverY >= _worldHeight)
                 {
                     // Entire row is out of bounds
-                    int end = index + TEX_SIZE;
+                    int end = index + texSize;
                     while (index < end)
                     {
                         colors[index++] = OutOfBoundsColor;
@@ -366,11 +504,7 @@ namespace Fodinae.UI
                     continue;
                 }
 
-                // Column-major chunk indexing for WorldLayer<T>
-                int chunkY = serverY / _chunkSize;
-                int localY = serverY % _chunkSize;
-
-                for (int texX = 0; texX < TEX_SIZE; texX++)
+                for (int texX = 0; texX < texSize; texX++)
                 {
                     int serverX = minX + texX;
 
@@ -380,20 +514,12 @@ namespace Fodinae.UI
                         continue;
                     }
 
-                    int chunkX = serverX / _chunkSize;
-                    int chunkIdx = chunkY + (chunkX * _heightChunks);
-
-                    if (!cache.TryGetValue(chunkIdx, out CellType[]? chunk))
+                    if (_cellSampler.TryGetCell(serverX, serverY, out CellType cellType))
                     {
-                        // Don't create missing chunks, don't touch LRU (no cache pollution)
-                        chunk = _cellLayer?.GetChunk(chunkIdx, false, false);
-                        cache[chunkIdx] = chunk;
-                    }
-
-                    if (chunk != null)
-                    {
-                        int localIdx = localY + ((serverX % _chunkSize) * _chunkSize);
-                        colors[index++] = cellColors[chunk[localIdx]];
+                        hasLoadedCells = true;
+                        colors[index++] = cellType == CellType.Unloaded
+                            ? UnloadedColor
+                            : cellColors[cellType];
                     }
                     else
                     {
@@ -403,22 +529,25 @@ namespace Fodinae.UI
             }
 
             // Draw player marker (plus sign)
-            const int cx = HALF_SIZE;
-            colors[(cx * TEX_SIZE) + cx - 1] = MarkerColor;
-            colors[(cx * TEX_SIZE) + cx] = CenterColor;
-            colors[(cx * TEX_SIZE) + cx + 1] = MarkerColor;
-            colors[((cx - 1) * TEX_SIZE) + cx] = MarkerColor;
-            colors[((cx + 1) * TEX_SIZE) + cx] = MarkerColor;
+            int cx = halfSize;
+            colors[(cx * texSize) + cx - 1] = MarkerColor;
+            colors[(cx * texSize) + cx] = CenterColor;
+            colors[(cx * texSize) + cx + 1] = MarkerColor;
+            colors[((cx - 1) * texSize) + cx] = MarkerColor;
+            colors[((cx + 1) * texSize) + cx] = MarkerColor;
 
             if (_minimapTexture != null)
             {
                 _minimapTexture.SetPixels32(colors);
+
                 // Keep the texture readable: this texture is updated again on
                 // every throttled player movement. Passing true discards the
                 // CPU copy and makes the next SetPixels32 fail/force a costly
                 // reallocation.
-                _minimapTexture.Apply(false);
-            } // Async GPU upload — non-blocking
+                _minimapTexture.Apply(false); // Async GPU upload — non-blocking
+            }
+
+            _lastRefreshHadLoadedCells = hasLoadedCells;
         }
 
         private void UpdateCoordinatesText(int x, int y)
@@ -444,6 +573,13 @@ namespace Fodinae.UI
             if (_player != null)
             {
                 _player.OnPlayerMoved -= OnPlayerMoved;
+                _playerMoveSubscribed = false;
+            }
+
+            if (_subscribedCellLayer != null)
+            {
+                _subscribedCellLayer.ChunkLoaded -= OnChunkLoaded;
+                _subscribedCellLayer = null;
             }
 
             if (_minimapTexture != null)
@@ -461,9 +597,10 @@ namespace Fodinae.UI
                 _lastUpdateTime = Time.time;
                 _lastUpdatePos = _player.Position;
                 RefreshTexture(_player.Position.x, _player.Position.y);
+                MapStorage storage = _mapStorage ??
+                    throw new InvalidOperationException("Minimap storage was lost while becoming visible.");
+                _lastRenderedStorageRevision = storage.Revision;
             }
-            PlayerPrefs.SetInt(_togglePrefKey, _isVisible ? 1 : 0);
-            PlayerPrefs.Save();
         }
 
         private void SetVisible(bool visible)

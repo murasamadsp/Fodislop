@@ -2,43 +2,51 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Fodinae.Rendering
 {
-    public enum GraphicsQualityTier
+    public enum GraphicsPreset
     {
+        VeryLow,
         Low,
         Medium,
         High,
+        VeryHigh,
         Ultra,
+        Custom,
     }
 
     [Serializable]
-    public struct GraphicsQualitySettings
+    public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
     {
+        [FormerlySerializedAs("LightingPixelsPerCell")]
         [Min(1)]
-        public int LightingPixelsPerCell;
+        [Tooltip("Нижняя граница lighting-пикселей на клетку. Фактическое разрешение считается от render target базовой камеры.")]
+        public int LightingMinimumPixelsPerCell;
         [Min(128)]
+        [Tooltip("Максимальный размер lighting field в пикселях.")]
         public int LightingMaximumTextureDimension;
         [Min(1)]
+        [Tooltip("Максимальное число dynamic light sources, загружаемых в GPU buffer.")]
         public int LightingMaximumLightCount;
         [Min(1)]
+        [Tooltip("Максимальное число шагов одного cascade interval.")]
         public int LightingMaximumRaySteps;
         [Min(1f)]
+        [Tooltip("Максимальная частота lighting solve. Изменение геометрии всё равно обрабатывается сразу.")]
         public float LightingUpdatesPerSecond;
-        [ColorUsage(showAlpha: false, hdr: true)]
-        public Color EmptyExtinctionRgb;
-        [ColorUsage(showAlpha: false, hdr: true)]
-        public Color SolidExtinctionRgb;
-        [Range(0f, 2f)]
-        public float BounceStrength;
         [Min(128)]
+        [Tooltip("Бюджет radiance cascade atlas.")]
         public int LightingCascadeAtlasLimit;
         [Range(0.5f, 1f)]
+        [Tooltip("URP render scale для данного quality tier.")]
         public float RenderScale;
         [Range(0, 4)]
+        [Tooltip("Количество вертикальных синхронизаций.")]
         public int VSyncCount;
         [Range(0, 8)]
+        [Tooltip("MSAA sample count для данного quality tier.")]
         public int AntiAliasing;
 
         public GraphicsQualitySettings(
@@ -47,81 +55,145 @@ namespace Fodinae.Rendering
             int lightingMaximumLightCount,
             int lightingMaximumRaySteps,
             float lightingUpdatesPerSecond,
-            Color? emptyExtinctionRgb = null,
-            Color? solidExtinctionRgb = null,
-            float bounceStrength = 0.3f,
-            int lightingCascadeAtlasLimit = 512,
-            float renderScale = 1f,
-            int vSyncCount = 1,
-            int antiAliasing = 0)
+            int lightingCascadeAtlasLimit,
+            float renderScale,
+            int vSyncCount,
+            int antiAliasing)
         {
-            LightingPixelsPerCell = lightingPixelsPerCell;
+            LightingMinimumPixelsPerCell = lightingPixelsPerCell;
             LightingMaximumTextureDimension = lightingMaximumTextureDimension;
             LightingMaximumLightCount = lightingMaximumLightCount;
             LightingMaximumRaySteps = lightingMaximumRaySteps;
             LightingUpdatesPerSecond = lightingUpdatesPerSecond;
-            EmptyExtinctionRgb = emptyExtinctionRgb ?? new Color(0.015f, 0.012f, 0.009f, 1f);
-            SolidExtinctionRgb = solidExtinctionRgb ?? new Color(4.5f, 4.25f, 4f, 1f);
-            BounceStrength = bounceStrength;
             LightingCascadeAtlasLimit = lightingCascadeAtlasLimit;
             RenderScale = renderScale;
             VSyncCount = vSyncCount;
             AntiAliasing = antiAliasing;
+        }
+
+        public readonly bool Equals(GraphicsQualitySettings other)
+        {
+            return LightingMinimumPixelsPerCell == other.LightingMinimumPixelsPerCell &&
+                LightingMaximumTextureDimension == other.LightingMaximumTextureDimension &&
+                LightingMaximumLightCount == other.LightingMaximumLightCount &&
+                LightingMaximumRaySteps == other.LightingMaximumRaySteps &&
+                LightingUpdatesPerSecond.Equals(other.LightingUpdatesPerSecond) &&
+                LightingCascadeAtlasLimit == other.LightingCascadeAtlasLimit &&
+                RenderScale.Equals(other.RenderScale) &&
+                VSyncCount == other.VSyncCount &&
+                AntiAliasing == other.AntiAliasing;
+        }
+
+        public override readonly bool Equals(object? obj)
+        {
+            return obj is GraphicsQualitySettings other && Equals(other);
+        }
+
+        public override readonly int GetHashCode()
+        {
+            return CalculateHash(this);
+        }
+
+        private static int CalculateHash(GraphicsQualitySettings settings)
+        {
+            HashCode hash = default;
+            hash.Add(settings.LightingMinimumPixelsPerCell);
+            hash.Add(settings.LightingMaximumTextureDimension);
+            hash.Add(settings.LightingMaximumLightCount);
+            hash.Add(settings.LightingMaximumRaySteps);
+            hash.Add(settings.LightingUpdatesPerSecond);
+            hash.Add(settings.LightingCascadeAtlasLimit);
+            hash.Add(settings.RenderScale);
+            hash.Add(settings.VSyncCount);
+            hash.Add(settings.AntiAliasing);
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(
+            GraphicsQualitySettings left,
+            GraphicsQualitySettings right)
+        {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(
+            GraphicsQualitySettings left,
+            GraphicsQualitySettings right)
+        {
+            return !left.Equals(right);
         }
     }
 
     [CreateAssetMenu(fileName = "GraphicsQualityProfile", menuName = "Fodinae/Graphics Quality Profile")]
     public sealed class GraphicsQualityProfile : ScriptableObject
     {
-        [SerializeField]
-        private GraphicsQualitySettings _low = new(1, 512, 128, 20, 60f, lightingCascadeAtlasLimit: 512);
-        [SerializeField]
-        private GraphicsQualitySettings _medium = new(2, 768, 256, 28, 60f, lightingCascadeAtlasLimit: 768);
-        [SerializeField]
-        private GraphicsQualitySettings _high = new(2, 1024, 512, 40, 60f, lightingCascadeAtlasLimit: 1024);
-        [SerializeField]
-        private GraphicsQualitySettings _ultra = new(4, 1536, 1024, 64, 60f, lightingCascadeAtlasLimit: 1536);
+        public const int StandardPresetCount = (int)GraphicsPreset.Custom;
 
-        public GraphicsQualitySettings Get(GraphicsQualityTier tier)
+        [SerializeField]
+        private GraphicsQualitySettings _veryLow;
+        [SerializeField]
+        private GraphicsQualitySettings _low;
+        [SerializeField]
+        private GraphicsQualitySettings _medium;
+        [SerializeField]
+        private GraphicsQualitySettings _high;
+        [SerializeField]
+        private GraphicsQualitySettings _veryHigh;
+        [SerializeField]
+        private GraphicsQualitySettings _ultra;
+
+        public GraphicsQualitySettings Get(GraphicsPreset preset)
         {
-            GraphicsQualitySettings settings = tier switch
+            GraphicsQualitySettings settings = preset switch
             {
-                GraphicsQualityTier.Low => _low,
-                GraphicsQualityTier.Medium => _medium,
-                GraphicsQualityTier.High => _high,
-                _ => _ultra,
+                GraphicsPreset.VeryLow => _veryLow,
+                GraphicsPreset.Low => _low,
+                GraphicsPreset.Medium => _medium,
+                GraphicsPreset.High => _high,
+                GraphicsPreset.VeryHigh => _veryHigh,
+                GraphicsPreset.Ultra => _ultra,
+                GraphicsPreset.Custom => throw new ArgumentException(
+                    "Custom graphics settings are stored in ClientConfig, not in the immutable profile.",
+                    nameof(preset)),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(preset),
+                    preset,
+                    "Unknown graphics preset."),
             };
 
-            ApplyRadianceCascadeDefaults(ref settings, tier);
+            ValidateSettings(settings, preset.ToString());
             return settings;
         }
 
-        private static void ApplyRadianceCascadeDefaults(
-            ref GraphicsQualitySettings settings,
-            GraphicsQualityTier tier)
+        public void Validate()
         {
-            (settings.LightingPixelsPerCell, settings.LightingMaximumTextureDimension) = tier switch
+            for (int index = 0; index < StandardPresetCount; index++)
             {
-                GraphicsQualityTier.Low => (1, 512),
-                GraphicsQualityTier.Medium => (2, 768),
-                GraphicsQualityTier.High => (2, 1024),
-                _ => (4, 1536),
-            };
-            settings.LightingCascadeAtlasLimit = settings.LightingMaximumTextureDimension;
-            settings.LightingUpdatesPerSecond = 60f;
-            if (settings.EmptyExtinctionRgb.maxColorComponent <= 0f)
-            {
-                settings.EmptyExtinctionRgb = new Color(0.015f, 0.012f, 0.009f, 1f);
+                _ = Get((GraphicsPreset)index);
             }
+        }
 
-            if (settings.SolidExtinctionRgb.maxColorComponent <= 0f)
-            {
-                settings.SolidExtinctionRgb = new Color(4.5f, 4.25f, 4f, 1f);
-            }
+        public static bool IsStandard(GraphicsPreset preset)
+        {
+            return preset is >= GraphicsPreset.VeryLow and <= GraphicsPreset.Ultra;
+        }
 
-            if (settings.BounceStrength <= 0f)
+        public static void ValidateSettings(
+            GraphicsQualitySettings settings,
+            string context)
+        {
+            if (settings.LightingMinimumPixelsPerCell < 1 ||
+                settings.LightingMaximumTextureDimension < 128 ||
+                settings.LightingMaximumLightCount < 1 ||
+                settings.LightingMaximumRaySteps < 1 ||
+                settings.LightingUpdatesPerSecond <= 0f ||
+                settings.LightingCascadeAtlasLimit < 128 ||
+                settings.RenderScale is < 0.5f or > 1f ||
+                settings.VSyncCount is < 0 or > 4 ||
+                settings.AntiAliasing is < 0 or > 8)
             {
-                settings.BounceStrength = 0.3f;
+                throw new InvalidOperationException(
+                    $"Graphics quality settings '{context}' contain invalid technical values.");
             }
         }
     }

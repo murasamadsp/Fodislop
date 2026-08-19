@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Core.Interfaces;
@@ -70,21 +71,37 @@ namespace Fodinae.Networking
         private IMapDataProvider _mapDataProvider = null!;
         [Inject]
         private UIDocument _uiDocument = null!;
-        private MapStorage? MapStorage => _mapStorageInterface as MapStorage;
-
         protected virtual void Awake()
         {
-            if (_mapDataProvider == null)
+            TryInitialize();
+        }
+
+        protected void Start()
+        {
+            TryInitialize();
+        }
+
+        public void EnsureInitialized()
+        {
+            if (!TryInitialize() || !_isSubscribed)
             {
-                Debug.LogError("[PacketHandler] FATAL: IMapDataProvider is not injected — PacketHandler cannot function. World will not render.");
-                return;
+                throw new InvalidOperationException(
+                    "PacketHandler dependencies were not injected before startup completed.");
+            }
+        }
+
+        private bool TryInitialize()
+        {
+            if (_isInitialized)
+            {
+                TrySubscribeToNetworkService();
+                return true;
             }
 
-            var mapStorage = MapStorage;
-            if (mapStorage == null)
+            if (_mapDataProvider == null || _mapStorageInterface == null ||
+                _uiDocument == null || _networkService == null)
             {
-                Debug.LogError("[PacketHandler] FATAL: MapStorage not found at Awake — PacketHandler cannot function. World will not render.");
-                return;
+                return false;
             }
 
             var modalWindowHandler = new ModalWindowHandler(_uiDocument);
@@ -98,20 +115,27 @@ namespace Fodinae.Networking
             }
 
             _isInitialized = true;
-        }
-
-        protected void Start()
-        {
-            TrySubscribeToNetworkService();
+            return true;
         }
 
         private void TrySubscribeToNetworkService()
         {
-            if (_isSubscribed || _networkService == null)
+            if (Fodinae.Core.ServiceLocator.IsInitialized)
+            {
+                _networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>() ??
+                    throw new InvalidOperationException(
+                        "PacketHandler requires INetworkService in the active resolver.");
+            }
+
+            if (_networkService == null)
             {
                 return;
             }
 
+            // NetworkService deduplicates handlers. Re-registering here is
+            // intentional: after a domain reload the injected service can be a
+            // new instance while PacketHandler's _isSubscribed flag survives.
+            // The old guard would then leave the new dispatcher empty.
             _networkService.Subscribe<WorldInitPacket>(WorldInit.Process);
             _networkService.Subscribe<RobotInfoPacket>(RobotInfo.Process);
             _networkService.Subscribe<PlayerInfoPacket>(PlayerInfo.Process);
@@ -243,7 +267,6 @@ namespace Fodinae.Networking
             var gm = _gameManager;
             if (gm != null)
             {
-                gm.SetState(GameState.InGame);
                 gm.NotifyWorldLoaded();
             }
         }

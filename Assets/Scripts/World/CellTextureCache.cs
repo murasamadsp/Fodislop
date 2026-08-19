@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using MinesServer.Data;
 using UnityEngine;
@@ -29,6 +30,13 @@ namespace Fodinae.World
         /// <param name="textureInfo">Texture information.</param>
         public void AddTexture(CellType cellType, CellTextureInfo textureInfo)
         {
+            if (_textureCache.TryGetValue(cellType, out CellTextureInfo previous) &&
+                previous.OwnsBaseTexture &&
+                previous.BaseTexture != textureInfo.BaseTexture)
+            {
+                DestroyTexture(previous.BaseTexture);
+            }
+
             _textureCache.AddOrUpdate(cellType, textureInfo, (key, oldValue) => textureInfo);
             _loadedTextures.AddOrUpdate(cellType, textureInfo.BaseTexture, (key, oldValue) => textureInfo.BaseTexture);
 
@@ -53,7 +61,7 @@ namespace Fodinae.World
         /// </summary>
         /// <param name="cellType">The cell type.</param>
         /// <returns>The cached texture or null if not found.</returns>
-        public Texture2D GetCachedTexture(CellType cellType)
+        public Texture2D? GetCachedTexture(CellType cellType)
         {
             _loadedTextures.TryGetValue(cellType, out var texture);
             return texture;
@@ -75,7 +83,12 @@ namespace Fodinae.World
         /// <param name="cellType">The cell type.</param>
         public void RemoveTexture(CellType cellType)
         {
-            _textureCache.TryRemove(cellType, out _);
+            if (_textureCache.TryRemove(cellType, out CellTextureInfo textureInfo) &&
+                textureInfo.OwnsBaseTexture)
+            {
+                DestroyTexture(textureInfo.BaseTexture);
+            }
+
             _loadedTextures.TryRemove(cellType, out _);
 
             var filename = $"Cells/{(int)cellType}";
@@ -87,17 +100,22 @@ namespace Fodinae.World
         /// </summary>
         public void Clear()
         {
-            foreach (var texture in _loadedTextures.Values)
+            var ownedTextures = new HashSet<Texture2D>();
+            foreach (CellTextureInfo textureInfo in _textureCache.Values)
             {
-                if (texture != null)
+                if (textureInfo.OwnsBaseTexture && textureInfo.BaseTexture != null)
                 {
-                    UnityEngine.Object.Destroy(texture);
+                    ownedTextures.Add(textureInfo.BaseTexture);
                 }
             }
 
             _textureCache.Clear();
             _loadedTextures.Clear();
             _filenameCache.Clear();
+            foreach (Texture2D texture in ownedTextures)
+            {
+                DestroyTexture(texture);
+            }
         }
 
         /// <summary>
@@ -169,36 +187,38 @@ namespace Fodinae.World
         {
             cellType = CellType.Unloaded;
 
-            try
+            // Extract cell ID from filenames such as "Cells/50".
+            if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
             {
-                // Extract cell ID from filename like "Cells/50"
-                if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase) || filename.StartsWith("cells/", StringComparison.OrdinalIgnoreCase))
+                string idStr = filename.Substring(6);
+
+                int dotIndex = idStr.LastIndexOf('.');
+                if (dotIndex > 0)
                 {
-                    string idStr = filename.Substring(6);
-
-                    // Remove extension if present (though we shouldn't have one now)
-                    int dotIndex = idStr.LastIndexOf('.');
-                    if (dotIndex > 0)
-                    {
-                        idStr = idStr.Substring(0, dotIndex);
-                    }
-
-                    if (int.TryParse(idStr, out int cellId))
-                    {
-                        if (Enum.IsDefined(typeof(CellType), cellId))
-                        {
-                            cellType = (CellType)cellId;
-                            return true;
-                        }
-                    }
+                    idStr = idStr.Substring(0, dotIndex);
                 }
-            }
-            catch
-            {
-                // Ignore parsing errors
+
+                if (int.TryParse(idStr, out int cellId) &&
+                    Enum.IsDefined(typeof(CellType), cellId))
+                {
+                    cellType = (CellType)cellId;
+                    return true;
+                }
             }
 
             return false;
+        }
+
+        private static void DestroyTexture(Texture2D texture)
+        {
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(texture);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
         }
     }
 }
