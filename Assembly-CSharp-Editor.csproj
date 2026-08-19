@@ -68,6 +68,7 @@
     <Compile Include="Assets\Scripts\Editor\PostProcessVolumeAssetCreator.cs" />
     <Compile Include="Assets\Editor\SdrOutputEnforcer.cs" />
     <Compile Include="Assets\Scripts\Tests\Editor\World\TileBitmaskConverterTests.cs" />
+    <Compile Include="Assets\Editor\BuildTextureStager.cs" />
     <Compile Include="Assets\Scripts\Editor\GuidTruthDump.cs" />
     <Compile Include="Assets\Editor\CsProjFix.cs" />
     <Compile Include="Assets\Editor\FmodBankBuilder.cs" />
