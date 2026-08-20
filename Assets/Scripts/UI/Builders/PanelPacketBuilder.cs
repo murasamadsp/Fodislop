@@ -19,6 +19,7 @@ namespace Fodinae.UI.Builders
             }
 
             var element = new VisualElement();
+            element.AddToClassList("sci-fi-panel");
 
             return element;
         }

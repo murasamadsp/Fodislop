@@ -31,15 +31,18 @@ namespace Fodinae.UI
 
             var titleLabel = new Label(packet.Title);
             titleLabel.AddToClassList("popup-title");
+            titleLabel.AddToClassList("sci-fi-text-title");
             _panel.Add(titleLabel);
 
             var descLabel = new Label(packet.Description);
             descLabel.AddToClassList("modal-desc");
+            descLabel.AddToClassList("sci-fi-text-body");
             _panel.Add(descLabel);
 
             var okButton = new Button(() => Hide());
             okButton.text = packet.ButtonText;
             okButton.AddToClassList("popup-btn");
+            okButton.AddToClassList("sci-fi-btn-gold");
             _panel.Add(okButton);
 
             _overlay!.style.display = DisplayStyle.Flex;
@@ -70,6 +73,7 @@ namespace Fodinae.UI
             _overlay.AddToClassList("modal-overlay");
             _overlay.AddToClassList("ui-overlay");
             _overlay.AddToClassList("ui-overlay--modal");
+            _overlay.AddToClassList("sci-fi-window-overlay");
             _overlay.style.display = DisplayStyle.None;
             _overlay.SetEnabled(false);
             _overlay.pickingMode = PickingMode.Ignore;
@@ -78,6 +82,7 @@ namespace Fodinae.UI
             _panel.AddToClassList("popup-panel");
             _panel.AddToClassList("ui-panel");
             _panel.AddToClassList("ui-panel--modal");
+            _panel.AddToClassList("sci-fi-window");
             _overlay.Add(_panel);
             _doc.rootVisualElement.Add(_overlay);
         }

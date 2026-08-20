@@ -23,6 +23,7 @@ namespace Fodinae.UI.Builders
                 isReadOnly = !textInputPkt.IsEnabled,
                 Regex = textInputPkt.Regex, // Assign the Regex property
             };
+            textField.AddToClassList("sci-fi-input");
             if (!string.IsNullOrEmpty(textInputPkt.Name))
             {
                 textField.name = textInputPkt.Name;
