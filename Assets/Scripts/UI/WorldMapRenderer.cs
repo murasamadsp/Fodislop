@@ -291,7 +291,7 @@ namespace Fodinae.UI
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
-            _cellSampler.Invalidate();
+            _cellSampler.InvalidateChunk(serverX, serverY);
             _renderRequested = true;
         }
 
@@ -499,8 +499,22 @@ namespace Fodinae.UI
             int width = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : (Screen.width > 0 ? Screen.width : 1920);
             int height = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : (Screen.height > 0 ? Screen.height : 1080);
 
-            _texWidth = Mathf.Max(1, width);
-            _texHeight = Mathf.Max(1, height);
+            // Bound map texture resolution to prevent high-DPI Retina allocations (e.g. 7.3M texels).
+            // ScreenSpaceOverlay RawImage scales this buffer seamlessly across the screen.
+            const int MAX_MAP_WIDTH = 960;
+            const int MAX_MAP_HEIGHT = 540;
+
+            float aspect = (float)width / Mathf.Max(1, height);
+            int targetWidth = MAX_MAP_WIDTH;
+            int targetHeight = Mathf.RoundToInt(targetWidth / aspect);
+            if (targetHeight > MAX_MAP_HEIGHT)
+            {
+                targetHeight = MAX_MAP_HEIGHT;
+                targetWidth = Mathf.RoundToInt(targetHeight * aspect);
+            }
+
+            _texWidth = Mathf.Max(16, targetWidth);
+            _texHeight = Mathf.Max(16, targetHeight);
 
             if (_mapTexture != null)
             {
