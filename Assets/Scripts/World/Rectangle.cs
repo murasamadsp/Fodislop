@@ -1,23 +1,8 @@
 #nullable enable
 
-namespace Fodinae.World
-{
-    /// <summary>
-    /// Represents a rectangle in the texture atlas.
-    /// </summary>
-    public struct Rectangle
-    {
-        public int X;
-        public int Y;
-        public int Width;
-        public int Height;
+namespace Fodinae.World;
 
-        public Rectangle(int x, int y, int width, int height)
-        {
-            X = x;
-            Y = y;
-            Width = width;
-            Height = height;
-        }
-    }
-}
+/// <summary>
+/// Represents a rectangle in the texture atlas.
+/// </summary>
+public readonly record struct Rectangle(int X, int Y, int Width, int Height);

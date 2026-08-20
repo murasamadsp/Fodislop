@@ -4,11 +4,11 @@ using System;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World
-{
-    /// <summary>
-    /// Represents coordinates within a texture atlas for a specific cell type.
-    /// </summary>
+namespace Fodinae.World;
+
+/// <summary>
+/// Represents coordinates within a texture atlas for a specific cell type.
+/// </summary>
     public struct AtlasCoordinate : IEquatable<AtlasCoordinate>
     {
         public static readonly AtlasCoordinate Empty = new AtlasCoordinate(0, 0, 0, 0, 1, 1);
@@ -180,4 +180,3 @@ namespace Fodinae.World
             return $"CellTexture(Cell:{CellType}, Variations:{HasVariations}, Animations:{HasAnimations})";
         }
     }
-}
