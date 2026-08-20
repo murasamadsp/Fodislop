@@ -126,6 +126,9 @@ namespace Fodinae.World.Terrain
             return new CachedCellInfo { Type = c.Type, Properties = c.Properties };
         }
 
+        public static bool BypassCpuMeshRebuild { get; set; }
+        public static bool BypassTerrainDraw { get; set; }
+
         public ulong LightingGeometryRevision => _lightingGeometryRevision;
 
         public bool IsReadyForGameplay =>
@@ -229,7 +232,7 @@ namespace Fodinae.World.Terrain
 
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
-            _mainCamera = Camera.main;
+            _mainCamera = GameplayCamera.Resolve();
 
             if (_mesh == null)
             {
@@ -251,21 +254,7 @@ namespace Fodinae.World.Terrain
 
         protected void Start()
         {
-            // При аддитивной загрузке MainGame Camera.main на момент Awake указывает на
-            // камеру меню (MenuSceneryCamera), которая ещё активна. Меш строится вокруг
-            // _mainCamera, поэтому привязываемся к активной камере СВОЕЙ сцены в первую
-            // очередь — иначе террейн считает границы по меню-камере до её выгрузки.
-            Camera? ownSceneCamera = null;
-            foreach (Camera cam in FindObjectsByType<Camera>(FindObjectsInactive.Include))
-            {
-                if (cam.isActiveAndEnabled && cam.gameObject.scene == gameObject.scene)
-                {
-                    ownSceneCamera = cam;
-                    break;
-                }
-            }
-
-            _mainCamera = ownSceneCamera ?? Camera.main ?? _mainCamera;
+            _mainCamera = GameplayCamera.Resolve();
             if (_mainCamera == null)
             {
                 throw new InvalidOperationException(
@@ -283,7 +272,7 @@ namespace Fodinae.World.Terrain
             _meshRenderer ??= GetComponent<MeshRenderer>();
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main ?? UnityEngine.Object.FindAnyObjectByType<Camera>();
+                _mainCamera = GameplayCamera.Resolve();
             }
 
             InitializeShader();
@@ -531,7 +520,7 @@ namespace Fodinae.World.Terrain
 
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main ?? UnityEngine.Object.FindAnyObjectByType<Camera>();
+                _mainCamera = GameplayCamera.Resolve();
                 if (_mainCamera == null)
                 {
                     LogDiag(1 << 2, "[TerrainDiag] camera NULL");
@@ -635,12 +624,13 @@ namespace Fodinae.World.Terrain
             int viewportHeight = Mathf.Max(2, requestedHeight - (effectiveViewportPadding * 2));
             int viewportMinX = Mathf.FloorToInt(camPos.x / _cellSize) - (viewportWidth / 2);
             int viewportMinY = Mathf.FloorToInt(camPos.y / _cellSize) - (viewportHeight / 2);
+            const int viewportMargin = 4;
             bool regionOutsideViewport =
                 _lastGridPos.x == int.MinValue ||
-                viewportMinX < _lastGridPos.x ||
-                viewportMinY < _lastGridPos.y ||
-                viewportMinX + viewportWidth > _lastGridPos.x + _meshWidth ||
-                viewportMinY + viewportHeight > _lastGridPos.y + _meshHeight;
+                viewportMinX - viewportMargin < _lastGridPos.x ||
+                viewportMinY - viewportMargin < _lastGridPos.y ||
+                viewportMinX + viewportWidth + viewportMargin > _lastGridPos.x + _meshWidth ||
+                viewportMinY + viewportHeight + viewportMargin > _lastGridPos.y + _meshHeight;
 
             Vector2Int currentGridPos = regionOutsideViewport || dimensionsChanged
                 ? new Vector2Int(
@@ -659,7 +649,12 @@ namespace Fodinae.World.Terrain
                     SnapRegionCoordinate(desiredGridPos.y, regionAnchor));
             }
 
-            bool terrainWasRebuilt = currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged;
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = !BypassTerrainDraw;
+            }
+
+            bool terrainWasRebuilt = (currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged) && !BypassCpuMeshRebuild;
             if (terrainWasRebuilt)
             {
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);

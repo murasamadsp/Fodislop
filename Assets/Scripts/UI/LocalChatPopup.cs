@@ -144,6 +144,11 @@ namespace Fodinae.UI
             tree.pickingMode = PickingMode.Ignore;
             _tree = tree;
             _overlay = tree.Q<VisualElement>("LocalChatOverlay");
+            if (_overlay != null)
+            {
+                _overlay.style.display = DisplayStyle.None;
+            }
+
             _inputField = tree.Q<TextField>("LocalChatInput");
 
             if (_doc != null && _overlay != null)

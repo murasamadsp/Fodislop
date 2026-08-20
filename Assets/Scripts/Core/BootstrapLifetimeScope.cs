@@ -35,7 +35,18 @@ namespace Fodinae.Core
             base.Awake();
             if (Container != null)
             {
+                ServiceLocator.Initialize(Container);
                 Container.Resolve<ISessionContainer>().Set(Container);
+
+                // ClientConfigManager is a lazy Bootstrap-tier singleton — it only
+                // exists after the first Resolve, and its Start() runs a frame later.
+                // Everything that reads ClientConfig.Config (ConnectionManager,
+                // PostProcessController, TerrariaLightingEngine — including scene
+                // components whose Start() fires BEFORE GameBootstrap.PostStart)
+                // needs it loaded by the time MainGame loads. Create and initialize
+                // it here, at Bootstrap startup, so the config is ready before
+                // MainMenu even loads.
+                Container.Resolve<IClientConfigManager>().EnsureInitialized();
             }
         }
 
@@ -47,12 +58,17 @@ namespace Fodinae.Core
 
         private async UniTask EnsureMainMenuLoadedAsync()
         {
-            if (SceneManager.GetSceneByName(MainMenuSceneName).isLoaded)
+            Scene menuScene = SceneManager.GetSceneByName(MainMenuSceneName);
+            if (!menuScene.isLoaded)
             {
-                return;
+                await SceneManager.LoadSceneAsync(MainMenuSceneName, LoadSceneMode.Additive).ToUniTask();
+                menuScene = SceneManager.GetSceneByName(MainMenuSceneName);
             }
 
-            await SceneManager.LoadSceneAsync(MainMenuSceneName, LoadSceneMode.Additive).ToUniTask();
+            if (menuScene.IsValid() && menuScene.isLoaded)
+            {
+                SceneManager.SetActiveScene(menuScene);
+            }
         }
 
         /// <summary>
@@ -67,18 +83,41 @@ namespace Fodinae.Core
 
         private async UniTaskVoid ReturnToMainMenuAsync()
         {
+            // Packet subscriptions come off first, while the game scope is still
+            // alive and this resolve is still valid. Leaving it to
+            // PacketHandler.OnDestroy means it happens inside the unload, after
+            // packets have already had a chance to reach processors that resolve
+            // managers out of a dying container.
+            ServiceLocator.Resolve<ISessionContainer>().TryResolve<PacketHandler>()?.Shutdown();
+
             ServiceLocator.Resolve<IConnectionService>()?.Disconnect();
+
+            // Ambient resolution is pointed back at Bootstrap BEFORE the unload,
+            // not after it.
+            //
+            // VContainer's Container.Dispose() empties sharedInstances but sets
+            // no disposed flag and leaves the registry intact, so a Resolve on a
+            // disposed scope silently re-runs the provider. For everything
+            // registered with RegisterComponentOnNewGameObject that provider is
+            // `new GameObject(typeof(T).Name)` - which is where the
+            // "PackManager / RobotManager / ServerAudioEventManager created
+            // while closing the scene" warning comes from. The unload spans at
+            // least a frame, ConnectionManager and its packet loop are
+            // Bootstrap-tier and keep running through it, and MapManager's
+            // [Inject] Construct pulls all three of those at once, so a single
+            // late packet was enough to resurrect the lot into a dying scene.
+            //
+            // Repointing first means those late resolves hit the Bootstrap
+            // container, where none of them are registered, and TryResolve
+            // simply returns null.
+            ServiceLocator.Initialize(Container);
+            Container.Resolve<ISessionContainer>().Set(Container);
 
             Scene mainGameScene = SceneManager.GetSceneByName(MainGameSceneName);
             if (mainGameScene.isLoaded)
             {
                 await SceneManager.UnloadSceneAsync(mainGameScene)!.ToUniTask();
             }
-
-            // MainGame's own child scope is gone with it; restore ServiceLocator to Bootstrap's
-            // container so the fresh MainMenu instance (and anything else) can resolve again.
-            ServiceLocator.Initialize(Container);
-            Container.Resolve<ISessionContainer>().Set(Container);
 
             await EnsureMainMenuLoadedAsync();
         }

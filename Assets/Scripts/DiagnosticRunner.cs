@@ -3,6 +3,7 @@
 using System;
 using System.IO;
 using System.Text;
+using Fodinae.Core;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
@@ -24,32 +25,17 @@ namespace Fodinae
 {
     public class DiagnosticRunner : MonoBehaviour
     {
-        private static readonly string LogPath = Path.Combine(Application.dataPath, "..", "diagnostic.txt");
-        private static readonly string MemoryLogPath = Path.Combine(Application.dataPath, "..", "memory_growth.txt");
+        private static string LogPath => Path.Combine(Application.dataPath, "..", "diagnostic.txt");
+        private static string MemoryLogPath => Path.Combine(Application.dataPath, "..", "memory_growth.txt");
         private float _nextMemorySampleTime;
         private Camera? _mainCamera;
 
         [Inject]
         private ISessionContainer _session = null!;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-        private static void EnsureCreated()
-        {
-            File.WriteAllText(MemoryLogPath, string.Empty);
-
-            if (FindAnyObjectByType<DiagnosticRunner>() != null)
-            {
-                return;
-            }
-
-            var go = new GameObject("FodinaeDiagnostics");
-            DontDestroyOnLoad(go);
-            go.AddComponent<DiagnosticRunner>();
-        }
-
         protected void Awake()
         {
-            _mainCamera = Camera.main;
+            _mainCamera = GameplayCamera.Resolve();
         }
 
         protected void Update()

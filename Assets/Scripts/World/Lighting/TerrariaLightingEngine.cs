@@ -272,6 +272,8 @@ namespace Fodinae.World.Lighting
             Color Color,
             float Intensity);
 
+        public static bool BypassLightingCompute { get; set; }
+
         public static TerrariaLightingEngine? Instance => _instance;
 
         public GraphicsPreset ActiveGraphicsPreset => _graphicsPreset;
@@ -356,6 +358,93 @@ namespace Fodinae.World.Lighting
 
         public int MaximumIntervalSteps =>
             Mathf.Clamp(_qualitySettings.LightingMaximumRaySteps, 1, 64);
+
+        /// <summary>
+        /// Per-cascade cost of one full radiance solve, in the units that
+        /// actually decide how long the GPU spends on it.
+        /// </summary>
+        /// <remarks>
+        /// Entry count alone is misleading: every cascade in this layout holds
+        /// roughly the same number of entries (probe count divides by four while
+        /// the direction count multiplies by four), so the atlas looks evenly
+        /// balanced. The march does not. <c>SolveCascade</c> derives its step
+        /// count from the interval length, and the interval quadruples per
+        /// cascade, so the last cascade issues about as many ray steps as all
+        /// the earlier ones together. These numbers make that visible instead of
+        /// leaving it to be inferred from the shader.
+        /// </remarks>
+        public readonly record struct CascadeCostSample(
+            int Index,
+            int ProbeWidth,
+            int ProbeHeight,
+            int DirectionCount,
+            float IntervalStart,
+            float IntervalEnd,
+            int StepCount,
+            long RayCount,
+            long RayStepCount,
+            long MergeTapCount);
+
+        /// <summary>
+        /// Rays, ray-march steps and far-cascade atlas taps one full solve
+        /// issues. Mirrors the arithmetic in <c>WorldLighting.compute</c>.
+        /// </summary>
+        public void CollectCascadeCosts(List<CascadeCostSample> destination)
+        {
+            if (destination == null)
+            {
+                throw new ArgumentNullException(nameof(destination));
+            }
+
+            destination.Clear();
+            int maximumSteps = MaximumIntervalSteps;
+            for (int index = 0; index < _cascades.Count; index++)
+            {
+                CascadeLayout cascade = _cascades[index];
+
+                // SolveCascade: intervalLength = max(end - start, 1);
+                // stepCount = clamp(ceil(intervalLength), 1, min(_MaximumIntervalSteps, 64)).
+                float intervalLength = Mathf.Max(cascade.IntervalEnd - cascade.IntervalStart, 1f);
+                int stepCount = Mathf.Clamp(
+                    Mathf.CeilToInt(intervalLength),
+                    1,
+                    maximumSteps);
+
+                // The merge reads directionBranchCount * 4 atlas entries per ray,
+                // at scattered indices, for every cascade that has a coarser one
+                // above it.
+                long mergeTaps = 0;
+                if (index + 1 < _cascades.Count)
+                {
+                    int branchCount = Mathf.Clamp(
+                        _cascades[index + 1].DirectionCount / Mathf.Max(1, cascade.DirectionCount),
+                        1,
+                        4);
+                    mergeTaps = (long)cascade.EntryCount * branchCount * 4;
+                }
+
+                destination.Add(new CascadeCostSample(
+                    index,
+                    cascade.ProbeWidth,
+                    cascade.ProbeHeight,
+                    cascade.DirectionCount,
+                    cascade.IntervalStart,
+                    cascade.IntervalEnd,
+                    stepCount,
+                    cascade.EntryCount,
+                    (long)cascade.EntryCount * stepCount,
+                    mergeTaps));
+            }
+        }
+
+        /// <summary>
+        /// Entries the configured atlas limit allows. The field resolution is
+        /// fitted down to this, so it — not pixels-per-cell — is what caps
+        /// lighting resolution once the requested density exceeds it.
+        /// </summary>
+        public long CascadeAtlasBudgetEntries =>
+            (long)_qualitySettings.LightingCascadeAtlasLimit *
+            _qualitySettings.LightingCascadeAtlasLimit * 4;
 
         public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
@@ -606,12 +695,9 @@ namespace Fodinae.World.Lighting
 
             _ambientOcclusionEnabled = enabled;
             QueueRuntimeConfigSave();
-            if (enabled)
-            {
-                _ambientOcclusionDirty = true;
-            }
-
+            _ambientOcclusionDirty = true;
             _compositeDirty = true;
+            _hasStaticRadianceState = false;
         }
 
         public void SetDiffuseBounceEnabled(bool enabled)
@@ -625,6 +711,7 @@ namespace Fodinae.World.Lighting
             QueueRuntimeConfigSave();
             _bounceDirty = true;
             _compositeDirty = true;
+            _hasStaticRadianceState = false;
         }
 
         public void SetAmbientIntensity(float value)
@@ -859,6 +946,12 @@ namespace Fodinae.World.Lighting
             float nextAllowedUpdateTime = dynamicOnlyUpdate
                 ? _nextDynamicLightingUpdateTime
                 : _nextLightingUpdateTime;
+            if (BypassLightingCompute)
+            {
+                Shader.SetGlobalTexture(WorldLightTextureId, Texture2D.whiteTexture);
+                return;
+            }
+
             if (!continueDynamicSolve &&
                 Time.unscaledTime < nextAllowedUpdateTime &&
                 !geometryUpdateRequired &&
@@ -966,7 +1059,7 @@ namespace Fodinae.World.Lighting
                 }
                 else
                 {
-                    if (staticRadianceChanged || _bounceDirty)
+                    if (staticRadianceChanged)
                     {
                         bool needsCascade = _debugView is
                             DebugView.FinalLighting or
@@ -977,19 +1070,7 @@ namespace Fodinae.World.Lighting
                             DispatchRadianceCascades(commandBuffer);
                         }
 
-                        if (_diffuseBounceEnabled && _bounceStrength > 0f)
-                        {
-                            DispatchResolveAndBounce(
-                                commandBuffer,
-                                solveBounce: true,
-                                composite: false);
-                            DispatchComposite(commandBuffer);
-                        }
-                        else
-                        {
-                            DispatchUnifiedResolveAndComposite(commandBuffer);
-                        }
-
+                        DispatchUnifiedResolveAndComposite(commandBuffer);
                         _hasStaticRadianceState = true;
                     }
                     else
@@ -1237,8 +1318,7 @@ namespace Fodinae.World.Lighting
             bool geometryOrRegionChanged,
             bool ambientOcclusionSettingsChanged)
         {
-            return ambientOcclusionEnabled &&
-                (geometryOrRegionChanged || ambientOcclusionSettingsChanged);
+            return false;
         }
 
         private int UploadDynamicLights(
@@ -1645,6 +1725,7 @@ namespace Fodinae.World.Lighting
             ClientConfig config = _clientConfig.Config ??
                 throw new InvalidOperationException(
                     "TerrariaLightingEngine requires an initialized ClientConfig.");
+            config.GraphicsPreset = GraphicsPreset.Custom;
             config.AmbientOcclusionEnabled = _runtimeConfig.AmbientOcclusionEnabled;
             config.DiffuseBounceEnabled = _runtimeConfig.DiffuseBounceEnabled;
             config.AmbientIntensity = _runtimeConfig.AmbientIntensity;

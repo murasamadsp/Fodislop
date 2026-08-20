@@ -79,13 +79,45 @@ namespace Fodinae.UI
                 _cameraTarget.Create();
             }
 
+            // A texture created by an earlier version of this component has no
+            // mip chain, and it survives a script reload - so without this the
+            // GenerateMips call below fails every frame until the scene is
+            // reopened, which looks exactly like the feature not working.
+            if (_outputTexture != null && !_outputTexture.useMipMap)
+            {
+                ReleaseTexture(ref _outputTexture);
+            }
+
             if (_outputTexture == null)
             {
                 // No depth and no MSAA: this one is only ever a blit destination.
+                //
+                // Mipmapped, and that is the whole point of it existing at this
+                // size. The UI draws this 1800px texture into an ~860px element,
+                // so every screen pixel covers about four texels. A bilinear tap
+                // reads four of them at fixed offsets, which is not an average -
+                // it is a point sample of a signal above the Nyquist limit, and
+                // the surface detail and the orbit line both live up there. That
+                // is the crawling and shimmer: the same geometry lands on a
+                // different set of four texels as the station moves and the
+                // planet turns. Trilinear off a mip chain filters properly,
+                // because mip generation is an actual box reduction.
+                //
+                // MSAA on the camera target cannot help with this - it
+                // supersamples triangle coverage, not the sampling of a texture
+                // that happens afterwards.
                 _outputTexture = new RenderTexture(_renderTextureWidth, _renderTextureHeight, 0, RenderTextureFormat.ARGBHalf)
                 {
                     name = "MenuSceneryRT",
                     wrapMode = TextureWrapMode.Clamp,
+                    useMipMap = true,
+
+                    // Generated explicitly after the resolve blit; leaving Unity
+                    // to do it automatically only covers the active render
+                    // target's own mip 0 writes, not a Graphics.Blit result.
+                    autoGenerateMips = false,
+                    filterMode = FilterMode.Trilinear,
+                    anisoLevel = 4,
                 };
                 _outputTexture.Create();
             }
@@ -129,6 +161,10 @@ namespace Fodinae.UI
             }
 
             Graphics.Blit(_cameraTarget, _outputTexture, _resolveMaterial);
+            if (_outputTexture.useMipMap)
+            {
+                _outputTexture.GenerateMips();
+            }
         }
 
         private void LateUpdate()

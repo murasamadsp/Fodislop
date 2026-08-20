@@ -290,15 +290,13 @@ namespace Fodinae.Rendering.PostProcessing
             bool eigengrauActive = eigengrau.active && eigengrau.IsActive();
             bool mbActive = mb.active && mb.IsActive();
 
-            // A neutral volume must not allocate or dispatch a full-screen compute
-            // pass. Tone mapping is represented by an active ColorGradingComponent,
-            // so it remains included in this gate when it is actually required.
-            if (!bloomActive &&
+            if (PostProcessRendererFeature.BypassPostProcessPass ||
+                (!bloomActive &&
                 !vignetteActive &&
                 !caActive &&
                 !cgActive &&
                 !eigengrauActive &&
-                !mbActive)
+                !mbActive))
             {
                 return;
             }

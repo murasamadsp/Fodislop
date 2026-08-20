@@ -54,6 +54,14 @@ namespace Fodinae.Core
         {
             _session.Set(_resolver);
 
+            // ClientConfigManager is a lazy Bootstrap-tier singleton: the first Resolve
+            // creates it, and its Start() only runs on the NEXT frame. Everything below
+            // (ConnectionManager, PostProcessController, TerrariaLightingEngine, ...)
+            // reads ClientConfig.Config this frame, so force it to exist and load now.
+            // Without this, PostStart throws "ClientConfig is not initialized" and the
+            // world starts without lighting config and post-processing.
+            _resolver.Resolve<IClientConfigManager>().EnsureInitialized();
+
             // Managers not already present in the scene get created lazily on first
             // Resolve() below via RegisterComponentOnNewGameObject, and Unity places new
             // GameObjects into whatever scene is active. Additive loads don't switch the
@@ -112,6 +120,7 @@ namespace Fodinae.Core
             _resolver.Resolve<PlayerHUDView>();
             _resolver.Resolve<InventoryView>();
             _resolver.Resolve<PauseMenu>();
+            _resolver.Resolve<InGameDebugOverlay>();
             PostProcessController postProcessController =
                 _resolver.Resolve<PostProcessController>();
             postProcessController.EnsureVolumeSetup();

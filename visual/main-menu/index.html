@@ -13,15 +13,18 @@
 
   <!-- Нижняя Dev-панель -->
   <div class="dev-drawer">
-    <span>РЕЖИМЫ:</span>
+    <span>ЭКРАНЫ:</span>
+    <button class="dev-btn" onclick="switchViewState('splash')">ЗАСТАВКА</button>
+    <button class="dev-btn" onclick="switchViewState('auth')">АВТОРИЗАЦИЯ</button>
+    <button class="dev-btn" onclick="switchViewState('onboarding')">ОНБОРДИНГ</button>
     <button class="dev-btn active" onclick="switchViewState('menu')">ОРБИТА</button>
-    <button class="dev-btn" onclick="openModal('serverBrowserModal')">СЕРВЕРЫ</button>
-    <button class="dev-btn" onclick="openModal('chronicleModal')">ХРОНИКА</button>
     <button class="dev-btn" onclick="startDescentSequence()">СПУСК</button>
+    <button class="dev-btn" style="border-color:var(--fa-cyan); color:var(--fa-cyan);" onclick="switchViewState('ingame')">ИГРА / HUD</button>
+    <button class="dev-btn" onclick="openModal('inventoryModal')">ИНВЕНТАРЬ</button>
+    <button class="dev-btn" onclick="openModal('programmatorModal')">ПРОГРАММАТОР</button>
+    <button class="dev-btn" onclick="openModal('chatModal')">ЧАТ</button>
+    <button class="dev-btn" onclick="switchViewState('pause')">ПАУЗА</button>
     <button class="dev-btn danger" onclick="switchViewState('reconnect')">ОБРЫВ</button>
-    <button class="dev-btn" onclick="openModal('settingsModal')">НАСТРОЙКИ</button>
-    <button class="dev-btn" onclick="openModal('repairModal')">ФАЙЛЫ</button>
-    <button class="dev-btn" style="border-color:var(--fa-gold); color:var(--fa-gold);" onclick="openMandatoryUpdateModal()">ОБНОВЛЕНИЕ</button>
     <div class="sfx-toggle" onclick="toggleAudio()" id="sfxToggle">
       <span id="sfxStatus">🔊 ЗВУК</span>
     </div>
@@ -243,6 +246,397 @@
         <div style="display:flex; gap:12px; margin-top:20px;">
           <button class="btn-gold-action" onclick="switchViewState('menu')">ВЕРНУТЬСЯ В ОРБИТУ</button>
           <button class="btn-outline-action" onclick="startOfflineDummy()">ОФЛАЙН РЕЖИМ (DUMMY)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. Заставка (Splash) -->
+    <div class="splash-overlay-view" id="splashView">
+      <div class="splash-card">
+        <svg class="splash-logo-symbol" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M24 4 L43 15 V33 L24 44 L5 33 V15 Z"/>
+          <path d="M14 18 L24 12 L34 18 L30 21 L24 18 L18 21 Z" fill="currentColor"/>
+          <path d="M18 25 L24 28 L30 25 V33 L24 37 L18 33 Z" fill="currentColor"/>
+        </svg>
+
+        <h1 class="splash-title">FODINAE</h1>
+        <div class="splash-tagline">DEEP SUBSURFACE EXPEDITION // MINES PROTOCOL v7</div>
+
+        <div class="splash-terminal-status">
+          <div><span style="color:var(--fa-cyan);">[GPU]</span> Radiance Cascades Compute Kernel ... <strong style="color:var(--fa-green);">OK</strong></div>
+          <div><span style="color:var(--fa-cyan);">[FMOD]</span> Audio Engine C++ Backend (Master / SFX / Spatial) ... <strong style="color:var(--fa-green);">SYNCED</strong></div>
+          <div><span style="color:var(--fa-cyan);">[WORLD]</span> SingleMesh Terrain Streaming 32x32 ... <strong style="color:var(--fa-green);">MOUNTED</strong></div>
+        </div>
+
+        <button class="btn-primary-action" style="width:320px;" onclick="startExperienceFromSplash()">
+          <span>ВОЙТИ В ЭКСПЕДИЦИЮ</span>
+          <div class="action-arrow">↗</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. Авторизация (Auth) -->
+    <div class="auth-overlay-view" id="authView">
+      <div class="auth-card">
+        <div>
+          <span class="eyebrow-tag">ШЛЮЗ АВТОРИЗАЦИИ // TOKEN 6</span>
+          <h2 style="font-family:var(--font-display); font-size:22px; color:#fff; margin-top:4px;">Идентификация шахтёра</h2>
+          <p style="color:var(--fa-muted); font-size:13px; margin-top:2px;">
+            Вход в защищённый канал связи кластера Hades-Orbit.
+          </p>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-family:var(--font-mono); font-size:11px; color:var(--fa-muted);">ПОЗЫВНОЙ ШАХТЁРА:</label>
+          <input type="text" class="auth-input" id="inputMinerName" value="ШАХТЁР-774 [DVM]">
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <label style="font-family:var(--font-mono); font-size:11px; color:var(--fa-muted);">КЛЮЧ ДОСТУПА (AuthToken):</label>
+          <div class="auth-input-row">
+            <input type="text" class="auth-input" id="inputAuthToken" value="fdn_tok_9948a204e18">
+            <button class="auth-btn-gen" onclick="generateRandomToken()">СЛУЧАЙНЫЙ</button>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
+          <button class="btn-gold-action" onclick="submitAuthForm()">ПОДТВЕРДИТЬ ВХОД ↗</button>
+          <button class="btn-outline-action" onclick="startOfflineDummy()">ЛОКАЛЬНЫЙ ОФЛАЙН (DUMMY)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Онбординг (Onboarding) -->
+    <div class="onboarding-overlay-view" id="onboardingView">
+      <div class="onboarding-card">
+        <div class="onboarding-header">
+          <div>
+            <span class="eyebrow-tag">КАЛИБРОВКА ОБОРУДОВАНИЯ</span>
+            <h2 style="font-family:var(--font-display); font-size:20px; color:#fff;" id="onboardingTitle">
+              Шаг 1: Доступность и визуальный комфорт
+            </h2>
+          </div>
+          <div class="onboarding-step-indicator">
+            <div class="onboarding-step-pill active" id="obStepPill1">1. ДОСТУПНОСТЬ</div>
+            <div class="onboarding-step-pill" id="obStepPill2">2. ГРАФИКА</div>
+            <div class="onboarding-step-pill" id="obStepPill3">3. УПРАВЛЕНИЕ</div>
+          </div>
+        </div>
+
+        <div class="onboarding-body">
+          <!-- Шаг 1 -->
+          <div class="onboarding-step-content active" id="obStep1">
+            <div class="settings-block">
+              <span class="settings-block-title">ОПТИЧЕСКАЯ АДАПТАЦИЯ И ДОСТУПНОСТЬ</span>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Масштаб интерфейса (UI Scaling)</div>
+                  <div class="settings-hint">Калибровка размера панелей UI Toolkit</div>
+                </div>
+                <select class="styled-select" onchange="applyUiScale(this.value)">
+                  <option value="1">100% (Штатный)</option>
+                  <option value="1.15">115% (Увеличенный)</option>
+                  <option value="1.3">130% (Крупный)</option>
+                </select>
+              </div>
+
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Цветовая адаптация (Colorblind)</div>
+                  <div class="settings-hint">Коррекция оттенков лавы, минералов и контуров</div>
+                </div>
+                <select class="styled-select" onchange="applyColorblindTheme(this.value)">
+                  <option value="none">Стандартная палитра</option>
+                  <option value="deuteranopia">Дейтеранопия</option>
+                  <option value="protanopia">Протанопия</option>
+                  <option value="tritanopia">Тританопия</option>
+                  <option value="high-contrast">Высокий контраст</option>
+                </select>
+              </div>
+
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Снижение фоточувствительности</div>
+                  <div class="settings-hint">Подавление резких вспышек при контакте с лавой</div>
+                </div>
+                <select class="styled-select" onchange="toggleReduceMotion(this.value === 'yes')">
+                  <option value="no">Выключено</option>
+                  <option value="yes">Включено (Мягкое освещение)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Шаг 2 -->
+          <div class="onboarding-step-content" id="obStep2">
+            <div class="settings-block">
+              <span class="settings-block-title">РЕНДЕРИНГ И ТРАССИРОВКА ОСВЕЩЕНИЯ</span>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">GPU Radiance Cascades</div>
+                  <div class="settings-hint">Качество каскадного расчета диффузного света в породе</div>
+                </div>
+                <select class="styled-select">
+                  <option>6 Каскадов (2 отскока) · Ультра</option>
+                  <option>4 Каскада (1 отскок) · Высокое</option>
+                  <option>2 Каскада · Быстрое</option>
+                </select>
+              </div>
+
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Частота обновления (FPS Limit)</div>
+                  <div class="settings-hint">Синхронизация частоты кадров</div>
+                </div>
+                <select class="styled-select">
+                  <option>144 FPS</option>
+                  <option>120 FPS</option>
+                  <option>60 FPS</option>
+                  <option>Без ограничений</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Шаг 3 -->
+          <div class="onboarding-step-content" id="obStep3">
+            <div class="settings-block">
+              <span class="settings-block-title">ТАКТИЛЬНЫЙ КОНТРОЛЬ И FMOD AUDIO</span>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Схема движения бурового дрона</div>
+                  <div class="settings-hint">Клавиатура или мышь</div>
+                </div>
+                <select class="styled-select">
+                  <option>WASD / Стрелки (Рекомендуется)</option>
+                  <option>Указатель мыши</option>
+                </select>
+              </div>
+
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Громкость звукового ядра FMOD</div>
+                  <div class="settings-hint">Master Bus</div>
+                </div>
+                <div class="slider-container">
+                  <input type="range" class="slider-range" min="0" max="100" value="85" oninput="this.nextElementSibling.innerText = this.value + '%'">
+                  <span class="slider-number">85%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="onboarding-footer">
+          <button class="btn-outline-action" id="btnObPrev" style="display:none;" onclick="prevOnboardingStep()">← НАЗАД</button>
+          <div style="margin-left:auto; display:flex; gap:8px;">
+            <button class="btn-outline-action" onclick="switchViewState('menu')">ПРОПУСТИТЬ</button>
+            <button class="btn-gold-action" id="btnObNext" onclick="nextOnboardingStep()">ДАЛЕЕ →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Игровой экран и ГУИ (In-Game 2D Mine + HUD) -->
+    <div class="ingame-viewport" id="ingameView">
+      <div class="mine-scene-canvas" id="mineCanvas">
+        <div class="mine-strata-container" id="mineStrataGrid"></div>
+        <div class="mining-robot-entity">
+          <div class="robot-hull">
+            <div class="robot-eye"></div>
+            <div class="robot-drill-bit"></div>
+            <div class="robot-headlight"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="game-hud-layer">
+        <!-- Статус игрока -->
+        <div class="sci-fi-panel" style="width:260px;">
+          <div class="hud-title-row">
+            <span class="hud-nickname" id="hudMinerNick">ШАХТЁР-774</span>
+            <span class="sci-fi-badge-mono">УР. 4</span>
+            <button class="hud-clan-btn" onclick="openModal('clanModal')">КЛАН [VOID]</button>
+          </div>
+
+          <div class="hud-bar-group">
+            <div class="hud-bar-header">
+              <span>ПРОЧНОСТЬ (HP)</span>
+              <span id="hpText">840 / 1000</span>
+            </div>
+            <div class="sci-fi-bar-track" onclick="simulateDamageOrHeal()" style="cursor:pointer;" title="Клик для симуляции урона/лечения">
+              <div class="sci-fi-bar-fill-hp" id="hpFill"></div>
+            </div>
+          </div>
+
+          <div class="hud-bar-group">
+            <div class="hud-bar-header">
+              <span>РЕАКТОР</span>
+              <span>92 / 100 EN</span>
+            </div>
+            <div class="sci-fi-bar-track">
+              <div class="sci-fi-bar-fill-cyan"></div>
+            </div>
+          </div>
+
+          <div class="hud-currencies-row">
+            <div>⛃ <span id="hudMoney" style="font-weight:700; color:#fff;">14 850</span> <span style="color:var(--fa-dim);">CR</span></div>
+            <div>★ <span id="hudCrystals" style="font-weight:700; color:var(--fa-gold);">340</span> <span style="color:var(--fa-dim);">ОР</span></div>
+          </div>
+        </div>
+
+        <!-- Корзина руды -->
+        <div class="sci-fi-panel hud-basket-panel" style="width:260px;">
+          <div class="hud-title-row">
+            <span style="font-family:var(--font-mono); font-size:10px; font-weight:700; color:var(--fa-muted);">КОРЗИНА РУДЫ</span>
+            <span class="sci-fi-badge-mono" id="basketCapBadge" style="color:var(--fa-gold); border-color:var(--fa-line-gold);">12 / 25</span>
+          </div>
+
+          <div class="basket-grid-mini" id="basketMiniGrid">
+            <div class="basket-slot-mini filled">T-4</div>
+            <div class="basket-slot-mini filled">T-4</div>
+            <div class="basket-slot-mini filled">G-2</div>
+            <div class="basket-slot-mini filled">R-8</div>
+            <div class="basket-slot-mini filled">R-8</div>
+            <div class="basket-slot-mini filled">R-8</div>
+            <div class="basket-slot-mini filled">Q-1</div>
+            <div class="basket-slot-mini filled">Q-1</div>
+            <div class="basket-slot-mini"></div>
+            <div class="basket-slot-mini"></div>
+            <div class="basket-slot-mini"></div>
+            <div class="basket-slot-mini"></div>
+          </div>
+        </div>
+
+        <!-- Миссия -->
+        <div class="sci-fi-panel hud-mission-panel">
+          <div class="hud-title-row">
+            <span class="eyebrow-tag" style="font-size:10px; margin:0;">КОНТРАКТ НА РАСКОПКУ · 03</span>
+            <span style="font-family:var(--font-mono); font-size:10px; color:var(--fa-gold);">+2 400 CR</span>
+          </div>
+          <div style="font-size:13px; font-weight:600; color:#fff;">Пробить пласт Красноскала на глубине -1 800 м</div>
+          <div class="sci-fi-bar-track">
+            <div class="sci-fi-bar-fill-cyan" id="missionFill" style="background:var(--fa-gold); width:71%;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; color:var(--fa-muted);">
+            <span>Прогресс:</span>
+            <strong id="missionMetric" style="color:var(--fa-gold);">142 / 200 блоков (71%)</strong>
+          </div>
+        </div>
+
+        <!-- Радар -->
+        <div class="sci-fi-panel hud-radar-panel" style="width:240px; justify-self:end;">
+          <div class="hud-title-row">
+            <span style="font-family:var(--font-mono); font-size:10px; font-weight:700; color:var(--fa-muted);">РАДАР СЕКТОРА</span>
+            <span style="font-family:var(--font-mono); font-size:10px; color:var(--fa-gold);">-840 М</span>
+          </div>
+          <div class="radar-screen">
+            <div class="radar-sweep-line"></div>
+            <div class="radar-dot" style="top:35%; left:42%;"></div>
+            <div class="radar-dot" style="top:60%; left:70%; background:var(--fa-danger);"></div>
+            <div class="radar-dot" style="top:50%; left:50%; background:#fff;"></div>
+          </div>
+        </div>
+
+        <!-- Действия -->
+        <div class="hud-actions-column">
+          <button class="hud-action-btn" id="btnAutoDig" onclick="toggleAutoDig()">
+            <div class="led-indicator" id="ledAutoDig"></div>
+            <span>АВТО-КОПКА [E]</span>
+          </button>
+
+          <button class="hud-action-btn" id="btnAggression" onclick="toggleAggression()">
+            <div class="led-indicator" id="ledAggression"></div>
+            <span>РЕЖИМ БОЯ [L]</span>
+          </button>
+
+          <button class="hud-action-btn" onclick="openModal('inventoryModal')">
+            <span>ГРУЗОВОЙ ОТСЕК [TAB]</span>
+          </button>
+
+          <button class="hud-action-btn" onclick="openModal('programmatorModal')">
+            <span>ПРОГРАММАТОР [P]</span>
+          </button>
+
+          <button class="hud-action-btn" onclick="openModal('chatModal')">
+            <span>ЧАТ [ENTER]</span>
+          </button>
+
+          <button class="hud-action-btn" onclick="openModal('traderModal')">
+            <span>ТОРГОВЕЦ [K]</span>
+          </button>
+
+          <button class="hud-action-btn" style="border-color:var(--fa-line-gold); color:var(--fa-gold);" onclick="claimBonus()">
+            <span>БОНУС ШАХТЫ</span>
+          </button>
+        </div>
+
+        <!-- Хотбар -->
+        <div class="hud-hotbar-container" id="hotbarSlotsWrap">
+          <div class="hotbar-slot active" onclick="selectHotbarSlot(0)">
+            <span class="hotbar-num">1</span>
+            <span class="hotbar-icon">⛏</span>
+            <span class="hotbar-count">T2</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(1)">
+            <span class="hotbar-num">2</span>
+            <span class="hotbar-icon">⚡</span>
+            <span class="hotbar-count">x18</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(2)">
+            <span class="hotbar-num">3</span>
+            <span class="hotbar-icon">⚑</span>
+            <span class="hotbar-count">x6</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(3)">
+            <span class="hotbar-num">4</span>
+            <span class="hotbar-icon">🔋</span>
+            <span class="hotbar-count">x4</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(4)">
+            <span class="hotbar-num">5</span>
+            <span class="hotbar-icon">⚙</span>
+            <span class="hotbar-count">x12</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(5)">
+            <span class="hotbar-num">6</span>
+            <span class="hotbar-icon">📡</span>
+            <span class="hotbar-count">x1</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(6)">
+            <span class="hotbar-num">7</span>
+            <span class="hotbar-icon">⌬</span>
+            <span class="hotbar-count">x3</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(7)">
+            <span class="hotbar-num">8</span>
+            <span class="hotbar-icon">🛡</span>
+            <span class="hotbar-count">x2</span>
+          </div>
+          <div class="hotbar-slot" onclick="selectHotbarSlot(8)">
+            <span class="hotbar-num">9</span>
+            <span class="hotbar-icon">◎</span>
+            <span class="hotbar-count">x1</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Меню паузы (Pause Overlay) -->
+    <div class="pause-overlay-view" id="pauseView">
+      <div class="pause-menu-card">
+        <span class="eyebrow-tag" style="justify-content:center;">ЭКСПЕДИЦИЯ НА ПАУЗЕ</span>
+        <h2 style="font-family:var(--font-display); font-size:24px; color:#fff;">МЕНЮ ПАУЗЫ</h2>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--fa-muted);">
+          ПОЗИЦИЯ: СЕКТОР 09 // ГОРИЗОНТ -840 М
+        </div>
+
+        <div class="pause-btn-list">
+          <button class="btn-gold-action" onclick="resumeGameFromPause()">ПРОДОЛЖИТЬ ИГРУ ▶</button>
+          <button class="btn-outline-action" onclick="openModal('settingsModal')">НАСТРОЙКИ</button>
+          <button class="btn-outline-action" onclick="switchViewState('onboarding')">КАЛИБРОВКА</button>
+          <button class="btn-outline-action" onclick="switchViewState('menu')">ОРБИТАЛЬНЫЙ ХАБ</button>
+          <button class="btn-outline-action" style="border-color:rgba(255,85,85,0.4); color:var(--fa-danger);" onclick="confirmQuit()">ВЫХОД НА РАБОЧИЙ СТОЛ</button>
         </div>
       </div>
     </div>
@@ -836,6 +1230,199 @@
       <div class="modal-card-footer">
         <button class="btn-outline-action" onclick="closeModal('mandatoryUpdateModal'); alert('Без обновления доступ к сетевым кластерам закрыт. Вы можете запустить локальный Offline Dummy.');">ОТЛОЖИТЬ (ТОЛЬКО ОФЛАЙН)</button>
         <button class="btn-gold-action" id="btnStartUpdate" onclick="startUpdateDownloadProcess()">СКАЧАТЬ ОБНОВЛЕНИЕ И ПЕРЕЗАПУСТИТЬ ↗</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ИНВЕНТАРЬ ШАХТЁРА (54 СЛОТА) -->
+  <div class="modal-overlay" id="inventoryModal">
+    <div class="modal-card" style="width:800px;">
+      <div class="modal-card-header">
+        <div class="modal-card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          ГРУЗОВОЙ ОТСЕК // 54 СЛОТА
+        </div>
+        <button class="modal-card-close" onclick="closeModal('inventoryModal')">×</button>
+      </div>
+
+      <div class="modal-card-body" style="flex-direction:row; gap:16px;">
+        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+          <div class="inventory-modal-grid-wrap" id="fullInventoryGrid"></div>
+        </div>
+
+        <div class="item-inspector-card" id="itemInspector">
+          <span class="sci-fi-badge-mono" style="width:fit-content;">МАТЕРИАЛ</span>
+          <div style="font-family:var(--font-tech); font-size:16px; font-weight:700; color:#fff;" id="inspName">Титановый самородок</div>
+          <div style="color:var(--fa-muted); font-size:12px; line-height:1.4;" id="inspDesc">
+            Тяжёлый высокопрочный металл с глубин -2 400 м. Используется для буров Tier-3.
+          </div>
+          <dl style="display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--fa-line); margin-top:auto;">
+            <div style="padding:6px; background:#070d13;"><dt style="font-size:9px; color:var(--fa-dim);">МАССА</dt><dd style="font-size:11px; color:#fff;">1.2 KG</dd></div>
+            <div style="padding:6px; background:#070d13;"><dt style="font-size:9px; color:var(--fa-dim);">ЦЕНА</dt><dd style="font-size:11px; color:var(--fa-gold);">45 CR</dd></div>
+          </dl>
+          <button class="btn-gold-action" style="padding:6px 12px; font-size:13px; margin-top:8px;" onclick="useCurrentItem()">В ХОТБАР ↗</button>
+        </div>
+      </div>
+
+      <div class="modal-card-footer">
+        <button class="btn-outline-action" onclick="closeModal('inventoryModal')">ЗАКРЫТЬ [TAB]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ПРОГРАММАТОР РОБОТА (16x12) -->
+  <div class="modal-overlay" id="programmatorModal">
+    <div class="modal-card" style="width:880px;">
+      <div class="modal-card-header">
+        <div class="modal-card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          ПРОГРАММАТОР АВТОНОМНОГО ДРОНА // 16x12
+        </div>
+        <button class="modal-card-close" onclick="closeModal('programmatorModal')">×</button>
+      </div>
+
+      <div class="modal-card-body">
+        <div class="programmator-layout">
+          <div class="programmator-palette">
+            <span style="font-family:var(--font-mono); font-size:10px; font-weight:700; color:var(--fa-cyan);">КОМАНДЫ:</span>
+            <button class="cmd-block-btn" onclick="selectProgCommand('⬇ СКАН')">⬇ СКАН_ВНИЗ</button>
+            <button class="cmd-block-btn" onclick="selectProgCommand('➡ БУР')">➡ БУР_ВПЕРЕД</button>
+            <button class="cmd-block-btn" onclick="selectProgCommand('⛏ СБОР')">⛏ СБОР_РУДЫ</button>
+            <button class="cmd-block-btn" onclick="selectProgCommand('♨ ОБХОД')">♨ ИЗБЕГАТЬ_ЛАВЫ</button>
+            <button class="cmd-block-btn" onclick="selectProgCommand('🔋 ЗАРЯД')">🔋 ПОДЗАРЯДКА</button>
+            <button class="cmd-block-btn" onclick="selectProgCommand('🏠 БАЗА')">🏠 ВОЗВРАТ</button>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div class="programmator-grid-16x12" id="progGrid16x12"></div>
+            <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:10px; color:var(--fa-muted);">
+              <span>192 ячейки памяти · Статус: <strong style="color:var(--fa-green);" id="progStatus">ГОТОВ</strong></span>
+              <span>Частота: <strong>10 HZ</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-card-footer">
+        <button class="btn-outline-action" onclick="clearProgrammatorGrid()">ОЧИСТИТЬ</button>
+        <button class="btn-outline-action" style="border-color:rgba(255,85,85,0.4); color:var(--fa-danger);" onclick="stopProgrammatorExec()">СТОП</button>
+        <button class="btn-gold-action" onclick="runProgrammatorExec()">ЗАПУСК ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ЧАТ ЭКСПЕДИЦИИ -->
+  <div class="modal-overlay" id="chatModal">
+    <div class="modal-card" style="width:640px;">
+      <div class="modal-card-header">
+        <div class="modal-card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          КАНАЛЫ СВЯЗИ ЭКСПЕДИЦИИ // CHAT
+        </div>
+        <button class="modal-card-close" onclick="closeModal('chatModal')">×</button>
+      </div>
+
+      <div class="modal-card-body">
+        <div class="chat-window-layout">
+          <div class="chat-tabs-bar">
+            <button class="chat-tab-btn active" onclick="switchChatTab(this, 'all')">ВСЕ</button>
+            <button class="chat-tab-btn" onclick="switchChatTab(this, 'local')">ЛОКАЛЬНЫЙ (СЕКТОР 09)</button>
+            <button class="chat-tab-btn" onclick="switchChatTab(this, 'clan')">КЛАН [VOID]</button>
+            <button class="chat-tab-btn" onclick="switchChatTab(this, 'system')">СИСТЕМА</button>
+          </div>
+
+          <div class="chat-messages-container" id="chatMessagesBox">
+            <div class="chat-row"><span class="chat-author system">[SYSTEM]:</span> Шлюз связи Стокгольм-01 синхронизирован.</div>
+            <div class="chat-row"><span class="chat-author">[ГОРНЯК-102]:</span> На горизонте -1800м обнаружена жила титана.</div>
+            <div class="chat-row"><span class="chat-author clan">[DVM_LEADER]:</span> Готовность к клановому бурению 10 минут.</div>
+          </div>
+
+          <div style="display:flex; gap:6px;">
+            <input type="text" class="auth-input" id="chatInputField" placeholder="Сообщение... (Enter для отправки)" onkeydown="handleChatInputKeyDown(event)">
+            <button class="btn-gold-action" style="padding:6px 14px; font-size:13px;" onclick="sendChatMessage()">ОТПРАВИТЬ</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: КЛАН ШАХТЁРОВ -->
+  <div class="modal-overlay" id="clanModal">
+    <div class="modal-card" style="width:700px;">
+      <div class="modal-card-header">
+        <div class="modal-card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          ГИЛЬДИЯ ШАХТЁРОВ // [VOID] DEEP MINERS
+        </div>
+        <button class="modal-card-close" onclick="closeModal('clanModal')">×</button>
+      </div>
+
+      <div class="modal-card-body">
+        <div style="display:flex; justify-content:space-between; padding:14px; background:#070d13; border:1px solid var(--fa-line); border-radius:3px;">
+          <div>
+            <h3 style="font-family:var(--font-display); font-size:16px; color:#fff;">[VOID] DEEP VOID MINERS</h3>
+            <div style="font-family:var(--font-mono); font-size:11px; color:var(--fa-cyan);">Ранг 8 · 42 шахтёра в сети</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-mono); font-size:10px; color:var(--fa-dim);">КАЗНА:</div>
+            <div style="font-family:var(--font-display); font-size:18px; color:var(--fa-gold); font-weight:700;">480 000 CR</div>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <span class="settings-block-title">КЛАНОВЫЕ МОДУЛИ</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="padding:10px; background:#050a10; border:1px solid var(--fa-line); border-radius:3px;">
+              <strong style="color:var(--fa-gold); font-size:12px; display:block;">Ускоритель буров +15%</strong>
+              <span style="font-size:11px; color:var(--fa-muted);">Действует для всех членов в шахте.</span>
+            </div>
+            <div style="padding:10px; background:#050a10; border:1px solid var(--fa-line); border-radius:3px;">
+              <strong style="color:var(--fa-cyan); font-size:12px; display:block;">Тепловой щит Tier-2</strong>
+              <span style="font-size:11px; color:var(--fa-muted);">-30% урона при контакте с лавой.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-card-footer">
+        <button class="btn-gold-action" onclick="closeModal('clanModal')">ЗАКРЫТЬ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ТОРГОВЕЦ / СТАНЦИЯ СНАБЖЕНИЯ -->
+  <div class="modal-overlay" id="traderModal">
+    <div class="modal-card" style="width:720px;">
+      <div class="modal-card-header">
+        <div class="modal-card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          СТАНЦИЯ СНАБЖЕНИЯ // ТОРГОВЕЦ
+        </div>
+        <button class="modal-card-close" onclick="closeModal('traderModal')">×</button>
+      </div>
+
+      <div class="modal-card-body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="padding:12px; background:#060c14; border:1px solid var(--fa-line); border-radius:3px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="color:#fff; font-size:13px; display:block;">Алмазный бур Tier-3</strong>
+              <span style="font-size:11px; color:var(--fa-muted);">Скорость копки 0.2s</span>
+            </div>
+            <button class="btn-outline-action" style="padding:4px 10px; font-size:12px;" onclick="buyItem('Алмазный бур Tier-3', 8500)">8 500 CR</button>
+          </div>
+
+          <div style="padding:12px; background:#060c14; border:1px solid var(--fa-line); border-radius:3px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="color:#fff; font-size:13px; display:block;">Сдать всю руду</strong>
+              <span style="font-size:11px; color:var(--fa-gold);">Стоимость: +1 680 CR</span>
+            </div>
+            <button class="btn-gold-action" style="padding:4px 10px; font-size:12px;" onclick="sellAllOre()">ПРОДАТЬ</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-card-footer">
+        <button class="btn-gold-action" onclick="closeModal('traderModal')">ЗАКРЫТЬ</button>
       </div>
     </div>
   </div>

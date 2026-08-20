@@ -41,10 +41,12 @@ namespace Fodinae.Game.Managers
             {
                 if (_mainCamera == null)
                 {
-                    _mainCamera = Camera.main;
+                    _mainCamera = GameplayCamera.Resolve();
                 }
 
-                return _mainCamera;
+                // The getter initialises on first access, so the cache is
+                // populated here.
+                return _mainCamera!;
             }
         }
 
@@ -146,6 +148,7 @@ namespace Fodinae.Game.Managers
 
         public void LoadWorldInit(WorldInitPacket packet)
         {
+            UnityEngine.Debug.Log($"[Probe] WorldInit {UnityEngine.Time.realtimeSinceStartup:F3}");
             IsWorldInitialized = false;
             _packManager?.ClearAllPacks();
             _robotService?.ClearAllRobots();

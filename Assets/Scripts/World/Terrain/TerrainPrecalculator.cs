@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -10,7 +11,6 @@ namespace Fodinae.World.Terrain
     public class TerrainPrecalculator
     {
         public Vector3[,] GridVertexOffsets { get; private set; } = null!;
-        public float[,] GridShadowValues { get; private set; } = null!;
         public int[,] CellTilingDescriptors { get; private set; } = null!;
         public byte[,] CellReliefMasks { get; private set; } = null!;
         public bool[,] CellIsRelief { get; private set; } = null!;
@@ -22,7 +22,6 @@ namespace Fodinae.World.Terrain
             if (GridVertexOffsets == null || GridVertexOffsets.GetLength(0) != meshWidth + 1 || GridVertexOffsets.GetLength(1) != meshHeight + 1)
             {
                 GridVertexOffsets = new Vector3[meshWidth + 1, meshHeight + 1];
-                GridShadowValues = new float[meshWidth + 1, meshHeight + 1];
                 CellTilingDescriptors = new int[meshWidth, meshHeight];
                 CellReliefMasks = new byte[meshWidth, meshHeight];
                 CellIsRelief = new bool[meshWidth, meshHeight];
@@ -62,7 +61,6 @@ namespace Fodinae.World.Terrain
             int gh = meshHeight + 1;
 
             TerrainCellCache.Scroll2DArray(GridVertexOffsets, gw, gh, dx, dy);
-            TerrainCellCache.Scroll2DArray(GridShadowValues, gw, gh, dx, dy);
             TerrainCellCache.Scroll2DArray(CellTilingDescriptors, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellReliefMasks, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellIsRelief, meshWidth, meshHeight, dx, dy);
@@ -72,24 +70,24 @@ namespace Fodinae.World.Terrain
             int vxStart = 0, vxLen = 0, vyStart = 0, vyLen = 0;
             if (dx > 0)
             {
-                vxStart = gw - dx;
-                vxLen = dx;
+                vxStart = Mathf.Max(0, gw - dx - 1);
+                vxLen = gw - vxStart;
             }
             else if (dx < 0)
             {
                 vxStart = 0;
-                vxLen = -dx;
+                vxLen = Mathf.Min(gw, -dx + 1);
             }
 
             if (dy > 0)
             {
-                vyStart = gh - dy;
-                vyLen = dy;
+                vyStart = Mathf.Max(0, gh - dy - 1);
+                vyLen = gh - vyStart;
             }
             else if (dy < 0)
             {
                 vyStart = 0;
-                vyLen = -dy;
+                vyLen = Mathf.Min(gh, -dy + 1);
             }
 
             if (vxLen > 0 || vyLen > 0)
@@ -136,24 +134,24 @@ namespace Fodinae.World.Terrain
             int cxStart = 0, cxLen = 0, cyStart = 0, cyLen = 0;
             if (dx > 0)
             {
-                cxStart = meshWidth - dx;
-                cxLen = dx;
+                cxStart = Mathf.Max(0, meshWidth - dx - 1);
+                cxLen = meshWidth - cxStart;
             }
             else if (dx < 0)
             {
                 cxStart = 0;
-                cxLen = -dx;
+                cxLen = Mathf.Min(meshWidth, -dx + 1);
             }
 
             if (dy > 0)
             {
-                cyStart = meshHeight - dy;
-                cyLen = dy;
+                cyStart = Mathf.Max(0, meshHeight - dy - 1);
+                cyLen = meshHeight - cyStart;
             }
             else if (dy < 0)
             {
                 cyStart = 0;
-                cyLen = -dy;
+                cyLen = Mathf.Min(meshHeight, -dy + 1);
             }
 
             if (cxLen > 0 || cyLen > 0)
@@ -267,8 +265,6 @@ namespace Fodinae.World.Terrain
             {
                 GridVertexOffsets[x, y] = Vector3.zero;
             }
-
-            GridShadowValues[x, y] = 0.0f;
         }
 
         private static bool IsCause(CachedCellData data)

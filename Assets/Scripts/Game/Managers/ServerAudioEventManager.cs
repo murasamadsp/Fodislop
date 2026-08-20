@@ -3,12 +3,14 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Game.Managers
 {
@@ -17,13 +19,13 @@ namespace Fodinae.Game.Managers
         private const string TAG = "[ServerAudioEventManager]";
         private readonly List<ServerAudioEvent> _activeEffects = new();
 
+        [Inject]
+        private IVFXService _vfxService = null!;
+
         public void PlayEffect(AudioPacket packet)
         {
             var vfxType = MapAudioToVFX(packet.EffectType);
-            IVFXService vfxPool = ServiceLocator.Resolve<IVFXService>() ??
-                throw new InvalidOperationException(
-                    "Server audio effects require a registered IVFXService.");
-            VFXPool.PooledSlot? slot = vfxPool.Acquire(vfxType);
+            VFXPool.PooledSlot? slot = _vfxService.Acquire(vfxType);
 
             var effect = new ServerAudioEvent(packet, slot);
             _activeEffects.Add(effect);

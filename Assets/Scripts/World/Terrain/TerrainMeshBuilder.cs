@@ -266,12 +266,7 @@ namespace Fodinae.World.Terrain
             Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
             bool isRelief = isSameCell && precalc.CellIsRelief[x, y];
-            byte reliefMask = isSameCell ? precalc.CellReliefMasks[x, y] : (byte)0;
-
-            float sv00 = precalc.GridShadowValues[x, y];
-            float sv10 = precalc.GridShadowValues[x + 1, y];
-            float sv11 = precalc.GridShadowValues[x + 1, y + 1];
-            float sv01 = precalc.GridShadowValues[x, y + 1];
+            float reliefValue = isRelief ? precalc.CellReliefMasks[x, y] : 0f;
 
             _vertexBuffer[vIdx].Color = color;
             _vertexBuffer[vIdx].UV1 = atlasRect;
@@ -288,7 +283,7 @@ namespace Fodinae.World.Terrain
 
             _vertexBuffer[vIdx].UV5 = new Vector4(
                 anchorFlag,
-                isRelief ? reliefMask : sv00,
+                reliefValue,
                 anchor0.x,
                 anchor0.y);
 
@@ -299,7 +294,7 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 1].UV4 = animDataVec;
             _vertexBuffer[vIdx + 1].UV5 = new Vector4(
                 anchorFlag,
-                isRelief ? reliefMask : sv10,
+                reliefValue,
                 anchor1.x,
                 anchor1.y);
 
@@ -310,7 +305,7 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 2].UV4 = animDataVec;
             _vertexBuffer[vIdx + 2].UV5 = new Vector4(
                 anchorFlag,
-                isRelief ? reliefMask : sv11,
+                reliefValue,
                 anchor2.x,
                 anchor2.y);
 
@@ -321,7 +316,7 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 3].UV4 = animDataVec;
             _vertexBuffer[vIdx + 3].UV5 = new Vector4(
                 anchorFlag,
-                isRelief ? reliefMask : sv01,
+                reliefValue,
                 anchor3.x,
                 anchor3.y);
 

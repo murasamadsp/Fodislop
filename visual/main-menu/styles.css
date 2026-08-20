@@ -1445,9 +1445,13 @@
     .footer-action-link.alert { color: var(--fa-gold); font-weight: 700; }
 
     /* Состояния */
-    .viewport[data-state="loading"] .fa-planet-system { right: -6%; transform: translateY(-50%) scale(1.18); }
-    .viewport[data-state="loading"] .fa-target { transform: translate(-50%, -50%) scale(0.85); }
+    .viewport[data-state="loading"] .fa-planet-system,
+    .viewport[data-state="descent"] .fa-planet-system { right: -6%; transform: translateY(-50%) scale(1.18); }
+    .viewport[data-state="loading"] .fa-target,
+    .viewport[data-state="descent"] .fa-target { transform: translate(-50%, -50%) scale(0.85); }
     .viewport[data-state="reconnect"] .fa-planet-system { filter: grayscale(0.8) brightness(0.6); transform: translateY(-50%) scale(0.95); }
+    .viewport[data-state="splash"] .fa-planet-system { right: 50%; transform: translate(50%, -50%) scale(1.1); opacity: 0.35; }
+    .viewport[data-state="ingame"] .fa-planet-system { opacity: 0; pointer-events: none; }
 
     @media (max-width: 1200px) {
       .fa-planet-system { right: -120px; transform: translateY(-50%) scale(0.8); }
@@ -1459,3 +1463,588 @@
       .menu-main-title { font-size: 32px; }
       .genshin-sidebar { right: 12px; }
     }
+
+    /* ════════════════════════════════════════════════════
+       ЭКРАНЫ: ЗАСТАВКА, АВТОРИЗАЦИЯ, ОНБОРДИНГ, ИГРА, ПАУЗА
+       ════════════════════════════════════════════════════ */
+
+    /* 1. Заставка (Splash) */
+    .splash-overlay-view {
+      position: absolute;
+      inset: 0;
+      z-index: 35;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(6, 12, 18, 0.88) 0%, rgba(2, 4, 7, 0.98) 75%);
+      backdrop-filter: blur(8px);
+    }
+    .splash-overlay-view.active { display: flex; }
+    .splash-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 580px;
+      padding: 32px;
+    }
+    .splash-logo-symbol {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      color: var(--fa-gold);
+      filter: drop-shadow(0 0 16px var(--fa-gold-glow));
+    }
+    .splash-title {
+      font-family: var(--font-display);
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: 0.25em;
+      color: #fff;
+      line-height: 1;
+    }
+    .splash-tagline {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.28em;
+      color: var(--fa-gold);
+      margin: 8px 0 24px;
+      text-transform: uppercase;
+    }
+    .splash-terminal-status {
+      background: rgba(5, 10, 16, 0.85);
+      border: 1px solid var(--fa-line);
+      padding: 12px 18px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--fa-muted);
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+      text-align: left;
+    }
+
+    /* 2. Авторизация */
+    .auth-overlay-view {
+      position: absolute;
+      inset: 0;
+      z-index: 35;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 30% 50%, rgba(7, 15, 24, 0.94) 0%, rgba(2, 4, 7, 0.98) 75%);
+    }
+    .auth-overlay-view.active { display: flex; }
+    .auth-card {
+      width: 480px;
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      backdrop-filter: blur(14px);
+    }
+    .auth-input-row { display: flex; gap: 6px; }
+    .auth-input {
+      flex: 1;
+      background: #050b12;
+      border: 1px solid var(--fa-line);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 2px;
+      outline: none;
+    }
+    .auth-input:focus { border-color: var(--fa-cyan); }
+    .auth-btn-gen {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--fa-line);
+      color: var(--fa-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 0 10px;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .auth-btn-gen:hover { border-color: var(--fa-cyan); color: #fff; }
+
+    /* 3. Онбординг */
+    .onboarding-overlay-view {
+      position: absolute;
+      inset: 0;
+      z-index: 35;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(2, 4, 7, 0.92);
+      backdrop-filter: blur(12px);
+    }
+    .onboarding-overlay-view.active { display: flex; }
+    .onboarding-card {
+      width: 780px;
+      max-height: 88vh;
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line);
+      box-shadow: 0 25px 60px rgba(0,0,0,0.9);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .onboarding-header {
+      padding: 18px 24px 14px;
+      border-bottom: 1px solid var(--fa-line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .onboarding-step-indicator { display: flex; gap: 6px; }
+    .onboarding-step-pill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      padding: 4px 8px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.05);
+      color: var(--fa-dim);
+    }
+    .onboarding-step-pill.active { background: var(--fa-gold); color: #000; font-weight: 700; }
+    .onboarding-step-pill.completed { color: var(--fa-cyan); border: 1px solid var(--fa-cyan); }
+    .onboarding-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      flex: 1;
+    }
+    .onboarding-step-content { display: none; flex-direction: column; gap: 14px; }
+    .onboarding-step-content.active { display: flex; }
+    .onboarding-footer {
+      padding: 12px 24px;
+      border-top: 1px solid var(--fa-line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(5, 10, 16, 0.7);
+    }
+
+    /* 4. Игровой экран (In-Game 2D Mine + HUD) */
+    .ingame-viewport {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      overflow: hidden;
+      background: #020407;
+    }
+    .ingame-viewport.active { display: block; }
+
+    .mine-scene-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background:
+        radial-gradient(circle at 50% 60%, rgba(255, 122, 54, 0.08) 0%, transparent 70%),
+        linear-gradient(180deg, #09141f 0%, #10151c 30%, #160e0d 65%, #080404 100%);
+      overflow: hidden;
+    }
+    .mine-strata-container {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(24, 1fr);
+      grid-template-rows: repeat(14, 1fr);
+      gap: 1px;
+      padding: 64px 36px 84px 36px;
+    }
+    .mine-tile {
+      background: rgba(18, 28, 38, 0.85);
+      border: 1px solid rgba(140, 185, 205, 0.08);
+      position: relative;
+      cursor: crosshair;
+      transition: all 0.1s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .mine-tile:hover {
+      border-color: var(--fa-cyan);
+      background: rgba(86, 221, 212, 0.15);
+    }
+    .mine-tile.redrock { background: linear-gradient(135deg, #2b1414 0%, #1c0c0c 100%); border-color: rgba(255, 85, 85, 0.15); }
+    .mine-tile.basalt { background: linear-gradient(135deg, #131b22 0%, #0b1116 100%); }
+    .mine-tile.ore-titanium { border-color: var(--fa-cyan); color: var(--fa-cyan); }
+    .mine-tile.ore-titanium::after { content: "◆"; }
+    .mine-tile.ore-gold { border-color: var(--fa-gold); color: var(--fa-gold); }
+    .mine-tile.ore-gold::after { content: "★"; }
+    .mine-tile.lava-crack { border-color: var(--fa-magma); color: var(--fa-magma); }
+    .mine-tile.lava-crack::after { content: "♨"; }
+    .mine-tile.mined-empty { background: rgba(2, 4, 7, 0.5) !important; border-color: rgba(255,255,255,0.02) !important; }
+    .mine-tile.mined-empty::after { content: none !important; }
+
+    .mining-robot-entity {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 52px;
+      height: 52px;
+      z-index: 5;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .robot-hull {
+      width: 38px;
+      height: 38px;
+      background: #111e29;
+      border: 1.5px solid var(--fa-cyan);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 0 15px var(--fa-cyan-glow);
+    }
+    .robot-eye { width: 10px; height: 4px; background: var(--fa-gold); border-radius: 1px; }
+    .robot-drill-bit {
+      position: absolute;
+      bottom: -10px;
+      width: 8px;
+      height: 12px;
+      background: var(--fa-text);
+      clip-path: polygon(0 0, 100% 0, 50% 100%);
+    }
+    .robot-headlight {
+      position: absolute;
+      bottom: -50px;
+      width: 120px;
+      height: 65px;
+      background: radial-gradient(ellipse at top, rgba(86, 221, 212, 0.35) 0%, transparent 70%);
+      clip-path: polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%);
+      pointer-events: none;
+    }
+
+    /* Игровой слой HUD */
+    .game-hud-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      padding: 16px 24px;
+      display: grid;
+      grid-template-columns: 280px 1fr 280px;
+      grid-template-rows: auto 1fr auto;
+      gap: 16px;
+    }
+    .sci-fi-panel {
+      pointer-events: auto;
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line);
+      padding: 12px 14px;
+      border-radius: 3px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      backdrop-filter: blur(10px);
+    }
+    .hud-title-row { display: flex; align-items: center; justify-content: space-between; }
+    .hud-nickname { font-family: var(--font-display); font-size: 13px; font-weight: 700; color: #fff; }
+    .sci-fi-badge-mono {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--fa-cyan);
+      background: var(--fa-cyan-dim);
+      border: 1px solid var(--fa-line-bright);
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+    .hud-clan-btn {
+      background: rgba(245, 197, 66, 0.12);
+      border: 1px solid var(--fa-line-gold);
+      color: var(--fa-gold);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .hud-bar-group { display: flex; flex-direction: column; gap: 3px; }
+    .hud-bar-header { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 10px; color: var(--fa-muted); }
+    .sci-fi-bar-track { height: 5px; background: rgba(0,0,0,0.6); border: 1px solid var(--fa-line); overflow: hidden; border-radius: 2px; }
+    .sci-fi-bar-fill-hp { height: 100%; background: var(--fa-green); width: 84%; }
+    .sci-fi-bar-fill-cyan { height: 100%; background: var(--fa-cyan); width: 92%; }
+    .hud-currencies-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      padding-top: 6px;
+    }
+
+    .hud-basket-panel { grid-row: 2; height: fit-content; }
+    .basket-grid-mini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+    .basket-slot-mini {
+      background: rgba(5, 10, 16, 0.8);
+      border: 1px solid var(--fa-line);
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--fa-dim);
+      border-radius: 2px;
+    }
+    .basket-slot-mini.filled { border-color: var(--fa-cyan); color: var(--fa-cyan); background: rgba(86, 221, 212, 0.1); }
+
+    .hud-mission-panel {
+      grid-column: 2;
+      justify-self: center;
+      min-width: 420px;
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line-gold);
+    }
+    .hud-radar-panel { grid-column: 3; }
+    .radar-screen {
+      height: 64px;
+      background: #04080e;
+      border: 1px solid var(--fa-line);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 2px;
+    }
+    .radar-sweep-line {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 50%, rgba(86, 221, 212, 0.25) 100%);
+      animation: rotateClockwise 4s linear infinite;
+    }
+    .radar-dot { position: absolute; width: 4px; height: 4px; background: var(--fa-gold); border-radius: 50%; }
+
+    .hud-actions-column {
+      pointer-events: auto;
+      grid-column: 3;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+    }
+    .hud-action-btn {
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line);
+      color: var(--fa-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.12s ease;
+      border-radius: 2px;
+    }
+    .hud-action-btn:hover { border-color: var(--fa-cyan); color: #fff; }
+    .hud-action-btn.active { border-color: var(--fa-gold); color: var(--fa-gold); background: rgba(245, 197, 66, 0.12); }
+    .led-indicator { width: 6px; height: 6px; border-radius: 50%; background: #333; }
+    .led-indicator.active { background: var(--fa-green); box-shadow: 0 0 6px var(--fa-green); }
+    .led-indicator.alert { background: var(--fa-danger); box-shadow: 0 0 6px var(--fa-danger); }
+
+    .hud-hotbar-container {
+      pointer-events: auto;
+      grid-column: 2;
+      grid-row: 3;
+      justify-self: center;
+      display: flex;
+      gap: 4px;
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line);
+      padding: 4px 6px;
+      border-radius: 3px;
+    }
+    .hotbar-slot {
+      width: 44px;
+      height: 44px;
+      background: rgba(6, 12, 18, 0.9);
+      border: 1px solid var(--fa-line);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .hotbar-slot:hover { border-color: var(--fa-cyan); }
+    .hotbar-slot.active { border-color: var(--fa-gold); background: rgba(245, 197, 66, 0.15); }
+    .hotbar-num { position: absolute; top: 2px; left: 3px; font-family: var(--font-mono); font-size: 8px; color: var(--fa-dim); }
+    .hotbar-slot.active .hotbar-num { color: var(--fa-gold); }
+    .hotbar-icon { font-size: 15px; font-family: var(--font-mono); font-weight: 700; color: var(--fa-cyan); }
+    .hotbar-count { position: absolute; bottom: 2px; right: 3px; font-family: var(--font-mono); font-size: 9px; color: #fff; }
+
+    /* 5. Инвентарь, Программатор, Чат */
+    .inventory-modal-grid-wrap {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 4px;
+      background: rgba(3, 6, 10, 0.9);
+      padding: 8px;
+      border: 1px solid var(--fa-line);
+      border-radius: 2px;
+    }
+    .inv-grid-cell {
+      width: 48px;
+      height: 48px;
+      background: rgba(8, 15, 23, 0.9);
+      border: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      border-radius: 2px;
+    }
+    .inv-grid-cell:hover { border-color: var(--fa-cyan); }
+    .inv-grid-cell.selected { border-color: var(--fa-gold); background: rgba(245, 197, 66, 0.12); }
+    .inv-grid-cell.rare { border-color: var(--fa-cyan); }
+    .inv-grid-cell.legendary { border-color: var(--fa-gold); }
+    .inv-cell-icon { font-size: 14px; font-weight: 700; color: var(--fa-text); }
+    .inv-cell-count { position: absolute; bottom: 2px; right: 3px; font-size: 9px; color: var(--fa-muted); }
+
+    .item-inspector-card {
+      width: 230px;
+      background: rgba(5, 10, 16, 0.95);
+      border: 1px solid var(--fa-line);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      border-radius: 2px;
+    }
+
+    .programmator-layout { display: grid; grid-template-columns: 190px 1fr; gap: 14px; }
+    .programmator-palette {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(5, 10, 16, 0.7);
+      padding: 8px;
+      border: 1px solid var(--fa-line);
+      border-radius: 2px;
+    }
+    .cmd-block-btn {
+      background: rgba(10, 18, 28, 0.85);
+      border: 1px solid var(--fa-line);
+      color: var(--fa-text);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 6px 8px;
+      cursor: pointer;
+      text-align: left;
+      border-radius: 2px;
+    }
+    .cmd-block-btn:hover { border-color: var(--fa-cyan); background: rgba(86, 221, 212, 0.12); }
+    .programmator-grid-16x12 {
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      grid-template-rows: repeat(12, 1fr);
+      gap: 2px;
+      background: #020508;
+      padding: 6px;
+      border: 1px solid var(--fa-line);
+      height: 340px;
+      border-radius: 2px;
+    }
+    .prog-grid-cell {
+      background: rgba(10, 18, 28, 0.6);
+      border: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-family: var(--font-mono);
+      color: var(--fa-dim);
+      border-radius: 1px;
+    }
+    .prog-grid-cell:hover { border-color: var(--fa-cyan); }
+    .prog-grid-cell.active-step { border-color: var(--fa-gold); background: rgba(245, 197, 66, 0.18); color: var(--fa-gold); }
+
+    .chat-window-layout { display: flex; flex-direction: column; gap: 10px; height: 380px; }
+    .chat-tabs-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--fa-line); padding-bottom: 6px; }
+    .chat-tab-btn {
+      background: transparent;
+      border: 1px solid var(--fa-line);
+      color: var(--fa-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .chat-tab-btn.active { border-color: var(--fa-cyan); color: var(--fa-cyan); background: rgba(86, 221, 212, 0.12); }
+    .chat-messages-container {
+      flex: 1;
+      background: rgba(3, 6, 10, 0.9);
+      border: 1px solid var(--fa-line);
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .chat-author { font-weight: 700; color: var(--fa-cyan); margin-right: 6px; }
+    .chat-author.clan { color: var(--fa-gold); }
+    .chat-author.system { color: var(--fa-danger); }
+
+    /* 6. Пауза */
+    .pause-overlay-view {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(2, 5, 9, 0.88);
+      backdrop-filter: blur(14px);
+    }
+    .pause-overlay-view.active { display: flex; }
+    .pause-menu-card {
+      width: 400px;
+      background: var(--fa-panel);
+      border: 1px solid var(--fa-line);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: center;
+      border-radius: 3px;
+    }
+    .pause-btn-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }

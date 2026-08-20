@@ -37,6 +37,41 @@ namespace Fodinae.Core
     {
         private Scene _ownScene;
 
+        // Repoints ambient resolution back at the Bootstrap scope BEFORE this
+        // scope's container is disposed.
+        //
+        // VContainer's Container.Dispose() clears sharedInstances but sets no
+        // disposed flag and leaves the registry alone, so resolving a disposed
+        // container silently re-runs the provider instead of failing. Everything
+        // here registered with RegisterComponentOnNewGameObject has
+        // `new GameObject(typeof(T).Name)` as its provider - which is exactly
+        // how PackManager, RobotManager and ServerAudioEventManager came back to
+        // life inside a closing scene and produced Unity's warning.
+        //
+        // The resolves that do it are not exotic: ConnectionManager (Bootstrap
+        // tier, still running) calls TryResolve<MapManager>() from Disconnect
+        // and OnDisconnected, and MapManager's [Inject] Construct takes
+        // PackManager, IRobotService and IServerAudioService - so one resolve
+        // spawns all three. The packet processors do the same on any late
+        // packet, since the connection outlives the scene by design.
+        //
+        // ReturnToMainMenu repoints explicitly before its unload; this covers
+        // every other way the scene can go away, including play-mode exit.
+        protected override void OnDestroy()
+        {
+            BootstrapLifetimeScope? bootstrap = BootstrapLifetimeScope.Instance;
+            if (bootstrap != null && bootstrap.Container != null)
+            {
+                ServiceLocator.Initialize(bootstrap.Container);
+                if (bootstrap.Container.TryResolve(out ISessionContainer session))
+                {
+                    session.Set(bootstrap.Container);
+                }
+            }
+
+            base.OnDestroy();
+        }
+
         protected override void Configure(IContainerBuilder builder)
         {
             _ownScene = gameObject.scene;
@@ -90,10 +125,13 @@ namespace Fodinae.Core
             RegisterManager<WorldTextureManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PacketHandler>(builder).AsImplementedInterfaces().AsSelf();
-            builder.Register<ClanProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
-            builder.Register<InventoryProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
-            builder.Register<PlayerStatsProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
-            builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces();
+
+            // PacketHandler инжектит процессоры по конкретному типу ([Inject] PlayerStatsProcessor и т.д.),
+            // поэтому регистрируем и интерфейсы (для коллекций IPacketProcessor<...>), и сам тип (AsSelf).
+            builder.Register<ClanProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<InventoryProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<PlayerStatsProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<WorldInitProcessor>(Lifetime.Singleton);
             builder.Register<RobotInfoProcessor>(Lifetime.Singleton);
             builder.Register<MapRegionProcessor>(Lifetime.Singleton);
@@ -156,6 +194,7 @@ namespace Fodinae.Core
             RegisterManager<PauseMenu>(builder);
             RegisterManager<MinimapController>(builder);
             RegisterManager<DisplayManager>(builder);
+            RegisterManager<InGameDebugOverlay>(builder);
             builder.Register<LocalizationService>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
 
 

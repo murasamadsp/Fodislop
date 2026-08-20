@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Data;
@@ -493,7 +494,7 @@ namespace Fodinae.World
 
         private Texture2D GetBaseTexture(CellType cellType)
         {
-            var textureService = ServiceLocator.Resolve<ITextureService>();
+            var textureService = SessionAccess.Resolve()?.TryResolve<ITextureService>();
             if (textureService is WorldTextureManager manager)
             {
                 var cachedTexture = manager.GetCachedTexture(cellType);

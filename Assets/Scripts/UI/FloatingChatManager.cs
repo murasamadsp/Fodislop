@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Fodinae.Core;
 using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
@@ -27,7 +28,7 @@ namespace Fodinae.UI
         {
             if (_camera == null)
             {
-                _camera = Camera.main;
+                _camera = GameplayCamera.Resolve();
             }
 
             if (_bubblePrefab != null)
@@ -71,7 +72,7 @@ namespace Fodinae.UI
             TryInitialize();
             if (_camera == null)
             {
-                _camera = Camera.main;
+                _camera = GameplayCamera.Resolve();
             }
 
             var robot = _robotManager?.GetOrCreateRobot(packet.BotId);

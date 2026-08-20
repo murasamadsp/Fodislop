@@ -216,7 +216,7 @@ namespace Fodinae.World
 
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main;
+                _mainCamera = GameplayCamera.Resolve();
             }
 
             Camera mainCamera = _mainCamera ??

@@ -194,7 +194,7 @@ namespace Fodinae.Rendering.PostProcessing
         private void Awake()
         {
             _instance = this;
-            _mainCamera = Camera.main;
+            _mainCamera = GameplayCamera.Resolve();
         }
 
         private void OnDestroy()
@@ -236,7 +236,7 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main;
+                _mainCamera = GameplayCamera.Resolve();
             }
 
             var mainCam = _mainCamera;
@@ -380,7 +380,7 @@ namespace Fodinae.Rendering.PostProcessing
         {
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main;
+                _mainCamera = GameplayCamera.Resolve();
             }
 
             Camera? mainCamera = _configuredMainCamera;

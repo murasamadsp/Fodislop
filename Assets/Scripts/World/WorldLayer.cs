@@ -239,6 +239,101 @@ namespace Fodinae
             }
         }
 
+        /// <summary>
+        /// Applies a region payload in one pass, chunk by chunk, without touching
+        /// the LRU once per cell. This is the hot path for server region streams
+        /// (a 32x32 region previously issued ~2048 LRU/Dictionary operations per
+        /// region through <see cref="GetCellSync"/> + <see cref="SetCell"/>), which
+        /// made every region cost several milliseconds and stretched the initial
+        /// world burst across dozens of frames under the packet-drain budget.
+        /// </summary>
+        /// <param name="startX">Region origin X in world cells.</param>
+        /// <param name="startY">Region origin Y in world cells.</param>
+        /// <param name="width">Region width in world cells.</param>
+        /// <param name="height">Region height in world cells.</param>
+        /// <param name="cells">Payload in row-major order (y outer, x inner).</param>
+        /// <param name="cellsOffset">Index of the first payload cell.</param>
+        /// <returns>Number of cells that actually changed.</returns>
+        public int SetRegion(
+            int startX,
+            int startY,
+            int width,
+            int height,
+            T[] cells,
+            int cellsOffset = 0)
+        {
+            int worldWidth = _widthChunks * _chunkSize;
+            int worldHeight = _heightChunks * _chunkSize;
+            if (startX < 0 || startY < 0 || startX >= worldWidth || startY >= worldHeight)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(startX),
+                    $"Region origin ({startX}, {startY}) is outside the world layer bounds {worldWidth}x{worldHeight}.");
+            }
+
+            long requiredCells = (long)cellsOffset + ((long)width * height);
+            if (width <= 0 || height <= 0 || cells.Length < requiredCells)
+            {
+                throw new ArgumentException(
+                    $"Region payload too small: {cells.Length} cells at offset {cellsOffset}, " +
+                    $"needs at least {requiredCells} for {width}x{height}.",
+                    nameof(cells));
+            }
+
+            int endX = Math.Min(startX + width, worldWidth);
+            int endY = Math.Min(startY + height, worldHeight);
+            int firstChunkX = startX / _chunkSize;
+            int lastChunkX = (endX - 1) / _chunkSize;
+            int firstChunkY = startY / _chunkSize;
+            int lastChunkY = (endY - 1) / _chunkSize;
+
+            int changedCount = 0;
+            for (int chunkX = firstChunkX; chunkX <= lastChunkX; chunkX++)
+            {
+                for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
+                {
+                    int chunkIndex = chunkY + (chunkX * _heightChunks);
+                    T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
+                    if (chunk == null)
+                    {
+                        throw new InvalidDataException(
+                            $"World layer '{_filePath}' could not load chunk {chunkIndex} " +
+                            $"while applying region ({startX},{startY}) {width}x{height}.");
+                    }
+
+                    int regionX0 = Math.Max(startX, chunkX * _chunkSize);
+                    int regionX1 = Math.Min(endX, (chunkX + 1) * _chunkSize);
+                    int regionY0 = Math.Max(startY, chunkY * _chunkSize);
+                    int regionY1 = Math.Min(endY, (chunkY + 1) * _chunkSize);
+
+                    bool chunkChanged = false;
+                    for (int x = regionX0; x < regionX1; x++)
+                    {
+                        int localX = x - (chunkX * _chunkSize);
+                        for (int y = regionY0; y < regionY1; y++)
+                        {
+                            int payloadIndex = cellsOffset + ((y - startY) * width) + (x - startX);
+                            T value = cells[payloadIndex];
+                            int localIndex = (y - (chunkY * _chunkSize)) + (localX * _chunkSize);
+                            if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
+                            {
+                                chunk[localIndex] = value;
+                                chunkChanged = true;
+                                changedCount++;
+                            }
+                        }
+                    }
+
+                    if (chunkChanged)
+                    {
+                        MarkDirty(chunkIndex);
+                    }
+                }
+            }
+
+            return changedCount;
+        }
+
         // --- Core Paging Logic ---
         public T[]? GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
         {

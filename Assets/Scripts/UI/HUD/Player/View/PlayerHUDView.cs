@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.Player;
@@ -87,6 +88,8 @@ namespace Fodinae.UI.HUD.Player.View
         private IAssetLoader _assetLoader = null!;
         [Inject]
         private INetworkService _networkService = null!;
+        [Inject]
+        private ISessionContainer _session = null!;
         private VisualElement? _missionPanel;
         private Label? _missionTitleLabel;
         private Label? _missionDescLabel;
@@ -108,7 +111,7 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void TryStartInitialization()
         {
-            if (_initializationStarted || !ServiceLocator.IsInitialized)
+            if (_initializationStarted || _session?.Current == null)
             {
                 return;
             }
@@ -327,7 +330,7 @@ namespace Fodinae.UI.HUD.Player.View
             _nicknameLabel.AddToClassList("hud-nickname");
             topRow.Add(_nicknameLabel);
 
-            _levelLabel = new Label("Ур: 0");
+            _levelLabel = new Label("Ур: ---");
             _levelLabel.AddToClassList("hud-level");
             topRow.Add(_levelLabel);
 
@@ -342,7 +345,7 @@ namespace Fodinae.UI.HUD.Player.View
             separator.AddToClassList("hud-separator");
             _panel.Add(separator);
 
-            _hpLabel = new Label("Прочность: 0/0");
+            _hpLabel = new Label("Прочность: --/--");
             _hpLabel.AddToClassList("hud-stat");
             _panel.Add(_hpLabel);
 
@@ -355,15 +358,15 @@ namespace Fodinae.UI.HUD.Player.View
 
             _panel.Add(hpContainer);
 
-            _moneyLabel = new Label("$ 0");
+            _moneyLabel = new Label("$ ---");
             _moneyLabel.AddToClassList("hud-money");
             _panel.Add(_moneyLabel);
 
-            _credsLabel = new Label("C 0");
+            _credsLabel = new Label("C ---");
             _credsLabel.AddToClassList("hud-creds");
             _panel.Add(_credsLabel);
 
-            _geologyLabel = new Label("Геология: 0/0");
+            _geologyLabel = new Label("Геология: --/--");
             _geologyLabel.AddToClassList("hud-stat");
             _panel.Add(_geologyLabel);
 
@@ -371,7 +374,7 @@ namespace Fodinae.UI.HUD.Player.View
             basketSep.AddToClassList("hud-separator");
             _panel.Add(basketSep);
 
-            _basketPercentLabel = new Label("Груз: 0%");
+            _basketPercentLabel = new Label("Груз: --%");
             _basketPercentLabel.AddToClassList("hud-basket");
             _panel.Add(_basketPercentLabel);
 
@@ -1148,11 +1151,11 @@ namespace Fodinae.UI.HUD.Player.View
         {
             var popup = new VisualElement();
             popup.AddToClassList("popup-overlay");
+            popup.style.display = DisplayStyle.None;
 
             var dimmer = new VisualElement();
             dimmer.pickingMode = PickingMode.Ignore;
             dimmer.AddToClassList("popup-dimmer");
-            dimmer.pickingMode = PickingMode.Ignore;
             popup.Add(dimmer);
 
             var panel = new VisualElement();
@@ -1175,11 +1178,11 @@ namespace Fodinae.UI.HUD.Player.View
         {
             var popup = new VisualElement();
             popup.AddToClassList("popup-overlay");
+            popup.style.display = DisplayStyle.None;
 
             var dimmer = new VisualElement();
             dimmer.pickingMode = PickingMode.Ignore;
             dimmer.AddToClassList("popup-dimmer");
-            dimmer.pickingMode = PickingMode.Ignore;
             popup.Add(dimmer);
 
             var panel = new VisualElement();

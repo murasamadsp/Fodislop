@@ -86,8 +86,9 @@ namespace Fodinae.UI
             // GameBootstrap (IPostStartable.PostStart) injects [Inject] fields only after
             // MonoBehaviour.Start, so _mapManager/_mapStorage are null here. Never disable
             // the component based on that: Update() -> TryInitialize() resolves them via
-            // ServiceLocator and waits for the world to become ready. World dimensions are
-            // computed there too (InitializeWorldState), so they are not duplicated here.
+            // the injected resolver and waits for the world to become ready. World
+            // dimensions are computed there too (InitializeWorldState), so they are not
+            // duplicated here.
 
             // Every texel is a discrete world-cell sample. Bilinear filtering
             // invents colors between adjacent cells and blurs unloaded chunk
@@ -189,13 +190,13 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 return;
             }
 
-            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
-            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
+            _mapManager = _resolver.ResolveOrDefault<MapManager>();
+            _mapStorage = _resolver.ResolveOrDefault<MapStorage>();
 
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
@@ -321,7 +322,7 @@ namespace Fodinae.UI
             _minimapRoot.AddToClassList("hud-minimap-panel");
             _minimapRoot.AddToClassList("sci-fi-panel");
 
-            _coordinatesLabel = new Label("0:0");
+            _coordinatesLabel = new Label(string.Empty);
             _coordinatesLabel.AddToClassList("hud-minimap-coords");
             _minimapRoot.Add(_coordinatesLabel);
 
@@ -376,14 +377,14 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 _ready = false;
                 return;
             }
 
-            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
-            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
+            _mapManager = _resolver.ResolveOrDefault<MapManager>();
+            _mapStorage = _resolver.ResolveOrDefault<MapStorage>();
             if (_mapManager == null || _mapStorage == null)
             {
                 _ready = false;

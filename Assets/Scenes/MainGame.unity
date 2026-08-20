@@ -957,8 +957,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1108560719}
   - component: {fileID: 1108560718}
-  - component: {fileID: 1108560717}
-  - component: {fileID: 1108560716}
   m_Layer: 5
   m_Name: UIDocument
   m_TagString: Untagged
@@ -966,38 +964,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1108560716
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1108560715}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f60718293a4b5c6d7e8f90, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  drawContainers: 1
-  drawCells: 1
-  drawWorldUI: 1
-  maxDepth: 64
-  containerColor: {r: 0.2, g: 0.8, b: 1, a: 0.9}
-  cellColor: {r: 1, g: 0.6, b: 0.2, a: 0.9}
-  worldUIColor: {r: 0.8, g: 0.2, b: 1, a: 0.9}
---- !u!114 &1108560717
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1108560715}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e7ee9e8630524226aecbf115a9824cba, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _loaderTexture: {fileID: 2800000, guid: bb2d88d590a7c9241a54276262f96c47, type: 3}
 --- !u!114 &1108560718
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1141,7 +1107,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bec81cf68faa54656b0c16a179b6f461, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.World.Lighting.TerrariaLightingEngine
+  _quality: 3
+  _graphicsProfile: {fileID: 11400000, guid: 0b7c4f0fd9e04f619d688a453e9193dd, type: 2}
+  _ambientColor: {r: 0.12, g: 0.14, b: 0.18, a: 1}
+  _emptyExtinctionRgb: {r: 0.015, g: 0.012, b: 0.009, a: 1}
+  _solidExtinctionRgb: {r: 1.2, g: 1.1, b: 1, a: 1}
+  _minimumTransmission: 0.008
+  _lightSafeBorder: 2
+  _ambientOcclusionEnabled: 1
+  _ambientOcclusionRadiusCells: 2
+  _ambientOcclusionStrength: 0.65
+  _ambientIntensity: 0.85
+  _emissionScale: 1.4
+  _emptyExtinctionMultiplier: 1
+  _solidExtinctionMultiplier: 1
+  _bounceStrength: 0.18
+  _maximumLightMultiplier: 8
+  _enableFinalLightingClamp: 0
+  _transmittanceDebugDistanceCells: 10
   _debugView: 0
+  _diffuseBounceEnabled: 1
+  _dynamicLightUpdatesPerSecond: 20
 --- !u!4 &1908995099
 Transform:
   m_ObjectHideFlags: 0

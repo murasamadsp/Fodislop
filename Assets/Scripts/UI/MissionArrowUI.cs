@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.UI.HUD.Player.Model;
@@ -25,6 +26,8 @@ namespace Fodinae.UI
         private PlayerStatsModel _playerStats = null!;
         [Inject]
         private MapManager _mapManager = null!;
+        [Inject]
+        private ISessionContainer _session = null!;
 
         protected void Start()
         {
@@ -41,7 +44,7 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _session?.Current == null)
             {
                 return;
             }
@@ -54,7 +57,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            _camera = Camera.main;
+            _camera = GameplayCamera.Resolve();
 
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
@@ -158,7 +161,7 @@ namespace Fodinae.UI
 
             var panelPos = RuntimePanelUtils.ScreenToPanel(
                 _doc.rootVisualElement.panel,
-                new Vector2(screenPos.x, Screen.height - screenPos.y));
+                screenPos);
 
             float halfW = _doc.rootVisualElement.resolvedStyle.width / 2f;
             float halfH = _doc.rootVisualElement.resolvedStyle.height / 2f;

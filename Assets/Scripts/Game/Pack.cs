@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
@@ -39,10 +40,20 @@ namespace Fodinae.Game
                 _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
             }
 
+            if (Application.isPlaying)
+            {
+                _spriteRenderer.enabled = false;
+            }
+
             var clanGo = new GameObject("ClanIcon");
             clanGo.transform.SetParent(transform);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
+            if (Application.isPlaying)
+            {
+                _clanRenderer.enabled = false;
+            }
+
             UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 10);
         }
 
@@ -68,14 +79,8 @@ namespace Fodinae.Game
             _cts?.Cancel();
             _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
-            LoadAssetsAsync(_cts.Token).Forget();
-        }
-
-        private async UniTaskVoid LoadAssetsAsync(CancellationToken token)
-        {
-            LoadPackAsync(token).Forget();
-            LoadClanAsync(token).Forget();
-            await UniTask.CompletedTask;
+            LoadPackAsync(_cts.Token).Forget();
+            LoadClanAsync(_cts.Token).Forget();
         }
 
         private async UniTaskVoid LoadPackAsync(CancellationToken token)
@@ -84,7 +89,7 @@ namespace Fodinae.Game
             string packPath = $"Pack/{packName}/{_variant}";
 
             // 1. Try loading as a texture (existing behavior — static or animated sprite)
-            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            var loader = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() as ClientAssetLoader;
             if (loader == null)
             {
                 return;
@@ -109,6 +114,7 @@ namespace Fodinae.Game
                 // Use central PIXELS_PER_UNIT for consistency
                 _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
                 _spriteRenderer.sprite = _packSprite;
+                _spriteRenderer.enabled = true;
 
                 UpdateClanPosition();
                 return;
@@ -164,7 +170,7 @@ namespace Fodinae.Game
                 return;
             }
 
-            var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+            var loader = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() as ClientAssetLoader;
             if (loader == null)
             {
                 return;
@@ -186,6 +192,7 @@ namespace Fodinae.Game
 
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
             _clanRenderer.sprite = _clanSprite;
+            _clanRenderer.enabled = true;
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
 
             UpdateClanPosition();

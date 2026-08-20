@@ -1,7 +1,7 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Game.Managers;
 using UnityEngine;
 
@@ -16,7 +16,7 @@ namespace Fodinae.World
                 return worldHeight;
             }
 
-            var mm = ServiceLocator.Resolve<MapManager>();
+            var mm = SessionAccess.Resolve()?.TryResolve<MapManager>();
             if (mm != null && mm.WorldHeight > 0)
             {
                 return mm.WorldHeight;

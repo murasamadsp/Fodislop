@@ -55,7 +55,7 @@ namespace Fodinae.Audio.Backend
 
         private void TryApplySavedBusVolumes()
         {
-            if (_configApplied || !ServiceLocator.IsInitialized)
+            if (_configApplied)
             {
                 return;
             }

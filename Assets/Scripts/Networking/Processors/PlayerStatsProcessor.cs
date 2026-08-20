@@ -53,6 +53,7 @@ namespace Fodinae.Networking.Processors
 
         public void Process(BasketPacket packet)
         {
+            UnityEngine.Debug.Log($"[Probe] Basket {UnityEngine.Time.realtimeSinceStartup:F3} cap={packet.Capacity}");
             var s = _stats;
             if (s != null)
             {

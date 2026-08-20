@@ -131,13 +131,13 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 throw new InvalidOperationException(
                     "[WorldMapController] Map toggle was requested before the VContainer resolver was initialized.");
             }
 
-            MapStorage mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>() ??
+            MapStorage mapStorage = _resolver.Resolve<MapStorage>() ??
                 throw new InvalidOperationException(
                     "[WorldMapController] MapStorage is not registered.");
             if (!mapStorage.IsReady)
@@ -171,7 +171,7 @@ namespace Fodinae.UI
 
             _player = player;
 
-            MapStorage mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>() ??
+            MapStorage mapStorage = _resolver.Resolve<MapStorage>() ??
                 throw new InvalidOperationException(
                     "[WorldMapController] MapStorage is not registered.");
             if (!mapStorage.IsReady)

@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Player;
@@ -48,7 +49,6 @@ namespace Fodinae.UI
         [Inject]
         private MapManager? _manager;
         private PlayerMovementController? _player;
-        private InputAction? _scrollAction;
 
         private bool _isDragging;
         private Vector2 _lastMousePos;
@@ -71,13 +71,14 @@ namespace Fodinae.UI
 
         protected void Awake()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session == null)
             {
                 return;
             }
 
-            _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+            _storage ??= session.TryResolve<IWorldDataStorage>();
+            _manager ??= session.TryResolve<MapManager>();
         }
 
         protected void Start()
@@ -90,7 +91,6 @@ namespace Fodinae.UI
             if (_initialized)
             {
                 RebindRuntimeSources();
-                EnsureScrollAction();
             }
         }
 
@@ -98,19 +98,19 @@ namespace Fodinae.UI
         {
             if (_initialized)
             {
-                EnsureScrollAction();
                 return;
             }
 
-            if (!ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session == null)
             {
                 return;
             }
 
-            _storage ??= ServiceLocator.Resolve<IWorldDataStorage>() ??
+            _storage ??= session.TryResolve<IWorldDataStorage>() ??
                 throw new InvalidOperationException(
                     "WorldMapRenderer requires IWorldDataStorage after the resolver was initialized.");
-            _manager ??= ServiceLocator.Resolve<MapManager>() ??
+            _manager ??= session.TryResolve<MapManager>() ??
                 throw new InvalidOperationException(
                     "WorldMapRenderer requires MapManager after the resolver was initialized.");
             if (!_manager.IsWorldInitialized || !_storage.IsReady)
@@ -149,8 +149,6 @@ namespace Fodinae.UI
                 _viewCenterY = h / 2f;
             }
 
-            EnsureScrollAction();
-
             if (_canvas != null && !_canvas.gameObject.activeSelf)
             {
                 Hide();
@@ -161,7 +159,6 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            DisposeScrollAction();
             if (_mapTexture != null)
             {
                 Destroy(_mapTexture);
@@ -185,35 +182,7 @@ namespace Fodinae.UI
             }
         }
 
-        protected void OnDisable()
-        {
-            DisposeScrollAction();
-        }
 
-        private void DisposeScrollAction()
-        {
-            if (_scrollAction == null)
-            {
-                return;
-            }
-
-            _scrollAction.performed -= OnScroll;
-            _scrollAction.Disable();
-            _scrollAction.Dispose();
-            _scrollAction = null;
-        }
-
-        private void EnsureScrollAction()
-        {
-            if (_scrollAction != null)
-            {
-                return;
-            }
-
-            _scrollAction = new InputAction("MapScroll", binding: "<Mouse>/scroll");
-            _scrollAction.performed += OnScroll;
-            _scrollAction.Enable();
-        }
 
         private void SubscribeToPlayer(PlayerMovementController player)
         {
@@ -253,14 +222,15 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            if (!ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session == null)
             {
                 _initialized = false;
                 return;
             }
 
-            _storage = ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager = ServiceLocator.Resolve<MapManager>();
+            _storage = session.TryResolve<IWorldDataStorage>();
+            _manager = session.TryResolve<MapManager>();
             if (_storage == null || _manager == null)
             {
                 _initialized = false;
@@ -412,6 +382,7 @@ namespace Fodinae.UI
                 }
             }
 
+            HandleMouseScroll();
             HandleDrag();
             HandleFollowPlayer();
             HandleQueuedRender();
@@ -430,13 +401,14 @@ namespace Fodinae.UI
         {
             if (_storage == null || _manager == null)
             {
-                if (!Fodinae.Core.ServiceLocator.IsInitialized)
+                ISessionContainer? session = SessionAccess.Resolve();
+                if (session == null)
                 {
                     return;
                 }
 
-                _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-                _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+                _storage ??= session.TryResolve<IWorldDataStorage>();
+                _manager ??= session.TryResolve<MapManager>();
                 if (_storage == null || _manager == null)
                 {
                     return;
@@ -812,14 +784,14 @@ namespace Fodinae.UI
             return Mathf.Max(1f, maxCp);
         }
 
-        private void OnScroll(InputAction.CallbackContext ctx)
+        private void HandleMouseScroll()
         {
-            if (!enabled || _canvas == null || !_canvas.gameObject.activeSelf)
+            if (!enabled || _canvas == null || !_canvas.gameObject.activeSelf || Mouse.current == null)
             {
                 return;
             }
 
-            float delta = ctx.ReadValue<Vector2>().y;
+            float delta = Mouse.current.scroll.ReadValue().y;
             if (Mathf.Abs(delta) < 0.01f)
             {
                 return;

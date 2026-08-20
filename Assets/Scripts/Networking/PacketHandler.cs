@@ -211,7 +211,33 @@ namespace Fodinae.Networking
             _isSubscribed = true;
         }
 
+        /// <summary>
+        /// Detaches every packet subscription. Idempotent.
+        /// </summary>
+        /// <remarks>
+        /// Split out of <c>OnDestroy</c> so it can be called BEFORE the game
+        /// scene starts unloading, which is the only point at which it actually
+        /// prevents anything. The connection lives in the Bootstrap scope and
+        /// keeps draining packets across the transition by design, while
+        /// OnDestroy runs *inside* the unload in an order Unity does not define.
+        /// Any packet that lands in that window reaches a processor, which
+        /// resolves a lazily-registered manager from an already-disposed
+        /// container - and VContainer answers that by re-running the provider,
+        /// i.e. by spawning a fresh PackManager / RobotManager /
+        /// ServerAudioEventManager GameObject into the closing scene.
+        /// OnDestroy still calls this as a backstop.
+        /// </remarks>
+        public void Shutdown()
+        {
+            UnsubscribeAll();
+        }
+
         protected virtual void OnDestroy()
+        {
+            UnsubscribeAll();
+        }
+
+        private void UnsubscribeAll()
         {
             if (!_isInitialized || !_isSubscribed)
             {

@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -28,7 +28,7 @@ namespace Fodinae.World.Extensions
         public static async UniTask<AtlasCoordinate> GetCellTextureCoordinate(this WorldLayer<CellType> worldLayer, int x, int y)
         {
             var cellType = worldLayer[x, y];
-            ITextureService manager = ServiceLocator.Resolve<ITextureService>() ??
+            ITextureService manager = SessionAccess.Resolve()?.TryResolve<ITextureService>() ??
                 throw new InvalidOperationException(
                     "World texture coordinates require a registered ITextureService.");
             return await manager.GetCellTextureCoordinate(cellType, x, y);
@@ -51,7 +51,7 @@ namespace Fodinae.World.Extensions
             var tasks = new List<UniTask<AtlasCoordinate>>();
 
             // Collect all texture requests
-            ITextureService manager = ServiceLocator.Resolve<ITextureService>() ??
+            ITextureService manager = SessionAccess.Resolve()?.TryResolve<ITextureService>() ??
                 throw new InvalidOperationException(
                     "World texture coordinates require a registered ITextureService.");
 
@@ -120,7 +120,7 @@ namespace Fodinae.World.Extensions
             }
 
             // Preload textures for unique cell types
-            ITextureService manager = ServiceLocator.Resolve<ITextureService>() ??
+            ITextureService manager = SessionAccess.Resolve()?.TryResolve<ITextureService>() ??
                 throw new InvalidOperationException(
                     "World texture preloading requires a registered ITextureService.");
 
@@ -141,7 +141,7 @@ namespace Fodinae.World.Extensions
         /// <returns>List of active texture atlases.</returns>
         public static List<TextureAtlas> GetActiveAtlases(this WorldLayer<CellType> worldLayer)
         {
-            ITextureService manager = ServiceLocator.Resolve<ITextureService>() ??
+            ITextureService manager = SessionAccess.Resolve()?.TryResolve<ITextureService>() ??
                 throw new InvalidOperationException(
                     "World texture atlases require a registered ITextureService.");
             return manager.GetAllAtlases();
@@ -153,7 +153,7 @@ namespace Fodinae.World.Extensions
         /// <param name="worldLayer">The world layer.</param>
         public static void ClearTextureCache(this WorldLayer<CellType> worldLayer)
         {
-            ITextureService manager = ServiceLocator.Resolve<ITextureService>() ??
+            ITextureService manager = SessionAccess.Resolve()?.TryResolve<ITextureService>() ??
                 throw new InvalidOperationException(
                     "World texture cache clearing requires a registered ITextureService.");
             manager.Clear();
@@ -166,7 +166,7 @@ namespace Fodinae.World.Extensions
         /// <returns>Cache statistics string.</returns>
         public static string GetTextureCacheStats(this WorldLayer<CellType> worldLayer)
         {
-            ITextureService manager = ServiceLocator.Resolve<ITextureService>() ??
+            ITextureService manager = SessionAccess.Resolve()?.TryResolve<ITextureService>() ??
                 throw new InvalidOperationException(
                     "World texture cache statistics require a registered ITextureService.");
             return manager.GetCacheStats();

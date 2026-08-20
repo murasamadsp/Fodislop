@@ -8,12 +8,14 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.World
 {
@@ -33,6 +35,9 @@ namespace Fodinae.World
 
         [System.NonSerialized]
         public TextureAtlas _currentAtlas = null!;
+
+        [Inject]
+        private ISessionContainer _session = null!;
         private CellTextureCache _textureCache = null!;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
@@ -204,7 +209,7 @@ namespace Fodinae.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    MapManager mmForAnim = ServiceLocator.Resolve<MapManager>() ??
+                    MapManager mmForAnim = _session.TryResolve<MapManager>() ??
                         throw new InvalidOperationException(
                             "MapManager is required to resolve animation metadata for a terrain texture.");
                     float speed = mmForAnim.GetAnimationSpeed(cellType);
@@ -262,7 +267,7 @@ namespace Fodinae.World
         public float GetAnimationSpeedForCell(CellType cellType)
         {
             EnsureInitialized();
-            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+            MapManager mapManager = _session.TryResolve<MapManager>() ??
                 throw new InvalidOperationException(
                     "MapManager is required to resolve terrain animation metadata.");
             if (!mapManager.HasAnimation(cellType))
@@ -388,7 +393,7 @@ namespace Fodinae.World
             Texture2D? texture = null;
             try
             {
-                IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+                IAssetLoader loader = _session.TryResolve<IAssetLoader>() ??
                     throw new InvalidOperationException(
                         "IAssetLoader is required to load terrain textures.");
                 texture = await loader.GetTextureAsync(filename);
@@ -455,7 +460,7 @@ namespace Fodinae.World
                 }
             }
 
-            MapManager mmForFrame = ServiceLocator.Resolve<MapManager>() ??
+            MapManager mmForFrame = _session.TryResolve<MapManager>() ??
                 throw new InvalidOperationException(
                     "MapManager is required to resolve terrain texture frame metadata.");
             int frameHeight = mmForFrame.GetAnimationFrameHeight(cellType);

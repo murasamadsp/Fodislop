@@ -57,6 +57,7 @@ namespace Fodinae.Networking.Processors
 
         public void Process(TeleportPacket packet)
         {
+            UnityEngine.Debug.Log($"[Probe] Teleport {UnityEngine.Time.realtimeSinceStartup:F3}");
             var player = PlayerMovementController.LocalPlayer;
             if (player == null)
             {

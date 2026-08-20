@@ -218,31 +218,20 @@ namespace Fodinae.Game.Managers
                     $"for world {_worldWidth}x{_worldHeight}.");
             }
 
-            bool changed = false;
-            int index = 0;
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    CellType type = cells[index++];
-                    if (x >= appliedWidth || y >= appliedHeight)
-                    {
-                        continue;
-                    }
+            // Bulk write: WorldLayer.SetRegion applies the payload chunk-by-chunk
+            // with one LRU touch per chunk instead of per cell (a 32x32 region used
+            // to issue ~2048 LRU/Dictionary operations through GetCellSync+SetCell,
+            // costing several milliseconds per region and stretching the initial
+            // world burst across dozens of frames under the packet-drain budget).
+            int changedCells = _cellLayer.SetRegion(
+                startX,
+                startY,
+                width,
+                height,
+                cells,
+                0);
 
-                    int worldX = startX + x;
-                    int worldY = startY + y;
-                    if (_cellLayer.GetCellSync(worldX, worldY, touchLru: true) == type)
-                    {
-                        continue;
-                    }
-
-                    _cellLayer[worldX, worldY] = type;
-                    changed = true;
-                }
-            }
-
-            if (changed)
+            if (changedCells > 0)
             {
                 Revision++;
                 TerrainRenderer.OnRegionChanged(startX, startY, width, height);

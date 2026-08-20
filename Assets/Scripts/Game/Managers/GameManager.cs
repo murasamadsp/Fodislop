@@ -46,6 +46,10 @@ namespace Fodinae.Game.Managers
         private ITextureService _textureService = null!;
         [Inject]
         private IRobotService _robotService = null!;
+        [Inject]
+        private IPlayerStats _playerStats = null!;
+        [Inject]
+        private IObjectResolver _resolver = null!;
 
         private GameObject? _uiRoot;
         private bool _worldLoadPending;
@@ -106,20 +110,14 @@ namespace Fodinae.Game.Managers
             {
                 var invGO = new GameObject("InventoryRoot");
                 invGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponents(
-                    invGO,
-                    typeof(Fodinae.UI.HUD.Inventory.View.InventoryView),
-                    typeof(Fodinae.UI.HUD.Inventory.Presenter.InventoryPresenter));
+                AddInjectedComponent<Fodinae.UI.HUD.Inventory.View.InventoryView>(invGO);
             }
 
             if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>(FindObjectsInactive.Include) == null)
             {
                 var hudGO = new GameObject("PlayerHUD");
                 hudGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponents(
-                    hudGO,
-                    typeof(Fodinae.UI.HUD.Player.View.PlayerHUDView),
-                    typeof(Fodinae.UI.HUD.Player.Presenter.PlayerHUDPresenter));
+                AddInjectedComponent<Fodinae.UI.HUD.Player.View.PlayerHUDView>(hudGO);
             }
 
             if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>(FindObjectsInactive.Include) == null)
@@ -206,6 +204,17 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
+            Robot? robot = player.GetComponent<Robot>();
+            if (robot == null || !robot.IsMetadataLoaded)
+            {
+                return;
+            }
+
+            if (_playerStats == null || !_playerStats.IsReady)
+            {
+                return;
+            }
+
             TerrainRenderer? terrain = TerrainRenderer.Instance;
             if (terrain == null || !terrain.IsReadyForGameplay)
             {
@@ -234,9 +243,11 @@ namespace Fodinae.Game.Managers
             _worldLoadPending = false;
             _worldLoadPublished = true;
             IsWorldLoaded = true;
+            Debug.Log($"[Probe] WorldLoaded {UnityEngine.Time.realtimeSinceStartup:F3}");
             SetState(GameState.InGame);
             player.SetGameplayVisible();
             CameraFollow.Instance?.SnapToTarget();
+            AuthorizeUI();
             int robotCount = _robotService?.RobotCount ?? -1;
             Debug.Log(
                 $"[GameManager] World load completed: server position and terrain are ready. " +
@@ -250,13 +261,13 @@ namespace Fodinae.Game.Managers
         // scan — inject explicitly so their [Inject] fields are filled immediately.
         // The temporary SetActive(false) ensures OnEnable/Start are not invoked before
         // injection completes, matching VContainer's NewGameObjectProvider ordering.
-        private static void AddInjectedComponent<T>(GameObject go)
+        private void AddInjectedComponent<T>(GameObject go)
             where T : Component
         {
             AddInjectedComponents(go, typeof(T));
         }
 
-        private static void AddInjectedComponents(GameObject go, params Type[] componentTypes)
+        private void AddInjectedComponents(GameObject go, params Type[] componentTypes)
         {
             bool wasActive = go.activeSelf;
             go.SetActive(false);
@@ -265,7 +276,7 @@ namespace Fodinae.Game.Managers
                 for (int i = 0; i < componentTypes.Length; i++)
                 {
                     Component component = go.AddComponent(componentTypes[i]);
-                    Fodinae.Core.ServiceLocator.Inject(component);
+                    _resolver.Inject(component);
                 }
             }
             finally

@@ -72,47 +72,13 @@ namespace Fodinae.Editor
                 }
             }
 
-            // Actual scattered star points (the previous version only added a
-            // faint regular grid here, which read as "no stars" at a glance).
-            var rng = new System.Random(4092);
-            int starCount = (width * height) / 900;
-            for (int i = 0; i < starCount; i++)
-            {
-                int sx = rng.Next(width);
-                int sy = rng.Next(height);
-                float brightness = (float)rng.NextDouble();
-                brightness = brightness * brightness; // bias toward dim stars
-                float size = brightness > 0.85f ? 1.6f : 0.9f;
-                var starColor = Color.Lerp(new Color(0.6f, 0.7f, 0.8f), Color.white, brightness);
-                float alpha = Mathf.Lerp(0.25f, 1f, brightness);
-
-                int r = Mathf.CeilToInt(size);
-                for (int oy = -r; oy <= r; oy++)
-                {
-                    for (int ox = -r; ox <= r; ox++)
-                    {
-                        int px = sx + ox;
-                        int py = sy + oy;
-                        if (px < 0 || px >= width || py < 0 || py >= height)
-                        {
-                            continue;
-                        }
-
-                        float d = new Vector2(ox, oy).magnitude;
-                        float falloff = Mathf.Clamp01(1f - (d / Mathf.Max(size, 0.01f)));
-                        if (falloff <= 0f)
-                        {
-                            continue;
-                        }
-
-                        int idx = (py * width) + px;
-                        Color existing = pixels[idx];
-                        Color blended = Color.Lerp(existing, starColor, alpha * falloff);
-                        pixels[idx] = ToColor32(blended, 1f);
-                    }
-                }
-            }
-
+            // No baked star points.
+            //
+            // The sky is now procedural: MenuStarfield blits a twinkling field
+            // into a RenderTexture that the UI draws as the background Image, so
+            // stars baked into this fallback PNG would sit under the procedural
+            // field as a second, static constellation whenever both are present.
+            // The texture keeps only the gradient.
             tex.SetPixels32(pixels);
             tex.Apply(false, false);
             return tex;

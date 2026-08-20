@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.UI.HUD.Inventory.Interfaces;
@@ -31,6 +32,8 @@ namespace Fodinae.UI.HUD.Inventory.View
         private IInventoryModel? _model;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
+        [Inject]
+        private ISessionContainer _session = null!;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
@@ -146,7 +149,7 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void TryInitialize()
         {
-            if (_initialized || !Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_initialized || _session == null || _session.Current == null)
             {
                 return;
             }
@@ -163,7 +166,7 @@ namespace Fodinae.UI.HUD.Inventory.View
                     "[InventoryUI] UIDocument must be injected and have a root before initialization.");
             }
 
-            IInventoryModel? model = Fodinae.Core.ServiceLocator.Resolve<IInventoryModel>();
+            IInventoryModel? model = _session.TryResolve<IInventoryModel>();
             if (model == null)
             {
                 if (!Application.isPlaying)
@@ -614,8 +617,8 @@ namespace Fodinae.UI.HUD.Inventory.View
                 _contextMenu = null!;
             }
 
-            _doc?.rootVisualElement.UnregisterCallback<MouseDownEvent>(OnContextMenuOutsideClick);
-            _doc?.rootVisualElement.UnregisterCallback<KeyDownEvent>(OnContextMenuEscape);
+            _doc?.rootVisualElement.UnregisterCallback<MouseDownEvent>(OnContextMenuOutsideClick, TrickleDown.TrickleDown);
+            _doc?.rootVisualElement.UnregisterCallback<KeyDownEvent>(OnContextMenuEscape, TrickleDown.TrickleDown);
         }
 
         private void OnContextMenuOutsideClick(MouseDownEvent evt)

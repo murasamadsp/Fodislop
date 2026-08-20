@@ -56,6 +56,7 @@
     <Compile Include="Assets/Editor/CaptureMenuScenery.cs" />
     <Compile Include="Assets/Editor/DumpShaderErrors.cs" />
     <Compile Include="Assets/Editor/BuildPlanetMesh.cs" />
+    <Compile Include="Assets/Editor/ReloadMainMenuFromDisk.cs" />
     <Compile Include="Assets/Editor/BuildMenuSceneryRig.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ClanProcessorTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalizationServiceTests.cs" />
@@ -70,25 +71,30 @@
     <Compile Include="Assets/Scripts/Tests/Editor/World/ContactOcclusionE2ETests.cs" />
     <Compile Include="Assets/Scripts/Editor/LightingEditModeTestRunner.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/CoordinateUtilsTests.cs" />
+    <Compile Include="Assets/Editor/ConfigureLightingExposureDefaults.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/StatusProcessorTests.cs" />
     <Compile Include="Assets/Editor/UnityRenderLayerValidator.cs" />
     <Compile Include="Assets/Editor/CaptureGameView.cs" />
     <Compile Include="Assets/Editor/PixelArtTextureImportPolicy.cs" />
     <Compile Include="Assets/Editor/CsProjFix.cs" />
     <Compile Include="Assets/Scripts/Editor/TerrariaLightingEngineEditor.cs" />
+    <Compile Include="Assets/Editor/CaptureMenuComposite.cs" />
     <Compile Include="Assets/Editor/PSOCollectionTool.cs" />
     <Compile Include="Assets/Editor/ConfigureGraphicsQualityProfile.cs" />
+    <Compile Include="Assets/Editor/CaptureBackdrop.cs" />
     <Compile Include="Assets/Editor/GeneratePlanetSurfaceTextures.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ConnectionTransportConfigTests.cs" />
     <Compile Include="Assets/Editor/FmodBankBuilder.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/InventoryModelTests.cs" />
     <Compile Include="Assets/Editor/GenerateMainMenuArt.cs" />
+    <Compile Include="Assets/Editor/LoadTimingProbe.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementBoundaryTests.cs" />
     <Compile Include="Assets/Scripts/Editor/InjectValidator.cs" />
     <Compile Include="Assets/Editor/BuildScript.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/WorldLayerRleTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/PlayerStatsModelTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/InventoryProcessorTests.cs" />
+    <Compile Include="Assets/Editor/AutoVerifyMenu.cs" />
     <Compile Include="Assets/Editor/GenerateFontAssets.cs" />
   </ItemGroup>
   <ItemGroup>

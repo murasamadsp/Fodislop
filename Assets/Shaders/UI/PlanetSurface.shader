@@ -16,7 +16,13 @@ Shader "Fodinae/UI/PlanetSurface"
         _NightAmbient ("Night Ambient", Range(0, 0.1)) = 0.004
         _TwilightColor ("Twilight Scatter Color", Color) = (0.30, 0.34, 0.13, 1)
         _TwilightIntensity ("Twilight Intensity", Range(0, 2)) = 1.10
-        _Roughness ("Surface Roughness (Oren-Nayar)", Range(0, 1)) = 0.85
+        // Oren-Nayar's whole purpose is to flatten the cosine falloff - it is why
+        // the full Moon looks like a disc rather than a ball. At 0.85 it was doing
+        // exactly that to this planet: with the star behind the camera, N.L only
+        // ranges 0.62..0.77 over most of the disc to begin with, and the
+        // backscatter term erased even that. Kept low enough to still soften the
+        // terminator without cancelling the shading that makes a sphere a sphere.
+        _Roughness ("Surface Roughness (Oren-Nayar)", Range(0, 1)) = 0.40
 
         [Header(Terrain)]
         _ContinentScale ("Continent Scale", Range(0.5, 8)) = 3.0
@@ -28,18 +34,23 @@ Shader "Fodinae/UI/PlanetSurface"
         _ReliefStrength ("Relief (normal) Strength", Range(0, 4)) = 0.75
 
         [Header(Materials)]
+        // These three are tuned in albedo space AGAINST the star's own colour:
+        // the sun (1.0, 0.9, 0.76) multiplies the green channel by 0.9, so an
+        // albedo with G slightly above R lands as olive, while an albedo with
+        // R >= G lands as ochre. Earlier values (R > G) are exactly how the
+        // world drifted into warm orange under this star.
         _BasaltColor ("Basalt (steep rock)", Color) = (0.070, 0.072, 0.062, 1)
-        _RegolithColor ("Olive Regolith", Color) = (0.085, 0.088, 0.052, 1)
-        _CrustColor ("Sulfur Crust (flats)", Color) = (0.190, 0.180, 0.115, 1)
-        _PeakColor ("Peak Rock", Color) = (0.145, 0.140, 0.112, 1)
+        _RegolithColor ("Olive Regolith", Color) = (0.080, 0.095, 0.050, 1)
+        _CrustColor ("Sulfur Crust (flats)", Color) = (0.150, 0.180, 0.115, 1)
+        _PeakColor ("Peak Rock", Color) = (0.120, 0.145, 0.110, 1)
         _BasinLevel ("Basin Level", Range(0, 1)) = 0.42
         _PeakLevel ("Peak Level", Range(0, 1)) = 0.72
 
         [Header(Rifts)]
         _MagmaColor ("Magma Color", Color) = (1.0, 0.24, 0.045, 1)
-        _MagmaIntensity ("Magma Intensity", Range(0, 12)) = 3.5
+        _MagmaIntensity ("Magma Intensity", Range(0, 12)) = 2.4
         _CrackScale ("Crack Network Scale", Range(1, 40)) = 9.0
-        _CrackThreshold ("Crack Threshold", Range(0.5, 1)) = 0.865
+        _CrackThreshold ("Crack Threshold", Range(0.5, 1)) = 0.885
 
         [Header(Liquid Sulfur)]
         _PoolAlbedo ("Pool Albedo", Color) = (0.048, 0.030, 0.014, 1)
@@ -139,7 +150,19 @@ Shader "Fodinae/UI/PlanetSurface"
             // whole disc. The detail octaves are the ones that carry the visible
             // crispness, so the savings come out of the low-frequency warp and
             // continent layers instead, where they are almost invisible.
-            float Elevation(float3 dir)
+            // detailFade suppresses the high-frequency octaves where the surface
+            // is foreshortened toward the limb.
+            //
+            // This is the aliasing. The detail layer runs at 140 cycles across the
+            // sphere, which is a ~9px wavelength at the centre of the disc - fine.
+            // Approaching the limb the same band compresses by 1/(N.V) until it is
+            // well under a pixel, and a sub-pixel signal sampled once per pixel
+            // does not average out, it beats against the sampling grid. That is
+            // the stippled fringe on the dark limb, and no amount of MSAA touches
+            // it: MSAA supersamples geometry coverage, not what the shader
+            // computes inside a fragment. The only real fix is not to ask for
+            // detail the raster cannot carry, which is what this does.
+            float Elevation(float3 dir, float detailFade)
             {
                 float3 c = dir * _ContinentScale;
                 float3 warp = float3(
@@ -158,7 +181,7 @@ Shader "Fodinae/UI/PlanetSurface"
 
                 // High-frequency roughness. Carried at low amplitude but it is
                 // what the normals pick up, so it dominates the close-up feel.
-                elev += Fbm(dir * _DetailScale, 3) * _DetailStrength * 0.12;
+                elev += Fbm(dir * _DetailScale, 3) * _DetailStrength * 0.12 * detailFade;
 
                 return saturate(elev);
             }
@@ -230,25 +253,33 @@ Shader "Fodinae/UI/PlanetSurface"
             half4 Frag(Varyings input) : SV_Target
             {
                 float3 dir = normalize(input.positionOS);
-                float elev = Elevation(dir);
+                float3 geoN = normalize(TransformObjectToWorldNormal(dir));
+                float3 L = normalize(_SunDirWS.xyz);
+                float3 V = normalize(GetWorldSpaceViewDir(input.positionWS));
+
+                // Foreshortening toward the limb, and the detail budget it allows.
+                float ndv = saturate(dot(geoN, V));
+                float detailFade = smoothstep(0.05, 0.42, ndv);
+
+                float elev = Elevation(dir, detailFade);
 
                 // Analytic normal from finite differences on the sphere's own
                 // tangent frame. eps is tied to the detail scale so the slope
-                // estimate stays consistent when detail frequency is retuned.
+                // estimate stays consistent when detail frequency is retuned, and
+                // widened toward the limb for the same reason the detail octaves
+                // fade there - a finite difference taken over less than a pixel
+                // reports slope from noise the pixel never resolves.
                 float3 up = abs(dir.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
                 float3 tangent = normalize(cross(up, dir));
                 float3 bitangent = cross(dir, tangent);
-                float eps = 1.6 / _DetailScale;
+                float eps = lerp(6.0, 1.6, detailFade) / _DetailScale;
 
-                float eT = Elevation(normalize(dir + (tangent * eps)));
-                float eB = Elevation(normalize(dir + (bitangent * eps)));
+                float eT = Elevation(normalize(dir + (tangent * eps)), detailFade);
+                float eB = Elevation(normalize(dir + (bitangent * eps)), detailFade);
                 float2 slopeVec = float2(eT - elev, eB - elev) / eps;
 
                 float3 normalOS = normalize(dir - (((tangent * slopeVec.x) + (bitangent * slopeVec.y)) * _ReliefStrength * 0.05));
                 float3 N = normalize(TransformObjectToWorldNormal(normalOS));
-                float3 geoN = normalize(TransformObjectToWorldNormal(dir));
-                float3 L = normalize(_SunDirWS.xyz);
-                float3 V = normalize(GetWorldSpaceViewDir(input.positionWS));
 
                 // ---- Albedo ------------------------------------------------
                 // Steepness sorts the materials: wind/haze-deposited sulfur can
@@ -281,8 +312,9 @@ Shader "Fodinae/UI/PlanetSurface"
                 albedo *= lerp(0.88, 1.14, saturate((mottle * 0.5) + 0.5));
 
                 // Fine grain at pixel scale keeps midtones from flattening out.
-                // 480 aliased into visible speckle at the size this actually renders.
-                float grain = GradientNoise(dir * 240.0);
+                // 480 aliased into visible speckle at the size this actually
+                // renders; 240 still does toward the limb, hence the same fade.
+                float grain = GradientNoise(dir * 240.0) * detailFade;
                 albedo *= lerp(0.94, 1.06, saturate((grain * 0.5) + 0.5));
 
                 // ---- Direct light ------------------------------------------
@@ -334,7 +366,12 @@ Shader "Fodinae/UI/PlanetSurface"
                 // Emissive, so it survives the night side untouched by N.L -
                 // which is the whole point: the rifts are the only thing you
                 // see on the dark limb.
-                float crack = CrackMask(dir, elev, faultField);
+                // Faded toward the limb along with everything else fine: a rift is
+                // a narrow trench, so seen edge-on you are looking at its wall
+                // rather than into it, and the haze column that way is at its
+                // thickest. Left un-faded these thresholded lines broke into
+                // crawling orange dots right on the silhouette.
+                float crack = CrackMask(dir, elev, faultField) * lerp(0.15, 1.0, detailFade);
                 float3 hot = lerp(_MagmaColor.rgb, float3(1.0, 0.80, 0.42), pow(crack, 4.0));
                 color += hot * crack * _MagmaIntensity;
 

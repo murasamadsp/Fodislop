@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Core;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 using VContainer;
@@ -110,12 +110,13 @@ namespace Fodinae.Audio.Backend
             }
             else
             {
-                if (!ServiceLocator.IsInitialized)
+                ISessionContainer? session = SessionAccess.Resolve();
+                if (session == null)
                 {
                     return false;
                 }
 
-                var assetLoader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+                var assetLoader = session.TryResolve<IAssetLoader>() as ClientAssetLoader;
                 if (assetLoader != null)
                 {
                     var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";

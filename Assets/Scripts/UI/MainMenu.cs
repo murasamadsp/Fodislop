@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
@@ -60,7 +61,6 @@ namespace Fodinae
         private VisualElement? _tree;
         private VisualElement? _mainMenuContainer;
         private VisualElement? _loaderContainer;
-        private VisualElement? _beaconPing;
         private VisualElement? _beacon;
         private VisualElement? _stationBadge;
         private VisualElement? _targetReticle;
@@ -133,9 +133,28 @@ namespace Fodinae
 
         // MainMenu живёт вне DI-графа (ExecuteAlways, сцена без скоупа) — текущий
         // контейнер сессии получаем через BootstrapLifetimeScope.Instance.
-        private ISessionContainer? _session;
+        //
+        // НЕ кэшируем: с Enter Play Mode Options (Reload Domain/Scene disabled)
+        // этот компонент и его поля переживают play-сессии, а SessionContainer —
+        // объект сессии. Закэшированный экземпляр из прошлой сессии указывает на
+        // выброшенный контейнер (Current мёртв), тогда как новый игровой скоуп
+        // переключает Current у СВОЕГО SessionContainer. Закэшированный давал
+        // TryResolve<GameManager> == null ровно после загрузки MainGame — спуск
+        // умирал с «GameManager is required». Резолв каждый раз — дешёвый
+        // TryResolve из живого Bootstrap-контейнера.
+        private ISessionContainer? Session
+        {
+            get
+            {
+                ISessionContainer? fresh = SessionAccess.Resolve();
+                if (fresh != null && fresh.Current != null)
+                {
+                    return fresh;
+                }
 
-        private ISessionContainer? Session => _session ??= SessionAccess.Resolve();
+                return null;
+            }
+        }
 
         protected void OnValidate()
         {
@@ -195,7 +214,6 @@ namespace Fodinae
             _root.Add(tree);
             _tree = tree;
 
-
             BindUiElements(tree);
             BuildPhaseList();
 
@@ -215,13 +233,13 @@ namespace Fodinae
         [SerializeField]
         private Texture2D? _spaceBgTexture;
         private MenuSceneryController? _scenery;
+        private MenuStarfield? _starfield;
 
         private void BindUiElements(VisualElement tree)
         {
             _spaceBgImage = tree.Q<Image>("SpaceBgImage");
             _planetBodyImage = tree.Q<Image>("MainMenuPlanetImage");
             _beacon = tree.Q<VisualElement>("MainMenuBeacon");
-            _beaconPing = tree.Q<VisualElement>("BeaconPing");
             _stationBadge = tree.Q<VisualElement>("StationBadge");
             _targetReticle = tree.Q<VisualElement>("TargetReticle");
             _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer");
@@ -317,7 +335,11 @@ namespace Fodinae
             // Безопасное авто-разрешение текстур без падений - every path here
             // logs on failure now; a silently-unset Image with no error is
             // exactly the failure mode that cost hours to track down once.
-            ApplyImageTexture(_spaceBgImage, ref _spaceBgTexture, "Assets/Textures/UI/mm_space_bg.png", nameof(_spaceBgImage));
+            // Фон космоса больше не запечённая PNG: MenuStarfield рисует
+            // мерцающее звёздное поле блитом в RenderTexture, и она подставляется
+            // в тот же элемент. Запечённая текстура остаётся в проекте как
+            // запасной вариант, если компонента в сцене нет.
+            TryApplyStarfieldTexture();
 
             TryApplySceneryTexture();
 
@@ -351,7 +373,7 @@ namespace Fodinae
             // bypasses the overload and would skip reloading it forever.
             if (cache == null)
             {
-                cache = LoadFallbackTexture(assetPath);
+                cache = LoadDirectTexture(assetPath);
             }
 
             if (cache != null)
@@ -379,7 +401,7 @@ namespace Fodinae
                 return;
             }
 
-            Texture2D? iconTex = LoadFallbackTexture(assetPath);
+            Texture2D? iconTex = LoadDirectTexture(assetPath);
             if (iconTex != null)
             {
                 img.image = iconTex;
@@ -388,6 +410,41 @@ namespace Fodinae
             {
                 Debug.LogWarning($"[MainMenu] ApplyIconTexture('{elementName}'): texture FAILED to load from '{assetPath}'");
             }
+        }
+
+        private float _lastComponentSearchTime;
+
+        // Подставляет процедурное звёздное поле в фоновый Image.
+        //
+        // Раньше звёзды рисовались квадом на отдельной камере прямо в дисплей.
+        // Это и клало небо поверх игры: квад - обычная мировая геометрия, а
+        // игровая камера рендерит все слои, пока сцена меню ещё загружена.
+        private void TryApplyStarfieldTexture()
+        {
+            if (_spaceBgImage == null)
+            {
+                return;
+            }
+
+            if (_starfield == null && (Time.unscaledTime - _lastComponentSearchTime > 1f || _lastComponentSearchTime == 0f))
+            {
+                _lastComponentSearchTime = Time.unscaledTime;
+                _starfield = UnityEngine.Object.FindAnyObjectByType<MenuStarfield>(FindObjectsInactive.Include);
+            }
+
+            if (_starfield != null && _starfield.Texture != null)
+            {
+                if (!ReferenceEquals(_spaceBgImage.image, _starfield.Texture))
+                {
+                    _spaceBgImage.image = _starfield.Texture;
+                }
+
+                return;
+            }
+
+            // Нет компонента - остаётся запечённый фон, чтобы меню не осталось
+            // на пустом чёрном.
+            ApplyImageTexture(_spaceBgImage, ref _spaceBgTexture, "Assets/Textures/UI/mm_space_bg.png", nameof(_spaceBgImage));
         }
 
         private void TryApplySceneryTexture()
@@ -403,8 +460,9 @@ namespace Fodinae
                 return;
             }
 
-            if (_scenery == null)
+            if (_scenery == null && (Time.unscaledTime - _lastComponentSearchTime > 1f || _lastComponentSearchTime == 0f))
             {
+                _lastComponentSearchTime = Time.unscaledTime;
                 _scenery = UnityEngine.Object.FindAnyObjectByType<MenuSceneryController>(FindObjectsInactive.Include);
                 if (_scenery == null && !_scenerySearchWarned && Time.time > 3f)
                 {
@@ -422,14 +480,12 @@ namespace Fodinae
 
         private bool _scenerySearchWarned;
 
-
-        private static Texture2D? LoadFallbackTexture(string assetPath)
+        private static Texture2D? LoadDirectTexture(string assetPath)
         {
             string absolutePath = assetPath.StartsWith("Assets/", StringComparison.Ordinal)
                 ? Path.Combine(Application.dataPath, assetPath.Substring("Assets/".Length))
                 : assetPath;
             bool exists = File.Exists(absolutePath);
-            Debug.Log($"[MainMenu] LoadFallbackTexture: dataPath='{Application.dataPath}' absolutePath='{absolutePath}' File.Exists={exists}");
             if (!exists)
             {
                 return null;
@@ -453,15 +509,52 @@ namespace Fodinae
             }
         }
 
-
         protected void Update()
         {
-            if (_loadingActive)
+            // Enter Play Mode Options (Reload Domain/Scene disabled) re-creates
+            // the UIDocument's panel on play entry WITHOUT re-running OnEnable:
+            // the tree built at scene load stays attached to the old, disposed
+            // panel, and the fresh root remains empty. The panel itself is alive
+            // (it renders a separate probe panel fine), so this reads as a black
+            // screen - not a rendering failure. Rebuild when our tree is no
+            // longer attached to any panel. (Hot-reload is already handled in
+            // OnEnable; this covers the panel-recreation case.)
+            if (Application.isPlaying && _built && _doc != null && _tree != null)
             {
-                UpdateLoaderProgress();
+                // The live root is whatever the UIDocument currently exposes;
+                // on play entry the panel is re-created and the old root (where
+                // our tree still hangs) is replaced by a fresh empty one.
+                var liveRoot = _doc.rootVisualElement;
+                if (liveRoot == null || !ReferenceEquals(_tree.parent, liveRoot))
+                {
+                    // Clear _built alongside _tree. This is a deliberate invalidation, and
+                    // leaving _built set made OnEnable report it as an unexplained
+                    // hot-reload desync — a warning, with a full native stack trace, on
+                    // every single play-mode entry, describing a state this line just
+                    // created on purpose one statement earlier.
+                    _tree = null;
+                    _built = false;
+                    Debug.Log("[MainMenu] Visual tree no longer in the live panel root - rebuilding.");
+                    OnEnable();
+                    return;
+                }
+            }
+
+            if (_loadingActive || _dismissedForServerWindow)
+            {
+                if (_loadingActive)
+                {
+                    UpdateLoaderProgress();
+                }
+
                 DismissDescentIfServerWindowOpened();
             }
 
+            // Обе текстуры переприсваиваются каждый кадр, а не один раз при
+            // сборке UI: обе живут в RenderTexture, которые пересоздаются при
+            // смене разрешения окна, и старая ссылка после этого указывает на
+            // уничтоженный объект.
+            TryApplyStarfieldTexture();
             TryApplySceneryTexture();
             AnimateAmbientScene();
             HandleKeyboardInput();
@@ -471,43 +564,71 @@ namespace Fodinae
         /// Server windows (e.g. the auth window) open in the MainGame UIDocument, which
         /// renders BELOW this menu's fullscreen layer. If the descent layer stays visible,
         /// the window is invisible and unclickable — the game looks frozen on "connecting".
-        /// The moment a window is open, yield the whole layer (but do NOT unload the scene:
-        /// OnWorldLoaded still owns the final teardown).
+        /// The moment a window is open, yield the whole layer. When the window closes,
+        /// resume the descent loader until OnWorldLoaded.
         /// </summary>
         private void DismissDescentIfServerWindowOpened()
         {
-            if (_dismissedForServerWindow)
-            {
-                return;
-            }
-
             var handler = Session?.TryResolve<PacketHandler>();
-            if (handler == null || handler.TopWindowTag == null)
+            bool hasServerWindow = handler != null && handler.TopWindowTag != null;
+
+            if (hasServerWindow)
             {
-                return;
+                if (!_dismissedForServerWindow)
+                {
+                    _dismissedForServerWindow = true;
+                    _loadingActive = false;
+                    HideLoader();
+
+                    if (_tree != null)
+                    {
+                        _tree.style.display = DisplayStyle.None;
+                        _tree.pickingMode = PickingMode.Ignore;
+                        Debug.Log("[MainMenu] Fullscreen layer hidden for server window");
+                    }
+
+                    if (_root != null)
+                    {
+                        _root.pickingMode = PickingMode.Ignore;
+                    }
+                }
             }
-
-            _dismissedForServerWindow = true;
-            _loadingActive = false;
-            HideLoader();
-
-            if (_tree != null)
+            else if (_dismissedForServerWindow)
             {
-                _tree.style.display = DisplayStyle.None;
-                _tree.pickingMode = PickingMode.Ignore;
-                Debug.Log("[MainMenu] Fullscreen layer hidden for server window");
+                if (_gameManager == null || !_gameManager.IsWorldLoaded)
+                {
+                    _dismissedForServerWindow = false;
+                    _loadingActive = true;
+                    if (_tree != null)
+                    {
+                        _tree.style.display = DisplayStyle.Flex;
+                        _tree.pickingMode = PickingMode.Position;
+                    }
+
+                    if (_root != null)
+                    {
+                        _root.pickingMode = PickingMode.Position;
+                    }
+
+                    if (_loaderContainer != null)
+                    {
+                        _loaderContainer.style.display = DisplayStyle.Flex;
+                    }
+
+                    if (_loaderContent != null)
+                    {
+                        _loaderContent.style.display = DisplayStyle.Flex;
+                    }
+
+                    UpdateLoaderProgress();
+                    Debug.Log("[MainMenu] Server window closed, resuming descent loader");
+                }
             }
         }
 
         private void AnimateAmbientScene()
         {
             float time = Time.time;
-
-            // The beacon ping's expanding-ring pulse is deliberately not driven.
-            // It scaled the ring around its own centre while the station point it
-            // marks lives in the 3D render, so the two visibly disagreed - and a
-            // pulsing HUD ping fights the photoreal treatment the rest of the
-            // scene is going for. The element stays as a static thin ring.
 
             // The marker tracks the actual orbiting body rather than sitting at a
             // fixed spot with a decorative bob, so the label and the glowing point
@@ -595,7 +716,9 @@ namespace Fodinae
             float x = rect.x + (viewport.x * rect.width);
             float y = rect.y + ((1f - viewport.y) * rect.height);
 
-            const float markerHalfSize = 6.5f;
+            // Half of .mm-target-reticle's 22px box - the station marker is now
+            // literally the same element as the landing reticle.
+            const float markerHalfSize = 11f;
             _beacon.style.left = x - markerHalfSize;
             _beacon.style.top = y - markerHalfSize;
         }
@@ -680,6 +803,18 @@ namespace Fodinae
 
             PlayerMovementController? player = PlayerMovementController.LocalPlayer;
             if (player == null || !player.HasServerPosition)
+            {
+                return LoadPhase.SpawnSync;
+            }
+
+            Robot? robot = player.GetComponent<Robot>();
+            if (robot == null || !robot.IsMetadataLoaded)
+            {
+                return LoadPhase.SpawnSync;
+            }
+
+            IPlayerStats? stats = Session.TryResolve<IPlayerStats>();
+            if (stats == null || !stats.IsReady)
             {
                 return LoadPhase.SpawnSync;
             }
@@ -1135,6 +1270,17 @@ namespace Fodinae
                 Debug.Log("[MainMenu] Fullscreen layer hidden");
             }
 
+            if (_root != null)
+            {
+                _root.Clear();
+                _root.pickingMode = PickingMode.Ignore;
+            }
+
+            if (_doc != null)
+            {
+                _doc.enabled = false;
+            }
+
             if (_gameManager != null)
             {
                 _gameManager.OnWorldLoaded -= OnWorldLoaded;
@@ -1145,6 +1291,7 @@ namespace Fodinae
 
         private void OnPlayButtonClicked()
         {
+            Debug.Log($"[Probe] T0 {UnityEngine.Time.realtimeSinceStartup:F3}");
             Debug.Log("[MainMenu] Play button clicked - initiating descent sequence");
 
             HideMenu();
@@ -1196,11 +1343,13 @@ namespace Fodinae
 
             await loadOp.ToUniTask();
 
-            _gameManager = ServiceLocator.Resolve<GameManager>();
+            _gameManager = Session?.TryResolve<GameManager>() ?? throw new InvalidOperationException(
+                "[MainMenu] GameManager is required after the game scene loads.");
             _gameManager.OnWorldLoaded -= OnWorldLoaded;
             _gameManager.OnWorldLoaded += OnWorldLoaded;
 
-            var connectionService = ServiceLocator.Resolve<IConnectionService>();
+            var connectionService = Session?.TryResolve<IConnectionService>() ?? throw new InvalidOperationException(
+                "[MainMenu] Connection service is required after the game scene loads.");
             if (!connectionService.IsConnected)
             {
                 connectionService.Connect(oldClient: false);

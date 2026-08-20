@@ -123,6 +123,7 @@ namespace Fodinae.UI.Programmator
         {
             _popup = new VisualElement();
             _popup.AddToClassList("prog-popup");
+            _popup.style.display = DisplayStyle.None;
 
             var dimmer = new VisualElement();
             dimmer.AddToClassList("prog-dimmer");

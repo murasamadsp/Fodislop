@@ -1,0 +1,131 @@
+ M AGENTS.md
+ M Assembly-CSharp-Editor.csproj
+ M Assembly-CSharp.csproj
+ M Assets/Editor/BuildMenuSceneryRig.cs
+ M Assets/Editor/ConfigureGraphicsQualityProfile.cs
+ M Assets/Editor/GenerateMainMenuArt.cs
+ M Assets/Materials/OrbitRingLine.mat
+ M Assets/Materials/PlanetAtmosphere.mat
+ M Assets/Materials/PlanetSurface.mat
+ M Assets/Materials/StationPoint.mat
+ M Assets/Resources/Configuration/ProjectDefaults.asset
+ M Assets/Resources/Fonts/Exo2_SDF.asset
+ M Assets/Resources/Fonts/JetBrainsMono_SDF.asset
+ M Assets/Resources/Fonts/Unbounded_SDF.asset
+ M Assets/Resources/GraphicsQualityProfile.asset
+ D Assets/Resources/PerformanceTestRunInfo.json
+ D Assets/Resources/PerformanceTestRunInfo.json.meta
+ D Assets/Resources/PerformanceTestRunSettings.json
+ D Assets/Resources/PerformanceTestRunSettings.json.meta
+ M Assets/Resources/Shaders/Lighting/WorldLighting.compute
+ M Assets/Resources/Styles/Theme.uss
+ M Assets/Resources/UI/MainMenu.uxml
+ M Assets/Scenes/MainGame.unity
+ M Assets/Scenes/MainMenu.unity
+M  Assets/Scripts/Audio/Backend/AudioSystem.cs
+M  Assets/Scripts/Audio/Backend/FmodAudioBackend.cs
+M  Assets/Scripts/Audio/Spatial/AudioSpatial.cs
+ M Assets/Scripts/Core/BootstrapLifetimeScope.cs
+ M Assets/Scripts/Core/ClientConfig.cs
+ M Assets/Scripts/Core/ClientConfigManager.cs
+ M Assets/Scripts/Core/GameBootstrap.cs
+MM Assets/Scripts/Core/GameLifetimeScope.cs
+ M Assets/Scripts/Core/Interfaces/IClientConfigManager.cs
+ M Assets/Scripts/DiagnosticRunner.cs
+MM Assets/Scripts/Game/Managers/GameManager.cs
+ M Assets/Scripts/Game/Managers/MapManager.cs
+ M Assets/Scripts/Game/Managers/MapStorage.cs
+MM Assets/Scripts/Game/Managers/PackManager.cs
+MM Assets/Scripts/Game/Managers/ServerAudioEventManager.cs
+MM Assets/Scripts/Game/Pack.cs
+MM Assets/Scripts/Game/Robot.cs
+M  Assets/Scripts/Game/ServerAudioEvent.cs
+ M Assets/Scripts/Networking/PacketHandler.cs
+ M Assets/Scripts/Networking/Processors/PlayerInfoProcessor.cs
+ M Assets/Scripts/Networking/Processors/PlayerStatsProcessor.cs
+ M Assets/Scripts/Player/PlayerInteractionController.cs
+ M Assets/Scripts/Rendering/GraphicsQualityProfile.cs
+ M Assets/Scripts/Rendering/PostProcessing/PostProcessController.cs
+ M Assets/Scripts/Rendering/PostProcessing/PostProcessRendererFeature.cs
+M  Assets/Scripts/UI/AssetLoadingIndicator.cs
+M  Assets/Scripts/UI/Builders/ImagePacketBuilder.cs
+ M Assets/Scripts/UI/FloatingChatBubble.cs
+ M Assets/Scripts/UI/FloatingChatManager.cs
+MM Assets/Scripts/UI/GameErrorUI.cs
+MM Assets/Scripts/UI/GlobalChatUI.cs
+ D Assets/Scripts/UI/HUD/Controllers.meta
+M  Assets/Scripts/UI/HUD/Inventory/View/InventoryView.cs
+M  Assets/Scripts/UI/HUD/Player/View/PlayerHUDView.cs
+MM Assets/Scripts/UI/MainMenu.cs
+ M Assets/Scripts/UI/MenuSceneryController.cs
+M  Assets/Scripts/UI/MinimapController.cs
+MM Assets/Scripts/UI/MissionArrowUI.cs
+MM Assets/Scripts/UI/PauseMenu.cs
+MM Assets/Scripts/UI/ReconnectUI.cs
+ D Assets/Scripts/UI/UIGizmosController.cs
+ D Assets/Scripts/UI/UIGizmosController.cs.meta
+M  Assets/Scripts/UI/WorldMapController.cs
+MM Assets/Scripts/UI/WorldMapRenderer.cs
+M  Assets/Scripts/World/CoordinateUtils.cs
+M  Assets/Scripts/World/Extensions/WorldLayerTextureExtensions.cs
+ M Assets/Scripts/World/FodinaeGizmos.cs
+MM Assets/Scripts/World/Lighting/TerrariaLightingEngine.cs
+MM Assets/Scripts/World/SceneSetup.cs
+ M Assets/Scripts/World/SurfaceRenderer.cs
+ M Assets/Scripts/World/Terrain/TerrainMeshBuilder.cs
+ M Assets/Scripts/World/Terrain/TerrainPrecalculator.cs
+MM Assets/Scripts/World/Terrain/TerrainRenderer.cs
+M  Assets/Scripts/World/TextureAtlas.cs
+ M Assets/Scripts/World/WorldLayer.cs
+M  Assets/Scripts/World/WorldTextureManager.cs
+ M Assets/Settings/UniversalRP.asset
+ M Assets/Shaders/Terrain.shader
+ M Assets/Shaders/UI/PlanetAtmosphere.shader
+ M Assets/Shaders/UI/PlanetSurface.shader
+ M Assets/Shaders/UI/Starfield.shader
+ M Assets/Shaders/UI/UnpremultiplyAlpha.shader
+ M CONTRIBUTING.md
+ M Effekseer.URP.csproj
+ M Effekseer.csproj
+ M EffekseerEditor.csproj
+ M McpUnity.Editor.Tests.csproj
+ M McpUnity.Editor.csproj
+ M ProjectSettings/TagManager.asset
+ M UniTask.Addressables.csproj
+ M UniTask.DOTween.csproj
+ M UniTask.Editor.csproj
+ M UniTask.Linq.csproj
+ M UniTask.TextMeshPro.csproj
+ M UniTask.csproj
+ M visual/main-menu/app.js
+ M visual/main-menu/index.html
+ M visual/main-menu/styles.css
+?? .freebuff/
+?? Assets/Editor/AutoVerifyMenu.cs
+?? Assets/Editor/AutoVerifyMenu.cs.meta
+?? Assets/Editor/CaptureBackdrop.cs
+?? Assets/Editor/CaptureBackdrop.cs.meta
+?? Assets/Editor/CaptureMenuComposite.cs
+?? Assets/Editor/CaptureMenuComposite.cs.meta
+?? Assets/Editor/ConfigureLightingExposureDefaults.cs
+?? Assets/Editor/ConfigureLightingExposureDefaults.cs.meta
+?? Assets/Editor/LoadTimingProbe.cs
+?? Assets/Editor/LoadTimingProbe.cs.meta
+?? Assets/Editor/ReloadMainMenuFromDisk.cs
+?? Assets/Editor/ReloadMainMenuFromDisk.cs.meta
+?? Assets/Materials/Starfield.mat
+?? Assets/Materials/Starfield.mat.meta
+?? Assets/Materials/UnpremultiplyAlpha.mat
+?? Assets/Materials/UnpremultiplyAlpha.mat.meta
+?? Assets/Scripts/Core/GameplayCamera.cs
+?? Assets/Scripts/Core/GameplayCamera.cs.meta
+?? Assets/Scripts/UI/InGameDebugOverlay.cs
+?? Assets/Scripts/UI/InGameDebugOverlay.cs.meta
+?? Assets/Scripts/UI/MenuStarfield.cs
+?? Assets/Scripts/UI/MenuStarfield.cs.meta
+?? Assets/Shaders/UI/MenuLineUnlit.shader
+?? Assets/Shaders/UI/MenuLineUnlit.shader.meta
+?? PIPELINE_DIFF_AUDIT.md
+?? backup_current_worktree.patch
+?? backup_file_list.txt
+?? visual/main-menu-mirror/

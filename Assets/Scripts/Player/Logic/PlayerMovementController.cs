@@ -137,7 +137,7 @@ namespace Fodinae.Player.Logic
 
         protected void Update()
         {
-            if (!HasServerPosition)
+            if (!HasServerPosition || (Application.isPlaying && !IsGameplayVisible))
             {
                 return;
             }

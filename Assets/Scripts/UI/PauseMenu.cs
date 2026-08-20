@@ -49,7 +49,6 @@ namespace Fodinae.UI
         private ScrollView? _mainPageScroll;
         private VisualElement? _settingsPage;
         private bool _isOpen;
-        private InputAction? _escapeAction;
         private float _originalScale;
         private bool _originalScaleCaptured;
         private Button? _fullscreenButton;
@@ -75,7 +74,6 @@ namespace Fodinae.UI
             };
         }
 
-
         [Inject]
         private INetworkService _networkService = null!;
         [Inject]
@@ -87,13 +85,7 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            EnsureEscapeAction();
             TryInitialize();
-        }
-
-        protected void OnEnable()
-        {
-            EnsureEscapeAction();
         }
 
         protected void Update()
@@ -103,7 +95,7 @@ namespace Fodinae.UI
                 TryInitialize();
             }
 
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame && (_escapeAction == null || !_escapeAction.enabled))
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 ToggleMenu();
             }
@@ -116,21 +108,21 @@ namespace Fodinae.UI
                 return;
             }
 
-            _doc ??= ServiceLocator.Resolve<UIDocument>() ?? FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
+            _doc ??= _resolver.Resolve<UIDocument>() ?? FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null)
             {
                 return;
             }
 
-            _clientConfig ??= ServiceLocator.Resolve<IClientConfigManager>();
-            _networkService ??= ServiceLocator.Resolve<INetworkService>();
-            _audioSystem ??= ServiceLocator.Resolve<IAudioSystem>();
-            _connectionService ??= ServiceLocator.Resolve<IConnectionService>();
-            _inputBlocker ??= ServiceLocator.Resolve<IInputBlocker>();
-            _lightingEngine ??= ServiceLocator.Resolve<TerrariaLightingEngine>();
-            _postProcessController ??= ServiceLocator.Resolve<PostProcessController>();
-            _terrainRenderer ??= ServiceLocator.Resolve<TerrainRenderer>();
-            _graphicsSettings ??= ServiceLocator.Resolve<GraphicsSettingsController>();
+            _clientConfig ??= _resolver.Resolve<IClientConfigManager>();
+            _networkService ??= _resolver.Resolve<INetworkService>();
+            _audioSystem ??= _resolver.Resolve<IAudioSystem>();
+            _connectionService ??= _resolver.Resolve<IConnectionService>();
+            _inputBlocker ??= _resolver.Resolve<IInputBlocker>();
+            _lightingEngine ??= _resolver.Resolve<TerrariaLightingEngine>();
+            _postProcessController ??= _resolver.Resolve<PostProcessController>();
+            _terrainRenderer ??= _resolver.Resolve<TerrainRenderer>();
+            _graphicsSettings ??= _resolver.Resolve<GraphicsSettingsController>();
 
             if (_clientConfig == null || _clientConfig.Config == null || _networkService == null ||
                 _audioSystem == null || _connectionService == null || _inputBlocker == null ||
@@ -148,9 +140,6 @@ namespace Fodinae.UI
                 // ретраится из Update каждый кадр.
                 return;
             }
-
-
-            EnsureEscapeAction();
 
             _originalScale = _doc.panelSettings.scale;
             _originalScaleCaptured = true;
@@ -202,42 +191,6 @@ namespace Fodinae.UI
                     _doc.panelSettings.scale = _originalScale;
                 }
             }
-
-            DisposeEscapeAction();
-        }
-
-        protected void OnDisable()
-        {
-            DisposeEscapeAction();
-        }
-
-        private void EnsureEscapeAction()
-        {
-            if (_escapeAction != null)
-            {
-                return;
-            }
-
-            _escapeAction = new InputAction("Escape", binding: "<Keyboard>/escape");
-            _escapeAction.performed += OnEscapePerformed;
-            _escapeAction.Enable();
-        }
-
-        private void DisposeEscapeAction()
-        {
-            if (_escapeAction == null)
-            {
-                return;
-            }
-
-            _escapeAction.performed -= OnEscapePerformed;
-            _escapeAction.Dispose();
-            _escapeAction = null;
-        }
-
-        private void OnEscapePerformed(InputAction.CallbackContext _)
-        {
-            ToggleMenu();
         }
 
         private static VisualElement CreateSlider(string labelText, float initialValue, System.Action<float> onChange, float min, float max)
@@ -392,6 +345,8 @@ namespace Fodinae.UI
             TemplateContainer menuTree = menuTemplate.Instantiate();
             _menuTree = menuTree;
             menuTree.AddToClassList("ui-fullscreen");
+            menuTree.pickingMode = PickingMode.Ignore;
+            menuTree.style.display = DisplayStyle.None;
             _menuPanel = menuTree.Q<VisualElement>("PauseOverlay") ??
                 throw new InvalidOperationException("[PauseMenu] PauseOverlay is missing from PauseMenu.uxml.");
             _mainPage = menuTree.Q<VisualElement>("MainPage") ??
@@ -835,6 +790,7 @@ namespace Fodinae.UI
             RefreshCustomVSync();
             customGraphicsSection.Add(customVSyncButton);
 
+
             var customAntiAliasingButton = new Button();
             void RefreshCustomAntiAliasing()
             {
@@ -1149,6 +1105,7 @@ namespace Fodinae.UI
                     "DirectRadiance — прямой свет",
                     "DiffuseBounce — непрямой диффузный свет",
                     "ContactOcclusion — контактное затенение",
+                    "Exposure — экспозиция (зелёный < белой точки, красный — пересвет)",
             ];
             int activeDebugView = (int)_lightingEngine.ActiveDebugView;
             var lightingDebugView = new Button();
@@ -1798,6 +1755,12 @@ namespace Fodinae.UI
         {
             _isOpen = true;
             IsMenuOpen = true;
+            if (_menuTree != null)
+            {
+                _menuTree.BringToFront();
+                _menuTree.style.display = DisplayStyle.Flex;
+            }
+
             if (_menuPanel != null)
             {
                 _menuPanel.BringToFront();
@@ -1828,6 +1791,11 @@ namespace Fodinae.UI
             if (_menuPanel != null)
             {
                 _menuPanel.style.display = DisplayStyle.None;
+            }
+
+            if (_menuTree != null)
+            {
+                _menuTree.style.display = DisplayStyle.None;
             }
         }
 
@@ -1898,7 +1866,11 @@ namespace Fodinae.UI
                 "Выйти в главное меню",
                 "Вы уверены? Текущая сессия будет закрыта.",
                 "В меню",
-                () => BootstrapLifetimeScope.Instance?.ReturnToMainMenu());
+                () =>
+                {
+                    CloseMenu();
+                    BootstrapLifetimeScope.Instance?.ReturnToMainMenu();
+                });
         }
 
         private void ShowConfirmation(string title, string description, string confirmText, Action onConfirm)

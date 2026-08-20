@@ -1,8 +1,10 @@
 #nullable enable
 
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
+using Fodinae.Player.Logic;
 using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
@@ -29,7 +31,11 @@ namespace Fodinae.Player
 
         protected void Awake()
         {
-            _mainCamera = Camera.main;
+            // GameplayCamera, not Camera.main: MainMenu stays loaded next to the
+            // game for the whole descent, and a bare tag lookup can resolve to
+            // the menu camera. Click-to-world through the wrong camera would
+            // send ClickCellPackets for the wrong cells.
+            _mainCamera = GameplayCamera.Resolve();
             if (Keyboard.current != null)
             {
                 _cachedAllKeys = Keyboard.current.allKeys;
@@ -38,9 +44,14 @@ namespace Fodinae.Player
 
         protected void Update()
         {
+            if (PlayerMovementController.LocalPlayer is not { IsGameplayVisible: true })
+            {
+                return;
+            }
+
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main;
+                _mainCamera = GameplayCamera.Resolve();
             }
 
             if (_mainCamera == null)

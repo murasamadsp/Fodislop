@@ -25,19 +25,28 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _AbsorbStrength: 1.35
-    - _Density: 6
+    - _AbsorbStrength: 1.15
+    - _CloudAltitude: 0.3
+    - _CloudAmbient: 0.25
+    - _CloudBandStrength: 0.32
+    - _CloudBands: 6
+    - _CloudCoverage: 0.56
+    - _CloudOpacity: 0.88
+    - _CloudRelief: 1.6
+    - _CloudScale: 4.4
+    - _CloudSharpness: 0.26
+    - _CloudWarp: 1.15
+    - _Density: 7
     - _MieBackG: -0.32
     - _MieBackWeight: 0.42
     - _MieG: 0.7
     - _PlanetRadiusRatio: 0.91463417
     - _ScaleHeight: 0.28
     - _SunIntensity: 4.2
-    - _TurbulenceScale: 5
-    - _TurbulenceStrength: 0.38
     m_Colors:
     - _AbsorbColor: {r: 0.33999997, g: 0.29999998, b: 0.85, a: 1}
-    - _ScatterColor: {r: 0.5, g: 0.65999997, b: 0.29999998, a: 1}
+    - _CloudColor: {r: 0.45999998, g: 0.6399999, b: 0.4799999, a: 1}
+    - _ScatterColor: {r: 0.51999998, g: 0.75999999, b: 0.29999998, a: 1}
     - _SunColor: {r: 1, g: 0.82, b: 0.62, a: 1}
     - _SunDirWS: {r: -0.7672455, g: 0.16026016, b: -0.6210081, a: 0}
   m_BuildTextureStacks: []

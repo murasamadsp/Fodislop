@@ -164,7 +164,6 @@ TextField,
     right: 0;
     bottom: 0;
     width: 100%;
-    picking-mode: ignore;
 }
 
 /* ── Планетарная система справа ── */
@@ -189,32 +188,15 @@ TextField,
     height: 860px;
 }
 
-/* Маркер орбитальной станции. Тот же язык, что и у метки высадки
-   (.mm-target-reticle): золотое кольцо + плашка .mm-target-badge. Отличается
-   только размером и отсутствием перекрестия - высадка это цель, база это
-   объект. left/top выставляются из кода по позиции станции в 3D-сцене. */
-.mm-beacon {
-    position: absolute;
+/* Маркер орбитальной станции. Ровно тот же элемент, что и метка высадки:
+   класс .mm-target-reticle несёт всё оформление, а .mm-beacon добавляет только
+   позиционирование - left/top выставляются из кода по позиции станции в
+   3D-сцене. Раньше это было отдельное кольцо меньшего размера с ping-обводкой
+   и без перекрестия: два маркера одного назначения, нарисованные по-разному,
+   читаются как недоделка, а не как различие смыслов. */
+.mm-target-reticle.mm-beacon {
     left: 0;
     top: 0;
-    width: 13px;
-    height: 13px;
-    border-radius: 7px;
-    border-width: 1.5px;
-    border-color: var(--mm-gold);
-    align-items: center;
-    justify-content: center;
-}
-
-.mm-beacon-ping {
-    position: absolute;
-    left: -3px;
-    top: -3px;
-    width: 19px;
-    height: 19px;
-    border-radius: 10px;
-    border-width: 1px;
-    border-color: var(--mm-gold);
 }
 
 .mm-target-reticle {
@@ -657,7 +639,7 @@ Button#ServerSelectButton Label {
     top: 0;
     right: 0;
     bottom: 0;
-    background-color: transparent;
+    background-color: #0b111e;
     display: none;
 }
 

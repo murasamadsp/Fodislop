@@ -79,6 +79,25 @@ namespace Fodinae.Core
             _initialized = true;
         }
 
+        /// <summary>
+        /// Forces config load synchronously, without waiting for the next
+        /// Start/Update cycle. This manager is a lazy Bootstrap-tier singleton
+        /// (RegisterComponentOnNewGameObject): it only exists after the first
+        /// Resolve, and its Start() runs a frame later — too late for
+        /// GameBootstrap.PostStart, which reads Config in the same frame the
+        /// manager is created. Injection has already happened by the time
+        /// Resolve returns, so this is safe to call immediately after it.
+        /// </summary>
+        public void EnsureInitialized()
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            TryInitialize();
+        }
+
         public void Load()
         {
             string configPath = GetConfigPath();

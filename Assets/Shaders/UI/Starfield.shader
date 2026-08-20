@@ -15,13 +15,20 @@ Shader "Fodinae/UI/Starfield"
     //    like a soft dot, the wing is what makes it look like a star;
     //  - colour drawn from a stellar temperature ramp, so the field is not
     //    monochrome white.
+    //
+    // Field scale was pulled down hard after the first pass: bright stars at
+    // the old sizes (glow 0.16, density 68) rendered as 12-16px soft discs on
+    // screen - a sky of blobs, not points, with visible edges that read as
+    // aliasing. The current defaults sit at the fine end: the brightest stars
+    // are ~2-3px across (core plus wing), the field is denser, and twinkle is
+    // quieter so the sub-pixel faint field does not shimmer.
     Properties
     {
-        _Density ("Star Density (cells across)", Range(10, 200)) = 68
-        _Brightness ("Brightness", Range(0, 4)) = 1.0
-        _CoreSize ("Core Size", Range(0.002, 0.08)) = 0.020
-        _GlowSize ("Glow Size", Range(0.02, 0.6)) = 0.16
-        _TwinkleAmount ("Twinkle Amount", Range(0, 1)) = 0.45
+        _Density ("Star Density (cells across)", Range(10, 200)) = 96
+        _Brightness ("Brightness", Range(0, 4)) = 1.4
+        _CoreSize ("Core Size", Range(0.002, 0.08)) = 0.010
+        _GlowSize ("Glow Size", Range(0.02, 0.6)) = 0.06
+        _TwinkleAmount ("Twinkle Amount", Range(0, 1)) = 0.30
         _TwinkleSpeed ("Twinkle Speed", Range(0, 6)) = 1.4
         _SkyColor ("Deep Sky Color", Color) = (0.012, 0.018, 0.032, 1)
     }

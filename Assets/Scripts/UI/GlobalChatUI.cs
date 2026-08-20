@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
@@ -58,6 +59,9 @@ namespace Fodinae.UI
         [Inject]
         private IInputBlocker _inputBlocker = null!;
 
+        [Inject]
+        private ISessionContainer _session = null!;
+
         protected void Start()
         {
             TryInitialize();
@@ -65,7 +69,7 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _session?.Current == null)
             {
                 return;
             }
@@ -197,6 +201,11 @@ namespace Fodinae.UI
                 tree.pickingMode = PickingMode.Ignore;
                 _tree = tree;
                 _panel = tree.Q<VisualElement>("ChatPanel");
+                if (_panel != null)
+                {
+                    _panel.style.display = DisplayStyle.None;
+                }
+
                 _muteStatus = tree.Q<Label>("ChatMuteStatus");
                 _scrollView = tree.Q<ScrollView>("ChatScroll");
                 _inputField = tree.Q<TextField>("ChatInput");
@@ -351,6 +360,7 @@ namespace Fodinae.UI
         {
             _blinker?.StopBlink();
             _idleCts?.Cancel();
+            _idleCts?.Dispose();
             _idleCts = new CancellationTokenSource();
             var token = _idleCts.Token;
             DelayedStartBlink(token).Forget();
@@ -358,8 +368,8 @@ namespace Fodinae.UI
 
         private async UniTaskVoid DelayedStartBlink(CancellationToken token)
         {
-            await UniTask.Delay(500, cancellationToken: token);
-            if (!token.IsCancellationRequested)
+            bool canceled = await UniTask.Delay(500, cancellationToken: token).SuppressCancellationThrow();
+            if (!canceled && !token.IsCancellationRequested)
             {
                 StartBlink();
             }

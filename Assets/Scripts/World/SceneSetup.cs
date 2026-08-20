@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.UI;
 using UnityEngine;
@@ -68,23 +69,36 @@ namespace Fodinae.World
 
         private void TryStartSurfaceRendererSetup()
         {
-            if (_surfaceRendererSetupStarted || !Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_surfaceRendererSetupStarted)
+            {
+                return;
+            }
+
+            // The readiness test has to be the resolve itself, not "does a session container
+            // exist". ISessionContainer.Current points at the Bootstrap container from
+            // Bootstrap's own Awake onwards, while VContainer defers building the game scope
+            // until after every Awake in the scene has run. Between those two points a
+            // container exists but none of the game-scope services are in it, so gating on
+            // the container let this start too early and throw on the very first frame.
+            ITextureStorageService? textureStorage =
+                SessionAccess.Resolve()?.TryResolve<ITextureStorageService>();
+            if (textureStorage == null)
             {
                 return;
             }
 
             _surfaceRendererSetupStarted = true;
-            SetupSurfaceRendererAsync(this.GetCancellationTokenOnDestroy()).Forget();
+            SetupSurfaceRendererAsync(
+                textureStorage,
+                this.GetCancellationTokenOnDestroy()).Forget();
         }
 
-        private async UniTask SetupSurfaceRendererAsync(CancellationToken cancellationToken)
+        private async UniTask SetupSurfaceRendererAsync(
+            ITextureStorageService textureStorage,
+            CancellationToken cancellationToken)
         {
             try
             {
-                ITextureStorageService textureStorage =
-                    Fodinae.Core.ServiceLocator.Resolve<ITextureStorageService>() ??
-                    throw new InvalidOperationException(
-                        "SceneSetup requires ITextureStorageService for local surface assets.");
                 Texture2D transitTexture = await textureStorage.GetTextureAsync(
                     "transit.png",
                     cancellationToken) ??
@@ -116,7 +130,7 @@ namespace Fodinae.World
                     TextureWrapMode.Clamp);
 
                 SurfaceRenderer surfaceRenderer =
-                    Fodinae.Core.ServiceLocator.Resolve<SurfaceRenderer>() ??
+                    SessionAccess.Resolve()?.TryResolve<SurfaceRenderer>() ??
                     throw new InvalidOperationException(
                         "SceneSetup requires the registered SurfaceRenderer.");
                 surfaceRenderer.SetLocalAssets(

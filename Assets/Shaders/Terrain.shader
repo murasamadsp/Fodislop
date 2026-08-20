@@ -102,7 +102,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         int2(lightUV * _WorldLightTextureSize.xy),
                         int2(0, 0),
                         int2(_WorldLightTextureSize.xy) - 1);
-                    return _WorldLightTexture.Load(int3(debugPixel, 0)).rgb;
+                    return _WorldLightTexture.Load(int3(debugPixel.x, debugPixel.y, 0)).rgb;
                 }
 
                 return _WorldLightTexture.Sample(

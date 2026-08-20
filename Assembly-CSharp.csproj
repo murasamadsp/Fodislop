@@ -75,7 +75,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/ContainerBuilderExtensions.cs" />
     <Compile Include="Assets/Scripts/Core/GameConstants.cs" />
     <Compile Include="Assets/Scripts/World/Terrain/TerrainMetadata.cs" />
-    <Compile Include="Assets/Scripts/UI/UIGizmosController.cs" />
+    <Compile Include="Assets/Scripts/UI/MenuStarfield.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/ContainerInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/FixedTypeObjectKeyHashtable.cs" />
     <Compile Include="Assets/Scripts/UI/Programmator/ProgrammatorGrid.cs" />
@@ -118,7 +118,6 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/WorldInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/SystemRegistrationBuilder.cs" />
     <Compile Include="Assets/Scripts/UI/Programmator/ProgrammatorData.cs" />
-    <Compile Include="Assets/Scripts/UI/HUD/Inventory/Presenter/InventoryPresenter.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IProjectDefaults.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/PlayerLoopHelper.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/ExistingComponentProvider.cs" />
@@ -232,7 +231,6 @@
     <Compile Include="Assets/Scripts/Game/Managers/GameManager.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/SystemInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/InventoryProcessor.cs" />
-    <Compile Include="Assets/Scripts/UI/HUD/Player/Presenter/PlayerHUDPresenter.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/ParentReference.cs" />
     <Compile Include="Assets/Scripts/UI/OrbitalStationMotion.cs" />
     <Compile Include="Assets/Scripts/UI/AssetLoadingIndicator.cs" />
@@ -273,6 +271,7 @@
     <Compile Include="Assets/Scripts/World/CellTextureCache.cs" />
     <Compile Include="Assets/Scripts/UI/MapCellSampler.cs" />
     <Compile Include="Assets/Scripts/Core/DI/IServiceLocator.cs" />
+    <Compile Include="Assets/Scripts/Core/GameplayCamera.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/StringDropdownPacketBuilder.cs" />
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/Components/VignetteComponent.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/LinePacketBuilder.cs" />
@@ -288,6 +287,7 @@
     <Compile Include="Assets/Scripts/Networking/Connection/Client/TextureStorageManager.cs" />
     <Compile Include="Assets/Scripts/UI/Binding/LogiCalcFormatter.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/TextPacketBuilder.cs" />
+    <Compile Include="Assets/Scripts/UI/InGameDebugOverlay.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/ContainerLocal.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/InstanceProviders/UnmanagedSystemInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/StatusProcessor.cs" />
@@ -392,6 +392,7 @@
     <None Include="Assets/Resources/Styles/Chat.uss" />
     <None Include="Assets/Resources/UI/GlobalChat.uxml" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF-Mobile Masking.shader" />
+    <None Include="Assets/Shaders/UI/MenuLineUnlit.shader" />
     <None Include="Assets/Shaders/PostProcessing/PostProcess.compute" />
     <None Include="Assets/Shaders/WorldSurfaceCommon.hlsl" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF Overlay.shader" />

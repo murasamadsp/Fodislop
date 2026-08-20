@@ -1,9 +1,12 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="MainMenuRoot" class="mm-root">
-        <!-- Звёзды рисует шейдер на MenuDisplayBackdropCamera, а не эта картинка:
-             запечённые точки не могут мерцать. Элемент оставлен скрытым, чтобы
-             привязки в MainMenu.cs не отвалились. -->
-        <ui:Image name="SpaceBgImage" class="mm-space-bg" style="display: none;" />
+        <!-- Фон космоса. Процедурное мерцающее звёздное поле из MenuStarfield:
+             шейдер блитится в RenderTexture, которая подставляется сюда из кода.
+             Именно UI-элемент, а не геометрия в сцене — квад на отдельной камере
+             рисовался в дисплей и попадал в игровую камеру, закрывая собой игру.
+             Планета справа рисуется поверх фона, т.к. этот элемент идёт первым
+             в дереве. -->
+        <ui:Image name="SpaceBgImage" class="mm-space-bg" scale-mode="ScaleAndCrop" />
 
         <!-- МОНУМЕНТАЛЬНАЯ ПЛАНЕТАРНАЯ СИСТЕМА СПРАВА -->
         <ui:VisualElement name="MainMenuPlanetContainer" class="mm-planet-system">
@@ -13,8 +16,9 @@
                  (MenuSceneryController.TryGetStationViewportPosition), поэтому
                  подпись едет вместе со светящейся точкой. Оформление то же, что
                  у метки высадки: маркер + плашка mm-target-badge. -->
-            <ui:VisualElement name="MainMenuBeacon" class="mm-beacon">
-                <ui:VisualElement name="BeaconPing" class="mm-beacon-ping" />
+            <ui:VisualElement name="MainMenuBeacon" class="mm-target-reticle mm-beacon">
+                <ui:VisualElement class="mm-target-cross-v" />
+                <ui:VisualElement class="mm-target-cross-h" />
                 <ui:VisualElement name="StationBadge" class="mm-target-badge mm-target-badge--right">
                     <ui:Label class="mm-tb-title" text="ФЕД. БАЗА [HADES-ORBIT-1]" />
                     <ui:Label class="mm-tb-coords" text="ОРБИТА 420 КМ // СТЫКОВКА ОТКРЫТА" />
@@ -33,7 +37,7 @@
         </ui:VisualElement>
 
         <!-- ТЕНЕВОЙ ГРАДИЕНТ СЛЕВА -->
-        <ui:Image name="LoaderShade" class="mm-loader-shade" scale-mode="StretchToFill" />
+        <ui:Image name="LoaderShade" class="mm-loader-shade" picking-mode="Ignore" scale-mode="StretchToFill" />
 
         <!-- ЭКРАН СПУСКА (ФАЗЫ ЗАГРУЗКИ) -->
         <ui:VisualElement name="LoaderContainer" class="mm-loader" style="display: none;">

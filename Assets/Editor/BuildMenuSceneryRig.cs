@@ -19,23 +19,56 @@ namespace Fodinae.Editor
     internal static class BuildMenuSceneryRig
     {
         private const string LayerName = "MenuScenery";
-        private const string BackdropLayerName = "MenuBackdrop";
         private const string ProfilePath = "Assets/Settings/MenuSceneryVolumeProfile.asset";
+
+        // Layers this rig used to create and no longer needs. Cleared on every
+        // build so the project setting does not keep a name nothing references -
+        // "MenuBackdrop" existed only to keep a starfield quad off other
+        // cameras, and the starfield is no longer geometry at all.
+        // "PlanetPreview" predates this rig and has never been referenced by any
+        // scene, prefab or script.
+        private static readonly string[] ObsoleteLayerNames = { "MenuBackdrop", "PlanetPreview" };
 
         // Shared by the moving station and the drawn ring - if these two ever
         // disagree the station visibly drifts off its own orbit line.
         private static readonly Vector3 OrbitTilt = new Vector3(72f, 0f, -19f);
 
+        // Where the offscreen render rig lives. See the comment at the call site.
+        private static readonly Vector3 RigParkPosition = new Vector3(0f, 20000f, 0f);
+
         [MenuItem("Fodinae/Art/Build Menu Scenery Rig")]
         public static void Build()
         {
             int layer = EnsureLayer(LayerName);
+            foreach (string obsolete in ObsoleteLayerNames)
+            {
+                RemoveLayer(obsolete);
+            }
 
             // The stock sphere primitive's silhouette is a visible polygon at the
             // size this planet is drawn, so the rig supplies its own dense mesh.
             BuildPlanetMesh.Build();
 
             GameObject root = FindOrCreate(null, "MenuScenery");
+
+            // The whole rig is parked far outside every other camera's frustum.
+            //
+            // The planet, its atmosphere shell and the station have to stay real
+            // world geometry - a camera renders them into a RenderTexture that
+            // the UI then draws. But MainGame's camera and Bootstrap's are both
+            // set to cullingMask Everything, and MainMenu stays loaded until the
+            // world has finished loading, so anything this rig leaves at the
+            // world origin is rendered by the gameplay camera too.
+            //
+            // MenuSceneryCamera is a child of this root, so moving the root
+            // changes nothing about the framing. Every other camera in the
+            // project has a far plane of 1000, so none of them can reach 20km.
+            // This is belt to the culling-mask braces in PostProcessController:
+            // the mask depends on a layer name resolving, this does not depend
+            // on anything.
+            root.transform.SetParent(null, worldPositionStays: false);
+            root.transform.localPosition = RigParkPosition;
+            root.transform.localRotation = Quaternion.identity;
 
             GameObject? camObj = GameObject.Find("Main Camera");
             if (camObj == null)
@@ -50,6 +83,19 @@ namespace Fodinae.Editor
             }
 
             camObj.name = "MenuSceneryCamera";
+
+            // Untagged, explicitly and every rebuild.
+            //
+            // This object started life as the scene's "Main Camera" and kept the
+            // MainCamera tag, which made Camera.main a coin flip: MainMenu is not
+            // unloaded when the game starts (see MainMenu.OnWorldLoaded), so both
+            // scenes carry a MainCamera-tagged camera for the whole descent -
+            // exactly when GameBootstrap.PostStart resolves every manager and
+            // those managers cache Camera.main. PostProcessRendererFeature gates
+            // its entire pass on that value, so a miss silently moved the game's
+            // post-processing onto this camera. Fixing it once in the scene is
+            // not enough: this method would hand the tag straight back.
+            camObj.tag = "Untagged";
             camObj.transform.SetParent(root.transform, worldPositionStays: false);
             var cam = camObj.GetComponent<Camera>();
             cam.orthographic = false;
@@ -71,6 +117,17 @@ namespace Fodinae.Editor
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
             cam.allowHDR = true;
+
+            // Deeper than the display/backdrop camera (-100). This camera renders
+            // into a RenderTexture, never the screen, so its depth is invisible to
+            // the final image - but URP draws the UI Toolkit overlay only after the
+            // LAST base camera that resolves to the screen (rendersOverlayUI &&
+            // isLastBaseCamera in UniversalRendererRenderGraph). If this camera
+            // sorted after the backdrop, the backdrop would never get the overlay
+            // pass and the menu would be a black screen with no UI at all. The
+            // game camera sits at depth -1, so it stays the last base camera once
+            // the game scene loads and keeps its own UI overlay.
+            cam.depth = -101f;
             camObj.transform.localPosition = new Vector3(0f, 0f, -7.2f);
             camObj.transform.localRotation = Quaternion.identity;
 
@@ -152,18 +209,27 @@ namespace Fodinae.Editor
             AssignMesh(planetSurface, BuildPlanetMesh.PlanetMeshPath);
             AssignMaterial(planetSurface, "Assets/Materials/PlanetSurface.mat");
 
-            // Slow axial spin. Only the crust turns - the atmosphere shell is
-            // shaded analytically from the object matrix, so rotating it would
-            // change nothing but would make the two objects disagree.
-            if (planetSurface.GetComponent<MenuPlanetSpin>() == null)
-            {
-                planetSurface.AddComponent<MenuPlanetSpin>();
-            }
+            // Slow axial spin.
+            ConfigureSpin(planetSurface, 0.35f);
 
             GameObject atmosphere = FindOrCreatePrimitive(root, "PlanetAtmosphere", PrimitiveType.Sphere);
             atmosphere.transform.localPosition = Vector3.zero;
             atmosphere.transform.localScale = Vector3.one * shellScale;
-            atmosphere.transform.localRotation = Quaternion.identity;
+
+            // Same axial tilt as the crust. The haze itself is spherically
+            // symmetric and does not care, but the cloud deck's zonal bands are
+            // evaluated in this object's space, and bands that ignore the tilt
+            // would sit at right angles to the body they belong to.
+            atmosphere.transform.localRotation = planetSurface.transform.localRotation;
+
+            // Nearly frozen drift: a full turn takes over three hours, so the
+            // deck reads as motionless while you watch and only as alive on a
+            // timelapse. Any visible rotation gives away the scale - a body
+            // this size cannot turn in seconds - and the earlier 1.6 deg/s
+            // super-rotation made the cloud bands crawl across the disc. The
+            // deck still never lines up with the crust beneath it: their
+            // periods differ, which is all the original super-rotation was for.
+            ConfigureSpin(atmosphere, 0.03f);
             AssignMesh(atmosphere, BuildPlanetMesh.ShellMeshPath);
             AssignMaterial(atmosphere, "Assets/Materials/PlanetAtmosphere.mat");
 
@@ -227,13 +293,13 @@ namespace Fodinae.Editor
 
             // Station itself keeps a slight over-range value so it reads as a
             // lit object catching the sun rather than a flat painted dot.
-            Material pointMat = GetOrCreateUnlitMaterial("StationPoint", new Color(1.7f, 1.5f, 1.15f, 1f));
+            Material pointMat = GetOrCreateUnlitMaterial("StationPoint", new Color(1.7f, 1.5f, 1.15f, 1f), 3120);
             GameObject point = FindOrCreatePrimitive(station, "Point", PrimitiveType.Sphere);
             point.transform.localPosition = Vector3.zero;
             point.transform.localScale = Vector3.one * 0.042f;
             AssignMaterial(point, pointMat);
 
-            Material ringMat = GetOrCreateUnlitMaterial("OrbitRingLine", new Color(0.42f, 0.40f, 0.34f, 0.42f));
+            Material ringMat = GetOrCreateUnlitMaterial("OrbitRingLine", new Color(0.42f, 0.40f, 0.34f, 0.30f), 3110);
             GameObject ringObj = FindOrCreate(root, "StationOrbitRing");
             var lineRenderer = ringObj.GetComponent<LineRenderer>();
             if (lineRenderer == null)
@@ -293,41 +359,68 @@ namespace Fodinae.Editor
             // silences it.
             GameObject displayCamObj = FindOrCreate(null, "MenuDisplayBackdropCamera");
             displayCamObj.layer = 0;
+            displayCamObj.transform.SetParent(null, worldPositionStays: false);
+            displayCamObj.transform.localPosition = Vector3.zero;
+            displayCamObj.transform.localRotation = Quaternion.identity;
+
             var displayCam = displayCamObj.GetComponent<Camera>();
             if (displayCam == null)
             {
                 displayCam = displayCamObj.AddComponent<Camera>();
             }
 
-            // This camera used to render nothing at all - it existed purely so
-            // the Editor would stop drawing its "No cameras rendering" overlay.
-            // It now carries the starfield, which means the twinkling sky costs
-            // no extra camera and no extra render target: it is drawn straight to
-            // the display, behind the UI Toolkit overlay.
-            int backdropLayer = EnsureLayer(BackdropLayerName);
-
+            // Renders NOTHING, deliberately, and that is its entire job.
+            //
+            // For a while this camera carried the starfield on its own layer.
+            // That is what put the sky over the game: the quad was world
+            // geometry, and MainGame's camera renders every layer while the menu
+            // scene is still loaded. The starfield is now a Graphics.Blit into a
+            // RenderTexture with no camera and no mesh (MenuStarfield), so there
+            // is nothing left here to leak.
             displayCam.clearFlags = CameraClearFlags.SolidColor;
             displayCam.backgroundColor = new Color(0.012f, 0.018f, 0.032f, 1f);
-            displayCam.cullingMask = 1 << backdropLayer;
+            displayCam.cullingMask = 0;
             displayCam.depth = -100f;
             displayCam.targetTexture = null;
-            displayCam.orthographic = false;
-            displayCam.fieldOfView = 60f;
+            displayCam.orthographic = true;
+            displayCam.orthographicSize = 1f;
             displayCam.nearClipPlane = 0.1f;
-            displayCam.farClipPlane = 100f;
+            displayCam.farClipPlane = 1f;
             displayCam.allowHDR = true;
 
-            // The starfield shader derives its coordinates from screen position,
-            // so this quad only has to cover the frustum - its own size and UVs
-            // are irrelevant. Generously oversized so it still covers the view at
-            // any aspect ratio without needing to be resized at runtime.
+            // Not tagged: see the note on MenuSceneryCamera above. Two cameras
+            // in this scene, neither of them the gameplay camera.
+            displayCamObj.tag = "Untagged";
+
+            // Remove the previous quad-and-layer implementation wherever it may
+            // still exist, so a scene built by an older version of this tool
+            // converges instead of keeping a second, invisible starfield.
+            foreach (string staleName in new[] { "StarfieldQuad" })
+            {
+                Transform? stale = displayCamObj.transform.Find(staleName);
+                if (stale != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(stale.gameObject);
+                }
+
+                GameObject? loose = GameObject.Find(staleName);
+                if (loose != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(loose);
+                }
+            }
+
+            // The starfield now lives on the rig root as a pure blit source.
             Material starMat = GetOrCreateMaterial("Starfield", "Fodinae/UI/Starfield");
-            GameObject starQuad = FindOrCreatePrimitive(displayCamObj, "StarfieldQuad", PrimitiveType.Quad);
-            starQuad.transform.localPosition = new Vector3(0f, 0f, 10f);
-            starQuad.transform.localRotation = Quaternion.identity;
-            starQuad.transform.localScale = new Vector3(80f, 80f, 1f);
-            AssignMaterial(starQuad, starMat);
-            SetLayerRecursive(displayCamObj, backdropLayer);
+            var starfield = root.GetComponent<MenuStarfield>();
+            if (starfield == null)
+            {
+                starfield = root.AddComponent<MenuStarfield>();
+            }
+
+            var starfieldObject = new SerializedObject(starfield);
+            starfieldObject.FindProperty("_starfieldMaterial").objectReferenceValue = starMat;
+            starfieldObject.ApplyModifiedProperties();
 
             // Guard against the historical "material assignment silently didn't
             // take" failure mode before trusting anything visually.
@@ -339,7 +432,27 @@ namespace Fodinae.Editor
 
             EditorUtility.SetDirty(root);
             AssetDatabase.SaveAssets();
-            Debug.Log("[BuildMenuSceneryRig] Rig build complete.");
+
+            // Saved, not left dirty. Everything above is a scene mutation, and
+            // leaving it unsaved meant "I rebuilt the rig" and "the project
+            // contains the rebuilt rig" were two different things - which is
+            // exactly how a fix can look applied and still not be present.
+            UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
+
+            Debug.Log("[BuildMenuSceneryRig] Rig build complete and scene saved.");
+        }
+
+        private static void ConfigureSpin(GameObject target, float degreesPerSecond)
+        {
+            var spin = target.GetComponent<MenuPlanetSpin>();
+            if (spin == null)
+            {
+                spin = target.AddComponent<MenuPlanetSpin>();
+            }
+
+            var so = new SerializedObject(spin);
+            so.FindProperty("_degreesPerSecond").floatValue = degreesPerSecond;
+            so.ApplyModifiedProperties();
         }
 
         private static void ConfigureOrbit(
@@ -389,23 +502,22 @@ namespace Fodinae.Editor
             return mat;
         }
 
-        private static Material GetOrCreateUnlitMaterial(string name, Color color)
+        // renderQueue is explicit because these share a bounding-box centre with
+        // the atmosphere shell (everything is centred on the planet), which
+        // leaves distance sorting between them with no tie-breaker at all.
+        private static Material GetOrCreateUnlitMaterial(string name, Color color, int renderQueue)
         {
-            string path = $"Assets/Materials/{name}.mat";
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat == null)
-            {
-                Shader? shader = Shader.Find("Sprites/Default");
-                if (shader == null)
-                {
-                    throw new InvalidOperationException("Shader 'Sprites/Default' not found.");
-                }
+            Material mat = GetOrCreateMaterial(name, "Fodinae/UI/MenuLineUnlit");
 
-                mat = new Material(shader) { name = name };
-                AssetDatabase.CreateAsset(mat, path);
+            // Existing assets may still carry the old Sprites/Default shader.
+            Shader? expected = Shader.Find("Fodinae/UI/MenuLineUnlit");
+            if (expected != null && mat.shader != expected)
+            {
+                mat.shader = expected;
             }
 
-            mat.color = color;
+            mat.SetColor("_Color", color);
+            mat.renderQueue = renderQueue;
             EditorUtility.SetDirty(mat);
             return mat;
         }
@@ -620,6 +732,36 @@ namespace Fodinae.Editor
             }
         }
 
+        // Blanks a user layer slot by name. Safe to call for a name that is not
+        // defined - the common case once the cleanup has run once.
+        private static void RemoveLayer(string layerName)
+        {
+            UnityEngine.Object[] tagManagerAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (tagManagerAssets.Length == 0)
+            {
+                return;
+            }
+
+            var tagManager = new SerializedObject(tagManagerAssets[0]);
+            SerializedProperty layersProp = tagManager.FindProperty("layers");
+
+            for (int i = 8; i < layersProp.arraySize; i++)
+            {
+                SerializedProperty sp = layersProp.GetArrayElementAtIndex(i);
+                if (sp.stringValue != layerName)
+                {
+                    continue;
+                }
+
+                sp.stringValue = string.Empty;
+                tagManager.ApplyModifiedProperties();
+                EditorUtility.SetDirty(tagManagerAssets[0]);
+                AssetDatabase.SaveAssetIfDirty(tagManagerAssets[0]);
+                Debug.Log($"[BuildMenuSceneryRig] Removed unused layer '{layerName}' (slot {i}).");
+                return;
+            }
+        }
+
         private static int EnsureLayer(string layerName)
         {
             UnityEngine.Object[] tagManagerAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
@@ -631,28 +773,50 @@ namespace Fodinae.Editor
             var tagManager = new SerializedObject(tagManagerAssets[0]);
             SerializedProperty layersProp = tagManager.FindProperty("layers");
 
+            int index = -1;
             for (int i = 8; i < layersProp.arraySize; i++)
             {
-                SerializedProperty sp = layersProp.GetArrayElementAtIndex(i);
-                if (sp.stringValue == layerName)
+                if (layersProp.GetArrayElementAtIndex(i).stringValue == layerName)
                 {
-                    return i;
+                    index = i;
+                    break;
                 }
             }
 
-            for (int i = 8; i < layersProp.arraySize; i++)
+            if (index < 0)
             {
-                SerializedProperty sp = layersProp.GetArrayElementAtIndex(i);
-                if (string.IsNullOrEmpty(sp.stringValue))
+                for (int i = 8; i < layersProp.arraySize; i++)
                 {
-                    sp.stringValue = layerName;
-                    tagManager.ApplyModifiedProperties();
-                    AssetDatabase.SaveAssets();
-                    return i;
+                    SerializedProperty sp = layersProp.GetArrayElementAtIndex(i);
+                    if (string.IsNullOrEmpty(sp.stringValue))
+                    {
+                        sp.stringValue = layerName;
+                        tagManager.ApplyModifiedProperties();
+                        index = i;
+                        break;
+                    }
                 }
             }
 
-            throw new InvalidOperationException("No free user layer slots (8-31) available.");
+            if (index < 0)
+            {
+                throw new InvalidOperationException("No free user layer slots (8-31) available.");
+            }
+
+            // Flushed unconditionally, including when the layer was already
+            // present in memory.
+            //
+            // This ran once in an earlier session and the name reached the live
+            // editor but never reached ProjectSettings/TagManager.asset on disk.
+            // Every subsequent build then took the "already exists" path and
+            // skipped saving entirely, so the scene kept referencing a layer
+            // index that is blank in the committed project - the rig looked
+            // correct in this editor and would have arrived nameless anywhere
+            // else. AssetDatabase.SaveAssets() does not cover ProjectSettings;
+            // SetDirty plus SaveAssetIfDirty on the object itself does.
+            EditorUtility.SetDirty(tagManagerAssets[0]);
+            AssetDatabase.SaveAssetIfDirty(tagManagerAssets[0]);
+            return index;
         }
     }
 }
