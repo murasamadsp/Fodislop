@@ -174,18 +174,23 @@ TextField,
    Смещение по вертикали убирает мёртвое центрирование. */
 .mm-planet-system {
     position: absolute;
-    right: -60px;
-    top: 60px;
-    bottom: -260px;
-    width: 860px;
+    right: 40px;
+    top: 51.5%;
+    translate: 0 -50%;
+    width: 820px;
+    height: 820px;
     align-items: center;
     justify-content: center;
 }
 
-
 .mm-planet-body {
-    width: 860px;
-    height: 860px;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
 }
 
 /* Маркер орбитальной станции. Ровно тот же элемент, что и метка высадки:
@@ -199,10 +204,20 @@ TextField,
     top: 0;
 }
 
+.mm-beacon-ping {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    border-width: 1px;
+    border-color: var(--mm-gold);
+    opacity: 0;
+}
+
 .mm-target-reticle {
     position: absolute;
-    left: 250px;
-    top: 40%;
+    left: 235px;
+    top: 48%;
     width: 22px;
     height: 22px;
     border-radius: 11px;
@@ -225,6 +240,14 @@ TextField,
     left: -10px;
     right: -10px;
     height: 1.5px;
+    background-color: var(--mm-gold);
+}
+
+.mm-target-dot {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 2.5px;
     background-color: var(--mm-gold);
 }
 

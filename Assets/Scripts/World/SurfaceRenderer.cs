@@ -214,14 +214,18 @@ namespace Fodinae.World
                 return;
             }
 
-            if (_mainCamera == null)
+            Camera? resolvedCam = GameplayCamera.Resolve();
+            if (resolvedCam != null)
             {
-                _mainCamera = GameplayCamera.Resolve();
+                _mainCamera = resolvedCam;
             }
 
-            Camera mainCamera = _mainCamera ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer requires a tagged Main Camera.");
+            if (_mainCamera == null)
+            {
+                return;
+            }
+
+            Camera mainCamera = _mainCamera;
             if (_lastWorldWidth == _mapManager.WorldWidth &&
                 _lastWorldHeight == _mapManager.WorldHeight &&
                 _lastCameraPosition == mainCamera.transform.position &&

@@ -118,6 +118,7 @@ namespace Fodinae.World.Terrain
         private WorldLayer<CellType>? _subscribedCellLayer;
         private WorldTextureManager? _subscribedTextureManager;
         private MapManager? _subscribedMapManager;
+        private TerrariaLightingEngine? _cachedLightingEngine;
 
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
@@ -579,14 +580,16 @@ namespace Fodinae.World.Terrain
                 _meshFilter.sharedMesh = _mesh;
             }
 
+            Camera? resolvedCam = GameplayCamera.Resolve();
+            if (resolvedCam != null)
+            {
+                _mainCamera = resolvedCam;
+            }
+
             if (_mainCamera == null)
             {
-                _mainCamera = GameplayCamera.Resolve();
-                if (_mainCamera == null)
-                {
-                    LogDiag(1 << 2, "[TerrainDiag] camera NULL");
-                    return;
-                }
+                LogDiag(1 << 2, "[TerrainDiag] camera NULL");
+                return;
             }
 
             if (_textureRefreshPending && Time.unscaledTime >= _nextTextureRefreshTime)
@@ -602,9 +605,13 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             }
 
-            TerrariaLightingEngine? lightingEngine = TerrariaLightingEngine.Instance ??
-                (ServiceLocator.IsInitialized ? ServiceLocator.TryResolve<TerrariaLightingEngine>() : null) ??
-                UnityEngine.Object.FindAnyObjectByType<TerrariaLightingEngine>(FindObjectsInactive.Include);
+            if (_cachedLightingEngine == null)
+            {
+                _cachedLightingEngine = TerrariaLightingEngine.Instance ??
+                    UnityEngine.Object.FindAnyObjectByType<TerrariaLightingEngine>(FindObjectsInactive.Include);
+            }
+
+            TerrariaLightingEngine? lightingEngine = _cachedLightingEngine;
             if (lightingEngine == null)
             {
                 if (!Application.isPlaying)

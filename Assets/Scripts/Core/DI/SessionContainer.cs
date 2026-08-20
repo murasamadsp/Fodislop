@@ -13,8 +13,15 @@ namespace Fodinae.Core.DI
     /// локатор: хелдер регистрируется в Bootstrap-скоупе и инжектится, а его
     /// Current переключается на контейнер сессии при сборке игрового скоупа.
     /// </summary>
+    [UnityEngine.Scripting.Preserve]
     public sealed class SessionContainer : ISessionContainer
     {
+        [UnityEngine.Scripting.Preserve]
+        [Inject]
+        public SessionContainer()
+        {
+        }
+
         public IObjectResolver? Current { get; private set; }
 
         public void Set(IObjectResolver resolver)

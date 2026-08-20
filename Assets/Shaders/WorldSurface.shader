@@ -33,7 +33,7 @@ Shader "Fodinae/World Surface"
             HLSLPROGRAM
             #pragma vertex VisibleVert
             #pragma fragment VisibleFrag
-            #pragma shader_feature_local_fragment _ FODINAE_SURFACE_REDROCK FODINAE_SURFACE_TRANSIT FODINAE_SURFACE_PERSPECTIVE
+            #pragma multi_compile_local_fragment _ FODINAE_SURFACE_REDROCK FODINAE_SURFACE_TRANSIT FODINAE_SURFACE_PERSPECTIVE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "WorldSurfaceCommon.hlsl"
@@ -140,7 +140,7 @@ Shader "Fodinae/World Surface"
             #pragma target 4.5
             #pragma vertex LightingFieldVert
             #pragma fragment LightingFieldFrag
-            #pragma shader_feature_local_fragment _ FODINAE_SURFACE_REDROCK FODINAE_SURFACE_TRANSIT FODINAE_SURFACE_PERSPECTIVE
+            #pragma multi_compile_local_fragment _ FODINAE_SURFACE_REDROCK FODINAE_SURFACE_TRANSIT FODINAE_SURFACE_PERSPECTIVE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "WorldSurfaceCommon.hlsl"

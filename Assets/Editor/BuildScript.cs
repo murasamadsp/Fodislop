@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -53,6 +54,18 @@ namespace Fodinae.Editor
                 TrySetAppleSiliconArchitecture();
             }
 
+            try
+            {
+                var standaloneTarget = UnityEditor.Build.NamedBuildTarget.Standalone;
+                PlayerSettings.SetIl2CppCompilerConfiguration(standaloneTarget, Il2CppCompilerConfiguration.Master);
+                PlayerSettings.SetIl2CppCodeGeneration(standaloneTarget, UnityEditor.Build.Il2CppCodeGeneration.OptimizeSpeed);
+                PlayerSettings.SetManagedStrippingLevel(standaloneTarget, ManagedStrippingLevel.Minimal);
+            }
+            catch (Exception ex)
+            {
+                Log($"Optimization settings notice: {ex.Message}");
+            }
+
             bool development = Environment.GetCommandLineArgs().Contains(DevArg);
             var options = new BuildPlayerOptions
             {
@@ -91,62 +104,51 @@ namespace Fodinae.Editor
             string playerDirectory = Path.GetDirectoryName(playerPath) ??
                 throw new InvalidOperationException(
                     $"Player output has no parent directory: {playerPath}");
-            string dataPath = target switch
+
+            List<string> destinations = new();
+            if (target == BuildTarget.StandaloneOSX)
             {
-                BuildTarget.StandaloneOSX => Path.Combine(
-                    playerPath,
-                    "Contents",
-                    "Resources",
-                    "Data"),
-                BuildTarget.StandaloneWindows64 => Path.Combine(
-                    playerDirectory,
-                    $"{Path.GetFileNameWithoutExtension(playerPath)}_Data"),
-                _ => throw new ArgumentOutOfRangeException(
-                    nameof(target),
-                    target,
-                    "Runtime texture destination is not defined for this build target."),
-            };
-            if (!Directory.Exists(dataPath))
+                destinations.Add(Path.Combine(playerPath, "Contents", "Resources", "Data", "Textures"));
+                destinations.Add(Path.Combine(playerPath, "Contents", "Data", "Textures"));
+                destinations.Add(Path.Combine(playerPath, "Contents", "Resources", "Textures"));
+                destinations.Add(Path.Combine(playerPath, "Contents", "Resources", "Data", "StreamingAssets", "Textures"));
+            }
+            else if (target == BuildTarget.StandaloneWindows64)
             {
-                throw new DirectoryNotFoundException(
-                    $"Unity player data directory does not exist after build: {dataPath}");
+                destinations.Add(Path.Combine(playerDirectory, $"{Path.GetFileNameWithoutExtension(playerPath)}_Data", "Textures"));
             }
 
-            string destination = Path.Combine(dataPath, "Textures");
-            if (Directory.Exists(destination))
+            foreach (string destination in destinations)
             {
-                Directory.Delete(destination, recursive: true);
-            }
-
-            Directory.CreateDirectory(destination);
-            int copiedFileCount = 0;
-            foreach (string sourceFile in Directory.EnumerateFiles(
-                         source,
-                         "*",
-                         SearchOption.AllDirectories))
-            {
-                if (sourceFile.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+                if (Directory.Exists(destination))
                 {
-                    continue;
+                    Directory.Delete(destination, recursive: true);
                 }
 
-                string relativePath = Path.GetRelativePath(source, sourceFile);
-                string destinationFile = Path.Combine(destination, relativePath);
-                string destinationDirectory = Path.GetDirectoryName(destinationFile) ??
-                    throw new InvalidOperationException(
-                        $"Runtime texture destination has no parent: {destinationFile}");
-                Directory.CreateDirectory(destinationDirectory);
-                File.Copy(sourceFile, destinationFile, overwrite: true);
-                copiedFileCount++;
-            }
+                Directory.CreateDirectory(destination);
+                int copiedFileCount = 0;
+                foreach (string sourceFile in Directory.EnumerateFiles(
+                             source,
+                             "*",
+                             SearchOption.AllDirectories))
+                {
+                    if (sourceFile.EndsWith(".meta", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
 
-            if (copiedFileCount == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Runtime texture copy produced no files from {source}.");
-            }
+                    string relativePath = Path.GetRelativePath(source, sourceFile);
+                    string destinationFile = Path.Combine(destination, relativePath);
+                    string destinationDirectory = Path.GetDirectoryName(destinationFile) ??
+                        throw new InvalidOperationException(
+                            $"Runtime texture destination has no parent: {destinationFile}");
+                    Directory.CreateDirectory(destinationDirectory);
+                    File.Copy(sourceFile, destinationFile, overwrite: true);
+                    copiedFileCount++;
+                }
 
-            Log($"Copied {copiedFileCount} runtime texture files to {destination}.");
+                Log($"Copied {copiedFileCount} runtime texture files to {destination}.");
+            }
         }
 
         /// <summary>

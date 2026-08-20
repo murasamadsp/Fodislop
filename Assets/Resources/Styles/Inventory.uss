@@ -13,7 +13,6 @@
     justify-content: center;
     align-items: center;
     background-color: rgba(0, 0, 0, 0.6);
-    picking-mode: position;
 }
 
 .inv-full-bg {
@@ -80,11 +79,16 @@
 
 .inv-grid-row {
     flex-direction: row;
+    flex-shrink: 0;
 }
 
 .inv-cell {
     width: 50px;
     height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    flex-shrink: 0;
+    flex-grow: 0;
     justify-content: center;
     align-items: center;
     margin: 3px;
@@ -92,7 +96,6 @@
     border-width: 1px;
     border-color: rgba(80, 140, 200, 0.4);
     border-radius: 4px;
-    picking-mode: position;
 }
 
 .inv-cell:hover {
@@ -113,6 +116,8 @@
 .inv-icon {
     width: 36px;
     height: 36px;
+    min-width: 36px;
+    min-height: 36px;
     align-self: center;
     justify-content: center;
 }
@@ -136,6 +141,15 @@
 
 /* ─── Хотбар ─── */
 
+.inv-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
 .inv-hotbar {
     position: absolute;
     bottom: 16px;
@@ -144,19 +158,50 @@
     flex-direction: row;
     justify-content: center;
     align-items: center;
-    picking-mode: ignore;
+    padding: 6px 12px;
+    border-radius: 8px;
+}
+
+.inv-hotbar-slots {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.inv-grid-container {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.inv-toggle-btn {
+    margin-left: 10px;
+    height: 48px;
+    padding-left: 14px;
+    padding-right: 14px;
+    justify-content: center;
+    align-items: center;
+}
+
+.inv-header-left {
+    flex-direction: row;
+    align-items: center;
 }
 
 .inv-button {
     width: 50px;
     height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    flex-shrink: 0;
+    flex-grow: 0;
     margin: 3px;
     background-color: rgba(30, 50, 75, 0.85);
     border-width: 1px;
     border-color: rgba(80, 180, 255, 0.5);
     border-radius: 4px;
     padding: 0;
-    picking-mode: position;
     justify-content: center;
     align-items: center;
 }
@@ -176,7 +221,6 @@
     height: 36px;
     flex-direction: row;
     justify-content: center;
-    picking-mode: ignore;
 }
 
 .inv-tooltip-bg {

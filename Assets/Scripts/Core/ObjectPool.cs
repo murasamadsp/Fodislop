@@ -3,67 +3,62 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Fodinae.Core
+namespace Fodinae.Core;
+
+public class ObjectPool<T>(T prefab, Transform? parent = null, int preload = 0)
+    where T : Component
 {
-    public class ObjectPool<T>
-        where T : Component
+    private readonly Queue<T> _pool = InitializePool(prefab, parent, preload);
+
+    public int CountInactive => _pool.Count;
+
+    private static Queue<T> InitializePool(T prefab, Transform? parent, int preload)
     {
-        private readonly Queue<T> _pool = new();
-        private readonly T _prefab;
-        private readonly Transform? _parent;
-
-        public int CountInactive => _pool.Count;
-
-        public ObjectPool(T prefab, Transform? parent = null, int preload = 0)
+        var queue = new Queue<T>(preload > 0 ? preload : 4);
+        for (int i = 0; i < preload; i++)
         {
-            _prefab = prefab;
-            _parent = parent;
-
-            for (int i = 0; i < preload; i++)
-            {
-                var obj = Object.Instantiate(_prefab, _parent);
-                obj.gameObject.SetActive(false);
-                _pool.Enqueue(obj);
-            }
-        }
-
-        public T Get()
-        {
-            T obj;
-            while (_pool.Count > 0)
-            {
-                obj = _pool.Dequeue();
-                if (obj != null)
-                {
-                    obj.gameObject.SetActive(true);
-                    return obj;
-                }
-            }
-
-            obj = Object.Instantiate(_prefab, _parent);
-            return obj;
-        }
-
-        public void Return(T obj)
-        {
-            if (obj == null)
-            {
-                return;
-            }
-
+            var obj = Object.Instantiate(prefab, parent);
             obj.gameObject.SetActive(false);
-            _pool.Enqueue(obj);
+            queue.Enqueue(obj);
         }
 
-        public void Clear()
+        return queue;
+    }
+
+    public T Get()
+    {
+        while (_pool.Count > 0)
         {
-            while (_pool.Count > 0)
+            var obj = _pool.Dequeue();
+            if (obj != null)
             {
-                var obj = _pool.Dequeue();
-                if (obj != null)
-                {
-                    Object.Destroy(obj.gameObject);
-                }
+                obj.gameObject.SetActive(true);
+                return obj;
+            }
+        }
+
+        return Object.Instantiate(prefab, parent);
+    }
+
+    public void Return(T obj)
+    {
+        if (obj == null)
+        {
+            return;
+        }
+
+        obj.gameObject.SetActive(false);
+        _pool.Enqueue(obj);
+    }
+
+    public void Clear()
+    {
+        while (_pool.Count > 0)
+        {
+            var obj = _pool.Dequeue();
+            if (obj != null)
+            {
+                Object.Destroy(obj.gameObject);
             }
         }
     }

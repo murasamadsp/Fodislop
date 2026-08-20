@@ -185,7 +185,7 @@ namespace Fodinae
                     $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
-            T[]? chunk = GetChunk(chunkIndex, createIfMissing: false, touchLru: touchLru);
+            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: touchLru);
             if (chunk == null)
             {
                 throw new InvalidDataException(

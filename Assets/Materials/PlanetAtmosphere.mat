@@ -26,28 +26,28 @@ Material:
     m_Ints: []
     m_Floats:
     - _AbsorbStrength: 1.15
-    - _CloudAltitude: 0.3
-    - _CloudAmbient: 0.25
-    - _CloudBandStrength: 0.32
-    - _CloudBands: 6
-    - _CloudCoverage: 0.56
-    - _CloudOpacity: 0.88
-    - _CloudRelief: 1.6
-    - _CloudScale: 4.4
-    - _CloudSharpness: 0.26
-    - _CloudWarp: 1.15
-    - _Density: 7
-    - _MieBackG: -0.32
-    - _MieBackWeight: 0.42
-    - _MieG: 0.7
-    - _PlanetRadiusRatio: 0.91463417
-    - _ScaleHeight: 0.28
-    - _SunIntensity: 4.2
+    - _CloudAltitude: 0.20
+    - _CloudAmbient: 0.28
+    - _CloudBandStrength: 0.12
+    - _CloudBands: 3
+    - _CloudCoverage: 0.44
+    - _CloudOpacity: 0.65
+    - _CloudRelief: 0.18
+    - _CloudScale: 2.8
+    - _CloudSharpness: 0.45
+    - _CloudWarp: 0.16
+    - _Density: 4.2
+    - _MieBackG: -0.20
+    - _MieBackWeight: 0.25
+    - _MieG: 0.82
+    - _PlanetRadiusRatio: 0.95
+    - _ScaleHeight: 0.14
+    - _SunIntensity: 5.6
     m_Colors:
-    - _AbsorbColor: {r: 0.33999997, g: 0.29999998, b: 0.85, a: 1}
-    - _CloudColor: {r: 0.45999998, g: 0.6399999, b: 0.4799999, a: 1}
-    - _ScatterColor: {r: 0.51999998, g: 0.75999999, b: 0.29999998, a: 1}
-    - _SunColor: {r: 1, g: 0.82, b: 0.62, a: 1}
-    - _SunDirWS: {r: -0.7672455, g: 0.16026016, b: -0.6210081, a: 0}
+    - _AbsorbColor: {r: 0.45, g: 0.35, b: 0.85, a: 1}
+    - _CloudColor: {r: 0.92, g: 0.94, b: 0.97, a: 1}
+    - _ScatterColor: {r: 0.42, g: 0.70, b: 0.28, a: 1}
+    - _SunColor: {r: 1, g: 0.92, b: 0.82, a: 1}
+    - _SunDirWS: {r: -0.68, g: 0.24, b: 0.52, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

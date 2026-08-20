@@ -24,12 +24,10 @@ namespace Fodinae.Editor
 
         private const string MeshFolder = "Assets/Meshes";
 
-        // 6 subdivisions => 81,920 triangles, ~286 segments around the silhouette,
-        // so a facet spans well under 10px at menu size. 5 is enough for the
-        // atmosphere shell: its shader intersects the sphere analytically, so the
-        // mesh only has to cover the right screen area, not define the curve.
-        private const int PlanetSubdivisions = 6;
-        private const int ShellSubdivisions = 5;
+        // 4 subdivisions => 5,120 triangles, smooth circular silhouette at menu size.
+        // 3 subdivisions => 1,280 triangles for the atmosphere shell.
+        private const int PlanetSubdivisions = 4;
+        private const int ShellSubdivisions = 3;
 
         [MenuItem("Fodinae/Art/Build Planet Meshes")]
         public static void Build()

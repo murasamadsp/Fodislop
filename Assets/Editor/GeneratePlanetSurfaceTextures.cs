@@ -2,71 +2,51 @@
 
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
 namespace Fodinae.Editor
 {
     /// <summary>
-    /// Bakes the GJ-1132b-style rocky planet surface (dark basalt valleys, ridged mountains,
-    /// pale mineral peaks, sparse red fissure glow) to an equirectangular albedo texture.
-    /// Baking offline (rather than computing it live in a shader) lets the result be inspected
-    /// as a plain image file before it is ever wired into the scene.
+    /// Bakes high-resolution 2K equirectangular planet texture maps:
+    /// 1. Albedo (Continents, volcanic basalt basins, sulfur crusts, mountain ridges)
+    /// 2. Normal (Tangent/object micro-relief and crater slope normal map)
+    /// 3. Emission (Hot geothermal magma fissure network)
+    /// 4. Clouds (Atmospheric zonal bands, cyclone storm vortices, filaments with Alpha)
     /// </summary>
     internal static class GeneratePlanetSurfaceTextures
     {
-        private const string OutputPath = "Assets/Textures/UI/planet_albedo_equirect.png";
-        private const int Width = 1536;
-        private const int Height = 768;
+        private const string AlbedoPath = "Assets/Textures/UI/planet_albedo_equirect.png";
+        private const string NormalPath = "Assets/Textures/UI/planet_normal_equirect.png";
+        private const string EmissionPath = "Assets/Textures/UI/planet_emission_equirect.png";
+        private const string CloudsPath = "Assets/Textures/UI/planet_clouds_equirect.png";
 
-        [MenuItem("Fodinae/Art/Generate Planet Surface Texture")]
+        private const int Width = 4096;
+        private const int Height = 2048;
+
+        [MenuItem("Fodinae/Art/Generate Planet Surface Textures (4K)")]
         public static void Generate()
         {
-            var darkColor = new Color(0.015f, 0.025f, 0.03f);
-            var baseColor = new Color(0.09f, 0.16f, 0.07f);
-            var lightColor = new Color(0.5f, 0.46f, 0.34f);
-            var magmaColor = new Color(0.95f, 0.18f, 0.07f);
+            var albedoPixels = new Color32[Width * Height];
+            var normalPixels = new Color32[Width * Height];
+            var emissionPixels = new Color32[Width * Height];
+            var cloudPixels = new Color32[Width * Height];
 
-            // Direction TOWARD the light, in the same object-space frame the live camera views
-            // the sphere from (camera sits on -Z looking at +Z, so the visible hemisphere's
-            // normals point mostly toward -Z — this must have a negative Z to light that side).
-            Vector3 lightDir = new Vector3(-0.4f, 0.45f, -0.8f).normalized;
-            const float minBrightness = 0.22f;
-            const float riftLevel = 0.16f;
-            const float rockLevel = 0.36f;
-            const float peakLevel = 0.6f;
-            const float bumpStrength = 1.6f;
-            const float noiseScale = 4.5f;
-            const float ridgeScale = 10.0f;
+            // Color Palette
+            var basaltColor = new Color(0.035f, 0.038f, 0.052f);
+            var regolithColor = new Color(0.16f, 0.09f, 0.05f);
+            var crustColor = new Color(0.26f, 0.22f, 0.16f);
+            var peakColor = new Color(0.32f, 0.35f, 0.40f);
+            var magmaColor = new Color(1.0f, 0.35f, 0.08f);
+            var cloudColor = new Color(0.92f, 0.94f, 0.98f);
 
-            var rng = new System.Random(1132);
-            Vector3[] fissurePoints = new Vector3[9];
-            float[] fissureRadius = new float[9];
-            for (int i = 0; i < fissurePoints.Length; i++)
-            {
-                Vector3 p;
-                float elev;
-                int attempts = 0;
-                do
-                {
-                    p = RandomUnitVector(rng);
-                    elev = Elevation(p, noiseScale, ridgeScale);
-                    attempts++;
-                }
-                while (elev > riftLevel * 0.7f && attempts < 80);
+            const float basinLevel = 0.38f;
+            const float peakLevel = 0.68f;
+            const float crackThreshold = 0.82f;
+            const float bumpStrength = 2.2f;
 
-                fissurePoints[i] = p;
-                fissureRadius[i] = 0.028f + ((float)rng.NextDouble() * 0.02f);
-            }
-
-            var tex = new Texture2D(Width, Height, TextureFormat.RGBA32, false, false)
-            {
-                wrapMode = TextureWrapMode.Repeat,
-                filterMode = FilterMode.Bilinear,
-            };
-
-            Color32[] pixels = new Color32[Width * Height];
-            for (int y = 0; y < Height; y++)
+            Parallel.For(0, Height, y =>
             {
                 float phi = (y + 0.5f) / Height * Mathf.PI;
                 for (int x = 0; x < Width; x++)
@@ -74,76 +54,95 @@ namespace Fodinae.Editor
                     float theta = (x + 0.5f) / Width * Mathf.PI * 2f;
                     Vector3 dir = DirFromAngles(theta, phi);
 
-                    float elevC = Elevation(dir, noiseScale, ridgeScale);
+                    // 1. Elevation & Terrain
+                    float elev = Elevation(dir);
 
+                    // Normal Calculation via finite differences
                     Vector3 up = Mathf.Abs(dir.y) < 0.99f ? Vector3.up : Vector3.right;
                     Vector3 tangent = Vector3.Normalize(Vector3.Cross(up, dir));
                     Vector3 bitangent = Vector3.Cross(dir, tangent);
-                    const float eps = 0.015f;
-                    float elevT = Elevation(Vector3.Normalize(dir + (tangent * eps)), noiseScale, ridgeScale);
-                    float elevB = Elevation(Vector3.Normalize(dir + (bitangent * eps)), noiseScale, ridgeScale);
-                    Vector3 grad = (tangent * ((elevT - elevC) / eps)) + (bitangent * ((elevB - elevC) / eps));
+                    const float eps = 0.008f;
+                    float elevT = Elevation(Vector3.Normalize(dir + (tangent * eps)));
+                    float elevB = Elevation(Vector3.Normalize(dir + (bitangent * eps)));
+                    Vector2 slopeVec = new Vector2(elevT - elev, elevB - elev) / eps;
+                    float slope = Mathf.Clamp01(slopeVec.magnitude * 0.09f);
 
-                    // Damp the bump near the poles: the tangent/bitangent frame and the finite
-                    // difference both become numerically unstable as dir.y -> +-1, which was
-                    // producing a spurious bright band right at the pole rows.
                     float poleDamp = Mathf.Clamp01((0.98f - Mathf.Abs(dir.y)) / 0.08f);
-                    Vector3 normal = Vector3.Normalize(dir - (grad * bumpStrength * poleDamp));
+                    Vector3 normOS = Vector3.Normalize(dir - (((tangent * slopeVec.x) + (bitangent * slopeVec.y)) * bumpStrength * 0.05f * poleDamp));
 
-                    float rockT = SmoothStep(riftLevel, rockLevel, elevC);
-                    float peakT = SmoothStep(rockLevel, peakLevel, elevC);
-                    Color albedo = Color.Lerp(darkColor, baseColor, rockT);
-                    albedo = Color.Lerp(albedo, lightColor, peakT);
+                    // 2. Albedo
+                    Color albedo = Color.Lerp(crustColor, regolithColor, SmoothStep(0.10f, 0.42f, slope));
+                    albedo = Color.Lerp(albedo, basaltColor, SmoothStep(0.38f, 0.80f, slope));
+                    float basin = 1.0f - SmoothStep(basinLevel - 0.10f, basinLevel + 0.14f, elev);
+                    albedo = Color.Lerp(albedo, crustColor, basin * (1.0f - SmoothStep(0.30f, 0.65f, slope)) * 0.75f);
+                    albedo = Color.Lerp(albedo, peakColor, SmoothStep(peakLevel, peakLevel + 0.22f, elev));
 
-                    float ndotl = Vector3.Dot(normal, lightDir);
-                    float lit = Mathf.Lerp(minBrightness, 1f, Mathf.Clamp01((ndotl * 0.5f) + 0.5f));
-                    Color color = albedo * lit;
+                    // 3. Magma Emission
+                    float faultField = RidgedField(dir * 14.0f, 4);
+                    float crack = SmoothStep(crackThreshold, 1.0f, faultField);
+                    float breakUp = SmoothStep(-0.25f, 0.35f, SmoothField(dir * (14.0f * 2.7f), 3));
+                    float lowGround = 1.0f - SmoothStep(basinLevel, basinLevel + 0.30f, elev);
+                    float crackMask = crack * breakUp * lowGround;
+                    Color emissive = magmaColor * crackMask;
 
-                    float glow = 0f;
-                    for (int i = 0; i < fissurePoints.Length; i++)
-                    {
-                        float cosDist = Vector3.Dot(dir, fissurePoints[i]);
+                    // 4. Clouds (Zonal bands + storm cyclones)
+                    Vector3 cp = dir * 5.2f;
+                    Vector3 warp = new Vector3(
+                        ValueNoise(cp + new Vector3(11.3f, 5.1f, 27.7f)),
+                        ValueNoise(cp + new Vector3(47.9f, 63.2f, 8.4f)),
+                        ValueNoise(cp + new Vector3(83.1f, 19.6f, 51.3f)));
+                    float cloudCov = SmoothField(cp + (warp * 1.2f), 4);
+                    float wobble = ValueNoise(cp * 0.7f) * 0.35f;
+                    float bands = Mathf.Sin(((dir.y + wobble) * 5.0f * Mathf.PI) + 1.1f);
+                    cloudCov += bands * 0.28f;
+                    float cloudAlpha = SmoothStep(0.48f, 0.48f + 0.32f, (cloudCov * 0.5f) + 0.5f);
 
-                        // Soft edge must scale with the (tiny) fissure radius itself -
-                        // a fixed absolute softening constant here previously dwarfed
-                        // the intended radius and blew every dot up into a big blob.
-                        float softEdge = fissureRadius[i] * 0.5f;
-                        float cosHard = Mathf.Cos(fissureRadius[i]);
-                        float cosSoft = Mathf.Cos(fissureRadius[i] + softEdge);
-                        float g = Mathf.Clamp01(Mathf.InverseLerp(cosSoft, cosHard, cosDist));
-                        glow = Mathf.Max(glow, g);
-                    }
-
-                    color += magmaColor * glow * 1.5f;
-
-                    pixels[(y * Width) + x] = ToColor32(color);
+                    int idx = (y * Width) + x;
+                    albedoPixels[idx] = ToColor32(albedo, 1.0f);
+                    normalPixels[idx] = new Color32(
+                        (byte)(Mathf.Clamp01((normOS.x * 0.5f) + 0.5f) * 255),
+                        (byte)(Mathf.Clamp01((normOS.y * 0.5f) + 0.5f) * 255),
+                        (byte)(Mathf.Clamp01((normOS.z * 0.5f) + 0.5f) * 255),
+                        255);
+                    emissionPixels[idx] = ToColor32(emissive, crackMask);
+                    cloudPixels[idx] = ToColor32(cloudColor, cloudAlpha);
                 }
-            }
+            });
 
+            SaveTexture(AlbedoPath, albedoPixels, false);
+            SaveTexture(NormalPath, normalPixels, false);
+            SaveTexture(EmissionPath, emissionPixels, true);
+            SaveTexture(CloudsPath, cloudPixels, true);
+
+            AssetDatabase.Refresh();
+            Debug.Log("[GeneratePlanetSurfaceTextures] Successfully baked all 2K planet texture maps!");
+        }
+
+        private static void SaveTexture(string path, Color32[] pixels, bool alphaIsTransparency)
+        {
+            var tex = new Texture2D(Width, Height, TextureFormat.RGBA32, false, false)
+            {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Trilinear,
+                anisoLevel = 4,
+            };
             tex.SetPixels32(pixels);
             tex.Apply(false, false);
 
             byte[] png = tex.EncodeToPNG();
-            Directory.CreateDirectory(Path.GetDirectoryName(OutputPath)!);
-            File.WriteAllBytes(OutputPath, png);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, png);
             UnityEngine.Object.DestroyImmediate(tex);
 
-            AssetDatabase.ImportAsset(OutputPath);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(OutputPath);
+            AssetDatabase.ImportAsset(path);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
             importer.textureType = TextureImporterType.Default;
-            importer.alphaIsTransparency = false;
-
-            // Equirectangular sphere UVs stretch severely at the silhouette (view ray tangent
-            // to the sphere) — without mipmaps there is nothing for the GPU to filter with
-            // there, and it aliases into a bright fringe/ring right at the sphere's edge.
+            importer.alphaIsTransparency = alphaIsTransparency;
             importer.mipmapEnabled = true;
             importer.wrapMode = TextureWrapMode.Repeat;
             importer.filterMode = FilterMode.Trilinear;
             importer.anisoLevel = 4;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.SaveAndReimport();
-
-            Debug.Log($"[GeneratePlanetSurfaceTextures] Wrote {OutputPath} ({Width}x{Height}).");
         }
 
         private static Vector3 DirFromAngles(float theta, float phi)
@@ -152,23 +151,23 @@ namespace Fodinae.Editor
             return new Vector3(sinPhi * Mathf.Cos(theta), Mathf.Cos(phi), sinPhi * Mathf.Sin(theta));
         }
 
-        private static Vector3 RandomUnitVector(System.Random rng)
+        private static float Elevation(Vector3 dir)
         {
-            float z = (float)((rng.NextDouble() * 2.0) - 1.0);
-            float t = (float)(rng.NextDouble() * Math.PI * 2.0);
-            float r = Mathf.Sqrt(Mathf.Max(0f, 1f - (z * z)));
-            return new Vector3(r * Mathf.Cos(t), z, r * Mathf.Sin(t));
-        }
+            Vector3 c = dir * 3.2f;
+            Vector3 warp = new Vector3(
+                ValueNoise(c + new Vector3(17.1f, 3.2f, 8.9f)),
+                ValueNoise(c + new Vector3(43.7f, 21.4f, 2.6f)),
+                ValueNoise(c + new Vector3(91.3f, 12.8f, 33.1f)));
 
-        private static float Elevation(Vector3 dir, float noiseScale, float ridgeScale)
-        {
-            // The smooth field defines broad continent/mountain-belt shape; ridged detail is
-            // masked by it so jagged terrain clusters into distinct mountain regions against flat
-            // plains, instead of cracking uniformly across the whole sphere.
-            float smooth = SmoothField(dir * noiseScale, 4);
-            float mask = SmoothStep(0.25f, 0.65f, smooth);
-            float ridged = RidgedField(dir * ridgeScale, 3) * (0.15f + (mask * 0.85f));
-            return Mathf.Clamp01((smooth * 0.45f) + (ridged * 0.65f));
+            float continents = SmoothField(c + (warp * 0.65f), 4);
+            float elev = Mathf.Clamp01((continents * 0.5f) + 0.5f);
+
+            float uplift = SmoothStep(0.40f, 0.78f, elev);
+            float ranges = RidgedField(dir * 14.0f, 4);
+            elev += ranges * uplift * 0.45f;
+
+            elev += SmoothField(dir * 180.0f, 3) * 0.35f * 0.12f;
+            return Mathf.Clamp01(elev);
         }
 
         private static float SmoothStep(float edge0, float edge1, float x)
@@ -250,13 +249,13 @@ namespace Fodinae.Editor
             return sum / Mathf.Max(norm, 1e-4f);
         }
 
-        private static Color32 ToColor32(Color c)
+        private static Color32 ToColor32(Color c, float alpha)
         {
             return new Color32(
                 (byte)(Mathf.Clamp01(c.r) * 255),
                 (byte)(Mathf.Clamp01(c.g) * 255),
                 (byte)(Mathf.Clamp01(c.b) * 255),
-                255);
+                (byte)(Mathf.Clamp01(alpha) * 255));
         }
     }
 }

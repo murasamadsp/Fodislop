@@ -25,37 +25,37 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _BasinLevel: 0.42
-    - _ContinentScale: 3
-    - _CrackScale: 9
-    - _CrackThreshold: 0.885
-    - _DetailScale: 140
-    - _DetailStrength: 0.2
-    - _MagmaIntensity: 2.4
-    - _MountainHeight: 0.28
-    - _NightAmbient: 0.004
-    - _PeakLevel: 0.72
-    - _PoolCoverage: 0.85
-    - _PoolF0: 0.045
-    - _PoolGloss: 900
-    - _PoolIntensity: 3
-    - _PoolScale: 22
-    - _ReliefStrength: 0.75
-    - _RidgeScale: 11
-    - _Roughness: 0.4
-    - _SunIntensity: 5
-    - _TwilightIntensity: 1.1
-    - _WarpStrength: 0.5
+    - _BasinLevel: 0.38
+    - _ContinentScale: 3.2
+    - _CrackScale: 4.5
+    - _CrackThreshold: 0.85
+    - _DetailScale: 60
+    - _DetailStrength: 0.05
+    - _MagmaIntensity: 7.2
+    - _MountainHeight: 0.40
+    - _NightAmbient: 0.012
+    - _PeakLevel: 0.68
+    - _PoolCoverage: 0.75
+    - _PoolF0: 0.05
+    - _PoolGloss: 1200
+    - _PoolIntensity: 4.8
+    - _PoolScale: 26
+    - _ReliefStrength: 1.25
+    - _RidgeScale: 12
+    - _Roughness: 0.45
+    - _SunIntensity: 5.8
+    - _TwilightIntensity: 1.4
+    - _WarpStrength: 0.65
     m_Colors:
-    - _BasaltColor: {r: 0.06999998, g: 0.071999975, b: 0.061999977, a: 1}
-    - _CrustColor: {r: 0.14999998, g: 0.17999998, b: 0.11499997, a: 1}
-    - _MagmaColor: {r: 1, g: 0.23999995, b: 0.044999972, a: 1}
-    - _PeakColor: {r: 0.11999997, g: 0.14499995, b: 0.10999996, a: 1}
-    - _PoolAlbedo: {r: 0.047999978, g: 0.03, b: 0.014, a: 1}
-    - _PoolSpecColor: {r: 1, g: 0.65999997, b: 0.27999997, a: 1}
-    - _RegolithColor: {r: 0.07999998, g: 0.09499998, b: 0.04999999, a: 1}
-    - _SunColor: {r: 1, g: 0.9, b: 0.76, a: 1}
-    - _SunDirWS: {r: -0.7672455, g: 0.16026016, b: -0.6210081, a: 0}
-    - _TwilightColor: {r: 0.29999998, g: 0.33999997, b: 0.12999997, a: 1}
+    - _BasaltColor: {r: 0.035, g: 0.038, b: 0.052, a: 1}
+    - _CrustColor: {r: 0.26, g: 0.22, b: 0.16, a: 1}
+    - _MagmaColor: {r: 1, g: 0.35, b: 0.08, a: 1}
+    - _PeakColor: {r: 0.32, g: 0.35, b: 0.40, a: 1}
+    - _PoolAlbedo: {r: 0.02, g: 0.03, b: 0.05, a: 1}
+    - _PoolSpecColor: {r: 1, g: 0.85, b: 0.65, a: 1}
+    - _RegolithColor: {r: 0.16, g: 0.09, b: 0.05, a: 1}
+    - _SunColor: {r: 1, g: 0.92, b: 0.82, a: 1}
+    - _SunDirWS: {r: -0.68, g: 0.24, b: 0.52, a: 0}
+    - _TwilightColor: {r: 0.58, g: 0.65, b: 0.22, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

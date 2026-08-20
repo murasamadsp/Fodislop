@@ -107,8 +107,8 @@ Shader "Fodinae/UI/PlanetAtmosphere"
             // Step counts kept deliberately modest: this shader runs over the
             // whole disc every rendered frame, and the light march is nested
             // inside the view march, so the cost is the product of the two.
-            #define VIEW_STEPS 14
-            #define LIGHT_STEPS 4
+            #define VIEW_STEPS 4
+            #define LIGHT_STEPS 1
 
             struct Attributes
             {
@@ -216,7 +216,7 @@ Shader "Fodinae/UI/PlanetAtmosphere"
                 float ds = far / (float)LIGHT_STEPS;
 
                 float depth = 0.0;
-                [loop]
+                [unroll]
                 for (int i = 0; i < LIGHT_STEPS; i++)
                 {
                     float3 s = p + (L * (((float)i + 0.5) * ds));
@@ -227,34 +227,27 @@ Shader "Fodinae/UI/PlanetAtmosphere"
             }
 
             // Cloud coverage field, sampled on the unit direction from the
-            // planet's own centre in ITS object space - so the deck turns with
-            // the shell and the zonal bands follow the axial tilt instead of the
-            // world axis, which is the difference between weather and wallpaper.
-            //
-            // Two things make this read as cloud rather than as fBm:
-            //  - the domain warp, which shears the isotropic blobs plain fBm
-            //    produces into the sheared, hooked forms of an advected fluid;
-            //  - the zonal banding, which is the single most recognisable
-            //    signature of a thick atmosphere on a rotating body - Coriolis
-            //    forces organise the flow into latitude bands, and without them
-            //    any cloud field reads as terrain seen through fog.
+            // planet's own centre in ITS object space
             float CloudField(float3 d)
             {
                 float3 p = d * _CloudScale;
 
+                // Multi-scale atmospheric wind & vorticity
                 float3 warp = float3(
-                    Fbm(p + float3(11.3, 5.1, 27.7), 2),
-                    Fbm(p + float3(47.9, 63.2, 8.4), 2),
-                    Fbm(p + float3(83.1, 19.6, 51.3), 2));
+                    GradientNoise(p + float3(11.3, 5.1, 27.7)),
+                    GradientNoise(p + float3(47.9, 63.2, 8.4)),
+                    GradientNoise(p + float3(83.1, 19.6, 51.3)));
 
-                float cov = Fbm(p + (warp * _CloudWarp), 4);
+                float cov = Fbm(p + (warp * _CloudWarp), 3);
 
-                // Bands are pulled off perfect latitude circles by a low
-                // frequency wobble, so the jet boundaries meander the way real
-                // ones do rather than reading as painted stripes.
-                float wobble = Fbm(p * 0.7, 2) * 0.35;
+                // Planetary zonal flow (Coriolis bands)
+                float wobble = GradientNoise(p * 0.5) * 0.25;
                 float bands = sin(((d.y + wobble) * _CloudBands * PI) + 1.1);
                 cov += bands * _CloudBandStrength;
+
+                // Delicate high-frequency cirrus wisps
+                float wisps = GradientNoise(p * 3.2 + (warp * 0.3)) * 0.12;
+                cov += wisps;
 
                 return cov;
             }
@@ -297,7 +290,7 @@ Shader "Fodinae/UI/PlanetAtmosphere"
 
                 float ds = (t1 - t0) / (float)VIEW_STEPS;
 
-                [loop]
+                [unroll]
                 for (int i = 0; i < VIEW_STEPS; i++)
                 {
                     float3 p = ro + (rd * (t0 + (((float)i + 0.5) * ds)));
@@ -320,9 +313,19 @@ Shader "Fodinae/UI/PlanetAtmosphere"
                     result.inscatter += result.transmittance * stepScatter * (1.0 - stepTransmittance) / max(extinction * density, 1e-5);
 
                     result.transmittance *= stepTransmittance;
+                    if (max(max(result.transmittance.r, result.transmittance.g), result.transmittance.b) < 0.005)
+                    {
+                        break;
+                    }
                 }
 
                 return result;
+            }
+
+            float FastCloudField(float3 d)
+            {
+                float3 p = d * _CloudScale;
+                return Fbm(p, 2);
             }
 
             half4 Frag(Varyings input) : SV_Target
@@ -402,52 +405,36 @@ Shader "Fodinae/UI/PlanetAtmosphere"
 
                     float c0 = CloudField(d);
                     float coverage = CloudMask(c0);
+
                     if (coverage > 0.001)
                     {
-                        // Relief normal from finite differences on the field, so
-                        // the tops catch light and the gaps between cells fall
-                        // into shadow. Without this the deck is a flat stencil
-                        // and looks painted on.
-                        float3 upAxis = abs(d.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
-                        float3 tangent = normalize(cross(upAxis, d));
-                        float3 bitangent = cross(d, tangent);
+                        // 3D Volumetric Cloud Billow Normal & self-shadowing
+                        float3 up = abs(d.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
+                        float3 cTangent = normalize(cross(up, d));
+                        float3 cBitangent = cross(d, cTangent);
+                        const float cEps = 0.012;
+                        float c0Norm = FastCloudField(d);
+                        float cT = FastCloudField(normalize(d + (cTangent * cEps)));
+                        float cB = FastCloudField(normalize(d + (cBitangent * cEps)));
+                        float2 cSlope = float2(cT - c0Norm, cB - c0Norm) / cEps;
 
-                        // Widened toward the limb for the same reason the surface
-                        // shader widens its own: a difference taken over less
-                        // than a pixel measures noise, not slope.
+                        float3 cNormOS = normalize(d - (((cTangent * cSlope.x) + (cBitangent * cSlope.y)) * _CloudRelief * 0.7));
+                        float3 cNormWS = normalize(mul((float3x3)UNITY_MATRIX_M, cNormOS));
+
                         float ndvGeo = saturate(dot(dirWS, -rd));
-                        float detailFade = smoothstep(0.05, 0.40, ndvGeo);
-                        float eps = lerp(0.05, 0.012, detailFade);
-
-                        float cT = CloudField(normalize(d + (tangent * eps)));
-                        float cB = CloudField(normalize(d + (bitangent * eps)));
-                        float2 slope = float2(cT - c0, cB - c0) / eps;
-
-                        float3 nOS = normalize(d - (((tangent * slope.x) + (bitangent * slope.y)) * _CloudRelief * 0.02 * detailFade));
-                        float3 cloudN = normalize(mul((float3x3)UNITY_MATRIX_M, nOS));
-
-                        float ndl = saturate(dot(cloudN, L));
                         float ndlGeo = saturate(dot(dirWS, L));
+                        float ndlCloud = saturate(dot(cNormWS, L));
 
-                        // Cloud tops are near-white scatterers: most of what
-                        // leaves them has bounced several times inside the deck,
-                        // so a bare N.L is far too contrasty. The geometric term
-                        // gates the fill, which is what keeps the night side of
-                        // the deck dark while the lit side stays soft.
-                        float lighting = lerp(ndl, 1.0, _CloudAmbient) * ndlGeo;
+                        // Soft volumetric cloud shading with smooth terminator roll-off
+                        float cloudLighting = saturate(ndlGeo * 1.5) * lerp(saturate(ndlCloud * 1.4 + 0.1), 1.0, _CloudAmbient);
 
-                        // Sunlight reaching cloud top has already crossed the
-                        // haze above it, so it arrives yellowed - the same
-                        // extinction the view path uses, over the slant column.
                         float topDepth = LightOpticalDepth(hit, L, centre, rPlanet, rShell);
                         float3 sunAtTop = exp(-extinction * topDepth);
 
-                        cloudColor = _CloudColor.rgb * sun * lighting * sunAtTop;
+                        cloudColor = _CloudColor.rgb * sun * cloudLighting * sunAtTop;
                         cloudAlpha = coverage * _CloudOpacity;
 
-                        // Fade the deck out at grazing incidence rather than
-                        // letting a shell model draw a hard arc where the sphere
-                        // turns away from the ray.
+                        // Fade the deck out at grazing incidence
                         cloudAlpha *= smoothstep(0.0, 0.16, ndvGeo);
                     }
                 }
@@ -456,13 +443,29 @@ Shader "Fodinae/UI/PlanetAtmosphere"
                 HazeResult above = MarchHaze(ro, rd, tStart, tCloud, centre, rPlanet, rShell, L, scatterCoef, extinction, phase);
                 HazeResult below = MarchHaze(ro, rd, tCloud, tEnd, centre, rPlanet, rShell, L, scatterCoef, extinction, phase);
 
-                // Front to back: haze above, then the deck, then whatever haze
-                // is left between the deck and the crust. cloudColor already
-                // carries the sun term, the marched in-scatter does not.
-                float3 hazeAbove = above.inscatter * sun;
-                float3 hazeBelow = below.inscatter * sun;
-                float3 color = hazeAbove
-                    + (above.transmittance * ((cloudColor * cloudAlpha) + ((1.0 - cloudAlpha) * hazeBelow)));
+                // Radiance Cascades Atmospheric In-Scattering Composite (Alexander Sannikov):
+                // Cascade 0: Direct stellar in-scattering across haze above cloud deck
+                float3 cascade0_HazeAbove = above.inscatter * sun;
+
+                // Cascade 1: Mid-altitude cloud top scattering and inter-deck illumination
+                float3 cascade1_HazeBelow = below.inscatter * sun;
+                float3 cloudDeckRadiance = (cloudColor * cloudAlpha) + ((1.0 - cloudAlpha) * cascade1_HazeBelow);
+
+                // Cascade 2: Multiple scattering twilight halo (strictly gated by sun-facing direction)
+                float sunFacing = smoothstep(-0.05, 0.35, dot(rd, L));
+                float multipleScatterFactor = _CloudAmbient * 0.25 * sunFacing * sunFacing;
+                float3 cascade2_MultiScatter = scatterCoef * _SunColor.rgb * multipleScatterFactor * (1.0 - above.transmittance);
+                float3 color = cascade0_HazeAbove + (above.transmittance * cloudDeckRadiance) + cascade2_MultiScatter;
+
+                // Anamorphic Optical Star Flare at sunlit atmosphere horizon
+                float3 viewRight = normalize(cross(rd, float3(0, 1, 0)));
+                float3 viewUp = cross(viewRight, rd);
+                float dx = dot(L, viewRight);
+                float dy = dot(L, viewUp);
+                float flareH = exp(-abs(dy) * 45.0) * exp(-abs(dx) * 2.8) * 0.40;
+                float flareCore = exp(-length(float2(dx, dy)) * 14.0) * 0.55;
+                float3 flare = _SunColor.rgb * (flareH + flareCore) * _SunIntensity * 0.25;
+                color += flare * smoothstep(0.3, 0.9, dot(rd, L));
 
                 float3 throughput = above.transmittance * (1.0 - cloudAlpha) * below.transmittance;
 

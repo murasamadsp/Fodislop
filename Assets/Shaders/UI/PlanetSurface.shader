@@ -166,22 +166,21 @@ Shader "Fodinae/UI/PlanetSurface"
             {
                 float3 c = dir * _ContinentScale;
                 float3 warp = float3(
-                    Fbm(c + float3(17.1, 3.2, 8.9), 2),
-                    Fbm(c + float3(43.7, 21.4, 2.6), 2),
-                    Fbm(c + float3(91.3, 12.8, 33.1), 2));
+                    GradientNoise(c + float3(17.1, 3.2, 8.9)),
+                    GradientNoise(c + float3(43.7, 21.4, 2.6)),
+                    GradientNoise(c + float3(91.3, 12.8, 33.1)));
 
-                float continents = Fbm(c + (warp * _WarpStrength), 4);
+                float continents = Fbm(c + (warp * _WarpStrength), 3);
                 float elev = saturate((continents * 0.5) + 0.5);
 
                 // Ranges only rise on already-uplifted crust, so mountains form
                 // belts along province edges instead of speckling the basins.
                 float uplift = smoothstep(0.40, 0.78, elev);
-                float ranges = RidgedFbm(dir * _RidgeScale, 4);
+                float ranges = RidgedFbm(dir * _RidgeScale, 3);
                 elev += ranges * uplift * _MountainHeight;
 
-                // High-frequency roughness. Carried at low amplitude but it is
-                // what the normals pick up, so it dominates the close-up feel.
-                elev += Fbm(dir * _DetailScale, 3) * _DetailStrength * 0.12 * detailFade;
+                // Subtle organic roughness without high-frequency grit/static
+                elev += Fbm(dir * _DetailScale, 2) * _DetailStrength * 0.03 * detailFade;
 
                 return saturate(elev);
             }
@@ -250,6 +249,15 @@ Shader "Fodinae/UI/PlanetSurface"
                 return lit * (A + (B * cosPhi * sin(alpha) * tan(beta)));
             }
 
+            float ElevationNormal(float3 dir)
+            {
+                float3 c = dir * _ContinentScale;
+                float continents = Fbm(c, 2);
+                float elev = saturate((continents * 0.5) + 0.5);
+                float ranges = RidgedFbm(dir * _RidgeScale, 2);
+                return saturate(elev + (ranges * _MountainHeight));
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
                 float3 dir = normalize(input.positionOS);
@@ -257,123 +265,63 @@ Shader "Fodinae/UI/PlanetSurface"
                 float3 L = normalize(_SunDirWS.xyz);
                 float3 V = normalize(GetWorldSpaceViewDir(input.positionWS));
 
-                // Foreshortening toward the limb, and the detail budget it allows.
+                // Foreshortening toward the limb
                 float ndv = saturate(dot(geoN, V));
                 float detailFade = smoothstep(0.05, 0.42, ndv);
 
                 float elev = Elevation(dir, detailFade);
 
-                // Analytic normal from finite differences on the sphere's own
-                // tangent frame. eps is tied to the detail scale so the slope
-                // estimate stays consistent when detail frequency is retuned, and
-                // widened toward the limb for the same reason the detail octaves
-                // fade there - a finite difference taken over less than a pixel
-                // reports slope from noise the pixel never resolves.
+                // Tangent frame for crisp mountain relief & slope
                 float3 up = abs(dir.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
                 float3 tangent = normalize(cross(up, dir));
                 float3 bitangent = cross(dir, tangent);
-                float eps = lerp(6.0, 1.6, detailFade) / _DetailScale;
+                const float eps = 0.006;
 
-                float eT = Elevation(normalize(dir + (tangent * eps)), detailFade);
-                float eB = Elevation(normalize(dir + (bitangent * eps)), detailFade);
-                float2 slopeVec = float2(eT - elev, eB - elev) / eps;
+                float e0 = ElevationNormal(dir);
+                float eT = ElevationNormal(normalize(dir + (tangent * eps)));
+                float eB = ElevationNormal(normalize(dir + (bitangent * eps)));
+                float2 slopeVec = float2(eT - e0, eB - e0) / eps;
 
-                float3 normalOS = normalize(dir - (((tangent * slopeVec.x) + (bitangent * slopeVec.y)) * _ReliefStrength * 0.05));
+                float3 normalOS = normalize(dir - (((tangent * slopeVec.x) + (bitangent * slopeVec.y)) * _ReliefStrength * 0.45));
                 float3 N = normalize(TransformObjectToWorldNormal(normalOS));
 
-                // ---- Albedo ------------------------------------------------
-                // Steepness sorts the materials: wind/haze-deposited sulfur can
-                // only accumulate on flats, so cliffs and scarps stay bare dark
-                // basalt. This slope-sorting is what makes procedural rock look
-                // geological instead of like a tinted noise texture.
-                float slope = saturate(length(slopeVec) * 0.09);
+                // ---- Albedo ----
+                float slope = saturate(length(slopeVec) * 0.25);
+                float3 albedo = lerp(_CrustColor.rgb, _RegolithColor.rgb, smoothstep(0.08, 0.35, slope));
+                albedo = lerp(albedo, _BasaltColor.rgb, smoothstep(0.30, 0.70, slope));
 
-                float3 albedo = lerp(_CrustColor.rgb, _RegolithColor.rgb, smoothstep(0.10, 0.42, slope));
-                albedo = lerp(albedo, _BasaltColor.rgb, smoothstep(0.38, 0.80, slope));
-
-                // Basins pond the pale evaporite crust; peaks strip back to rock.
                 float basin = 1.0 - smoothstep(_BasinLevel - 0.10, _BasinLevel + 0.14, elev);
                 albedo = lerp(albedo, _CrustColor.rgb, basin * (1.0 - smoothstep(0.30, 0.65, slope)) * 0.75);
-                albedo = lerp(albedo, _PeakColor.rgb, smoothstep(_PeakLevel, _PeakLevel + 0.22, elev));
+                albedo = lerp(albedo, _PeakColor.rgb, smoothstep(_PeakLevel - 0.05, _PeakLevel + 0.15, elev));
 
-                // Fault field, evaluated once and shared by the rift glow and the
-                // sulfur pools - both need to know where the geothermal zones
-                // are, and RidgedFbm is the single most expensive call here.
+                // Fault field for magma rifts
                 float faultField = RidgedFbm(dir * _CrackScale, 4);
-                float pool = PoolMask(dir, elev, slope, faultField);
 
-                // Liquid sulfur is much darker than the crust it sits in - the
-                // dark pool is what makes the highlight on it read as wet.
-                albedo = lerp(albedo, _PoolAlbedo.rgb, pool);
-
-                // Broad mineral mottling, decorrelated from elevation so the
-                // colour does not simply restate the height map.
-                float mottle = Fbm(dir * 5.3 + float3(61.0, 12.0, 44.0), 4);
-                albedo *= lerp(0.88, 1.14, saturate((mottle * 0.5) + 0.5));
-
-                // Fine grain at pixel scale keeps midtones from flattening out.
-                // 480 aliased into visible speckle at the size this actually
-                // renders; 240 still does toward the limb, hence the same fade.
-                float grain = GradientNoise(dir * 240.0) * detailFade;
-                albedo *= lerp(0.94, 1.06, saturate((grain * 0.5) + 0.5));
-
-                // ---- Direct light ------------------------------------------
+                // ---- Radiance Cascades Global Illumination ----
+                // Cascade 0: Direct sun irradiance with Oren-Nayar
                 float diffuse = OrenNayar(N, L, V, _Roughness);
-
-                // Relief self-shadowing: as the sun goes grazing, slopes tilted
-                // away from it drop into shadow faster than N.L alone predicts.
-                // Both normals are taken in world space here - comparing an
-                // object-space normal against the world-space sun vector silently
-                // produces garbage as soon as the planet carries any rotation.
                 float ndlGeo = dot(geoN, L);
                 float ndlRelief = dot(N, L);
                 float grazing = saturate(1.0 - ndlGeo);
                 float shadow = saturate(1.0 - (max(0.0, ndlGeo - ndlRelief) * grazing * 1.2));
-
                 float3 sun = _SunColor.rgb * _SunIntensity;
-                float3 color = albedo * diffuse * shadow * sun;
+                float3 cascade0_Direct = albedo * diffuse * shadow * sun;
 
-                // ---- Specular glint off ponded sulfur ----------------------
-                // This is the one cue that separates liquid from a pale mineral
-                // crust at orbital distance: a mirror-smooth surface returns a
-                // single bright specular point rather than scattering. It is the
-                // same signature Cassini used to confirm Titan's lakes.
-                //
-                // A pool is flat, so the highlight is taken against the geometric
-                // normal - using the relief-perturbed normal would scatter the
-                // glint across the terrain roughness and destroy the effect.
-                float3 poolN = normalize(lerp(N, geoN, pool));
-                float3 H = normalize(L + V);
-                float specular = pow(saturate(dot(poolN, H)), _PoolGloss);
+                // Cascade 1: Grand tectonic rift magma emission & bounce
+                float crack = CrackMask(dir, elev, faultField) * lerp(0.2, 1.0, detailFade);
+                float3 hotMagma = lerp(_MagmaColor.rgb, float3(1.0, 0.90, 0.65), pow(crack, 3.0));
+                float3 riftEmission = hotMagma * crack * _MagmaIntensity;
+                float riftBounce = smoothstep(0.70, 0.95, faultField) * (1.0 - crack) * 0.35;
+                float3 cascade1_Geothermal = riftEmission + (albedo * _MagmaColor.rgb * riftBounce * _MagmaIntensity * 0.35);
 
-                // Schlick: reflectance climbs steeply at grazing angles, which is
-                // why pools near the limb flare and ones under the sub-stellar
-                // point stay subtle.
-                float fresnel = _PoolF0 + ((1.0 - _PoolF0) * pow(1.0 - saturate(dot(poolN, V)), 5.0));
+                // Cascade 2: Atmospheric multiple-scattering & twilight wrap
+                float twilightTerm = smoothstep(-0.35, 0.18, ndlGeo) * (1.0 - saturate(ndlGeo * 2.8));
+                float3 atmosphericWrap = _TwilightColor.rgb * twilightTerm * _TwilightIntensity;
+                float3 planetaryAmbient = albedo * _NightAmbient;
+                float3 cascade2_Atmosphere = (albedo * atmosphericWrap) + planetaryAmbient;
 
-                color += _PoolSpecColor.rgb * sun * specular * fresnel * pool * saturate(dot(poolN, L)) * _PoolIntensity;
-
-                // ---- Twilight ----------------------------------------------
-                // Just past the geometric terminator the ground is still lit by
-                // the dense atmosphere overhead. A thick sulfur haze scatters a
-                // lot, so this band is wide and distinctly olive.
-                float twilight = smoothstep(-0.32, 0.14, ndlGeo) * (1.0 - saturate(ndlGeo * 3.0));
-                color += albedo * _TwilightColor.rgb * twilight * _TwilightIntensity;
-
-                color += albedo * _NightAmbient;
-
-                // ---- Rift glow ---------------------------------------------
-                // Emissive, so it survives the night side untouched by N.L -
-                // which is the whole point: the rifts are the only thing you
-                // see on the dark limb.
-                // Faded toward the limb along with everything else fine: a rift is
-                // a narrow trench, so seen edge-on you are looking at its wall
-                // rather than into it, and the haze column that way is at its
-                // thickest. Left un-faded these thresholded lines broke into
-                // crawling orange dots right on the silhouette.
-                float crack = CrackMask(dir, elev, faultField) * lerp(0.15, 1.0, detailFade);
-                float3 hot = lerp(_MagmaColor.rgb, float3(1.0, 0.80, 0.42), pow(crack, 4.0));
-                color += hot * crack * _MagmaIntensity;
+                // Merge Cascades: L_total = Cascade0 + Cascade1 + Cascade2
+                float3 color = cascade0_Direct + cascade1_Geothermal + cascade2_Atmosphere;
 
                 return half4(color, 1.0);
             }

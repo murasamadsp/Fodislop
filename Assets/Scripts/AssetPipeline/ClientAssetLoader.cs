@@ -476,7 +476,7 @@ namespace Fodinae
                 if ((contents == null || contents.Length == 0) &&
                     !string.IsNullOrEmpty(assetPacket.ETag))
                 {
-                    byte[]? cachedAsset = await GetAssetAsync(assetPacket.Filename).ConfigureAwait(false);
+                    byte[]? cachedAsset = await GetAssetAsync(assetPacket.Filename);
                     if (cachedAsset == null || cachedAsset.Length == 0)
                     {
                         throw new InvalidDataException(
@@ -496,7 +496,7 @@ namespace Fodinae
                 string etag = Calculate(contents) ??
                     throw new InvalidDataException(
                         $"Asset '{filename}' produced no ETag after download.");
-                await SaveAssetAsync(assetPacket.Filename, contents, etag).ConfigureAwait(false);
+                await SaveAssetAsync(assetPacket.Filename, contents, etag);
                 _missingAssets.TryRemove(assetPacket.Filename, out _);
                 tcs.TrySetResult(contents);
             }

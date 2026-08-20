@@ -18,19 +18,14 @@ namespace Fodinae.UI
     {
         [SerializeField]
         [Tooltip("Degrees per second around the planet's own axis.")]
-        private float _degreesPerSecond = 0.35f;
+        private float _degreesPerSecond = 0f;
 
-        // Rotation is applied around the body's local up, so it follows the
-        // axial tilt the rig sets rather than the world axis - a planet turning
-        // about anything other than its own axis reads as wrong immediately.
         private void Update()
         {
-            if (Mathf.Approximately(_degreesPerSecond, 0f))
+            if (_degreesPerSecond != 0f)
             {
-                return;
+                transform.Rotate(Vector3.up, _degreesPerSecond * Time.deltaTime, Space.Self);
             }
-
-            transform.Rotate(Vector3.up, _degreesPerSecond * Time.unscaledDeltaTime, Space.Self);
         }
     }
 }

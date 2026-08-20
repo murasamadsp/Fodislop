@@ -37,10 +37,14 @@ public static class GameplayCamera
     // on demand.
     public static Camera? Resolve()
     {
-        Camera? activeCamera = ResolveIn(SceneManager.GetActiveScene());
-        if (activeCamera != null)
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (!string.Equals(activeScene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase))
         {
-            return activeCamera;
+            Camera? activeCamera = ResolveIn(activeScene);
+            if (activeCamera != null)
+            {
+                return activeCamera;
+            }
         }
 
         for (int i = 0; i < SceneManager.sceneCount; i++)
@@ -59,25 +63,19 @@ public static class GameplayCamera
         return null;
     }
 
-    // Same rules, against a caller-supplied scene.
-    //
-    // Needed because the active scene is not MainGame for the whole of that
-    // scene's startup: GameBootstrap calls SetActiveScene from PostStart, which
-    // the player loop runs after every Awake and Start in the frame. A component
-    // in MainGame that needs its camera during Start therefore cannot use the
-    // active scene, and must ask about its own.
     public static Camera? ResolveIn(Scene scene)
     {
+        if (string.Equals(scene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         Camera? tagged = Camera.main;
         if (tagged != null && IsUsable(tagged, scene))
         {
             return tagged;
         }
 
-        // Fallback for a game scene whose camera lost its tag. Deliberately not
-        // "the first enabled camera anywhere" - that is how the old workaround
-        // in TerrainRenderer could have picked the runtime-created WorldUICamera,
-        // which is an Overlay camera with a culling mask of just the UI layer.
         foreach (Camera candidate in Object.FindObjectsByType<Camera>())
         {
             if (IsUsable(candidate, scene))
@@ -96,10 +94,13 @@ public static class GameplayCamera
             return false;
         }
 
-        // Overlay cameras render into another camera's stack and have no
-        // standalone output, so one can never be "the" gameplay camera. A camera
-        // aimed at a RenderTexture is somebody's offscreen render rig - the menu
-        // planet is exactly that - and is likewise never the gameplay camera.
+        if (string.Equals(camera.gameObject.scene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase) ||
+            camera.name.Contains("Menu", System.StringComparison.OrdinalIgnoreCase) ||
+            camera.name.Contains("Backdrop", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         if (camera.targetTexture != null)
         {
             return false;

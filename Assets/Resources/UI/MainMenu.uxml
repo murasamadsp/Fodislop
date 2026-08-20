@@ -10,13 +10,14 @@
 
         <!-- МОНУМЕНТАЛЬНАЯ ПЛАНЕТАРНАЯ СИСТЕМА СПРАВА -->
         <ui:VisualElement name="MainMenuPlanetContainer" class="mm-planet-system">
-            <ui:Image name="MainMenuPlanetImage" class="mm-planet-body" />
+            <ui:Image name="MainMenuPlanetImage" class="mm-planet-body" scale-mode="ScaleToFit" />
 
             <!-- Метка станции на орбите. Позиция берётся из 3D-сцены каждый кадр
                  (MenuSceneryController.TryGetStationViewportPosition), поэтому
                  подпись едет вместе со светящейся точкой. Оформление то же, что
                  у метки высадки: маркер + плашка mm-target-badge. -->
             <ui:VisualElement name="MainMenuBeacon" class="mm-target-reticle mm-beacon">
+                <ui:VisualElement name="BeaconPing" class="mm-beacon-ping" picking-mode="Ignore" />
                 <ui:VisualElement class="mm-target-cross-v" />
                 <ui:VisualElement class="mm-target-cross-h" />
                 <ui:VisualElement name="StationBadge" class="mm-target-badge mm-target-badge--right">
@@ -29,6 +30,7 @@
             <ui:VisualElement name="TargetReticle" class="mm-target-reticle">
                 <ui:VisualElement class="mm-target-cross-v" />
                 <ui:VisualElement class="mm-target-cross-h" />
+                <ui:VisualElement class="mm-target-dot" />
                 <ui:VisualElement class="mm-target-badge">
                     <ui:Label class="mm-tb-title" text="СЕКТОР-09 [ВЫСАДКА]" />
                     <ui:Label class="mm-tb-coords" text="42.18°N // 108.44°E // 0 М" />

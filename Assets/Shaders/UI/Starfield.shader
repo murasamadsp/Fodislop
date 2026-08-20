@@ -25,12 +25,18 @@ Shader "Fodinae/UI/Starfield"
     Properties
     {
         _Density ("Star Density (cells across)", Range(10, 200)) = 96
-        _Brightness ("Brightness", Range(0, 4)) = 1.4
+        _Brightness ("Brightness", Range(0, 4)) = 1.6
         _CoreSize ("Core Size", Range(0.002, 0.08)) = 0.010
         _GlowSize ("Glow Size", Range(0.02, 0.6)) = 0.06
-        _TwinkleAmount ("Twinkle Amount", Range(0, 1)) = 0.30
-        _TwinkleSpeed ("Twinkle Speed", Range(0, 6)) = 1.4
+        _TwinkleAmount ("Twinkle Amount", Range(0, 1)) = 0.1
+        _TwinkleSpeed ("Twinkle Speed", Range(0, 10)) = 0.8
         _SkyColor ("Deep Sky Color", Color) = (0.012, 0.018, 0.032, 1)
+        _NebulaIntensity ("Nebula Intensity", Range(0, 2)) = 0.65
+        _NebulaColor1 ("Nebula Deep Indigo", Color) = (0.025, 0.055, 0.11, 1)
+        _NebulaColor2 ("Nebula Warm Dust", Color) = (0.09, 0.045, 0.025, 1)
+        _ParallaxOffset ("Parallax Offset", Vector) = (0, 0, 0, 0)
+        _ShaderTime ("Shader Time", Float) = 0
+        _Aspect ("Aspect Ratio", Float) = 1.7777
     }
 
     SubShader
@@ -57,22 +63,31 @@ Shader "Fodinae/UI/Starfield"
                 float _TwinkleAmount;
                 float _TwinkleSpeed;
                 float4 _SkyColor;
+                float _NebulaIntensity;
+                float4 _NebulaColor1;
+                float4 _NebulaColor2;
+                float4 _ParallaxOffset;
+                float _ShaderTime;
+                float _Aspect;
             CBUFFER_END
 
             struct Attributes
             {
                 float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
             };
 
             Varyings Vert(Attributes input)
             {
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = input.uv;
                 return output;
             }
 
@@ -88,6 +103,52 @@ Shader "Fodinae/UI/Starfield"
                 float3 p3 = frac(float3(p.xyx) * 0.1031);
                 p3 += dot(p3, p3.yzx + 33.33);
                 return frac((p3.x + p3.y) * p3.z);
+            }
+
+            float ValueNoise(float2 p)
+            {
+                float2 i = floor(p);
+                float2 f = frac(p);
+                float2 u = f * f * (3.0 - 2.0 * f);
+
+                float a = Hash12(i);
+                float b = Hash12(i + float2(1.0, 0.0));
+                float c = Hash12(i + float2(0.0, 1.0));
+                float d = Hash12(i + float2(1.0, 1.0));
+
+                return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+            }
+
+            float NebulaFbm(float2 p)
+            {
+                float val = 0.0;
+                float amp = 0.5;
+                float2 shift = float2(100.0, 100.0);
+                [unroll]
+                for (int i = 0; i < 3; i++)
+                {
+                    val += amp * ValueNoise(p);
+                    p = (p * 2.1) + shift;
+                    amp *= 0.5;
+                }
+
+                return val;
+            }
+
+            float3 EvaluateNebula(float2 uv)
+            {
+                float2 p = uv * 1.5;
+                float2 warp = float2(
+                    NebulaFbm(p),
+                    NebulaFbm(p + float2(5.2, 1.3)));
+
+                float n1 = NebulaFbm(p + (warp * 0.7));
+
+                float dustMask = smoothstep(0.34, 0.76, n1);
+                float gasMask = smoothstep(0.42, 0.82, n1 * 1.15);
+
+                float3 nebula = (dustMask * _NebulaColor1.rgb) + (gasMask * _NebulaColor2.rgb * 0.65);
+                return nebula * _NebulaIntensity;
             }
 
             // Rough main-sequence colour ramp, blue-white through to red dwarf.
@@ -115,6 +176,7 @@ Shader "Fodinae/UI/Starfield"
                 float2 local = frac(grid);
 
                 float3 accum = 0.0;
+                float activeTime = _ShaderTime > 0.0 ? _ShaderTime : _Time.y;
 
                 [unroll]
                 for (int oy = -1; oy <= 1; oy++)
@@ -151,18 +213,17 @@ Shader "Fodinae/UI/Starfield"
                         float wing = radius / (radius + (dist * dist * 42.0));
                         float shape = core + (wing * 0.10);
 
-                        // Scintillation. Two incommensurate rates per star so
-                        // the field never visibly loops, and faint stars flicker
-                        // proportionally harder - which is what the eye expects.
+                        // In deep space vacuum, stars do NOT twinkle: there is no atmosphere
+                        // to refract light. Stars shine with pure, static crystal clarity.
+                        // Micro-sensor variation is available if _TwinkleAmount > 0.
                         float phase = Hash12(id + 3.77) * 6.2831853;
-                        float rate = 0.6 + (Hash12(id + 11.3) * 1.8);
-                        float t = _Time.y * _TwinkleSpeed * rate;
-                        float flicker = (sin(t + phase) * 0.6) + (sin((t * 1.618) + (phase * 2.1)) * 0.4);
-                        float amount = _TwinkleAmount * lerp(1.0, 0.35, mag);
-                        float twinkle = 1.0 + (flicker * amount);
+                        float rate = 0.5 + (Hash12(id + 11.3) * 1.5);
+                        float t = (activeTime * _TwinkleSpeed * rate);
+                        float sensorBreathing = sin(t + phase) * 0.05;
+                        float twinkle = 1.0 + (sensorBreathing * _TwinkleAmount);
 
                         float3 color = StarColor(Hash12(id + 5.19));
-                        accum += color * shape * mag * max(twinkle, 0.0);
+                        accum += color * shape * (mag + 0.03) * twinkle;
                     }
                 }
 
@@ -171,18 +232,15 @@ Shader "Fodinae/UI/Starfield"
 
             half4 Frag(Varyings input) : SV_Target
             {
-                // Screen-space UV with the aspect folded in, so stars stay round
-                // and the field does not stretch when the window is resized.
-                float2 uv = input.positionCS.xy / _ScreenParams.xy;
-                uv.x *= _ScreenParams.x / max(_ScreenParams.y, 1.0);
+                float2 uv = input.uv + _ParallaxOffset.xy;
+                uv.x *= (_Aspect > 0.01 ? _Aspect : 1.7777);
 
-                // Two layers at different scales: a dense faint field plus a
-                // sparser bright one. A single layer always reads as a regular
-                // lattice no matter how much the cells are jittered.
+                float3 nebula = EvaluateNebula(uv);
+
                 float3 stars = StarLayer(uv, _Density, _CoreSize, 0.0);
                 stars += StarLayer(uv, _Density * 0.43, _GlowSize * 0.22, 41.7) * 1.6;
 
-                float3 color = _SkyColor.rgb + (stars * _Brightness);
+                float3 color = _SkyColor.rgb + nebula + (stars * _Brightness);
                 return half4(color, 1.0);
             }
             ENDHLSL

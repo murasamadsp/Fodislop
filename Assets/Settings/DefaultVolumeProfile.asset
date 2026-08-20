@@ -848,6 +848,12 @@ MonoBehaviour:
   saturation:
     m_OverrideState: 1
     m_Value: 1
+  toneMapping:
+    m_OverrideState: 1
+    m_Value: 0
+  toneMappingWhitePoint:
+    m_OverrideState: 1
+    m_Value: 0.25
 --- !u!114 &5762530381802164056
 MonoBehaviour:
   m_ObjectHideFlags: 3

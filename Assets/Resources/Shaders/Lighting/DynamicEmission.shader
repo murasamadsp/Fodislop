@@ -84,8 +84,14 @@ Shader "Hidden/Fodinae/DynamicEmission"
             {
                 float radius = input.centerRadius.z;
                 float dist = length(input.worldPosition - input.centerRadius.xy);
-                float atten = saturate(1.0 - (dist / radius));
-                atten = atten * atten;
+
+                // Inverse-square law falloff with smooth radius windowing (Karis / Frostbite)
+                float d = dist / max(_CellSize, 0.001);
+                float distRatio = dist / max(radius, 0.001);
+                float window = saturate(1.0 - (distRatio * distRatio * distRatio * distRatio));
+                float smoothWindow = window * window;
+
+                float atten = smoothWindow / (d * d + 1.0);
 
                 // Alpha stays zero: the pass blends One One into a field whose
                 // alpha the ray march never reads, and adding coverage there

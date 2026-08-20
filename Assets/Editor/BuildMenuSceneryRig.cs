@@ -110,7 +110,7 @@ namespace Fodinae.Editor
             // the planet could never read as large in the menu no matter how
             // big the UI element got. 34 puts the disc at ~70% of the frame
             // while still leaving room for the orbit ring and its bloom.
-            cam.fieldOfView = 34f;
+            cam.fieldOfView = 36f;
             cam.nearClipPlane = 0.3f;
             cam.farClipPlane = 60f;
             cam.cullingMask = 1 << layer;
@@ -118,17 +118,8 @@ namespace Fodinae.Editor
             cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
             cam.allowHDR = true;
 
-            // Deeper than the display/backdrop camera (-100). This camera renders
-            // into a RenderTexture, never the screen, so its depth is invisible to
-            // the final image - but URP draws the UI Toolkit overlay only after the
-            // LAST base camera that resolves to the screen (rendersOverlayUI &&
-            // isLastBaseCamera in UniversalRendererRenderGraph). If this camera
-            // sorted after the backdrop, the backdrop would never get the overlay
-            // pass and the menu would be a black screen with no UI at all. The
-            // game camera sits at depth -1, so it stays the last base camera once
-            // the game scene loads and keeps its own UI overlay.
             cam.depth = -101f;
-            camObj.transform.localPosition = new Vector3(0f, 0f, -7.2f);
+            camObj.transform.localPosition = new Vector3(0f, 0f, -7.5f);
             camObj.transform.localRotation = Quaternion.identity;
 
             // The gameplay camera gets this same volumeLayerMask/volumeTrigger
@@ -191,7 +182,7 @@ namespace Fodinae.Editor
             // approaching the terminator, so a wide band reads as dark long
             // before it is unlit. 0.42 was geometrically 71% lit but looked
             // half-dark for exactly that reason.
-            Vector3 sunDir = new Vector3(-0.766f, 0.16f, -0.62f).normalized;
+            Vector3 sunDir = new Vector3(-0.68f, 0.24f, 0.52f).normalized;
 
             // Radii must agree with PlanetAtmosphere's _PlanetRadiusRatio, which
             // is what tells the ray-march where the crust is. Derived here from
@@ -213,7 +204,7 @@ namespace Fodinae.Editor
             ConfigureSpin(planetSurface, 0.35f);
 
             GameObject atmosphere = FindOrCreatePrimitive(root, "PlanetAtmosphere", PrimitiveType.Sphere);
-            atmosphere.transform.localPosition = Vector3.zero;
+            atmosphere.transform.localPosition = planetSurface.transform.localPosition;
             atmosphere.transform.localScale = Vector3.one * shellScale;
 
             // Same axial tilt as the crust. The haze itself is spherically
@@ -542,22 +533,27 @@ namespace Fodinae.Editor
             // exposure and the tint is warm rather than neutral white.
             var bloom = profile.Add<BloomComponent>(true);
             bloom.intensity.overrideState = true;
-            bloom.intensity.value = 0.30f;
+            bloom.intensity.value = 0.58f;
             bloom.threshold.overrideState = true;
-            bloom.threshold.value = 1.5f;
+            bloom.threshold.value = 1.15f;
             bloom.scatter.overrideState = true;
-            bloom.scatter.value = 0.55f;
+            bloom.scatter.value = 0.70f;
             bloom.tint.overrideState = true;
-            bloom.tint.value = new Color(1f, 0.86f, 0.62f);
+            bloom.tint.value = new Color(1f, 0.88f, 0.72f);
             bloom.active = true;
+
+            var chromatic = profile.Add<ChromaticAberrationComponent>(true);
+            chromatic.intensity.overrideState = true;
+            chromatic.intensity.value = 0.18f;
+            chromatic.active = true;
 
             var vignette = profile.Add<VignetteComponent>(true);
             vignette.intensity.overrideState = true;
-            vignette.intensity.value = 0.35f;
+            vignette.intensity.value = 0.28f;
             vignette.color.overrideState = true;
             vignette.color.value = Color.black;
             vignette.smoothness.overrideState = true;
-            vignette.smoothness.value = 0.6f;
+            vignette.smoothness.value = 0.70f;
             vignette.center.overrideState = true;
             vignette.center.value = new Vector2(0.5f, 0.5f);
             vignette.active = true;
@@ -566,20 +562,16 @@ namespace Fodinae.Editor
             colorGrading.exposure.overrideState = true;
             colorGrading.exposure.value = 0f;
             colorGrading.colorFilter.overrideState = true;
-            colorGrading.colorFilter.value = new Color(1.02f, 1f, 0.94f);
+            colorGrading.colorFilter.value = new Color(1.03f, 1f, 0.98f);
             colorGrading.contrast.overrideState = true;
-            colorGrading.contrast.value = 0.06f;
+            colorGrading.contrast.value = 0.14f;
             colorGrading.saturation.overrideState = true;
-            colorGrading.saturation.value = 1.02f;
+            colorGrading.saturation.value = 1.10f;
 
-            // Tone mapping ON. The scene is genuinely HDR now (sunlit limb and
-            // rift glow run well past 1.0), and a linear clip turns those into
-            // flat blown-out patches with hard edges - the single biggest
-            // "rendered in 2003" tell.
             colorGrading.toneMapping.overrideState = true;
             colorGrading.toneMapping.value = true;
             colorGrading.toneMappingWhitePoint.overrideState = true;
-            colorGrading.toneMappingWhitePoint.value = 4.0f;
+            colorGrading.toneMappingWhitePoint.value = 3.2f;
             colorGrading.active = true;
 
             EditorUtility.SetDirty(profile);

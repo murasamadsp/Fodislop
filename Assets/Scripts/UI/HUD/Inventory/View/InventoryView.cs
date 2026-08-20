@@ -100,7 +100,12 @@ namespace Fodinae.UI.HUD.Inventory.View
                 return;
             }
 
-            if (_inputBlocker == null || _inputBlocker.IsInputBlocked)
+            if (Keyboard.current.tabKey.wasPressedThisFrame)
+            {
+                ToggleInventory();
+            }
+
+            if (_inputBlocker != null && _inputBlocker.IsInputBlocked)
             {
                 return;
             }
@@ -149,47 +154,38 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void TryInitialize()
         {
-            if (_initialized || _session == null || _session.Current == null)
+            if (_initialized)
             {
                 return;
             }
 
-            _doc ??= FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
+            _doc ??= SessionAccess.Resolve()?.TryResolve<UIDocument>() ??
+                     FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null)
             {
-                if (!Application.isPlaying)
-                {
-                    return;
-                }
-
-                throw new InvalidOperationException(
-                    "[InventoryUI] UIDocument must be injected and have a root before initialization.");
+                return;
             }
 
-            IInventoryModel? model = _session.TryResolve<IInventoryModel>();
-            if (model == null)
+            _model ??= SessionAccess.Resolve()?.TryResolve<IInventoryModel>();
+            if (_model == null)
             {
                 if (!Application.isPlaying)
                 {
-                    model = new InventoryModel();
+                    _model = new InventoryModel();
                 }
                 else
                 {
-                    // Не бросаем: модель может зарегистрироваться позже (порядок DI-сборки
-                    // не гарантирован). Update ретраит TryInitialize — ждём молча, иначе
-                    // каждый кадр до регистрации будет сыпать исключениями.
                     return;
                 }
             }
 
-            _model = model;
-
-            model.OnSlotChanged += RefreshSlot;
-            model.OnSlotSelected += OnModelSlotSelected;
+            _model.OnSlotChanged += RefreshSlot;
+            _model.OnSlotSelected += OnModelSlotSelected;
 
             CreateTooltip(_doc.rootVisualElement);
             BuildUI();
             _initialized = true;
+            Debug.Log("[InventoryView] Initialized successfully.");
         }
 
         private void OnModelSlotSelected(int slotIndex)
@@ -254,70 +250,44 @@ namespace Fodinae.UI.HUD.Inventory.View
         {
             var root = _doc.rootVisualElement;
 
-            CreateFullInventoryPanel(root);
-            CreateHotbar(root);
-        }
-
-        private void CreateHotbar(VisualElement root)
-        {
-            _hotbarContainer = new VisualElement();
-            _hotbarContainer.name = "HotbarContainer";
-            _hotbarContainer.AddToClassList("inv-hotbar");
-
-            for (int i = 0; i < HOTBAR_COLS; i++)
+            var uxml = Resources.Load<VisualTreeAsset>("UI/Inventory");
+            if (uxml != null)
             {
-                var cell = CreateCell(i, $"Hotbar_{i}");
-                _hotbarContainer.Add(cell);
+                var tree = uxml.CloneTree();
+                root.Add(tree);
+
+                _hotbarContainer = tree.Q<VisualElement>("HotbarContainer");
+                var hotbarSlots = tree.Q<VisualElement>("HotbarSlots") ?? _hotbarContainer;
+                for (int i = 0; i < HOTBAR_COLS; i++)
+                {
+                    var cell = CreateCell(i, $"Hotbar_{i}");
+                    hotbarSlots.Add(cell);
+                }
+
+                _inventoryButton = tree.Q<Button>("InventoryToggleBtn");
+                if (_inventoryButton != null)
+                {
+                    _inventoryButton.clicked += ToggleInventory;
+                }
+
+                _fullInventoryPanel = tree.Q<VisualElement>("FullInventoryPanel");
+                var closeBtn = tree.Q<Button>("CloseInventoryBtn");
+                if (closeBtn != null)
+                {
+                    closeBtn.clicked += ToggleInventory;
+                }
+
+                var inventoryGrid = tree.Q<VisualElement>("InventoryGrid");
+                if (inventoryGrid != null)
+                {
+                    var grid = CreateGrid(0, InventoryModel.TOTALSLOTS - 1, "Inv");
+                    inventoryGrid.Add(grid);
+                }
             }
-
-            _inventoryButton = CreateInventoryButton();
-            _hotbarContainer.Add(_inventoryButton);
-
-            root.Add(_hotbarContainer);
-        }
-
-
-        private void CreateFullInventoryPanel(VisualElement root)
-        {
-            _fullInventoryPanel = new VisualElement();
-            _fullInventoryPanel.name = "FullInventoryPanel";
-            _fullInventoryPanel.AddToClassList("inv-full-panel");
-            _fullInventoryPanel.style.display = DisplayStyle.None;
-
-            var panelBg = new VisualElement();
-            panelBg.name = "PanelBackground";
-            panelBg.AddToClassList("inv-full-bg");
-
-            var closeBtn = new Button();
-            closeBtn.name = "CloseButton";
-            closeBtn.AddToClassList("inv-close-btn");
-
-            var closeLabel = new Label("×");
-            closeLabel.AddToClassList("inv-close-label");
-            closeLabel.pickingMode = PickingMode.Ignore;
-            closeBtn.Add(closeLabel);
-
-            closeBtn.clicked += ToggleInventory;
-            panelBg.Add(closeBtn);
-
-            var titleLabel = new Label("Inventory");
-            titleLabel.AddToClassList("inv-title");
-            panelBg.Add(titleLabel);
-
-            var inventoryGrid = CreateGrid(9, InventoryModel.TOTALSLOTS - 1, "Inv");
-            panelBg.Add(inventoryGrid);
-
-            var separator = new VisualElement();
-            separator.AddToClassList("inv-separator");
-            separator.style.width = (INVENTORY_COLS * CELLSIZE) + ((INVENTORY_COLS - 1) * CELL_GAP);
-            panelBg.Add(separator);
-
-            var hotbarInPanel = CreateGrid(0, 8, "PanelHotbar");
-            panelBg.Add(hotbarInPanel);
-
-            _fullInventoryPanel.Add(panelBg);
-
-            root.Add(_fullInventoryPanel);
+            else
+            {
+                throw new InvalidOperationException("[InventoryView] Failed to load UI/Inventory.uxml");
+            }
         }
 
         private VisualElement CreateGrid(int fromSlot, int toSlot, string prefix)
@@ -352,6 +322,31 @@ namespace Fodinae.UI.HUD.Inventory.View
             cell.name = name;
             cell.userData = slotIndex;
             cell.AddToClassList("inv-cell");
+            cell.style.width = CELLSIZE;
+            cell.style.height = CELLSIZE;
+            cell.style.minWidth = CELLSIZE;
+            cell.style.minHeight = CELLSIZE;
+            cell.style.flexShrink = 0;
+            cell.style.flexGrow = 0;
+            cell.style.marginRight = 3;
+            cell.style.marginLeft = 3;
+            cell.style.marginTop = 3;
+            cell.style.marginBottom = 3;
+            cell.style.backgroundColor = new Color(0.08f, 0.1f, 0.15f, 0.85f);
+            cell.style.borderTopWidth = 1;
+            cell.style.borderBottomWidth = 1;
+            cell.style.borderLeftWidth = 1;
+            cell.style.borderRightWidth = 1;
+            cell.style.borderTopColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
+            cell.style.borderBottomColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
+            cell.style.borderLeftColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
+            cell.style.borderRightColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
+            cell.style.borderTopLeftRadius = 4;
+            cell.style.borderTopRightRadius = 4;
+            cell.style.borderBottomLeftRadius = 4;
+            cell.style.borderBottomRightRadius = 4;
+            cell.style.justifyContent = Justify.Center;
+            cell.style.alignItems = Align.Center;
 
             // Иконка-кружок
             var icon = new VisualElement();
@@ -552,7 +547,15 @@ namespace Fodinae.UI.HUD.Inventory.View
             var btn = new Button();
             btn.name = "InventoryButton";
             btn.AddToClassList("inv-button");
-            btn.text = string.Empty;
+            btn.tooltip = "Открыть инвентарь (Tab)";
+
+            var label = new Label("☰");
+            label.AddToClassList("inv-button-label");
+            label.style.fontSize = 24;
+            label.style.color = Color.white;
+            label.style.unityTextAlign = TextAnchor.MiddleCenter;
+            label.pickingMode = PickingMode.Ignore;
+            btn.Add(label);
 
             btn.clicked += ToggleInventory;
             return btn;
@@ -561,7 +564,10 @@ namespace Fodinae.UI.HUD.Inventory.View
         private void ToggleInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
-            _fullInventoryPanel!.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            if (_fullInventoryPanel != null)
+            {
+                _fullInventoryPanel.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            }
         }
 
         public IInventoryModel? GetModel() => _model;

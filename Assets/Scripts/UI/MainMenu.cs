@@ -63,6 +63,7 @@ namespace Fodinae
         private VisualElement? _mainMenuContainer;
         private VisualElement? _loaderContainer;
         private VisualElement? _beacon;
+        private VisualElement? _beaconPing;
         private VisualElement? _stationBadge;
         private VisualElement? _targetReticle;
         private Image? _loaderImage;
@@ -241,6 +242,7 @@ namespace Fodinae
             _spaceBgImage = tree.Q<Image>("SpaceBgImage");
             _planetBodyImage = tree.Q<Image>("MainMenuPlanetImage");
             _beacon = tree.Q<VisualElement>("MainMenuBeacon");
+            _beaconPing = tree.Q<VisualElement>("BeaconPing");
             _stationBadge = tree.Q<VisualElement>("StationBadge");
             _targetReticle = tree.Q<VisualElement>("TargetReticle");
             _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer");
@@ -433,9 +435,26 @@ namespace Fodinae
                 _starfield = UnityEngine.Object.FindAnyObjectByType<MenuStarfield>(FindObjectsInactive.Include);
             }
 
-            if (_starfield != null && _starfield.Texture != null)
+            if (_starfield != null)
             {
-                if (!ReferenceEquals(_spaceBgImage.image, _starfield.Texture))
+                float resolvedWidth = _spaceBgImage.resolvedStyle.width;
+                float resolvedHeight = _spaceBgImage.resolvedStyle.height;
+                if (float.IsNaN(resolvedWidth) || resolvedWidth <= 0f)
+                {
+                    resolvedWidth = Screen.width > 0 ? Screen.width : 1920;
+                }
+
+                if (float.IsNaN(resolvedHeight) || resolvedHeight <= 0f)
+                {
+                    resolvedHeight = Screen.height > 0 ? Screen.height : 1080;
+                }
+
+                float panelScale = _spaceBgImage.panel?.scaledPixelsPerPoint ?? 1f;
+                _starfield.SetDisplaySize(
+                    Mathf.RoundToInt(resolvedWidth * panelScale),
+                    Mathf.RoundToInt(resolvedHeight * panelScale));
+
+                if (_starfield.Texture != null && !ReferenceEquals(_spaceBgImage.image, _starfield.Texture))
                 {
                     _spaceBgImage.image = _starfield.Texture;
                 }
@@ -483,14 +502,20 @@ namespace Fodinae
             // 860 device pixels on every display.
             float resolvedWidth = _planetBodyImage.resolvedStyle.width;
             float resolvedHeight = _planetBodyImage.resolvedStyle.height;
-            if (!float.IsNaN(resolvedWidth) && !float.IsNaN(resolvedHeight) &&
-                resolvedWidth > 0f && resolvedHeight > 0f)
+            if (float.IsNaN(resolvedWidth) || resolvedWidth <= 0f)
             {
-                float panelScale = _planetBodyImage.panel?.scaledPixelsPerPoint ?? 1f;
-                _scenery.SetDisplaySize(
-                    Mathf.RoundToInt(resolvedWidth * panelScale),
-                    Mathf.RoundToInt(resolvedHeight * panelScale));
+                resolvedWidth = Screen.width > 0 ? Screen.width : 1920;
             }
+
+            if (float.IsNaN(resolvedHeight) || resolvedHeight <= 0f)
+            {
+                resolvedHeight = Screen.height > 0 ? Screen.height : 1080;
+            }
+
+            float panelScale = _planetBodyImage.panel?.scaledPixelsPerPoint ?? 1f;
+            _scenery.SetDisplaySize(
+                Mathf.RoundToInt(resolvedWidth * panelScale),
+                Mathf.RoundToInt(resolvedHeight * panelScale));
 
             if (_scenery.OutputTexture != null &&
                 !ReferenceEquals(_planetBodyImage.image, _scenery.OutputTexture))
@@ -503,11 +528,37 @@ namespace Fodinae
 
         private static Texture2D? LoadDirectTexture(string assetPath)
         {
-            string absolutePath = assetPath.StartsWith("Assets/", StringComparison.Ordinal)
-                ? Path.Combine(Application.dataPath, assetPath.Substring("Assets/".Length))
-                : assetPath;
-            bool exists = File.Exists(absolutePath);
-            if (!exists)
+            string relativePath = assetPath.StartsWith("Assets/Textures/", StringComparison.Ordinal)
+                ? assetPath.Substring("Assets/Textures/".Length)
+                : (assetPath.StartsWith("Assets/", StringComparison.Ordinal)
+                    ? assetPath.Substring("Assets/".Length)
+                    : assetPath);
+
+            string[] candidatePaths =
+            [
+                assetPath.StartsWith("Assets/", StringComparison.Ordinal)
+                    ? Path.Combine(Application.dataPath, assetPath.Substring("Assets/".Length))
+                    : assetPath,
+                Path.Combine(Application.dataPath, "Textures", relativePath),
+                Path.Combine(Application.dataPath, "Resources", "Data", "Textures", relativePath),
+                Path.Combine(Application.dataPath, "..", "Resources", "Data", "Textures", relativePath),
+                Path.Combine(Application.dataPath, "..", "Textures", relativePath),
+                Path.Combine(Application.streamingAssetsPath, "Textures", relativePath),
+                Path.Combine(Application.streamingAssetsPath, "..", "Textures", relativePath),
+                Path.Combine(Application.dataPath, relativePath),
+            ];
+
+            string? absolutePath = null;
+            foreach (string candidate in candidatePaths)
+            {
+                if (File.Exists(candidate))
+                {
+                    absolutePath = candidate;
+                    break;
+                }
+            }
+
+            if (absolutePath == null)
             {
                 return null;
             }
@@ -655,6 +706,7 @@ namespace Fodinae
             // fixed spot with a decorative bob, so the label and the glowing point
             // stay the same object.
             UpdateStationMarker();
+            UpdateLandingSectorMarker();
 
             if (_targetReticle != null)
             {
@@ -733,6 +785,15 @@ namespace Fodinae
 
             _beacon.style.display = DisplayStyle.Flex;
 
+            if (_beaconPing != null)
+            {
+                float pingPhase = (Time.time * 0.4f) % 1.0f;
+                float pingScale = Mathf.Lerp(1.0f, 2.5f, pingPhase);
+                float pingAlpha = Mathf.Sin(pingPhase * Mathf.PI) * 0.8f;
+                _beaconPing.style.scale = new Scale(new Vector2(pingScale, pingScale));
+                _beaconPing.style.opacity = pingAlpha;
+            }
+
             // Viewport Y is bottom-up, UI Toolkit Y is top-down.
             float x = rect.x + (viewport.x * rect.width);
             float y = rect.y + ((1f - viewport.y) * rect.height);
@@ -742,6 +803,33 @@ namespace Fodinae
             const float markerHalfSize = 11f;
             _beacon.style.left = x - markerHalfSize;
             _beacon.style.top = y - markerHalfSize;
+        }
+
+        private void UpdateLandingSectorMarker()
+        {
+            if (_targetReticle == null || _planetBodyImage == null)
+            {
+                return;
+            }
+
+            var landingSiteDir = new Vector3(-0.48f, 0.10f, -0.87f);
+            if (_scenery == null || !_scenery.TryGetPlanetSurfaceViewportPosition(landingSiteDir, out Vector2 viewport))
+            {
+                return;
+            }
+
+            Rect rect = _planetBodyImage.layout;
+            if (rect.width <= 0f || rect.height <= 0f)
+            {
+                return;
+            }
+
+            float x = rect.x + (viewport.x * rect.width);
+            float y = rect.y + ((1f - viewport.y) * rect.height);
+
+            const float markerHalfSize = 11f;
+            _targetReticle.style.left = x - markerHalfSize;
+            _targetReticle.style.top = y - markerHalfSize;
         }
 
         private void HandleKeyboardInput()
@@ -1319,6 +1407,7 @@ namespace Fodinae
             CloseCurrentModal();
             _dismissedForServerWindow = false;
             _loadingActive = true;
+
             if (_loaderContainer != null)
             {
                 // LoaderContainer скрыт display:none по умолчанию (UXML inline + USS .mm-loader).

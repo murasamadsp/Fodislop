@@ -516,12 +516,23 @@ namespace Fodinae.UI
             }));
 #endif
 
+            var graphicsRefreshers = new List<Action>();
             audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master));
             audioSection.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX));
             audioSection.Add(CreateAudioSlider("Музыка", AudioBusType.Music));
             audioSection.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience));
             audioSection.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice));
             audioSection.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI));
+            Toggle muteInBackgroundToggle = CreateBoundToggle(
+                "Глушить звук в фоне",
+                () => _clientConfig.Config.MuteAudioInBackground,
+                value =>
+                {
+                    _clientConfig.Config.MuteAudioInBackground = value;
+                    _clientConfig.Save();
+                },
+                graphicsRefreshers);
+            audioSection.Add(muteInBackgroundToggle);
 
             interfaceSection.Add(CreateSlider(
                 "Масштаб UI",
@@ -533,11 +544,6 @@ namespace Fodinae.UI
                     if (_doc != null && _doc.panelSettings != null)
                     {
                         _doc.panelSettings.scale = v;
-                    }
-
-                    foreach (var canvas in FindObjectsByType<Canvas>())
-                    {
-                        canvas.scaleFactor = v;
                     }
                 },
                 0.5f,
@@ -600,7 +606,6 @@ namespace Fodinae.UI
             UpdateResolutionButton();
             displaySection.Add(resolutionButton);
 
-            var graphicsRefreshers = new List<Action>();
             Foldout customGraphicsSection = null!;
             string[] graphicsPresetNames =
             [
@@ -1191,8 +1196,6 @@ namespace Fodinae.UI
             debugSection.Add(resetLightingPreferences);
 #endif
 
-            graphicsSection.Add(CreateLabel("Визуальные эффекты"));
-
             _postProcessController.EnsureVolumeSetup();
             var pp = _postProcessController;
             void SavePostProcess(Action apply)
@@ -1202,7 +1205,7 @@ namespace Fodinae.UI
                 _clientConfig.Save();
             }
 
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Свечение",
                 () => _clientConfig.Config.BloomIntensity,
                 value => SavePostProcess(() =>
@@ -1213,7 +1216,7 @@ namespace Fodinae.UI
                 0f,
                 5f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Порог свечения",
                 () => _clientConfig.Config.BloomThreshold,
                 value => SavePostProcess(() =>
@@ -1224,7 +1227,7 @@ namespace Fodinae.UI
                 0f,
                 2f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Рассеивание свечения",
                 () => _clientConfig.Config.BloomScatter,
                 value => SavePostProcess(() =>
@@ -1235,7 +1238,7 @@ namespace Fodinae.UI
                 0.1f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цвет свечения",
                 () => _clientConfig.Config.BloomTint,
                 value => SavePostProcess(() =>
@@ -1246,7 +1249,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Виньетка",
                 () => _clientConfig.Config.VignetteIntensity,
                 value => SavePostProcess(() =>
@@ -1257,7 +1260,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Мягкость виньетки",
                 () => _clientConfig.Config.VignetteSmoothness,
                 value => SavePostProcess(() =>
@@ -1268,33 +1271,7 @@ namespace Fodinae.UI
                 0.01f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Центр виньетки X",
-                () => _clientConfig.Config.VignetteCenter.x,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteCenter = new Vector2(
-                        value,
-                        _clientConfig.Config.VignetteCenter.y);
-                    pp.ApplyClientConfig();
-                }),
-                0f,
-                1f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Центр виньетки Y",
-                () => _clientConfig.Config.VignetteCenter.y,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteCenter = new Vector2(
-                        _clientConfig.Config.VignetteCenter.x,
-                        value);
-                    pp.ApplyClientConfig();
-                }),
-                0f,
-                1f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цвет виньетки",
                 () => _clientConfig.Config.VignetteColor,
                 value => SavePostProcess(() =>
@@ -1305,7 +1282,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Хроматическая аберрация",
                 () => _clientConfig.Config.ChromaticAberrationIntensity,
                 value => SavePostProcess(() =>
@@ -1316,7 +1293,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Экспозиция",
                 () => _clientConfig.Config.ColorGradingExposure,
                 value => SavePostProcess(() =>
@@ -1327,7 +1304,7 @@ namespace Fodinae.UI
                 -4f,
                 4f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Контраст",
                 () => _clientConfig.Config.ColorGradingContrast,
                 value => SavePostProcess(() =>
@@ -1338,7 +1315,7 @@ namespace Fodinae.UI
                 -1f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Насыщенность",
                 () => _clientConfig.Config.ColorGradingSaturation,
                 value => SavePostProcess(() =>
@@ -1358,8 +1335,8 @@ namespace Fodinae.UI
                     pp.ApplyClientConfig();
                 }),
                 graphicsRefreshers);
-            graphicsSection.Add(toneMappingToggle);
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(toneMappingToggle);
+            postProcessSection.Add(CreateBoundSlider(
                 "Белая точка tone mapping",
                 () => _clientConfig.Config.ColorGradingToneMappingWhitePoint,
                 value => SavePostProcess(() =>
@@ -1370,7 +1347,7 @@ namespace Fodinae.UI
                 0.25f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цветовой фильтр",
                 () => _clientConfig.Config.ColorGradingFilter,
                 value => SavePostProcess(() =>
@@ -1381,7 +1358,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Зернистость",
                 () => _clientConfig.Config.EigengrauIntensity,
                 value => SavePostProcess(() =>
@@ -1392,40 +1369,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Порог тёмных областей зернистости",
-                () => _clientConfig.Config.EigengrauDarknessThreshold,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauDarknessThreshold = value;
-                    pp.ApplyClientConfig();
-                }),
-                0.02f,
-                0.75f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Масштаб зернистости",
-                () => _clientConfig.Config.EigengrauNoiseScale,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauNoiseScale = value;
-                    pp.ApplyClientConfig();
-                }),
-                0.75f,
-                2f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Скорость зернистости",
-                () => _clientConfig.Config.EigengrauAnimationSpeed,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauAnimationSpeed = value;
-                    pp.ApplyClientConfig();
-                }),
-                1f,
-                60f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цвет зернистости",
                 () => _clientConfig.Config.EigengrauColor,
                 value => SavePostProcess(() =>
@@ -1436,7 +1380,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Размытие движения",
                 () => _clientConfig.Config.MotionBlurIntensity,
                 value => SavePostProcess(() =>
@@ -1447,48 +1391,14 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Сэмплы размытия движения",
-                () => _clientConfig.Config.MotionBlurMaxSamples,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.MotionBlurMaxSamples = Mathf.Clamp(
-                        Mathf.RoundToInt(value),
-                        2,
-                        32);
-                    pp.ApplyClientConfig();
-                }),
-                2f,
-                32f,
-                graphicsRefreshers));
+
             void SaveShaderSetting(Action apply)
             {
                 apply();
                 _graphicsSettings.ApplyCustomWorldMaterialSettings();
             }
 
-            graphicsSection.Add(CreateLabel("Материалы мира"));
-            graphicsSection.Add(CreateBoundSlider(
-                "Масштаб flow X",
-                () => _clientConfig.Config.TerrainFlowScale.x,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainFlowScale = new Vector2(
-                        value,
-                        _clientConfig.Config.TerrainFlowScale.y)),
-                0.001f,
-                1024f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Масштаб flow Y",
-                () => _clientConfig.Config.TerrainFlowScale.y,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainFlowScale = new Vector2(
-                        _clientConfig.Config.TerrainFlowScale.x,
-                        value)),
-                0.001f,
-                1024f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Скорость shimmer террейна",
                 () => _clientConfig.Config.TerrainShimmerSpeedScale,
                 value => SaveShaderSetting(() =>
@@ -1496,7 +1406,7 @@ namespace Fodinae.UI
                 0f,
                 10f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет shimmer террейна",
                 () => _clientConfig.Config.TerrainShimmerColor,
                 value => SaveShaderSetting(() =>
@@ -1504,22 +1414,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
-                "Диагностический цвет террейна",
-                () => _clientConfig.Config.TerrainDebugColor,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainDebugColor = value),
-                0f,
-                8f,
-                graphicsRefreshers));
-            Toggle terrainDebugToggle = CreateBoundToggle(
-                "Диагностический режим террейна",
-                () => _clientConfig.Config.TerrainDebugMode,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainDebugMode = value),
-                graphicsRefreshers);
-            graphicsSection.Add(terrainDebugToggle);
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Скорость пульсации террейна",
                 () => _clientConfig.Config.TerrainPulseSpeedScale,
                 value => SaveShaderSetting(() =>
@@ -1527,7 +1422,7 @@ namespace Fodinae.UI
                 0f,
                 10f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Излучение поверхности мира",
                 () => _clientConfig.Config.TransitEmissionStrength,
                 value => SaveShaderSetting(() =>
@@ -1535,7 +1430,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет излучения поверхности",
                 () => _clientConfig.Config.TransitEmissionColor,
                 value => SaveShaderSetting(() =>
@@ -1543,7 +1438,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Излучение дальней поверхности",
                 () => _clientConfig.Config.PerspectiveEmissionStrength,
                 value => SaveShaderSetting(() =>
@@ -1551,7 +1446,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет дальней поверхности",
                 () => _clientConfig.Config.PerspectiveEmissionColor,
                 value => SaveShaderSetting(() =>
@@ -1559,23 +1454,6 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Физическая плотность поверхности",
-                () => _clientConfig.Config.SurfaceOccupancy,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.SurfaceOccupancy = value),
-                0f,
-                1f,
-                graphicsRefreshers));
-
-            MoveChildrenStartingAt(
-                graphicsSection,
-                "Визуальные эффекты",
-                postProcessSection);
-            MoveChildrenStartingAt(
-                postProcessSection,
-                "Материалы мира",
-                worldMaterialsSection);
 
             displayScroll.contentContainer.Add(displaySection);
             graphicsScroll.contentContainer.Add(graphicsSection);
@@ -1671,36 +1549,6 @@ namespace Fodinae.UI
             descriptionLabel.AddToClassList("settings-section__description");
             section.Add(descriptionLabel);
             return section;
-        }
-
-        private static void MoveChildrenStartingAt(
-            VisualElement source,
-            string markerText,
-            VisualElement destination)
-        {
-            int markerIndex = -1;
-            for (int index = 0; index < source.childCount; index++)
-            {
-                if (source.ElementAt(index) is Label label &&
-                    string.Equals(label.text, markerText, StringComparison.Ordinal))
-                {
-                    markerIndex = index;
-                    break;
-                }
-            }
-
-            if (markerIndex < 0)
-            {
-                throw new InvalidOperationException(
-                    $"[PauseMenu] Settings marker '{markerText}' was not built.");
-            }
-
-            while (markerIndex < source.childCount)
-            {
-                VisualElement child = source.ElementAt(markerIndex);
-                source.RemoveAt(markerIndex);
-                destination.Add(child);
-            }
         }
 
         private void ToggleMenu()

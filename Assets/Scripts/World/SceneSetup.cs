@@ -24,47 +24,7 @@ namespace Fodinae.World
         protected void Awake()
         {
             SetupWorldBackground();
-            SetupWorldMapController();
-            SetupMinimapController();
-            SetupWorldAudioController();
             TryStartSurfaceRendererSetup();
-        }
-
-        protected void Update()
-        {
-            if (_surfaceRendererSetup)
-            {
-                enabled = false;
-                return;
-            }
-
-            TryStartSurfaceRendererSetup();
-        }
-
-        private void SetupMinimapController()
-        {
-            var existing = FindAnyObjectByType<MinimapController>();
-            if (existing != null)
-            {
-                return;
-            }
-
-            var minimapGO = new GameObject("MinimapController");
-            minimapGO.transform.SetParent(transform);
-            minimapGO.AddComponent<MinimapController>();
-        }
-
-        private void SetupWorldAudioController()
-        {
-            var existing = FindAnyObjectByType<Audio.Spatial.WorldAudioController>();
-            if (existing != null)
-            {
-                return;
-            }
-
-            var audioGO = new GameObject("WorldAudioController");
-            audioGO.transform.SetParent(transform);
-            audioGO.AddComponent<Audio.Spatial.WorldAudioController>();
         }
 
         private void TryStartSurfaceRendererSetup()
@@ -131,6 +91,7 @@ namespace Fodinae.World
 
                 SurfaceRenderer surfaceRenderer =
                     SessionAccess.Resolve()?.TryResolve<SurfaceRenderer>() ??
+                    FindAnyObjectByType<SurfaceRenderer>(FindObjectsInactive.Include) ??
                     throw new InvalidOperationException(
                         "SceneSetup requires the registered SurfaceRenderer.");
                 surfaceRenderer.SetLocalAssets(
@@ -138,10 +99,15 @@ namespace Fodinae.World
                     perspectiveTexture,
                     redRockTexture);
                 _surfaceRendererSetup = true;
+                Debug.Log("[SceneSetup] SurfaceRenderer setup completed successfully.");
             }
             catch (OperationCanceledException)
             {
                 // Cancellation is the expected teardown path during a domain reload.
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[SceneSetup] SurfaceRenderer setup failed: {ex}");
             }
             finally
             {
@@ -149,19 +115,6 @@ namespace Fodinae.World
                 // Never leave the guard latched, otherwise the surface is lost forever.
                 _surfaceRendererSetupStarted = false;
             }
-        }
-
-        private void SetupWorldMapController()
-        {
-            var existing = FindAnyObjectByType<WorldMapController>();
-            if (existing != null)
-            {
-                return;
-            }
-
-            var controllerGO = new GameObject("WorldMapController");
-            controllerGO.transform.SetParent(transform);
-            controllerGO.AddComponent<WorldMapController>();
         }
 
         private void SetupWorldBackground()

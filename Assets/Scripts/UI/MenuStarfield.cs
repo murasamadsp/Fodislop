@@ -29,18 +29,29 @@ namespace Fodinae.UI
         [SerializeField]
         private Material? _starfieldMaterial;
 
-        // Below native resolution on purpose. Stars are a tight core plus a wide
-        // low-amplitude wing - there is no high-frequency detail to preserve -
-        // and the UI samples this with bilinear filtering, which softens the
-        // upscale in a way that suits a point-spread function. Rendering the
-        // whole screen every frame at native resolution for a background would
-        // be the expensive way to get the same image.
-        [SerializeField]
-        private int _height = 900;
+        private int _targetWidth = 1920;
+        private int _targetHeight = 1080;
 
         private RenderTexture? _texture;
 
         public RenderTexture? Texture => _texture;
+
+        public void SetDisplaySize(int width, int height)
+        {
+            int w = Mathf.Max(width, 64);
+            int h = Mathf.Max(height, 64);
+
+            if (_texture != null && _texture.width == w && _texture.height == h)
+            {
+                return;
+            }
+
+            _targetWidth = w;
+            _targetHeight = h;
+
+            ReleaseTexture();
+            EnsureTexture();
+        }
 
         private void OnEnable()
         {
@@ -56,6 +67,8 @@ namespace Fodinae.UI
         {
             ReleaseTexture();
         }
+
+        private Vector2 _smoothParallax;
 
         // Draws one frame of the starfield. Public so the editor capture tool can
         // drive it: LateUpdate does not run on demand outside Play Mode, and the
@@ -73,9 +86,25 @@ namespace Fodinae.UI
                 return;
             }
 
-            // Blitting from whiteTexture rather than null: a null source leaves
-            // the bound source texture undefined, and the shader ignores it
-            // either way.
+            Vector2 targetParallax = Vector2.zero;
+            if (Application.isPlaying && Screen.width > 0 && Screen.height > 0)
+            {
+                var mouse = UnityEngine.InputSystem.Mouse.current;
+                if (mouse != null)
+                {
+                    Vector2 mousePos = mouse.position.ReadValue();
+                    float normX = (mousePos.x / Screen.width) - 0.5f;
+                    float normY = (mousePos.y / Screen.height) - 0.5f;
+                    targetParallax = new Vector2(normX * -0.006f, normY * -0.006f);
+                }
+            }
+
+            _smoothParallax = Vector2.Lerp(_smoothParallax, targetParallax, Time.unscaledDeltaTime * 3.0f);
+
+            float currentTime = Application.isPlaying ? Time.time : (float)Time.realtimeSinceStartup;
+            _starfieldMaterial.SetFloat("_ShaderTime", currentTime);
+            _starfieldMaterial.SetFloat("_Aspect", (float)_texture.width / Mathf.Max(_texture.height, 1));
+            _starfieldMaterial.SetVector("_ParallaxOffset", new Vector4(_smoothParallax.x, _smoothParallax.y, 0f, 0f));
             Graphics.Blit(Texture2D.whiteTexture, _texture, _starfieldMaterial);
         }
 
@@ -86,16 +115,8 @@ namespace Fodinae.UI
 
         private void EnsureTexture()
         {
-            int height = Mathf.Max(_height, 64);
-
-            // Clamped, because Screen.width/height do not mean the game view
-            // outside Play Mode - in the editor they can report whichever EditorWindow
-            // is current, which produced a 3.6:1 target for a 1.7:1 screen. The
-            // Image is ScaleAndCrop so a mismatch crops instead of stretching,
-            // but there is no reason to allocate an absurd texture either.
-            float rawAspect = Screen.height > 0 ? (float)Screen.width / Screen.height : 16f / 9f;
-            float aspect = Mathf.Clamp(rawAspect, 1f, 2.4f);
-            int width = Mathf.Max(Mathf.RoundToInt(height * aspect), 64);
+            int width = _targetWidth;
+            int height = _targetHeight;
 
             if (_texture != null && _texture.width == width && _texture.height == height)
             {

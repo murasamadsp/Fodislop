@@ -105,10 +105,13 @@ float2 UnpackPath(uint3 packedInterval)
 
 float3 Transmission(float2 pathLength)
 {
+    // Inverse-square law attenuation in free space (pathLength.x in cells)
+    float geomAtten = 1.0 / (pathLength.x * pathLength.x + 1.0);
+
     float3 opticalDepth =
         _EmptyExtinctionRgb.rgb * pathLength.x +
         _SolidExtinctionRgb.rgb * pathLength.y;
-    return exp(-opticalDepth);
+    return geomAtten * exp(-opticalDepth);
 }
 
 float Max3(float3 value)

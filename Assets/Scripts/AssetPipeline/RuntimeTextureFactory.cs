@@ -81,6 +81,45 @@ public static class RuntimeTextureFactory
         return texture;
     }
 
+    public static Texture2DArray CreateRgba32ArrayNoMip(
+        int width,
+        int height,
+        int depth,
+        string name,
+        RuntimeTextureColorSpace colorSpace,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode)
+    {
+        if (width <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(width), width, "Runtime texture array width must be positive.");
+        }
+
+        if (height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(height), height, "Runtime texture array height must be positive.");
+        }
+
+        if (depth <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(depth), depth, "Runtime texture array depth must be positive.");
+        }
+
+        var array = new Texture2DArray(
+            width,
+            height,
+            depth,
+            TextureFormat.RGBA32,
+            mipChain: false,
+            linear: colorSpace == RuntimeTextureColorSpace.Linear)
+        {
+            name = name,
+            filterMode = filterMode,
+            wrapMode = wrapMode,
+        };
+        return array;
+    }
+
     public static Texture2D DecodeEncodedImageToRgba32NoMip(
         byte[] data,
         string name,
