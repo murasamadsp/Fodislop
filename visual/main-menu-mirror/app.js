@@ -130,10 +130,9 @@ function switchViewState(state) {
     btn.classList.remove('active');
     const txt = btn.innerText.toLowerCase();
     if (
-      (state === 'splash' && txt.includes('заставка')) ||
-      (state === 'auth' && txt.includes('авторизация')) ||
+      (state === 'auth' && (txt.includes('вход') || txt.includes('регистрация') || txt.includes('авторизация'))) ||
       (state === 'onboarding' && txt.includes('онбординг')) ||
-      (state === 'menu' && txt.includes('орбита')) ||
+      (state === 'menu' && (txt.includes('орбита') || txt.includes('хаб') || txt.includes('меню'))) ||
       (state === 'descent' && txt.includes('спуск')) ||
       (state === 'ingame' && txt.includes('игра')) ||
       (state === 'pause' && txt.includes('пауза')) ||
@@ -232,28 +231,135 @@ function switchViewState(state) {
 }
 
 // ----------------------------------------------------
-// Заставка и Авторизация
+// Заставка и Авторизация (Логин / Регистрация)
 // ----------------------------------------------------
+let currentAuthTab = 'login';
+
 function startExperienceFromSplash() {
   playSound('confirm');
   switchViewState('auth');
 }
 
-function generateRandomToken() {
+function switchAuthTab(tab) {
   playSound('click');
-  const hex = Math.random().toString(16).substring(2, 10);
-  const tok = `fdn_tok_${hex}`;
-  document.getElementById('inputAuthToken').value = tok;
-  playerState.token = tok;
+  currentAuthTab = tab;
+  const tabLogin = document.getElementById('authTabLogin');
+  const tabRegister = document.getElementById('authTabRegister');
+  const loginForm = document.getElementById('authLoginForm');
+  const regForm = document.getElementById('authRegisterForm');
+  const btnSubmit = document.getElementById('btnSubmitAuth');
+
+  if (tab === 'login') {
+    tabLogin?.classList.add('active');
+    tabRegister?.classList.remove('active');
+    if (loginForm) loginForm.style.display = 'flex';
+    if (regForm) regForm.style.display = 'none';
+    if (btnSubmit) btnSubmit.innerHTML = '<span>ВОЙТИ В МИР FODINAE</span><span>↗</span>';
+  } else {
+    tabLogin?.classList.remove('active');
+    tabRegister?.classList.add('active');
+    if (loginForm) loginForm.style.display = 'none';
+    if (regForm) regForm.style.display = 'flex';
+    if (btnSubmit) btnSubmit.innerHTML = '<span>ЗАРЕГИСТРИРОВАТЬСЯ В ЭКСПЕДИЦИИ</span><span>↗</span>';
+  }
+}
+
+function togglePasswordVisibility(fieldId) {
+  playSound('click');
+  const field = document.getElementById(fieldId);
+  if (!field) return;
+  field.type = field.type === 'password' ? 'text' : 'password';
+}
+
+// Уникальный генератор позывного на основе Seed (Время + Хэш оборудования)
+const CALLSIGN_ROLES = [
+  'ШАХТЁР', 'БУРОВИК', 'ОПЕРАТОР', 'ПРОХОДЧИК',
+  'ИНЖЕНЕР', 'СКАУТ', 'СТАЛКЕР', 'МИНЕР', 'КИБЕР'
+];
+
+const CALLSIGN_CLANS = [
+  '[DVM]', '[VOID]', '[CORE]', '[HADES]', '[TITAN]', '[APEX]', '[NEO]'
+];
+
+function generateSeededCallsign() {
+  playSound('click');
+
+  // Вычисляем сид на основе времени и характеристик окружения (эмуляция MAC/Device UUID)
+  const timeSeed = Date.now();
+  const perfSeed = Math.floor(performance.now() * 1000);
+  const combinedSeed = (timeSeed ^ perfSeed) >>> 0;
+
+  // Псевдослучайный генератор с сидом
+  const roleIndex = combinedSeed % CALLSIGN_ROLES.length;
+  const clanIndex = (combinedSeed >>> 4) % CALLSIGN_CLANS.length;
+  const uniqueNumber = 100 + ((combinedSeed >>> 8) % 900); // 100..999
+
+  const callsign = `${CALLSIGN_ROLES[roleIndex]}-${uniqueNumber} ${CALLSIGN_CLANS[clanIndex]}`;
+  const inputLogin = document.getElementById('inputMinerName');
+  const inputReg = document.getElementById('inputRegMinerName');
+  if (inputLogin) inputLogin.value = callsign;
+  if (inputReg) inputReg.value = callsign;
+  return callsign;
 }
 
 function submitAuthForm() {
   playSound('confirm');
-  const nick = document.getElementById('inputMinerName').value.trim() || 'ШАХТЁР-774 [DVM]';
+  let nick = '';
+  let pass = '';
+
+  if (currentAuthTab === 'login') {
+    nick = document.getElementById('inputMinerName')?.value.trim() || 'ШАХТЁР-774 [DVM]';
+    pass = document.getElementById('inputPassword')?.value || '';
+  } else {
+    nick = document.getElementById('inputRegMinerName')?.value.trim() || 'ШАХТЁР-774 [DVM]';
+    pass = document.getElementById('inputRegPassword')?.value || '';
+    const confirmPass = document.getElementById('inputRegConfirmPassword')?.value || '';
+    const acceptEula = document.getElementById('authAcceptEula')?.checked;
+
+    if (!acceptEula) {
+      alert('Для входа необходимо принять Регламент Экспедиции и EULA.');
+      return;
+    }
+    if (pass !== confirmPass) {
+      alert('Внимание: Пароли не совпадают!');
+      return;
+    }
+  }
+
   playerState.nickname = nick;
+  // Генерируем сессионный токен из логина и пароля
+  playerState.token = `fdn_tok_${Math.abs(nick.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0)).toString(16)}`;
+
+  // Обновляем плашку в шапке (User Pill)
+  const userPillNick = document.querySelector('.user-pill div div:first-child');
+  if (userPillNick) userPillNick.innerText = nick;
+
+  // Обновляем профиль
+  const profileNick = document.querySelector('#profileModal h3');
+  if (profileNick) profileNick.innerText = nick.split(' ')[0];
+  const profileToken = document.getElementById('profileTokenInput');
+  if (profileToken) profileToken.value = playerState.token;
+
   const hudNick = document.getElementById('hudMinerNick');
   if (hudNick) hudNick.innerText = nick.split(' ')[0];
-  switchViewState('menu');
+
+  // Переходим на экран Онбординга (Калибровка оборудования)
+  switchViewState('onboarding');
+}
+
+function switchAccountFromProfile() {
+  closeModal('profileModal');
+  switchViewState('auth');
+}
+
+function copyTokenToClipboard() {
+  playSound('click');
+  const tok = document.getElementById('profileTokenInput')?.value || playerState.token;
+  navigator.clipboard.writeText(tok).then(() => {
+    alert(`Ключ доступа ${tok} скопирован в буфер обмена!`);
+  }).catch(() => {
+    alert(`Ключ доступа: ${tok}`);
+  });
 }
 
 // ----------------------------------------------------
@@ -287,7 +393,7 @@ function updateOnboardingStepUI() {
     if (nextBtn) nextBtn.innerText = 'ДАЛЕЕ (УПРАВЛЕНИЕ) →';
   } else if (currentObStep === 3) {
     if (title) title.innerText = 'Шаг 3: Тактильный контроль и звук';
-    if (nextBtn) nextBtn.innerText = 'ЗАВЕРШИТЬ КАЛИБРОВКУ ↗';
+    if (nextBtn) nextBtn.innerText = 'ЗАВЕРШИТЬ КАЛИБРОВКУ (В ОРБИТУ) ↗';
   }
 }
 
@@ -298,7 +404,7 @@ function nextOnboardingStep() {
     updateOnboardingStepUI();
   } else {
     playSound('confirm');
-    startDescentSequence();
+    switchViewState('menu');
   }
 }
 
@@ -925,6 +1031,7 @@ window.addEventListener('keydown', (e) => {
 // Инициализация
 // ----------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+  generateSeededCallsign();
   initMineStrataGrid();
   initFullInventoryGrid();
   initProgrammatorGrid();

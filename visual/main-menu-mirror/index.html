@@ -11,26 +11,27 @@
 </head>
 <body>
 
-  <!-- Нижняя Dev-панель -->
+  <!-- Нижняя Dev-панель: Строгий хронологический порядок экранов -->
   <div class="dev-drawer">
     <span>ЭКРАНЫ:</span>
-    <button class="dev-btn" onclick="switchViewState('splash')">ЗАСТАВКА</button>
-    <button class="dev-btn" onclick="switchViewState('auth')">АВТОРИЗАЦИЯ</button>
-    <button class="dev-btn" onclick="switchViewState('onboarding')">ОНБОРДИНГ</button>
-    <button class="dev-btn active" onclick="switchViewState('menu')">ОРБИТА</button>
-    <button class="dev-btn" onclick="startDescentSequence()">СПУСК</button>
-    <button class="dev-btn" style="border-color:var(--fa-cyan); color:var(--fa-cyan);" onclick="switchViewState('ingame')">ИГРА / HUD</button>
+    <button class="dev-btn active" onclick="switchViewState('auth')">1. ВХОД / РЕГИСТРАЦИЯ</button>
+    <button class="dev-btn" onclick="switchViewState('onboarding')">2. ОНБОРДИНГ</button>
+    <button class="dev-btn" onclick="switchViewState('menu')">3. ОРБИТАЛЬНЫЙ ХАБ</button>
+    <button class="dev-btn" onclick="startDescentSequence()">4. СПУСК В ШАХТУ</button>
+    <button class="dev-btn" style="border-color:var(--fa-cyan); color:var(--fa-cyan);" onclick="switchViewState('ingame')">5. ИГРА / HUD</button>
     <button class="dev-btn" onclick="openModal('inventoryModal')">ИНВЕНТАРЬ</button>
     <button class="dev-btn" onclick="openModal('programmatorModal')">ПРОГРАММАТОР</button>
+    <button class="dev-btn" onclick="openModal('profileModal')">ПРОФИЛЬ ШАХТЁРА</button>
+    <button class="dev-btn" onclick="openMandatoryUpdateModal()">ОБНОВЛЕНИЕ КЛИЕНТА</button>
     <button class="dev-btn" onclick="openModal('chatModal')">ЧАТ</button>
-    <button class="dev-btn" onclick="switchViewState('pause')">ПАУЗА</button>
-    <button class="dev-btn danger" onclick="switchViewState('reconnect')">ОБРЫВ</button>
+    <button class="dev-btn" onclick="switchViewState('pause')">6. ПАУЗА</button>
+    <button class="dev-btn danger" onclick="switchViewState('reconnect')">7. ОБРЫВ</button>
     <div class="sfx-toggle" onclick="toggleAudio()" id="sfxToggle">
       <span id="sfxStatus">🔊 ЗВУК</span>
     </div>
   </div>
 
-  <div class="viewport" id="appViewport" data-state="menu">
+  <div class="viewport" id="appViewport" data-state="auth">
     <div class="space-backdrop"></div>
     <div class="left-shade"></div>
 
@@ -227,68 +228,133 @@
       </div>
     </div>
 
-    <!-- 1. Заставка (Splash) -->
-    <div class="splash-overlay-view" id="splashView">
-      <div class="splash-card">
-        <svg class="splash-logo-symbol" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M24 4 L43 15 V33 L24 44 L5 33 V15 Z"/>
-          <path d="M14 18 L24 12 L34 18 L30 21 L24 18 L18 21 Z" fill="currentColor"/>
-          <path d="M18 25 L24 28 L30 25 V33 L24 37 L18 33 Z" fill="currentColor"/>
-        </svg>
-
-        <h1 class="splash-title">FODINAE</h1>
-        <div class="splash-tagline">DEEP SUBSURFACE EXPEDITION // MINES PROTOCOL v7</div>
-
-        <div class="splash-terminal-status">
-          <div><span style="color:var(--fa-cyan);">[GPU]</span> Radiance Cascades Compute Kernel ... <strong style="color:var(--fa-green);">OK</strong></div>
-          <div><span style="color:var(--fa-cyan);">[FMOD]</span> Audio Engine C++ Backend (Master / SFX / Spatial) ... <strong style="color:var(--fa-green);">SYNCED</strong></div>
-          <div><span style="color:var(--fa-cyan);">[WORLD]</span> SingleMesh Terrain Streaming 32x32 ... <strong style="color:var(--fa-green);">MOUNTED</strong></div>
-        </div>
-
-        <button class="btn-primary-action" style="width:320px;" onclick="startExperienceFromSplash()">
-          <span>ВОЙТИ В ЭКСПЕДИЦИЮ</span>
-          <div class="action-arrow">↗</div>
-        </button>
-      </div>
-    </div>
-
-    <!-- 2. Авторизация (Auth) -->
-    <div class="auth-overlay-view" id="authView">
+    <!-- 1. Объединенный Шлюз Входа и Заставка (Splash + Auth Gateway) -->
+    <div class="auth-overlay-view active" id="authView">
       <div class="auth-card">
-        <div>
-          <span class="eyebrow-tag">ШЛЮЗ АВТОРИЗАЦИИ // TOKEN 6</span>
-          <h2 style="font-family:var(--font-display); font-size:22px; color:#fff; margin-top:4px;">Идентификация шахтёра</h2>
-          <p style="color:var(--fa-muted); font-size:13px; margin-top:2px;">
-            Вход в защищённый канал связи кластера Hades-Orbit.
-          </p>
-        </div>
+        <!-- Шапка окна с логотипом -->
+        <div class="auth-brand-header">
+          <svg class="auth-brand-logo" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M24 4 L43 15 V33 L24 44 L5 33 V15 Z"/>
+            <path d="M14 18 L24 12 L34 18 L30 21 L24 18 L18 21 Z" fill="currentColor"/>
+            <path d="M18 25 L24 28 L30 25 V33 L24 37 L18 33 Z" fill="currentColor"/>
+          </svg>
+          <h1 class="auth-brand-title">FODINAE</h1>
+          <span class="auth-brand-subtitle">DEEP SUBSURFACE EXPEDITION // MINES PROTOCOL v7</span>
 
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <label style="font-family:var(--font-mono); font-size:11px; color:var(--fa-muted);">ПОЗЫВНОЙ ШАХТЁРА:</label>
-          <input type="text" class="auth-input" id="inputMinerName" value="ШАХТЁР-774 [DVM]">
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:4px;">
-          <label style="font-family:var(--font-mono); font-size:11px; color:var(--fa-muted);">КЛЮЧ ДОСТУПА (AuthToken):</label>
-          <div class="auth-input-row">
-            <input type="text" class="auth-input" id="inputAuthToken" value="fdn_tok_9948a204e18">
-            <button class="auth-btn-gen" onclick="generateRandomToken()">СЛУЧАЙНЫЙ</button>
+          <!-- Компактный статус готовности игровых систем -->
+          <div style="display:flex; gap:8px; margin-top:6px; font-family:var(--font-mono); font-size:10px;">
+            <span style="color:var(--fa-cyan);">[GPU] <strong style="color:var(--fa-green);">OK</strong></span>
+            <span style="color:var(--fa-line);">·</span>
+            <span style="color:var(--fa-cyan);">[FMOD] <strong style="color:var(--fa-green);">SYNCED</strong></span>
+            <span style="color:var(--fa-line);">·</span>
+            <span style="color:var(--fa-cyan);">[WORLD] <strong style="color:var(--fa-green);">MOUNTED</strong></span>
           </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
-          <button class="btn-gold-action" onclick="submitAuthForm()">ПОДТВЕРДИТЬ ВХОД ↗</button>
-          <button class="btn-outline-action" onclick="startOfflineDummy()">ЛОКАЛЬНЫЙ ОФЛАЙН (DUMMY)</button>
+        <!-- Переключатель Вход / Регистрация -->
+        <div class="onboarding-step-indicator">
+          <div class="onboarding-step-pill active" id="authTabLogin" onclick="switchAuthTab('login')">ВХОД В АККАУНТ</div>
+          <div class="onboarding-step-pill" id="authTabRegister" onclick="switchAuthTab('register')">РЕГИСТРАЦИЯ</div>
+        </div>
+
+        <!-- Форма Входа -->
+        <div id="authLoginForm" style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Позывной (Логин) -->
+          <div class="auth-field-wrap">
+            <label class="auth-field-label">ПОЗЫВНОЙ ШАХТЁРА (ЛОГИН):</label>
+            <div class="auth-input-group">
+              <span class="auth-input-icon">👤</span>
+              <input type="text" class="auth-input" id="inputMinerName" value="ШАХТЁР-774 [DVM]" placeholder="Введите позывной">
+            </div>
+          </div>
+
+          <!-- Пароль -->
+          <div class="auth-field-wrap">
+            <label class="auth-field-label">ПАРОЛЬ ДОСТУПА:</label>
+            <div class="auth-input-group">
+              <span class="auth-input-icon">🔒</span>
+              <input type="password" class="auth-input" id="inputPassword" value="MiningPassword#2026" placeholder="Введите пароль">
+              <button class="auth-eye-btn" onclick="togglePasswordVisibility('inputPassword')" title="Показать/скрыть">👁</button>
+            </div>
+          </div>
+
+          <!-- Опции: Запомнить / Авто-вход -->
+          <div class="auth-options-row">
+            <label class="auth-checkbox-label">
+              <input type="checkbox" checked id="authRememberMe">
+              <span>Запомнить данные</span>
+            </label>
+            <label class="auth-checkbox-label">
+              <input type="checkbox" checked id="authAutoLogin">
+              <span>Авто-вход</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Форма Регистрации (Только учетные данные и EULA) -->
+        <div id="authRegisterForm" style="display:none; flex-direction:column; gap:14px;">
+          <div class="auth-field-wrap">
+            <label class="auth-field-label">ПОЗЫВНОЙ НОВОГО ШАХТЁРА:</label>
+            <div class="auth-input-group">
+              <span class="auth-input-icon">👤</span>
+              <input type="text" class="auth-input" id="inputRegMinerName" value="ШАХТЁР-774 [DVM]" placeholder="Введите позывной">
+            </div>
+          </div>
+
+          <div class="auth-field-wrap">
+            <label class="auth-field-label">ПАРОЛЬ ДОСТУПА:</label>
+            <div class="auth-input-group">
+              <span class="auth-input-icon">🔒</span>
+              <input type="password" class="auth-input" id="inputRegPassword" value="MiningPassword#2026" placeholder="Придумайте пароль">
+              <button class="auth-eye-btn" onclick="togglePasswordVisibility('inputRegPassword')">👁</button>
+            </div>
+          </div>
+
+          <div class="auth-field-wrap">
+            <label class="auth-field-label">ПОДТВЕРЖДЕНИЕ ПАРОЛЯ:</label>
+            <div class="auth-input-group">
+              <span class="auth-input-icon">🔒</span>
+              <input type="password" class="auth-input" id="inputRegConfirmPassword" value="MiningPassword#2026" placeholder="Повторите пароль">
+              <button class="auth-eye-btn" onclick="togglePasswordVisibility('inputRegConfirmPassword')">👁</button>
+            </div>
+          </div>
+
+          <!-- Пользовательское соглашение и Кодекс шахтёра -->
+          <div class="auth-field-wrap">
+            <label class="auth-field-label">КОДЕКС ЭКСПЕДИЦИИ И EULA:</label>
+            <div class="auth-eula-box" style="height:70px;">
+              <strong>1. РЕГЛАМЕНТ ШАХТЫ:</strong> Игрок обязуется соблюдать правила кластера Hades-Orbit.<br>
+              <strong>2. АВТОРИТЕТ СЕРВЕРА:</strong> Координаты и добыча рассчитываются сервером авторитарно.<br>
+              <strong>3. ПРОГРЕСС:</strong> Все данные синхронизируются по протоколу MinesProtocol v7.
+            </div>
+            <label class="auth-checkbox-label" style="margin-top:2px;">
+              <input type="checkbox" checked id="authAcceptEula">
+              <span style="font-size:11px; color:#fff;">Принимаю Пользовательское соглашение и EULA</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Главная кнопка входа -->
+        <button class="auth-btn-enter" id="btnSubmitAuth" onclick="submitAuthForm()">
+          <span>ВОЙТИ В МИР FODINAE</span>
+          <span>↗</span>
+        </button>
+
+        <!-- Вспомогательные ссылки -->
+        <div class="auth-footer-links">
+          <span class="auth-footer-link" onclick="startOfflineDummy()">Офлайн режим (Dummy)</span>
+          <span style="color:var(--fa-line);">|</span>
+          <span class="auth-footer-link" onclick="alert('Для восстановления доступа обратитесь в поддержку Hades-Orbit.')">Забыли пароль?</span>
         </div>
       </div>
     </div>
 
-    <!-- 3. Онбординг (Onboarding) -->
+    <!-- 2. Онбординг (Калибровка оборудования: 3 шага) -->
     <div class="onboarding-overlay-view" id="onboardingView">
       <div class="onboarding-card">
         <div class="onboarding-header">
           <div>
-            <span class="eyebrow-tag">КАЛИБРОВКА ОБОРУДОВАНИЯ</span>
+            <span class="eyebrow-tag">КАЛИБРОВКА ОБОРУДОВАНИЯ ШАХТЁРА</span>
             <h2 style="font-family:var(--font-display); font-size:20px; color:#fff;" id="onboardingTitle">
               Шаг 1: Доступность и визуальный комфорт
             </h2>
@@ -308,10 +374,10 @@
               <div class="settings-row">
                 <div>
                   <div class="settings-label">Масштаб интерфейса (UI Scaling)</div>
-                  <div class="settings-hint">Калибровка размера панелей UI Toolkit</div>
+                  <div class="settings-hint">Калибровка размера панелей UI Toolkit под монитор</div>
                 </div>
                 <select class="styled-select" onchange="applyUiScale(this.value)">
-                  <option value="1">100% (Штатный)</option>
+                  <option value="1" selected>100% (Штатный)</option>
                   <option value="1.15">115% (Увеличенный)</option>
                   <option value="1.3">130% (Крупный)</option>
                 </select>
@@ -323,7 +389,7 @@
                   <div class="settings-hint">Коррекция оттенков лавы, минералов и контуров</div>
                 </div>
                 <select class="styled-select" onchange="applyColorblindTheme(this.value)">
-                  <option value="none">Стандартная палитра</option>
+                  <option value="none" selected>Стандартная палитра</option>
                   <option value="deuteranopia">Дейтеранопия</option>
                   <option value="protanopia">Протанопия</option>
                   <option value="tritanopia">Тританопия</option>
@@ -337,7 +403,7 @@
                   <div class="settings-hint">Подавление резких вспышек при контакте с лавой</div>
                 </div>
                 <select class="styled-select" onchange="toggleReduceMotion(this.value === 'yes')">
-                  <option value="no">Выключено</option>
+                  <option value="no" selected>Выключено</option>
                   <option value="yes">Включено (Мягкое освещение)</option>
                 </select>
               </div>
@@ -355,7 +421,7 @@
                 </div>
                 <select class="styled-select">
                   <option>6 Каскадов (2 отскока) · Ультра</option>
-                  <option>4 Каскада (1 отскок) · Высокое</option>
+                  <option selected>4 Каскада (1 отскок) · Высокое</option>
                   <option>2 Каскада · Быстрое</option>
                 </select>
               </div>
@@ -367,7 +433,7 @@
                 </div>
                 <select class="styled-select">
                   <option>144 FPS</option>
-                  <option>120 FPS</option>
+                  <option selected>120 FPS</option>
                   <option>60 FPS</option>
                   <option>Без ограничений</option>
                 </select>
@@ -382,10 +448,10 @@
               <div class="settings-row">
                 <div>
                   <div class="settings-label">Схема движения бурового дрона</div>
-                  <div class="settings-hint">Клавиатура или мышь</div>
+                  <div class="settings-hint">Клавиатура или указатель мыши</div>
                 </div>
                 <select class="styled-select">
-                  <option>WASD / Стрелки (Рекомендуется)</option>
+                  <option selected>WASD / Стрелки (Рекомендуется)</option>
                   <option>Указатель мыши</option>
                 </select>
               </div>
@@ -408,7 +474,7 @@
           <button class="btn-outline-action" id="btnObPrev" style="display:none;" onclick="prevOnboardingStep()">← НАЗАД</button>
           <div style="margin-left:auto; display:flex; gap:8px;">
             <button class="btn-outline-action" onclick="switchViewState('menu')">ПРОПУСТИТЬ</button>
-            <button class="btn-gold-action" id="btnObNext" onclick="nextOnboardingStep()">ДАЛЕЕ →</button>
+            <button class="btn-gold-action" id="btnObNext" onclick="nextOnboardingStep()">ДАЛЕЕ (ГРАФИКА) →</button>
           </div>
         </div>
       </div>
@@ -1126,6 +1192,22 @@
         </div>
 
         <div class="settings-block">
+          <span class="settings-block-title">ИДЕНТИФИКАЦИЯ И КЛЮЧ ДОСТУПА</span>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div class="settings-row">
+              <div>
+                <div class="settings-label">Ключ доступа (AuthToken)</div>
+                <div class="settings-hint">Сохранён в локальном профиле клиента</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <input type="text" class="auth-input" id="profileTokenInput" value="fdn_tok_9948a204e18" readonly style="width:220px; font-family:var(--font-mono); font-size:11px;">
+                <button class="btn-outline-action" onclick="copyTokenToClipboard()" title="Скопировать ключ">📋 КОПИЯ</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-block">
           <span class="settings-block-title">ЭКИПИРОВКА И ОБОРУДОВАНИЕ</span>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-family:var(--font-mono); font-size:12px;">
             <div style="background:#050b12; padding:10px; border:1px solid var(--fa-line); border-radius:3px;">
@@ -1147,7 +1229,8 @@
           </div>
         </div>
       </div>
-      <div class="modal-card-footer">
+      <div class="modal-card-footer" style="display:flex; justify-content:space-between;">
+        <button class="btn-outline-action" style="border-color:var(--fa-cyan); color:var(--fa-cyan);" onclick="switchAccountFromProfile()">🔄 СМЕНИТЬ АККАУНТ</button>
         <button class="btn-gold-action" onclick="closeModal('profileModal')">ЗАКРЫТЬ</button>
       </div>
     </div>

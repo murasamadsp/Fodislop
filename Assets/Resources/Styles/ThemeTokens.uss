@@ -3,35 +3,35 @@
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-    /* ── Палитра глубокого космоса и шахты ── */
-    --scifi-void: #05080b;
-    --scifi-bg-dark: rgba(7, 12, 16, 0.94);
-    --scifi-bg-panel: rgba(14, 22, 32, 0.92);
-    --scifi-bg-card: rgba(20, 32, 46, 0.85);
+    /* ── Палитра Fodinae (каноничная с main-menu-mirror) ── */
+    --scifi-void: #030509;
+    --scifi-bg-dark: rgba(5, 10, 16, 0.94);
+    --scifi-bg-panel: rgba(7, 13, 20, 0.88);
+    --scifi-bg-card: rgba(11, 20, 30, 0.78);
 
     /* ── Фирменные акценты ── */
-    --scifi-gold: #f2a900;
-    --scifi-gold-bright: #ffd043;
-    --scifi-gold-dim: rgba(242, 169, 0, 0.25);
+    --scifi-gold: #f5c542;
+    --scifi-gold-bright: #ffcf4d;
+    --scifi-gold-dim: rgba(245, 197, 66, 0.25);
 
-    --scifi-cyan: #26c6da;
-    --scifi-cyan-bright: #1ee6b5;
-    --scifi-cyan-dim: rgba(38, 198, 218, 0.2);
+    --scifi-cyan: #56ddd4;
+    --scifi-cyan-bright: #86ede6;
+    --scifi-cyan-dim: rgba(86, 221, 212, 0.2);
 
-    --scifi-red: #e74c3c;
-    --scifi-red-dim: rgba(231, 76, 60, 0.25);
+    --scifi-red: #ff5555;
+    --scifi-red-dim: rgba(255, 85, 85, 0.25);
 
-    --scifi-green: #2ecc71;
-    --scifi-green-dim: rgba(46, 204, 113, 0.25);
+    --scifi-green: #4ade80;
+    --scifi-green-dim: rgba(74, 222, 128, 0.25);
 
     /* ── Тексты и границы ── */
-    --scifi-text-white: #ffffff;
-    --scifi-text-dim: #7e8e9f;
-    --scifi-text-muted: #4e5e70;
+    --scifi-text-white: #f0f6f8;
+    --scifi-text-dim: #8598a3;
+    --scifi-text-muted: #4d6370;
 
-    --scifi-border-subtle: rgba(255, 255, 255, 0.08);
-    --scifi-border-tech: rgba(38, 198, 218, 0.35);
-    --scifi-border-gold: rgba(242, 169, 0, 0.4);
+    --scifi-border-subtle: rgba(140, 185, 205, 0.22);
+    --scifi-border-tech: rgba(86, 221, 212, 0.45);
+    --scifi-border-gold: rgba(245, 197, 66, 0.45);
 
     /* ── Шрифтовые ассеты ── */
     --font-heading: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
