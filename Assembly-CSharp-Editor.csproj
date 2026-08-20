@@ -89,6 +89,7 @@
     <Compile Include="Assets/Editor/GenerateMainMenuArt.cs" />
     <Compile Include="Assets/Editor/LoadTimingProbe.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementBoundaryTests.cs" />
+    <Compile Include="Assets/Editor/PerfProbe.cs" />
     <Compile Include="Assets/Scripts/Editor/InjectValidator.cs" />
     <Compile Include="Assets/Editor/BuildScript.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/WorldLayerRleTests.cs" />

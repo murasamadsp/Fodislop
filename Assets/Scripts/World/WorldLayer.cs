@@ -733,10 +733,13 @@ namespace Fodinae
 
         private void TouchLru(int chunkIndex)
         {
-            if (_lruIndexMap.TryGetValue(chunkIndex, out var node))
+            lock (_loadingLock)
             {
-                _lruList.Remove(node);
-                _lruList.AddFirst(node);
+                if (_lruIndexMap.TryGetValue(chunkIndex, out var node))
+                {
+                    _lruList.Remove(node);
+                    _lruList.AddFirst(node);
+                }
             }
         }
 

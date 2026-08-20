@@ -19,6 +19,17 @@ RWTexture2D<float4> _AutomaticNormalField;
 Texture2D<float4> _AutomaticNormalInput;
 RWTexture2D<float> _ContactOcclusionTexture;
 Texture2D<float4> _DirectInput;
+
+// Resolved radiance from the terrain's own emitters, solved separately and kept
+// across frames.
+//
+// Light transport is linear in emission and the medium does not depend on it, so
+// solve(terrain + lamps) is exactly solve(terrain) + solve(lamps). Splitting the
+// two lets the terrain half survive until geometry actually changes, instead of
+// being recomputed every time a lamp moves a fraction of a cell - which is what
+// made walking cost a full cascade solve per frame.
+Texture2D<float4> _StaticDirectInput;
+
 RWTexture2D<float4> _BounceTexture;
 Texture2D<float4> _BounceInput;
 RWTexture2D<float4> _Result;
@@ -137,37 +148,21 @@ float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
     return length(rayDirection * cellsPerPixel * pathLengthInPixels);
 }
 
-struct DynamicLight
-{
-    float4 positionRadius;
-    float4 colorIntensity;
-};
-StructuredBuffer<DynamicLight> _DynamicLights;
-int _DynamicLightCount;
-
+// Reads the emission field, which already contains the dynamic sources.
+//
+// This used to loop over every dynamic light here and accumulate its falloff.
+// That loop sat on the hottest path in the whole renderer: the ray march calls
+// this once per step, and a solve issues on the order of 238 million steps, so
+// a single lamp cost 238M iterations of a length() and a branch - and the price
+// scaled linearly with how many lights were on screen. The same falloff is now
+// rasterized into _EmissionField once per solve by Hidden/Fodinae/DynamicEmission,
+// over a quad the size of the light rather than the size of the world.
 float4 SampleEmission(float2 pixelPosition, float mipLevel)
 {
-    float4 emission = _EmissionField.SampleLevel(
+    return _EmissionField.SampleLevel(
         sampler_LinearClamp,
         MaterialUv(pixelPosition),
         mipLevel);
-
-    float2 worldPos = _WorldRect.xy + (pixelPosition / float2(_FieldSize)) * _WorldRect.zw;
-    [loop]
-    for (int i = 0; i < _DynamicLightCount; i++)
-    {
-        DynamicLight light = _DynamicLights[i];
-        float dist = length(worldPos - light.positionRadius.xy);
-        float radius = max(light.positionRadius.w, 4.0 * _CellSize);
-        if (dist < radius)
-        {
-            float atten = saturate(1.0 - (dist / radius));
-            atten = atten * atten;
-            emission.rgb += light.colorIntensity.rgb * (light.colorIntensity.a * atten);
-        }
-    }
-
-    return emission;
 }
 
 float4 CalculateAutomaticSurfaceNormal(float2 pixelPosition)
@@ -283,10 +278,22 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
         int2 sampleCell = int2(floor(
             samplePosition * regionCellCount / float2(_FieldSize)));
         bool insideReceiverCell = startsInSolid && all(sampleCell == receiverCell);
+
+        // Occupancy comes from the material field at the step's mip, emission
+        // from the emission field at mip 0.
+        //
+        // These were briefly merged into one fetch by packing occupancy into the
+        // emission field's alpha, which halved the texture traffic of this loop.
+        // It also forced both to share one mip level, and that is not a free
+        // choice: occupancy must be prefiltered or a long step walks through a
+        // thin wall, while emission must not be, or a light source averaged over
+        // a coarse mip smears across the field. On a low preset, where the atlas
+        // budget already shrinks the field to a couple of hundred texels, mip 2
+        // is a fiftyish-texel image and the result is mush.
         float occupancy = insideReceiverCell
             ? 0.0
             : saturate(SampleOccupancy(samplePosition, samplingMip));
-        float4 emission = SampleEmission(samplePosition, samplingMip);
+        float4 emission = SampleEmission(samplePosition, 0.0);
         float3 emittedRadiance =
             max(emission.rgb, 0.0) * physicalStepLength * _EmissionScale;
         radiance += currentTransmission * emittedRadiance;
@@ -506,7 +513,10 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    float4 direct = _DirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
+    // The two halves of the solve, summed. See _StaticDirectInput for why this
+    // sum is exact rather than an approximation.
+    float4 direct = _DirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba +
+        _StaticDirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
     float3 result = _AmbientColor.rgb + direct.rgb;
 
     if (_DebugView == 4 || _DebugView == 5 || _DebugView == 6)

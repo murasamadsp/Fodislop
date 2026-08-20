@@ -96,6 +96,70 @@ namespace Fodinae.World.Terrain
             }
         }
 
+        public void BuildRegion(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
+            int minX, int minY, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight,
+            List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
+            MapManager mapManager, ITextureService textureManager)
+        {
+            if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
+            {
+                return;
+            }
+
+            int endX = Mathf.Clamp(startX + countX, 0, meshWidth);
+            int endY = Mathf.Clamp(startY + countY, 0, meshHeight);
+            int clampedStartX = Mathf.Clamp(startX, 0, meshWidth);
+            int clampedStartY = Mathf.Clamp(startY, 0, meshHeight);
+
+            for (int x = clampedStartX; x < endX; x++)
+            {
+                int gridX = minX + x;
+                for (int y = clampedStartY; y < endY; y++)
+                {
+                    int unityY = minY + y;
+                    int quadIdx = (x * meshHeight) + y;
+                    int baseIdx = quadIdx * 8;
+                    _bgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, baseIdx, atlases, useColorLod, mapManager, textureManager);
+                    _fgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, baseIdx + 4, atlases, useColorLod, mapManager, textureManager);
+                }
+            }
+
+            for (int i = 0; i < subMeshIndices.Length; i++)
+            {
+                subMeshIndices[i].Clear();
+            }
+
+            int totalQuads = meshWidth * meshHeight;
+            for (int i = 0; i < totalQuads; i++)
+            {
+                int bgAtlas = _bgAtlasIndices[i];
+                if (bgAtlas >= 0 && bgAtlas < subMeshIndices.Length)
+                {
+                    var bgList = subMeshIndices[bgAtlas];
+                    int baseIdx = i * 8;
+                    bgList.Add(baseIdx + 0);
+                    bgList.Add(baseIdx + 3);
+                    bgList.Add(baseIdx + 2);
+                    bgList.Add(baseIdx + 2);
+                    bgList.Add(baseIdx + 1);
+                    bgList.Add(baseIdx + 0);
+                }
+
+                int fgAtlas = _fgAtlasIndices[i];
+                if (fgAtlas >= 0 && fgAtlas < subMeshIndices.Length)
+                {
+                    var fgList = subMeshIndices[fgAtlas];
+                    int fgIdx = (i * 8) + 4;
+                    fgList.Add(fgIdx + 0);
+                    fgList.Add(fgIdx + 3);
+                    fgList.Add(fgIdx + 2);
+                    fgList.Add(fgIdx + 2);
+                    fgList.Add(fgIdx + 1);
+                    fgList.Add(fgIdx + 0);
+                }
+            }
+        }
+
         private int FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int worldWidth, int worldHeight, bool isBackground, int vIdx, List<TextureAtlas> atlases, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)

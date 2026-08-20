@@ -7,13 +7,36 @@ namespace Fodinae.UI
     [ExecuteAlways]
     public class MenuSceneryController : MonoBehaviour
     {
-        // The planet is drawn around 800 screen pixels wide, so this renders at
-        // better than 2x and downsamples - which is what keeps the surface crisp
-        // and the thin orbit line from breaking up.
+        private const int MinimumDisplayDimension = 128;
+
+        // Supersampling factor over the size the UI actually displays this at.
+        //
+        // Replaces a hardcoded 1800x1800 target with 4x MSAA. Both parts of that
+        // were wrong. The size ignored how large the element really is, so it
+        // over-rendered on a small window and under-rendered on a large one. And
+        // MSAA was the wrong tool entirely: it antialiases triangle coverage, but
+        // almost none of this image's aliasing comes from triangle edges. The
+        // planet is three smooth shells - the shimmer is in the surface's noise
+        // octaves, the cloud bands and the terminator, all of which are shader
+        // output that MSAA resolves identically across every sample of a pixel.
+        // It was paying for four samples per pixel to fix the one artifact it did
+        // not have.
+        //
+        // Supersampling filters shader detail and geometric edges alike, because
+        // it genuinely shades more points. At exactly 2 the downsample below is
+        // an exact 2x2 box average, so keep this at 1 or 2 - a higher factor
+        // would need a real reduction filter rather than one bilinear tap.
         [SerializeField]
-        private int _renderTextureWidth = 1800;
+        [Range(1, 2)]
+        private int _supersample = 2;
+
+        // Ceiling on the rendered dimension, so a 5K display cannot ask for a
+        // target that costs more than the rest of the menu put together.
         [SerializeField]
-        private int _renderTextureHeight = 1800;
+        private int _maximumRenderDimension = 2048;
+
+        private int _displayWidth;
+        private int _displayHeight;
 
         private Camera? _sceneryCamera;
         private OrbitalStationMotion? _station;
@@ -41,6 +64,127 @@ namespace Fodinae.UI
 
         public RenderTexture? OutputTexture => _outputTexture;
 
+        /// <summary>
+        /// Tells the rig how many screen pixels the UI element actually covers.
+        /// </summary>
+        /// <remarks>
+        /// The controller has no way to find this out on its own — the element
+        /// lives in a UI Toolkit hierarchy in another scene, and its size comes
+        /// from USS plus the panel's scaling. Without it the only honest choice
+        /// is a guess from the screen size, which is what <see cref="EnsureTargets"/>
+        /// falls back to.
+        /// </remarks>
+        public void SetDisplaySize(int width, int height)
+        {
+            int clampedWidth = Mathf.Clamp(width, MinimumDisplayDimension, _maximumRenderDimension);
+            int clampedHeight = Mathf.Clamp(height, MinimumDisplayDimension, _maximumRenderDimension);
+            if (clampedWidth == _displayWidth && clampedHeight == _displayHeight)
+            {
+                return;
+            }
+
+            _displayWidth = clampedWidth;
+            _displayHeight = clampedHeight;
+            EnsureTargets();
+        }
+
+        /// <summary>
+        /// Allocates the supersampled camera target and the display-sized output,
+        /// reallocating only when the required size changes.
+        /// </summary>
+        private void EnsureTargets()
+        {
+            if (_displayWidth <= 0 || _displayHeight <= 0)
+            {
+                // Nobody has reported the element size yet. The planet is drawn
+                // as a square roughly filling the shorter screen axis, which is
+                // close enough to keep the menu correct on the first frames and
+                // is replaced as soon as MainMenu resolves its layout.
+                int fallback = Mathf.Clamp(
+                    Mathf.RoundToInt(Mathf.Min(Screen.width, Screen.height) * 0.7f),
+                    MinimumDisplayDimension,
+                    _maximumRenderDimension);
+                _displayWidth = fallback;
+                _displayHeight = fallback;
+            }
+
+            int supersample = Mathf.Clamp(_supersample, 1, 2);
+            int renderWidth = Mathf.Min(_displayWidth * supersample, _maximumRenderDimension);
+            int renderHeight = Mathf.Min(_displayHeight * supersample, _maximumRenderDimension);
+
+            bool cameraTargetMatches = _cameraTarget != null &&
+                _cameraTarget.width == renderWidth &&
+                _cameraTarget.height == renderHeight;
+            bool outputMatches = _outputTexture != null &&
+                _outputTexture.width == _displayWidth &&
+                _outputTexture.height == _displayHeight &&
+                !_outputTexture.useMipMap;
+            if (cameraTargetMatches && outputMatches)
+            {
+                return;
+            }
+
+            if (!cameraTargetMatches)
+            {
+                ReleaseTexture(ref _cameraTarget);
+
+                // HDR format so the post-process Bloom pass has values above 1.0
+                // to threshold against (the star/window emissives rely on this).
+                // ARGBHalf specifically (not DefaultHDR) - DefaultHDR resolved
+                // to a format with no real alpha channel on this system, so
+                // the "transparent" clear color always came back opaque and
+                // the whole render showed as a solid black box in the UI.
+                //
+                // antiAliasing is left at 1. See _supersample for why MSAA was
+                // the wrong mechanism here; it also cost four times this
+                // texture's memory, on a target this size the single largest
+                // allocation in the menu.
+                _cameraTarget = new RenderTexture(renderWidth, renderHeight, 16, RenderTextureFormat.ARGBHalf)
+                {
+                    name = "MenuSceneryRT_Premultiplied",
+
+                    // Bilinear matters here: at a supersample of 2 the resolve
+                    // blit reads exactly the centre of each 2x2 source quad, and
+                    // a bilinear tap at that point returns their exact average.
+                    // The downsample IS the antialiasing, so a point filter here
+                    // would silently throw away three quarters of the work.
+                    filterMode = FilterMode.Bilinear,
+
+                    // Default wrap mode is Repeat; bilinear sampling near the
+                    // Image element's UV edges then blends in texels from the
+                    // opposite side of the texture, showing up as a thin seam
+                    // line along the render bounds.
+                    wrapMode = TextureWrapMode.Clamp,
+                };
+                _cameraTarget.Create();
+                if (_sceneryCamera != null)
+                {
+                    _sceneryCamera.targetTexture = _cameraTarget;
+                }
+            }
+
+            if (!outputMatches)
+            {
+                ReleaseTexture(ref _outputTexture);
+
+                // Display-sized, so the UI samples it at roughly 1:1 and there is
+                // no minification left to filter. That is what removes the need
+                // for the mip chain this used to rebuild every single frame:
+                // mips existed only because the output was 1800px feeding an
+                // ~860px element, and downsampling in the resolve blit solves
+                // the same problem once instead of over a whole chain.
+                _outputTexture = new RenderTexture(_displayWidth, _displayHeight, 0, RenderTextureFormat.ARGBHalf)
+                {
+                    name = "MenuSceneryRT",
+                    wrapMode = TextureWrapMode.Clamp,
+                    filterMode = FilterMode.Bilinear,
+                    useMipMap = false,
+                    anisoLevel = 0,
+                };
+                _outputTexture.Create();
+            }
+        }
+
         private void OnEnable()
         {
             _sceneryCamera = GetComponentInChildren<Camera>(includeInactive: true);
@@ -57,71 +201,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_cameraTarget == null)
-            {
-                // HDR format so the post-process Bloom pass has values above 1.0
-                // to threshold against (the star/window emissives rely on this).
-                // ARGBHalf specifically (not DefaultHDR) - DefaultHDR resolved
-                // to a format with no real alpha channel on this system, so
-                // the "transparent" clear color always came back opaque and
-                // the whole render showed as a solid black box in the UI.
-                _cameraTarget = new RenderTexture(_renderTextureWidth, _renderTextureHeight, 16, RenderTextureFormat.ARGBHalf)
-                {
-                    name = "MenuSceneryRT_Premultiplied",
-                    antiAliasing = 4,
-
-                    // Default wrap mode is Repeat; bilinear sampling near the
-                    // Image element's UV edges then blends in texels from the
-                    // opposite side of the texture, showing up as a thin seam
-                    // line along the render bounds.
-                    wrapMode = TextureWrapMode.Clamp,
-                };
-                _cameraTarget.Create();
-            }
-
-            // A texture created by an earlier version of this component has no
-            // mip chain, and it survives a script reload - so without this the
-            // GenerateMips call below fails every frame until the scene is
-            // reopened, which looks exactly like the feature not working.
-            if (_outputTexture != null && !_outputTexture.useMipMap)
-            {
-                ReleaseTexture(ref _outputTexture);
-            }
-
-            if (_outputTexture == null)
-            {
-                // No depth and no MSAA: this one is only ever a blit destination.
-                //
-                // Mipmapped, and that is the whole point of it existing at this
-                // size. The UI draws this 1800px texture into an ~860px element,
-                // so every screen pixel covers about four texels. A bilinear tap
-                // reads four of them at fixed offsets, which is not an average -
-                // it is a point sample of a signal above the Nyquist limit, and
-                // the surface detail and the orbit line both live up there. That
-                // is the crawling and shimmer: the same geometry lands on a
-                // different set of four texels as the station moves and the
-                // planet turns. Trilinear off a mip chain filters properly,
-                // because mip generation is an actual box reduction.
-                //
-                // MSAA on the camera target cannot help with this - it
-                // supersamples triangle coverage, not the sampling of a texture
-                // that happens afterwards.
-                _outputTexture = new RenderTexture(_renderTextureWidth, _renderTextureHeight, 0, RenderTextureFormat.ARGBHalf)
-                {
-                    name = "MenuSceneryRT",
-                    wrapMode = TextureWrapMode.Clamp,
-                    useMipMap = true,
-
-                    // Generated explicitly after the resolve blit; leaving Unity
-                    // to do it automatically only covers the active render
-                    // target's own mip 0 writes, not a Graphics.Blit result.
-                    autoGenerateMips = false,
-                    filterMode = FilterMode.Trilinear,
-                    anisoLevel = 4,
-                };
-                _outputTexture.Create();
-            }
-
+            EnsureTargets();
             if (_resolveMaterial == null)
             {
                 if (_resolveMaterialAsset != null)
@@ -155,16 +235,17 @@ namespace Fodinae.UI
         // the menu shows.
         public void ResolveOutput()
         {
+            EnsureTargets();
             if (_cameraTarget == null || _outputTexture == null || _resolveMaterial == null)
             {
                 return;
             }
 
+            // One blit does both jobs. The hardware bilinear tap averages the
+            // supersampled premultiplied values - correct in that order, since
+            // premultiplied alpha is exactly the representation that stays linear
+            // under filtering - and the material then divides out alpha.
             Graphics.Blit(_cameraTarget, _outputTexture, _resolveMaterial);
-            if (_outputTexture.useMipMap)
-            {
-                _outputTexture.GenerateMips();
-            }
         }
 
         private void LateUpdate()

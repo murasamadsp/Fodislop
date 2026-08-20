@@ -460,9 +460,12 @@ namespace Fodinae.World
                 }
             }
 
-            MapManager mmForFrame = _session.TryResolve<MapManager>() ??
-                throw new InvalidOperationException(
-                    "MapManager is required to resolve terrain texture frame metadata.");
+            MapManager? mmForFrame = _session.TryResolve<MapManager>();
+            if (mmForFrame == null || !mmForFrame.IsWorldInitialized)
+            {
+                return;
+            }
+
             int frameHeight = mmForFrame.GetAnimationFrameHeight(cellType);
 
             ValidateTerrainTextureDimensions(

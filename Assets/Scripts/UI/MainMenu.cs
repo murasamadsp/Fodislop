@@ -26,6 +26,7 @@ namespace Fodinae
     public class MainMenu : MonoBehaviour
     {
         private const string GameSceneName = "MainGame";
+        private const float GameScopeReadyTimeoutSeconds = 10f;
 
         // USS modifiers toggled on the station badge so it flips to whichever
         // side of the marker has room instead of sliding off-screen.
@@ -471,7 +472,27 @@ namespace Fodinae
                 }
             }
 
-            if (_scenery != null && _scenery.OutputTexture != null &&
+            if (_scenery == null)
+            {
+                return;
+            }
+
+            // The rig renders to the size this element actually occupies, so it
+            // has to be told what that is. Resolved style rather than the USS
+            // value: the panel applies its own scaling, and a 860px rule is not
+            // 860 device pixels on every display.
+            float resolvedWidth = _planetBodyImage.resolvedStyle.width;
+            float resolvedHeight = _planetBodyImage.resolvedStyle.height;
+            if (!float.IsNaN(resolvedWidth) && !float.IsNaN(resolvedHeight) &&
+                resolvedWidth > 0f && resolvedHeight > 0f)
+            {
+                float panelScale = _planetBodyImage.panel?.scaledPixelsPerPoint ?? 1f;
+                _scenery.SetDisplaySize(
+                    Mathf.RoundToInt(resolvedWidth * panelScale),
+                    Mathf.RoundToInt(resolvedHeight * panelScale));
+            }
+
+            if (_scenery.OutputTexture != null &&
                 !ReferenceEquals(_planetBodyImage.image, _scenery.OutputTexture))
             {
                 _planetBodyImage.image = _scenery.OutputTexture;
@@ -1343,8 +1364,7 @@ namespace Fodinae
 
             await loadOp.ToUniTask();
 
-            _gameManager = Session?.TryResolve<GameManager>() ?? throw new InvalidOperationException(
-                "[MainMenu] GameManager is required after the game scene loads.");
+            _gameManager = await WaitForGameManagerAsync(destroyCancellationToken);
             _gameManager.OnWorldLoaded -= OnWorldLoaded;
             _gameManager.OnWorldLoaded += OnWorldLoaded;
 
@@ -1353,6 +1373,51 @@ namespace Fodinae
             if (!connectionService.IsConnected)
             {
                 connectionService.Connect(oldClient: false);
+            }
+        }
+
+        /// <summary>
+        /// Waits for the game scope to finish building and hand over its <see cref="GameManager"/>.
+        /// </summary>
+        /// <remarks>
+        /// LoadSceneAsync completing does not mean the loaded scene's LifetimeScope
+        /// has built its container. VContainer defers Build through
+        /// LifetimeScope.AwakeScheduler, and it is a build callback that points
+        /// SessionContainer.Current at the game container — so resolving on the
+        /// very next line is a race.
+        ///
+        /// Losing that race used to throw, and the throw landed before the
+        /// OnWorldLoaded subscription below. Nothing then ever raised
+        /// OnWorldLoaded, so the world never finished loading AND the menu scene,
+        /// whose teardown hangs off that same event, stayed resident for the rest
+        /// of the session — with its planet rig still rendering behind the game.
+        /// One missed frame cost the whole frame budget.
+        ///
+        /// Still throws on timeout: a scope that has not appeared after several
+        /// seconds is a real failure, and swallowing it would leave the menu up
+        /// with no explanation.
+        /// </remarks>
+        private async UniTask<GameManager> WaitForGameManagerAsync(
+            System.Threading.CancellationToken cancellationToken)
+        {
+            float deadline = Time.realtimeSinceStartup + GameScopeReadyTimeoutSeconds;
+            while (true)
+            {
+                GameManager? candidate = Session?.TryResolve<GameManager>();
+                if (candidate != null)
+                {
+                    return candidate;
+                }
+
+                if (Time.realtimeSinceStartup >= deadline)
+                {
+                    throw new InvalidOperationException(
+                        "[MainMenu] GameManager did not become resolvable within " +
+                        $"{GameScopeReadyTimeoutSeconds:F0}s of '{GameSceneName}' loading. " +
+                        "The game LifetimeScope failed to build.");
+                }
+
+                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
             }
         }
     }

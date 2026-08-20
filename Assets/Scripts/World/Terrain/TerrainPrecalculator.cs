@@ -53,6 +53,38 @@ namespace Fodinae.World.Terrain
             });
         }
 
+        public void PrecalculateRegion(TerrainCellCache cellCache, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight)
+        {
+            int gw = meshWidth + 1;
+            int gh = meshHeight + 1;
+
+            int vxMin = Mathf.Clamp(startX, 0, gw);
+            int vxMax = Mathf.Clamp(startX + countX + 1, 0, gw);
+            int vyMin = Mathf.Clamp(startY, 0, gh);
+            int vyMax = Mathf.Clamp(startY + countY + 1, 0, gh);
+
+            for (int x = vxMin; x < vxMax; x++)
+            {
+                for (int y = vyMin; y < vyMax; y++)
+                {
+                    CalculateVertexNode(cellCache, x, y, worldWidth, worldHeight);
+                }
+            }
+
+            int cxMin = Mathf.Clamp(startX, 0, meshWidth);
+            int cxMax = Mathf.Clamp(startX + countX, 0, meshWidth);
+            int cyMin = Mathf.Clamp(startY, 0, meshHeight);
+            int cyMax = Mathf.Clamp(startY + countY, 0, meshHeight);
+
+            for (int x = cxMin; x < cxMax; x++)
+            {
+                for (int y = cyMin; y < cyMax; y++)
+                {
+                    CalculateCellNode(cellCache, x, y);
+                }
+            }
+        }
+
         public void PrecalculateIncremental(TerrainCellCache cellCache, int meshWidth, int meshHeight, int dx, int dy, int worldWidth, int worldHeight)
         {
             EnsureCapacity(meshWidth, meshHeight);
