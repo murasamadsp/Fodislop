@@ -59,7 +59,9 @@
     <Compile Include="Assets/Scripts/Core/BootstrapLifetimeScope.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/LifetimeScope.AwakeScheduler.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/WorldConfigurationHelper.cs" />
+    <Compile Include="Assets/Scripts/UI/UiLayoutTier.cs" />
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/PostProcessRendererFeature.cs" />
+    <Compile Include="Assets/Scripts/UI/GatewayController.cs" />
     <Compile Include="Assets/Scripts/World/SceneSetup.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/FuncRegistrationBuilder.cs" />
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/Components/ChromaticAberrationComponent.cs" />
@@ -79,6 +81,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/ContainerInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/FixedTypeObjectKeyHashtable.cs" />
     <Compile Include="Assets/Scripts/UI/Programmator/ProgrammatorGrid.cs" />
+    <Compile Include="Assets/Scripts/UI/GatewayDevFlags.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/IInitializable.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InjectorCache.cs" />
     <Compile Include="Assets/Scripts/World/SingleMeshTerrainRenderer.cs" />
@@ -98,6 +101,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/CappedArrayPool.cs" />
     <Compile Include="Assets/Scripts/Core/ProjectDefaults.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/IPostTickable.cs" />
+    <Compile Include="Assets/Scripts/UI/AuthGate.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/Model/PlayerStatsModel.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IClientConfigManager.cs" />
     <Compile Include="Assets/Scripts/Audio/Core/AudioPlaybackHandle.cs" />
@@ -200,6 +204,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/ITickable.cs" />
     <Compile Include="Assets/Scripts/World/Lighting/LightingConfigLimits.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/InjectAttribute.cs" />
+    <Compile Include="Assets/Scripts/World/MapBlockColors.cs" />
     <Compile Include="Assets/Scripts/Networking/Connection/ConnectionManager.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/LifetimeScope.cs" />
     <Compile Include="Assets/Scripts/AssetPipeline/AnimatedSpriteData.cs" />
@@ -237,6 +242,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/FuncInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/IConnectionService.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Annotations/IPostInitializable.cs" />
+    <Compile Include="Assets/Scripts/UI/PlanetFieldBaker.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/IInjectParameter.cs" />
     <Compile Include="Assets/Scripts/World/AtlasCoordinate.cs" />
     <Compile Include="Assets/Scripts/UI/Builders/IntDropdownPacketBuilder.cs" />
@@ -344,6 +350,7 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/DisposeLoopItem.cs" />
     <Compile Include="Assets/Scripts/Game/ServerAudioEvent.cs" />
     <Compile Include="Assets/Scripts/World/TextureAtlas.cs" />
+    <Compile Include="Assets/Scripts/Core/RuntimeAssetPaths.cs" />
     <Compile Include="Assets/Scripts/UI/ReconnectUI.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/PlayerLoopRunner.cs" />
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/PostProcessController.cs" />
@@ -352,6 +359,7 @@
   <ItemGroup>
     <None Include="Assets/TextMesh Pro/Shaders/TMPro.cginc" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF-Mobile Overlay.shader" />
+    <None Include="Assets/Resources/Shaders/PlanetFieldsBake.compute" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF-Mobile-2-Pass.shader" />
     <None Include="Assets/Resources/UI/MainMenu.uxml" />
     <None Include="Assets/Resources/Shaders/Lighting/WorldLighting.compute" />
@@ -367,14 +375,17 @@
     <None Include="Assets/link.xml" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF SSD.shader" />
     <None Include="Assets/Shaders/Terrain.shader" />
+    <None Include="Assets/Resources/UI/Gateway.uxml" />
     <None Include="Assets/Resources/UI/Inventory.uxml" />
     <None Include="Assets/TextMesh Pro/Shaders/TMP_SDF-Surface-Mobile.shader" />
     <None Include="Assets/Resources/Styles/PauseMenu.uss" />
     <None Include="Assets/Shaders/WorldSurface.shader" />
     <None Include="Assets/Shaders/TerrainTileAddressing.hlsl" />
+    <None Include="Assets/Resources/Styles/Auth.uss" />
     <None Include="Assets/Resources/Styles/Theme.uss" />
     <None Include="Assets/TextMesh Pro/Shaders/SDFFunctions.hlsl" />
     <None Include="Assets/Shaders/UI/UnpremultiplyAlpha.shader" />
+    <None Include="Assets/Shaders/UI/PlanetSurfaceFields.hlsl" />
     <None Include="Assets/Resources/Shaders/Lighting/DynamicEmission.shader" />
     <None Include="Assets/Resources/Styles/Panel.uss" />
     <None Include="Assets/Resources/Styles/Button.uss" />
@@ -387,6 +398,7 @@
     <None Include="Assets/TextMesh Pro/Resources/LineBreaking Leading Characters.txt" />
     <None Include="Assets/Resources/Styles/HUD.uss" />
     <None Include="Assets/TextMesh Pro/Shaders/TMPro_Properties.cginc" />
+    <None Include="Assets/Shaders/UI/PlanetCloudFields.hlsl" />
     <None Include="Assets/TextMesh Pro/Shaders/TMPro_Surface.cginc" />
     <None Include="Assets/Shaders/UI/PlanetSurface.shader" />
     <None Include="Assets/TextMesh Pro/Resources/LineBreaking Following Characters.txt" />

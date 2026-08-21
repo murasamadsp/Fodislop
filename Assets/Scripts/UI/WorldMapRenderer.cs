@@ -27,6 +27,8 @@ namespace Fodinae.UI
 
         private int _texWidth;
         private int _texHeight;
+        private int _lastCanvasWidth = -1;
+        private int _lastCanvasHeight = -1;
         private Canvas? _canvas;
         private RawImage? _rawImage;
         private Texture2D? _mapTexture;
@@ -375,7 +377,7 @@ namespace Fodinae.UI
                 Rect canvasRect = _canvas.pixelRect;
                 int curW = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : Screen.width;
                 int curH = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : Screen.height;
-                if (curW > 0 && curH > 0 && (curW != _texWidth || curH != _texHeight))
+                if (curW > 0 && curH > 0 && (curW != _lastCanvasWidth || curH != _lastCanvasHeight))
                 {
                     InitTexture();
                     _renderRequested = true;
@@ -515,6 +517,8 @@ namespace Fodinae.UI
 
             _texWidth = Mathf.Max(16, targetWidth);
             _texHeight = Mathf.Max(16, targetHeight);
+            _lastCanvasWidth = width;
+            _lastCanvasHeight = height;
 
             if (_mapTexture != null)
             {
@@ -568,11 +572,10 @@ namespace Fodinae.UI
                 if (delta.sqrMagnitude > 1f)
                 {
                     // Screen-space: +X right, +Y up. World: +X right, +Y down.
-                    // Grab-style drag: content follows the cursor. Dragging right
-                    // moves the view left (X +), dragging up moves the view "north"
-                    // (smaller server Y), so centerY must INCREASE when delta.y is +.
+                    // Dragging right moves view left (decrease centerX).
+                    // Dragging up moves view up towards surface (decrease centerY).
                     _viewCenterX -= delta.x * _cellsPerPixel * _dragSpeed;
-                    _viewCenterY += delta.y * _cellsPerPixel * _dragSpeed;
+                    _viewCenterY -= delta.y * _cellsPerPixel * _dragSpeed;
                     ClampViewCenter();
                     _renderRequested = true;
                 }

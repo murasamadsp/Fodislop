@@ -101,8 +101,17 @@ Shader "Fodinae/UI/PlanetAtmosphere"
             #pragma fragment Frag
             #pragma target 4.5
 
+            // Ставится из C# (PlanetFieldBaker) вместе с ключевым словом
+            // поверхности: обе карты запекаются одним проходом.
+            #pragma multi_compile _ PLANET_FIELDS_BAKED
+
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "PlanetNoise.hlsl"
+            #include "PlanetCloudFields.hlsl"
+
+#if defined(PLANET_FIELDS_BAKED)
+            TEXTURECUBE(_PlanetCloudFields);
+            SAMPLER(sampler_PlanetCloudFields);
+#endif
 
             // Step counts kept deliberately modest: this shader runs over the
             // whole disc every rendered frame, and the light march is nested
@@ -226,30 +235,29 @@ Shader "Fodinae/UI/PlanetAtmosphere"
                 return depth;
             }
 
-            // Cloud coverage field, sampled on the unit direction from the
-            // planet's own centre in ITS object space
-            float CloudField(float3 d)
+            // Покрытие и наклон палубы — чистые функции направления, поэтому
+            // они целиком вынесены в PlanetCloudFields.hlsl и целиком же
+            // запекаются: тем же кодом, тем же ядром, что и поля поверхности.
+            //
+            // Палуба не маршируется объёмно, а вычисляется на одной сфере на
+            // высоте облачного верха, — это не срезание угла, а верная модель
+            // для тела с такой плотной атмосферой: у него есть настоящий
+            // облачный ВЕРХ, резкий уровень, на котором палуба становится
+            // непрозрачной.
+            //
+            // Процедурная ветка здесь считает наклон безусловно, тогда как
+            // раньше он считался только под облаком. Это её и не жалко: она
+            // остаётся ради платформ без вычислительных шейдеров, где кадр и
+            // так дороже запечённого примерно вдесятеро.
+            float3 CloudFields(float3 d)
             {
-                float3 p = d * _CloudScale;
-
-                // Multi-scale atmospheric wind & vorticity
-                float3 warp = float3(
-                    GradientNoise(p + float3(11.3, 5.1, 27.7)),
-                    GradientNoise(p + float3(47.9, 63.2, 8.4)),
-                    GradientNoise(p + float3(83.1, 19.6, 51.3)));
-
-                float cov = Fbm(p + (warp * _CloudWarp), 3);
-
-                // Planetary zonal flow (Coriolis bands)
-                float wobble = GradientNoise(p * 0.5) * 0.25;
-                float bands = sin(((d.y + wobble) * _CloudBands * PI) + 1.1);
-                cov += bands * _CloudBandStrength;
-
-                // Delicate high-frequency cirrus wisps
-                float wisps = GradientNoise(p * 3.2 + (warp * 0.3)) * 0.12;
-                cov += wisps;
-
-                return cov;
+#if defined(PLANET_FIELDS_BAKED)
+                return SAMPLE_TEXTURECUBE(_PlanetCloudFields, sampler_PlanetCloudFields, d).xyz;
+#else
+                float coverage = FodinaeCloudField(d, _CloudScale, _CloudWarp, _CloudBands, _CloudBandStrength);
+                float2 slope = FodinaeCloudSlope(d, _CloudScale);
+                return float3(coverage, slope);
+#endif
             }
 
             float CloudMask(float field)
@@ -320,12 +328,6 @@ Shader "Fodinae/UI/PlanetAtmosphere"
                 }
 
                 return result;
-            }
-
-            float FastCloudField(float3 d)
-            {
-                float3 p = d * _CloudScale;
-                return Fbm(p, 2);
             }
 
             half4 Frag(Varyings input) : SV_Target
@@ -403,20 +405,16 @@ Shader "Fodinae/UI/PlanetAtmosphere"
                     // Into the shell's object space so the deck rotates with it.
                     float3 d = normalize(mul((float3x3)UNITY_MATRIX_I_M, dirWS));
 
-                    float c0 = CloudField(d);
-                    float coverage = CloudMask(c0);
+                    float3 fields = CloudFields(d);
+                    float coverage = CloudMask(fields.x);
 
                     if (coverage > 0.001)
                     {
                         // 3D Volumetric Cloud Billow Normal & self-shadowing
+                        float2 cSlope = fields.yz;
                         float3 up = abs(d.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
                         float3 cTangent = normalize(cross(up, d));
                         float3 cBitangent = cross(d, cTangent);
-                        const float cEps = 0.012;
-                        float c0Norm = FastCloudField(d);
-                        float cT = FastCloudField(normalize(d + (cTangent * cEps)));
-                        float cB = FastCloudField(normalize(d + (cBitangent * cEps)));
-                        float2 cSlope = float2(cT - c0Norm, cB - c0Norm) / cEps;
 
                         float3 cNormOS = normalize(d - (((cTangent * cSlope.x) + (cBitangent * cSlope.y)) * _CloudRelief * 0.7));
                         float3 cNormWS = normalize(mul((float3x3)UNITY_MATRIX_M, cNormOS));

@@ -152,23 +152,14 @@ namespace Fodinae.UI
 
             bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
 
-            if (Keyboard.current.tabKey.wasPressedThisFrame)
-            {
-                if (inputBlocked && !_isOpen)
-                {
-                    return;
-                }
-
-                if (_isOpen || !ChatInput.IsFocused)
-                {
-                    Toggle();
-                }
-
-                return;
-            }
-
             if (!_isOpen)
             {
+                if ((Keyboard.current.enterKey.wasPressedThisFrame ||
+                     Keyboard.current.numpadEnterKey.wasPressedThisFrame) && !inputBlocked)
+                {
+                    Show();
+                }
+
                 return;
             }
 

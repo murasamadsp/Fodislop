@@ -196,14 +196,24 @@ namespace Fodinae.Player
                 return;
             }
 
-            // This is a bit expensive but since it's for "unmapped" keys,
-            // we might want to check all keys if they were pressed this frame.
+            if (!Keyboard.current.anyKey.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            // Send unmapped keys to the server, excluding locally handled gameplay and UI hotkeys.
             for (int i = 0; i < _cachedAllKeys.Count; i++)
             {
                 var keyControl = _cachedAllKeys[i];
                 if (keyControl.wasPressedThisFrame)
                 {
-                    byte code = MapKeyToByte(keyControl.keyCode);
+                    Key key = keyControl.keyCode;
+                    if (IsLocallyHandledKey(key))
+                    {
+                        continue;
+                    }
+
+                    byte code = MapKeyToByte(key);
                     if (code != 0)
                     {
                         bool ctrl = Keyboard.current.ctrlKey.isPressed;
@@ -217,6 +227,18 @@ namespace Fodinae.Player
                     }
                 }
             }
+        }
+
+        private static bool IsLocallyHandledKey(Key key)
+        {
+            return key is Key.W or Key.A or Key.S or Key.D or
+                          Key.UpArrow or Key.DownArrow or Key.LeftArrow or Key.RightArrow or
+                          Key.Space or Key.E or Key.L or Key.G or Key.V or
+                          Key.Y or Key.H or Key.F or Key.J or
+                          Key.M or Key.I or Key.Tab or Key.Escape or Key.Enter or Key.NumpadEnter or
+                          Key.P or Key.R or Key.T or
+                          Key.Digit1 or Key.Digit2 or Key.Digit3 or Key.Digit4 or Key.Digit5 or
+                          Key.Digit6 or Key.Digit7 or Key.Digit8 or Key.Digit9;
         }
 
         private byte MapKeyToByte(Key key)

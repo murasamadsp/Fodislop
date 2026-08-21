@@ -18,7 +18,6 @@ namespace Fodinae.World
     public class SceneSetup : MonoBehaviour
     {
         private WorldBackgroundSetup? _backgroundSetup;
-        private bool _surfaceRendererSetup;
         private bool _surfaceRendererSetupStarted;
 
         protected void Awake()
@@ -98,7 +97,6 @@ namespace Fodinae.World
                     transitTexture,
                     perspectiveTexture,
                     redRockTexture);
-                _surfaceRendererSetup = true;
                 Debug.Log("[SceneSetup] SurfaceRenderer setup completed successfully.");
             }
             catch (OperationCanceledException)

@@ -61,6 +61,7 @@
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ClanProcessorTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalizationServiceTests.cs" />
     <Compile Include="Assets/Editor/BuildSettingsFix.cs" />
+    <Compile Include="Assets/Editor/DescentFramingPreview.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/TileBitmaskConverterTests.cs" />
     <Compile Include="Assets/Editor/MapbConverter.cs" />
     <Compile Include="Assets/Editor/TempSaveBootstrapScene.cs" />
@@ -70,7 +71,9 @@
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ReconnectBackoffTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/ContactOcclusionE2ETests.cs" />
     <Compile Include="Assets/Scripts/Editor/LightingEditModeTestRunner.cs" />
+    <Compile Include="Assets/Editor/PlanetFieldsMenu.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/CoordinateUtilsTests.cs" />
+    <Compile Include="Assets/Editor/GatewayDevMenu.cs" />
     <Compile Include="Assets/Editor/ConfigureLightingExposureDefaults.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/StatusProcessorTests.cs" />
     <Compile Include="Assets/Editor/UnityRenderLayerValidator.cs" />
@@ -96,6 +99,7 @@
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/InventoryProcessorTests.cs" />
     <Compile Include="Assets/Editor/AutoVerifyMenu.cs" />
     <Compile Include="Assets/Editor/GenerateFontAssets.cs" />
+    <Compile Include="Assets/Editor/PlanetCostProbe.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

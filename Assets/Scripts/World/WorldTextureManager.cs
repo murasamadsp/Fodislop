@@ -430,15 +430,28 @@ namespace Fodinae.World
                 RuntimeTextureColorSpace.Srgb,
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
-            var random = new System.Random(unchecked((int)cellType * 397) ^ 0x5F3759DF);
-            Color[] pixels = new Color[_cellTextureSize * _cellTextureSize];
-            for (int y = 0; y < _cellTextureSize; y++)
+
+            int seed = unchecked((int)cellType * 397) ^ 0x5F3759DF;
+            float baseHue = (float)((seed & 0xFFFF) / 65536.0);
+            Color primaryColor = Color.HSVToRGB(baseHue, 0.85f, 0.90f);
+            Color secondaryColor = Color.HSVToRGB((baseHue + 0.5f) % 1.0f, 0.70f, 0.35f);
+            Color borderColor = Color.HSVToRGB(baseHue, 0.95f, 0.20f);
+
+            int size = _cellTextureSize;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
             {
-                for (int x = 0; x < _cellTextureSize; x++)
+                for (int x = 0; x < size; x++)
                 {
-                    float hue = (float)random.NextDouble();
-                    float value = (((x / 4) + (y / 4)) & 1) == 0 ? 0.9f : 0.45f;
-                    pixels[(y * _cellTextureSize) + x] = Color.HSVToRGB(hue, 0.85f, value);
+                    bool isBorder = x == 0 || y == 0 || x == size - 1 || y == size - 1;
+                    bool isCross = x == y || x == (size - 1 - y);
+                    bool isChecker = (((x / 4) + (y / 4)) & 1) == 0;
+
+                    Color pixelColor = isBorder
+                        ? borderColor
+                        : isCross || isChecker ? primaryColor : secondaryColor;
+
+                    pixels[(y * size) + x] = pixelColor;
                 }
             }
 

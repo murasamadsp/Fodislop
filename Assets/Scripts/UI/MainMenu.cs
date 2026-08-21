@@ -30,8 +30,6 @@ namespace Fodinae
 
         // USS modifiers toggled on the station badge so it flips to whichever
         // side of the marker has room instead of sliding off-screen.
-        private const string StationBadgeRightClass = "mm-target-badge--right";
-        private const string StationBadgeAboveClass = "mm-target-badge--above";
 
         private enum LoadPhase
         {
@@ -43,6 +41,24 @@ namespace Fodinae
             Done,
         }
 
+        /// <summary>
+        /// Направление на точку высадки в локальных координатах планеты.
+        /// К ней привязаны и метка на поверхности, и наезд камеры при спуске,
+        /// поэтому значение одно: разъехавшись, они показывали бы разные места.
+        /// </summary>
+        private static readonly Vector3 LandingSiteDirection = new(-0.48f, 0.10f, -0.87f);
+
+        /// <summary>
+        /// Длительность облёта камеры, в секундах.
+        ///
+        /// Анимация намеренно НЕ привязана к фазам загрузки. Фаз пять, то есть
+        /// доля загрузки — ступенчатая функция: камера телепортировалась бы
+        /// между пятью точками вместо движения, а на старте прыгала бы сразу
+        /// на ту ступень, где загрузка уже находится. Полёт — это анимация, а
+        /// не индикатор; за прогресс отвечает шкала.
+        /// </summary>
+        private const float DescentAnimationSeconds = 2.6f;
+
         private static readonly (LoadPhase Phase, string Label)[] PhaseSteps =
         {
             (LoadPhase.Handshake, "Подключение к серверу"),
@@ -52,8 +68,6 @@ namespace Fodinae
             (LoadPhase.SurfaceAssets, "Загрузка текстур"),
         };
 
-        [SerializeField]
-        private Texture2D? _loaderTexture;
         [SerializeField]
         private Texture2D? _shadeTexture;
 
@@ -65,8 +79,8 @@ namespace Fodinae
         private VisualElement? _beacon;
         private VisualElement? _beaconPing;
         private VisualElement? _stationBadge;
+        private VisualElement? _sidebar;
         private VisualElement? _targetReticle;
-        private Image? _loaderImage;
         private Image? _loaderShade;
         private Image? _planetIcon;
         private VisualElement? _loaderContent;
@@ -74,9 +88,11 @@ namespace Fodinae
         private Label? _loaderPhaseLabel;
         private Label? _loaderPhaseCount;
         private VisualElement? _loaderPhaseList;
-        private Label? _routeOrbit;
-        private Label? _routeDescent;
-        private Label? _networkLabel;
+        // Шаги маршрута в футере. Это контейнеры, а не Label: внутри каждого
+        // лежит ромб активного шага и подпись.
+        private VisualElement? _routeOrbit;
+        private VisualElement? _routeDescent;
+        private VisualElement? _routeSurface;
 
         // Кнопки основного экрана
         private Button? _playButton;
@@ -98,7 +114,6 @@ namespace Fodinae
         // Футер
         private Button? _newsTickerButton;
         private Button? _footerVersionButton;
-        private Button? _footerRepairButton;
 
         // Модальный слой
         private VisualElement? _modalOverlay;
@@ -216,6 +231,10 @@ namespace Fodinae
             _root.Add(tree);
             _tree = tree;
 
+            // Тир раскладки вместо @media: класс на корне, границы и значения
+            // совпадают с visual/main-menu-mirror/css/tokens.css §3.
+            UiLayoutTier.Attach(tree);
+
             BindUiElements(tree);
             BuildPhaseList();
 
@@ -227,6 +246,12 @@ namespace Fodinae
             ApplyTextures();
 
             _built = true;
+
+#if UNITY_EDITOR
+            _uiBuiltAt = Time.realtimeSinceStartup;
+            _uiBuiltFrame = Time.frameCount;
+            _planetTimingLogged = false;
+#endif
             Debug.Log($"[MainMenu] UI BUILT successfully: children={_root.childCount}");
         }
 
@@ -244,10 +269,13 @@ namespace Fodinae
             _beacon = tree.Q<VisualElement>("MainMenuBeacon");
             _beaconPing = tree.Q<VisualElement>("BeaconPing");
             _stationBadge = tree.Q<VisualElement>("StationBadge");
+
+            // Рейл иконок нужен не для управления, а как препятствие: плашка
+            // станции ездит по орбите и обязана его обходить.
+            _sidebar = tree.Q<VisualElement>(className: "mm-sidebar");
             _targetReticle = tree.Q<VisualElement>("TargetReticle");
             _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer");
             _loaderContainer = tree.Q<VisualElement>("LoaderContainer");
-            _loaderImage = tree.Q<Image>("LoaderImage");
             _loaderShade = tree.Q<Image>("LoaderShade");
             _planetIcon = tree.Q<Image>("MainMenuPlanetIcon");
             _loaderProgressFill = tree.Q<VisualElement>("LoaderProgressFill");
@@ -255,9 +283,9 @@ namespace Fodinae
             _loaderPhaseCount = tree.Q<Label>("LoaderPhaseCount");
             _loaderPhaseList = tree.Q<VisualElement>("LoaderPhaseList");
             _loaderContent = tree.Q<VisualElement>("LoaderContent");
-            _routeOrbit = tree.Q<Label>("MainMenuRouteOrbit");
-            _routeDescent = tree.Q<Label>("MainMenuRouteDescent");
-            _networkLabel = tree.Q<Label>("MainMenuNetworkLabel");
+            _routeOrbit = tree.Q<VisualElement>("MainMenuRouteOrbit");
+            _routeDescent = tree.Q<VisualElement>("MainMenuRouteDescent");
+            _routeSurface = tree.Q<VisualElement>("MainMenuRouteSurface");
 
             // Кнопки основного меню
             _playButton = tree.Q<Button>("PlayButton");
@@ -279,7 +307,6 @@ namespace Fodinae
             // Футер
             _newsTickerButton = tree.Q<Button>("NewsTickerButton");
             _footerVersionButton = tree.Q<Button>("FooterVersionButton");
-            _footerRepairButton = tree.Q<Button>("FooterRepairButton");
 
             // Модалки
             _modalOverlay = tree.Q<VisualElement>("ModalOverlay");
@@ -317,11 +344,6 @@ namespace Fodinae
                 _loaderContent.style.display = DisplayStyle.None;
             }
 
-            if (_loaderImage != null)
-            {
-                _loaderImage.pickingMode = PickingMode.Ignore;
-            }
-
             if (_modalOverlay != null)
             {
                 _modalOverlay.style.display = DisplayStyle.None;
@@ -346,7 +368,6 @@ namespace Fodinae
 
             TryApplySceneryTexture();
 
-            ApplyImageTexture(_loaderImage, ref _loaderTexture, "Assets/Textures/loader_new.png", nameof(_loaderImage));
             ApplyImageTexture(_loaderShade, ref _shadeTexture, "Assets/Textures/UI/mm_shade.png", nameof(_loaderShade));
 
             Texture2D? unusedLogoCache = null;
@@ -397,8 +418,13 @@ namespace Fodinae
                 return;
             }
 
-            var img = _tree.Q<Image>(elementName);
-            if (img == null)
+            // Иконка ставится ФОНОМ, а не через Image.image: перекрасить можно
+            // только background-image — свойства -unity-image-tint-color в USS
+            // не существует, есть лишь -unity-background-image-tint-color.
+            // Благодаря этому один белый PNG обслуживает покой, наведение и
+            // акцентные варианты, а цвет живёт в таблице стилей.
+            var element = _tree.Q<VisualElement>(elementName);
+            if (element == null)
             {
                 Debug.LogWarning($"[MainMenu] ApplyIconTexture: element '{elementName}' not found in UXML tree");
                 return;
@@ -407,7 +433,7 @@ namespace Fodinae
             Texture2D? iconTex = LoadDirectTexture(assetPath);
             if (iconTex != null)
             {
-                img.image = iconTex;
+                element.style.backgroundImage = new StyleBackground(iconTex);
             }
             else
             {
@@ -415,7 +441,6 @@ namespace Fodinae
             }
         }
 
-        private float _lastComponentSearchTime;
 
         // Подставляет процедурное звёздное поле в фоновый Image.
         //
@@ -429,24 +454,20 @@ namespace Fodinae
                 return;
             }
 
-            if (_starfield == null && (Time.unscaledTime - _lastComponentSearchTime > 1f || _lastComponentSearchTime == 0f))
-            {
-                _lastComponentSearchTime = Time.unscaledTime;
-                _starfield = UnityEngine.Object.FindAnyObjectByType<MenuStarfield>(FindObjectsInactive.Include);
-            }
+            _starfield = MenuStarfield.Current;
 
             if (_starfield != null)
             {
                 float resolvedWidth = _spaceBgImage.resolvedStyle.width;
                 float resolvedHeight = _spaceBgImage.resolvedStyle.height;
-                if (float.IsNaN(resolvedWidth) || resolvedWidth <= 0f)
-                {
-                    resolvedWidth = Screen.width > 0 ? Screen.width : 1920;
-                }
 
-                if (float.IsNaN(resolvedHeight) || resolvedHeight <= 0f)
+                // Пока раскладка не посчитана — ничего не создаём. Подстановка
+                // Screen.width означала текстуру во весь экран, которую на
+                // следующем кадре уничтожают и создают заново нужного размера.
+                if (float.IsNaN(resolvedWidth) || resolvedWidth <= 1f ||
+                    float.IsNaN(resolvedHeight) || resolvedHeight <= 1f)
                 {
-                    resolvedHeight = Screen.height > 0 ? Screen.height : 1080;
+                    return;
                 }
 
                 float panelScale = _spaceBgImage.panel?.scaledPixelsPerPoint ?? 1f;
@@ -480,36 +501,40 @@ namespace Fodinae
                 return;
             }
 
-            if (_scenery == null && (Time.unscaledTime - _lastComponentSearchTime > 1f || _lastComponentSearchTime == 0f))
-            {
-                _lastComponentSearchTime = Time.unscaledTime;
-                _scenery = UnityEngine.Object.FindAnyObjectByType<MenuSceneryController>(FindObjectsInactive.Include);
-                if (_scenery == null && !_scenerySearchWarned && Time.time > 3f)
-                {
-                    Debug.LogWarning("[MainMenu] No MenuSceneryController found in the loaded scenes after 3s - planet render will stay blank");
-                    _scenerySearchWarned = true;
-                }
-            }
+            // Ссылка берётся напрямую, без поиска по сцене: риг проставляет её
+            // в OnEnable. Опрос раз в секунду означал, что промах первой
+            // попытки стоил секунды задержки — планета появлялась заметно позже
+            // остального меню.
+            _scenery = MenuSceneryController.Current;
 
             if (_scenery == null)
             {
+                if (!_scenerySearchWarned && Time.time > 3f)
+                {
+                    Debug.LogWarning(
+                        "[MainMenu] MenuSceneryController не зарегистрировался за 3 с — планета останется пустой.");
+                    _scenerySearchWarned = true;
+                }
+
                 return;
             }
 
-            // The rig renders to the size this element actually occupies, so it
-            // has to be told what that is. Resolved style rather than the USS
-            // value: the panel applies its own scaling, and a 860px rule is not
-            // 860 device pixels on every display.
+            // Риг рисует в текстуру размером с этот элемент, поэтому размер надо
+            // ему сообщить. Берётся resolvedStyle, а не значение из USS: панель
+            // применяет собственное масштабирование, и правило в 860px — это не
+            // 860 физических пикселей на любом экране.
             float resolvedWidth = _planetBodyImage.resolvedStyle.width;
             float resolvedHeight = _planetBodyImage.resolvedStyle.height;
-            if (float.IsNaN(resolvedWidth) || resolvedWidth <= 0f)
-            {
-                resolvedWidth = Screen.width > 0 ? Screen.width : 1920;
-            }
 
-            if (float.IsNaN(resolvedHeight) || resolvedHeight <= 0f)
+            // Пока раскладка не посчитана, размера просто нет. Раньше здесь
+            // подставлялся Screen.width — и текстура создавалась во весь экран,
+            // чтобы на следующем кадре быть уничтоженной и созданной заново уже
+            // правильного размера. Один гарантированный перезалив и пустой кадр
+            // на каждом входе в меню: планета появлялась не сразу.
+            if (float.IsNaN(resolvedWidth) || resolvedWidth <= 1f ||
+                float.IsNaN(resolvedHeight) || resolvedHeight <= 1f)
             {
-                resolvedHeight = Screen.height > 0 ? Screen.height : 1080;
+                return;
             }
 
             float panelScale = _planetBodyImage.panel?.scaledPixelsPerPoint ?? 1f;
@@ -521,8 +546,28 @@ namespace Fodinae
                 !ReferenceEquals(_planetBodyImage.image, _scenery.OutputTexture))
             {
                 _planetBodyImage.image = _scenery.OutputTexture;
+
+#if UNITY_EDITOR
+                if (!_planetTimingLogged)
+                {
+                    _planetTimingLogged = true;
+                    Debug.Log(
+                        $"[Планета] Текстура подставлена через {(Time.realtimeSinceStartup - _uiBuiltAt) * 1000f:F0} мс " +
+                        $"после сборки UI, кадр {Time.frameCount - _uiBuiltFrame} от неё.");
+                }
+#endif
             }
         }
+
+        /// <summary>Текущее и желаемое положение камеры: 0 — меню, 1 — точка высадки.</summary>
+        private float _descentCameraProgress;
+        private float _descentCameraTarget;
+
+#if UNITY_EDITOR
+        private float _uiBuiltAt;
+        private int _uiBuiltFrame;
+        private bool _planetTimingLogged;
+#endif
 
         private bool _scenerySearchWarned;
 
@@ -698,9 +743,33 @@ namespace Fodinae
             }
         }
 
+        /// <summary>
+        /// Ведёт камеру к текущей цели. Вызывается каждый кадр, а не только во
+        /// время загрузки: отмена спуска обязана вернуть камеру обратно, а к
+        /// этому моменту загрузка уже не активна.
+        /// </summary>
+        private void UpdateDescentCamera()
+        {
+            if (Mathf.Approximately(_descentCameraProgress, _descentCameraTarget))
+            {
+                return;
+            }
+
+            // Движение линейное, сглаживание живёт внутри SetDescentFraming —
+            // иначе плавность накладывалась бы дважды и конец пути размазывало.
+            _descentCameraProgress = Mathf.MoveTowards(
+                _descentCameraProgress,
+                _descentCameraTarget,
+                Time.unscaledDeltaTime / DescentAnimationSeconds);
+
+            _scenery?.SetDescentFraming(_descentCameraProgress, LandingSiteDirection);
+        }
+
         private void AnimateAmbientScene()
         {
             float time = Time.time;
+
+            UpdateDescentCamera();
 
             // The marker tracks the actual orbiting body rather than sitting at a
             // fixed spot with a decorative bob, so the label and the glowing point
@@ -732,39 +801,31 @@ namespace Fodinae
         // differ in size.
         private void UpdateStationMarker()
         {
-            if (_beacon == null || _planetBodyImage == null)
+            if (_beacon == null)
             {
                 return;
             }
 
-            if (_scenery == null || !_scenery.TryGetStationViewportPosition(out Vector2 viewport))
+            // Панель равна null, пока элемент не присоединён к дереву.
+            IPanel? hostPanel = _beacon.panel;
+
+            // Единственная точка выхода, и она всегда прячет маркер. Раньше
+            // выходов было четыре, и три из них оставляли метку висеть на
+            // экране — в том числе до того, как планета вообще нарисовалась.
+            if (hostPanel == null ||
+                !TryGetPlanetFrame(out Rect rect, out Rect image) ||
+                _scenery == null ||
+                !_scenery.TryGetStationViewportPosition(out Vector2 viewport))
             {
                 _beacon.style.display = DisplayStyle.None;
                 return;
             }
 
-            Rect rect = _planetBodyImage.layout;
-            if (rect.width <= 0f || rect.height <= 0f)
-            {
-                // Layout has not been resolved yet on the first frames.
-                return;
-            }
-
-            // The badge is moved to whichever side of the marker has room rather
-            // than the whole label being hidden near an edge. Hiding it meant the
-            // station spent long stretches of its orbit as an unlabelled dot -
-            // the label is the point of the marker, so the layout gives way, not
-            // the information.
-            // panel is null until the element is attached; on the first frames
-            // after a rebuild this would otherwise dereference null.
-            IPanel? hostPanel = _beacon.panel;
-            if (hostPanel == null)
-            {
-                return;
-            }
+            // Подпись не прячется у края, а сдвигается в свободное место:
+            // иначе станция подолгу висела бы неподписанной точкой, а подпись
+            // — это и есть смысл маркера.
 
             Rect panel = hostPanel.visualTree.worldBound;
-            Rect image = _planetBodyImage.worldBound;
             float panelX = image.x + (viewport.x * image.width);
             float panelY = image.y + ((1f - viewport.y) * image.height);
 
@@ -774,13 +835,48 @@ namespace Fodinae
 
             if (_stationBadge != null)
             {
-                bool roomOnRight = panelX + badgeWidth < panel.width;
-                _stationBadge.EnableInClassList(StationBadgeRightClass, roomOnRight);
+                // Маркер следует за станцией, подпись — удерживается.
+                //
+                // Раньше сторона подписи выбиралась порогом «есть ли справа
+                // место». Этого мало: станция летит по орбите через весь кадр,
+                // и подпись успевала заехать и под рейл иконок, и под шапку.
+                // Переключение стороны на границе к тому же срабатывало каждый
+                // кадр — отсюда дрожание.
+                //
+                // Теперь подпись просто зажимается в свободную зону. Решение
+                // непрерывное, а не двоичное, поэтому переключаться нечему:
+                // подпись плавно упирается в границу и скользит вдоль неё.
+                const float edgeGap = 24f;
+                const float markerGap = 28f;
+                const float headerSafe = 84f;
 
-                // Near the footer the badge is lifted above the marker instead of
-                // hanging below it and sliding under the bar.
-                bool nearBottom = panelY + badgeHeight > panel.height - footerSafe;
-                _stationBadge.EnableInClassList(StationBadgeAboveClass, nearBottom);
+                float safeRight = panel.width - edgeGap;
+                if (_sidebar != null)
+                {
+                    Rect rail = _sidebar.worldBound;
+                    if (rail.width > 0f && panelY + badgeHeight > rail.yMin && panelY < rail.yMax)
+                    {
+                        safeRight = Mathf.Min(safeRight, rail.xMin - edgeGap);
+                    }
+                }
+
+                // Сторона по-прежнему выбирается по месту, но теперь это лишь
+                // предпочтение: итог всё равно проходит через ограничение.
+                float preferred = panelX + markerGap + badgeWidth <= safeRight
+                    ? panelX + markerGap
+                    : panelX - markerGap - badgeWidth;
+
+                float left = Mathf.Clamp(preferred, edgeGap, Mathf.Max(edgeGap, safeRight - badgeWidth));
+                float top = Mathf.Clamp(
+                    panelY - (badgeHeight * 0.5f),
+                    headerSafe,
+                    Mathf.Max(headerSafe, panel.height - footerSafe - badgeHeight));
+
+                // Смещение считается от маркера: подпись лежит внутри него.
+                _stationBadge.style.left = left - panelX;
+                _stationBadge.style.top = top - panelY;
+                _stationBadge.style.right = StyleKeyword.Auto;
+                _stationBadge.style.bottom = StyleKeyword.Auto;
             }
 
             _beacon.style.display = DisplayStyle.Flex;
@@ -805,22 +901,61 @@ namespace Fodinae
             _beacon.style.top = y - markerHalfSize;
         }
 
-        private void UpdateLandingSectorMarker()
+        /// <summary>
+        /// Готов ли кадр планеты, чтобы к нему можно было привязывать метки.
+        ///
+        /// Это ровно то условие, из-за отсутствия которого метки появлялись
+        /// раньше самой планеты: риг ещё не найден, текстуры ещё нет, раскладка
+        /// ещё не посчитана — а «СЕКТОР-09» уже висит в углу экрана. Проверка
+        /// одна на всех потребителей, чтобы они не могли разойтись во мнениях.
+        /// </summary>
+        private bool TryGetPlanetFrame(out Rect localFrame, out Rect worldFrame)
         {
-            if (_targetReticle == null || _planetBodyImage == null)
+            localFrame = default;
+            worldFrame = default;
+
+            if (_planetBodyImage == null || _scenery == null || _scenery.OutputTexture == null)
             {
-                return;
+                return false;
             }
 
-            var landingSiteDir = new Vector3(-0.48f, 0.10f, -0.87f);
-            if (_scenery == null || !_scenery.TryGetPlanetSurfaceViewportPosition(landingSiteDir, out Vector2 viewport))
+            // Текстура должна быть не просто создана, а уже подставлена в
+            // элемент: между этими двумя событиями планеты на экране ещё нет.
+            if (!ReferenceEquals(_planetBodyImage.image, _scenery.OutputTexture))
             {
-                return;
+                return false;
             }
 
             Rect rect = _planetBodyImage.layout;
-            if (rect.width <= 0f || rect.height <= 0f)
+            if (rect.width <= 1f || rect.height <= 1f ||
+                float.IsNaN(rect.width) || float.IsNaN(rect.height))
             {
+                return false;
+            }
+
+            // Отдаём обе системы координат сразу: метка ставится в координатах
+            // родителя, а решение о свободном месте принимается в координатах
+            // панели. Пока их доставали порознь, легко было перепутать.
+            localFrame = rect;
+            worldFrame = _planetBodyImage.worldBound;
+            return true;
+        }
+
+        private void UpdateLandingSectorMarker()
+        {
+            if (_targetReticle == null)
+            {
+                return;
+            }
+
+            if (!TryGetPlanetFrame(out Rect rect, out _) ||
+                _scenery == null ||
+                !_scenery.TryGetPlanetSurfaceViewportPosition(LandingSiteDirection, out Vector2 viewport))
+            {
+                // Прятать, а не молча выходить. Раньше ранний выход оставлял
+                // метку там, где её застали, — то есть в углу кадра до того,
+                // как планета вообще нарисовалась.
+                _targetReticle.style.display = DisplayStyle.None;
                 return;
             }
 
@@ -830,6 +965,7 @@ namespace Fodinae
             const float markerHalfSize = 11f;
             _targetReticle.style.left = x - markerHalfSize;
             _targetReticle.style.top = y - markerHalfSize;
+            _targetReticle.style.display = DisplayStyle.Flex;
         }
 
         private void HandleKeyboardInput()
@@ -953,16 +1089,13 @@ namespace Fodinae
             int phaseIndex = (int)phase;
             int totalPhases = PhaseSteps.Length;
 
-            if (_networkLabel != null)
-            {
-                _networkLabel.text = phase == LoadPhase.Handshake ? "ПОДКЛЮЧЕНИЕ..." : "HADES-ALPHA · ОНЛАЙН";
-            }
+            float progress = Mathf.Clamp01((float)phaseIndex / totalPhases);
 
             if (_loaderProgressFill != null)
             {
-                float progress = Mathf.Clamp01((float)phaseIndex / totalPhases);
                 _loaderProgressFill.style.width = new Length(progress * 100f, LengthUnit.Percent);
             }
+
 
             if (_loaderPhaseLabel != null)
             {
@@ -1069,12 +1202,16 @@ namespace Fodinae
 
             if (_footerVersionButton != null)
             {
-                _footerVersionButton.clicked += () => OpenModal(_updateModal);
-            }
+                // Версия берётся из настроек плеера, а не из строки в разметке.
+                // Захардкоженная «ВЕРСИЯ 0.8.14» не менялась от сборки к сборке,
+                // то есть по экрану нельзя было понять, какой билд запущен.
+                _footerVersionButton.text = Application.isEditor
+                    ? $"ВЕРСИЯ {Application.version} (РЕДАКТОР)"
+                    : Debug.isDebugBuild
+                        ? $"ВЕРСИЯ {Application.version} (DEV)"
+                        : $"ВЕРСИЯ {Application.version}";
 
-            if (_footerRepairButton != null)
-            {
-                _footerRepairButton.clicked += () => OpenModal(_repairModal);
+                _footerVersionButton.clicked += () => OpenModal(_updateModal);
             }
 
             // Модалки: закрытие
@@ -1277,10 +1414,6 @@ namespace Fodinae
 
             serverCard.AddToClassList("mm-server-card--active");
 
-            if (_networkLabel != null)
-            {
-                _networkLabel.text = serverName;
-            }
         }
 
         private void QuitGame()
@@ -1369,6 +1502,12 @@ namespace Fodinae
         private void OnWorldLoaded()
         {
             _loadingActive = false;
+
+            // Маршрут доводится до конца: раньше третий шаг не подсвечивался
+            // никогда, и полоса внизу навсегда застревала на «СПУСК».
+            _routeDescent?.RemoveFromClassList("mm-route-item--active");
+            _routeSurface?.AddToClassList("mm-route-item--active");
+
             HideLoader();
             HideMenu();
 
@@ -1423,6 +1562,8 @@ namespace Fodinae
 
             _routeOrbit?.RemoveFromClassList("mm-route-item--active");
             _routeDescent?.AddToClassList("mm-route-item--active");
+
+            _descentCameraTarget = 1f;
             UpdateLoaderProgress();
 
             LoadGameSceneAsync().Forget();
@@ -1440,7 +1581,11 @@ namespace Fodinae
             }
 
             _routeDescent?.RemoveFromClassList("mm-route-item--active");
+            _routeSurface?.RemoveFromClassList("mm-route-item--active");
             _routeOrbit?.AddToClassList("mm-route-item--active");
+
+            // Отмена — не мгновенный возврат, а тот же полёт в обратную сторону.
+            _descentCameraTarget = 0f;
         }
 
         private async UniTaskVoid LoadGameSceneAsync()

@@ -29,10 +29,19 @@ namespace Fodinae.UI
         [SerializeField]
         private Material? _starfieldMaterial;
 
+        private const int ResizeThresholdPixels = 24;
+
         private int _targetWidth = 1920;
         private int _targetHeight = 1080;
 
         private RenderTexture? _texture;
+
+        /// <summary>
+        /// Действующее звёздное поле. Как и у рига планеты: регистрация вместо
+        /// опроса, иначе промах первой попытки поиска стоит секунды задержки и
+        /// фон появляется позже остального меню.
+        /// </summary>
+        public static MenuStarfield? Current { get; private set; }
 
         public RenderTexture? Texture => _texture;
 
@@ -41,7 +50,12 @@ namespace Fodinae.UI
             int w = Mathf.Max(width, 64);
             int h = Mathf.Max(height, 64);
 
-            if (_texture != null && _texture.width == w && _texture.height == h)
+            // Порог, а не точное сравнение: размер приходит из Update каждый
+            // кадр и дрожит на пиксель от округлений раскладки, а пересоздание
+            // текстуры — не бесплатная операция.
+            if (_texture != null &&
+                Mathf.Abs(_texture.width - w) <= ResizeThresholdPixels &&
+                Mathf.Abs(_texture.height - h) <= ResizeThresholdPixels)
             {
                 return;
             }
@@ -55,11 +69,17 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
+            Current = this;
             EnsureTexture();
         }
 
         private void OnDisable()
         {
+            if (ReferenceEquals(Current, this))
+            {
+                Current = null;
+            }
+
             ReleaseTexture();
         }
 

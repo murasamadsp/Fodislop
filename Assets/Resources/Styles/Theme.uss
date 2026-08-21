@@ -6,21 +6,25 @@
     /* ── Высококачественные Sci-Fi шрифты ── */
     -unity-font-definition: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
 
-    /* ── Цветовая палитра ── */
-    --color-panel-bg: rgba(20, 20, 20, 0.9);
-    --color-panel-border: rgba(90, 90, 90, 1);
-    --color-accent: rgba(178, 166, 128, 1);
-    --color-accent-hover: rgba(204, 191, 153, 1);
-    --color-text: white;
-    --color-text-dim: rgba(180, 180, 180, 1);
-    --color-danger: rgba(200, 60, 60, 1);
-    --color-success: rgba(60, 180, 60, 1);
+    /* ── Палитра ──
+       Раньше здесь жил самостоятельный тёплый серо-песочный набор
+       (акцент rgb(178,166,128), панель rgba(20,20,20,.9)), из-за чего
+       ин-гейм UI был другого цвета, чем главное меню. Теперь это алиасы
+       семантического слоя из ThemeTokens.uss — палитра в проекте одна. */
+    --color-panel-bg: var(--surface-panel);
+    --color-panel-border: var(--border-subtle);
+    --color-accent: var(--accent-gold);
+    --color-accent-hover: var(--accent-gold-hover);
+    --color-text: var(--text-primary);
+    --color-text-dim: var(--text-secondary);
+    --color-danger: var(--state-danger);
+    --color-success: var(--state-ok);
 
     /* ── Размеры ── */
-    --panel-padding: 12px;
-    --panel-border-width: 2px;
+    --panel-padding: var(--space-6);
+    --panel-border-width: 1px;
     --cell-size: 50px;
-    --cell-gap: 10px;
+    --cell-gap: var(--space-5);
     --icon-size: 36px;
 }
 
@@ -137,15 +141,18 @@ TextField,
        Непрозрачный фон здесь полностью закрыл бы её. PanelSettings не чистит
        цвет (m_ClearColor: 0), поэтому камера видна везде, где UI прозрачен. */
     background-color: rgba(0, 0, 0, 0);
-    --mm-gold: rgb(245, 197, 66);
-    --mm-gold-light: rgb(255, 225, 120);
-    --mm-cyan: rgb(86, 221, 212);
-    --mm-text: rgb(244, 246, 250);
-    --mm-muted: rgb(149, 165, 181);
-    --mm-dim: rgb(90, 107, 124);
-    --mm-line: rgba(245, 197, 66, 0.25);
-    --mm-line-cyan: rgba(86, 221, 212, 0.25);
-    --mm-card-bg: rgba(14, 22, 38, 0.9);
+    /* Локальная палитра меню — тоже алиасы семантического слоя.
+       --mm-dim становится светлее прежнего rgb(90,107,124): тот давал
+       контраст 3.2:1 и не проходил порог читаемости для мелкого текста. */
+    --mm-gold: var(--accent-gold);
+    --mm-gold-light: var(--accent-gold-hover);
+    --mm-cyan: var(--accent-cyan);
+    --mm-text: var(--text-primary);
+    --mm-muted: var(--text-secondary);
+    --mm-dim: var(--text-tertiary);
+    --mm-line: var(--border-gold-soft);
+    --mm-line-cyan: var(--border-cyan-soft);
+    --mm-card-bg: var(--surface-raised);
 }
 
 /* ── Фон космоса ── */
@@ -167,18 +174,33 @@ TextField,
 }
 
 /* ── Планетарная система справа ── */
-/* Планета кадрируется правым краем экрана, а не висит целиком в пустоте.
-   Диск занимает ~70% ширины рендер-текстуры, поэтому отрицательный right
-   уводит его правый край примерно на 60px за кадр: тело выглядит слишком
-   большим, чтобы поместиться, и держит правый край композиции.
-   Смещение по вертикали убирает мёртвое центрирование. */
+/* Кадр планеты полноэкранный и НИКОГДА не меняет размер.
+   Размер рендер-текстуры берётся из размера этого элемента, а решение о нём
+   принимается в Update каждый кадр. Стоило элементу поехать — и текстура
+   пересоздавалась покадрово: лаг, гонки и пустая планета, пока новая текстура
+   не отрисована. Поэтому положение и масштаб планеты в кадре задаёт камера
+   (MenuSceneryController), а не прямоугольник в интерфейсе. */
+/* Планета кадрируется правым краем экрана, а не висит целиком в пустоте:
+   тело должно выглядеть слишком большим, чтобы поместиться, — это и есть
+   заявка на масштаб мира. Смещение по вертикали убирает мёртвое
+   центрирование.
+
+   Числа выведены, а не подобраны. Источник истины — --planet-disc: 860px из
+   visual/main-menu-mirror/css/tokens.css. Здесь планета не CSS-фигура, а
+   рендер 3D-сферы в RenderTexture, и сфера занимает ~70% ширины кадра
+   (замерено: контейнер 820 → диск 568). Отсюда контейнер = 860 / 0.7 ≈ 1229,
+   а поля вокруг диска = (1229 − 860) / 2 ≈ 184. Чтобы диск уходил за правый
+   край на 60px, нужен right = −(60 + 184) = −244.
+
+   Тиров у этого правила нет: USS не знает медиазапросов, а держать три
+   копии числа хуже, чем одну композицию. Если понадобится — заводить
+   .tier--compact .mm-planet-system рядом. */
 .mm-planet-system {
     position: absolute;
-    right: 40px;
-    top: 51.5%;
-    translate: 0 -50%;
-    width: 820px;
-    height: 820px;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
     align-items: center;
     justify-content: center;
 }
@@ -214,7 +236,13 @@ TextField,
     opacity: 0;
 }
 
+/* Метки скрыты, пока код не поставит их на место.
+   Их положение вычисляется из проекции 3D-точки на кадр планеты, то есть
+   до появления самой планеты осмысленного положения не существует. С
+   видимостью по умолчанию первые кадры показывали «СЕКТОР-09» в углу экрана
+   рядом с пустым местом — гонка, видимая глазом на каждом входе в меню. */
 .mm-target-reticle {
+    display: none;
     position: absolute;
     left: 235px;
     top: 48%;
@@ -332,7 +360,7 @@ TextField,
 }
 
 .mm-brand-sub {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-cyan);
     font-size: 9px;
     margin-top: 2px;
@@ -406,7 +434,7 @@ TextField,
 }
 
 .mm-user-name {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: white;
     font-size: 12px;
     -unity-font-style: bold;
@@ -445,9 +473,29 @@ TextField,
     color: var(--mm-text);
 }
 
+/* Иконки рейла лежат белыми, цвет даёт USS. Так один файл обслуживает и
+   покой, и наведение, и акцентные варианты — раньше вместо контуров были
+   заглушки (у Discord — прямоугольник с двумя точками). */
 .mm-side-icon {
     width: 22px;
     height: 22px;
+    background-size: contain;
+    -unity-background-image-tint-color: var(--accent-cyan);
+    transition-property: -unity-background-image-tint-color;
+    transition-duration: var(--dur-base);
+    transition-timing-function: var(--ease-standard);
+}
+
+.mm-side-btn:hover .mm-side-icon {
+    -unity-background-image-tint-color: var(--accent-cyan-hover);
+}
+
+.mm-side-btn--gold .mm-side-icon {
+    -unity-background-image-tint-color: var(--accent-gold);
+}
+
+.mm-side-btn--danger .mm-side-icon {
+    -unity-background-image-tint-color: var(--state-danger);
 }
 
 .mm-side-btn:hover {
@@ -499,7 +547,7 @@ TextField,
 }
 
 .mm-eyebrow {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-gold);
     font-size: 12px;
     -unity-font-style: bold;
@@ -525,22 +573,28 @@ TextField,
     -unity-font-style: bold;
 }
 
+/* Ширина та же, что у баннера и кнопок: это один столбец, и 400 против 380
+   давали несовпадение левого края на 20px — заметное, но необъяснимое. */
 .mm-subtitle {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-muted);
     font-size: 14px;
     white-space: normal;
-    max-width: 400px;
+    max-width: var(--menu-action-width);
     margin-bottom: 24px;
 }
 
 /* ── Кнопки меню ── */
 .mm-button-group {
     flex-direction: column;
-    width: 380px;
+    width: var(--menu-action-width);
     margin-bottom: 14px;
 }
 
+/* margin-left/right: 0 обязательны. В дефолтной теме UI Toolkit у .unity-button
+   стоит margin: 3px со всех сторон, а наше правило переопределяло только
+   margin-bottom — кнопки оказывались утоплены внутрь колонки на 3px с каждой
+   стороны, и их правый край не совпадал с краем баннера обновления. */
 Button.mm-btn-primary,
 Button#PlayButton {
     flex-direction: row;
@@ -552,6 +606,9 @@ Button#PlayButton {
     border-width: 1px;
     border-color: rgb(245, 197, 66);
     border-radius: 4px;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
     margin-bottom: 10px;
 }
 
@@ -594,6 +651,10 @@ Button#ServerSelectButton {
     border-width: 1px;
     border-color: rgba(86, 221, 212, 0.38);
     border-radius: 4px;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 Button.mm-btn-secondary:hover,
@@ -656,22 +717,19 @@ Button#ServerSelectButton Label {
 }
 
 /* ── Лоадер и Спуск ── */
+/* Экран спуска не закрашивает сцену. Раньше здесь была непрозрачная заливка
+   плюс полноэкранная PNG (loader_new.png, 3.4 МБ), которая накрывала уже
+   отрисованные звёздное поле и планету — то есть игра прятала собственную
+   сцену за картинкой этой же сцены. Вместо этого лёгкий димер: планета видна,
+   и камера подъезжает к точке высадки прямо под текстом загрузки. */
 .mm-loader {
     position: absolute;
     left: 0;
     top: 0;
     right: 0;
     bottom: 0;
-    background-color: #0b111e;
+    background-color: rgba(3, 5, 9, 0.55);
     display: none;
-}
-
-.mm-loader-image {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
 }
 
 .mm-loader-content {
@@ -706,7 +764,7 @@ Button#ServerSelectButton Label {
 }
 
 .mm-loader-phase-label {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-text);
     font-size: 12px;
 }
@@ -768,14 +826,35 @@ Button#ServerSelectButton Label {
 }
 
 .mm-route-item {
+    flex-direction: row;
+    align-items: center;
+}
+
+.mm-route-text {
     -unity-font-definition: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
     color: var(--mm-dim);
     font-size: 11px;
 }
 
-.mm-route-item--active {
+.mm-route-item--active .mm-route-text {
     color: var(--mm-gold);
     -unity-font-style: bold;
+}
+
+/* Ромб активного шага. Место под него не резервируется: шаги стоят в ряд
+   через разделители, и лёгкий сдвиг соседей при переходе читается как
+   движение по маршруту. */
+.mm-route-dot {
+    display: none;
+    width: 5px;
+    height: 5px;
+    margin-right: 6px;
+    rotate: 45deg;
+    background-color: var(--mm-gold);
+}
+
+.mm-route-item--active .mm-route-dot {
+    display: flex;
 }
 
 .mm-route-sep {
@@ -810,7 +889,7 @@ Button#ServerSelectButton Label {
 }
 
 .mm-ticker-text {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-text);
     font-size: 11px;
     overflow: hidden;
@@ -918,7 +997,7 @@ Button#ServerSelectButton Label {
 }
 
 .mm-modal-desc {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-muted);
     font-size: 13px;
     margin-bottom: 14px;
@@ -1009,7 +1088,7 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-sc-desc {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-muted);
     font-size: 11px;
     margin-top: 2px;
@@ -1119,14 +1198,14 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-item-title {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: white;
     font-size: 13px;
     -unity-font-style: bold;
 }
 
 .mm-item-desc {
-    -unity-font: url("project://database/Assets/Resources/Fonts/Exo2.ttf");
+    -unity-font-definition: var(--face-body);
     color: var(--mm-muted);
     font-size: 11px;
 }
@@ -1232,7 +1311,7 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-tc-title {
-    -unity-font: resource("Fonts/Exo2");
+    -unity-font-definition: var(--face-body);
     -unity-font-definition: resource("Fonts/Exo2");
     color: white;
     font-size: 13px;
@@ -1243,7 +1322,7 @@ Button.mm-btn-outline:hover {
 .mm-text--gold { color: var(--mm-gold); }
 
 .mm-tc-body {
-    -unity-font: resource("Fonts/Exo2");
+    -unity-font-definition: var(--face-body);
     -unity-font-definition: resource("Fonts/Exo2");
     color: var(--mm-muted);
     font-size: 12px;
@@ -1291,7 +1370,7 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-profile-avatar Label {
-    -unity-font: resource("Fonts/Unbounded");
+    -unity-font-definition: var(--face-display);
     -unity-font-definition: resource("Fonts/Unbounded");
     color: rgb(18, 12, 4);
     font-size: 24px;
@@ -1303,7 +1382,7 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-profile-name {
-    -unity-font: resource("Fonts/Unbounded");
+    -unity-font-definition: var(--face-display);
     -unity-font-definition: resource("Fonts/Unbounded");
     color: white;
     font-size: 16px;
@@ -1311,7 +1390,7 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-profile-clan {
-    -unity-font: resource("Fonts/Exo2");
+    -unity-font-definition: var(--face-body);
     -unity-font-definition: resource("Fonts/Exo2");
     color: var(--mm-gold);
     font-size: 12px;
@@ -1319,9 +1398,67 @@ Button.mm-btn-outline:hover {
 }
 
 .mm-profile-uid {
-    -unity-font: resource("Fonts/JetBrainsMono");
+    -unity-font-definition: var(--face-data);
     -unity-font-definition: resource("Fonts/JetBrainsMono");
     color: var(--mm-muted);
     font-size: 10px;
     margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Баннер обязательного обновления (#UpdateAlertBanner)
+   Соответствует .update-alert-banner из visual/main-menu-mirror.
+   ═══════════════════════════════════════════════════════════ */
+
+.mm-update-banner {
+    flex-direction: row;
+    align-items: center;
+    width: var(--menu-action-width);
+    justify-content: space-between;
+    margin-bottom: var(--space-8);
+    padding: var(--space-5) var(--space-6);
+    background-color: var(--surface-ember);
+    border-width: 1px;
+    border-color: var(--border-gold);
+    border-radius: var(--radius-sm);
+    /* Левая грань — акцентная полоса состояния. */
+    border-left-width: 3px;
+    border-left-color: var(--accent-gold);
+}
+
+.mm-update-banner:hover {
+    border-color: var(--accent-gold);
+}
+
+.mm-update-banner-text {
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+.mm-update-banner-title {
+    -unity-font-definition: var(--face-data);
+    font-size: var(--size-xs);
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    color: var(--accent-gold);
+    margin-bottom: var(--space-1);
+}
+
+.mm-update-banner-sub {
+    -unity-font-definition: var(--face-body);
+    font-size: var(--size-sm);
+    color: var(--text-secondary);
+    white-space: normal;
+}
+
+.mm-update-banner-cta {
+    -unity-font-definition: var(--face-data);
+    font-size: var(--size-2xs);
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    color: var(--text-on-gold);
+    background-color: var(--accent-gold);
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius-sharp);
+    margin-left: var(--space-6);
 }

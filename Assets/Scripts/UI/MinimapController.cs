@@ -335,6 +335,12 @@ namespace Fodinae.UI
             imageContainer.Add(_minimapImageElement);
 
             _minimapRoot.Add(imageContainer);
+            _minimapRoot.RegisterCallback<ClickEvent>(evt =>
+            {
+                WorldMapController? mapController = _resolver?.ResolveOrDefault<WorldMapController>();
+                mapController?.ToggleMapMode();
+                evt.StopPropagation();
+            });
             root.Add(_minimapRoot);
 
             _isVisible = true;

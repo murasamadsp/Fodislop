@@ -126,108 +126,51 @@ function switchViewState(state) {
   currentMode = state;
   playSound('click');
 
+  // Подсветка dev-кнопок идёт по data-state, а не по разбору русского текста
+  // кнопки: подпись — это контент, а не идентификатор.
   document.querySelectorAll('.dev-btn').forEach(btn => {
-    btn.classList.remove('active');
-    const txt = btn.innerText.toLowerCase();
-    if (
-      (state === 'auth' && (txt.includes('вход') || txt.includes('регистрация') || txt.includes('авторизация'))) ||
-      (state === 'onboarding' && txt.includes('онбординг')) ||
-      (state === 'menu' && (txt.includes('орбита') || txt.includes('хаб') || txt.includes('меню'))) ||
-      (state === 'descent' && txt.includes('спуск')) ||
-      (state === 'ingame' && txt.includes('игра')) ||
-      (state === 'pause' && txt.includes('пауза')) ||
-      (state === 'reconnect' && txt.includes('обрыв'))
-    ) {
-      btn.classList.add('active');
-    }
+    btn.classList.toggle('active', btn.dataset.state === state);
   });
 
   const viewport = document.getElementById('appViewport');
-  const mainHeader = document.querySelector('.fa-header');
-  const mainSidebar = document.querySelector('.genshin-sidebar');
-  const mainFooter = document.querySelector('.fa-footer');
+  const views = {
+    auth: 'authView',
+    onboarding: 'onboardingView',
+    descent: 'descentView',
+    loading: 'descentView',
+    ingame: 'ingameView',
+    pause: 'pauseView',
+    reconnect: 'reconnectView',
+  };
 
-  const splashView = document.getElementById('splashView');
-  const authView = document.getElementById('authView');
-  const onboardingView = document.getElementById('onboardingView');
-  const menuArea = document.getElementById('menuArea');
-  const descentView = document.getElementById('descentView');
-  const ingameView = document.getElementById('ingameView');
-  const pauseView = document.getElementById('pauseView');
-  const reconnectView = document.getElementById('reconnectView');
+  document
+    .querySelectorAll('.auth-overlay-view, .onboarding-overlay-view, .descent-overlay-view, .ingame-viewport, .pause-overlay-view, .reconnect-overlay-view')
+    .forEach(v => v.classList.remove('active'));
 
-  const routeOrbit = document.getElementById('routeOrbit');
-  const routeDescent = document.getElementById('routeDescent');
-  const routeSurface = document.getElementById('routeSurface');
-
-  if (splashView) splashView.classList.remove('active');
-  if (authView) authView.classList.remove('active');
-  if (onboardingView) onboardingView.classList.remove('active');
-  if (menuArea) menuArea.style.display = 'none';
-  if (descentView) descentView.classList.remove('active');
-  if (ingameView) ingameView.classList.remove('active');
-  if (pauseView) pauseView.classList.remove('active');
-  if (reconnectView) reconnectView.classList.remove('active');
-
-  if (routeOrbit) routeOrbit.classList.remove('active');
-  if (routeDescent) routeDescent.classList.remove('active');
-  if (routeSurface) routeSurface.classList.remove('active');
-
+  // Видимость хрома (шапка, рейл, футер) и колонки меню задаётся правилами
+  // [data-state] в CSS. Раньше здесь проставлялся style.display, который
+  // намертво перебивал любое правило таблицы стилей.
   viewport.dataset.state = state;
 
-  if (state === 'splash') {
-    if (mainHeader) mainHeader.style.display = 'none';
-    if (mainSidebar) mainSidebar.style.display = 'none';
-    if (mainFooter) mainFooter.style.display = 'none';
-    if (splashView) splashView.classList.add('active');
-  } else if (state === 'auth') {
-    if (mainHeader) mainHeader.style.display = 'flex';
-    if (mainSidebar) mainSidebar.style.display = 'none';
-    if (mainFooter) mainFooter.style.display = 'none';
-    if (authView) authView.classList.add('active');
-  } else if (state === 'onboarding') {
-    if (mainHeader) mainHeader.style.display = 'flex';
-    if (mainSidebar) mainSidebar.style.display = 'none';
-    if (mainFooter) mainFooter.style.display = 'none';
-    if (onboardingView) onboardingView.classList.add('active');
-  } else if (state === 'menu') {
-    if (mainHeader) mainHeader.style.display = 'flex';
-    if (mainSidebar) mainSidebar.style.display = 'flex';
-    if (mainFooter) mainFooter.style.display = 'flex';
-    if (menuArea) menuArea.style.display = 'flex';
-    if (routeOrbit) routeOrbit.classList.add('active');
+  const routes = { menu: 'routeOrbit', loading: 'routeDescent', descent: 'routeDescent', ingame: 'routeSurface' };
+  ['routeOrbit', 'routeDescent', 'routeSurface'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', routes[state] === id);
+  });
 
-    const nDot = document.getElementById('networkDot');
-    const nText = document.getElementById('networkText');
-    if (nDot) nDot.className = 'network-dot';
-    if (nText) nText.innerText = 'СЕВЕРНАЯ ЕВРОПА (СТОКГОЛЬМ) · 38 МС';
-  } else if (state === 'loading' || state === 'descent') {
-    if (mainHeader) mainHeader.style.display = 'flex';
-    if (mainSidebar) mainSidebar.style.display = 'none';
-    if (mainFooter) mainFooter.style.display = 'flex';
-    if (descentView) descentView.classList.add('active');
-    if (routeDescent) routeDescent.classList.add('active');
-  } else if (state === 'ingame') {
-    if (mainHeader) mainHeader.style.display = 'none';
-    if (mainSidebar) mainSidebar.style.display = 'none';
-    if (mainFooter) mainFooter.style.display = 'none';
-    if (ingameView) ingameView.classList.add('active');
-    if (routeSurface) routeSurface.classList.add('active');
-  } else if (state === 'pause') {
-    if (ingameView) ingameView.classList.add('active');
-    if (pauseView) pauseView.classList.add('active');
-  } else if (state === 'reconnect') {
-    if (mainHeader) mainHeader.style.display = 'flex';
-    if (mainSidebar) mainSidebar.style.display = 'none';
-    if (mainFooter) mainFooter.style.display = 'flex';
-    if (reconnectView) reconnectView.classList.add('active');
-
-    const nDot = document.getElementById('networkDot');
-    const nText = document.getElementById('networkText');
-    if (nDot) nDot.className = 'network-dot error';
-    if (nText) nText.innerText = 'СВЯЗЬ ПОТЕРЯНА · ПОВТОРНЫЙ ПОИСК...';
-    startReconnectCount();
+  const viewId = views[state];
+  if (viewId) {
+    const el = document.getElementById(viewId);
+    if (el) el.classList.add('active');
   }
+
+  // Пауза рисуется поверх живой игровой сцены.
+  if (state === 'pause') {
+    const ingame = document.getElementById('ingameView');
+    if (ingame) ingame.classList.add('active');
+  }
+
+  if (state === 'reconnect') startReconnectCount();
 }
 
 // ----------------------------------------------------
@@ -731,7 +674,7 @@ function initProgrammatorGrid() {
     cell.addEventListener('click', () => {
       playSound('click');
       cell.innerText = playerState.activeProgCommand.split(' ')[0];
-      cell.style.color = 'var(--fa-cyan)';
+      cell.style.color = 'var(--accent-cyan)';
     });
     container.appendChild(cell);
   }
@@ -746,7 +689,7 @@ function clearProgrammatorGrid() {
   playSound('click');
   document.querySelectorAll('.prog-grid-cell').forEach(cell => {
     cell.innerText = '·';
-    cell.style.color = 'var(--fa-dim)';
+    cell.style.color = 'var(--text-tertiary)';
     cell.classList.remove('active-step');
   });
 }
@@ -758,7 +701,7 @@ function runProgrammatorExec() {
   const status = document.getElementById('progStatus');
   if (status) {
     status.innerText = 'ВЫПОЛНЕНИЕ...';
-    status.style.color = 'var(--fa-gold)';
+    status.style.color = 'var(--accent-gold)';
   }
 
   const cells = Array.from(document.querySelectorAll('.prog-grid-cell'));
@@ -782,7 +725,7 @@ function stopProgrammatorExec() {
   const status = document.getElementById('progStatus');
   if (status) {
     status.innerText = 'ОСТАНОВЛЕН';
-    status.style.color = 'var(--fa-green)';
+    status.style.color = 'var(--state-ok)';
   }
   document.querySelectorAll('.prog-grid-cell').forEach(c => c.classList.remove('active-step'));
 }
@@ -893,28 +836,86 @@ function confirmQuit() {
 // ----------------------------------------------------
 // Модальные окна
 // ----------------------------------------------------
+// Модальный слой. Одновременно открыта ровно одна модалка: раньше openModal
+// просто добавлял класс, и любые два вызова подряд накладывали окна друг на
+// друга. Плюс сохранение и возврат фокуса — без этого после закрытия окна
+// фокус улетал в начало документа.
+let lastFocusedBeforeModal = null;
+
+function getOpenModal() {
+  return document.querySelector('.modal-overlay.active');
+}
+
 function openModal(id) {
   playSound('click');
   const el = document.getElementById(id);
-  if (el) el.classList.add('active');
+  if (!el) return;
+
+  const current = getOpenModal();
+  if (current && current !== el) current.classList.remove('active');
+  else if (!current) lastFocusedBeforeModal = document.activeElement;
+
+  el.classList.add('active');
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+
+  const focusable = el.querySelector(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable) focusable.focus();
 }
 
 function closeModal(id) {
   playSound('click');
-  const el = document.getElementById(id);
-  if (el) el.classList.remove('active');
+  const el = id ? document.getElementById(id) : getOpenModal();
+  if (!el) return;
+
+  el.classList.remove('active');
+  el.removeAttribute('aria-modal');
+
+  if (lastFocusedBeforeModal && document.contains(lastFocusedBeforeModal)) {
+    lastFocusedBeforeModal.focus();
+  }
+  lastFocusedBeforeModal = null;
 }
+
+// Клавиатурная активация для элементов, которые не являются <button>, но ведут
+// себя как кнопки (строки таблицы серверов, карточки хроники, пилюли табов).
+// Один делегированный обработчик вместо 24 инлайновых: любой новый элемент с
+// role="button" получает поведение бесплатно.
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+
+  const el = event.target;
+  if (!el.hasAttribute || !el.hasAttribute('onclick')) return;
+  if (el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return;
+
+  const role = el.getAttribute('role');
+  if (role !== 'button' && role !== 'row') return;
+
+  // Пробел на роли button прокручивает страницу — это надо погасить.
+  event.preventDefault();
+  el.click();
+});
+
+// Клик по затемнённому фону закрывает окно — стандартное поведение, которого
+// в макете не было вовсе.
+document.addEventListener('click', event => {
+  if (event.target.classList && event.target.classList.contains('modal-overlay')) {
+    closeModal(event.target.id);
+  }
+});
 
 function openMandatoryUpdateModal() {
   playSound('alert');
   openModal('mandatoryUpdateModal');
 }
 
-function switchGenshinTab(tabId, trigger) {
+function switchSettingsTab(tabId, trigger) {
   playSound('hover');
-  const container = trigger.closest('.genshin-settings-layout');
+  const container = trigger.closest('.fdn-settings-layout');
   if (!container) return;
-  container.querySelectorAll('.genshin-nav-btn').forEach(b => b.classList.remove('active'));
+  container.querySelectorAll('.fdn-settings-tab').forEach(b => b.classList.remove('active'));
   container.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
 
   trigger.classList.add('active');

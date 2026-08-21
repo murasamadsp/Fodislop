@@ -43,7 +43,6 @@
 
         <!-- ЭКРАН СПУСКА (ФАЗЫ ЗАГРУЗКИ) -->
         <ui:VisualElement name="LoaderContainer" class="mm-loader" style="display: none;">
-            <ui:Image name="LoaderImage" class="mm-loader-image" />
             <ui:VisualElement name="LoaderContent" class="mm-loader-content">
                 <ui:Label name="LoaderEyebrow" class="mm-eyebrow" text="ФАЗА СПУСКА 03 / 05" />
                 <ui:Label class="mm-heading-white" text="Подготавливаем" />
@@ -72,11 +71,6 @@
             </ui:VisualElement>
 
             <ui:VisualElement class="mm-header-right">
-                <ui:VisualElement name="MainMenuNetwork" class="mm-network">
-                    <ui:VisualElement name="MainMenuNetworkDot" class="mm-network-dot" />
-                    <ui:Label name="MainMenuNetworkLabel" text="СЕВЕРНАЯ ЕВРОПА (СТОКГОЛЬМ) · 38 МС" />
-                </ui:VisualElement>
-
                 <ui:Button name="UserPillButton" class="mm-user-pill">
                     <ui:VisualElement class="mm-user-avatar">
                         <ui:Label text="Ш" />
@@ -97,6 +91,19 @@
                 <ui:Label class="mm-heading-gold" text="под поверхностью." />
             </ui:VisualElement>
             <ui:Label class="mm-subtitle" text="Спускайся на неизведанные глубины. Бури породу, автоматизируй дронов, создавай кластеры и выживай в бесконечной шахте." />
+
+            <!-- Баннер обязательного обновления.
+                 MainMenu.cs:265 запрашивает #UpdateAlertBanner и вешает на него
+                 открытие окна обновления, но самого элемента в разметке не было —
+                 биндинг молча получал null. Разметка соответствует
+                 .update-alert-banner из visual/main-menu-mirror. -->
+            <ui:Button name="UpdateAlertBanner" class="mm-update-banner">
+                <ui:VisualElement class="mm-update-banner-text">
+                    <ui:Label class="mm-update-banner-title" text="ТРЕБУЕТСЯ ОБНОВЛЕНИЕ v0.9.0" />
+                    <ui:Label class="mm-update-banner-sub" text="Без обновления игра недоступна" />
+                </ui:VisualElement>
+                <ui:Label class="mm-update-banner-cta" text="ОБНОВИТЬ" />
+            </ui:Button>
 
             <!-- Основные кнопки -->
             <ui:VisualElement class="mm-button-group">
@@ -126,46 +133,59 @@
         <!-- ПРАВАЯ БОКОВАЯ ПАНЕЛЬ С КНОПКАМИ И СОЦСЕТЯМИ -->
         <ui:VisualElement class="mm-sidebar">
             <ui:Button name="SideChronicleButton" class="mm-side-btn" tooltip="Хроника событий">
-                <ui:Image name="SideChronicleIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideChronicleIcon" class="mm-side-icon" />
             </ui:Button>
             <ui:Button name="SideSettingsButton" class="mm-side-btn" tooltip="Настройки системы">
-                <ui:Image name="SideSettingsIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideSettingsIcon" class="mm-side-icon" />
             </ui:Button>
             <ui:Button name="SideRepairButton" class="mm-side-btn" tooltip="Проверка файлов">
-                <ui:Image name="SideRepairIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideRepairIcon" class="mm-side-icon" />
             </ui:Button>
             <ui:Button name="SideUpdateButton" class="mm-side-btn mm-side-btn--gold" tooltip="Обновление v0.9.0">
-                <ui:Image name="SideUpdateIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideUpdateIcon" class="mm-side-icon" />
                 <ui:VisualElement class="mm-side-badge" />
             </ui:Button>
 
             <ui:VisualElement class="mm-sidebar-sep" />
 
             <ui:Button name="SideDiscordButton" class="mm-side-btn" tooltip="Discord сообщество">
-                <ui:Image name="SideDiscordIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideDiscordIcon" class="mm-side-icon" />
             </ui:Button>
             <ui:Button name="SideTelegramButton" class="mm-side-btn" tooltip="Telegram канал">
-                <ui:Image name="SideTelegramIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideTelegramIcon" class="mm-side-icon" />
             </ui:Button>
             <ui:Button name="SideVkButton" class="mm-side-btn" tooltip="ВКонтакте">
-                <ui:Image name="SideVkIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideVkIcon" class="mm-side-icon" />
             </ui:Button>
 
             <ui:VisualElement class="mm-sidebar-sep" />
 
             <ui:Button name="SideExitButton" class="mm-side-btn mm-side-btn--danger" tooltip="Выход из игры">
-                <ui:Image name="SideExitIcon" class="mm-side-icon" />
+                <ui:VisualElement name="SideExitIcon" class="mm-side-icon" />
             </ui:Button>
         </ui:VisualElement>
 
         <!-- НИЖНИЙ ФУТЕР (48px) -->
         <ui:VisualElement class="mm-footer">
             <ui:VisualElement class="mm-route">
-                <ui:Label class="mm-route-item mm-route-item--active" text="• ОРБИТА" />
+                <!-- Маркер активного шага — реальный элемент, а не символ в
+                     тексте: в макете это ::before, а псевдоэлементов в USS нет.
+                     Пока «•» был частью строки «• ОРБИТА», он не мог переехать
+                     на следующий шаг. -->
+                <ui:VisualElement name="MainMenuRouteOrbit" class="mm-route-item mm-route-item--active">
+                    <ui:VisualElement class="mm-route-dot" />
+                    <ui:Label class="mm-route-text" text="ОРБИТА" />
+                </ui:VisualElement>
                 <ui:VisualElement class="mm-route-sep" />
-                <ui:Label class="mm-route-item" text="СПУСК" />
+                <ui:VisualElement name="MainMenuRouteDescent" class="mm-route-item">
+                    <ui:VisualElement class="mm-route-dot" />
+                    <ui:Label class="mm-route-text" text="СПУСК" />
+                </ui:VisualElement>
                 <ui:VisualElement class="mm-route-sep" />
-                <ui:Label class="mm-route-item" text="ПОВЕРХНОСТЬ" />
+                <ui:VisualElement name="MainMenuRouteSurface" class="mm-route-item">
+                    <ui:VisualElement class="mm-route-dot" />
+                    <ui:Label class="mm-route-text" text="ПОВЕРХНОСТЬ" />
+                </ui:VisualElement>
             </ui:VisualElement>
 
             <ui:Button name="NewsTickerButton" class="mm-news-ticker">
@@ -174,11 +194,7 @@
             </ui:Button>
 
             <ui:VisualElement class="mm-footer-meta">
-                <ui:Button name="FooterVersionButton" class="mm-footer-link" text="ВЕРСИЯ КЛИЕНТА 0.9.0 (АКТУАЛЬНА)" />
-                <ui:Label class="mm-footer-dot" text="•" />
-                <ui:Button name="FooterRepairButton" class="mm-footer-link" text="ЦЕЛОСТНОСТЬ: В НОРМЕ" />
-                <ui:Label class="mm-footer-dot" text="•" />
-                <ui:Label class="mm-footer-engine" text="URP 2D / C# 12 / FMOD" />
+                <ui:Button name="FooterVersionButton" class="mm-footer-link" text="ВЕРСИЯ" />
             </ui:VisualElement>
         </ui:VisualElement>
 

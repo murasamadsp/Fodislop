@@ -193,6 +193,7 @@ namespace Fodinae.Core
             RegisterManager<InventoryView>(builder);
             RegisterManager<PauseMenu>(builder);
             RegisterManager<MinimapController>(builder);
+            RegisterManager<WorldMapController>(builder);
             RegisterManager<DisplayManager>(builder);
             RegisterManager<InGameDebugOverlay>(builder);
             builder.Register<LocalizationService>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();

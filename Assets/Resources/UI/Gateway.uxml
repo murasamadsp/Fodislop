@@ -1,0 +1,191 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!-- ═══════════════════════════════════════════════════════════
+         GATEWAY — вход и онбординг
+
+         Отдельная сцена перед главным меню: Bootstrap → Gateway → MainMenu.
+         Раньше блок входа жил внутри MainMenu.uxml оверлеем; вынесен, чтобы
+         меню не тащило на себе чужой жизненный цикл, а ворота можно было
+         загрузить и выгрузить целиком вместе со сценой.
+         ═══════════════════════════════════════════════════════════ -->
+    <ui:VisualElement name="GatewayRoot" class="gateway-root gateway--auth">
+    <!-- ═══════════════════════════════════════════════════════
+         ВОРОТА ВХОДА
+         Портировано из visual/main-menu-mirror (.auth-*). Замены по
+         контракту переносимости: radial-gradient → плотная заливка,
+         backdrop-filter → она же, ::before/::after угловые скобки →
+         реальные элементы, box-shadow → рамка, gap → margin на детях.
+
+         ВНИМАНИЕ: в протоколе MinesProtocol нет ни логина, ни пароля,
+         ни регистрации — ClientHelloPacket несёт только токен из
+         PlayerPrefs, а сервер отвечает AuthTokenPacket. Поля пароля и
+         вкладка регистрации здесь — заглушки по макету; рабочие пути
+         это «Войти» (обычное подключение) и «Офлайн режим (Dummy)».
+         ═══════════════════════════════════════════════════════ -->
+    <ui:VisualElement name="AuthOverlay" class="auth-overlay">
+        <ui:VisualElement name="AuthCard" class="auth-card">
+            <ui:VisualElement class="auth-brace auth-brace--tl" />
+            <ui:VisualElement class="auth-brace auth-brace--br" />
+
+            <ui:VisualElement class="auth-brand">
+                <ui:VisualElement name="AuthBrandLogo" class="auth-brand-logo" />
+                <ui:Label class="auth-brand-title" text="FODINAE" />
+                <ui:Label class="auth-brand-subtitle" text="DEEP SUBSURFACE EXPEDITION // MINES PROTOCOL v7" />
+                <ui:VisualElement class="auth-systems">
+                    <ui:Label name="AuthStatusGpu" class="auth-system-chip" text="[GPU] OK" />
+                    <ui:Label name="AuthStatusAudio" class="auth-system-chip" text="[FMOD] SYNCED" />
+                    <ui:Label name="AuthStatusWorld" class="auth-system-chip" text="[WORLD] MOUNTED" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:VisualElement class="auth-tabs">
+                <ui:Button name="AuthTabLogin" class="auth-tab auth-tab--active" text="ВХОД В АККАУНТ" />
+                <ui:Button name="AuthTabRegister" class="auth-tab" text="РЕГИСТРАЦИЯ" />
+            </ui:VisualElement>
+
+            <!-- Форма входа -->
+            <ui:VisualElement name="AuthLoginForm" class="auth-form">
+                <ui:VisualElement class="auth-field">
+                    <ui:Label class="auth-field-label" text="ПОЗЫВНОЙ ШАХТЁРА (ЛОГИН):" />
+                    <ui:TextField name="AuthLogin" class="auth-input" />
+                </ui:VisualElement>
+                <ui:VisualElement class="auth-field">
+                    <ui:Label class="auth-field-label" text="ПАРОЛЬ ДОСТУПА:" />
+                    <ui:TextField name="AuthPassword" class="auth-input" password="true" />
+                </ui:VisualElement>
+                <ui:VisualElement class="auth-options">
+                    <ui:Toggle name="AuthRememberMe" class="auth-check" value="true" text="Запомнить данные" />
+                    <ui:Toggle name="AuthAutoLogin" class="auth-check" text="Авто-вход" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Форма регистрации -->
+            <ui:VisualElement name="AuthRegisterForm" class="auth-form auth-form--hidden">
+                <ui:VisualElement class="auth-field">
+                    <ui:Label class="auth-field-label" text="ПОЗЫВНОЙ НОВОГО ШАХТЁРА:" />
+                    <ui:TextField name="AuthRegLogin" class="auth-input" />
+                </ui:VisualElement>
+                <ui:VisualElement class="auth-field">
+                    <ui:Label class="auth-field-label" text="ПАРОЛЬ ДОСТУПА:" />
+                    <ui:TextField name="AuthRegPassword" class="auth-input" password="true" />
+                </ui:VisualElement>
+                <ui:VisualElement class="auth-field">
+                    <ui:Label class="auth-field-label" text="ПОДТВЕРЖДЕНИЕ ПАРОЛЯ:" />
+                    <ui:TextField name="AuthRegConfirm" class="auth-input" password="true" />
+                </ui:VisualElement>
+                <ui:VisualElement class="auth-field">
+                    <ui:Label class="auth-field-label" text="КОДЕКС ЭКСПЕДИЦИИ И EULA:" />
+                    <ui:ScrollView class="auth-eula">
+                        <ui:Label class="auth-eula-line" text="1. РЕГЛАМЕНТ ШАХТЫ: игрок обязуется соблюдать правила кластера Hades-Orbit." />
+                        <ui:Label class="auth-eula-line" text="2. АВТОРИТЕТ СЕРВЕРА: координаты и добыча рассчитываются сервером авторитарно." />
+                        <ui:Label class="auth-eula-line" text="3. ПРОГРЕСС: все данные синхронизируются по протоколу MinesProtocol v7." />
+                    </ui:ScrollView>
+                    <ui:Toggle name="AuthAcceptEula" class="auth-check" text="Принимаю Пользовательское соглашение и EULA" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:Button name="AuthSubmitButton" class="auth-submit" text="ВОЙТИ В МИР FODINAE" />
+
+            <ui:VisualElement class="auth-footer">
+                <ui:Button name="AuthOfflineButton" class="auth-footer-link" text="Офлайн режим (Dummy)" />
+                <ui:Label class="auth-footer-sep" text="|" />
+                <ui:Button name="AuthRecoverButton" class="auth-footer-link" text="Забыли пароль?" />
+            </ui:VisualElement>
+
+            <ui:Label name="AuthHint" class="auth-hint" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+
+    <!-- ═══════════════════════════════════════════════════════
+         ОНБОРДИНГ — калибровка оборудования, три шага.
+         Показывается один раз после первого прохода ворот.
+         ═══════════════════════════════════════════════════════ -->
+    <ui:VisualElement name="OnboardingOverlay" class="onb-overlay">
+        <ui:VisualElement class="onb-card">
+            <ui:VisualElement class="onb-header">
+                <ui:VisualElement class="onb-header-text">
+                    <ui:Label class="onb-eyebrow" text="КАЛИБРОВКА ОБОРУДОВАНИЯ ШАХТЁРА" />
+                    <ui:Label name="OnboardingTitle" class="onb-title" text="Доступность и визуальный комфорт" />
+                </ui:VisualElement>
+                <ui:VisualElement class="onb-steps">
+                    <ui:Label name="OnbPill1" class="onb-pill onb-pill--active" text="1. ДОСТУПНОСТЬ" />
+                    <ui:Label name="OnbPill2" class="onb-pill" text="2. ГРАФИКА" />
+                    <ui:Label name="OnbPill3" class="onb-pill" text="3. УПРАВЛЕНИЕ" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <ui:ScrollView class="onb-body" mode="Vertical">
+                <!-- Шаг 1 -->
+                <ui:VisualElement name="OnbStep1" class="onb-step onb-step--active">
+                    <ui:Label class="onb-block-title" text="ОПТИЧЕСКАЯ АДАПТАЦИЯ И ДОСТУПНОСТЬ" />
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Масштаб интерфейса" />
+                            <ui:Label class="onb-hint" text="Калибровка размера панелей UI Toolkit под монитор" />
+                        </ui:VisualElement>
+                        <ui:DropdownField name="OnbUiScale" class="onb-select" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Снижение фоточувствительности" />
+                            <ui:Label class="onb-hint" text="Подавление резких вспышек при контакте с лавой" />
+                        </ui:VisualElement>
+                        <ui:Toggle name="OnbReduceFlashes" class="onb-toggle" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <!-- Шаг 2 -->
+                <ui:VisualElement name="OnbStep2" class="onb-step">
+                    <ui:Label class="onb-block-title" text="РЕНДЕРИНГ И ТРАССИРОВКА ОСВЕЩЕНИЯ" />
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Качество освещения" />
+                            <ui:Label class="onb-hint" text="Каскадный расчёт диффузного света в породе" />
+                        </ui:VisualElement>
+                        <ui:DropdownField name="OnbGraphicsPreset" class="onb-select" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Ограничение частоты кадров" />
+                            <ui:Label class="onb-hint" text="Синхронизация частоты кадров" />
+                        </ui:VisualElement>
+                        <ui:DropdownField name="OnbFrameRate" class="onb-select" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Вертикальная синхронизация" />
+                            <ui:Label class="onb-hint" text="Убирает разрыв кадра ценой задержки ввода" />
+                        </ui:VisualElement>
+                        <ui:Toggle name="OnbVSync" class="onb-toggle" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+
+                <!-- Шаг 3 -->
+                <ui:VisualElement name="OnbStep3" class="onb-step">
+                    <ui:Label class="onb-block-title" text="ТАКТИЛЬНЫЙ КОНТРОЛЬ И FMOD AUDIO" />
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Приглушать звук в фоне" />
+                            <ui:Label class="onb-hint" text="Тишина, когда окно клиента неактивно" />
+                        </ui:VisualElement>
+                        <ui:Toggle name="OnbMuteInBackground" class="onb-toggle" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="Схема движения бурового дрона" />
+                            <ui:Label class="onb-hint" text="Клавиатура — единственная схема в этой сборке" />
+                        </ui:VisualElement>
+                        <ui:Label class="onb-static" text="WASD / СТРЕЛКИ" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:ScrollView>
+
+            <ui:VisualElement class="onb-footer">
+                <ui:Button name="OnbPrevButton" class="onb-btn onb-btn--ghost" text="← НАЗАД" />
+                <ui:VisualElement class="onb-footer-spacer" />
+                <ui:Button name="OnbSkipButton" class="onb-btn onb-btn--ghost" text="ПРОПУСТИТЬ" />
+                <ui:Button name="OnbNextButton" class="onb-btn onb-btn--gold" text="ДАЛЕЕ →" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

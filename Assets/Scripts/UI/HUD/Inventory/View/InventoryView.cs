@@ -32,8 +32,6 @@ namespace Fodinae.UI.HUD.Inventory.View
         private IInventoryModel? _model;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
-        [Inject]
-        private ISessionContainer _session = null!;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
@@ -100,7 +98,8 @@ namespace Fodinae.UI.HUD.Inventory.View
                 return;
             }
 
-            if (Keyboard.current.tabKey.wasPressedThisFrame)
+            if (Keyboard.current.tabKey.wasPressedThisFrame ||
+                (Keyboard.current.iKey.wasPressedThisFrame && !ChatInput.IsFocused))
             {
                 ToggleInventory();
             }

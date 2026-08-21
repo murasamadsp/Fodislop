@@ -18,6 +18,10 @@ namespace Fodinae.Core
     public class BootstrapLifetimeScope : LifetimeScope
     {
         private const string MainMenuSceneName = "MainMenu";
+
+        // Первой после Bootstrap грузится не меню, а Gateway: вход и онбординг.
+        // Он сам загрузит MainMenu и выгрузится, когда игрок пройдёт ворота.
+        private const string GatewaySceneName = "Gateway";
         private const string MainGameSceneName = "MainGame";
 
         public static BootstrapLifetimeScope? Instance { get; private set; }
@@ -53,7 +57,30 @@ namespace Fodinae.Core
 
         protected void Start()
         {
-            EnsureMainMenuLoadedAsync().Forget();
+            EnsureGatewayLoadedAsync().Forget();
+        }
+
+        private async UniTask EnsureGatewayLoadedAsync()
+        {
+            // Если меню уже в сцене (запуск прямо из MainMenu в редакторе),
+            // ворота пропускаем — иначе они перекроют уже готовый экран.
+            if (SceneManager.GetSceneByName(MainMenuSceneName).isLoaded)
+            {
+                await EnsureMainMenuLoadedAsync();
+                return;
+            }
+
+            Scene gateway = SceneManager.GetSceneByName(GatewaySceneName);
+            if (!gateway.isLoaded)
+            {
+                await SceneManager.LoadSceneAsync(GatewaySceneName, LoadSceneMode.Additive).ToUniTask();
+                gateway = SceneManager.GetSceneByName(GatewaySceneName);
+            }
+
+            if (gateway.IsValid() && gateway.isLoaded)
+            {
+                SceneManager.SetActiveScene(gateway);
+            }
         }
 
         private async UniTask EnsureMainMenuLoadedAsync()

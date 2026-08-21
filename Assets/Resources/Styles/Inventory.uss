@@ -147,7 +147,9 @@
     top: 0;
     right: 0;
     bottom: 0;
-    pointer-events: none;
+    /* Прозрачность для кликов задаётся не здесь: свойства pointer-events в USS
+       нет, и правило молча игнорировалось. Рабочий вариант уже стоит в
+       разметке — picking-mode="Ignore" на InventoryRoot в Inventory.uxml. */
 }
 
 .inv-hotbar {

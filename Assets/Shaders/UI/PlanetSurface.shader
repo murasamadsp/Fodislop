@@ -75,8 +75,21 @@ Shader "Fodinae/UI/PlanetSurface"
             // Integer bit ops in the pcg3d hash need SM4+.
             #pragma target 4.5
 
+            // Включается из C# (PlanetFieldBaker), когда поля уже запечены в
+            // кубическую карту. Вариант без ключевого слова остаётся рабочим и
+            // используется там, где вычислительных шейдеров нет.
+            #pragma multi_compile _ PLANET_FIELDS_BAKED
+
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "PlanetNoise.hlsl"
+            #include "PlanetSurfaceFields.hlsl"
+
+#if defined(PLANET_FIELDS_BAKED)
+            // Не свойство материала, а глобальная текстура: планета в сцене
+            // одна, карту заводит и раздаёт запекатель, и .mat-ассеты об этом
+            // знать не обязаны.
+            TEXTURECUBE(_PlanetSurfaceFields);
+            SAMPLER(sampler_PlanetSurfaceFields);
+#endif
 
             struct Attributes
             {
@@ -138,51 +151,26 @@ Shader "Fodinae/UI/PlanetSurface"
                 return output;
             }
 
-            // Tectonic elevation field in [0, 1].
+            // Итоговая высота в [0, 1].
             //
-            // The domain warp is the load-bearing part: unwarped fBm gives
-            // isotropic blobs that look like clouds no matter how many octaves
-            // you stack. Warping the lookup by another fBm shears those blobs
-            // into the elongated, branching provinces that read as crust.
-            // Octave counts are held down on purpose. Elevation() is evaluated
-            // three times per pixel (once for height, twice more for the analytic
-            // normal), so every octave added here costs three lookups across the
-            // whole disc. The detail octaves are the ones that carry the visible
-            // crispness, so the savings come out of the low-frequency warp and
-            // continent layers instead, where they are almost invisible.
-            // detailFade suppresses the high-frequency octaves where the surface
-            // is foreshortened toward the limb.
+            // Сами формулы полей живут в PlanetSurfaceFields.hlsl: их же
+            // исполняет запекающее ядро, и держать их в двух местах означало бы
+            // тихое расхождение картинки с запечённой картой. Здесь остаётся
+            // только сборка — база плюс детальный слой.
             //
-            // This is the aliasing. The detail layer runs at 140 cycles across the
-            // sphere, which is a ~9px wavelength at the centre of the disc - fine.
-            // Approaching the limb the same band compresses by 1/(N.V) until it is
-            // well under a pixel, and a sub-pixel signal sampled once per pixel
-            // does not average out, it beats against the sampling grid. That is
-            // the stippled fringe on the dark limb, and no amount of MSAA touches
-            // it: MSAA supersamples geometry coverage, not what the shader
-            // computes inside a fragment. The only real fix is not to ask for
-            // detail the raster cannot carry, which is what this does.
-            float Elevation(float3 dir, float detailFade)
+            // Детальный слой не запекается и запечён быть не может: он умножен
+            // на detailFade, то есть зависит от угла обзора, а не от одного лишь
+            // направления. Затухание тут не украшение, а борьба с алиасингом.
+            // Детальная полоса идёт на 140 циклов по шару — около 9 px длины
+            // волны в центре диска. К краю та же полоса сжимается как 1/(N.V),
+            // уходит под пиксель, и подпиксельный сигнал, взятый одной выборкой,
+            // не усредняется, а бьётся о сетку растра. Это и есть крапчатая
+            // бахрома на тёмном лимбе, и MSAA её не трогает: он суперсэмплит
+            // покрытие геометрии, а не то, что шейдер считает внутри фрагмента.
+            float ElevationFromBase(float3 dir, float elevBase, float detailFade)
             {
-                float3 c = dir * _ContinentScale;
-                float3 warp = float3(
-                    GradientNoise(c + float3(17.1, 3.2, 8.9)),
-                    GradientNoise(c + float3(43.7, 21.4, 2.6)),
-                    GradientNoise(c + float3(91.3, 12.8, 33.1)));
-
-                float continents = Fbm(c + (warp * _WarpStrength), 3);
-                float elev = saturate((continents * 0.5) + 0.5);
-
-                // Ranges only rise on already-uplifted crust, so mountains form
-                // belts along province edges instead of speckling the basins.
-                float uplift = smoothstep(0.40, 0.78, elev);
-                float ranges = RidgedFbm(dir * _RidgeScale, 3);
-                elev += ranges * uplift * _MountainHeight;
-
-                // Subtle organic roughness without high-frequency grit/static
-                elev += Fbm(dir * _DetailScale, 2) * _DetailStrength * 0.03 * detailFade;
-
-                return saturate(elev);
+                float detail = FodinaeElevationDetail(dir, _DetailScale);
+                return saturate(elevBase + (detail * _DetailStrength * 0.03 * detailFade));
             }
 
             // Rift network: ridged-noise crests thresholded into thin connected
@@ -200,7 +188,7 @@ Shader "Fodinae/UI/PlanetSurface"
 
                 // Break the network up along its length so it reads as a
                 // discontinuous fault system rather than one drawn contour.
-                float breakUp = smoothstep(-0.25, 0.35, Fbm(dir * (_CrackScale * 2.7), 3));
+                float breakUp = smoothstep(-0.25, 0.35, FodinaeCrackBreakup(dir, _CrackScale));
                 float lowGround = 1.0 - smoothstep(_BasinLevel, _BasinLevel + 0.30, elev);
 
                 return ridge * breakUp * lowGround;
@@ -224,38 +212,22 @@ Shader "Fodinae/UI/PlanetSurface"
                 return saturate(geothermal * flatGround * lowGround * patches * _PoolCoverage);
             }
 
-            // Oren-Nayar (qualitative form). Dusty basalt regolith is strongly
-            // backscattering: pure Lambert makes the terminator roll off too
-            // fast and the disc centre look waxy.
+            // Oren-Nayar (qualitative form, closed-form algebraic formulation).
+            // Eliminates transcendental acos/sin/tan and square root normalizations,
+            // producing mathematically identical backscattering with pure dot/mad ALU.
             float OrenNayar(float3 N, float3 L, float3 V, float roughness)
             {
                 float s2 = roughness * roughness;
                 float A = 1.0 - (0.5 * (s2 / (s2 + 0.33)));
                 float B = 0.45 * (s2 / (s2 + 0.09));
 
-                float ndl = dot(N, L);
-                float ndv = dot(N, V);
-                float lit = saturate(ndl);
+                float ndl = saturate(dot(N, L));
+                float ndv = saturate(dot(N, V));
 
-                float3 lPerp = normalize(L - (N * ndl));
-                float3 vPerp = normalize(V - (N * ndv));
-                float cosPhi = saturate(dot(lPerp, vPerp));
+                float s = dot(L, V) - (ndl * ndv);
+                float t = (s > 0.0) ? (s / max(max(ndl, ndv), 0.0001)) : 0.0;
 
-                float thetaI = acos(clamp(ndl, -1.0, 1.0));
-                float thetaR = acos(clamp(ndv, -1.0, 1.0));
-                float alpha = max(thetaI, thetaR);
-                float beta = min(thetaI, thetaR);
-
-                return lit * (A + (B * cosPhi * sin(alpha) * tan(beta)));
-            }
-
-            float ElevationNormal(float3 dir)
-            {
-                float3 c = dir * _ContinentScale;
-                float continents = Fbm(c, 2);
-                float elev = saturate((continents * 0.5) + 0.5);
-                float ranges = RidgedFbm(dir * _RidgeScale, 2);
-                return saturate(elev + (ranges * _MountainHeight));
+                return ndl * (A + (B * t));
             }
 
             half4 Frag(Varyings input) : SV_Target
@@ -269,18 +241,25 @@ Shader "Fodinae/UI/PlanetSurface"
                 float ndv = saturate(dot(geoN, V));
                 float detailFade = smoothstep(0.05, 0.42, ndv);
 
-                float elev = Elevation(dir, detailFade);
+                // Один из двух источников одних и тех же чисел.
+#if defined(PLANET_FIELDS_BAKED)
+                float4 fields = SAMPLE_TEXTURECUBE(_PlanetSurfaceFields, sampler_PlanetSurfaceFields, dir);
+                float2 slopeVec = fields.xy;
+                float elevBase = fields.z;
+                float faultField = fields.w;
+#else
+                float2 slopeVec = FodinaeElevationSlope(dir, _ContinentScale, _RidgeScale, _MountainHeight);
+                float elevBase = FodinaeElevationBase(dir, _ContinentScale, _WarpStrength, _RidgeScale, _MountainHeight);
+                float faultField = FodinaeFaultField(dir, _CrackScale);
+#endif
 
-                // Tangent frame for crisp mountain relief & slope
-                float3 up = abs(dir.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
-                float3 tangent = normalize(cross(up, dir));
-                float3 bitangent = cross(dir, tangent);
-                const float eps = 0.006;
+                float elev = ElevationFromBase(dir, elevBase, detailFade);
 
-                float e0 = ElevationNormal(dir);
-                float eT = ElevationNormal(normalize(dir + (tangent * eps)));
-                float eB = ElevationNormal(normalize(dir + (bitangent * eps)));
-                float2 slopeVec = float2(eT - e0, eB - e0) / eps;
+                // Базис нужен и в запечённой ветке: в карте лежит наклон, а
+                // нормаль из него собирается здесь.
+                float3 tangent;
+                float3 bitangent;
+                FodinaePlanetTangentFrame(dir, tangent, bitangent);
 
                 float3 normalOS = normalize(dir - (((tangent * slopeVec.x) + (bitangent * slopeVec.y)) * _ReliefStrength * 0.45));
                 float3 N = normalize(TransformObjectToWorldNormal(normalOS));
@@ -293,9 +272,6 @@ Shader "Fodinae/UI/PlanetSurface"
                 float basin = 1.0 - smoothstep(_BasinLevel - 0.10, _BasinLevel + 0.14, elev);
                 albedo = lerp(albedo, _CrustColor.rgb, basin * (1.0 - smoothstep(0.30, 0.65, slope)) * 0.75);
                 albedo = lerp(albedo, _PeakColor.rgb, smoothstep(_PeakLevel - 0.05, _PeakLevel + 0.15, elev));
-
-                // Fault field for magma rifts
-                float faultField = RidgedFbm(dir * _CrackScale, 4);
 
                 // ---- Radiance Cascades Global Illumination ----
                 // Cascade 0: Direct sun irradiance with Oren-Nayar

@@ -1,0 +1,100 @@
+// Запекание процедурных полей планеты в кубические карты.
+//
+// ЗАЧЕМ. Поверхность и облачная палуба считались попиксельно каждый кадр: 30
+// выборок градиентного шума на пиксель у поверхности и ещё 14 у атмосферы, по
+// восемь хешей на выборку — около 350 хешей на пиксель. При этом ни в том, ни
+// в другом шейдере нет _Time: это полностью статическая функция направления,
+// которую пересчитывали шестьдесят раз в секунду. Отсюда 20 FPS на подлёте,
+// где диск закрывает почти весь кадр.
+//
+// Запекание ничего не упрощает и ничего не огрубляет: считается ровно та же
+// математика из PlanetSurfaceFields.hlsl и PlanetCloudFields.hlsl, просто один
+// раз. Освещение, терминатор, блики и марш атмосферы остаются попиксельными,
+// поэтому картинка не меняется — меняется только то, сколько раз в секунду
+// пересчитывается неизменное.
+//
+// ПОЧЕМУ КУБ, А НЕ РАВНОПРОМЕЖУТОЧНАЯ РАЗВЁРТКА. Вход у обоих полей — уже
+// направление. Кубическая карта индексируется направлением напрямую: нет ни
+// шва по долготе, ни сгущения выборок у полюсов, ни обратного преобразования,
+// в котором можно ошибиться.
+//
+// ПОЧЕМУ ВЫЧИСЛИТЕЛЬНОЕ ЯДРО, А НЕ ОТРИСОВКА В ГРАНИ. Запись идёт прямо в
+// тексель (x, y, грань). Отрисовка полноэкранного треугольника в грань куба
+// потащила бы за собой отражение оси Y между графическими API — тихий источник
+// расхождения на стыках граней.
+
+#pragma kernel BakeSurfaceFields
+#pragma kernel BakeCloudFields
+
+#include "../../Shaders/UI/PlanetSurfaceFields.hlsl"
+#include "../../Shaders/UI/PlanetCloudFields.hlsl"
+
+RWTexture2DArray<float4> _Result;
+uint _Resolution;
+
+// Поверхность
+float _ContinentScale;
+float _WarpStrength;
+float _RidgeScale;
+float _MountainHeight;
+float _CrackScale;
+
+// Облака
+float _CloudScale;
+float _CloudWarp;
+float _CloudBands;
+float _CloudBandStrength;
+
+// Направление на центр текселя (x, y) грани face.
+//
+// Таблица — стандартное соответствие граней кубической карты (то самое, что
+// описано в спецификации OpenGL таблицей 8.19 и совпадает с Direct3D):
+// координата v отсчитывается сверху вниз, поэтому знаки при y отрицательные у
+// боковых граней. Это обратное преобразование к аппаратной выборке — если
+// перепутать знак, поле окажется зеркальным на части граней, и стыки станут
+// видны разрывами.
+float3 DirectionForTexel(uint3 id)
+{
+    float2 uv = (float2(id.xy) + 0.5) / (float)_Resolution;
+    float a = (uv.x * 2.0) - 1.0;
+    float b = (uv.y * 2.0) - 1.0;
+
+    float3 dir;
+    switch (id.z)
+    {
+        case 0:  dir = float3( 1.0,   -b,   -a); break; // +X
+        case 1:  dir = float3(-1.0,   -b,    a); break; // -X
+        case 2:  dir = float3(   a,  1.0,    b); break; // +Y
+        case 3:  dir = float3(   a, -1.0,   -b); break; // -Y
+        case 4:  dir = float3(   a,   -b,  1.0); break; // +Z
+        default: dir = float3(  -a,   -b, -1.0); break; // -Z
+    }
+
+    return normalize(dir);
+}
+
+[numthreads(8, 8, 1)]
+void BakeSurfaceFields(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Resolution || id.y >= _Resolution)
+    {
+        return;
+    }
+
+    float3 dir = DirectionForTexel(id);
+    _Result[id] = FodinaePackSurfaceFields(
+        dir, _ContinentScale, _WarpStrength, _RidgeScale, _MountainHeight, _CrackScale);
+}
+
+[numthreads(8, 8, 1)]
+void BakeCloudFields(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Resolution || id.y >= _Resolution)
+    {
+        return;
+    }
+
+    float3 dir = DirectionForTexel(id);
+    _Result[id] = FodinaePackCloudFields(
+        dir, _CloudScale, _CloudWarp, _CloudBands, _CloudBandStrength);
+}

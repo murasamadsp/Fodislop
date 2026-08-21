@@ -46,6 +46,8 @@ namespace Fodinae.UI
         private FPSCounter? _fps;
         private MinimapController? _minimap;
 
+        public bool IsInMapMode => _isInMapMode;
+
         protected void Start()
         {
             TryInitialize();
@@ -58,9 +60,15 @@ namespace Fodinae.UI
                 TryInitialize();
             }
 
+            if (_isInMapMode && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                ExitMapMode();
+                return;
+            }
+
             // Map toggle as a direct keyboard check (mirrors MinimapController's N key);
-            // ad-hoc InputActions are banned by the project lint policy.
-            if (Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame)
+            // Ignore when typing in chat.
+            if (Keyboard.current != null && Keyboard.current.mKey.wasPressedThisFrame && !ChatInput.IsFocused)
             {
                 ToggleMapMode();
             }
@@ -124,23 +132,9 @@ namespace Fodinae.UI
             _playerSpawnSubscription = false;
         }
 
-        private void ToggleMapMode()
+        public void ToggleMapMode()
         {
             if (!enabled)
-            {
-                return;
-            }
-
-            if (_resolver == null)
-            {
-                throw new InvalidOperationException(
-                    "[WorldMapController] Map toggle was requested before the VContainer resolver was initialized.");
-            }
-
-            MapStorage mapStorage = _resolver.Resolve<MapStorage>() ??
-                throw new InvalidOperationException(
-                    "[WorldMapController] MapStorage is not registered.");
-            if (!mapStorage.IsReady)
             {
                 return;
             }
@@ -155,6 +149,22 @@ namespace Fodinae.UI
             }
         }
 
+        public void OpenMap()
+        {
+            if (!_isInMapMode)
+            {
+                EnterMapMode();
+            }
+        }
+
+        public void CloseMap()
+        {
+            if (_isInMapMode)
+            {
+                ExitMapMode();
+            }
+        }
+
         private void EnterMapMode()
         {
             if (_isInMapMode)
@@ -162,19 +172,21 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (_resolver == null)
+            {
+                return;
+            }
+
             PlayerMovementController? player = _player ?? PlayerMovementController.LocalPlayer;
             if (player == null || !player.HasServerPosition)
             {
-                throw new InvalidOperationException(
-                    "[WorldMapController] Cannot enter map mode before the local player has a server position.");
+                return;
             }
 
             _player = player;
 
-            MapStorage mapStorage = _resolver.Resolve<MapStorage>() ??
-                throw new InvalidOperationException(
-                    "[WorldMapController] MapStorage is not registered.");
-            if (!mapStorage.IsReady)
+            MapStorage? mapStorage = _resolver.Resolve<MapStorage>();
+            if (mapStorage == null || !mapStorage.IsReady)
             {
                 return;
             }
@@ -185,14 +197,10 @@ namespace Fodinae.UI
                 _cameraFollow.SetScrollEnabled(false);
             }
 
-            if (_terrain != null)
-            {
-                _terrain.enabled = false;
-            }
-
             if (_mapRenderer == null)
             {
                 var go = new GameObject("WorldMapRenderer");
+                go.transform.SetParent(transform, false);
                 _mapRenderer = go.AddComponent<WorldMapRenderer>();
             }
 
@@ -219,11 +227,6 @@ namespace Fodinae.UI
             if (_mapRenderer != null)
             {
                 _mapRenderer.Hide();
-            }
-
-            if (_terrain != null)
-            {
-                _terrain.enabled = true;
             }
 
             SetHudVisible(true);

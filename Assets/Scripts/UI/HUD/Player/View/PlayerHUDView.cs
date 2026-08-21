@@ -248,6 +248,9 @@ namespace Fodinae.UI.HUD.Player.View
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
 
+            // Тир раскладки вместо @media: класс на корне панели.
+            UiLayoutTier.Attach(_doc.rootVisualElement);
+
             CreatePanel(_doc.rootVisualElement);
             CreateBonusButton(_doc.rootVisualElement);
             CreateBonusPanel(_doc.rootVisualElement);

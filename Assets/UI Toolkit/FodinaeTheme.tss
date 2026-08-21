@@ -13,4 +13,5 @@
 @import url("../Resources/Styles/Programmator.uss");
 @import url("../Resources/Styles/PauseMenu.uss");
 @import url("../Resources/Styles/Modal.uss");
+@import url("../Resources/Styles/Auth.uss");
 

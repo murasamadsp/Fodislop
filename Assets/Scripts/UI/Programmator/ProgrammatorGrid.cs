@@ -1686,6 +1686,20 @@ namespace Fodinae.UI.Programmator
 
             if (!_isOpen)
             {
+                if ((Keyboard.current.pKey.wasPressedThisFrame || Keyboard.current.rKey.wasPressedThisFrame) &&
+                    !ChatInput.IsFocused &&
+                    !PauseMenu.IsMenuOpen)
+                {
+                    Show();
+                }
+
+                return;
+            }
+
+            if ((Keyboard.current.pKey.wasPressedThisFrame || Keyboard.current.rKey.wasPressedThisFrame) &&
+                !_radialShown)
+            {
+                Hide();
                 return;
             }
 

@@ -449,20 +449,22 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    float4 normalData = SampleAutomaticSurfaceNormal(float2(pixel) + 0.5);
+    static const float2 kResolveDirections4[4] =
+    {
+        float2(0.70710678118, 0.70710678118),
+        float2(-0.70710678118, 0.70710678118),
+        float2(-0.70710678118, -0.70710678118),
+        float2(0.70710678118, -0.70710678118)
+    };
 
     [unroll]
     for (int direction = 0; direction < 4; direction++)
     {
         int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
         uint3 packedInterval = _RadianceAtlas[atlasIndex];
-        float angle = (float(direction) + 0.5) * PI2 / 4.0;
-        float raySine;
-        float rayCosine;
-        sincos(angle, raySine, rayCosine);
         radiance += UnpackRadiance(packedInterval.xy) * SurfaceLambert(
             normalData,
-            float2(rayCosine, raySine));
+            kResolveDirections4[direction]);
     }
 
     float3 directOutput = radiance * 0.25;
@@ -593,13 +595,9 @@ void ResolveAndComposite(uint3 dispatchId : SV_DispatchThreadID)
     {
         int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
         uint3 packedInterval = _RadianceAtlas[atlasIndex];
-        float angle = (float(direction) + 0.5) * PI2 / 4.0;
-        float raySine;
-        float rayCosine;
-        sincos(angle, raySine, rayCosine);
         radiance += UnpackRadiance(packedInterval.xy) * SurfaceLambert(
             normalData,
-            float2(rayCosine, raySine));
+            kResolveDirections4[direction]);
     }
     float3 directOutput = radiance * 0.25;
 

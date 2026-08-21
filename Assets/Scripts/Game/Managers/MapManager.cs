@@ -347,18 +347,23 @@ namespace Fodinae.Game.Managers
         public Color GetCellMinimapColor(CellType type)
         {
             var config = GetCellConfig(type);
-            if (config.Color == 0)
+            if (config.Color != 0)
             {
-                return Color.clear;
+                int argb = config.Color;
+                byte a = (byte)((argb >> 24) & 0xFF);
+                if (a == 0)
+                {
+                    a = 255;
+                }
+
+                byte r = (byte)((argb >> 16) & 0xFF);
+                byte g = (byte)((argb >> 8) & 0xFF);
+                byte b = (byte)(argb & 0xFF);
+
+                return new Color(r / 255f, g / 255f, b / 255f, a / 255f);
             }
 
-            int argb = config.Color;
-            byte a = (byte)((argb >> 24) & 0xFF);
-            byte r = (byte)((argb >> 16) & 0xFF);
-            byte g = (byte)((argb >> 8) & 0xFF);
-            byte b = (byte)(argb & 0xFF);
-
-            return new Color(r / 255f, g / 255f, b / 255f, a / 255f);
+            return MapBlockColors.GetColor(type);
         }
 
         public int GetAnimationFrameHeight(CellType cellType)

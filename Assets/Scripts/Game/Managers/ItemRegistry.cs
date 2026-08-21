@@ -35,7 +35,14 @@ namespace Fodinae.Game.Managers
 
             var typeName = type.ToString();
             var camelName = char.ToLowerInvariant(typeName[0]) + typeName.Substring(1);
-            var itemsDir = Path.Combine(Application.dataPath, "Textures", "Items");
+            // Раньше здесь стоял Application.dataPath напрямую — в редакторе это
+            // Assets/, а в плеере каталог данных, куда сборка каталог Textures
+            // не кладёт. Иконки предметов молча пропадали именно в билде.
+            string? itemsDir = Fodinae.Core.RuntimeAssetPaths.TexturesSubfolder("Items");
+            if (itemsDir == null)
+            {
+                return null;
+            }
 
             var path = Path.Combine(itemsDir, camelName + ".png");
             if (!File.Exists(path))

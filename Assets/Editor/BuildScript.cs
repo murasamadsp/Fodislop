@@ -20,6 +20,15 @@ namespace Fodinae.Editor
     ///
     /// Menu: Build > macOS (Apple Silicon) / Windows 64.
     /// Output goes to Build/&lt;platform&gt;/ (gitignored).
+    ///
+    /// Сборка сама себя проверяет и чинит перед запуском:
+    ///   • список сцен приводится к каноническому (BuildSettingsFix) — сцена,
+    ///     выпавшая из Build Settings, ломается только в билде и незаметна
+    ///     при разработке, потому что сцены грузятся аддитивно по имени;
+    ///   • активная платформа переключается на целевую, иначе Unity молча
+    ///     собирает не то и тратит на это полный реимпорт;
+    ///   • каталог вывода очищается, чтобы файлы прошлой сборки не уезжали
+    ///     в новую.
     /// </summary>
     public static class BuildScript
     {
@@ -39,6 +48,10 @@ namespace Fodinae.Editor
 
         private static void Build(BuildTarget target, string relativeOutput, bool isApple = false)
         {
+            // Чинить список сцен до сборки, а не надеяться, что он верен:
+            // отсутствующая сцена проявится только в готовом билде.
+            BuildSettingsFix.EnsureScenesInBuildSettings();
+
             var scenes = EnabledScenes;
             if (scenes.Length == 0)
             {
@@ -46,19 +59,39 @@ namespace Fodinae.Editor
                 return;
             }
 
+            if (!EnsureActiveBuildTarget(target))
+            {
+                return;
+            }
+
             string output = Path.GetFullPath(relativeOutput);
-            Directory.CreateDirectory(Path.GetDirectoryName(output));
+            string outputDirectory = Path.GetDirectoryName(output)
+                ?? throw new InvalidOperationException($"Build output has no parent directory: {output}");
+
+            CleanOutput(output, outputDirectory);
+            Directory.CreateDirectory(outputDirectory);
 
             if (isApple)
             {
                 TrySetAppleSiliconArchitecture();
             }
 
+            bool development = Environment.GetCommandLineArgs().Contains(DevArg);
+
             try
             {
                 var standaloneTarget = UnityEditor.Build.NamedBuildTarget.Standalone;
-                PlayerSettings.SetIl2CppCompilerConfiguration(standaloneTarget, Il2CppCompilerConfiguration.Master);
+
+                // Master компилируется в разы дольше и не даёт ничего отладке.
+                // Раньше он ставился и для development-сборок тоже.
+                PlayerSettings.SetIl2CppCompilerConfiguration(
+                    standaloneTarget,
+                    development ? Il2CppCompilerConfiguration.Debug : Il2CppCompilerConfiguration.Master);
                 PlayerSettings.SetIl2CppCodeGeneration(standaloneTarget, UnityEditor.Build.Il2CppCodeGeneration.OptimizeSpeed);
+
+                // Minimal, а не Medium/High: в проекте VContainer, а он резолвит
+                // типы рефлексией — агрессивный стриппинг вырезает то, на что
+                // нет статических ссылок, и DI падает только в билде.
                 PlayerSettings.SetManagedStrippingLevel(standaloneTarget, ManagedStrippingLevel.Minimal);
             }
             catch (Exception ex)
@@ -66,14 +99,16 @@ namespace Fodinae.Editor
                 Log($"Optimization settings notice: {ex.Message}");
             }
 
-            bool development = Environment.GetCommandLineArgs().Contains(DevArg);
             var options = new BuildPlayerOptions
             {
                 scenes = scenes,
                 locationPathName = output,
                 target = target,
                 options = development
-                    ? BuildOptions.Development | BuildOptions.AllowDebugging
+                    // ConnectWithProfiler — без него профайлер к билду не
+                    // цепляется, хотя AllowDebugging создаёт впечатление, что
+                    // всё включено.
+                    ? BuildOptions.Development | BuildOptions.AllowDebugging | BuildOptions.ConnectWithProfiler
                     : BuildOptions.None,
             };
 
@@ -89,7 +124,73 @@ namespace Fodinae.Editor
             }
 
             CopyRuntimeTextures(target, output);
+
             Log($"Build succeeded: {output}");
+            Log($"Версия {PlayerSettings.bundleVersion}{(development ? " (development)" : string.Empty)}");
+            Log($"Запуск: {LaunchHint(target, output)}");
+        }
+
+        /// <summary>Готовая команда запуска — чтобы не искать бинарник руками.</summary>
+        private static string LaunchHint(BuildTarget target, string output) => target switch
+        {
+            BuildTarget.StandaloneOSX => $"open \"{output}\"",
+            BuildTarget.StandaloneWindows64 => $"\"{output}\"",
+            _ => output,
+        };
+
+        /// <summary>
+        /// Переключает активную платформу на целевую. Без этого Unity собирает
+        /// плеер для текущей платформы независимо от того, что просили, —
+        /// и обнаруживается это уже по нерабочему бинарнику.
+        /// </summary>
+        private static bool EnsureActiveBuildTarget(BuildTarget target)
+        {
+            if (EditorUserBuildSettings.activeBuildTarget == target)
+            {
+                return true;
+            }
+
+            var group = BuildPipeline.GetBuildTargetGroup(target);
+            Log($"Переключаю платформу: {EditorUserBuildSettings.activeBuildTarget} → {target} (это перезапустит импорт ассетов).");
+
+            if (!EditorUserBuildSettings.SwitchActiveBuildTarget(group, target))
+            {
+                Fail($"Не удалось переключиться на {target}. Модуль платформы установлен?");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Удаляет прошлый билд. Инкрементальная сборка Unity не убирает файлы,
+        /// которые перестали быть нужны, — старые текстуры и библиотеки уезжают
+        /// в новый билд и маскируют то, что на самом деле сломано.
+        /// </summary>
+        private static void CleanOutput(string output, string outputDirectory)
+        {
+            try
+            {
+                if (Directory.Exists(output))
+                {
+                    Directory.Delete(output, recursive: true);
+                }
+                else if (File.Exists(output))
+                {
+                    File.Delete(output);
+                    string dataDirectory = Path.Combine(
+                        outputDirectory,
+                        $"{Path.GetFileNameWithoutExtension(output)}_Data");
+                    if (Directory.Exists(dataDirectory))
+                    {
+                        Directory.Delete(dataDirectory, recursive: true);
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                Log($"Прошлый билд удалить не удалось ({exception.Message}); собираю поверх.");
+            }
         }
 
         private static void CopyRuntimeTextures(BuildTarget target, string playerPath)
@@ -105,17 +206,33 @@ namespace Fodinae.Editor
                 throw new InvalidOperationException(
                     $"Player output has no parent directory: {playerPath}");
 
+            // Ровно один адрес на платформу — тот, что вернёт
+            // Application.streamingAssetsPath в плеере. Раньше здесь было
+            // четыре адреса для macOS: каталог на 29 МБ копировался четырежды,
+            // потому что три подсистемы искали текстуры каждая своим списком
+            // догадок. Теперь адрес один и на стороне игры — Fodinae.Core.
+            // RuntimeAssetPaths, который начинает поиск со StreamingAssets.
             List<string> destinations = new();
             if (target == BuildTarget.StandaloneOSX)
             {
-                destinations.Add(Path.Combine(playerPath, "Contents", "Resources", "Data", "Textures"));
-                destinations.Add(Path.Combine(playerPath, "Contents", "Data", "Textures"));
-                destinations.Add(Path.Combine(playerPath, "Contents", "Resources", "Textures"));
-                destinations.Add(Path.Combine(playerPath, "Contents", "Resources", "Data", "StreamingAssets", "Textures"));
+                destinations.Add(Path.Combine(
+                    playerPath, "Contents", "Resources", "Data", "StreamingAssets", "Textures"));
             }
             else if (target == BuildTarget.StandaloneWindows64)
             {
-                destinations.Add(Path.Combine(playerDirectory, $"{Path.GetFileNameWithoutExtension(playerPath)}_Data", "Textures"));
+                destinations.Add(Path.Combine(
+                    playerDirectory,
+                    $"{Path.GetFileNameWithoutExtension(playerPath)}_Data",
+                    "StreamingAssets",
+                    "Textures"));
+            }
+
+            if (destinations.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Нет адреса для копирования текстур на платформе {target}. " +
+                    "Добавь его сюда и в RuntimeAssetPaths.Resolve, иначе игра " +
+                    "останется без локальных текстур.");
             }
 
             foreach (string destination in destinations)
