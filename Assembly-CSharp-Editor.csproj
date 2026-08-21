@@ -53,6 +53,12 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/Scripts/Editor/PostProcessVolumeAssetCreator.cs" />
+    <Compile Include="Assets/Editor/SdrOutputEnforcer.cs" />
+    <Compile Include="Assets/Editor/BuildTextureStager.cs" />
+    <Compile Include="Assets/Scripts/Editor/GuidTruthDump.cs" />
+    <Compile Include="Assets/Scripts/Editor/FixPlayerPrefabUtility.cs" />
+    <Compile Include="Assets/Scripts/Editor/FixRenderer2DFeaturesUtility.cs" />
     <Compile Include="Assets/Editor/CaptureMenuScenery.cs" />
     <Compile Include="Assets/Editor/DumpShaderErrors.cs" />
     <Compile Include="Assets/Editor/BuildPlanetMesh.cs" />

@@ -35,6 +35,7 @@ namespace Fodinae
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
         private readonly ConcurrentDictionary<string, byte> _missingAssets = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? _loopCts;
+        private bool _packetSubscribed;
 
         public int PendingAssetCount => _pendingRequests.Count;
         public int QueuedAssetCount => _requestQueue.Count;
@@ -237,6 +238,21 @@ namespace Fodinae
         public void ClearCache()
         {
             _cache.Clear();
+        }
+
+        public void EnsurePacketSubscription()
+        {
+            if (_packetSubscribed)
+            {
+                return;
+            }
+
+            if (_connectionService is ConnectionManager cm)
+            {
+                cm.OnPacketReceived -= OnPacketReceived;
+                cm.OnPacketReceived += OnPacketReceived;
+                _packetSubscribed = true;
+            }
         }
 
         private static async UniTask<byte[]?> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
