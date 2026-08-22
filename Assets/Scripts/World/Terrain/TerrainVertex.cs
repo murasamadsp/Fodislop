@@ -12,27 +12,27 @@ namespace Fodinae.World.Terrain
         public Vector3 Position;
 
         [FieldOffset(12)]
-        public Color Color;
+        public Color32 Color;
 
-        [FieldOffset(28)]
+        [FieldOffset(16)]
         public Vector2 UV0;
 
-        [FieldOffset(36)]
+        [FieldOffset(24)]
         public Vector4 UV1;
 
-        [FieldOffset(52)]
+        [FieldOffset(40)]
         public Vector4 UV2;
 
-        [FieldOffset(68)]
+        [FieldOffset(56)]
         public Vector4 UV3;
 
-        [FieldOffset(84)]
+        [FieldOffset(72)]
         public Vector4 UV4;
 
-        [FieldOffset(100)]
+        [FieldOffset(88)]
         public Vector4 UV5;
 
-        [FieldOffset(116)]
+        [FieldOffset(104)]
         public Vector4 UV6;
     }
 }

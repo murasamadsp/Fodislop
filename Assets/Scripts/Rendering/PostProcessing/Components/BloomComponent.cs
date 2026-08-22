@@ -9,6 +9,7 @@ namespace Fodinae.Rendering.PostProcessing
 {
     [Serializable]
     [VolumeComponentMenu("Fodinae/Bloom")]
+    [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class BloomComponent : VolumeComponent, IPostProcessComponent
     {
         // Unity Volume serialization and the existing profile use these stable

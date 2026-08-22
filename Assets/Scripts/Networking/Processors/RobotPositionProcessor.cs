@@ -1,6 +1,6 @@
 #nullable enable
 
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Game.Managers;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
@@ -11,9 +11,16 @@ namespace Fodinae.Networking.Processors
 {
     public class RobotPositionProcessor : IPacketProcessor<RobotPositionPacket>
     {
+        private readonly ISessionContainer _session;
+
+        public RobotPositionProcessor(ISessionContainer session)
+        {
+            _session = session;
+        }
+
         public void Process(RobotPositionPacket packet)
         {
-            var rm = Fodinae.Core.ServiceLocator.Resolve<RobotManager>();
+            var rm = _session.TryResolve<RobotManager>();
             if (rm == null)
             {
                 return;

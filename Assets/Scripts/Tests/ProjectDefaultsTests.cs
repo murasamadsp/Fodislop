@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 #nullable enable
 
 using System;
@@ -87,3 +88,4 @@ namespace Fodinae.Tests.Core
         }
     }
 }
+#endif

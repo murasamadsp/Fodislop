@@ -12,7 +12,7 @@ using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae;
 using Fodinae.Audio;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.UI;
@@ -49,8 +49,14 @@ namespace MinesServer.Networking.Connection.Client
 {
     public class DummyConnection : IServerConnection, IOfflineConnection
     {
+        private readonly ISessionContainer _session;
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
         private int _lifecycleVersion;
+
+        public DummyConnection(ISessionContainer session)
+        {
+            _session = session;
+        }
 
         public ConnectionStatus ConnectionStatus => _status;
 
@@ -229,7 +235,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private async UniTaskVoid UpdatePosition()
         {
-            await UniTask.Delay(200);
+            await UniTask.Delay(IgnoreCollision ? 20 : 200);
             SendMapChunksAround(_x, _y);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
         }
@@ -314,7 +320,7 @@ namespace MinesServer.Networking.Connection.Client
                     if (_worldLayer != null)
                     {
                         CellType cellType = GetServerCell(move.X, move.Y);
-                        var cellConfig = Fodinae.Core.ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
+                        var cellConfig = _session.TryResolve<MapManager>()?.GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
                             bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
@@ -377,7 +383,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         CellType cellType = GetServerCell(cellX, cellY);
                         int crystalIdx = GetCrystalBasketIndex(cellType);
-                        var mm = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+                        var mm = _session.TryResolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
@@ -390,7 +396,7 @@ namespace MinesServer.Networking.Connection.Client
 
                         if (crystalIdx >= 0)
                         {
-                            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+                            var stats = _session.TryResolve<IPlayerStats>();
                             if (stats != null && stats.BasketContents != null && stats.BasketContents.Length > crystalIdx)
                             {
                                 var newContents = new long[stats.BasketContents.Length];
@@ -454,7 +460,7 @@ namespace MinesServer.Networking.Connection.Client
                     if (_worldLayer != null)
                     {
                         CellType cellType = GetServerCell(fx, fy);
-                        var mm = ServiceLocator.Resolve<MapManager>();
+                        var mm = _session.TryResolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
@@ -1163,7 +1169,7 @@ namespace MinesServer.Networking.Connection.Client
                 _clientKeybinds,
                 _clientUnrenderedTextures)));
 
-            var serverConfig = ServiceLocator.Resolve<ServerConfig>();
+            var serverConfig = _session.TryResolve<ServerConfig>();
             serverConfig?.ApplyValues(_digCooldown, _maxGlobalChatLength, _maxLocalChatLength);
         }
 
@@ -2209,7 +2215,7 @@ namespace MinesServer.Networking.Connection.Client
         {
             foreach (var assetEntry in runtimeAssets.Assets)
             {
-                var tsm = Fodinae.Core.ServiceLocator.Resolve<ITextureStorageService>();
+                var tsm = _session.TryResolve<ITextureStorageService>();
                 var data = tsm != null ? await tsm.GetTextureData(assetEntry.Filename.TrimStart('/')) : null;
 
                 RuntimeAssetPacket response;
@@ -2387,7 +2393,7 @@ namespace MinesServer.Networking.Connection.Client
                     }
 
                     CellType cellType = GetServerCell((ushort)nx, (ushort)ny);
-                    var cellConfig = ServiceLocator.Resolve<MapManager>()?.GetCellConfig(cellType);
+                    var cellConfig = _session.TryResolve<MapManager>()?.GetCellConfig(cellType);
                     bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
                     if (!isPassable)
                     {

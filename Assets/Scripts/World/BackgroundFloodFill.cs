@@ -19,52 +19,19 @@ namespace Fodinae.World
     /// </summary>
     public sealed class BackgroundFloodFill
     {
-        private sealed class PooledFrontier : IDisposable
-        {
-            private static readonly ArrayPool<(int X, int Y)> Pool = ArrayPool<(int X, int Y)>.Shared;
-            private (int X, int Y)[] _items = Pool.Rent(64);
-
-            public int Count { get; private set; }
-
-            public void Add((int X, int Y) item)
-            {
-                if (Count == _items.Length)
-                {
-                    var replacement = Pool.Rent(_items.Length * 2);
-                    Array.Copy(_items, replacement, Count);
-                    Pool.Return(_items);
-                    _items = replacement;
-                }
-
-                _items[Count++] = item;
-            }
-
-            public void AppendTo(List<(int X, int Y)> destination)
-            {
-                for (int i = 0; i < Count; i++)
-                {
-                    destination.Add(_items[i]);
-                }
-            }
-
-            public void Dispose()
-            {
-                Pool.Return(_items);
-                _items = Array.Empty<(int X, int Y)>();
-                Count = 0;
-            }
-        }
-
         private int[] _fbpwGeneration = Array.Empty<int>();
         private int _fbpwCurrentGen = 1;
         private readonly List<(int X, int Y)> _fbpwFrontier = new(64);
         private readonly List<(int X, int Y)> _fbpwNextFrontier = new(64);
-        private List<(int X, int Y)>[] _columnFrontiers = Array.Empty<List<(int X, int Y)>>();
-        private readonly object _fbpwLock = new();
 
         private CellType[,] _bgMapBuffer = new CellType[0, 0];
         private int _width;
         private int _height;
+
+        // One frontier list per column, so the seed scan can run in parallel and
+        // still produce the exact sequential frontier when concatenated in
+        // column order. Allocated once per resize rather than per rebuild.
+        private List<(int X, int Y)>[] _columnFrontiers = Array.Empty<List<(int X, int Y)>>();
 
         public void Allocate(int width, int height)
         {
@@ -77,13 +44,12 @@ namespace Fodinae.World
             _height = height;
             _bgMapBuffer = new CellType[width, height];
             _fbpwGeneration = new int[width * height];
+            _fbpwCurrentGen = 1;
             _columnFrontiers = new List<(int X, int Y)>[width];
             for (int x = 0; x < width; x++)
             {
-                _columnFrontiers[x] = new List<(int X, int Y)>(Math.Min(height, 64));
+                _columnFrontiers[x] = new List<(int X, int Y)>(height);
             }
-
-            _fbpwCurrentGen = 1;
         }
 
         public CellType[,] Buffer => _bgMapBuffer;
@@ -94,26 +60,34 @@ namespace Fodinae.World
         public void ComputeFull(ICachedCellDataProvider cellCache)
         {
             int w = _width, h = _height;
-            Array.Clear(_bgMapBuffer, 0, _bgMapBuffer.Length);
-
             var frontier = _fbpwFrontier;
             frontier.Clear();
 
+            // The seed scan writes only its own cell and appends to its own
+            // column list, so it parallelises cleanly. Measured at 5.81 ms for a
+            // 192x128 region on the main thread, which was the single most
+            // expensive stage of a terrain rebuild - and a rebuild fires on every
+            // mined cell.
+            //
+            // Concatenating the column lists in x order reproduces the sequential
+            // frontier exactly, which matters: FBPWPropagate fills each Unloaded
+            // cell from whichever seed reaches it first, so a different frontier
+            // order would be a different background map.
             Parallel.For(0, w, x =>
             {
-                List<(int X, int Y)> localFrontier = _columnFrontiers[x];
-                localFrontier.Clear();
                 Span<TypeCount> typeCounts = stackalloc TypeCount[8];
-
+                List<(int X, int Y)> columnFrontier = _columnFrontiers[x];
+                columnFrontier.Clear();
+                int cx = x + 1;
                 for (int y = 0; y < h; y++)
                 {
-                    int cx = x + 1, cy = y + 1;
+                    int cy = y + 1;
                     var cell = cellCache.GetCell(cx, cy);
 
-                    if ((cell.Properties & CellConfigProperties.Passable) != 0)
+                    if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
                     {
                         _bgMapBuffer[x, y] = cell.Type;
-                        localFrontier.Add((x, y));
+                        columnFrontier.Add((x, y));
                     }
                     else
                     {
@@ -134,7 +108,7 @@ namespace Fodinae.World
                                 }
 
                                 var n = cellCache.GetCell(nx + 1, ny + 1);
-                                if ((n.Properties & CellConfigProperties.Passable) != 0)
+                                if ((n.Properties & CellConfigProperties.Passable) != 0 && n.Type != CellType.Unloaded)
                                 {
                                     bool found = false;
                                     for (int i = 0; i < distinctCount; i++)
@@ -169,7 +143,11 @@ namespace Fodinae.World
                             }
 
                             _bgMapBuffer[x, y] = mostFrequent;
-                            localFrontier.Add((x, y));
+                            columnFrontier.Add((x, y));
+                        }
+                        else
+                        {
+                            _bgMapBuffer[x, y] = CellType.Unloaded;
                         }
                     }
                 }
@@ -180,7 +158,7 @@ namespace Fodinae.World
                 frontier.AddRange(_columnFrontiers[x]);
             }
 
-            FBPWPropagate(frontier, useParallel: true);
+            FBPWPropagate(frontier);
 
             for (int x = 0; x < w; x++)
             {
@@ -194,9 +172,117 @@ namespace Fodinae.World
             }
         }
 
+        public void UpdateLocalRegion(int startX, int startY, int countX, int countY, ICachedCellDataProvider cellCache)
+        {
+            int w = _width;
+            int h = _height;
+            int endX = Math.Min(startX + countX, w);
+            int endY = Math.Min(startY + countY, h);
+            int clampedStartX = Math.Max(0, startX);
+            int clampedStartY = Math.Max(0, startY);
+
+            Span<TypeCount> typeCounts = stackalloc TypeCount[8];
+
+            for (int x = clampedStartX; x < endX; x++)
+            {
+                int cx = x + 1;
+                for (int y = clampedStartY; y < endY; y++)
+                {
+                    int cy = y + 1;
+                    var cell = cellCache.GetCell(cx, cy);
+
+                    if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
+                    {
+                        _bgMapBuffer[x, y] = cell.Type;
+                    }
+                    else
+                    {
+                        int distinctCount = 0;
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            for (int dy = -1; dy <= 1; dy++)
+                            {
+                                if (dx == 0 && dy == 0)
+                                {
+                                    continue;
+                                }
+
+                                var n = cellCache.GetCell(cx + dx, cy + dy);
+                                if (n.Type != CellType.Unloaded && (n.Properties & CellConfigProperties.Passable) != 0)
+                                {
+                                    bool found = false;
+                                    for (int i = 0; i < distinctCount; i++)
+                                    {
+                                        if (typeCounts[i].Type == n.Type)
+                                        {
+                                            typeCounts[i].Count++;
+                                            found = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (!found && distinctCount < 8)
+                                    {
+                                        typeCounts[distinctCount++] = new TypeCount { Type = n.Type, Count = 1 };
+                                    }
+                                }
+                            }
+                        }
+
+                        if (distinctCount > 0)
+                        {
+                            CellType mostFrequent = typeCounts[0].Type;
+                            int maxC = typeCounts[0].Count;
+                            for (int i = 1; i < distinctCount; i++)
+                            {
+                                if (typeCounts[i].Count > maxC)
+                                {
+                                    maxC = typeCounts[i].Count;
+                                    mostFrequent = typeCounts[i].Type;
+                                }
+                            }
+
+                            _bgMapBuffer[x, y] = mostFrequent;
+                        }
+                        else
+                        {
+                            _bgMapBuffer[x, y] = CellType.Empty;
+                        }
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// Incremental rebuild: scroll existing buffer, then process border only.
         /// </summary>
+        /// <remarks>
+        /// NOT EQUIVALENT to <see cref="ComputeFull"/>, and currently unused for
+        /// that reason. Two defects, both of which make the background depend on
+        /// the path the camera travelled rather than on the world:
+        ///
+        /// 1. Propagation cannot reach inward. FBPWPropagate only writes cells
+        ///    that are still Unloaded, and after the scroll every interior cell
+        ///    is already classified, so no interior cell can enter the frontier.
+        ///    Background therefore cannot flow from the existing map into the
+        ///    newly exposed strip; a new cell that should have inherited a
+        ///    neighbour's background stays Unloaded and the final sweep turns it
+        ///    into plain Empty. ComputeFull seeds every passable cell, so it has
+        ///    no such restriction.
+        ///
+        /// 2. The reseeded strip is exactly |dx| (or |dy|) wide with no ring
+        ///    inward, while SeedBorderCell reads a 3x3 neighbourhood. The old
+        ///    boundary column was computed when its outward neighbours were off
+        ///    the edge and got skipped, and it is never revisited - so every
+        ///    scroll leaves a one-cell stripe of stale classification behind.
+        ///    TerrainPrecalculator.PrecalculateIncremental handles exactly this
+        ///    case correctly, with `meshWidth - dx - 1`; this did not.
+        ///
+        /// Fixing it means seeding the ring adjacent to the strip as well as the
+        /// strip itself, and widening the reseed by one cell. Until that is done
+        /// and verified against ComputeFull on the same data, callers must use
+        /// ComputeFull.
+        /// </remarks>
         public void ComputeIncremental(int dx, int dy, ICachedCellDataProvider cellCache)
         {
             int w = _width, h = _height;
@@ -258,7 +344,7 @@ namespace Fodinae.World
                 }
             }
 
-            FBPWPropagate(frontier, useParallel: false);
+            FBPWPropagate(frontier);
 
             if (hasXBorder)
             {
@@ -293,13 +379,10 @@ namespace Fodinae.World
         private void SeedBorderCell(int x, int y, ICachedCellDataProvider cellCache, List<(int, int)> frontier)
         {
             var cell = cellCache.GetCell(x + 1, y + 1);
-            if ((cell.Properties & CellConfigProperties.Passable) != 0)
+            if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
             {
                 _bgMapBuffer[x, y] = cell.Type;
-                lock (_fbpwLock)
-                {
-                    frontier.Add((x, y));
-                }
+                frontier.Add((x, y));
             }
             else
             {
@@ -323,7 +406,7 @@ namespace Fodinae.World
                         }
 
                         var n = cellCache.GetCell(nx + 1, ny + 1);
-                        if ((n.Properties & CellConfigProperties.Passable) != 0)
+                        if ((n.Properties & CellConfigProperties.Passable) != 0 && n.Type != CellType.Unloaded)
                         {
                             bool found = false;
                             for (int i = 0; i < distinctCount; i++)
@@ -358,15 +441,16 @@ namespace Fodinae.World
                     }
 
                     _bgMapBuffer[x, y] = mostFrequent;
-                    lock (_fbpwLock)
-                    {
-                        frontier.Add((x, y));
-                    }
+                    frontier.Add((x, y));
+                }
+                else
+                {
+                    _bgMapBuffer[x, y] = CellType.Unloaded;
                 }
             }
         }
 
-        private void FBPWPropagate(List<(int, int)> frontier, bool useParallel = false)
+        private void FBPWPropagate(List<(int, int)> frontier)
         {
             if (frontier.Count == 0)
             {
@@ -374,10 +458,12 @@ namespace Fodinae.World
             }
 
             int w = _width, h = _height;
+            var current = frontier;
+            var next = _fbpwNextFrontier;
 
-            while (frontier.Count > 0)
+            while (current.Count > 0)
             {
-                _fbpwNextFrontier.Clear();
+                next.Clear();
                 int gen = _fbpwCurrentGen++;
 
                 if (_fbpwCurrentGen >= int.MaxValue - 1)
@@ -386,102 +472,48 @@ namespace Fodinae.World
                     _fbpwCurrentGen = 1;
                 }
 
-                if (useParallel)
+                int currentCount = current.Count;
+                for (int i = 0; i < currentCount; i++)
                 {
-                    Parallel.For(0, frontier.Count,
-                        () => new PooledFrontier(),
-                        (i, state, local) =>
-                        {
-                            var (x, y) = frontier[i];
-                            CellType bg = _bgMapBuffer[x, y];
-                            for (int dy = -1; dy <= 1; dy++)
-                            {
-                                for (int dx = -1; dx <= 1; dx++)
-                                {
-                                    if (dx == 0 && dy == 0)
-                                    {
-                                        continue;
-                                    }
-
-                                    int nx = x + dx, ny = y + dy;
-                                    if (nx < 0 || nx >= w || ny < 0 || ny >= h)
-                                    {
-                                        continue;
-                                    }
-
-                                    if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
-                                    {
-                                        continue;
-                                    }
-
-                                    int idx = nx + (ny * w);
-                                    if (Interlocked.CompareExchange(ref _fbpwGeneration[idx], gen, gen - 1) != gen - 1)
-                                    {
-                                        continue;
-                                    }
-
-                                    _bgMapBuffer[nx, ny] = bg;
-                                    local.Add((nx, ny));
-                                }
-                            }
-
-                            return local;
-                        },
-                        local =>
-                        {
-                            if (local.Count > 0)
-                            {
-                                lock (_fbpwLock)
-                                {
-                                    local.AppendTo(_fbpwNextFrontier);
-                                }
-                            }
-
-                            local.Dispose();
-                        });
-                }
-                else
-                {
-                    foreach (var (x, y) in frontier)
+                    var (x, y) = current[i];
+                    CellType bg = _bgMapBuffer[x, y];
+                    for (int dy = -1; dy <= 1; dy++)
                     {
-                        CellType bg = _bgMapBuffer[x, y];
-                        for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
                         {
-                            for (int dx = -1; dx <= 1; dx++)
+                            if (dx == 0 && dy == 0)
                             {
-                                if (dx == 0 && dy == 0)
-                                {
-                                    continue;
-                                }
-
-                                int nx = x + dx, ny = y + dy;
-                                if (nx < 0 || nx >= w || ny < 0 || ny >= h)
-                                {
-                                    continue;
-                                }
-
-                                if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
-                                {
-                                    continue;
-                                }
-
-                                int idx = nx + (ny * w);
-                                if (_fbpwGeneration[idx] >= gen)
-                                {
-                                    continue;
-                                }
-
-                                _fbpwGeneration[idx] = gen;
-                                _bgMapBuffer[nx, ny] = bg;
-                                _fbpwNextFrontier.Add((nx, ny));
+                                continue;
                             }
+
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                            {
+                                continue;
+                            }
+
+                            if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
+                            {
+                                continue;
+                            }
+
+                            int idx = nx + (ny * w);
+                            if (_fbpwGeneration[idx] >= gen)
+                            {
+                                continue;
+                            }
+
+                            _fbpwGeneration[idx] = gen;
+                            _bgMapBuffer[nx, ny] = bg;
+                            next.Add((nx, ny));
                         }
                     }
                 }
 
-                frontier.Clear();
-                frontier.AddRange(_fbpwNextFrontier);
-                _fbpwNextFrontier.Clear();
+                current.Clear();
+                var temp = current;
+                current = next;
+                next = temp;
             }
         }
 

@@ -10,7 +10,7 @@ using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
+using UnityEngine.UIElements;
 using VContainer;
 
 namespace Fodinae.UI
@@ -22,14 +22,18 @@ namespace Fodinae.UI
     public class MinimapController : MonoBehaviour
     {
         [SerializeField]
-        private int _uiSize = 200;
+        private int _uiSize = 160;
 
-        // UI
-        private Text? _coordinatesText;
-        private RawImage? _minimapImage;
+        // UI Toolkit
+        [Inject]
+        private UIDocument? _doc;
+        [Inject]
+        private IObjectResolver _resolver = null!;
+        private VisualElement? _minimapRoot;
+        private Image? _minimapImageElement;
+        private Label? _coordinatesLabel;
         private Texture2D? _minimapTexture;
-        private GameObject? _minimapObj;
-        private GameObject? _textObj;
+
 
         // World state
         private PlayerMovementController? _player;
@@ -62,6 +66,7 @@ namespace Fodinae.UI
 
         // Toggle state
         private bool _isVisible = true;
+        private bool _uiCreated;
 
         private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
 
@@ -81,8 +86,9 @@ namespace Fodinae.UI
             // GameBootstrap (IPostStartable.PostStart) injects [Inject] fields only after
             // MonoBehaviour.Start, so _mapManager/_mapStorage are null here. Never disable
             // the component based on that: Update() -> TryInitialize() resolves them via
-            // ServiceLocator and waits for the world to become ready. World dimensions are
-            // computed there too (InitializeWorldState), so they are not duplicated here.
+            // the injected resolver and waits for the world to become ready. World
+            // dimensions are computed there too (InitializeWorldState), so they are not
+            // duplicated here.
 
             // Every texel is a discrete world-cell sample. Bilinear filtering
             // invents colors between adjacent cells and blurs unloaded chunk
@@ -98,6 +104,11 @@ namespace Fodinae.UI
             _pixelColors = new Color32[_uiSize * _uiSize];
 
             CreateUI();
+            if (!_uiCreated)
+            {
+                // UIDocument не готов в Start (PostStart-инъекция позже) — ретраим
+                // создание UI из Update, мир и плеер привязываем без падений.
+            }
 
             _player = PlayerMovementController.LocalPlayer;
             if (_player != null)
@@ -131,6 +142,11 @@ namespace Fodinae.UI
         /// </summary>
         protected void Update()
         {
+            if (!_uiCreated)
+            {
+                CreateUI();
+            }
+
             if (!_ready || _player == null || !_player.HasServerPosition || !_initialRefreshDone)
             {
                 TryInitialize();
@@ -174,13 +190,13 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 return;
             }
 
-            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
-            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
+            _mapManager = _resolver.ResolveOrDefault<MapManager>();
+            _mapStorage = _resolver.ResolveOrDefault<MapStorage>();
 
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
@@ -285,68 +301,53 @@ namespace Fodinae.UI
 
         private void CreateUI()
         {
-            // UI Toolkit renders independently from uGUI. A dedicated overlay canvas
-            // prevents a full-screen UIDocument from covering the minimap.
-            GameObject canvasObj = new("MinimapCanvas");
-            canvasObj.transform.SetParent(transform, false);
-            Canvas canvas = canvasObj.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.overrideSorting = true;
-
-            // Runtime UI Toolkit occupies a full-screen panel. A negative
-            // overlay order places uGUI behind that panel even where its
-            // visual background is transparent.
-            canvas.sortingOrder = 10;
-            canvasObj.AddComponent<CanvasScaler>();
-
-            // Minimap image
-            _minimapObj = new GameObject("Minimap");
-            _minimapObj.transform.SetParent(canvas.transform, false);
-            _minimapImage = _minimapObj.AddComponent<RawImage>();
-            _minimapImage.texture = _minimapTexture;
-            _minimapImage.color = Color.white;
-
-            RectTransform rt = _minimapObj.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.zero;
-            rt.pivot = Vector2.zero;
-            rt.anchoredPosition = new Vector2(10, 10);
-            rt.sizeDelta = new Vector2(_uiSize, _uiSize);
-
-            // Coordinates text
-            _textObj = new GameObject("PlayerCoordinates");
-            _textObj.transform.SetParent(canvas.transform, false);
-            _coordinatesText = _textObj.AddComponent<Text>();
-            _coordinatesText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (_coordinatesText.font == null)
+            if (_uiCreated)
             {
-                _coordinatesText.font = Font.CreateDynamicFontFromOSFont("Arial", 14);
+                return;
             }
 
-            _coordinatesText.fontSize = 20;
-            _coordinatesText.color = Color.white;
-            _coordinatesText.alignment = TextAnchor.MiddleCenter;
-            _coordinatesText.text = string.Empty;
-            _coordinatesText.fontStyle = FontStyle.Bold;
-            _coordinatesText.raycastTarget = false;
+            _doc ??= _resolver?.Resolve<UIDocument>();
+            if (_doc == null || _doc.rootVisualElement == null)
+            {
+                // Не бросаем: UIDocument может появиться после этого Start (PostStart-
+                // инъекция или аддитивная загрузка сцены). Update ретраит CreateUI —
+                // ждём молча, иначе первый кадр роняет клиент.
+                return;
+            }
 
-            Shadow shadow = _textObj.AddComponent<Shadow>();
-            shadow.effectColor = Color.black;
-            shadow.effectDistance = new Vector2(2, -2);
 
-            RectTransform textRt = _textObj.GetComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.zero;
-            textRt.pivot = new Vector2(0.5f, 1f);
-            textRt.anchoredPosition = new Vector2(10 + (_uiSize * 0.5f), 10 + _uiSize + 5);
-            textRt.sizeDelta = new Vector2(200, 30);
-            _textObj.transform.SetAsLastSibling();
+            var root = _doc.rootVisualElement;
+            _minimapRoot = new VisualElement();
+            _minimapRoot.name = "MinimapPanel";
+            _minimapRoot.AddToClassList("hud-minimap-panel");
+            _minimapRoot.AddToClassList("sci-fi-panel");
 
-            // The minimap is a permanent in-game HUD element. It becomes visible
-            // only once a world has been initialized.
+            _coordinatesLabel = new Label(string.Empty);
+            _coordinatesLabel.AddToClassList("hud-minimap-coords");
+            _minimapRoot.Add(_coordinatesLabel);
+
+            var imageContainer = new VisualElement();
+            imageContainer.AddToClassList("hud-minimap-container");
+
+            _minimapImageElement = new Image();
+            _minimapImageElement.image = _minimapTexture;
+            _minimapImageElement.AddToClassList("hud-minimap-image");
+            imageContainer.Add(_minimapImageElement);
+
+            _minimapRoot.Add(imageContainer);
+            _minimapRoot.RegisterCallback<ClickEvent>(evt =>
+            {
+                WorldMapController? mapController = _resolver?.ResolveOrDefault<WorldMapController>();
+                mapController?.ToggleMapMode();
+                evt.StopPropagation();
+            });
+            root.Add(_minimapRoot);
+
             _isVisible = true;
             SetVisible(false);
+            _uiCreated = true;
         }
+
 
         protected void OnEnable()
         {
@@ -382,14 +383,14 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 _ready = false;
                 return;
             }
 
-            _mapManager = Fodinae.Core.ServiceLocator.Resolve<MapManager>();
-            _mapStorage = Fodinae.Core.ServiceLocator.Resolve<MapStorage>();
+            _mapManager = _resolver.ResolveOrDefault<MapManager>();
+            _mapStorage = _resolver.ResolveOrDefault<MapStorage>();
             if (_mapManager == null || _mapStorage == null)
             {
                 _ready = false;
@@ -552,9 +553,9 @@ namespace Fodinae.UI
 
         private void UpdateCoordinatesText(int x, int y)
         {
-            if (_coordinatesText != null)
+            if (_coordinatesLabel != null)
             {
-                _coordinatesText.text = $"{x}:{y}";
+                _coordinatesLabel.text = $"{x}:{y}";
             }
         }
 
@@ -582,6 +583,12 @@ namespace Fodinae.UI
                 _subscribedCellLayer = null;
             }
 
+            if (_minimapRoot != null && _minimapRoot.parent != null)
+            {
+                _minimapRoot.parent.Remove(_minimapRoot);
+                _minimapRoot = null;
+            }
+
             if (_minimapTexture != null)
             {
                 Destroy(_minimapTexture);
@@ -605,14 +612,9 @@ namespace Fodinae.UI
 
         private void SetVisible(bool visible)
         {
-            if (_minimapObj != null)
+            if (_minimapRoot != null)
             {
-                _minimapObj.SetActive(visible);
-            }
-
-            if (_textObj != null)
-            {
-                _textObj.SetActive(visible);
+                _minimapRoot.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             }
         }
     }

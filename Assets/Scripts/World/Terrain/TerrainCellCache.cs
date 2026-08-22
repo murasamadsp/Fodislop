@@ -19,8 +19,8 @@ namespace Fodinae.World.Terrain
         private int _cacheWidth;
         private int _cacheHeight;
 
-        private readonly Dictionary<CellType, int> _atlasIndexCache = new();
-        private readonly Dictionary<CellType, CellMetadata> _metadataCache = new();
+        private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
+        private readonly bool[] _metadataReady = new bool[65536];
 
         private static CachedCellData UnloadedCellData => new()
         {
@@ -46,8 +46,7 @@ namespace Fodinae.World.Terrain
 
         public void ClearCaches()
         {
-            _atlasIndexCache.Clear();
-            _metadataCache.Clear();
+            Array.Clear(_metadataReady, 0, _metadataReady.Length);
         }
 
         public CachedCellData GetCellData(int x, int y)
@@ -90,7 +89,7 @@ namespace Fodinae.World.Terrain
             _cacheMinX = minX - 1;
             _cacheMinY = minY - 1;
 
-            for (int x = 0; x < _cacheWidth; x++)
+            System.Threading.Tasks.Parallel.For(0, _cacheWidth, x =>
             {
                 int gridX = _cacheMinX + x;
                 int lastChunkIndex = -1;
@@ -109,15 +108,53 @@ namespace Fodinae.World.Terrain
 
                     var meta = GetMetadata(type, mm, wtm, atlases);
                     _cellCache[x, y] = CreateCachedData(type, meta);
-
-                    if (Application.isPlaying && !meta.IsTextureReady)
-                    {
-                        wtm.RequestTexture(type);
-                    }
                 }
-            }
+            });
 
             wtm.RequestTexture(CellType.Empty);
+        }
+
+        public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
+        {
+            if (wtm == null || atlases == null || mm == null || mapStorage == null || !mapStorage.IsReady)
+            {
+                return;
+            }
+
+            int worldWidth = mm.WorldWidth;
+            int worldHeight = mm.WorldHeight;
+            var layer = mapStorage.CellLayer;
+            if (layer == null)
+            {
+                return;
+            }
+
+            int startX = Mathf.Clamp(gridMinX - _cacheMinX, 0, _cacheWidth);
+            int endX = Mathf.Clamp(gridMinX + width - _cacheMinX, 0, _cacheWidth);
+            int startY = Mathf.Clamp(unityMinY - _cacheMinY, 0, _cacheHeight);
+            int endY = Mathf.Clamp(unityMinY + height - _cacheMinY, 0, _cacheHeight);
+
+            for (int x = startX; x < endX; x++)
+            {
+                int gridX = _cacheMinX + x;
+                int lastChunkIndex = -1;
+                CellType[]? currentChunk = null;
+
+                for (int y = startY; y < endY; y++)
+                {
+                    int unityY = _cacheMinY + y;
+                    CellType type = GetCellType(gridX, unityY, worldWidth, worldHeight, layer, ref lastChunkIndex, ref currentChunk);
+
+                    if (type == CellType.Unloaded)
+                    {
+                        _cellCache[x, y] = UnloadedCellData;
+                        continue;
+                    }
+
+                    var meta = GetMetadata(type, mm, wtm, atlases);
+                    _cellCache[x, y] = CreateCachedData(type, meta);
+                }
+            }
         }
 
         public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
@@ -150,14 +187,15 @@ namespace Fodinae.World.Terrain
 
             Scroll2DArray(_cellCache, _cacheWidth, _cacheHeight, dx, dy);
 
-            void FillCell(int cx, int cy)
+            int lastChunkIndex = -1;
+            CellType[]? currentChunk = null;
+
+            void FillCell(int cx, int cy, ref int chunkIdx, ref CellType[]? chunk)
             {
                 int gridX = _cacheMinX + cx;
                 int unityY = _cacheMinY + cy;
-                int lastChunkIndex = -1;
-                CellType[]? currentChunk = null;
 
-                CellType type = GetCellType(gridX, unityY, worldWidth, worldHeight, layer, ref lastChunkIndex, ref currentChunk);
+                CellType type = GetCellType(gridX, unityY, worldWidth, worldHeight, layer, ref chunkIdx, ref chunk);
 
                 if (type == CellType.Unloaded)
                 {
@@ -167,11 +205,6 @@ namespace Fodinae.World.Terrain
 
                 var meta = GetMetadata(type, mm, wtm, atlases);
                 _cellCache[cx, cy] = CreateCachedData(type, meta);
-
-                if (Application.isPlaying && type != CellType.Unloaded && !meta.IsTextureReady)
-                {
-                    wtm.RequestTexture(type);
-                }
             }
 
             if (dx > 0)
@@ -180,7 +213,7 @@ namespace Fodinae.World.Terrain
                 {
                     for (int y = 0; y < _cacheHeight; y++)
                     {
-                        FillCell(x, y);
+                        FillCell(x, y, ref lastChunkIndex, ref currentChunk);
                     }
                 }
             }
@@ -190,7 +223,7 @@ namespace Fodinae.World.Terrain
                 {
                     for (int y = 0; y < _cacheHeight; y++)
                     {
-                        FillCell(x, y);
+                        FillCell(x, y, ref lastChunkIndex, ref currentChunk);
                     }
                 }
             }
@@ -201,7 +234,7 @@ namespace Fodinae.World.Terrain
                 {
                     for (int x = 0; x < _cacheWidth; x++)
                     {
-                        FillCell(x, y);
+                        FillCell(x, y, ref lastChunkIndex, ref currentChunk);
                     }
                 }
             }
@@ -211,7 +244,7 @@ namespace Fodinae.World.Terrain
                 {
                     for (int x = 0; x < _cacheWidth; x++)
                     {
-                        FillCell(x, y);
+                        FillCell(x, y, ref lastChunkIndex, ref currentChunk);
                     }
                 }
             }
@@ -244,7 +277,7 @@ namespace Fodinae.World.Terrain
 
             if (chunkIndex != lastChunkIndex)
             {
-                currentChunk = layer.GetChunk(chunkIndex, false, true);
+                currentChunk = layer.GetChunk(chunkIndex, false, false);
                 lastChunkIndex = chunkIndex;
             }
 
@@ -253,24 +286,21 @@ namespace Fodinae.World.Terrain
 
         public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
         {
-            if (_metadataCache.TryGetValue(type, out var meta))
+            int idx = (int)type;
+            if ((uint)idx < (uint)_metadataReady.Length && _metadataReady[idx])
             {
-                return meta;
+                return _metadataLookup[idx];
             }
 
             var config = mm.GetCellConfig(type);
 
-            if (!_atlasIndexCache.TryGetValue(type, out int atlasIndex))
+            int atlasIndex = -1;
+            for (int i = 0; i < atlases.Count; i++)
             {
-                atlasIndex = -1;
-                for (int i = 0; i < atlases.Count; i++)
+                if (atlases[i].ContainsCell(type))
                 {
-                    if (atlases[i].ContainsCell(type))
-                    {
-                        atlasIndex = i;
-                        _atlasIndexCache[type] = i;
-                        break;
-                    }
+                    atlasIndex = i;
+                    break;
                 }
             }
 
@@ -278,7 +308,7 @@ namespace Fodinae.World.Terrain
             int frameCount = wtm.GetAnimationFrameCount(type);
             int frameSize = wtm.GetFrameSize(type);
 
-            meta = new CellMetadata
+            var meta = new CellMetadata
             {
                 Properties = config.Properties,
                 ReliefGroup = config.ReliefGroup,
@@ -297,11 +327,22 @@ namespace Fodinae.World.Terrain
                 FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
                 IsTextureReady = atlasRect.z > 0.0001f,
             };
-            _metadataCache[type] = meta;
+
+            if ((uint)idx < (uint)_metadataReady.Length)
+            {
+                _metadataLookup[idx] = meta;
+                _metadataReady[idx] = true;
+            }
+
+            if (!meta.IsTextureReady)
+            {
+                wtm.RequestTexture(type);
+            }
+
             return meta;
         }
 
-        private CachedCellData CreateCachedData(CellType type, CellMetadata meta)
+        public CachedCellData CreateCachedData(CellType type, CellMetadata meta)
         {
             return new CachedCellData
             {

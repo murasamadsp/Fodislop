@@ -9,6 +9,7 @@ namespace Fodinae.Rendering.PostProcessing
 {
     [Serializable]
     [VolumeComponentMenu("Fodinae/Chromatic Aberration")]
+    [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class ChromaticAberrationComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter name stable for existing profiles.

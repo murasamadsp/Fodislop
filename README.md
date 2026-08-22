@@ -8,12 +8,19 @@
 git clone https://github.com/MinesReborn/Fodinae.git
 ```
 
-Открой через **Unity Hub** → `Open` → выбери папку. Unity сам подтянет зависимости. Открой `Assets/Scenes/MainGame.unity` и жми **Play**. Нет сервера? Включится автономный режим.
+Открой через **Unity Hub** → `Open` → выбери папку. Unity сам подтянет зависимости. Открой `Assets/Scenes/Bootstrap.unity` и жми **Play**: Bootstrap (build index 0) грузит `MainMenu`, а тот — `MainGame` аддитивно.
+
+### Сеть
+
+Транспорт выбирается из `client_config.json` (создаётся в `Application.persistentDataPath/Config/` при первом запуске):
+
+- `UseDummyConnection: true` — офлайн-заглушка `DummyConnection` для локального теста без сервера (режим по умолчанию);
+- `UseDummyConnection: false` — реальное подключение через Darkar25 `TcpConnection` (MinesServerNetworking) к `ServerHost:ServerPort` (по умолчанию `127.0.0.1:7777`).
 
 ## Что уже есть
 
 ✅ Тайловый мир (один меш, 7 UV-каналов)  
-✅ Сеть через MinesServerNetworking  
+✅ Сеть: Darkar25 MinesServerNetworking (`TcpConnection`), офлайн-заглушка `DummyConnection`  
 ✅ Динамический UI из серверных пакетов  
 ✅ FMOD аудио (3D-звук, снэпшоты, шины)  
 ✅ Инвентарь, HUD, экипировка  

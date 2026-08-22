@@ -2,7 +2,7 @@
 
 using Fodinae.Audio.Backend;
 using Fodinae.Audio.Core;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 
@@ -34,7 +34,7 @@ namespace Fodinae.Audio.Spatial
         /// <summary>Начать проигрывание текущего события с нативной привязкой FMOD к GameObject.</summary>
         public void PlayCurrent()
         {
-            var audioSystem = ServiceLocator.Resolve<IAudioSystem>();
+            var audioSystem = SessionAccess.Resolve()?.TryResolve<IAudioSystem>();
             if (string.IsNullOrEmpty(_eventName) || audioSystem == null)
             {
                 return;

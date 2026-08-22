@@ -41,20 +41,27 @@ namespace Fodinae.UI
         private TerrainRenderer _terrainRenderer = null!;
         [Inject]
         private GraphicsSettingsController _graphicsSettings = null!;
+        [Inject]
+        private IObjectResolver _resolver = null!;
         private VisualElement? _menuPanel;
         private TemplateContainer? _menuTree;
         private VisualElement? _mainPage;
         private ScrollView? _mainPageScroll;
         private VisualElement? _settingsPage;
         private bool _isOpen;
-        private InputAction? _escapeAction;
         private float _originalScale;
         private bool _originalScaleCaptured;
         private Button? _fullscreenButton;
         private bool _initialized;
+        private bool _initializationFailed;
 
         private float GetConfiguredBusVolume(AudioBusType busType)
         {
+            if (_clientConfig == null || _clientConfig.Config == null)
+            {
+                return 1f;
+            }
+
             return busType switch
             {
                 AudioBusType.Master => _clientConfig.Config.MasterVolume,
@@ -81,45 +88,77 @@ namespace Fodinae.UI
             TryInitialize();
         }
 
-        protected void OnEnable()
-        {
-            if (_initialized)
-            {
-                EnsureEscapeAction();
-            }
-        }
-
         protected void Update()
         {
-            if (!_initialized)
+            if (!_initialized && !_initializationFailed)
             {
                 TryInitialize();
+            }
+
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                ToggleMenu();
             }
         }
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _initializationFailed || _resolver == null)
             {
                 return;
             }
 
-            if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null ||
-                _clientConfig == null || _networkService == null ||
+            _doc ??= _resolver.Resolve<UIDocument>() ?? FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
+            if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null)
+            {
+                return;
+            }
+
+            _clientConfig ??= _resolver.Resolve<IClientConfigManager>();
+            _networkService ??= _resolver.Resolve<INetworkService>();
+            _audioSystem ??= _resolver.Resolve<IAudioSystem>();
+            _connectionService ??= _resolver.Resolve<IConnectionService>();
+            _inputBlocker ??= _resolver.Resolve<IInputBlocker>();
+            _lightingEngine ??= _resolver.Resolve<TerrariaLightingEngine>();
+            _postProcessController ??= _resolver.Resolve<PostProcessController>();
+            _terrainRenderer ??= _resolver.Resolve<TerrainRenderer>();
+            _graphicsSettings ??= _resolver.Resolve<GraphicsSettingsController>();
+
+            if (_clientConfig == null || _clientConfig.Config == null || _networkService == null ||
                 _audioSystem == null || _connectionService == null || _inputBlocker == null ||
                 _lightingEngine == null || _postProcessController == null || _terrainRenderer == null ||
                 _graphicsSettings == null)
             {
-                throw new InvalidOperationException(
-                    "[PauseMenu] Required DI services and UIDocument must be initialized before building pause menu.");
+                return;
             }
 
-            EnsureEscapeAction();
+            if (!_lightingEngine.IsInitialized)
+            {
+                // Меню строится на геттерах освещения (AmbientIntensity, EmissionScale и т.д.),
+                // которые читают _runtimeConfig, создаваемый только в EnsureInitialized().
+                // Порядок Start не гарантирован — ждём готовности движка; TryInitialize
+                // ретраится из Update каждый кадр.
+                return;
+            }
 
             _originalScale = _doc.panelSettings.scale;
             _originalScaleCaptured = true;
 
-            CreateMenu(_doc.rootVisualElement);
+            try
+            {
+                CreateMenu(_doc.rootVisualElement);
+            }
+            catch (InvalidOperationException exception)
+            {
+                // Обязательный контент меню (UXML/элементы) отсутствует или битый.
+                // Не бросаем из Update-ретрая: это зациклило бы исключения каждый кадр.
+                // Логируем один раз и помечаем как неинициализируемое — меню просто
+                // не откроется, игра продолжит работать.
+                Debug.LogError($"[PauseMenu] Cannot build menu: {exception.Message}");
+                _initializationFailed = true;
+                return;
+            }
+
             HideMenu();
 
             var savedScale = _clientConfig.Config.UiScale;
@@ -152,42 +191,6 @@ namespace Fodinae.UI
                     _doc.panelSettings.scale = _originalScale;
                 }
             }
-
-            DisposeEscapeAction();
-        }
-
-        protected void OnDisable()
-        {
-            DisposeEscapeAction();
-        }
-
-        private void EnsureEscapeAction()
-        {
-            if (_escapeAction != null)
-            {
-                return;
-            }
-
-            _escapeAction = new InputAction("Escape", binding: "<Keyboard>/escape");
-            _escapeAction.performed += OnEscapePerformed;
-            _escapeAction.Enable();
-        }
-
-        private void DisposeEscapeAction()
-        {
-            if (_escapeAction == null)
-            {
-                return;
-            }
-
-            _escapeAction.performed -= OnEscapePerformed;
-            _escapeAction.Dispose();
-            _escapeAction = null;
-        }
-
-        private void OnEscapePerformed(InputAction.CallbackContext _)
-        {
-            ToggleMenu();
         }
 
         private static VisualElement CreateSlider(string labelText, float initialValue, System.Action<float> onChange, float min, float max)
@@ -342,6 +345,8 @@ namespace Fodinae.UI
             TemplateContainer menuTree = menuTemplate.Instantiate();
             _menuTree = menuTree;
             menuTree.AddToClassList("ui-fullscreen");
+            menuTree.pickingMode = PickingMode.Ignore;
+            menuTree.style.display = DisplayStyle.None;
             _menuPanel = menuTree.Q<VisualElement>("PauseOverlay") ??
                 throw new InvalidOperationException("[PauseMenu] PauseOverlay is missing from PauseMenu.uxml.");
             _mainPage = menuTree.Q<VisualElement>("MainPage") ??
@@ -418,6 +423,7 @@ namespace Fodinae.UI
 
             _mainPageScroll.Add(CreateButton("Продолжить", CloseMenu));
             _mainPageScroll.Add(CreateButton("Настройки", OpenSettings));
+            _mainPageScroll.Add(CreateButton("В главное меню", ExitToMainMenu));
             _mainPageScroll.Add(CreateButton("Выйти", QuitGame));
 
             VisualElement displaySection = CreateSettingsSection(
@@ -510,12 +516,23 @@ namespace Fodinae.UI
             }));
 #endif
 
+            var graphicsRefreshers = new List<Action>();
             audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master));
             audioSection.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX));
             audioSection.Add(CreateAudioSlider("Музыка", AudioBusType.Music));
             audioSection.Add(CreateAudioSlider("Эмбиент", AudioBusType.Ambience));
             audioSection.Add(CreateAudioSlider("Голос / Диалоги", AudioBusType.Voice));
             audioSection.Add(CreateAudioSlider("Интерфейс", AudioBusType.UI));
+            Toggle muteInBackgroundToggle = CreateBoundToggle(
+                "Глушить звук в фоне",
+                () => _clientConfig.Config.MuteAudioInBackground,
+                value =>
+                {
+                    _clientConfig.Config.MuteAudioInBackground = value;
+                    _clientConfig.Save();
+                },
+                graphicsRefreshers);
+            audioSection.Add(muteInBackgroundToggle);
 
             interfaceSection.Add(CreateSlider(
                 "Масштаб UI",
@@ -527,11 +544,6 @@ namespace Fodinae.UI
                     if (_doc != null && _doc.panelSettings != null)
                     {
                         _doc.panelSettings.scale = v;
-                    }
-
-                    foreach (var canvas in FindObjectsByType<Canvas>())
-                    {
-                        canvas.scaleFactor = v;
                     }
                 },
                 0.5f,
@@ -594,7 +606,6 @@ namespace Fodinae.UI
             UpdateResolutionButton();
             displaySection.Add(resolutionButton);
 
-            var graphicsRefreshers = new List<Action>();
             Foldout customGraphicsSection = null!;
             string[] graphicsPresetNames =
             [
@@ -784,6 +795,7 @@ namespace Fodinae.UI
             RefreshCustomVSync();
             customGraphicsSection.Add(customVSyncButton);
 
+
             var customAntiAliasingButton = new Button();
             void RefreshCustomAntiAliasing()
             {
@@ -885,11 +897,14 @@ namespace Fodinae.UI
             {
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Мощность emission игрока",
-                    () => localRobot.DynamicLightIntensity,
+                    () => localRobot != null ? localRobot.DynamicLightIntensity : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
-                        localRobot.SetDynamicLightIntensity(value);
+                        if (localRobot != null)
+                        {
+                            localRobot.SetDynamicLightIntensity(value);
+                        }
                     },
                     0f,
                     4f,
@@ -908,10 +923,15 @@ namespace Fodinae.UI
 
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Цвет источника: красный",
-                    () => localRobot.DynamicLightColor.r,
+                    () => localRobot != null ? localRobot.DynamicLightColor.r : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
+                        if (localRobot == null)
+                        {
+                            return;
+                        }
+
                         Color color = localRobot.DynamicLightColor;
                         localRobot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
                     },
@@ -920,10 +940,15 @@ namespace Fodinae.UI
                     graphicsRefreshers));
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Цвет источника: зелёный",
-                    () => localRobot.DynamicLightColor.g,
+                    () => localRobot != null ? localRobot.DynamicLightColor.g : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
+                        if (localRobot == null)
+                        {
+                            return;
+                        }
+
                         Color color = localRobot.DynamicLightColor;
                         localRobot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
                     },
@@ -932,10 +957,15 @@ namespace Fodinae.UI
                     graphicsRefreshers));
                 advancedGraphicsSection.Add(CreateBoundSlider(
                     "Цвет источника: синий",
-                    () => localRobot.DynamicLightColor.b,
+                    () => localRobot != null ? localRobot.DynamicLightColor.b : 0f,
                     value =>
                     {
                         MarkGraphicsCustom();
+                        if (localRobot == null)
+                        {
+                            return;
+                        }
+
                         Color color = localRobot.DynamicLightColor;
                         localRobot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
                     },
@@ -1080,6 +1110,7 @@ namespace Fodinae.UI
                     "DirectRadiance — прямой свет",
                     "DiffuseBounce — непрямой диффузный свет",
                     "ContactOcclusion — контактное затенение",
+                    "Exposure — экспозиция (зелёный < белой точки, красный — пересвет)",
             ];
             int activeDebugView = (int)_lightingEngine.ActiveDebugView;
             var lightingDebugView = new Button();
@@ -1165,8 +1196,6 @@ namespace Fodinae.UI
             debugSection.Add(resetLightingPreferences);
 #endif
 
-            graphicsSection.Add(CreateLabel("Визуальные эффекты"));
-
             _postProcessController.EnsureVolumeSetup();
             var pp = _postProcessController;
             void SavePostProcess(Action apply)
@@ -1176,7 +1205,7 @@ namespace Fodinae.UI
                 _clientConfig.Save();
             }
 
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Свечение",
                 () => _clientConfig.Config.BloomIntensity,
                 value => SavePostProcess(() =>
@@ -1187,7 +1216,7 @@ namespace Fodinae.UI
                 0f,
                 5f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Порог свечения",
                 () => _clientConfig.Config.BloomThreshold,
                 value => SavePostProcess(() =>
@@ -1198,7 +1227,7 @@ namespace Fodinae.UI
                 0f,
                 2f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Рассеивание свечения",
                 () => _clientConfig.Config.BloomScatter,
                 value => SavePostProcess(() =>
@@ -1209,7 +1238,7 @@ namespace Fodinae.UI
                 0.1f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цвет свечения",
                 () => _clientConfig.Config.BloomTint,
                 value => SavePostProcess(() =>
@@ -1220,7 +1249,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Виньетка",
                 () => _clientConfig.Config.VignetteIntensity,
                 value => SavePostProcess(() =>
@@ -1231,7 +1260,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Мягкость виньетки",
                 () => _clientConfig.Config.VignetteSmoothness,
                 value => SavePostProcess(() =>
@@ -1242,33 +1271,7 @@ namespace Fodinae.UI
                 0.01f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Центр виньетки X",
-                () => _clientConfig.Config.VignetteCenter.x,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteCenter = new Vector2(
-                        value,
-                        _clientConfig.Config.VignetteCenter.y);
-                    pp.ApplyClientConfig();
-                }),
-                0f,
-                1f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Центр виньетки Y",
-                () => _clientConfig.Config.VignetteCenter.y,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteCenter = new Vector2(
-                        _clientConfig.Config.VignetteCenter.x,
-                        value);
-                    pp.ApplyClientConfig();
-                }),
-                0f,
-                1f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цвет виньетки",
                 () => _clientConfig.Config.VignetteColor,
                 value => SavePostProcess(() =>
@@ -1279,7 +1282,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Хроматическая аберрация",
                 () => _clientConfig.Config.ChromaticAberrationIntensity,
                 value => SavePostProcess(() =>
@@ -1290,7 +1293,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Экспозиция",
                 () => _clientConfig.Config.ColorGradingExposure,
                 value => SavePostProcess(() =>
@@ -1301,7 +1304,7 @@ namespace Fodinae.UI
                 -4f,
                 4f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Контраст",
                 () => _clientConfig.Config.ColorGradingContrast,
                 value => SavePostProcess(() =>
@@ -1312,7 +1315,7 @@ namespace Fodinae.UI
                 -1f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Насыщенность",
                 () => _clientConfig.Config.ColorGradingSaturation,
                 value => SavePostProcess(() =>
@@ -1332,8 +1335,8 @@ namespace Fodinae.UI
                     pp.ApplyClientConfig();
                 }),
                 graphicsRefreshers);
-            graphicsSection.Add(toneMappingToggle);
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(toneMappingToggle);
+            postProcessSection.Add(CreateBoundSlider(
                 "Белая точка tone mapping",
                 () => _clientConfig.Config.ColorGradingToneMappingWhitePoint,
                 value => SavePostProcess(() =>
@@ -1344,7 +1347,7 @@ namespace Fodinae.UI
                 0.25f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цветовой фильтр",
                 () => _clientConfig.Config.ColorGradingFilter,
                 value => SavePostProcess(() =>
@@ -1355,7 +1358,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Зернистость",
                 () => _clientConfig.Config.EigengrauIntensity,
                 value => SavePostProcess(() =>
@@ -1366,40 +1369,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Порог тёмных областей зернистости",
-                () => _clientConfig.Config.EigengrauDarknessThreshold,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauDarknessThreshold = value;
-                    pp.ApplyClientConfig();
-                }),
-                0.02f,
-                0.75f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Масштаб зернистости",
-                () => _clientConfig.Config.EigengrauNoiseScale,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauNoiseScale = value;
-                    pp.ApplyClientConfig();
-                }),
-                0.75f,
-                2f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Скорость зернистости",
-                () => _clientConfig.Config.EigengrauAnimationSpeed,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauAnimationSpeed = value;
-                    pp.ApplyClientConfig();
-                }),
-                1f,
-                60f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            postProcessSection.Add(CreateBoundColorControls(
                 "Цвет зернистости",
                 () => _clientConfig.Config.EigengrauColor,
                 value => SavePostProcess(() =>
@@ -1410,7 +1380,7 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            postProcessSection.Add(CreateBoundSlider(
                 "Размытие движения",
                 () => _clientConfig.Config.MotionBlurIntensity,
                 value => SavePostProcess(() =>
@@ -1421,48 +1391,14 @@ namespace Fodinae.UI
                 0f,
                 1f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Сэмплы размытия движения",
-                () => _clientConfig.Config.MotionBlurMaxSamples,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.MotionBlurMaxSamples = Mathf.Clamp(
-                        Mathf.RoundToInt(value),
-                        2,
-                        32);
-                    pp.ApplyClientConfig();
-                }),
-                2f,
-                32f,
-                graphicsRefreshers));
+
             void SaveShaderSetting(Action apply)
             {
                 apply();
                 _graphicsSettings.ApplyCustomWorldMaterialSettings();
             }
 
-            graphicsSection.Add(CreateLabel("Материалы мира"));
-            graphicsSection.Add(CreateBoundSlider(
-                "Масштаб flow X",
-                () => _clientConfig.Config.TerrainFlowScale.x,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainFlowScale = new Vector2(
-                        value,
-                        _clientConfig.Config.TerrainFlowScale.y)),
-                0.001f,
-                1024f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Масштаб flow Y",
-                () => _clientConfig.Config.TerrainFlowScale.y,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainFlowScale = new Vector2(
-                        _clientConfig.Config.TerrainFlowScale.x,
-                        value)),
-                0.001f,
-                1024f,
-                graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Скорость shimmer террейна",
                 () => _clientConfig.Config.TerrainShimmerSpeedScale,
                 value => SaveShaderSetting(() =>
@@ -1470,7 +1406,7 @@ namespace Fodinae.UI
                 0f,
                 10f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет shimmer террейна",
                 () => _clientConfig.Config.TerrainShimmerColor,
                 value => SaveShaderSetting(() =>
@@ -1478,22 +1414,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
-                "Диагностический цвет террейна",
-                () => _clientConfig.Config.TerrainDebugColor,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainDebugColor = value),
-                0f,
-                8f,
-                graphicsRefreshers));
-            Toggle terrainDebugToggle = CreateBoundToggle(
-                "Диагностический режим террейна",
-                () => _clientConfig.Config.TerrainDebugMode,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainDebugMode = value),
-                graphicsRefreshers);
-            graphicsSection.Add(terrainDebugToggle);
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Скорость пульсации террейна",
                 () => _clientConfig.Config.TerrainPulseSpeedScale,
                 value => SaveShaderSetting(() =>
@@ -1501,7 +1422,7 @@ namespace Fodinae.UI
                 0f,
                 10f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Излучение поверхности мира",
                 () => _clientConfig.Config.TransitEmissionStrength,
                 value => SaveShaderSetting(() =>
@@ -1509,7 +1430,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет излучения поверхности",
                 () => _clientConfig.Config.TransitEmissionColor,
                 value => SaveShaderSetting(() =>
@@ -1517,7 +1438,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
+            worldMaterialsSection.Add(CreateBoundSlider(
                 "Излучение дальней поверхности",
                 () => _clientConfig.Config.PerspectiveEmissionStrength,
                 value => SaveShaderSetting(() =>
@@ -1525,7 +1446,7 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundColorControls(
+            worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет дальней поверхности",
                 () => _clientConfig.Config.PerspectiveEmissionColor,
                 value => SaveShaderSetting(() =>
@@ -1533,23 +1454,6 @@ namespace Fodinae.UI
                 0f,
                 8f,
                 graphicsRefreshers));
-            graphicsSection.Add(CreateBoundSlider(
-                "Физическая плотность поверхности",
-                () => _clientConfig.Config.SurfaceOccupancy,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.SurfaceOccupancy = value),
-                0f,
-                1f,
-                graphicsRefreshers));
-
-            MoveChildrenStartingAt(
-                graphicsSection,
-                "Визуальные эффекты",
-                postProcessSection);
-            MoveChildrenStartingAt(
-                postProcessSection,
-                "Материалы мира",
-                worldMaterialsSection);
 
             displayScroll.contentContainer.Add(displaySection);
             graphicsScroll.contentContainer.Add(graphicsSection);
@@ -1647,36 +1551,6 @@ namespace Fodinae.UI
             return section;
         }
 
-        private static void MoveChildrenStartingAt(
-            VisualElement source,
-            string markerText,
-            VisualElement destination)
-        {
-            int markerIndex = -1;
-            for (int index = 0; index < source.childCount; index++)
-            {
-                if (source.ElementAt(index) is Label label &&
-                    string.Equals(label.text, markerText, StringComparison.Ordinal))
-                {
-                    markerIndex = index;
-                    break;
-                }
-            }
-
-            if (markerIndex < 0)
-            {
-                throw new InvalidOperationException(
-                    $"[PauseMenu] Settings marker '{markerText}' was not built.");
-            }
-
-            while (markerIndex < source.childCount)
-            {
-                VisualElement child = source.ElementAt(markerIndex);
-                source.RemoveAt(markerIndex);
-                destination.Add(child);
-            }
-        }
-
         private void ToggleMenu()
         {
             if (!enabled)
@@ -1729,6 +1603,12 @@ namespace Fodinae.UI
         {
             _isOpen = true;
             IsMenuOpen = true;
+            if (_menuTree != null)
+            {
+                _menuTree.BringToFront();
+                _menuTree.style.display = DisplayStyle.Flex;
+            }
+
             if (_menuPanel != null)
             {
                 _menuPanel.BringToFront();
@@ -1760,18 +1640,25 @@ namespace Fodinae.UI
             {
                 _menuPanel.style.display = DisplayStyle.None;
             }
+
+            if (_menuTree != null)
+            {
+                _menuTree.style.display = DisplayStyle.None;
+            }
         }
 
         private void SendClientConfig()
         {
             var context = new List<StringPairPacket>();
 
-            context.Add(new StringPairPacket("master_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Master) * 255)).ToString()));
-            context.Add(new StringPairPacket("sfx_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.SFX) * 255)).ToString()));
-            context.Add(new StringPairPacket("music_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Music) * 255)).ToString()));
-            context.Add(new StringPairPacket("ambience_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Ambience) * 255)).ToString()));
-            context.Add(new StringPairPacket("voice_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.Voice) * 255)).ToString()));
-            context.Add(new StringPairPacket("ui_volume", ((byte)(GetConfiguredBusVolume(AudioBusType.UI) * 255)).ToString()));
+            // Слайдеры громкости ограничены 0..1, но значение в конфиге может выйти
+            // за диапазон (старые/ручные правки) — clamp до байта, иначе переполнение.
+            context.Add(new StringPairPacket("master_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Master)) * 255).ToString()));
+            context.Add(new StringPairPacket("sfx_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.SFX)) * 255).ToString()));
+            context.Add(new StringPairPacket("music_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Music)) * 255).ToString()));
+            context.Add(new StringPairPacket("ambience_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Ambience)) * 255).ToString()));
+            context.Add(new StringPairPacket("voice_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Voice)) * 255).ToString()));
+            context.Add(new StringPairPacket("ui_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.UI)) * 255).ToString()));
 
             context.Add(new StringPairPacket("ui_scale", _clientConfig.Config.UiScale.ToString("F2")));
 
@@ -1807,10 +1694,34 @@ namespace Fodinae.UI
 
         private void QuitGame()
         {
-            ShowQuitConfirmation();
+            ShowConfirmation(
+                "Выход из игры",
+                "Вы уверены, что хотите выйти?",
+                "Выйти",
+                () =>
+                {
+#if UNITY_EDITOR
+                    Debug.Log("[PauseMenu] Выход из игры");
+#else
+                    Application.Quit();
+#endif
+                });
         }
 
-        private void ShowQuitConfirmation()
+        private void ExitToMainMenu()
+        {
+            ShowConfirmation(
+                "Выйти в главное меню",
+                "Вы уверены? Текущая сессия будет закрыта.",
+                "В меню",
+                () =>
+                {
+                    CloseMenu();
+                    BootstrapLifetimeScope.Instance?.ReturnToMainMenu();
+                });
+        }
+
+        private void ShowConfirmation(string title, string description, string confirmText, Action onConfirm)
         {
             if (_doc == null)
             {
@@ -1820,7 +1731,7 @@ namespace Fodinae.UI
             var root = _doc.rootVisualElement;
 
             var overlay = new VisualElement();
-            overlay.name = "QuitConfirmOverlay";
+            overlay.name = "ConfirmOverlay";
             overlay.AddToClassList("pause-confirm-overlay");
             overlay.AddToClassList("ui-overlay");
             overlay.AddToClassList("ui-overlay--modal");
@@ -1830,11 +1741,11 @@ namespace Fodinae.UI
             panel.AddToClassList("ui-panel");
             panel.AddToClassList("ui-panel--modal");
 
-            var titleLabel = new Label("Выход из игры");
+            var titleLabel = new Label(title);
             titleLabel.AddToClassList("pause-confirm-title");
             panel.Add(titleLabel);
 
-            var descLabel = new Label("Вы уверены, что хотите выйти?");
+            var descLabel = new Label(description);
             descLabel.AddToClassList("pause-confirm-desc");
             panel.Add(descLabel);
 
@@ -1845,13 +1756,9 @@ namespace Fodinae.UI
             var confirmBtn = new Button(() =>
             {
                 root.Remove(overlay);
-#if UNITY_EDITOR
-                Debug.Log("[PauseMenu] Выход из игры");
-#else
-                Application.Quit();
-#endif
+                onConfirm();
             });
-            confirmBtn.text = "Выйти";
+            confirmBtn.text = confirmText;
             confirmBtn.AddToClassList("pause-btn-confirm");
 
             var cancelBtn = new Button(() => root.Remove(overlay));

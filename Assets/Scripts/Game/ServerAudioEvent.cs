@@ -8,6 +8,7 @@ using Cysharp.Threading.Tasks;
 using Effekseer;
 using Fodinae.Audio.Backend;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
@@ -104,6 +105,12 @@ namespace Fodinae.Game
 
         public bool IsDisposed => _slotReleased;
 
+        private static T? TryResolve<T>()
+            where T : class
+        {
+            return SessionAccess.Resolve()?.TryResolve<T>();
+        }
+
         public void Update()
         {
             if (_slotReleased)
@@ -139,7 +146,7 @@ namespace Fodinae.Game
             {
                 if (_hasSourceBot)
                 {
-                    var sourceBot = ServiceLocator.Resolve<IRobotService>()?.GetOrCreateRobot(_sourceBotId);
+                    var sourceBot = TryResolve<IRobotService>()?.GetOrCreateRobot(_sourceBotId);
                     if (sourceBot != null)
                     {
                         _effekseerHandle.SetLocation(sourceBot.transform.position);
@@ -148,7 +155,7 @@ namespace Fodinae.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (TryResolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -317,7 +324,7 @@ namespace Fodinae.Game
 
             if (_hasSourceBot)
             {
-                var service = ServiceLocator.Resolve<IRobotService>();
+                var service = TryResolve<IRobotService>();
                 var sourceBot = service is RobotManager manager ? manager.GetOrCreateRobot(_sourceBotId) : null;
                 pos = sourceBot != null
                     ? sourceBot.transform.position
@@ -337,7 +344,7 @@ namespace Fodinae.Game
 
             if (_targetBotId != 0 && _gameObject != null)
             {
-                var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
+                var targetBot = (TryResolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle + 180f);
@@ -354,7 +361,7 @@ namespace Fodinae.Game
 
         private void PlayAudio()
         {
-            var audioSystem = ServiceLocator.Resolve<IAudioSystem>();
+            var audioSystem = TryResolve<IAudioSystem>();
             if (audioSystem == null)
             {
                 return;
@@ -369,7 +376,7 @@ namespace Fodinae.Game
             try
             {
                 var filename = $"VFX/{_effectType.ToString().ToLowerInvariant()}";
-                var loader = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader;
+                var loader = TryResolve<IAssetLoader>() as ClientAssetLoader;
                 if (loader == null)
                 {
                     MarkVisualCompleted();
@@ -490,7 +497,7 @@ namespace Fodinae.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = (ServiceLocator.Resolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (TryResolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -526,7 +533,7 @@ namespace Fodinae.Game
 
         private static int GetWorldHeight()
         {
-            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+            MapManager mapManager = TryResolve<MapManager>() ??
                 throw new InvalidOperationException(
                     "[ServerAudioEvent] MapManager is required for server-to-world coordinate conversion.");
             return mapManager.WorldHeight;
@@ -569,7 +576,7 @@ namespace Fodinae.Game
 
             if (_slot != null)
             {
-                ServiceLocator.Resolve<VFXPool>()?.Release(_slot);
+                TryResolve<VFXPool>()?.Release(_slot);
                 _slot = null;
             }
 

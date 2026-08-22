@@ -8,12 +8,14 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.World
 {
@@ -33,11 +35,23 @@ namespace Fodinae.World
 
         [System.NonSerialized]
         public TextureAtlas _currentAtlas = null!;
+
+        [Inject]
+        private ISessionContainer _session = null!;
         private CellTextureCache _textureCache = null!;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private List<TextureAtlas> _atlases = null!;
+
+        // Tracked separately from _pendingRequests: that dictionary only gets populated
+        // after GetCellTextureCoordinate's first `await UniTask.SwitchToMainThread()`
+        // continuation resumes, so a request fired via RequestTexture this frame can read
+        // as "not pending" for part of a frame even though it has genuinely started. This
+        // set is written synchronously at the RequestTexture call site instead, so gameplay
+        // code (e.g. the world-loaded gate) can reliably tell "still loading" from "done".
+        private readonly ConcurrentDictionary<CellType, byte> _inFlightCellTypeRequests = new();
+        public int PendingCellTextureRequests => _inFlightCellTypeRequests.Count;
 
         private Texture2D? _cachedEmptyTexture;
 
@@ -145,12 +159,25 @@ namespace Fodinae.World
         {
             EnsureInitialized();
             if (_textureCache.TryGetTexture(cellType, out _) ||
-                _pendingRequests.ContainsKey(cellType))
+                _pendingRequests.ContainsKey(cellType) ||
+                !_inFlightCellTypeRequests.TryAdd(cellType, 0))
             {
                 return;
             }
 
-            GetCellTextureCoordinate(cellType, 0, 0).Forget();
+            TrackedRequestTextureAsync(cellType).Forget();
+        }
+
+        private async UniTaskVoid TrackedRequestTextureAsync(CellType cellType)
+        {
+            try
+            {
+                await GetCellTextureCoordinate(cellType, 0, 0);
+            }
+            finally
+            {
+                _inFlightCellTypeRequests.TryRemove(cellType, out _);
+            }
         }
 
         public AtlasCoordinate GetCellTextureCoordinate(CellType cellType)
@@ -182,7 +209,7 @@ namespace Fodinae.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    MapManager mmForAnim = ServiceLocator.Resolve<MapManager>() ??
+                    MapManager mmForAnim = _session.TryResolve<MapManager>() ??
                         throw new InvalidOperationException(
                             "MapManager is required to resolve animation metadata for a terrain texture.");
                     float speed = mmForAnim.GetAnimationSpeed(cellType);
@@ -240,7 +267,7 @@ namespace Fodinae.World
         public float GetAnimationSpeedForCell(CellType cellType)
         {
             EnsureInitialized();
-            MapManager mapManager = ServiceLocator.Resolve<MapManager>() ??
+            MapManager mapManager = _session.TryResolve<MapManager>() ??
                 throw new InvalidOperationException(
                     "MapManager is required to resolve terrain animation metadata.");
             if (!mapManager.HasAnimation(cellType))
@@ -366,7 +393,7 @@ namespace Fodinae.World
             Texture2D? texture = null;
             try
             {
-                IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+                IAssetLoader loader = _session.TryResolve<IAssetLoader>() ??
                     throw new InvalidOperationException(
                         "IAssetLoader is required to load terrain textures.");
                 texture = await loader.GetTextureAsync(filename);
@@ -403,15 +430,28 @@ namespace Fodinae.World
                 RuntimeTextureColorSpace.Srgb,
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
-            var random = new System.Random(unchecked((int)cellType * 397) ^ 0x5F3759DF);
-            Color[] pixels = new Color[_cellTextureSize * _cellTextureSize];
-            for (int y = 0; y < _cellTextureSize; y++)
+
+            int seed = unchecked((int)cellType * 397) ^ 0x5F3759DF;
+            float baseHue = (float)((seed & 0xFFFF) / 65536.0);
+            Color primaryColor = Color.HSVToRGB(baseHue, 0.85f, 0.90f);
+            Color secondaryColor = Color.HSVToRGB((baseHue + 0.5f) % 1.0f, 0.70f, 0.35f);
+            Color borderColor = Color.HSVToRGB(baseHue, 0.95f, 0.20f);
+
+            int size = _cellTextureSize;
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
             {
-                for (int x = 0; x < _cellTextureSize; x++)
+                for (int x = 0; x < size; x++)
                 {
-                    float hue = (float)random.NextDouble();
-                    float value = (((x / 4) + (y / 4)) & 1) == 0 ? 0.9f : 0.45f;
-                    pixels[(y * _cellTextureSize) + x] = Color.HSVToRGB(hue, 0.85f, value);
+                    bool isBorder = x == 0 || y == 0 || x == size - 1 || y == size - 1;
+                    bool isCross = x == y || x == (size - 1 - y);
+                    bool isChecker = (((x / 4) + (y / 4)) & 1) == 0;
+
+                    Color pixelColor = isBorder
+                        ? borderColor
+                        : isCross || isChecker ? primaryColor : secondaryColor;
+
+                    pixels[(y * size) + x] = pixelColor;
                 }
             }
 
@@ -433,9 +473,12 @@ namespace Fodinae.World
                 }
             }
 
-            MapManager mmForFrame = ServiceLocator.Resolve<MapManager>() ??
-                throw new InvalidOperationException(
-                    "MapManager is required to resolve terrain texture frame metadata.");
+            MapManager? mmForFrame = _session.TryResolve<MapManager>();
+            if (mmForFrame == null || !mmForFrame.IsWorldInitialized)
+            {
+                return;
+            }
+
             int frameHeight = mmForFrame.GetAnimationFrameHeight(cellType);
 
             ValidateTerrainTextureDimensions(

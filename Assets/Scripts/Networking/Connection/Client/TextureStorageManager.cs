@@ -219,14 +219,33 @@ namespace Fodinae.Networking.Connection.Client
                 }
             }
 
-            // 2. Read-only search in bundled Assets/Textures
-            var bundledFolder = Path.Combine(Application.dataPath, "Textures");
-            if (Directory.Exists(bundledFolder))
+            // 2. Read-only search in bundled textures across all candidate paths
+            string[] candidateFolders =
+            [
+                Path.Combine(Application.dataPath, "Textures"),
+                Path.Combine(Application.dataPath, "Resources", "Data", "Textures"),
+                Path.Combine(Application.dataPath, "..", "Resources", "Data", "Textures"),
+                Path.Combine(Application.dataPath, "..", "Textures"),
+                Path.Combine(Application.streamingAssetsPath, "Textures"),
+                Path.Combine(Application.streamingAssetsPath, "..", "Textures"),
+            ];
+
+            foreach (string candidate in candidateFolders)
             {
-                var foundPath = SearchInFolder(bundledFolder, normalizedFilename);
-                if (foundPath != null)
+                try
                 {
-                    return foundPath;
+                    if (Directory.Exists(candidate))
+                    {
+                        var foundPath = SearchInFolder(candidate, normalizedFilename);
+                        if (foundPath != null)
+                        {
+                            return foundPath;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore path resolution errors for invalid relative traversals
                 }
             }
 

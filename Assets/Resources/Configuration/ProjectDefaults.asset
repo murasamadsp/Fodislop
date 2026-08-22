@@ -23,7 +23,6 @@ MonoBehaviour:
     _uiScale: 1
     _graphicsQuality: 2
   _lighting:
-    _quality: 3
     _ambientOcclusionEnabled: 1
     _diffuseBounceEnabled: 1
     _ambientIntensity: 0.85
@@ -51,7 +50,6 @@ MonoBehaviour:
     _terrainShimmerColor: {r: 1, g: 1, b: 1, a: 1}
     _terrainDebugColor: {r: 1, g: 0, b: 1, a: 1}
     _terrainDebugMode: 0
-    _worldSurfaceWrapBaseMap: 1
     _bloomThreshold: 0.9
     _bloomScatter: 0.7
     _bloomTint: {r: 1, g: 1, b: 1, a: 1}

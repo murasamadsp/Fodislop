@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Player;
@@ -26,6 +27,8 @@ namespace Fodinae.UI
 
         private int _texWidth;
         private int _texHeight;
+        private int _lastCanvasWidth = -1;
+        private int _lastCanvasHeight = -1;
         private Canvas? _canvas;
         private RawImage? _rawImage;
         private Texture2D? _mapTexture;
@@ -48,7 +51,6 @@ namespace Fodinae.UI
         [Inject]
         private MapManager? _manager;
         private PlayerMovementController? _player;
-        private InputAction? _scrollAction;
 
         private bool _isDragging;
         private Vector2 _lastMousePos;
@@ -71,13 +73,14 @@ namespace Fodinae.UI
 
         protected void Awake()
         {
-            if (!Fodinae.Core.ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session == null)
             {
                 return;
             }
 
-            _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+            _storage ??= session.TryResolve<IWorldDataStorage>();
+            _manager ??= session.TryResolve<MapManager>();
         }
 
         protected void Start()
@@ -90,7 +93,6 @@ namespace Fodinae.UI
             if (_initialized)
             {
                 RebindRuntimeSources();
-                EnsureScrollAction();
             }
         }
 
@@ -98,19 +100,19 @@ namespace Fodinae.UI
         {
             if (_initialized)
             {
-                EnsureScrollAction();
                 return;
             }
 
-            if (!ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session == null)
             {
                 return;
             }
 
-            _storage ??= ServiceLocator.Resolve<IWorldDataStorage>() ??
+            _storage ??= session.TryResolve<IWorldDataStorage>() ??
                 throw new InvalidOperationException(
                     "WorldMapRenderer requires IWorldDataStorage after the resolver was initialized.");
-            _manager ??= ServiceLocator.Resolve<MapManager>() ??
+            _manager ??= session.TryResolve<MapManager>() ??
                 throw new InvalidOperationException(
                     "WorldMapRenderer requires MapManager after the resolver was initialized.");
             if (!_manager.IsWorldInitialized || !_storage.IsReady)
@@ -149,8 +151,6 @@ namespace Fodinae.UI
                 _viewCenterY = h / 2f;
             }
 
-            EnsureScrollAction();
-
             if (_canvas != null && !_canvas.gameObject.activeSelf)
             {
                 Hide();
@@ -161,7 +161,6 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            DisposeScrollAction();
             if (_mapTexture != null)
             {
                 Destroy(_mapTexture);
@@ -185,35 +184,7 @@ namespace Fodinae.UI
             }
         }
 
-        protected void OnDisable()
-        {
-            DisposeScrollAction();
-        }
 
-        private void DisposeScrollAction()
-        {
-            if (_scrollAction == null)
-            {
-                return;
-            }
-
-            _scrollAction.performed -= OnScroll;
-            _scrollAction.Disable();
-            _scrollAction.Dispose();
-            _scrollAction = null;
-        }
-
-        private void EnsureScrollAction()
-        {
-            if (_scrollAction != null)
-            {
-                return;
-            }
-
-            _scrollAction = new InputAction("MapScroll", binding: "<Mouse>/scroll");
-            _scrollAction.performed += OnScroll;
-            _scrollAction.Enable();
-        }
 
         private void SubscribeToPlayer(PlayerMovementController player)
         {
@@ -253,14 +224,15 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            if (!ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session == null)
             {
                 _initialized = false;
                 return;
             }
 
-            _storage = ServiceLocator.Resolve<IWorldDataStorage>();
-            _manager = ServiceLocator.Resolve<MapManager>();
+            _storage = session.TryResolve<IWorldDataStorage>();
+            _manager = session.TryResolve<MapManager>();
             if (_storage == null || _manager == null)
             {
                 _initialized = false;
@@ -321,7 +293,7 @@ namespace Fodinae.UI
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
-            _cellSampler.Invalidate();
+            _cellSampler.InvalidateChunk(serverX, serverY);
             _renderRequested = true;
         }
 
@@ -400,9 +372,23 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (_canvas != null)
+            {
+                Rect canvasRect = _canvas.pixelRect;
+                int curW = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : Screen.width;
+                int curH = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : Screen.height;
+                if (curW > 0 && curH > 0 && (curW != _lastCanvasWidth || curH != _lastCanvasHeight))
+                {
+                    InitTexture();
+                    _renderRequested = true;
+                }
+            }
+
+            HandleMouseScroll();
             HandleDrag();
             HandleFollowPlayer();
             HandleQueuedRender();
+
 
             _playerBlinkTimer += Time.deltaTime;
             if (_playerBlinkTimer >= 0.5f)
@@ -417,13 +403,14 @@ namespace Fodinae.UI
         {
             if (_storage == null || _manager == null)
             {
-                if (!Fodinae.Core.ServiceLocator.IsInitialized)
+                ISessionContainer? session = SessionAccess.Resolve();
+                if (session == null)
                 {
                     return;
                 }
 
-                _storage ??= Fodinae.Core.ServiceLocator.Resolve<IWorldDataStorage>();
-                _manager ??= Fodinae.Core.ServiceLocator.Resolve<MapManager>();
+                _storage ??= session.TryResolve<IWorldDataStorage>();
+                _manager ??= session.TryResolve<MapManager>();
                 if (_storage == null || _manager == null)
                 {
                     return;
@@ -507,23 +494,36 @@ namespace Fodinae.UI
 
         private void InitTexture()
         {
-            const int BASE_RES = 512;
             Canvas canvas = _canvas ?? throw new InvalidOperationException(
                 "[WorldMapRenderer] Canvas must be created before the map texture.");
             Canvas.ForceUpdateCanvases();
             Rect canvasRect = canvas.pixelRect;
-            if (canvasRect.width <= 0f || canvasRect.height <= 0f)
+            int width = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : (Screen.width > 0 ? Screen.width : 1920);
+            int height = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : (Screen.height > 0 ? Screen.height : 1080);
+
+            // Bound map texture resolution to prevent high-DPI Retina allocations (e.g. 7.3M texels).
+            // ScreenSpaceOverlay RawImage scales this buffer seamlessly across the screen.
+            const int MAX_MAP_WIDTH = 960;
+            const int MAX_MAP_HEIGHT = 540;
+
+            float aspect = (float)width / Mathf.Max(1, height);
+            int targetWidth = MAX_MAP_WIDTH;
+            int targetHeight = Mathf.RoundToInt(targetWidth / aspect);
+            if (targetHeight > MAX_MAP_HEIGHT)
             {
-                throw new InvalidOperationException(
-                    $"[WorldMapRenderer] Canvas has invalid layout {canvasRect.width}x{canvasRect.height}.");
+                targetHeight = MAX_MAP_HEIGHT;
+                targetWidth = Mathf.RoundToInt(targetHeight * aspect);
             }
 
-            _texHeight = BASE_RES;
-            int canvasHeight = Mathf.RoundToInt(canvasRect.height);
-            int canvasWidth = Mathf.RoundToInt(canvasRect.width);
-            _texWidth = Mathf.Max(
-                1,
-                Mathf.RoundToInt(BASE_RES * ((float)canvasWidth / canvasHeight)));
+            _texWidth = Mathf.Max(16, targetWidth);
+            _texHeight = Mathf.Max(16, targetHeight);
+            _lastCanvasWidth = width;
+            _lastCanvasHeight = height;
+
+            if (_mapTexture != null)
+            {
+                Destroy(_mapTexture);
+            }
 
             // This texture is categorical map data: one texel represents one
             // sampled world cell. Bilinear filtering fabricates blended terrain
@@ -535,11 +535,16 @@ namespace Fodinae.UI
                 RuntimeTextureColorSpace.Srgb,
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
+
+            _pixelBuffer = new Color32[_texWidth * _texHeight];
+
             if (_rawImage != null)
             {
                 _rawImage.texture = _mapTexture;
             }
         }
+
+
 
         private void HandleDrag()
         {
@@ -567,11 +572,10 @@ namespace Fodinae.UI
                 if (delta.sqrMagnitude > 1f)
                 {
                     // Screen-space: +X right, +Y up. World: +X right, +Y down.
-                    // Grab-style drag: content follows the cursor. Dragging right
-                    // moves the view left (X +), dragging up moves the view "north"
-                    // (smaller server Y), so centerY must INCREASE when delta.y is +.
+                    // Dragging right moves view left (decrease centerX).
+                    // Dragging up moves view up towards surface (decrease centerY).
                     _viewCenterX -= delta.x * _cellsPerPixel * _dragSpeed;
-                    _viewCenterY += delta.y * _cellsPerPixel * _dragSpeed;
+                    _viewCenterY -= delta.y * _cellsPerPixel * _dragSpeed;
                     ClampViewCenter();
                     _renderRequested = true;
                 }
@@ -797,14 +801,14 @@ namespace Fodinae.UI
             return Mathf.Max(1f, maxCp);
         }
 
-        private void OnScroll(InputAction.CallbackContext ctx)
+        private void HandleMouseScroll()
         {
-            if (!enabled || _canvas == null || !_canvas.gameObject.activeSelf)
+            if (!enabled || _canvas == null || !_canvas.gameObject.activeSelf || Mouse.current == null)
             {
                 return;
             }
 
-            float delta = ctx.ReadValue<Vector2>().y;
+            float delta = Mouse.current.scroll.ReadValue().y;
             if (Mathf.Abs(delta) < 0.01f)
             {
                 return;

@@ -194,7 +194,7 @@ namespace Fodinae.Rendering.PostProcessing
         private void Awake()
         {
             _instance = this;
-            _mainCamera = Camera.main;
+            _mainCamera = GameplayCamera.Resolve();
         }
 
         private void OnDestroy()
@@ -234,7 +234,11 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = GameplayCamera.Resolve();
+            }
+
             var mainCam = _mainCamera;
             if (mainCam != null)
             {
@@ -243,8 +247,20 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_volume == null)
             {
-                _volume = FindAnyObjectByType<Volume>(FindObjectsInactive.Include);
+                foreach (Volume vol in FindObjectsByType<Volume>(FindObjectsInactive.Include))
+                {
+                    if (vol.profile != null &&
+                        !vol.profile.name.Contains("MenuScenery", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _volume = vol;
+                        break;
+                    }
+                }
+
+
+                _volume ??= FindAnyObjectByType<Volume>(FindObjectsInactive.Include);
             }
+
 
             if (_volume == null)
             {
@@ -362,7 +378,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
-            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = GameplayCamera.Resolve();
+            }
+
             Camera? mainCamera = _configuredMainCamera;
             if (mainCamera == null)
             {
@@ -495,23 +515,25 @@ namespace Fodinae.Rendering.PostProcessing
         {
             if (!profile.TryGet(out target) || target == null)
             {
-                throw new InvalidOperationException(
-                    $"Post-process VolumeProfile '{profile.name}' is missing " +
-                    $"the required '{typeof(T).Name}' component.");
+                target = profile.Add<T>(overrides: true);
+                if (target == null)
+                {
+                    throw new InvalidOperationException(
+                        $"Post-process VolumeProfile '{profile.name}' is missing " +
+                        $"the required '{typeof(T).Name}' component and could not create it.");
+                }
             }
 
             EnableOverrides(target);
         }
 
+
         private static void ValidateProfileComponents(VolumeProfile profile)
         {
-            for (int index = 0; index < profile.components.Count; index++)
+            int removed = profile.components.RemoveAll(c => c == null);
+            if (removed > 0)
             {
-                if (profile.components[index] == null)
-                {
-                    throw new InvalidOperationException(
-                        $"Post-process VolumeProfile '{profile.name}' contains a null component at index {index}.");
-                }
+                Debug.LogWarning($"[PostProcessController] Cleaned up {removed} null/missing component(s) from VolumeProfile '{profile.name}'.");
             }
         }
 

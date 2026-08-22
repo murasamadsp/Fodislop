@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Connection;
 using Fodinae.World;
@@ -46,6 +47,24 @@ namespace Fodinae
 
         [Inject]
         private IConnectionService _connectionService = null!;
+        [Inject]
+        private ISessionContainer _session = null!;
+
+        /// <summary>
+        /// Injected connection, with a session-container fallback for the brief
+        /// window where Unity runs OnEnable before VContainer populates fields.
+        /// </summary>
+        private IConnectionService ConnectionService =>
+            _connectionService ?? _session?.TryResolve<IConnectionService>() ??
+            throw new InvalidOperationException(
+                "ClientAssetLoader requires IConnectionService before loading assets.");
+
+        /// <summary>
+        /// Texture storage lives in the session (game) scope while this loader is
+        /// bootstrap-tier, so it is resolved from the current session container.
+        /// </summary>
+        private ITextureStorageService? TextureStorage =>
+            _session?.TryResolve<ITextureStorageService>();
 
         private bool _assetSubscriptionEstablished;
         private IConnectionService? _subscribedConnection;
@@ -84,9 +103,9 @@ namespace Fodinae
         /// </summary>
         public void EnsureAssetSubscription()
         {
-            if (ServiceLocator.IsInitialized)
+            if (_connectionService == null && _session != null)
             {
-                _connectionService = ServiceLocator.Resolve<IConnectionService>() ??
+                _connectionService = _session.TryResolve<IConnectionService>() ??
                     throw new InvalidOperationException(
                         "ClientAssetLoader requires IConnectionService in the active resolver.");
             }
@@ -238,7 +257,7 @@ namespace Fodinae
 
         private static async UniTask<byte[]?> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
         {
-            var instance = ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader ??
+            var instance = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() as ClientAssetLoader ??
                 throw new InvalidOperationException(
                     "ClientAssetLoader is not registered in the active container.");
 
@@ -250,7 +269,7 @@ namespace Fodinae
             filename = filename.TrimStart('/').ToLowerInvariant();
 
             // 1. Check local RAM/disk cache first when offline
-            var connectionService = ServiceLocator.Resolve<IConnectionService>()!;
+            var connectionService = ConnectionService;
             var isConnected = connectionService.IsConnected;
 
             if (!isConnected)
@@ -264,7 +283,7 @@ namespace Fodinae
             // 2. Check local TextureStorageManager if available
             if (IsTextureFile(filename))
             {
-                var tsm = ServiceLocator.Resolve<ITextureStorageService>();
+                var tsm = TextureStorage;
                 bool tsmHas = tsm != null && tsm.HasTexture(filename);
                 if (tsmHas && tsm != null)
                 {
@@ -318,7 +337,7 @@ namespace Fodinae
 
             if (IsTextureFile(filename))
             {
-                var tsm = ServiceLocator.Resolve<ITextureStorageService>();
+                var tsm = TextureStorage;
                 if (tsm != null)
                 {
                     var localData = await tsm.GetTextureData(filename);
@@ -396,7 +415,7 @@ namespace Fodinae
 
                 if (batch.Count > 0)
                 {
-                    var connectionService = ServiceLocator.Resolve<IConnectionService>()!;
+                    var connectionService = ConnectionService;
                     if (connectionService.IsConnected)
                     {
                         var assetRequest = new RuntimeAssetRequestPacket(batch);
@@ -417,6 +436,27 @@ namespace Fodinae
         }
 
         private async void OnPacketReceived(ServerPacket obj)
+        {
+            // Outer try-catch is mandatory: in an async void method, any exception
+            // that escapes all catch blocks is thrown on the SynchronizationContext
+            // and crashes Unity.  The inner catch propagates to the TaskCompletionSource
+            // for the caller, but if TrySetException returns false (TCS already
+            // completed), the exception would be unhandled without this guard.
+            try
+            {
+                await HandleAssetPacketAsync(obj);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during teardown or domain reload.
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+        }
+
+        private async UniTask HandleAssetPacketAsync(ServerPacket obj)
         {
             if (obj.Payload is not RuntimeAssetPacket assetPacket)
             {
@@ -452,7 +492,7 @@ namespace Fodinae
                 if ((contents == null || contents.Length == 0) &&
                     !string.IsNullOrEmpty(assetPacket.ETag))
                 {
-                    byte[]? cachedAsset = await GetAssetAsync(assetPacket.Filename).ConfigureAwait(false);
+                    byte[]? cachedAsset = await GetAssetAsync(assetPacket.Filename);
                     if (cachedAsset == null || cachedAsset.Length == 0)
                     {
                         throw new InvalidDataException(
@@ -472,7 +512,7 @@ namespace Fodinae
                 string etag = Calculate(contents) ??
                     throw new InvalidDataException(
                         $"Asset '{filename}' produced no ETag after download.");
-                await SaveAssetAsync(assetPacket.Filename, contents, etag).ConfigureAwait(false);
+                await SaveAssetAsync(assetPacket.Filename, contents, etag);
                 _missingAssets.TryRemove(assetPacket.Filename, out _);
                 tcs.TrySetResult(contents);
             }
@@ -508,12 +548,12 @@ namespace Fodinae
                 _pendingRequests.TryRemove(filename, out _);
             });
 
-            var connectionService = ServiceLocator.Resolve<IConnectionService>()!;
+            var connectionService = ConnectionService;
             if (!connectionService.IsConnected)
             {
                 try
                 {
-                    var tsm = ServiceLocator.Resolve<ITextureStorageService>();
+                    var tsm = TextureStorage;
                     if (tsm != null)
                     {
                         var localData = await tsm.GetTextureData(filename);

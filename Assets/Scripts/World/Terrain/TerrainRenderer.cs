@@ -16,6 +16,7 @@ using VContainer;
 
 namespace Fodinae.World.Terrain
 {
+    [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
     [DefaultExecutionOrder(100)]
     public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
@@ -81,6 +82,35 @@ namespace Fodinae.World.Terrain
         private bool _needsRefresh = false;
         private bool _textureRefreshPending;
         private float _nextTextureRefreshTime;
+
+        // Дебаунс пересборки меша при приходе текстур. Раньше был жёсткий +1с после
+        // ПЕРВОЙ текстуры: все остальные (их десятки — по типу клетки) копились и
+        // применялись разом через секунду — мир стоял серым. Теперь таймер переустанавли-
+        // вается на КАЖДОМ приходе (см. OnTextureLoaded): меш пересобирается через этот
+        // интервал после затихания потока, батча приходы, но не задерживает отрисовку.
+        private const float TextureRefreshDebounceSeconds = 0.1f;
+
+        // Coalescing window for streamed terrain regions. See HandleRegionChanged.
+        // The deadline exists so a continuous stream cannot postpone the rebuild
+        // indefinitely - the debounce alone would starve while chunks keep
+        // arriving, which is exactly what happens when walking.
+        private const float BulkRefreshDebounceSeconds = 0.08f;
+        private const float BulkRefreshMaximumDelaySeconds = 0.25f;
+
+        // Anything larger than this is a streamed region rather than an edit.
+        // A mined cell is one cell; a chunk is 32x32.
+        private const int BulkRegionCellThreshold = 16;
+
+        private int _bulkRefreshRequests;
+        private int _observedBulkRefreshRequests;
+        private bool _bulkRefreshPending;
+        private float _bulkRefreshDueTime;
+        private float _bulkRefreshDeadline;
+        private int _dirtyCellsMinX;
+        private int _dirtyCellsMaxX;
+        private int _dirtyCellsMinY;
+        private int _dirtyCellsMaxY;
+        private bool _hasDirtyCells;
         private bool _useColorLod = false;
         private int _lastAtlasCount = -1;
         private bool _lightingBindingValidated;
@@ -88,11 +118,12 @@ namespace Fodinae.World.Terrain
         private WorldLayer<CellType>? _subscribedCellLayer;
         private WorldTextureManager? _subscribedTextureManager;
         private MapManager? _subscribedMapManager;
+        private TerrariaLightingEngine? _cachedLightingEngine;
 
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
             new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
             new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 4),
@@ -117,6 +148,9 @@ namespace Fodinae.World.Terrain
             var c = _cellCache.GetCellData(x, y);
             return new CachedCellInfo { Type = c.Type, Properties = c.Properties };
         }
+
+        public static bool BypassCpuMeshRebuild { get; set; }
+        public static bool BypassTerrainDraw { get; set; }
 
         public ulong LightingGeometryRevision => _lightingGeometryRevision;
 
@@ -192,21 +226,59 @@ namespace Fodinae.World.Terrain
                 CoordinateUtils.ServerToUnityY(lastServerY, _mapManager.WorldHeight));
             int minimumUnityY = Mathf.Min(firstUnityY, lastUnityY);
             int maximumUnityY = Mathf.Max(firstUnityY, lastUnityY);
-            TerrariaLightingEngine.Instance?.InvalidateRegion(
-                serverX,
-                minimumUnityY,
-                width,
-                maximumUnityY - minimumUnityY + 1);
             bool affectsCachedTerrain =
                 serverX + width - 1 >= _lastGridPos.x - 1 &&
                 serverX <= _lastGridPos.x + _meshWidth &&
                 maximumUnityY >= _lastGridPos.y - 1 &&
                 minimumUnityY <= _lastGridPos.y + _meshHeight;
-            if (affectsCachedTerrain)
+            if (!affectsCachedTerrain)
             {
-                _lightingGeometryRevision++;
-                _needsRefresh = true;
+                return;
             }
+
+            // A region change forces _needsRefresh, and _needsRefresh is what
+            // disables the cache scroll - so any changed cell inside the region
+            // repopulates all of it: cache, precalculation, background fill,
+            // mesh build and a vertex upload of the whole grid. Measured while
+            // walking, that was 37 full repopulations out of 42 rebuilds, and
+            // together they accounted for essentially the entire main thread.
+            //
+            // The two callers want opposite things. A player edit is one or a
+            // few cells and must show up on the next frame or the game feels
+            // broken. Streamed chunks arrive in bursts of hundreds of cells
+            // while walking, and nothing is lost by folding a burst into one
+            // rebuild. Size is what separates them.
+            if ((long)width * height <= BulkRegionCellThreshold)
+            {
+                if (!_hasDirtyCells)
+                {
+                    _dirtyCellsMinX = serverX;
+                    _dirtyCellsMaxX = serverX + width;
+                    _dirtyCellsMinY = minimumUnityY;
+                    _dirtyCellsMaxY = maximumUnityY + 1;
+                    _hasDirtyCells = true;
+                }
+                else
+                {
+                    _dirtyCellsMinX = Mathf.Min(_dirtyCellsMinX, serverX);
+                    _dirtyCellsMaxX = Mathf.Max(_dirtyCellsMaxX, serverX + width);
+                    _dirtyCellsMinY = Mathf.Min(_dirtyCellsMinY, minimumUnityY);
+                    _dirtyCellsMaxY = Mathf.Max(_dirtyCellsMaxY, maximumUnityY + 1);
+                }
+
+                return;
+            }
+
+            TerrariaLightingEngine.Instance?.InvalidateRegion(
+                serverX,
+                minimumUnityY,
+                width,
+                maximumUnityY - minimumUnityY + 1);
+
+            // Timing is left to LateUpdate: this runs from a cell-layer event
+            // raised during packet handling, and the counter keeps this method
+            // free of any assumption about when that happens.
+            _bulkRefreshRequests++;
         }
 
         protected void Awake()
@@ -222,7 +294,7 @@ namespace Fodinae.World.Terrain
 
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
-            _mainCamera = Camera.main;
+            _mainCamera = GameplayCamera.Resolve();
 
             if (_mesh == null)
             {
@@ -244,14 +316,48 @@ namespace Fodinae.World.Terrain
 
         protected void Start()
         {
-            if (_mainCamera != null)
+            _mainCamera = GameplayCamera.Resolve();
+            if (_mainCamera == null)
             {
-                return;
-            }
-
-            _mainCamera = Camera.main ??
                 throw new InvalidOperationException(
                     "TerrainRenderer requires a tagged Main Camera.");
+            }
+        }
+
+        public void InitializeEditorPreview(IWorldDataStorage storage, MapManager mapManager, ITextureService textureService)
+        {
+            _storage = storage;
+            _mapManager = mapManager;
+            _textureService = textureService;
+            Instance = this;
+            _meshFilter ??= GetComponent<MeshFilter>();
+            _meshRenderer ??= GetComponent<MeshRenderer>();
+            if (_mainCamera == null)
+            {
+                _mainCamera = GameplayCamera.Resolve();
+            }
+
+            InitializeShader();
+            if (_mesh == null)
+            {
+                _mesh = new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 };
+                _mesh.MarkDynamic();
+            }
+
+            if (_meshFilter != null)
+            {
+                _meshFilter.sharedMesh = _mesh;
+            }
+
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = true;
+                _meshRenderer.sortingLayerName = _sortingLayerName;
+                _meshRenderer.sortingOrder = _sortingOrder;
+            }
+
+            EnsureSubscriptions();
+            _needsRefresh = true;
         }
 
         public void EnsureSubscriptions()
@@ -355,8 +461,12 @@ namespace Fodinae.World.Terrain
 
                 // Cell textures arrive independently. Rebuilding the complete
                 // viewport mesh for every arrival caused hundreds of native
-                // mesh uploads while the world asset set streamed in.
+                // mesh uploads while the world asset set streamed in — но рефреш
+                // не должен ждать секунду: таймер сдвигается на каждом приходе,
+                // и меш пересобирается через TextureRefreshDebounceSeconds после
+                // затихания потока текстур.
                 _textureRefreshPending = true;
+                _nextTextureRefreshTime = Time.unscaledTime + TextureRefreshDebounceSeconds;
             }
         }
 
@@ -403,17 +513,49 @@ namespace Fodinae.World.Terrain
             using var terrainLateUpdateMarker = TerrainLateUpdateMarker.Auto();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
-                if ((_diagLogged & (1 << 0)) == 0)
+                if (!Application.isPlaying)
                 {
-                    LogDiag(1 << 0, $"[TerrainDiag] gate BLOCKED: mapManager={(_mapManager == null ? "NULL" : "ok")}, storage={(_storage == null ? "NULL" : (_storage.IsReady ? "ready" : "NOT_READY"))}");
+                    if (ServiceLocator.IsInitialized)
+                    {
+                        _mapManager ??= ServiceLocator.Resolve<MapManager>();
+                        _storage ??= ServiceLocator.Resolve<IWorldDataStorage>();
+                        _textureService ??= ServiceLocator.Resolve<ITextureService>();
+                    }
+                    else
+                    {
+                        _mapManager ??= UnityEngine.Object.FindAnyObjectByType<MapManager>(FindObjectsInactive.Include);
+                        _storage ??= _mapManager != null ? _mapManager.WorldStorage : null;
+                        _textureService ??= UnityEngine.Object.FindAnyObjectByType<WorldTextureManager>(FindObjectsInactive.Include);
+                    }
+
+                    if (_storage != null && _mapManager != null && _textureService != null && _storage.IsReady)
+                    {
+                        EnsureSubscriptions();
+                        _needsRefresh = true;
+                    }
                 }
 
-                return;
+                if (_mapManager == null || _storage == null || !_storage.IsReady)
+                {
+                    return;
+                }
             }
 
             if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
             {
-                return;
+                if (!Application.isPlaying)
+                {
+                    var pmc = PlayerMovementController.LocalPlayer ?? UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>(FindObjectsInactive.Include);
+                    if (pmc != null && !pmc.HasServerPosition && _storage != null && _mapManager != null)
+                    {
+                        pmc.InitializeEditorPreview(_storage, _mapManager);
+                    }
+                }
+
+                if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+                {
+                    return;
+                }
             }
 
             if ((_diagLogged & (1 << 1)) == 0)
@@ -421,9 +563,27 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
             }
 
-            if (_meshFilter != null && _meshFilter.sharedMesh != _mesh)
+            InitializeShader();
+            _meshFilter ??= GetComponent<MeshFilter>();
+            _meshRenderer ??= GetComponent<MeshRenderer>();
+            if (_mesh == null)
+            {
+                _mesh = new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 };
+                _mesh.MarkDynamic();
+                if (_meshFilter != null)
+                {
+                    _meshFilter.sharedMesh = _mesh;
+                }
+            }
+            else if (_meshFilter != null && _meshFilter.sharedMesh != _mesh)
             {
                 _meshFilter.sharedMesh = _mesh;
+            }
+
+            Camera? resolvedCam = GameplayCamera.Resolve();
+            if (resolvedCam != null)
+            {
+                _mainCamera = resolvedCam;
             }
 
             if (_mainCamera == null)
@@ -435,18 +595,34 @@ namespace Fodinae.World.Terrain
             if (_textureRefreshPending && Time.unscaledTime >= _nextTextureRefreshTime)
             {
                 _textureRefreshPending = false;
-                _nextTextureRefreshTime = Time.unscaledTime + 1f;
                 _needsRefresh = true;
             }
+
+            PromoteCoalescedRegionRefresh();
 
             if ((_diagLogged & (1 << 3)) == 0)
             {
                 LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             }
 
-            TerrariaLightingEngine lightingEngine = TerrariaLightingEngine.Instance ??
+            if (_cachedLightingEngine == null)
+            {
+                _cachedLightingEngine = TerrariaLightingEngine.Instance ??
+                    UnityEngine.Object.FindAnyObjectByType<TerrariaLightingEngine>(FindObjectsInactive.Include);
+            }
+
+            TerrariaLightingEngine? lightingEngine = _cachedLightingEngine;
+            if (lightingEngine == null)
+            {
+                if (!Application.isPlaying)
+                {
+                    return;
+                }
+
                 throw new InvalidOperationException(
                     "TerrariaLightingEngine was not initialized by GameLifetimeScope.");
+            }
+
             int effectiveViewportPadding = _viewportPadding;
             int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
                 TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
@@ -518,12 +694,13 @@ namespace Fodinae.World.Terrain
             int viewportHeight = Mathf.Max(2, requestedHeight - (effectiveViewportPadding * 2));
             int viewportMinX = Mathf.FloorToInt(camPos.x / _cellSize) - (viewportWidth / 2);
             int viewportMinY = Mathf.FloorToInt(camPos.y / _cellSize) - (viewportHeight / 2);
+            const int viewportMargin = 4;
             bool regionOutsideViewport =
                 _lastGridPos.x == int.MinValue ||
-                viewportMinX < _lastGridPos.x ||
-                viewportMinY < _lastGridPos.y ||
-                viewportMinX + viewportWidth > _lastGridPos.x + _meshWidth ||
-                viewportMinY + viewportHeight > _lastGridPos.y + _meshHeight;
+                viewportMinX - viewportMargin < _lastGridPos.x ||
+                viewportMinY - viewportMargin < _lastGridPos.y ||
+                viewportMinX + viewportWidth + viewportMargin > _lastGridPos.x + _meshWidth ||
+                viewportMinY + viewportHeight + viewportMargin > _lastGridPos.y + _meshHeight;
 
             Vector2Int currentGridPos = regionOutsideViewport || dimensionsChanged
                 ? new Vector2Int(
@@ -542,22 +719,31 @@ namespace Fodinae.World.Terrain
                     SnapRegionCoordinate(desiredGridPos.y, regionAnchor));
             }
 
-            bool terrainWasRebuilt = currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged;
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = !BypassTerrainDraw;
+            }
+
+            bool terrainWasRebuilt = (currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged) && !BypassCpuMeshRebuild;
             if (terrainWasRebuilt)
             {
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
-                if (!_needsRefresh)
-                {
-                    // The lighting material field is rasterized from this
-                    // mesh. A streamed chunk can change occupancy at the
-                    // cache edge without changing the camera lighting
-                    // region, so every successful mesh rebuild must publish a
-                    // new geometry revision for normal/AO caches as well.
-                    _lightingGeometryRevision++;
-                }
+
+                // The lighting material field is rasterized from this mesh. A streamed
+                // chunk can change occupancy at the cache edge without changing the
+                // camera lighting region, so every successful mesh rebuild — including
+                // ones triggered only by _needsRefresh — must publish a new geometry
+                // revision for normal/AO caches as well.
+                _lightingGeometryRevision++;
 
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
+                _hasDirtyCells = false;
+            }
+            else if (_hasDirtyCells && !BypassCpuMeshRebuild)
+            {
+                UpdateDirtyCells(currentGridPos.x, currentGridPos.y);
+                _hasDirtyCells = false;
             }
 
             // Keep command-buffer execution outside the URP sprite pass. The
@@ -565,20 +751,25 @@ namespace Fodinae.World.Terrain
             // executing it from an unsafe RenderGraph pass would leak that
             // state into the following terrain draw.
             int lightingPadding = requiredLightingPadding;
-            int lightingMinX = viewportMinX - lightingPadding;
-            int lightingMinY = viewportMinY - lightingPadding;
-            int lightingWidth = viewportWidth + (lightingPadding * 2);
-            int lightingHeight = viewportHeight + (lightingPadding * 2);
-            lightingEngine.UpdateLighting(
-                lightingMinX,
-                lightingMinY,
-                lightingWidth,
-                lightingHeight,
-                _mainCamera,
-                _storage,
-                _mapManager);
-            ValidateLightingBinding();
+            int lightingMinX = currentGridPos.x - lightingPadding;
+            int lightingMinY = currentGridPos.y - lightingPadding;
+            int lightingWidth = _meshWidth + (lightingPadding * 2);
+            int lightingHeight = _meshHeight + (lightingPadding * 2);
+            if (_mainCamera != null && _mainCamera.orthographic)
+            {
+                lightingEngine.UpdateLighting(
+                    lightingMinX,
+                    lightingMinY,
+                    lightingWidth,
+                    lightingHeight,
+                    _mainCamera,
+                    _storage,
+                    _mapManager);
+                ValidateLightingBinding();
+            }
         }
+
+
 
         private void ValidateLightingBinding()
         {
@@ -617,6 +808,39 @@ namespace Fodinae.World.Terrain
             return Mathf.FloorToInt(coordinate / (float)anchor) * anchor;
         }
 
+        /// <summary>
+        /// Turns a burst of streamed region changes into one rebuild.
+        /// </summary>
+        /// <remarks>
+        /// Pushes the rebuild out while chunks keep arriving, but never past a
+        /// fixed deadline from the first request of the burst. Without that
+        /// ceiling a steady stream - a player walking - would reset the debounce
+        /// every frame and the terrain would never refresh at all.
+        /// </remarks>
+        private void PromoteCoalescedRegionRefresh()
+        {
+            float now = Time.unscaledTime;
+            if (_bulkRefreshRequests != _observedBulkRefreshRequests)
+            {
+                _observedBulkRefreshRequests = _bulkRefreshRequests;
+                if (!_bulkRefreshPending)
+                {
+                    _bulkRefreshPending = true;
+                    _bulkRefreshDeadline = now + BulkRefreshMaximumDelaySeconds;
+                }
+
+                _bulkRefreshDueTime = Mathf.Min(
+                    now + BulkRefreshDebounceSeconds,
+                    _bulkRefreshDeadline);
+            }
+
+            if (_bulkRefreshPending && now >= _bulkRefreshDueTime)
+            {
+                _bulkRefreshPending = false;
+                _needsRefresh = true;
+            }
+        }
+
         private static int SelectCachedDimension(
             int requested,
             int current,
@@ -632,13 +856,15 @@ namespace Fodinae.World.Terrain
                 return allocated;
             }
 
-            // Zoom changes continuously. Growing the mesh immediately at each
-            // 32-cell boundary turns one zoom gesture into several full CPU
-            // rebuilds. Keep the previous mesh while the viewport is moving
-            // and allocate once after the zoom settles.
+            // Growing must happen immediately: keeping the smaller mesh while
+            // zooming out leaves the newly-visible edges of the screen
+            // unrendered until the debounce below expires. Only shrinking is
+            // debounced — zoom changes continuously, and shrinking immediately
+            // at each 32-cell boundary would turn one zoom gesture into
+            // several full CPU rebuilds for no visible benefit.
             if (requested > current)
             {
-                return viewportSizeSettled ? allocated : current;
+                return allocated;
             }
 
             return viewportSizeSettled && current - requested >= DimensionAllocationQuantum
@@ -688,6 +914,7 @@ namespace Fodinae.World.Terrain
                     $"Terrain material '{_materials[0].name}' is missing the LightingMaterialField pass.");
             }
 
+            commandBuffer.BeginSample("Fodinae.Terrain.RenderMaterialFields");
             for (int subMeshIndex = 0; subMeshIndex < subMeshCount; subMeshIndex++)
             {
                 Material material = _materials[subMeshIndex];
@@ -698,6 +925,8 @@ namespace Fodinae.World.Terrain
                     subMeshIndex,
                     materialFieldPass);
             }
+
+            commandBuffer.EndSample("Fodinae.Terrain.RenderMaterialFields");
         }
 
         private void UpdateVertexAttributes(int minX, int minY)
@@ -805,6 +1034,8 @@ namespace Fodinae.World.Terrain
                     _cellCache.CacheMinX != int.MinValue &&
                     Mathf.Abs(cacheDeltaX) < _cellCache.CacheWidth &&
                     Mathf.Abs(cacheDeltaY) < _cellCache.CacheHeight;
+                FrameProfiler.TerrainRebuildCount++;
+                long swCache = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (CacheMarker.Auto())
                 {
                     if (canScrollCache)
@@ -813,46 +1044,69 @@ namespace Fodinae.World.Terrain
                     }
                     else
                     {
+                        FrameProfiler.TerrainFullPopulateCount++;
                         _cellCache.PopulateFull(minX, minY, _storage, _mapManager, textureService, atlases);
                     }
                 }
+
+                FrameProfiler.TerrainCacheTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swCache) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 using (PrecalculateMarker.Auto())
                 {
                     if (canScrollCache)
                     {
-                        _precalc.PrecalculateIncremental(_cellCache, _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY);
+                        _precalc.PrecalculateIncremental(_cellCache, _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY, _mapManager.WorldWidth, _mapManager.WorldHeight);
                     }
                     else
                     {
-                        _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight);
+                        _precalc.PrecalculateFull(_cellCache, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight);
                     }
                 }
 
+                long swFlood = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (FloodFillMarker.Auto())
                 {
-                    if (canScrollCache)
-                    {
-                        _backgroundFloodFill.ComputeIncremental(cacheDeltaX, cacheDeltaY, this);
-                    }
-                    else
-                    {
-                        _backgroundFloodFill.ComputeFull(this);
-                    }
+                    // Always full, even when the cache scrolled.
+                    //
+                    // ComputeIncremental does not reproduce ComputeFull, so which
+                    // one ran was visible: the same world cells came out looking
+                    // different depending on the path walked to reach them, and
+                    // the next full rebuild snapped them back. See the remarks on
+                    // ComputeIncremental for the two reasons.
+                    //
+                    // The cost lands only when the terrain region recenters, not
+                    // per frame, and it is reported as TerrainFloodFillTimeMs -
+                    // so if this turns out to be expensive it can be optimized
+                    // against a measurement rather than by guessing.
+                    _backgroundFloodFill.ComputeFull(this);
                 }
 
+                FrameProfiler.TerrainFloodFillTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swFlood) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+
+                long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (MeshBuildMarker.Auto())
                 {
                     _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
                 }
 
+                FrameProfiler.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+
                 if (_mesh != null)
                 {
+                    long swUpload = System.Diagnostics.Stopwatch.GetTimestamp();
                     using (MeshUploadMarker.Auto())
                     {
-                        _mesh.Clear();
-                        _mesh.subMeshCount = atlases.Count;
-                        _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+                        if (_mesh.vertexCount != _meshBuilder.VertexBuffer.Length || _mesh.subMeshCount != atlases.Count)
+                        {
+                            // Counted because atlases.Count grows as cell textures
+                            // stream in, and every growth drops the whole mesh -
+                            // which is a frame with nothing drawn.
+                            FrameProfiler.TerrainMeshClearCount++;
+                            _mesh.Clear();
+                            _mesh.subMeshCount = atlases.Count;
+                            _mesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+                        }
+
                         _mesh.SetVertexBufferData(
                             _meshBuilder.VertexBuffer,
                             0,
@@ -860,46 +1114,48 @@ namespace Fodinae.World.Terrain
                             _meshBuilder.VertexBuffer.Length,
                             0,
                             UPLOAD_FLAGS);
+                    }
 
-                        // The terrain is a regular viewport-sized grid. Scanning
-                        // every vertex after each rebuild is wasted CPU work and
-                        // becomes noticeable with the bounded terrain cache. Keep a
-                        // conservative local-space bound that also contains the
-                        // relief offsets and the two terrain layers.
-                        _mesh.bounds = new Bounds(
-                            new Vector3(_meshWidth * _cellSize * 0.5f, _meshHeight * _cellSize * 0.5f, 0f),
-                            new Vector3(
-                                (_meshWidth * _cellSize) + (_cellSize * 2f),
-                                (_meshHeight * _cellSize) + (_cellSize * 2f),
-                                2f));
-                        if ((_diagLogged & (1 << 8)) == 0)
+                    FrameProfiler.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+
+                    // The terrain is a regular viewport-sized grid. Scanning
+                    // every vertex after each rebuild is wasted CPU work and
+                    // becomes noticeable with the bounded terrain cache. Keep a
+                    // conservative local-space bound that also contains the
+                    // relief offsets and the two terrain layers.
+                    _mesh.bounds = new Bounds(
+                        new Vector3(_meshWidth * _cellSize * 0.5f, _meshHeight * _cellSize * 0.5f, 0f),
+                        new Vector3(
+                            (_meshWidth * _cellSize) + (_cellSize * 2f),
+                            (_meshHeight * _cellSize) + (_cellSize * 2f),
+                            2f));
+                    if ((_diagLogged & (1 << 8)) == 0)
+                    {
+                        string diagnostic =
+                            "[TerrainDiag] BuildFull: grid=(" +
+                            $"{_lastGridPos.x},{_lastGridPos.y}) " +
+                            $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
+                            $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} " +
+                            $"bounds={_mesh.bounds} transform={transform.position}";
+                        LogDiag(
+                            1 << 8,
+                            diagnostic);
+                    }
+
+                    for (int i = 0; i < atlases.Count; i++)
+                    {
+                        var atlasTex = atlases[i].Texture;
+                        if (_materials[i].GetTexture("_BaseMap") != atlasTex)
                         {
-                            string diagnostic =
-                                "[TerrainDiag] BuildFull: grid=(" +
-                                $"{_lastGridPos.x},{_lastGridPos.y}) " +
-                                $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
-                                $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={_mesh.vertexCount} " +
-                                $"bounds={_mesh.bounds} transform={transform.position}";
-                            LogDiag(
-                                1 << 8,
-                                diagnostic);
+                            _materials[i].SetTexture("_BaseMap", atlasTex);
                         }
 
-                        for (int i = 0; i < atlases.Count; i++)
+                        if (_materials[i].GetTexture("_FlowMap") != textureService.FlowMapTexture)
                         {
-                            var atlasTex = atlases[i].Texture;
-                            if (_materials[i].GetTexture("_BaseMap") != atlasTex)
-                            {
-                                _materials[i].SetTexture("_BaseMap", atlasTex);
-                            }
-
-                            if (_materials[i].GetTexture("_FlowMap") != textureService.FlowMapTexture)
-                            {
-                                _materials[i].SetTexture("_FlowMap", textureService.FlowMapTexture);
-                            }
-
-                            _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+                            _materials[i].SetTexture("_FlowMap", textureService.FlowMapTexture);
                         }
+
+                        _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                     }
                 }
 
@@ -968,6 +1224,49 @@ namespace Fodinae.World.Terrain
                         $"Terrain shader '{material.shader.name}' is missing required property " +
                         $"'{propertyName}'. Client graphics settings cannot be applied.");
                 }
+            }
+        }
+
+        private void UpdateDirtyCells(int minX, int minY)
+        {
+            if (_storage == null || !_storage.IsReady || _mapManager == null || _mesh == null)
+            {
+                return;
+            }
+
+            ITextureService? textureService = _textureService ??
+                (ServiceLocator.IsInitialized ? ServiceLocator.TryResolve<ITextureService>() : null) ??
+                _subscribedTextureManager;
+            if (textureService == null)
+            {
+                return;
+            }
+
+            var atlases = textureService.GetAllAtlases();
+            if (atlases == null || atlases.Count == 0 || _subMeshIndices == null)
+            {
+                return;
+            }
+
+            int dirtyMinX = _dirtyCellsMinX - 1;
+            int dirtyMaxX = _dirtyCellsMaxX + 1;
+            int dirtyMinY = _dirtyCellsMinY - 1;
+            int dirtyMaxY = _dirtyCellsMaxY + 1;
+
+            int localStartX = dirtyMinX - minX;
+            int localStartY = dirtyMinY - minY;
+            int countX = dirtyMaxX - dirtyMinX;
+            int countY = dirtyMaxY - dirtyMinY;
+
+            _cellCache.UpdateRegion(dirtyMinX, dirtyMinY, countX, countY, _storage, _mapManager, textureService, atlases);
+            _precalc.PrecalculateRegion(_cellCache, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight);
+            _backgroundFloodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, this);
+            _meshBuilder.BuildRegion(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
+
+            _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
+            for (int i = 0; i < atlases.Count && i < _subMeshIndices.Length; i++)
+            {
+                _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
             }
         }
 

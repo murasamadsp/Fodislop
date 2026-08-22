@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Fodinae.Core.DI;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -69,6 +70,8 @@ namespace Fodinae.UI.Programmator
 
         public static bool IsOpen { get; private set; }
 
+        private bool _uiBuilt;
+
         protected void OnDestroy()
         {
             IsOpen = false;
@@ -76,17 +79,51 @@ namespace Fodinae.UI.Programmator
 
         protected void Start()
         {
+            TryBuildUI();
+        }
+
+        private void TryBuildUI()
+        {
+            if (_uiBuilt)
+            {
+                return;
+            }
+
+            if (_doc == null)
+            {
+                // ProgrammatorGrid создаётся ручным AddComponent из PlayerHUDView и не
+                // получает [Inject]-полей: резолвим UIDocument через текущий контейнер
+                // сессии. Update ретраит TryBuildUI — ждём готовности молча.
+                UIDocument? resolved = SessionAccess.Resolve()?.TryResolve<UIDocument>();
+                if (resolved != null)
+                {
+                    _doc = resolved;
+                }
+            }
+
+            if (_doc == null || _doc.rootVisualElement == null)
+            {
+                return;
+            }
+
             CreateUI();
-            _popup!.style.display = DisplayStyle.None;
+            if (_popup == null)
+            {
+                return;
+            }
+
+            _popup.style.display = DisplayStyle.None;
 
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
+            _uiBuilt = true;
         }
 
         private void CreateUI()
         {
             _popup = new VisualElement();
             _popup.AddToClassList("prog-popup");
+            _popup.style.display = DisplayStyle.None;
 
             var dimmer = new VisualElement();
             dimmer.AddToClassList("prog-dimmer");
@@ -420,7 +457,9 @@ namespace Fodinae.UI.Programmator
         // top-left corner. Wait for one GeometryChangedEvent when bounds aren't ready.
         private static void ShowAtCellCenter(VisualElement cell, Action<Vector2> show)
         {
-            if (cell.worldBound.width > 0f || cell.worldBound.height > 0f)
+            // Обе размерности должны быть готовы: при одной нулевой worldBound ещё
+            // не валиден, и меню уедет в (0,0) — верхний левый угол экрана.
+            if (cell.worldBound.width > 0f && cell.worldBound.height > 0f)
             {
                 show(cell.worldBound.center);
                 return;
@@ -1631,6 +1670,15 @@ namespace Fodinae.UI.Programmator
 
         protected void Update()
         {
+            if (!_uiBuilt)
+            {
+                TryBuildUI();
+                if (!_uiBuilt)
+                {
+                    return;
+                }
+            }
+
             if (Keyboard.current == null)
             {
                 return;
@@ -1638,6 +1686,20 @@ namespace Fodinae.UI.Programmator
 
             if (!_isOpen)
             {
+                if ((Keyboard.current.pKey.wasPressedThisFrame || Keyboard.current.rKey.wasPressedThisFrame) &&
+                    !ChatInput.IsFocused &&
+                    !PauseMenu.IsMenuOpen)
+                {
+                    Show();
+                }
+
+                return;
+            }
+
+            if ((Keyboard.current.pKey.wasPressedThisFrame || Keyboard.current.rKey.wasPressedThisFrame) &&
+                !_radialShown)
+            {
+                Hide();
                 return;
             }
 
@@ -1783,9 +1845,21 @@ namespace Fodinae.UI.Programmator
 
         public void Show()
         {
+            if (!_uiBuilt)
+            {
+                TryBuildUI();
+            }
+
+            if (!_uiBuilt || _popup == null)
+            {
+                // UI ещё не готов (DI-инъекция не завершилась) — кнопка просто не
+                // открывает программатор в этот раз; TryBuildUI ретраится из Update.
+                return;
+            }
+
             _isOpen = true;
             IsOpen = true;
-            _popup!.style.display = DisplayStyle.Flex;
+            _popup.style.display = DisplayStyle.Flex;
             ShowProgramList();
         }
 

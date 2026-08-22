@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Game.Managers;
 using Fodinae.World.Terrain;
 using UnityEngine;
@@ -29,6 +30,9 @@ namespace Fodinae.UI
         [Inject]
         private TerrainRenderer _terrainRenderer = null!;
 
+        [Inject]
+        private ISessionContainer _session = null!;
+
         private GameManager? _gameManager;
         private VisualElement? _root;
         private VisualElement? _loadingOverlay;
@@ -53,12 +57,12 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _session == null || _session.Current == null)
             {
                 return;
             }
 
-            _gameManager = ServiceLocator.Resolve<GameManager>();
+            _gameManager = _session.TryResolve<GameManager>();
             if (_gameManager == null || _assetLoader == null || _fpsCounter == null || _document == null)
             {
                 throw new InvalidOperationException("[AssetLoadingIndicator] Required [Inject] dependencies were not resolved — DI initialization failed.");
@@ -78,7 +82,7 @@ namespace Fodinae.UI
 
         private void RebindGameManager()
         {
-            if (!ServiceLocator.IsInitialized)
+            if (_session == null || _session.Current == null)
             {
                 if (_gameManager != null)
                 {
@@ -89,7 +93,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            GameManager? current = ServiceLocator.Resolve<GameManager>();
+            GameManager? current = _session.TryResolve<GameManager>();
             if (current == null)
             {
                 return;

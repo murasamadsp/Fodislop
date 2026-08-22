@@ -1,7 +1,7 @@
 #nullable enable
 
 using System;
-using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
@@ -10,9 +10,16 @@ namespace Fodinae.Networking.Processors
 {
     public class MapRegionProcessor : IPacketProcessor<MapRegionPacket>
     {
+        private readonly ISessionContainer _session;
+
+        public MapRegionProcessor(ISessionContainer session)
+        {
+            _session = session;
+        }
+
         public void Process(MapRegionPacket packet)
         {
-            MapStorage storage = ServiceLocator.Resolve<MapStorage>() ??
+            MapStorage storage = _session.TryResolve<MapStorage>() ??
                 throw new InvalidOperationException(
                     "[MapRegionProcessor] MapStorage is not registered while processing a map region.");
 

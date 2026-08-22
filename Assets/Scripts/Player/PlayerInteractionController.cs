@@ -1,8 +1,10 @@
 #nullable enable
 
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
+using Fodinae.Player.Logic;
 using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
@@ -19,6 +21,8 @@ namespace Fodinae.Player
         private UIDocument[] _uiDocuments = [];
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
+        private UIDocument? _injectedUiDoc;
+        [Inject]
         private IMapDataProvider _mapManager = null!;
         [Inject]
         private INetworkService _networkService = null!;
@@ -27,8 +31,11 @@ namespace Fodinae.Player
 
         protected void Awake()
         {
-            _mainCamera = Camera.main;
-            RefreshUiDocuments();
+            // GameplayCamera, not Camera.main: MainMenu stays loaded next to the
+            // game for the whole descent, and a bare tag lookup can resolve to
+            // the menu camera. Click-to-world through the wrong camera would
+            // send ClickCellPackets for the wrong cells.
+            _mainCamera = GameplayCamera.Resolve();
             if (Keyboard.current != null)
             {
                 _cachedAllKeys = Keyboard.current.allKeys;
@@ -37,9 +44,14 @@ namespace Fodinae.Player
 
         protected void Update()
         {
+            if (PlayerMovementController.LocalPlayer is not { IsGameplayVisible: true })
+            {
+                return;
+            }
+
             if (_mainCamera == null)
             {
-                _mainCamera = Camera.main;
+                _mainCamera = GameplayCamera.Resolve();
             }
 
             if (_mainCamera == null)
@@ -100,26 +112,45 @@ namespace Fodinae.Player
         // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
         private bool IsPointerOverUI(Vector2 mousePos)
         {
+            var doc = _injectedUiDoc;
+            if (doc != null && doc.isActiveAndEnabled)
+            {
+                var root = doc.rootVisualElement;
+                if (root?.panel != null)
+                {
+                    // ScreenToPanel учитывает масштаб панели (ScaleWithScreenSize); ручной
+                    // флип Y без учёта масштаба мажет далеко от верхнего левого угла —
+                    // клики по UI внизу экрана проваливались в мир и двигали робота.
+                    var panelPos = RuntimePanelUtils.ScreenToPanel(root.panel, mousePos);
+                    var picked = root.panel.Pick(panelPos);
+                    if (picked != null && picked != root && picked is not TemplateContainer)
+                    {
+                        return true;
+                    }
+                }
+            }
+
             if (_uiDocuments.Length == 0 || !HasLiveUiDocument())
             {
                 RefreshUiDocuments();
             }
 
-            foreach (UIDocument doc in _uiDocuments)
+            foreach (UIDocument candidate in _uiDocuments)
             {
-                if (doc == null || !doc.isActiveAndEnabled)
+                if (candidate == null || !candidate.isActiveAndEnabled || candidate == doc)
                 {
                     continue;
                 }
 
-                var root = doc.rootVisualElement;
+                var root = candidate.rootVisualElement;
                 if (root?.panel == null)
                 {
                     continue;
                 }
 
-                // Input System gives bottom-left origin; UI Toolkit panels expect top-left.
-                var panelPos = new Vector2(mousePos.x, Screen.height - mousePos.y);
+                // ScreenToPanel переводит экранные координаты (низ-лево, как в Input
+                // System) в координаты панели с учётом её масштаба.
+                var panelPos = RuntimePanelUtils.ScreenToPanel(root.panel, mousePos);
                 var picked = root.panel.Pick(panelPos);
                 if (picked != null && picked != root && picked is not TemplateContainer)
                 {
@@ -165,14 +196,24 @@ namespace Fodinae.Player
                 return;
             }
 
-            // This is a bit expensive but since it's for "unmapped" keys,
-            // we might want to check all keys if they were pressed this frame.
+            if (!Keyboard.current.anyKey.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            // Send unmapped keys to the server, excluding locally handled gameplay and UI hotkeys.
             for (int i = 0; i < _cachedAllKeys.Count; i++)
             {
                 var keyControl = _cachedAllKeys[i];
                 if (keyControl.wasPressedThisFrame)
                 {
-                    byte code = MapKeyToByte(keyControl.keyCode);
+                    Key key = keyControl.keyCode;
+                    if (IsLocallyHandledKey(key))
+                    {
+                        continue;
+                    }
+
+                    byte code = MapKeyToByte(key);
                     if (code != 0)
                     {
                         bool ctrl = Keyboard.current.ctrlKey.isPressed;
@@ -186,6 +227,18 @@ namespace Fodinae.Player
                     }
                 }
             }
+        }
+
+        private static bool IsLocallyHandledKey(Key key)
+        {
+            return key is Key.W or Key.A or Key.S or Key.D or
+                          Key.UpArrow or Key.DownArrow or Key.LeftArrow or Key.RightArrow or
+                          Key.Space or Key.E or Key.L or Key.G or Key.V or
+                          Key.Y or Key.H or Key.F or Key.J or
+                          Key.M or Key.I or Key.Tab or Key.Escape or Key.Enter or Key.NumpadEnter or
+                          Key.P or Key.R or Key.T or
+                          Key.Digit1 or Key.Digit2 or Key.Digit3 or Key.Digit4 or Key.Digit5 or
+                          Key.Digit6 or Key.Digit7 or Key.Digit8 or Key.Digit9;
         }
 
         private byte MapKeyToByte(Key key)

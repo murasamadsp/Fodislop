@@ -2,12 +2,15 @@
 
 using System;
 using Fodinae.Audio.Backend;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Networking.Connection.Client;
+using Fodinae.Networking.Processors;
+using Fodinae.Player;
 using Fodinae.Player.Logic;
 using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
@@ -20,9 +23,9 @@ using Fodinae.UI.HUD.Player.View;
 using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
+using global::Fodinae.Core.Localization;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.InputSystem.UI;
+using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
@@ -32,18 +35,70 @@ namespace Fodinae.Core
     [DefaultExecutionOrder(-20000)]
     public class GameLifetimeScope : LifetimeScope
     {
+        private Scene _ownScene;
+
+        // Repoints ambient resolution back at the Bootstrap scope BEFORE this
+        // scope's container is disposed.
+        //
+        // VContainer's Container.Dispose() clears sharedInstances but sets no
+        // disposed flag and leaves the registry alone, so resolving a disposed
+        // container silently re-runs the provider instead of failing. Everything
+        // here registered with RegisterComponentOnNewGameObject has
+        // `new GameObject(typeof(T).Name)` as its provider - which is exactly
+        // how PackManager, RobotManager and ServerAudioEventManager came back to
+        // life inside a closing scene and produced Unity's warning.
+        //
+        // The resolves that do it are not exotic: ConnectionManager (Bootstrap
+        // tier, still running) calls TryResolve<MapManager>() from Disconnect
+        // and OnDisconnected, and MapManager's [Inject] Construct takes
+        // PackManager, IRobotService and IServerAudioService - so one resolve
+        // spawns all three. The packet processors do the same on any late
+        // packet, since the connection outlives the scene by design.
+        //
+        // ReturnToMainMenu repoints explicitly before its unload; this covers
+        // every other way the scene can go away, including play-mode exit.
+        protected override void OnDestroy()
+        {
+            BootstrapLifetimeScope? bootstrap = BootstrapLifetimeScope.Instance;
+            if (bootstrap != null && bootstrap.Container != null)
+            {
+                ServiceLocator.Initialize(bootstrap.Container);
+                if (bootstrap.Container.TryResolve(out ISessionContainer session))
+                {
+                    session.Set(bootstrap.Container);
+                }
+            }
+
+            base.OnDestroy();
+        }
+
         protected override void Configure(IContainerBuilder builder)
         {
-            EnsureRuntimeUiInput();
+            _ownScene = gameObject.scene;
 
-            IProjectDefaults projectDefaults = ProjectDefaultsLoader.LoadRequired();
-            builder.RegisterInstance(projectDefaults);
-            GraphicsQualityProfile graphicsQualityProfile =
-                GraphicsQualityProfileLoader.LoadRequired();
-            builder.RegisterInstance(graphicsQualityProfile);
+            // Additive scene loads don't switch the active scene, and managers not already
+            // present in _ownScene get created via RegisterComponentOnNewGameObject — Unity
+            // places new GameObjects into whatever scene is active. _ownScene isn't fully
+            // loaded yet at this point (Configure runs as part of the load itself, so
+            // SceneManager.SetActiveScene would throw here); GameBootstrap.PostStart applies
+            // it once the scene is actually loaded and managers start getting resolved.
+            builder.RegisterInstance(_ownScene);
 
-            UIDocument? uiDocument = FindAnyObjectByType<UIDocument>(
-                FindObjectsInactive.Include);
+            // IProjectDefaults/GraphicsQualityProfile are registered by BootstrapLifetimeScope
+            // (parent scope) — ClientConfigManager, now Bootstrap-tier, injects them, and child
+            // scopes resolve unregistered types from the parent automatically.
+
+            UIDocument? uiDocument = null;
+            foreach (UIDocument candidate in FindObjectsByType<UIDocument>(
+                FindObjectsInactive.Include))
+            {
+                if (candidate.gameObject.scene == _ownScene)
+                {
+                    uiDocument = candidate;
+                    break;
+                }
+            }
+
             if (uiDocument == null || uiDocument.panelSettings == null)
             {
                 throw new InvalidOperationException(
@@ -56,6 +111,7 @@ namespace Fodinae.Core
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
 
             builder.RegisterBuildCallback(_ => ServiceLocator.Initialize(_));
+            builder.RegisterBuildCallback(container => container.Resolve<ISessionContainer>().Set(container));
 
             // Register (не RegisterInstance): VContainer сам конструирует и инжектит [Inject]-поля.
             // RegisterInstance НЕ инжектит уже созданные вручную объекты — _networkService остаётся null.
@@ -66,13 +122,29 @@ namespace Fodinae.Core
 
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
-            RegisterManager<ClientAssetLoader>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<AudioSystem>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldTextureManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<ConnectionManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PacketHandler>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<NetworkService>(builder).AsImplementedInterfaces().AsSelf();
+
+            // PacketHandler инжектит процессоры по конкретному типу ([Inject] PlayerStatsProcessor и т.д.),
+            // поэтому регистрируем и интерфейсы (для коллекций IPacketProcessor<...>), и сам тип (AsSelf).
+            builder.Register<ClanProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<InventoryProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<PlayerStatsProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<StatusProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<WorldInitProcessor>(Lifetime.Singleton);
+            builder.Register<RobotInfoProcessor>(Lifetime.Singleton);
+            builder.Register<MapRegionProcessor>(Lifetime.Singleton);
+            builder.Register<AudioPacketProcessor>(Lifetime.Singleton);
+            builder.Register<PlayerInfoProcessor>(Lifetime.Singleton);
+            builder.Register<RobotPositionProcessor>(Lifetime.Singleton);
+            builder.Register<ChatProcessor>(Lifetime.Singleton);
+            builder.Register<MissionProcessor>(Lifetime.Singleton);
+            builder.Register<PackProcessor>(Lifetime.Singleton);
+            builder.Register<ConnectionProcessor>(Lifetime.Singleton);
+            builder.Register<ClientConfigProcessor>(Lifetime.Singleton);
+            builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
+            builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
             RegisterManager<GameManager>(builder);
             RegisterManager<VFXPool>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PackManager>(builder).AsImplementedInterfaces().AsSelf();
@@ -82,8 +154,19 @@ namespace Fodinae.Core
             // PlayerMovementController живёт на PrefabInstance объекта Player (тег "Player") в сцене.
             // RegisterManager<T> через FindAnyObjectByType может не найти его надёжно до инициализации
             // сцены, что приводит к созданию нового пустого GO без Robot/SpriteRenderer/etc.
-            // Поэтому регистрируем явно через тег.
-            var playerGo = GameObject.FindGameObjectWithTag("Player");
+            // Поэтому регистрируем явно через тег. Scoped to _ownScene: FindGameObjectWithTag
+            // searches every loaded scene, and during an additive load MainMenu/Bootstrap are
+            // also loaded, so an unscoped lookup could bind the wrong scene's Player object.
+            GameObject? playerGo = null;
+            foreach (GameObject candidate in GameObject.FindGameObjectsWithTag("Player"))
+            {
+                if (candidate.scene == _ownScene)
+                {
+                    playerGo = candidate;
+                    break;
+                }
+            }
+
             var existingPmc = playerGo != null ? playerGo.GetComponent<PlayerMovementController>() : null;
             if (existingPmc != null)
             {
@@ -96,7 +179,6 @@ namespace Fodinae.Core
             }
 
             RegisterManager<ServerConfig>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<ClientConfigManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TextureStorageManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder);
             RegisterManager<UIInputManager>(builder);
@@ -106,8 +188,18 @@ namespace Fodinae.Core
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
             RegisterManager<SurfaceRenderer>(builder);
+            RegisterManager<CameraFollow>(builder);
+            RegisterManager<PlayerHUDView>(builder);
+            RegisterManager<InventoryView>(builder);
+            RegisterManager<PauseMenu>(builder);
+            RegisterManager<MinimapController>(builder);
+            RegisterManager<WorldMapController>(builder);
+            RegisterManager<DisplayManager>(builder);
+            RegisterManager<InGameDebugOverlay>(builder);
+            builder.Register<LocalizationService>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
 
-            builder.RegisterBuildCallback(InjectSceneBehaviours);
+
+
 
             // Инициализация ПОСЛЕ сборки графа: резолв менеджеров, инжект scene-компонентов,
             // сборка UI, валидация. IPostStart вызывается в player-loop фазе PostStartup,
@@ -116,45 +208,37 @@ namespace Fodinae.Core
             builder.RegisterEntryPoint<GameBootstrap>();
         }
 
-        private static void EnsureRuntimeUiInput()
-        {
-            EventSystem? eventSystem = FindAnyObjectByType<EventSystem>(FindObjectsInactive.Include);
-            if (eventSystem == null)
-            {
-                GameObject eventSystemObject = new("EventSystem");
-                eventSystem = eventSystemObject.AddComponent<EventSystem>();
-            }
-
-            if (eventSystem.GetComponent<InputSystemUIInputModule>() == null)
-            {
-                eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
-            }
-        }
-
-        private static void InjectSceneBehaviours(IObjectResolver resolver)
-        {
-            foreach (MonoBehaviour behaviour in FindObjectsByType<MonoBehaviour>(
-                FindObjectsInactive.Include))
-            {
-                if (behaviour is LifetimeScope)
-                {
-                    continue;
-                }
-
-                resolver.Inject(behaviour);
-            }
-        }
-
         private RegistrationBuilder RegisterManager<T>(IContainerBuilder builder)
             where T : MonoBehaviour
         {
-            var existing = FindAnyObjectByType<T>(FindObjectsInactive.Include);
+            T? existing = null;
+            foreach (T candidate in FindObjectsByType<T>(FindObjectsInactive.Include))
+            {
+                if (candidate.gameObject.scene == _ownScene)
+                {
+                    existing = candidate;
+                    break;
+                }
+            }
+
             if (existing != null)
             {
                 return builder.RegisterComponent(existing);
             }
 
-            return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton);
+            // Не создаём менеджер вручную через AddComponent прямо здесь: Configure
+            // выполняется ДО сборки контейнера, а AddComponent мгновенно дёргает
+            // Awake/OnEnable менеджера — в этот момент текущий контейнер ещё указывает
+            // на Bootstrap-скоуп, сцена не активна, а [Inject]-поля не заполнены. Отсюда
+            // весь класс багов "резолв из Awake во время Configure" (FPSCounter,
+            // TerrainRenderer-камера, PauseMenu и т.п.).
+            //
+            // RegisterComponentOnNewGameObject делегирует создание NewGameObjectProvider:
+            // неактивный GO -> AddComponent (Awake не вызывается) -> инъекция -> активация.
+            // Происходит это при первом резолве — в GameBootstrap.PostStart, когда граф
+            // построен, текущий контейнер указывает на игровой скоуп, а сцена уже активна.
+            return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)
+                .UnderTransform(transform);
         }
     }
 }

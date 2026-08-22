@@ -26,12 +26,12 @@ public static class ConfigureGraphicsQualityProfile
                 $"Required graphics quality profile is missing at '{ProfilePath}'.");
         SerializedObject serializedProfile = new(profile);
         serializedProfile.Update();
-        WritePreset(serializedProfile, "_veryLow", 1, 384, 64, 12, 15f, 384, 0.65f, 0, 0);
-        WritePreset(serializedProfile, "_low", 1, 512, 128, 20, 20f, 512, 0.8f, 0, 0);
-        WritePreset(serializedProfile, "_medium", 2, 768, 256, 28, 24f, 768, 0.9f, 1, 0);
-        WritePreset(serializedProfile, "_high", 4, 1536, 512, 40, 60f, 1536, 1f, 1, 0);
-        WritePreset(serializedProfile, "_veryHigh", 6, 1792, 768, 52, 60f, 1792, 1f, 1, 0);
-        WritePreset(serializedProfile, "_ultra", 8, 2048, 1024, 64, 60f, 2048, 1f, 1, 0);
+        WritePreset(serializedProfile, "_veryLow", 1, 384, 32, 8, 60f, 256, 0.75f, 0, 0);
+        WritePreset(serializedProfile, "_low", 2, 512, 64, 8, 60f, 384, 0.85f, 0, 0);
+        WritePreset(serializedProfile, "_medium", 4, 768, 128, 8, 60f, 512, 1.0f, 0, 0);
+        WritePreset(serializedProfile, "_high", 8, 1024, 256, 8, 60f, 768, 1.0f, 0, 0);
+        WritePreset(serializedProfile, "_veryHigh", 16, 1280, 512, 8, 60f, 1024, 1.0f, 0, 0);
+        WritePreset(serializedProfile, "_ultra", 16, 1536, 1024, 8, 60f, 1536, 1.0f, 0, 0);
         serializedProfile.ApplyModifiedProperties();
         EditorUtility.SetDirty(profile);
         AssetDatabase.SaveAssetIfDirty(profile);

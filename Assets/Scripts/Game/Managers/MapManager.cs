@@ -41,10 +41,12 @@ namespace Fodinae.Game.Managers
             {
                 if (_mainCamera == null)
                 {
-                    _mainCamera = Camera.main;
+                    _mainCamera = GameplayCamera.Resolve();
                 }
 
-                return _mainCamera;
+                // The getter initialises on first access, so the cache is
+                // populated here.
+                return _mainCamera!;
             }
         }
 
@@ -93,7 +95,7 @@ namespace Fodinae.Game.Managers
             IsStandaloneMode = true;
         }
 
-        private IWorldDataStorage WorldStorage => _worldStorage;
+        public IWorldDataStorage WorldStorage => _worldStorage;
 
         protected void OnDestroy()
         {
@@ -146,6 +148,7 @@ namespace Fodinae.Game.Managers
 
         public void LoadWorldInit(WorldInitPacket packet)
         {
+            UnityEngine.Debug.Log($"[Probe] WorldInit {UnityEngine.Time.realtimeSinceStartup:F3}");
             IsWorldInitialized = false;
             _packManager?.ClearAllPacks();
             _robotService?.ClearAllRobots();
@@ -344,18 +347,23 @@ namespace Fodinae.Game.Managers
         public Color GetCellMinimapColor(CellType type)
         {
             var config = GetCellConfig(type);
-            if (config.Color == 0)
+            if (config.Color != 0)
             {
-                return Color.clear;
+                int argb = config.Color;
+                byte a = (byte)((argb >> 24) & 0xFF);
+                if (a == 0)
+                {
+                    a = 255;
+                }
+
+                byte r = (byte)((argb >> 16) & 0xFF);
+                byte g = (byte)((argb >> 8) & 0xFF);
+                byte b = (byte)(argb & 0xFF);
+
+                return new Color(r / 255f, g / 255f, b / 255f, a / 255f);
             }
 
-            int argb = config.Color;
-            byte a = (byte)((argb >> 24) & 0xFF);
-            byte r = (byte)((argb >> 16) & 0xFF);
-            byte g = (byte)((argb >> 8) & 0xFF);
-            byte b = (byte)(argb & 0xFF);
-
-            return new Color(r / 255f, g / 255f, b / 255f, a / 255f);
+            return MapBlockColors.GetColor(type);
         }
 
         public int GetAnimationFrameHeight(CellType cellType)

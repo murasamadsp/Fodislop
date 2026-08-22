@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using MinesServer.Data;
@@ -100,16 +101,6 @@ namespace Fodinae.World
 
                 _atlasTexture = null;
             }
-
-            _atlasPixels = null;
-        }
-
-        private void EnsurePixelBuffer()
-        {
-            if (_atlasPixels == null)
-            {
-                _atlasPixels = new Color32[Size * Size];
-            }
         }
 
         public void Clear()
@@ -121,15 +112,6 @@ namespace Fodinae.World
                 _usedRectangles.Clear();
                 _freeRectangles.Clear();
                 _freeRectangles.Add(new Rectangle(0, 0, Size, Size));
-
-                EnsurePixelBuffer();
-                if (_atlasPixels != null && _atlasTexture != null)
-                {
-                    Array.Clear(_atlasPixels, 0, _atlasPixels.Length);
-                    _atlasTexture.SetPixels32(_atlasPixels);
-                    _atlasTexture.Apply();
-                }
-
                 _isDirty = false;
             }
         }
@@ -174,15 +156,13 @@ namespace Fodinae.World
             if (tilesPerRow <= 0)
             {
                 throw new InvalidOperationException(
-                    $"Atlas cell {cellType} has invalid width {subAtlasWidth} " +
-                    $"for terrain tile size {TERRAIN_TILE_SIZE}.");
+                    $"Atlas cell {cellType} has invalid width {subAtlasWidth} for terrain tile size {TERRAIN_TILE_SIZE}.");
             }
 
             if (tilesPerColumn <= 0)
             {
                 throw new InvalidOperationException(
-                    $"Atlas cell {cellType} has invalid height {effectiveSubAtlasHeight} " +
-                    $"for terrain tile size {TERRAIN_TILE_SIZE}.");
+                    $"Atlas cell {cellType} has invalid height {effectiveSubAtlasHeight} for terrain tile size {TERRAIN_TILE_SIZE}.");
             }
 
             int wrappedX = ((globalX % tilesPerRow) + tilesPerRow) % tilesPerRow;
@@ -211,6 +191,12 @@ namespace Fodinae.World
 
             lock (_lock)
             {
+                if (_cells.TryGetValue(cellType, out var existingCell))
+                {
+                    coordinate = existingCell.BaseCoordinate;
+                    return true;
+                }
+
                 var bestFit = FindBestFit(texture.width, texture.height);
                 if (bestFit == null)
                 {
@@ -230,9 +216,15 @@ namespace Fodinae.World
                         Size),
                 };
 
-                Rectangle rectWithPadding = new Rectangle(bestFit.Value.X, bestFit.Value.Y, bestFit.Value.Width + Padding, bestFit.Value.Height + Padding);
+                var rectWithPadding = new Rectangle(
+                    bestFit.Value.X,
+                    bestFit.Value.Y,
+                    bestFit.Value.Width + Padding,
+                    bestFit.Value.Height + Padding);
+
                 _usedRectangles.Add(rectWithPadding);
                 SplitFreeRectangles(rectWithPadding);
+
                 _cells.TryAdd(cellType, atlasCell);
                 _dirtyCells.Add(cellType);
                 _isDirty = true;
@@ -249,14 +241,6 @@ namespace Fodinae.World
                 throw new InvalidOperationException(
                     $"Cell type {cellType} has no reserved atlas rectangle. " +
                     "TryAddTexture must succeed before the texture is copied.");
-            }
-
-            var rect = cell.Rectangle;
-            if (!RuntimeTextureFactory.SupportsTexture2DGpuCopy)
-            {
-                EnsurePixelBuffer();
-                var sourcePixels = texture.GetPixels32();
-                CopyPixelsToAtlasArray(sourcePixels, texture.width, texture.height, rect);
             }
 
             lock (_lock)
@@ -289,9 +273,7 @@ namespace Fodinae.World
                 }
             }
 
-            bool uploadedDirectly = dirtyTextures.Count > 0 &&
-                RuntimeTextureFactory.SupportsTexture2DGpuCopy;
-            if (uploadedDirectly)
+            if (dirtyTextures.Count > 0 && RuntimeTextureFactory.SupportsTexture2DGpuCopy)
             {
                 foreach (var (_, texture, rect) in dirtyTextures)
                 {
@@ -301,13 +283,12 @@ namespace Fodinae.World
                         _atlasTexture, 0, 0, rect.X, rect.Y);
                 }
             }
-
-            if (!uploadedDirectly)
+            else if (dirtyTextures.Count > 0)
             {
-                if (_atlasPixels == null)
+                EnsurePixelBuffer();
+                foreach (var (_, texture, rect) in dirtyTextures)
                 {
-                    throw new InvalidOperationException(
-                        $"[TextureAtlas] CPU atlas storage is unavailable for {Size}x{Size} atlas.");
+                    CopyPixelsToAtlasArray(texture.GetPixels32(), texture.width, texture.height, rect);
                 }
 
                 _atlasTexture.SetPixels32(_atlasPixels);
@@ -335,17 +316,16 @@ namespace Fodinae.World
             return _atlasTexture;
         }
 
+        private void EnsurePixelBuffer()
+        {
+            _atlasPixels ??= new Color32[Size * Size];
+        }
+
         public async UniTask UpdateAtlasTexture()
         {
             await UniTask.SwitchToMainThread();
 
-            if (!_isDirty)
-            {
-                return;
-            }
-
             List<(Texture2D texture, Rectangle rect)> texturesToCopy;
-
             lock (_lock)
             {
                 if (!_isDirty)
@@ -493,7 +473,7 @@ namespace Fodinae.World
 
         private Texture2D GetBaseTexture(CellType cellType)
         {
-            var textureService = ServiceLocator.Resolve<ITextureService>();
+            var textureService = SessionAccess.Resolve()?.TryResolve<ITextureService>();
             if (textureService is WorldTextureManager manager)
             {
                 var cachedTexture = manager.GetCachedTexture(cellType);

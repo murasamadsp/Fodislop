@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
@@ -58,6 +59,9 @@ namespace Fodinae.UI
         [Inject]
         private IInputBlocker _inputBlocker = null!;
 
+        [Inject]
+        private ISessionContainer _session = null!;
+
         protected void Start()
         {
             TryInitialize();
@@ -65,16 +69,19 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _session?.Current == null)
             {
                 return;
             }
 
+            _doc ??= FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
                 _serverConfig == null || _inputBlocker == null)
             {
-                throw new InvalidOperationException(
-                    "[GlobalChatUI] Required DI services and UIDocument must be initialized before building chat UI.");
+                // Не бросаем: DI-инъекция может прийти позже (PostStart/сборка scope после
+                // этого Start). Update ретраит TryInitialize — ждём готовности молча,
+                // иначе каждый кадр до инжекта будет сыпать исключениями.
+                return;
             }
 
             _initialized = true;
@@ -90,13 +97,16 @@ namespace Fodinae.UI
                 ApplyServerConfig();
             }
 
-            try
+            if (Application.isPlaying)
             {
-                _networkService.Send(new QueryChatHistoryPacket("global", 0));
-            }
-            catch (Exception ex)
-            {
-                GameErrorUI.ReportError("Не удалось запросить историю чата", ex);
+                try
+                {
+                    _networkService.Send(new QueryChatHistoryPacket("global", 0));
+                }
+                catch (Exception ex)
+                {
+                    GameErrorUI.ReportError("Не удалось запросить историю чата", ex);
+                }
             }
         }
 
@@ -142,30 +152,23 @@ namespace Fodinae.UI
 
             bool inputBlocked = _inputBlocker != null && _inputBlocker.IsInputBlocked;
 
-            if (Keyboard.current.tabKey.wasPressedThisFrame)
-            {
-                if (inputBlocked && !_isOpen)
-                {
-                    return;
-                }
-
-                if (_isOpen || !ChatInput.IsFocused)
-                {
-                    Toggle();
-                }
-
-                return;
-            }
-
             if (!_isOpen)
             {
+                if ((Keyboard.current.enterKey.wasPressedThisFrame ||
+                     Keyboard.current.numpadEnterKey.wasPressedThisFrame) && !inputBlocked)
+                {
+                    Show();
+                }
+
                 return;
             }
 
             if (Keyboard.current.enterKey.wasPressedThisFrame ||
                 Keyboard.current.numpadEnterKey.wasPressedThisFrame)
             {
-                if (!inputBlocked)
+                // IsInputBlocked теперь включает ChatInput.IsFocused, поэтому «не
+                // заблокировано» или «печатаем в чате» — разрешаем отправку.
+                if (!inputBlocked || ChatInput.IsFocused)
                 {
                     OnSendClicked();
                 }
@@ -189,6 +192,11 @@ namespace Fodinae.UI
                 tree.pickingMode = PickingMode.Ignore;
                 _tree = tree;
                 _panel = tree.Q<VisualElement>("ChatPanel");
+                if (_panel != null)
+                {
+                    _panel.style.display = DisplayStyle.None;
+                }
+
                 _muteStatus = tree.Q<Label>("ChatMuteStatus");
                 _scrollView = tree.Q<ScrollView>("ChatScroll");
                 _inputField = tree.Q<TextField>("ChatInput");
@@ -343,6 +351,7 @@ namespace Fodinae.UI
         {
             _blinker?.StopBlink();
             _idleCts?.Cancel();
+            _idleCts?.Dispose();
             _idleCts = new CancellationTokenSource();
             var token = _idleCts.Token;
             DelayedStartBlink(token).Forget();
@@ -350,8 +359,8 @@ namespace Fodinae.UI
 
         private async UniTaskVoid DelayedStartBlink(CancellationToken token)
         {
-            await UniTask.Delay(500, cancellationToken: token);
-            if (!token.IsCancellationRequested)
+            bool canceled = await UniTask.Delay(500, cancellationToken: token).SuppressCancellationThrow();
+            if (!canceled && !token.IsCancellationRequested)
             {
                 StartBlink();
             }
@@ -457,11 +466,13 @@ namespace Fodinae.UI
                     .ToLocalTime()
                     .ToString("g");
             }
-            catch (ArgumentOutOfRangeException exception)
+            catch (ArgumentOutOfRangeException)
             {
-                throw new InvalidOperationException(
-                    "Chat mute packet contains an invalid expiry timestamp.",
-                    exception);
+                // Серверный ввод не должен ронять клиент: битый timestamp в пакете
+                // мута — это данные, а не контрактная ошибка. Отображаем как есть.
+                Debug.LogWarning(
+                    $"[GlobalChat] Mute packet contains invalid expiry timestamp: {unixMilliseconds}");
+                return unixMilliseconds.ToString();
             }
         }
 

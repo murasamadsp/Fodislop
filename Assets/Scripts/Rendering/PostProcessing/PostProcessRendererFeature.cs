@@ -61,9 +61,11 @@ namespace Fodinae.Rendering.PostProcessing
 
             _pass = new PostProcessRenderPass(computeShader, velocityShader);
             _pass.ConfigureInput(ScriptableRenderPassInput.Color);
-            _mainCamera = Camera.main;
+            _mainCamera = GameplayCamera.Resolve();
             PostProcessRenderPass.SetMainCamera(_mainCamera);
         }
+
+        public static bool BypassPostProcessPass { get; set; }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
@@ -72,7 +74,11 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            _mainCamera ??= Camera.main;
+            if (_mainCamera == null)
+            {
+                _mainCamera = GameplayCamera.Resolve();
+            }
+
             if (_mainCamera == null)
             {
                 return;

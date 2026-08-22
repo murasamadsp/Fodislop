@@ -16,7 +16,7 @@ MonoBehaviour:
     LightingMinimumPixelsPerCell: 1
     LightingMaximumTextureDimension: 384
     LightingMaximumLightCount: 64
-    LightingMaximumRaySteps: 12
+    LightingMaximumRaySteps: 8
     LightingUpdatesPerSecond: 15
     LightingCascadeAtlasLimit: 384
     RenderScale: 0.65
@@ -26,7 +26,7 @@ MonoBehaviour:
     LightingMinimumPixelsPerCell: 1
     LightingMaximumTextureDimension: 512
     LightingMaximumLightCount: 128
-    LightingMaximumRaySteps: 20
+    LightingMaximumRaySteps: 8
     LightingUpdatesPerSecond: 20
     LightingCascadeAtlasLimit: 512
     RenderScale: 0.8
@@ -36,39 +36,39 @@ MonoBehaviour:
     LightingMinimumPixelsPerCell: 2
     LightingMaximumTextureDimension: 768
     LightingMaximumLightCount: 256
-    LightingMaximumRaySteps: 28
+    LightingMaximumRaySteps: 10
     LightingUpdatesPerSecond: 24
     LightingCascadeAtlasLimit: 768
     RenderScale: 0.9
     VSyncCount: 1
     AntiAliasing: 0
   _high:
-    LightingMinimumPixelsPerCell: 4
-    LightingMaximumTextureDimension: 1536
-    LightingMaximumLightCount: 512
-    LightingMaximumRaySteps: 40
-    LightingUpdatesPerSecond: 60
-    LightingCascadeAtlasLimit: 1536
+    LightingMinimumPixelsPerCell: 2
+    LightingMaximumTextureDimension: 960
+    LightingMaximumLightCount: 256
+    LightingMaximumRaySteps: 12
+    LightingUpdatesPerSecond: 30
+    LightingCascadeAtlasLimit: 960
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
   _veryHigh:
-    LightingMinimumPixelsPerCell: 6
-    LightingMaximumTextureDimension: 1792
-    LightingMaximumLightCount: 768
-    LightingMaximumRaySteps: 52
-    LightingUpdatesPerSecond: 60
-    LightingCascadeAtlasLimit: 1792
+    LightingMinimumPixelsPerCell: 4
+    LightingMaximumTextureDimension: 1024
+    LightingMaximumLightCount: 384
+    LightingMaximumRaySteps: 14
+    LightingUpdatesPerSecond: 30
+    LightingCascadeAtlasLimit: 1024
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
   _ultra:
-    LightingMinimumPixelsPerCell: 8
-    LightingMaximumTextureDimension: 2048
-    LightingMaximumLightCount: 1024
-    LightingMaximumRaySteps: 64
+    LightingMinimumPixelsPerCell: 4
+    LightingMaximumTextureDimension: 1280
+    LightingMaximumLightCount: 512
+    LightingMaximumRaySteps: 16
     LightingUpdatesPerSecond: 60
-    LightingCascadeAtlasLimit: 2048
+    LightingCascadeAtlasLimit: 1280
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0

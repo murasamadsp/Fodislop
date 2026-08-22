@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Player.Logic;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
 using Fodinae.World.Lighting;
@@ -96,8 +97,11 @@ namespace Fodinae.Game
         private bool _hasPendingServerPosition;
         private ushort _pendingServerX;
         private ushort _pendingServerY;
+        private bool _hasReceivedInitialPosition;
         [Inject]
         private TentacleBatchRenderer _tentacleBatchRenderer = null!;
+        [Inject]
+        private IObjectResolver _resolver = null!;
 
         public uint BotId => _botId;
         public int PlayerId => _playerId;
@@ -178,6 +182,11 @@ namespace Fodinae.Game
                 _spriteRenderer = GetComponent<SpriteRenderer>();
             }
 
+            if (_spriteRenderer != null && Application.isPlaying)
+            {
+                _spriteRenderer.enabled = false;
+            }
+
             if (!IsLocalPlayer && !TryGetComponent<MotionBlurTag>(out _))
             {
                 gameObject.AddComponent<MotionBlurTag>();
@@ -202,7 +211,14 @@ namespace Fodinae.Game
         {
             ApplyWorldUiLayer();
             _tentaclesSettled = false;
-            SetTentaclesActive(true);
+            if (!Application.isPlaying || (IsLocalPlayer ? PlayerMovementController.LocalPlayer is { HasServerPosition: true } : _isMetadataLoaded && _hasReceivedInitialPosition))
+            {
+                SetTentaclesActive(true);
+            }
+            else
+            {
+                SetTentaclesActive(false);
+            }
         }
 
         protected void OnDisable()
@@ -256,17 +272,17 @@ namespace Fodinae.Game
             var clanGo = new GameObject("ClanIcon");
             clanGo.transform.SetParent(transform);
             _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
+            if (Application.isPlaying)
+            {
+                _clanRenderer.enabled = false;
+            }
+
             UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 100);
             _clanRenderer.transform.localScale = Vector3.one * 0.8f;
         }
 
         private void ApplyWorldUiLayer()
         {
-            if (_nicknameText == null)
-            {
-                _nicknameText = transform.Find("Nickname")?.GetComponent<TextMeshPro>();
-            }
-
             if (_clanRenderer == null)
             {
                 _clanRenderer = transform.Find("ClanIcon")?.GetComponent<SpriteRenderer>();
@@ -301,10 +317,9 @@ namespace Fodinae.Game
             _smoothPosition = snappedPos;
             _smoothAngle = transform.eulerAngles.z;
 
-            // This is an intentional offline/DummyConnection identity skin for
-            // the local player, not an implicit rendering fallback. Keep it in
-            // the asset contract; it must never be removed during default cleanup.
-            if (string.IsNullOrEmpty(_skinPath) && IsLocalPlayer)
+            // In editor preview (outside Play Mode), populate fallback visuals.
+            // In Play Mode, wait for authoritative server metadata via SetMetadata.
+            if (string.IsNullOrEmpty(_skinPath) && IsLocalPlayer && !Application.isPlaying)
             {
                 _skinPath = "Skin/bee.png";
                 _tailPath = "Tail/default.png";
@@ -325,6 +340,19 @@ namespace Fodinae.Game
 
         protected void Update()
         {
+            if (Application.isPlaying)
+            {
+                if (IsLocalPlayer && PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+                {
+                    return;
+                }
+
+                if (!IsLocalPlayer && (!_isMetadataLoaded || !_hasReceivedInitialPosition))
+                {
+                    return;
+                }
+            }
+
             TryInitializeDynamicLightSettings();
             ApplyPendingServerPosition();
 
@@ -540,6 +568,16 @@ namespace Fodinae.Game
         private void CreateTentacles(Texture2D tailTexture)
         {
             ClearTentacles();
+            if (_tentacleBatchRenderer == null && _resolver != null)
+            {
+                _tentacleBatchRenderer = _resolver.Resolve<TentacleBatchRenderer>();
+            }
+
+            if (_tentacleBatchRenderer == null)
+            {
+                return;
+            }
+
             _tentacles = new Tentacle[4];
             _tentaclesSettled = false;
             float[] offsets = { -45f, -15f, 15f, 45f };
@@ -575,9 +613,9 @@ namespace Fodinae.Game
                 return;
             }
 
-            foreach (Tentacle tentacle in _tentacles)
+            foreach (Tentacle? tentacle in _tentacles)
             {
-                tentacle.SetActive(active);
+                tentacle?.SetActive(active);
             }
         }
 
@@ -588,9 +626,9 @@ namespace Fodinae.Game
                 return true;
             }
 
-            foreach (Tentacle tentacle in _tentacles)
+            foreach (Tentacle? tentacle in _tentacles)
             {
-                if (!tentacle.IsSettled)
+                if (tentacle != null && !tentacle.IsSettled)
                 {
                     return false;
                 }
@@ -608,9 +646,10 @@ namespace Fodinae.Game
 
             foreach (var tentacle in _tentacles)
             {
-                tentacle.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
+                tentacle?.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
             }
         }
+
 
         private void UpdateLabelsPosition()
         {
@@ -650,9 +689,9 @@ namespace Fodinae.Game
         {
             TryInitializeDynamicLightSettings();
             _botId = botId;
-            if (ServiceLocator.IsInitialized)
+            if (_resolver != null)
             {
-                ServiceLocator.Resolve<RobotManager>()?.RegisterRobot(this);
+                _resolver.Resolve<RobotManager>()?.RegisterRobot(this);
             }
 
             _isMetadataLoaded = false;
@@ -706,7 +745,7 @@ namespace Fodinae.Game
 
         public void SetPosition(ushort x, ushort y)
         {
-            if (!ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 _pendingServerX = x;
                 _pendingServerY = y;
@@ -719,7 +758,7 @@ namespace Fodinae.Game
 
         private void ApplyPendingServerPosition()
         {
-            if (!_hasPendingServerPosition || !ServiceLocator.IsInitialized)
+            if (!_hasPendingServerPosition || _resolver == null)
             {
                 return;
             }
@@ -730,10 +769,30 @@ namespace Fodinae.Game
 
         private void ApplyServerPosition(ushort x, ushort y)
         {
-            MapManager mm = ServiceLocator.Resolve<MapManager>() ??
+            MapManager mm = _resolver.Resolve<MapManager>() ??
                 throw new InvalidOperationException(
                     $"{TAG} MapManager is required to apply position for bot {_botId}.");
             _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, mm.WorldHeight);
+
+            if (!_hasReceivedInitialPosition)
+            {
+                _hasReceivedInitialPosition = true;
+                _smoothPosition = _serverPosition;
+                _targetPosition = _serverPosition;
+                transform.position = _serverPosition;
+                _currentVelocity = Vector3.zero;
+                if (_tentacles != null)
+                {
+                    foreach (var tentacle in _tentacles)
+                    {
+                        tentacle?.Snap(_smoothPosition);
+                    }
+
+                    SetTentaclesActive(true);
+                }
+
+                return;
+            }
 
             // Only update target position from server for remote robots.
             // Local player manages its own target position via PlayerMovementController.
@@ -765,7 +824,7 @@ namespace Fodinae.Game
             _cts?.Dispose();
             _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
-            if (!ServiceLocator.IsInitialized)
+            if (_resolver == null)
             {
                 WaitForServicesAndLoadMetadataAsync(_cts.Token).Forget();
                 return;
@@ -779,7 +838,7 @@ namespace Fodinae.Game
             try
             {
                 await UniTask.WaitUntil(
-                    () => ServiceLocator.IsInitialized,
+                    () => _resolver != null,
                     cancellationToken: token);
                 if (!token.IsCancellationRequested)
                 {
@@ -806,12 +865,12 @@ namespace Fodinae.Game
 
         private async UniTaskVoid LoadSkinAsync(CancellationToken token)
         {
-            if (string.IsNullOrEmpty(_skinPath) || !ServiceLocator.IsInitialized)
+            if (string.IsNullOrEmpty(_skinPath) || _resolver == null)
             {
                 return;
             }
 
-            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+            IAssetLoader loader = _resolver.Resolve<IAssetLoader>() ??
                 throw new InvalidOperationException(
                     $"{TAG} Asset loader is required for skin load on bot {_botId}.");
             Texture2D? skinTexture = await TryLoadOptionalTextureAsync(
@@ -837,17 +896,42 @@ namespace Fodinae.Game
 
             _skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
             spriteRenderer.sprite = _skinSprite;
+            if (!IsLocalPlayer)
+            {
+                spriteRenderer.enabled = true;
+            }
+        }
+
+        public void EnsureEditorPreviewVisual()
+        {
+            if (_spriteRenderer != null && _spriteRenderer.sprite == null)
+            {
+                var botTex = Resources.Load<Texture2D>("Textures/bot") ?? Resources.Load<Texture2D>("bot");
+                if (botTex != null)
+                {
+                    _skinSprite = Sprite.Create(botTex, new Rect(0, 0, botTex.width, botTex.height), new Vector2(0.5f, 0.5f), 16);
+                }
+                else
+                {
+                    var tex = Texture2D.whiteTexture;
+                    _skinSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16);
+                }
+
+                _spriteRenderer.sprite = _skinSprite;
+                _spriteRenderer.color = new Color(0.2f, 0.65f, 0.95f, 1f);
+                _spriteRenderer.enabled = true;
+            }
         }
 
         private async UniTaskVoid LoadTailAsync(CancellationToken token)
         {
-            if (string.IsNullOrEmpty(_tailPath) || !ServiceLocator.IsInitialized)
+            if (string.IsNullOrEmpty(_tailPath) || _resolver == null)
             {
                 ClearTentacles();
                 return;
             }
 
-            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+            IAssetLoader loader = _resolver.Resolve<IAssetLoader>() ??
                 throw new InvalidOperationException(
                     $"{TAG} Asset loader is required for tail load on bot {_botId}.");
             Texture2D? tailTexture = await TryLoadOptionalTextureAsync(
@@ -870,12 +954,12 @@ namespace Fodinae.Game
 
         private async UniTaskVoid LoadClanAsync(CancellationToken token)
         {
-            if (_clanId == 0 || !ServiceLocator.IsInitialized)
+            if (_clanId == 0 || _resolver == null)
             {
                 return;
             }
 
-            IAssetLoader loader = ServiceLocator.Resolve<IAssetLoader>() ??
+            IAssetLoader loader = _resolver.Resolve<IAssetLoader>() ??
                 throw new InvalidOperationException(
                     $"{TAG} Asset loader is required for clan load on bot {_botId}.");
             string clanPath = $"/Clan/{_clanId}";
@@ -903,6 +987,7 @@ namespace Fodinae.Game
 
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
             clanRenderer.sprite = _clanSprite;
+            clanRenderer.enabled = true;
         }
 
         private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
@@ -971,7 +1056,7 @@ namespace Fodinae.Game
             _cts?.Cancel();
             _cts?.Dispose();
 
-            _robotService?.UnregisterRobot(_botId, this);
+            _robotService?.UnregisterRobot(_botId);
 
             if (_skinSprite != null)
             {

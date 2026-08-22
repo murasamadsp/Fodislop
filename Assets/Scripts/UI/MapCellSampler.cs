@@ -41,6 +41,19 @@ namespace Fodinae.UI
             _chunkOrder.Clear();
         }
 
+        public void InvalidateChunk(int serverX, int serverY)
+        {
+            if (_layer == null || _chunkSize <= 0 || _heightChunks <= 0)
+            {
+                return;
+            }
+
+            int chunkX = serverX / _chunkSize;
+            int chunkY = serverY / _chunkSize;
+            int chunkIndex = chunkY + (chunkX * _heightChunks);
+            _chunks.Remove(chunkIndex);
+        }
+
         public bool TryGetCell(int serverX, int serverY, out CellType cellType)
         {
             cellType = CellType.Unloaded;

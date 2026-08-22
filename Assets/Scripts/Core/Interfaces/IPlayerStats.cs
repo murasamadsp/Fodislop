@@ -10,6 +10,7 @@ namespace Fodinae.Core.Interfaces
     using Fodinae.UI.HUD.Player.Model;
     public interface IPlayerStats
     {
+        bool IsReady { get; }
         int Health { get; }
         int MaxHealth { get; }
         float HealthPercent { get; }

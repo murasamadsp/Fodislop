@@ -21,6 +21,14 @@ namespace McpUnity.Tests
         [SetUp]
         public void SetUp()
         {
+            // McpUnityServer.Instance is intentionally null in batch mode (see
+            // McpUnityServer.Instance: "Returns null in batch mode"), so this
+            // whole fixture is inconclusive in headless/-nographics CI runs.
+            Assume.That(
+                McpUnityServer.Instance,
+                Is.Not.Null,
+                "McpUnity server requires an interactive editor session (unavailable in batch mode).");
+
             // Get the server instance to access registered tools
             _batchTool = new BatchExecuteTool(McpUnityServer.Instance);
         }

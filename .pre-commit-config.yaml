@@ -12,7 +12,7 @@ repos:
       - id: check-yaml
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ['--maxkb=5000']
+        args: ['--maxkb=15000']
       - id: mixed-line-ending
         args: ['--fix=lf']
 
@@ -24,3 +24,9 @@ repos:
         language: script
         always_run: true
         pass_filenames: false
+      - id: forbid-anti-patterns
+        name: Forbid new static singletons, ServiceLocator, ad-hoc InputAction
+        entry: ./scripts/check-forbidden-patterns.sh
+        language: script
+        pass_filenames: true
+        files: '\.cs$'

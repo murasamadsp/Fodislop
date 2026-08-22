@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.UI.HUD.Player.Model;
@@ -25,6 +26,8 @@ namespace Fodinae.UI
         private PlayerStatsModel _playerStats = null!;
         [Inject]
         private MapManager _mapManager = null!;
+        [Inject]
+        private ISessionContainer _session = null!;
 
         protected void Start()
         {
@@ -41,26 +44,29 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _session?.Current == null)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
             {
-                throw new InvalidOperationException(
-                    "[MissionArrowUI] Required DI services and UIDocument must be initialized before building the arrow.");
+                // Не бросаем: инъекция может завершиться после этого Start (PostStart).
+                // Update ретраит TryInitialize — ждём готовности молча, иначе каждый
+                // кадр до инжекта будет сыпать исключениями.
+                return;
             }
 
-            _camera = Camera.main;
+            _camera = GameplayCamera.Resolve();
 
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
             _arrow.AddToClassList("mission-arrow");
 
-            // Видимость — рантайм-состояние
+            // Видимость — рантайм-состояние. Вставляем в индекс 0: метка не должна
+            // перекрывать текст UI (раньше добавлялась последней — рисовалась поверх).
             _arrow.style.display = DisplayStyle.None;
-            _doc.rootVisualElement.Add(_arrow);
+            _doc.rootVisualElement.Insert(0, _arrow);
 
             PlayerStatsModel stats = _playerStats;
             if (stats != null)
@@ -155,7 +161,7 @@ namespace Fodinae.UI
 
             var panelPos = RuntimePanelUtils.ScreenToPanel(
                 _doc.rootVisualElement.panel,
-                new Vector2(screenPos.x, Screen.height - screenPos.y));
+                screenPos);
 
             float halfW = _doc.rootVisualElement.resolvedStyle.width / 2f;
             float halfH = _doc.rootVisualElement.resolvedStyle.height / 2f;

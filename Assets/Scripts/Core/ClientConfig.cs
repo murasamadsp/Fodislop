@@ -10,7 +10,7 @@ namespace Fodinae.Core
     [Serializable]
     public class ClientConfig
     {
-        public const int CurrentSchemaVersion = 9;
+        public const int CurrentSchemaVersion = 11;
 
         public int SchemaVersion;
         public string ProjectDefaultsHash = string.Empty;
@@ -21,7 +21,16 @@ namespace Fodinae.Core
         public float VoiceVolume;
         public float UiVolume;
         public float UiScale;
+        public string Language = "ru";
+        public int ResolutionWidth;
+        public int ResolutionHeight;
+        public int RefreshRate;
+        public int FullScreenMode = 1; // FullScreenWindow
+        public bool VSync = true;
+        public int TargetFrameRate = -1;
+        public bool MuteAudioInBackground = true;
         [FormerlySerializedAs("GraphicsQuality")]
+
         public GraphicsPreset GraphicsPreset;
         public GraphicsQualitySettings GraphicsQualitySettings;
         public bool AmbientOcclusionEnabled;
@@ -77,5 +86,12 @@ namespace Fodinae.Core
         public float EigengrauAnimationSpeed;
         public float MotionBlurIntensity;
         public int MotionBlurMaxSamples;
+
+        // Сетевое подключение. DummyConnection — заглушка для локального теста без
+        // сервера. При UseDummyConnection = false клиент подключается к реальному
+        // серверу через Darkar25 TcpConnection (MinesServerNetworking).
+        public bool UseDummyConnection = true;
+        public string ServerHost = "127.0.0.1";
+        public int ServerPort = 7777;
     }
 }

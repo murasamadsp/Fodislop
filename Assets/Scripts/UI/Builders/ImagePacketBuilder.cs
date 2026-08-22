@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual; // Corrected using directive for ImagePacket
@@ -43,7 +44,7 @@ namespace Fodinae.UI.Builders
             string uri,
             CancellationToken token)
         {
-            IAssetLoader loader = Fodinae.Core.ServiceLocator.Resolve<IAssetLoader>() ??
+            IAssetLoader loader = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() ??
                 throw new InvalidOperationException(
                     "Image packet loading requires a registered IAssetLoader.");
             Texture2D? texture;

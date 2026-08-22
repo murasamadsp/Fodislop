@@ -2,13 +2,16 @@
 
 using System;
 using Fodinae.Audio.Backend;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Networking.Connection.Client;
+using Fodinae.Player;
 using Fodinae.Player.Logic;
+using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Inventory.View;
@@ -17,6 +20,7 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
 using VContainer.Unity;
@@ -24,8 +28,8 @@ using VContainer.Unity;
 namespace Fodinae.Core
 {
     /// <summary>
-    /// Выполняет инициализацию после полной сборки DI-графа. Поля scene-компонентов
-    /// инжектируются build callback-ом в GameLifetimeScope до этой фазы.
+    /// Выполняет инициализацию после полной сборки DI-графа, включая инжект
+    /// [Inject]-полей существующих scene-компонентов (InjectSceneBehaviours).
     ///
     /// Причина существования: резолвить менеджеры и собирать UI прямо в build-callback'е
     /// (внутри Build()) опасно — лениво создаваемые через RegisterComponentOnNewGameObject
@@ -36,18 +40,46 @@ namespace Fodinae.Core
     public sealed class GameBootstrap : IPostStartable
     {
         private readonly IObjectResolver _resolver;
+        private readonly Scene _ownScene;
+        private readonly ISessionContainer _session;
 
-        public GameBootstrap(IObjectResolver resolver)
+        public GameBootstrap(IObjectResolver resolver, Scene ownScene, ISessionContainer session)
         {
             _resolver = resolver;
+            _ownScene = ownScene;
+            _session = session;
         }
 
         public void PostStart()
         {
+            _session.Set(_resolver);
+
+            // ClientConfigManager is a lazy Bootstrap-tier singleton: the first Resolve
+            // creates it, and its Start() only runs on the NEXT frame. Everything below
+            // (ConnectionManager, PostProcessController, TerrariaLightingEngine, ...)
+            // reads ClientConfig.Config this frame, so force it to exist and load now.
+            // Without this, PostStart throws "ClientConfig is not initialized" and the
+            // world starts without lighting config and post-processing.
+            _resolver.Resolve<IClientConfigManager>().EnsureInitialized();
+
+            // Managers not already present in the scene get created lazily on first
+            // Resolve() below via RegisterComponentOnNewGameObject, and Unity places new
+            // GameObjects into whatever scene is active. Additive loads don't switch the
+            // active scene on their own, so without this, managers created here would land
+            // in whatever scene loaded us (e.g. a menu) and get destroyed when it unloads.
+            SceneManager.SetActiveScene(_ownScene);
+
+
+            // Injects [Inject] fields on pre-existing scene MonoBehaviours (e.g. CameraFollow)
+            // that aren't explicitly resolved anywhere below. Runs here, not as a build
+            // callback in GameLifetimeScope.Configure(), because _ownScene isn't fully loaded
+            // yet at that point — SetActiveScene above already needed the same fix.
+            InjectSceneBehaviours();
+
             _resolver.Resolve<ConnectionManager>();
             var networkService = _resolver.Resolve<NetworkService>();
             networkService.EnsureConnectionSubscription();
-            if (!networkService.IsConnectionSubscriptionEstablished)
+            if (!networkService.IsConnectionSubscriptionEstablished && Application.isPlaying)
             {
                 throw new InvalidOperationException(
                     "NetworkService failed to subscribe to the connection packet stream.");
@@ -60,7 +92,7 @@ namespace Fodinae.Core
             if (assetLoader is ClientAssetLoader clientAssetLoader)
             {
                 clientAssetLoader.EnsureAssetSubscription();
-                if (!clientAssetLoader.IsAssetSubscriptionEstablished)
+                if (!clientAssetLoader.IsAssetSubscriptionEstablished && Application.isPlaying)
                 {
                     throw new InvalidOperationException(
                         "ClientAssetLoader failed to subscribe to the connection packet stream.");
@@ -71,6 +103,9 @@ namespace Fodinae.Core
             audioSystem.ApplySavedBusVolumes();
             _resolver.Resolve<IPlayerStats>();
             _resolver.Resolve<PlayerMovementController>();
+            _resolver.Resolve<CameraFollow>();
+            _resolver.Resolve<TerrainRenderer>();
+            _resolver.Resolve<TentacleBatchRenderer>();
 
             // UI-сервисы: создаём ПЕРЕД GameManager чтобы SetupUI находил их через
             // FindAnyObjectByType(FindObjectsInactive.Include) и не создавал дубликаты.
@@ -79,6 +114,14 @@ namespace Fodinae.Core
             _resolver.Resolve<FPSCounter>();
             _resolver.Resolve<DiagnosticRunner>();
             _resolver.Resolve<IInputBlocker>();
+            _resolver.Resolve<MinimapController>();
+            _resolver.Resolve<WorldMapController>();
+            _resolver.Resolve<DisplayManager>();
+            _resolver.Resolve<UIInputManager>();
+            _resolver.Resolve<PlayerHUDView>();
+            _resolver.Resolve<InventoryView>();
+            _resolver.Resolve<PauseMenu>();
+            _resolver.Resolve<InGameDebugOverlay>();
             PostProcessController postProcessController =
                 _resolver.Resolve<PostProcessController>();
             postProcessController.EnsureVolumeSetup();
@@ -106,6 +149,20 @@ namespace Fodinae.Core
             }
 
             ValidateStartup(_resolver);
+        }
+
+        private void InjectSceneBehaviours()
+        {
+            foreach (MonoBehaviour behaviour in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(
+                FindObjectsInactive.Include))
+            {
+                if (behaviour is LifetimeScope || behaviour.gameObject.scene != _ownScene)
+                {
+                    continue;
+                }
+
+                _resolver.Inject(behaviour);
+            }
         }
 
         private void ValidateStartup(IObjectResolver resolver)

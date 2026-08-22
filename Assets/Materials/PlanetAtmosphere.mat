@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: PlanetAtmosphere
+  m_Shader: {fileID: 4800000, guid: c1e62bf498aa14c9bb219b772b3ac157, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _AbsorbStrength: 1.15
+    - _CloudAltitude: 0.20
+    - _CloudAmbient: 0.28
+    - _CloudBandStrength: 0.12
+    - _CloudBands: 3
+    - _CloudCoverage: 0.44
+    - _CloudOpacity: 0.65
+    - _CloudRelief: 0.18
+    - _CloudScale: 2.8
+    - _CloudSharpness: 0.45
+    - _CloudWarp: 0.16
+    - _Density: 4.2
+    - _MieBackG: -0.20
+    - _MieBackWeight: 0.25
+    - _MieG: 0.82
+    - _PlanetRadiusRatio: 0.95
+    - _ScaleHeight: 0.14
+    - _SunIntensity: 5.6
+    m_Colors:
+    - _AbsorbColor: {r: 0.45, g: 0.35, b: 0.85, a: 1}
+    - _CloudColor: {r: 0.92, g: 0.94, b: 0.97, a: 1}
+    - _ScatterColor: {r: 0.42, g: 0.70, b: 0.28, a: 1}
+    - _SunColor: {r: 1, g: 0.92, b: 0.82, a: 1}
+    - _SunDirWS: {r: -0.68, g: 0.24, b: 0.52, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

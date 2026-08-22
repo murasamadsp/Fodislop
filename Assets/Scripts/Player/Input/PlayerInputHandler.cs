@@ -13,21 +13,54 @@ namespace Fodinae.Player.Input
         private InputActionReference? _moveActionReference;
 
         private Vector2 _moveInput;
+        private bool _isGamepadActive;
 
         public Vector2 MoveInput => _moveInput;
-        public bool WantsToToggleAutoDig => Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame;
-        public bool WantsToToggleAggression => Keyboard.current != null && Keyboard.current.lKey.wasPressedThisFrame;
-        public bool WantsToGeo => Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame;
-        public bool WantsToHeal => Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
-        public bool WantsToBuildCyan => Keyboard.current != null && Keyboard.current.yKey.wasPressedThisFrame;
-        public bool WantsToBuildGray => Keyboard.current != null && Keyboard.current.hKey.wasPressedThisFrame;
-        public bool WantsToBuildGreen => Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame;
-        public bool WantsToBuildWhite => Keyboard.current != null && Keyboard.current.jKey.wasPressedThisFrame;
+        public bool IsGamepadActive => _isGamepadActive;
 
-        // Пробел удобнее Z — большой палец не загибается, проще удерживать во время движения
-        public bool WantsToDig => Keyboard.current != null && Keyboard.current.spaceKey.isPressed;
-        public bool IsShiftPressed => Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
-        public bool IsCtrlPressed => Keyboard.current != null && Keyboard.current.ctrlKey.isPressed;
+        public bool WantsToToggleAutoDig =>
+            (Keyboard.current != null && Keyboard.current.eKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.buttonNorth.wasPressedThisFrame);
+
+        public bool WantsToToggleAggression =>
+            (Keyboard.current != null && Keyboard.current.lKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.leftShoulder.wasPressedThisFrame);
+
+        public bool WantsToGeo =>
+            (Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.dpad.left.wasPressedThisFrame);
+
+        public bool WantsToHeal =>
+            (Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.dpad.right.wasPressedThisFrame);
+
+        public bool WantsToBuildCyan =>
+            (Keyboard.current != null && Keyboard.current.yKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.dpad.up.wasPressedThisFrame);
+
+        public bool WantsToBuildGray =>
+            (Keyboard.current != null && Keyboard.current.hKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.dpad.down.wasPressedThisFrame);
+
+        public bool WantsToBuildGreen =>
+            (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.buttonEast.wasPressedThisFrame);
+
+        public bool WantsToBuildWhite =>
+            (Keyboard.current != null && Keyboard.current.jKey.wasPressedThisFrame) ||
+            (Gamepad.current != null && Gamepad.current.buttonWest.wasPressedThisFrame);
+
+        public bool WantsToDig =>
+            (Keyboard.current != null && Keyboard.current.spaceKey.isPressed) ||
+            (Gamepad.current != null && (Gamepad.current.rightTrigger.isPressed || Gamepad.current.buttonSouth.isPressed));
+
+        public bool IsShiftPressed =>
+            (Keyboard.current != null && Keyboard.current.shiftKey.isPressed) ||
+            (Gamepad.current != null && (Gamepad.current.rightShoulder.isPressed || Gamepad.current.leftStickButton.isPressed));
+
+        public bool IsCtrlPressed =>
+            (Keyboard.current != null && Keyboard.current.ctrlKey.isPressed) ||
+            (Gamepad.current != null && Gamepad.current.leftTrigger.isPressed);
 
         protected void OnEnable()
         {
@@ -70,21 +103,44 @@ namespace Fodinae.Player.Input
                     if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed)
                     {
                         _moveInput.y += 1f;
+                        _isGamepadActive = false;
                     }
 
                     if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed)
                     {
                         _moveInput.y -= 1f;
+                        _isGamepadActive = false;
                     }
 
                     if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed)
                     {
                         _moveInput.x -= 1f;
+                        _isGamepadActive = false;
                     }
 
                     if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed)
                     {
                         _moveInput.x += 1f;
+                        _isGamepadActive = false;
+                    }
+                }
+
+                if (Gamepad.current != null)
+                {
+                    Vector2 stick = Gamepad.current.leftStick.ReadValue();
+                    if (stick.sqrMagnitude > 0.04f)
+                    {
+                        _moveInput = stick;
+                        _isGamepadActive = true;
+                    }
+                    else
+                    {
+                        Vector2 dpad = Gamepad.current.dpad.ReadValue();
+                        if (dpad.sqrMagnitude > 0.04f)
+                        {
+                            _moveInput = dpad;
+                            _isGamepadActive = true;
+                        }
                     }
                 }
             }

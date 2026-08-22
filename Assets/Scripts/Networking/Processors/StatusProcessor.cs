@@ -1,7 +1,6 @@
 #nullable enable
 
 using System.Linq;
-using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.UI;
@@ -15,9 +14,20 @@ namespace Fodinae.Networking.Processors
 {
     public class StatusProcessor : IPacketProcessor<OnlinePacket>, IPacketProcessor<PingPacket>, IPacketProcessor<OutdatedClientPacket>, IPacketProcessor<AddStatusLinePacket>, IPacketProcessor<ClearStatusLinePacket>, IPacketProcessor<ClearStatusPacket>
     {
+        private readonly IPlayerStats _stats;
+        private readonly FPSCounter _fps;
+        private readonly INetworkService _networkService;
+
+        public StatusProcessor(IPlayerStats stats, FPSCounter fps, INetworkService networkService)
+        {
+            _stats = stats;
+            _fps = fps;
+            _networkService = networkService;
+        }
+
         public void Process(OnlinePacket packet)
         {
-            var fps = Fodinae.Core.ServiceLocator.Resolve<FPSCounter>();
+            var fps = _fps;
             if (fps != null)
             {
                 fps.SetOnline((int)packet.Players, (int)packet.Programmator);
@@ -26,13 +36,13 @@ namespace Fodinae.Networking.Processors
 
         public void Process(PingPacket packet)
         {
-            var fps = Fodinae.Core.ServiceLocator.Resolve<FPSCounter>();
+            var fps = _fps;
             if (fps != null)
             {
                 fps.SetPing(packet.PreviousPing);
             }
 
-            var networkService = Fodinae.Core.ServiceLocator.Resolve<INetworkService>();
+            var networkService = _networkService;
             networkService?.Send(new PongPacket(packet.SentAt));
         }
 
@@ -46,7 +56,7 @@ namespace Fodinae.Networking.Processors
 
         public void Process(AddStatusLinePacket packet)
         {
-            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = _stats;
             if (stats == null)
             {
                 GameErrorUI.ReportError("IPlayerStats не зарегистрирован — статус-линия не добавлена");
@@ -66,13 +76,13 @@ namespace Fodinae.Networking.Processors
 
         public void Process(ClearStatusLinePacket packet)
         {
-            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = _stats;
             stats?.RemoveStatusLine(packet.Tag);
         }
 
         public void Process(ClearStatusPacket packet)
         {
-            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = _stats;
             stats?.ClearStatusLines();
         }
     }

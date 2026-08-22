@@ -1,6 +1,5 @@
 #nullable enable
 
-using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
@@ -13,9 +12,16 @@ namespace Fodinae.Networking.Processors
 {
     public class ClanProcessor : IPacketProcessor<ShowClanPacket>, IPacketProcessor<HideClanPacket>
     {
+        private readonly IPlayerStats _stats;
+
+        public ClanProcessor(IPlayerStats stats)
+        {
+            _stats = stats;
+        }
+
         public void Process(ShowClanPacket packet)
         {
-            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = _stats;
             stats?.SetClanId(packet.ClanId);
             var player = PlayerMovementController.LocalPlayer;
             if (player != null && player.TryGetComponent<Robot>(out var robot))
@@ -26,7 +32,7 @@ namespace Fodinae.Networking.Processors
 
         public void Process(HideClanPacket packet)
         {
-            var stats = Fodinae.Core.ServiceLocator.Resolve<IPlayerStats>();
+            var stats = _stats;
             if (stats != null)
             {
                 stats.SetClanId(0);

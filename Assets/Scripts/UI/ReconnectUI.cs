@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -22,6 +23,8 @@ namespace Fodinae.UI
 
         [Inject]
         private UIDocument _doc = null!;
+        [Inject]
+        private ISessionContainer _session = null!;
 
         private VisualElement? _reconnectOverlay;
         private VisualElement? _disconnectOverlay;
@@ -31,6 +34,11 @@ namespace Fodinae.UI
         private bool _initialized;
 
         private void Awake()
+        {
+            _instance = this;
+        }
+
+        private void OnEnable()
         {
             _instance = this;
         }
@@ -71,15 +79,14 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized || _session?.Current == null)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null)
             {
-                throw new InvalidOperationException(
-                    "[ReconnectUI] UIDocument must be injected and have a root before initialization.");
+                return;
             }
 
             CreateUI();

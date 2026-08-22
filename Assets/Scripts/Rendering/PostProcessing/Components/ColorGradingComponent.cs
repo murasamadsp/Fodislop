@@ -9,6 +9,7 @@ namespace Fodinae.Rendering.PostProcessing
 {
     [Serializable]
     [VolumeComponentMenu("Fodinae/Color Grading")]
+    [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class ColorGradingComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.

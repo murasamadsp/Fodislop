@@ -1,0 +1,145 @@
+/* ============================================================================
+   FODINAE — КОМПОНЕНТЫ И УТИЛИТЫ
+   ----------------------------------------------------------------------------
+   Классы, заменившие повторяющиеся инлайн-стили разметки. Каждый выведен из
+   фактического паттерна, встречавшегося в index.html не меньше двух раз.
+   ============================================================================ */
+
+/* ==========================================================================
+   §1  МОДИФИКАТОРЫ КЕГЛЯ
+   Дополняют роли из base.css (.fdn-body / .fdn-label / .fdn-data), когда
+   роль верна, а размер отличается от её умолчания.  @uss ok
+   ========================================================================== */
+
+/* Только гарнитура, без кегля и цвета — когда роль задавать нечем,
+   а семейство сменить нужно. */
+.fdn-font-display { font-family: var(--face-display); }
+.fdn-font-body    { font-family: var(--face-body); }
+.fdn-font-data    { font-family: var(--face-data); font-variant-numeric: tabular-nums; }
+
+.fdn-text--micro { font-size: var(--size-micro); }
+.fdn-text--2xs   { font-size: var(--size-2xs); }
+.fdn-text--xs    { font-size: var(--size-xs); }
+.fdn-text--sm    { font-size: var(--size-sm); }
+.fdn-text--base  { font-size: var(--size-base); }
+.fdn-text--md    { font-size: var(--size-md); }
+.fdn-text--lg    { font-size: var(--size-lg); }
+.fdn-text--xl    { font-size: var(--size-xl); }
+
+.fdn-text--bold  { font-weight: var(--weight-bold); }
+.fdn-text--light { color: rgb(var(--rgb-light)); }
+
+.fdn-text--block { display: block; }
+.fdn-text--right { text-align: right; }
+
+/* Выключенное состояние и декоративные разделители. Контраст ниже AA —
+   читаемый текст этим классом набирать нельзя (см. tokens.css §2.3). */
+.fdn-text--disabled { color: var(--text-disabled); }
+
+/* ==========================================================================
+   §2  БОКС — базовая обшивка блока внутри панели
+   Самый частый инлайн-паттерн макета: заливка abyss, волосяная рамка,
+   малый радиус.  @uss ok
+   ========================================================================== */
+
+.fdn-box {
+  background: rgb(var(--rgb-abyss));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-5);
+}
+
+.fdn-box--tight { padding: var(--space-3); }
+.fdn-box--loose { padding: var(--space-6); }
+
+/* Бордюрless-вариант: та же заливка, без рамки — для вложенных полос. */
+.fdn-box--flat {
+  border: none;
+  border-radius: 0;
+}
+
+/* Строка «подпись слева, значение справа» — костяк всех списков настроек. */
+.fdn-box--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ==========================================================================
+   §3  РАСКЛАДКИ
+   gap в USS отсутствует — при переносе становится margin на детях.
+   @uss via margin на детях
+   ========================================================================== */
+
+.fdn-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.fdn-row--between {
+  justify-content: space-between;
+}
+
+.fdn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fdn-stack--tight { gap: var(--space-2); }
+.fdn-stack--loose { gap: var(--space-8); }
+
+/* Две равные колонки. CSS Grid в USS нет — переносится как flex 1/1.
+   @uss via flexbox */
+.fdn-cols-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+/* ==========================================================================
+   §4  ШИРИНЫ МОДАЛЬНЫХ ОКОН
+   Раньше девять из десяти модалок задавали ширину инлайном (width:880px,
+   width:720px, …). Теперь это шкала, а не россыпь чисел.  @uss ok
+   ========================================================================== */
+
+.modal-card--sm { width: 440px; }
+.modal-card--md { width: 720px; }
+.modal-card--lg { width: 880px; }
+.modal-card--xl { width: 1040px; }
+
+/* На узком экране любая модалка отдаёт фиксированную ширину. */
+@media (max-width: 899px) {
+  .modal-card--sm,
+  .modal-card--md,
+  .modal-card--lg,
+  .modal-card--xl {
+    width: min(94vw, 560px);
+  }
+}
+
+/* ==========================================================================
+   §5  ИКОНКИ
+   Спрайт объявлен один раз в разметке, элементы ссылаются на него через
+   <use>. Иконки наследуют currentColor, поэтому цветовые модификаторы
+   текста работают на них так же, как на подписях.  @uss via отдельная
+   текстура или VectorImage — <use> в UI Toolkit нет.
+   ========================================================================== */
+
+.fdn-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.fdn-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  vertical-align: -0.18em;
+  color: currentColor;
+}
+
+.fdn-icon--lg { width: 1.6em; height: 1.6em; }

@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Connection;
 using UnityEngine;
@@ -26,20 +27,15 @@ namespace Fodinae.UI
         private Button? _closeButton;
         private bool _isCritical;
         private bool _isInitialized;
-        private static int? _mainThreadId;
+        private static int _mainThreadId;
 
-        private bool IsMainThread
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForDomainReload()
         {
-            get
-            {
-                if (!_mainThreadId.HasValue)
-                {
-                    _mainThreadId = Thread.CurrentThread.ManagedThreadId;
-                }
-
-                return Thread.CurrentThread.ManagedThreadId == _mainThreadId.Value;
-            }
+            _mainThreadId = Thread.CurrentThread.ManagedThreadId;
         }
+
+        private static bool IsMainThread => Thread.CurrentThread.ManagedThreadId == _mainThreadId;
 
         public static void ReportError(string message, Exception? ex = null)
         {
@@ -60,9 +56,8 @@ namespace Fodinae.UI
             string fullMessage = ex != null ? $"{message}\n\n{ex.Message}" : message;
             Debug.LogError($"[GameError] FATAL: {fullMessage}");
 
-            IConnectionService? connectionService = ServiceLocator.IsInitialized
-                ? ServiceLocator.Resolve<IConnectionService>()
-                : null;
+            IConnectionService? connectionService =
+                SessionAccess.Resolve()?.TryResolve<IConnectionService>();
             if (connectionService != null && connectionService.IsOffline)
             {
                 connectionService.TriggerDisconnect(fullMessage);
@@ -86,11 +81,12 @@ namespace Fodinae.UI
 
         private static GameErrorUI? ResolveInstance()
         {
-            if (ServiceLocator.IsInitialized)
+            ISessionContainer? session = SessionAccess.Resolve();
+            if (session != null && session.Current != null)
             {
                 try
                 {
-                    var resolved = ServiceLocator.Resolve<GameErrorUI>();
+                    var resolved = session.TryResolve<GameErrorUI>();
                     if (resolved != null)
                     {
                         return resolved;
@@ -98,7 +94,7 @@ namespace Fodinae.UI
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"[GameError] ServiceLocator.Resolve<GameErrorUI> failed: {ex.Message}");
+                    Debug.LogWarning($"[GameError] DI resolve of GameErrorUI failed: {ex.Message}");
                 }
             }
 

@@ -21,7 +21,9 @@ namespace Fodinae.Game.Managers
 
         public static bool ShowDebugVisuals { get; set; }
 
-        public uint LocalPlayerBotId { get; set; }
+        public uint LocalPlayerBotId { get; private set; }
+
+        public int RobotCount => _robots.Count;
 
         public void RegisterRobot(Robot robot)
         {
@@ -109,10 +111,15 @@ namespace Fodinae.Game.Managers
             robot.SetRotation(rotation);
         }
 
-        public void UpdateRobotMetadata(uint botId, int playerId, byte clanId, string nickname, string skinPath, string tailPath)
+        public void UpdateRobotMetadata(uint botId, RobotMetadata metadata)
         {
             var robot = GetOrCreateRobot(botId);
-            robot.SetMetadata(playerId, clanId, nickname, skinPath, tailPath);
+            robot.SetMetadata(metadata.PlayerId, metadata.ClanId, metadata.Nickname, metadata.SkinPath, metadata.TailPath);
+        }
+
+        public void SetLocalPlayerBotId(uint botId)
+        {
+            LocalPlayerBotId = botId;
         }
 
         public void RemoveRobot(uint botId)
@@ -156,12 +163,9 @@ namespace Fodinae.Game.Managers
             Debug.Log($"{TAG} Cleared {cleared} robots, kept {(_robots.ContainsKey(LocalPlayerBotId) ? "local player" : "none")}");
         }
 
-        public void UnregisterRobot(uint botId, Robot instance)
+        public void UnregisterRobot(uint botId)
         {
-            if (_robots.TryGetValue(botId, out var robot) && robot == instance)
-            {
-                _robots.Remove(botId);
-            }
+            _robots.Remove(botId);
         }
     }
 }

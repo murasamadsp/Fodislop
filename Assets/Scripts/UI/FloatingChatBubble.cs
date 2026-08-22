@@ -15,14 +15,19 @@ namespace Fodinae.UI
         private Mesh? _bgMesh;
         private MaterialPropertyBlock? _bgPropertyBlock;
         private float _elapsed;
-        private const float DURATION = 5f;
-        private const float FLOAT_SPEED = 0.3f;
-        private const float FADE_START = 4f;
+        private const float Duration = 5f;
+        private const float FloatSpeed = 0.3f;
+        private const float FadeStart = 4f;
         private Camera? _cam;
+        private float _lastOrthoSize = -1f;
+
+        private static readonly int[] QuadTriangles = { 0, 1, 2, 2, 1, 3 };
+        private static readonly Vector2[] QuadUvs = { Vector2.zero, Vector2.right, Vector2.up, Vector2.one };
+        private readonly Vector3[] _quadVertices = new Vector3[4];
 
         public void Init(string text)
         {
-            _cam = Camera.main;
+            _cam = GameplayCamera.Resolve();
             _elapsed = 0f;
             if (_textMesh == null)
             {
@@ -50,6 +55,7 @@ namespace Fodinae.UI
 
             if (_cam != null)
             {
+                _lastOrthoSize = _cam.orthographicSize;
                 _textMesh.characterSize = 0.08f * (_cam.orthographicSize / 10f);
             }
 
@@ -67,17 +73,21 @@ namespace Fodinae.UI
             float w = Mathf.Max(textWidth, 1.5f) + 0.4f;
             const float h = 0.3f;
 
+            bool isNewMesh = _bgMesh == null;
             _bgMesh ??= new Mesh { name = "ChatBubbleBackground" };
-            Vector3[] vertices =
+
+            _quadVertices[0] = new Vector3(-w / 2, -h / 2, 0);
+            _quadVertices[1] = new Vector3(w / 2, -h / 2, 0);
+            _quadVertices[2] = new Vector3(-w / 2, h / 2, 0);
+            _quadVertices[3] = new Vector3(w / 2, h / 2, 0);
+
+            _bgMesh.vertices = _quadVertices;
+            if (isNewMesh)
             {
-                new Vector3(-w / 2, -h / 2, 0),
-                new Vector3(w / 2, -h / 2, 0),
-                new Vector3(-w / 2, h / 2, 0),
-                new Vector3(w / 2, h / 2, 0),
-            };
-            _bgMesh.vertices = vertices;
-            _bgMesh.triangles = new[] { 0, 1, 2, 2, 1, 3 };
-            _bgMesh.uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one };
+                _bgMesh.triangles = QuadTriangles;
+                _bgMesh.uv = QuadUvs;
+            }
+
             _bgMesh.RecalculateBounds();
 
             if (_bgFilter != null)
@@ -101,23 +111,24 @@ namespace Fodinae.UI
         protected void Update()
         {
             _elapsed += Time.deltaTime;
-            transform.Translate(0, FLOAT_SPEED * Time.deltaTime, 0);
+            transform.Translate(0, FloatSpeed * Time.deltaTime, 0);
 
-            if (_cam != null && _textMesh != null)
+            if (_cam != null && _textMesh != null && !Mathf.Approximately(_cam.orthographicSize, _lastOrthoSize))
             {
+                _lastOrthoSize = _cam.orthographicSize;
                 _textMesh.characterSize = 0.08f * (_cam.orthographicSize / 10f);
             }
 
-            if (_elapsed >= FADE_START && _textMesh != null)
+            if (_elapsed >= FadeStart && _textMesh != null)
             {
-                float t = (_elapsed - FADE_START) / (DURATION - FADE_START);
+                float t = (_elapsed - FadeStart) / (Duration - FadeStart);
                 Color c = _textMesh.color;
                 c.a = Mathf.Lerp(1f, 0f, t);
                 _textMesh.color = c;
                 SetBackgroundAlpha(Mathf.Lerp(0.5f, 0f, t));
             }
 
-            if (_elapsed >= DURATION)
+            if (_elapsed >= Duration)
             {
                 gameObject.SetActive(false);
             }

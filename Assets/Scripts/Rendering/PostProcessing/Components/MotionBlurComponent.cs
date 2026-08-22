@@ -9,6 +9,7 @@ namespace Fodinae.Rendering.PostProcessing
 {
     [Serializable]
     [VolumeComponentMenu("Fodinae/Motion Blur")]
+    [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class MotionBlurComponent : VolumeComponent, IPostProcessComponent
     {
         // Keep the serialized Volume parameter names stable for existing profiles.

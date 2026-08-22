@@ -65,21 +65,30 @@ public sealed class LightingRuntimeConfig
         ValidateColor(SolidExtinctionRgb, nameof(SolidExtinctionRgb));
         ValidateColor(DynamicLightColor, nameof(DynamicLightColor));
 
-        if (AmbientIntensity is < 0f or > 1f ||
-            EmissionScale is < 0.1f or > 8f ||
-            EmptyExtinctionMultiplier is < 0f or > 2f ||
-            SolidExtinctionMultiplier is < 0.25f or > 2f ||
-            BounceStrength is < 0f or > 1f ||
-            AmbientOcclusionRadiusCells is < 0.5f or > 8f ||
-            AmbientOcclusionStrength is < 0.1f or > 8f ||
-            MaximumLightMultiplier is < 0.25f or > LightingConfigLimits.MaximumLightMultiplier ||
-            TransmittanceDebugDistanceCells is < 2f or > 32f ||
-            MinimumTransmission is < 0.0001f or > 0.1f ||
-            LightSafeBorder is < 0 or > 8 ||
-            DynamicLightIntensity is < 0f or > 4f ||
-            DynamicLightUpdatesPerSecond is < 1f or > LightingConfigLimits.DynamicLightUpdatesPerSecond)
+        ValidateRange(AmbientIntensity, 0f, 1f, nameof(AmbientIntensity));
+        ValidateRange(EmissionScale, 0.1f, 8f, nameof(EmissionScale));
+        ValidateRange(EmptyExtinctionMultiplier, 0f, 2f, nameof(EmptyExtinctionMultiplier));
+        ValidateRange(SolidExtinctionMultiplier, 0.25f, 2f, nameof(SolidExtinctionMultiplier));
+        ValidateRange(BounceStrength, 0f, 1f, nameof(BounceStrength));
+        ValidateRange(AmbientOcclusionRadiusCells, 0.5f, 8f, nameof(AmbientOcclusionRadiusCells));
+        ValidateRange(AmbientOcclusionStrength, 0.1f, 8f, nameof(AmbientOcclusionStrength));
+        ValidateRange(MaximumLightMultiplier, 0.25f, LightingConfigLimits.MaximumLightMultiplier, nameof(MaximumLightMultiplier));
+        ValidateRange(TransmittanceDebugDistanceCells, 2f, 32f, nameof(TransmittanceDebugDistanceCells));
+        ValidateRange(MinimumTransmission, 0.0001f, 0.1f, nameof(MinimumTransmission));
+        if (LightSafeBorder is < 0 or > 8)
         {
-            throw new InvalidOperationException("Lighting runtime config contains an out-of-range value.");
+            throw new InvalidOperationException($"Lighting config value 'LightSafeBorder' ({LightSafeBorder}) is out of range [0, 8].");
+        }
+
+        ValidateRange(DynamicLightIntensity, 0f, 4f, nameof(DynamicLightIntensity));
+        ValidateRange(DynamicLightUpdatesPerSecond, 1f, LightingConfigLimits.DynamicLightUpdatesPerSecond, nameof(DynamicLightUpdatesPerSecond));
+    }
+
+    private static void ValidateRange(float value, float min, float max, string propertyName)
+    {
+        if (value < min || value > max)
+        {
+            throw new InvalidOperationException($"Lighting config value '{propertyName}' ({value}) is out of range [{min}, {max}].");
         }
     }
 

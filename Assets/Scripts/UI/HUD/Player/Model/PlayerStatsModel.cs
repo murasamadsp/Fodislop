@@ -44,6 +44,7 @@ namespace Fodinae.UI.HUD.Player.Model
             OnStatsChanged?.Invoke();
         }
 
+        public bool IsReady => MaxHealth > 0 && BasketCapacity > 0 && !string.IsNullOrEmpty(Nickname) && Level > 0;
         public string Nickname { get; private set; } = string.Empty;
         public long Level { get; private set; }
         public int Health { get; private set; }

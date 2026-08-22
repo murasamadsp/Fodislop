@@ -13,6 +13,7 @@ namespace Fodinae.Core.Interfaces
     public interface ITextureService
     {
         event Action<string, Texture2D>? OnTextureLoaded;
+        int PendingCellTextureRequests { get; }
         void RequestTexture(CellType cellType);
         AtlasCoordinate GetCellTextureCoordinate(CellType cellType);
         Vector4 GetCellFrameRect(CellType cellType);

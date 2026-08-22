@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FODINAE — Дизайн-система</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/styleguide.css">
+</head>
+<body class="sg">
+<div class="sg-shell">
+
+  <nav class="sg-nav">
+    <div class="sg-nav-brand">FODINAE</div>
+    <div class="sg-nav-sub">ДИЗАЙН-СИСТЕМА</div>
+    <a href="#perенос">Переносимость в USS</a>
+    <a href="#палитра">Палитра</a>
+    <a href="#высоты">Рампа высот</a>
+    <a href="#материалы">Материалы мира</a>
+    <a href="#контраст">Контраст</a>
+    <a href="#типографика">Типографика</a>
+    <a href="#пространство">Пространство</a>
+    <a href="#радиусы">Радиусы</a>
+    <a href="#движение">Движение</a>
+    <a href="#слои">Слои</a>
+    <a href="#компоненты">Компоненты</a>
+    <a href="#тиры">Тиры макета</a>
+    <a href="index.html">← Прототип</a>
+  </nav>
+
+  <main class="sg-main">
+
+    <header class="sg-lede">
+      <h1 class="fdn-title fdn-title--hero" style="margin-bottom: var(--space-6);">Дизайн-система</h1>
+      <p class="fdn-body">
+        Источник истины для интерфейса клиента. Эта страница подключает те же
+        <code class="fdn-font-data fdn-text--cyan">css/tokens.css</code>,
+        <code class="fdn-font-data fdn-text--cyan">css/base.css</code> и
+        <code class="fdn-font-data fdn-text--cyan">css/components.css</code>, что и рабочий
+        прототип, а образцы читает из живого CSS в момент открытия. Витрина не может
+        разойтись с игрой: если токен изменится, изменится и то, что здесь показано.
+      </p>
+    </header>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="perенос">
+      <h2>Переносимость в USS</h2>
+      <p>
+        Интерфейс игры собран на Unity UI&nbsp;Toolkit. Набор поддерживаемых свойств там
+        уже, чем в браузере, поэтому каждое решение системы помечено тем, во что оно
+        превращается при переносе. Проверено по реестру свойств
+        <code>UnityEngine.UIElementsModule.dll</code> версии 6000.5 — в отличие от
+        <code>ExCSS.Unity.dll</code>, который знает имена всех свойств CSS, но не реализует их.
+        Присутствие имени в парсере ничего не доказывает: <code>cubic-bezier</code> есть
+        в ExCSS и отсутствует в UIElements, и импортёр Unity ругается на него предупреждением.
+      </p>
+
+      <div class="sg-sub">Работает напрямую</div>
+      <table class="sg-table">
+        <tbody>
+          <tr><td><code>filter: blur() tint() opacity() invert() grayscale() sepia() contrast() hue-rotate()</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+          <tr><td><code>background-image: linear-gradient(...)</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+          <tr><td><code>text-shadow</code>, <code>-unity-text-outline-*</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+          <tr><td><code>background-size / -repeat / -position-x / -position-y</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+          <tr><td><code>transform-origin</code>, <code>rotate</code>, <code>scale</code>, <code>translate</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+          <tr><td><code>-unity-slice-*</code> (9-slice), <code>letter-spacing</code>, <code>text-overflow</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="sg-sub">Переносится приёмом</div>
+      <table class="sg-table">
+        <thead><tr><th>В макете</th><th>В Unity</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>box-shadow</code> — свечение</td><td>элемент-подложка + <code>filter: blur()</code>. Настоящее рантайм-свечение, не запечённая текстура</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>box-shadow</code> — рамка</td><td><code>border-*-color</code> либо 9-slice спрайт</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>radial-gradient</code></td><td>размытый элемент; ободки — <code>linear-gradient</code></td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>::before</code> / <code>::after</code></td><td>реальные <code>VisualElement</code></td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>gap</code></td><td><code>margin</code> на детях</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>z-index</code></td><td>порядок детей в UXML</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td>CSS Grid</td><td>flexbox</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>@keyframes</code></td><td><code>transition</code> + переключение класса</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>@media</code></td><td>класс тира на корневом элементе</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>text-transform: uppercase</code></td><td>строка приходит заглавными из источника</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+        </tbody>
+      </table>
+
+      <div class="sg-sub">Не переносится</div>
+      <table class="sg-table">
+        <tbody>
+          <tr><td><code>backdrop-filter</code> — размытие того, что <em>за</em> панелью</td><td>Единственная настоящая потеря. Заменяется плотной заливкой димера</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
+          <tr><td><code>filter: drop-shadow() / brightness() / saturate()</code></td><td>Этих функций нет в наборе Unity</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
+          <tr><td><code>clip-path</code>, <code>mask-image</code></td><td><code>overflow: hidden</code> + радиус</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
+          <tr><td><code>cubic-bezier()</code></td><td>Функции нет в UI&nbsp;Toolkit вообще — ни в токене, ни в правиле. Доступны 23 именованные кривые; сигнатурная кривая макета ложится на <code>ease-out-circ</code></td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="палитра">
+      <h2>Палитра</h2>
+      <p>
+        Цвет несёт смысл, а не украшает. <strong class="fdn-text--gold">Золото</strong> — руда,
+        ценность и действие игрока. <strong class="fdn-text--cyan">Циан</strong> — машина,
+        телеметрия и состояние системы. <strong class="fdn-text--warn">Магма</strong> — глубина
+        и жар. <strong class="fdn-text--anomaly">Аномалия</strong> — редкое и странное.
+        Пользоваться следует семантическим слоем; сырые примитивы существуют, чтобы
+        значение было объявлено ровно один раз.
+      </p>
+      <div class="sg-sub">Семантический слой — им пользуются компоненты</div>
+      <div class="sg-grid" data-swatches="semantic"></div>
+      <div class="sg-sub">Примитивы — сырые значения</div>
+      <div class="sg-grid" data-swatches="primitive"></div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="высоты">
+      <h2>Рампа высот</h2>
+      <p>
+        Четыре ступени глубины вместо тридцати самодельных почти-чёрных оттенков,
+        которые были в макете раньше. Каждая ступень — отдельный уровень вложенности:
+        фон мира, корпус панели, карточка, карточка поверх карточки.
+      </p>
+      <div class="sg-grid" data-swatches="elevation"></div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="материалы">
+      <h2>Материалы мира</h2>
+      <p>
+        Породы, страты, планета и космос — игровой контент, а не интерфейс. Держатся
+        отдельной группой намеренно: перекрашивая UI, эти цвета трогать нельзя, а вводя
+        новую породу, не нужно лезть в семантику интерфейса.
+      </p>
+      <div class="sg-grid" data-swatches="material"></div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="контраст">
+      <h2>Контраст</h2>
+      <p>
+        Считается прямо сейчас, по действующим значениям токенов. Порог WCAG&nbsp;AA —
+        4.5:1 для обычного текста и 3:1 для крупного (от 18px).
+      </p>
+      <table class="sg-table" data-contrast></table>
+      <div class="sg-note">
+        <code>--text-disabled</code> намеренно не проходит порог: это выключенные состояния
+        и декоративные разделители. Читаемый текст им набирать нельзя.
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="типографика">
+      <h2>Типографика</h2>
+      <p>
+        Три гарнитуры, все с полным покрытием кириллицы — это проверено по таблице cmap
+        файлов шрифтов, а не принято на веру. Прежние Orbitron и Rajdhani содержали
+        <strong>ноль</strong> кириллических глифов из 66, из-за чего весь русский текст
+        макета уходил в системный фолбэк.
+      </p>
+      <table class="sg-table">
+        <thead><tr><th>Роль</th><th>Гарнитура</th><th>Применение</th></tr></thead>
+        <tbody>
+          <tr><td><code>--face-display</code></td><td class="fdn-font-display fdn-text--md">Unbounded</td><td>крупные заголовки, вордмарк</td></tr>
+          <tr><td><code>--face-body</code></td><td class="fdn-font-body fdn-text--md">Exo 2</td><td>интерфейсный текст, кнопки, лейблы</td></tr>
+          <tr><td><code>--face-data</code></td><td class="fdn-font-data fdn-text--md">JetBrains Mono</td><td>координаты, пинг, ID, телеметрия</td></tr>
+        </tbody>
+      </table>
+
+      <div class="sg-sub">Роли</div>
+      <div class="sg-demo sg-demo--stack">
+        <div class="fdn-title fdn-title--hero">Планета ждёт под поверхностью</div>
+        <div class="fdn-title">Заголовок раздела</div>
+        <div class="fdn-heading">Подзаголовок панели</div>
+        <div class="fdn-body">Основной текст интерфейса. Спускайся на неизведанные глубины, бури породу, автоматизируй дронов и выживай в бесконечной шахте.</div>
+        <div class="fdn-label">Тех-лейбл с разрядкой</div>
+        <div class="fdn-data">ГЛУБИНА −2 480 М · ПИНГ 32 МС · СИД #849201</div>
+      </div>
+
+      <div class="sg-sub">Шкала кеглей</div>
+      <table class="sg-table" data-typescale></table>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="пространство">
+      <h2>Пространство</h2>
+      <p>Сетка 2px. Значения выведены из фактического распределения отступов в макете.</p>
+      <table class="sg-table" data-scale="space"></table>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="радиусы">
+      <h2>Радиусы</h2>
+      <p>Острота углов — часть арт-дирекшена. Шкала намеренно короткая и не расширяется.</p>
+      <div class="sg-demo" data-radii></div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="движение">
+      <h2>Движение</h2>
+      <p>
+        Наведи курсор на полосу, чтобы увидеть длительность. Фирменная кривая
+        <code>--ease-signature</code> используется движением планеты и иконочного рейла.
+        При системной настройке «уменьшить движение» все длительности схлопываются в 0.01s.
+      </p>
+      <table class="sg-table" data-motion></table>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="слои">
+      <h2>Слои</h2>
+      <p>
+        Именованная лестница вместо безымянных чисел от 1 до 1000. В Unity
+        <code>z-index</code> не существует, поэтому <strong>порядок этой таблицы есть
+        порядок детей в UXML</strong>.
+      </p>
+      <table class="sg-table" data-scale="layer"></table>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="компоненты">
+      <h2>Компоненты</h2>
+      <p>Каждый интерактив показан во всех состояниях, включая фокус с клавиатуры.</p>
+
+      <div class="sg-sub">Кнопки</div>
+      <div class="sg-demo">
+        <button class="btn-primary-action">Начать спуск<span class="action-arrow">↗</span></button>
+        <button class="btn-gold-action">Сохранить</button>
+        <button class="btn-outline-action">Отмена</button>
+        <button class="btn-secondary-action">Вторичное действие</button>
+        <button class="btn-gold-action" disabled>Недоступно</button>
+      </div>
+      <div class="sg-note">
+        Нажми <kbd class="fdn-font-data">Tab</kbd>, чтобы пройти по кнопкам: у каждой есть
+        видимое кольцо фокуса. Модель фокуса заложена сразу — в CSS это почти бесплатно,
+        а дописывать её потом по каждому интерактиву дорого.
+      </div>
+
+      <div class="sg-sub">Боксы и строки</div>
+      <div class="sg-demo sg-demo--stack">
+        <div class="fdn-box" style="width: 100%;">Бокс — базовая обшивка блока внутри панели</div>
+        <div class="fdn-box fdn-box--loose fdn-box--row" style="width: 100%;">
+          <span class="fdn-text--secondary">Подпись слева</span>
+          <span class="fdn-font-data fdn-text--gold">Значение справа</span>
+        </div>
+        <div class="fdn-cols-2" style="width: 100%;">
+          <div class="fdn-box">Колонка первая</div>
+          <div class="fdn-box">Колонка вторая</div>
+        </div>
+      </div>
+
+      <div class="sg-sub">Цветовые роли текста</div>
+      <div class="sg-demo sg-demo--stack">
+        <span class="fdn-text--primary">primary — основной текст</span>
+        <span class="fdn-text--secondary">secondary — пояснения и подписи</span>
+        <span class="fdn-text--tertiary">tertiary — минимум для читаемого текста</span>
+        <span class="fdn-text--disabled">disabled — выключено, читать не нужно</span>
+        <span class="fdn-text--gold">gold — руда, ценность, действие</span>
+        <span class="fdn-text--cyan">cyan — машина, телеметрия</span>
+        <span class="fdn-text--ok">ok — успех</span>
+        <span class="fdn-text--warn">warn — жар, предупреждение</span>
+        <span class="fdn-text--danger">danger — потеря, ошибка</span>
+        <span class="fdn-text--anomaly">anomaly — редкое и странное</span>
+      </div>
+
+      <div class="sg-sub">Ширины модальных окон</div>
+      <table class="sg-table">
+        <thead><tr><th>Класс</th><th>Ширина</th><th>Применение</th></tr></thead>
+        <tbody>
+          <tr><td><code>.modal-card--sm</code></td><td>440px</td><td>подтверждение, пауза, вход</td></tr>
+          <tr><td><code>.modal-card--md</code></td><td>720px</td><td>профиль, хроника, ремонт</td></tr>
+          <tr><td><code>.modal-card--lg</code></td><td>880px</td><td>настройки, выбор сервера</td></tr>
+          <tr><td><code>.modal-card--xl</code></td><td>1040px</td><td>инвентарь, программатор</td></tr>
+        </tbody>
+      </table>
+      <div class="sg-note">
+        Раньше девять из десяти модалок задавали ширину инлайном
+        (<code>width:880px</code>, <code>width:720px</code>, <code>width:860px</code>…).
+        На узком экране вся шкала схлопывается в <code>min(94vw, 560px)</code>.
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <section class="sg-section" id="тиры">
+      <h2>Тиры макета</h2>
+      <p>
+        Три тира вместо двух медиазапросов, работавших только на экране меню.
+        Переопределяются <em>только токены</em>, а не правила компонентов — поэтому
+        в Unity тир становится классом на корневом элементе, и ни один компонент
+        переписывать не нужно.
+      </p>
+      <table class="sg-table">
+        <thead><tr><th>Тир</th><th>Ширина</th><th>Цель</th></tr></thead>
+        <tbody>
+          <tr><td><code>compact</code></td><td>&lt; 900</td><td>телефон, планшет, узкое окно</td></tr>
+          <tr><td><code>standard</code></td><td>900–1599</td><td>ПК и ноутбуки — базовые значения</td></tr>
+          <tr><td><code>wide</code></td><td>≥ 1600</td><td>большой монитор, ТВ, консоль</td></tr>
+        </tbody>
+      </table>
+      <div class="sg-note" data-tier>Текущий тир определяется по ширине окна — измени размер окна, чтобы увидеть переключение.</div>
+    </section>
+
+  </main>
+</div>
+
+<script src="js/styleguide.js"></script>
+</body>
+</html>
