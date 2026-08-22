@@ -43,6 +43,16 @@ namespace Fodinae.World.Terrain
         private string _sortingLayerName = "Default";
         [SerializeField]
         private int _sortingOrder = -1000;
+
+        // Overlay mesh re-rendering a subset of terrain cells (building doors)
+        // ABOVE entities so robots appear to walk under the door arch.
+        [SerializeField]
+        private int _overlaySortingOrder = 500;
+        private GameObject? _overlayChild;
+        private MeshFilter? _overlayMeshFilter;
+        private Mesh? _overlayMesh;
+        private MeshRenderer? _overlayMeshRenderer;
+        private List<int>[] _overlaySubMeshIndices = Array.Empty<List<int>>();
         [SerializeField]
         private int _viewportPadding = 2;
 
@@ -415,6 +425,15 @@ namespace Fodinae.World.Terrain
             {
                 DestroyTerrainObject(_mesh);
                 _mesh = null;
+            }
+
+            if (_overlayChild != null)
+            {
+                DestroyTerrainObject(_overlayChild);
+                _overlayChild = null;
+                _overlayMesh = null;
+                _overlayMeshFilter = null;
+                _overlayMeshRenderer = null;
             }
 
             CleanupMaterials();
@@ -974,11 +993,13 @@ namespace Fodinae.World.Terrain
                 _cellCache.ClearCaches();
                 CleanupMaterials();
                 _subMeshIndices = new List<int>[atlases.Count];
+                _overlaySubMeshIndices = new List<int>[atlases.Count];
                 _materials = new Material[atlases.Count];
                 int estimatedPerAtlas = (_meshWidth * _meshHeight * 2 * 6 / atlases.Count) + 16;
                 for (int i = 0; i < atlases.Count; i++)
                 {
                     _subMeshIndices[i] = new List<int>(estimatedPerAtlas);
+                    _overlaySubMeshIndices[i] = new List<int>();
                     Shader terrainShader = _terrainShader ??
                         throw new InvalidOperationException(
                             "Terrain shader was not initialized before atlas material creation.");
@@ -1019,6 +1040,14 @@ namespace Fodinae.World.Terrain
                     if (list.Capacity < estimatedPerAtlas)
                     {
                         list.Capacity = estimatedPerAtlas;
+                    }
+                }
+
+                if (_overlaySubMeshIndices.Length == _subMeshIndices.Length)
+                {
+                    foreach (var list in _overlaySubMeshIndices)
+                    {
+                        list.Clear();
                     }
                 }
             }
@@ -1086,7 +1115,7 @@ namespace Fodinae.World.Terrain
                 long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (MeshBuildMarker.Auto())
                 {
-                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
+                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService, _overlaySubMeshIndices);
                 }
 
                 FrameProfiler.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
@@ -1157,6 +1186,8 @@ namespace Fodinae.World.Terrain
 
                         _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
                     }
+
+                    ApplyOverlayMesh(atlases, textureService);
                 }
 
                 _needsRefresh = false;
@@ -1261,12 +1292,126 @@ namespace Fodinae.World.Terrain
             _cellCache.UpdateRegion(dirtyMinX, dirtyMinY, countX, countY, _storage, _mapManager, textureService, atlases);
             _precalc.PrecalculateRegion(_cellCache, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight);
             _backgroundFloodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, this);
-            _meshBuilder.BuildRegion(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService);
+            _meshBuilder.BuildRegion(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _subMeshIndices, _useColorLod, _mapManager, textureService, _overlaySubMeshIndices);
 
             _mesh.SetVertexBufferData(_meshBuilder.VertexBuffer, 0, 0, _meshBuilder.VertexBuffer.Length, 0, UPLOAD_FLAGS);
             for (int i = 0; i < atlases.Count && i < _subMeshIndices.Length; i++)
             {
                 _mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+            }
+
+            ApplyOverlayMesh(atlases, textureService);
+        }
+
+        /// <summary>
+        /// Uploads the shared terrain vertex buffer into the overlay mesh and
+        /// assigns its per-atlas index lists. The overlay only ever carries the
+        /// quads routed by TerrainMeshBuilder (building doors), so when nothing
+        /// is routed its sub-meshes stay empty and it draws nothing.
+        /// </summary>
+        private void ApplyOverlayMesh(List<TextureAtlas> atlases, ITextureService textureService)
+        {
+            if (_overlaySubMeshIndices.Length != atlases.Count || _materials.Length != atlases.Count)
+            {
+                return;
+            }
+
+            bool hasAnyQuads = false;
+            foreach (var list in _overlaySubMeshIndices)
+            {
+                if (list.Count > 0)
+                {
+                    hasAnyQuads = true;
+                    break;
+                }
+            }
+
+            if (!hasAnyQuads)
+            {
+                if (_overlayChild != null)
+                {
+                    _overlayChild.SetActive(false);
+                }
+
+                return;
+            }
+
+            EnsureOverlayRenderer(atlases);
+            if (_overlayMesh == null || _overlayMeshRenderer == null || _overlayChild == null)
+            {
+                return;
+            }
+
+            _overlayChild.SetActive(true);
+
+            if (_overlayMesh.vertexCount != _meshBuilder.VertexBuffer.Length || _overlayMesh.subMeshCount != atlases.Count)
+            {
+                _overlayMesh.Clear();
+                _overlayMesh.subMeshCount = atlases.Count;
+                _overlayMesh.SetVertexBufferParams(_meshBuilder.VertexBuffer.Length, VertexLayout);
+            }
+
+            _overlayMesh.SetVertexBufferData(
+                _meshBuilder.VertexBuffer,
+                0,
+                0,
+                _meshBuilder.VertexBuffer.Length,
+                0,
+                UPLOAD_FLAGS);
+            _overlayMesh.bounds = new Bounds(
+                new Vector3(_meshWidth * _cellSize * 0.5f, _meshHeight * _cellSize * 0.5f, 0f),
+                new Vector3(
+                    (_meshWidth * _cellSize) + (_cellSize * 2f),
+                    (_meshHeight * _cellSize) + (_cellSize * 2f),
+                    2f));
+
+            for (int i = 0; i < atlases.Count; i++)
+            {
+                var atlasTex = atlases[i].Texture;
+                if (_materials[i].GetTexture("_BaseMap") != atlasTex)
+                {
+                    _materials[i].SetTexture("_BaseMap", atlasTex);
+                }
+
+                _overlayMesh.SetIndices(_overlaySubMeshIndices[i], MeshTopology.Triangles, i, false, 0);
+            }
+        }
+
+        private void EnsureOverlayRenderer(List<TextureAtlas> atlases)
+        {
+            if (_overlayChild == null)
+            {
+                _overlayChild = new GameObject("TerrainOverlay");
+                _overlayChild.transform.SetParent(transform, worldPositionStays: false);
+                _overlayChild.transform.localPosition = Vector3.zero;
+                _overlayChild.transform.localRotation = Quaternion.identity;
+                _overlayChild.transform.localScale = Vector3.one;
+                _overlayMeshFilter = _overlayChild.AddComponent<MeshFilter>();
+                _overlayMeshRenderer = _overlayChild.AddComponent<MeshRenderer>();
+                _overlayMesh = new Mesh { name = "TerrainOverlayMesh", indexFormat = IndexFormat.UInt32 };
+                _overlayMesh.MarkDynamic();
+                _overlayMeshFilter.sharedMesh = _overlayMesh;
+            }
+            else if (_overlayMeshFilter == null || _overlayMeshRenderer == null || _overlayMesh == null)
+            {
+                _overlayMeshFilter = _overlayChild.GetComponent<MeshFilter>();
+                _overlayMeshRenderer = _overlayChild.GetComponent<MeshRenderer>();
+                _overlayMesh ??= _overlayMeshFilter != null ? _overlayMeshFilter.sharedMesh : null;
+            }
+
+            if (_overlayMeshRenderer != null)
+            {
+                Material[] materials = new Material[atlases.Count];
+                for (int i = 0; i < atlases.Count; i++)
+                {
+                    materials[i] = _materials[i];
+                }
+
+                _overlayMeshRenderer.sharedMaterials = materials;
+                _overlayMeshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _overlayMeshRenderer.receiveShadows = false;
+                _overlayMeshRenderer.sortingLayerName = _sortingLayerName;
+                _overlayMeshRenderer.sortingOrder = _overlaySortingOrder;
             }
         }
 

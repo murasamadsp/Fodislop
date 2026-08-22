@@ -128,8 +128,15 @@ namespace Fodinae.Core
 
             var gameManager = _resolver.Resolve<GameManager>();
             _resolver.Resolve<ServerConfig>();
+
+            // The engine is CREATED here to keep the manager creation order
+            // deterministic, but INITIALIZED after every other manager below:
+            // its EnsureInitialized compiles the radiance-cascade compute
+            // kernels and throws on GPUs whose shader compiler rejects them.
+            // Letting that exception escape here used to abort PostStart and
+            // leave SurfaceRenderer/WorldTextureManager/etc. unresolved — the
+            // world then rendered without any cell textures or lighting.
             var lightingEngine = _resolver.Resolve<TerrariaLightingEngine>();
-            lightingEngine.EnsureInitialized();
             _resolver.Resolve<SurfaceRenderer>();
             _resolver.Resolve<TextureStorageManager>();
             _resolver.Resolve<WorldTextureManager>();
@@ -137,6 +144,10 @@ namespace Fodinae.Core
             _resolver.Resolve<VFXPool>();
             _resolver.Resolve<PackManager>();
             _resolver.Resolve<RobotManager>();
+
+            // Must run before ValidateStartup so an engine failure is reported
+            // as a validation error instead of silently skipping the checks.
+            lightingEngine.EnsureInitialized();
 
             // UI создаётся ПОСЛЕ того как все менеджеры-синглтоны уже построены и контейнер
             // полностью собран. AddInjectedComponent -> ServiceLocator.Inject не пере-резолвит

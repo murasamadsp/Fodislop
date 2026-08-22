@@ -6,6 +6,8 @@
 #pragma kernel CompositeLighting
 #pragma kernel ResolveAndComposite
 
+#pragma target 5.0
+
 #define PI2 6.28318530718
 #define MAX_INTERVAL_STEPS 64
 #define CONTACT_DIRECTION_COUNT 8
@@ -118,6 +120,14 @@ float Max3(float3 value)
 {
     return max(value.x, max(value.y, value.z));
 }
+
+static const float2 kResolveDirections4[4] =
+{
+    float2(0.70710678118, 0.70710678118),
+    float2(-0.70710678118, 0.70710678118),
+    float2(-0.70710678118, -0.70710678118),
+    float2(0.70710678118, -0.70710678118)
+};
 
 float2 OutputUv(float2 pixelPosition)
 {
@@ -449,13 +459,7 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    static const float2 kResolveDirections4[4] =
-    {
-        float2(0.70710678118, 0.70710678118),
-        float2(-0.70710678118, 0.70710678118),
-        float2(-0.70710678118, -0.70710678118),
-        float2(0.70710678118, -0.70710678118)
-    };
+    float4 normalData = SampleAutomaticSurfaceNormal(float2(pixel) + 0.5);
 
     [unroll]
     for (int direction = 0; direction < 4; direction++)
