@@ -2479,13 +2479,35 @@ namespace Fodinae.World.Lighting
             _solveDiffuseBounceKernel = _lightingCompute.FindKernel("SolveDiffuseBounce");
             _compositeLightingKernel = _lightingCompute.FindKernel("CompositeLighting");
             _resolveAndCompositeKernel = _lightingCompute.FindKernel("ResolveAndComposite");
-            ValidateKernelSupportOrThrow("SolveCascade", _solveCascadeKernel);
-            ValidateKernelSupportOrThrow("SolveAutomaticNormals", _solveAutomaticNormalsKernel);
-            ValidateKernelSupportOrThrow("SolveContactOcclusion", _solveContactOcclusionKernel);
-            ValidateKernelSupportOrThrow("ResolveDirect", _resolveDirectKernel);
-            ValidateKernelSupportOrThrow("SolveDiffuseBounce", _solveDiffuseBounceKernel);
-            ValidateKernelSupportOrThrow("CompositeLighting", _compositeLightingKernel);
-            ValidateKernelSupportOrThrow("ResolveAndComposite", _resolveAndCompositeKernel);
+
+            List<string> unsupportedKernels = new();
+            foreach ((string Name, int Index) kernel in new (string, int)[]
+            {
+                ("SolveCascade", _solveCascadeKernel),
+                ("SolveAutomaticNormals", _solveAutomaticNormalsKernel),
+                ("SolveContactOcclusion", _solveContactOcclusionKernel),
+                ("ResolveDirect", _resolveDirectKernel),
+                ("SolveDiffuseBounce", _solveDiffuseBounceKernel),
+                ("CompositeLighting", _compositeLightingKernel),
+                ("ResolveAndComposite", _resolveAndCompositeKernel),
+            })
+            {
+                if (_lightingCompute.IsSupported(kernel.Index))
+                {
+                    continue;
+                }
+
+                unsupportedKernels.Add(
+                    $"{kernel.Name} (kernel index {kernel.Index})");
+            }
+
+            if (unsupportedKernels.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Radiance Cascades kernels failed to compile for {SystemInfo.graphicsDeviceType}: " +
+                    string.Join(", ", unsupportedKernels) + ".");
+            }
+
             LoadDynamicEmissionMaterialOrThrow();
         }
 
@@ -2505,15 +2527,6 @@ namespace Fodinae.World.Lighting
                 name = "FodinaeDynamicEmission",
                 hideFlags = HideFlags.HideAndDontSave,
             };
-        }
-
-        private void ValidateKernelSupportOrThrow(string kernelName, int kernelIndex)
-        {
-            if (_lightingCompute?.IsSupported(kernelIndex) != true)
-            {
-                throw new InvalidOperationException(
-                    $"Radiance Cascades kernel '{kernelName}' failed to compile for {SystemInfo.graphicsDeviceType}.");
-            }
         }
 
         private static void ValidateGpuRequirements()

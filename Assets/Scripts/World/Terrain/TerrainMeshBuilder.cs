@@ -19,6 +19,22 @@ namespace Fodinae.World.Terrain
 
         private int[] _bgAtlasIndices = Array.Empty<int>();
         private int[] _fgAtlasIndices = Array.Empty<int>();
+        private bool[] _fgOverlayFlags = Array.Empty<bool>();
+
+        /// <summary>
+        /// Foreground cell types whose quads are routed into the overlay mesh
+        /// rendered above entities (building doors hide robots walking through).
+        /// </summary>
+        private readonly HashSet<CellType> _overlayTypes = new() { CellType.BuildingDoor };
+
+        public void SetOverlayCellTypes(IEnumerable<CellType> types)
+        {
+            _overlayTypes.Clear();
+            foreach (CellType type in types)
+            {
+                _overlayTypes.Add(type);
+            }
+        }
 
         public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
         {
@@ -36,13 +52,14 @@ namespace Fodinae.World.Terrain
             {
                 _bgAtlasIndices = new int[singleLayerQuads];
                 _fgAtlasIndices = new int[singleLayerQuads];
+                _fgOverlayFlags = new bool[singleLayerQuads];
             }
         }
 
         public void BuildFull(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int minX, int minY, int meshWidth, int meshHeight, int worldWidth, int worldHeight,
             List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
-            MapManager mapManager, ITextureService textureManager)
+            MapManager mapManager, ITextureService textureManager, List<int>[]? overlaySubMeshIndices = null)
         {
             if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
             {
@@ -84,7 +101,9 @@ namespace Fodinae.World.Terrain
                 int fgAtlas = _fgAtlasIndices[i];
                 if (fgAtlas >= 0 && fgAtlas < subMeshIndices.Length)
                 {
-                    var fgList = subMeshIndices[fgAtlas];
+                    List<int> fgList = _fgOverlayFlags[i] && overlaySubMeshIndices != null
+                        ? overlaySubMeshIndices[fgAtlas]
+                        : subMeshIndices[fgAtlas];
                     int fgIdx = (i * 8) + 4;
                     fgList.Add(fgIdx + 0);
                     fgList.Add(fgIdx + 3);
@@ -99,7 +118,7 @@ namespace Fodinae.World.Terrain
         public void BuildRegion(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int minX, int minY, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight,
             List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
-            MapManager mapManager, ITextureService textureManager)
+            MapManager mapManager, ITextureService textureManager, List<int>[]? overlaySubMeshIndices = null)
         {
             if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
             {
@@ -129,6 +148,14 @@ namespace Fodinae.World.Terrain
                 subMeshIndices[i].Clear();
             }
 
+            if (overlaySubMeshIndices != null)
+            {
+                for (int i = 0; i < overlaySubMeshIndices.Length; i++)
+                {
+                    overlaySubMeshIndices[i].Clear();
+                }
+            }
+
             int totalQuads = meshWidth * meshHeight;
             for (int i = 0; i < totalQuads; i++)
             {
@@ -148,7 +175,9 @@ namespace Fodinae.World.Terrain
                 int fgAtlas = _fgAtlasIndices[i];
                 if (fgAtlas >= 0 && fgAtlas < subMeshIndices.Length)
                 {
-                    var fgList = subMeshIndices[fgAtlas];
+                    List<int> fgList = _fgOverlayFlags[i] && overlaySubMeshIndices != null
+                        ? overlaySubMeshIndices[fgAtlas]
+                        : subMeshIndices[fgAtlas];
                     int fgIdx = (i * 8) + 4;
                     fgList.Add(fgIdx + 0);
                     fgList.Add(fgIdx + 3);
@@ -175,6 +204,7 @@ namespace Fodinae.World.Terrain
 
             CachedCellData ccd = cellCache.GetCellData(cx, cy);
             CellType cellFgType = ccd.Type;
+            _fgOverlayFlags[vIdx / 8] = !isBackground && _overlayTypes.Contains(cellFgType);
             if (ccd.State != TerrainCellState.Loaded)
             {
                 return -1;

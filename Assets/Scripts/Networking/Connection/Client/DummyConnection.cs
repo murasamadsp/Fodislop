@@ -15,6 +15,7 @@ using Fodinae.Audio;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
+using Fodinae.Networking.Buildings;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Player.Model;
 using MinesServer.Data;
@@ -708,20 +709,33 @@ namespace MinesServer.Networking.Connection.Client
                     return;
                 }
 
-                ushort frontX = _x;
-                ushort frontY = _y;
-                switch (_rot)
+                ushort dist = BuildingTemplates.GetAnchorDistance(packType);
+                (int offsetX, int offsetY) = _rot switch
                 {
-                    case Direction.Up: frontY--; break;
-                    case Direction.Down: frontY++; break;
-                    case Direction.Left: frontX--; break;
-                    case Direction.Right: frontX++; break;
+                    Direction.Up => (0, -1),
+                    Direction.Down => (0, 1),
+                    Direction.Left => (-1, 0),
+                    Direction.Right => (1, 0),
+                    _ => (0, 0),
+                };
+
+                long anchorXLong = _x + (offsetX * dist);
+                long anchorYLong = _y + (offsetY * dist);
+                if (anchorXLong < 0 || anchorYLong < 0 ||
+                    anchorXLong > ushort.MaxValue || anchorYLong > ushort.MaxValue)
+                {
+                    return;
                 }
 
-                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+                var frontX = (ushort)anchorXLong;
+                var frontY = (ushort)anchorYLong;
+
+                List<IHBPacket> placementPackets = new()
                 {
                     new PackPacket(frontX, frontY, packType, 0, 0),
-                })));
+                };
+                PlaceBuildingCells(placementPackets, frontX, frontY, packType);
+                OnReceived?.Invoke(new ServerPacket(new HBPacket(placementPackets.ToArray())));
                 if (packType == PackType.Teleport)
                 {
                     _teleportPositions.Add((frontX, frontY));
@@ -1898,8 +1912,8 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.CorrosiveActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF9AFF22), distortion: CellDistortionType.Cause);
 
             // === ARTIFICIAL: ReliefGroup = 2 ===
-            SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513), distortion: CellDistortionType.Block);
-            SetConfig(configs, CellType.BuildingCorner, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF555555), distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.BuildingDoor, INDESTRUCTIBLE_PROPS | CellConfigProperties.Passable, 2, color: unchecked((int)0xFF8B4513), distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.BuildingCorner, INDESTRUCTIBLE_PROPS, 2, color: unchecked((int)0xFF555555), distortion: CellDistortionType.Block);
             SetConfig(configs, CellType.QuadBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
             SetConfig(configs, CellType.Support, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
             SetConfig(configs, CellType.MilitaryBlockFrame, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
@@ -1908,7 +1922,7 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.YellowBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
             SetConfig(configs, CellType.FedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
             SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
-            SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
+            SetConfig(configs, CellType.BuildingWall, INDESTRUCTIBLE_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
 
             // === ROCKS & CRYSTALS: ReliefGroup = 3 ===
             SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D), distortion: CellDistortionType.Cause);
@@ -2329,6 +2343,46 @@ namespace MinesServer.Networking.Connection.Client
 
             SetServerCell(x, y, placeType);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { placeType }) })));
+        }
+
+        private void PlaceBuildingCells(List<IHBPacket> packets, ushort anchorX, ushort anchorY, PackType packType)
+        {
+            if (_worldLayer == null)
+            {
+                return;
+            }
+
+            if (!BuildingTemplates.TryGet(packType, out PackBuilding? building) || building == null)
+            {
+                return;
+            }
+
+            foreach (((int dx, int dy), CellType cell) in building.CellsToPlace())
+            {
+                long targetXLong = anchorX + dx;
+                long targetYLong = anchorY + dy;
+                if (targetXLong < 0 || targetYLong < 0 ||
+                    targetXLong > ushort.MaxValue || targetYLong > ushort.MaxValue)
+                {
+                    continue;
+                }
+
+                var targetX = (ushort)targetXLong;
+                var targetY = (ushort)targetYLong;
+
+                // Same placement rule as the authoritative server: footprint
+                // cells are only written over free ground (empty or roads).
+                CellType current = GetServerCell(targetX, targetY);
+                bool isAllowedBase = current == CellType.Empty || current == CellType.Road ||
+                    current == CellType.GoldenRoad || current == CellType.BuildingRoad;
+                if (!isAllowedBase)
+                {
+                    continue;
+                }
+
+                SetServerCell(targetX, targetY, cell);
+                packets.Add(new MapRegionPacket(targetX, targetY, 0, 0, new[] { cell }));
+            }
         }
 
         private void TryUpgradeBuild(ushort x, ushort y, params (CellType From, CellType To)[] upgrades)
