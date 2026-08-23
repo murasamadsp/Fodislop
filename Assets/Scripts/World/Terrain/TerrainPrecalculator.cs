@@ -12,6 +12,7 @@ namespace Fodinae.World.Terrain
     {
         public Vector3[,] GridVertexOffsets { get; private set; } = null!;
         public int[,] CellTilingDescriptors { get; private set; } = null!;
+        public int[,] CellCornerVariants { get; private set; } = null!;
         public byte[,] CellReliefMasks { get; private set; } = null!;
         public bool[,] CellIsRelief { get; private set; } = null!;
         public byte[,] CellVisualBlendMasks { get; private set; } = null!;
@@ -23,6 +24,7 @@ namespace Fodinae.World.Terrain
             {
                 GridVertexOffsets = new Vector3[meshWidth + 1, meshHeight + 1];
                 CellTilingDescriptors = new int[meshWidth, meshHeight];
+                CellCornerVariants = new int[meshWidth, meshHeight];
                 CellReliefMasks = new byte[meshWidth, meshHeight];
                 CellIsRelief = new bool[meshWidth, meshHeight];
                 CellVisualBlendMasks = new byte[meshWidth, meshHeight];
@@ -94,6 +96,7 @@ namespace Fodinae.World.Terrain
 
             TerrainCellCache.Scroll2DArray(GridVertexOffsets, gw, gh, dx, dy);
             TerrainCellCache.Scroll2DArray(CellTilingDescriptors, meshWidth, meshHeight, dx, dy);
+            TerrainCellCache.Scroll2DArray(CellCornerVariants, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellReliefMasks, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellIsRelief, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellVisualBlendMasks, meshWidth, meshHeight, dx, dy);
@@ -385,6 +388,37 @@ namespace Fodinae.World.Terrain
             {
                 CellTilingDescriptors[x, y] = 0;
             }
+
+            // Building walls pick their atlas tile by the number of
+            // orthogonally adjacent corner cells AND the sides those corners
+            // sit on. The value is a side bitmask (L=1, R=2, T=4, B=8), not a
+            // count: the mesh builder mirrors/rotates the wall texture toward
+            // the actual corner side.
+            int cornerSideMask = 0;
+            if (data.Type == CellType.BuildingWall)
+            {
+                if (left.Type == CellType.BuildingCorner)
+                {
+                    cornerSideMask |= 1;
+                }
+
+                if (right.Type == CellType.BuildingCorner)
+                {
+                    cornerSideMask |= 2;
+                }
+
+                if (top.Type == CellType.BuildingCorner)
+                {
+                    cornerSideMask |= 4;
+                }
+
+                if (bottom.Type == CellType.BuildingCorner)
+                {
+                    cornerSideMask |= 8;
+                }
+            }
+
+            CellCornerVariants[x, y] = cornerSideMask;
 
             byte rm = 0;
             bool isR = false;

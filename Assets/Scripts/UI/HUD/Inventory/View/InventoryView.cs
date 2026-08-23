@@ -253,6 +253,12 @@ namespace Fodinae.UI.HUD.Inventory.View
             if (uxml != null)
             {
                 var tree = uxml.CloneTree();
+
+                // Абсолютные дети .inv-root не дают контейнеру авторазмера —
+                // растягиваем его вручную на весь корневой элемент.
+                tree.style.width = Length.Percent(100);
+                tree.style.height = Length.Percent(100);
+
                 root.Add(tree);
 
                 _hotbarContainer = tree.Q<VisualElement>("HotbarContainer");

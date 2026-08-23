@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using MinesServer.Data;
+using UnityEngine;
 
 namespace Fodinae.Networking.Buildings
 {
@@ -11,6 +12,8 @@ namespace Fodinae.Networking.Buildings
     public sealed class Resp : PackBuilding
     {
         public override PackType Type => PackType.Resp;
+
+        public override Vector2 RoofCenterOffsetCells => new(0f, 0.5775f);
 
         public override IEnumerable<((int X, int Y) Pos, CellType Cell)> CellsToPlace()
         {

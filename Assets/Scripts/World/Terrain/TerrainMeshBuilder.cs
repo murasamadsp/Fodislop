@@ -189,6 +189,15 @@ namespace Fodinae.World.Terrain
             }
         }
 
+        /// <summary>
+        /// Building block tiles (wall/door/corner) whose transparent pixels
+        /// must reveal a road background instead of the flood-fill void.
+        /// </summary>
+        private static bool IsBuildingBlock(CellType type) =>
+            type == CellType.BuildingWall ||
+            type == CellType.BuildingDoor ||
+            type == CellType.BuildingCorner;
+
         private int FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int worldWidth, int worldHeight, bool isBackground, int vIdx, List<TextureAtlas> atlases, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
@@ -211,6 +220,13 @@ namespace Fodinae.World.Terrain
             }
 
             CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
+            if (isBackground && IsBuildingBlock(cellFgType))
+            {
+                // Building tiles keep the road visible through their transparent
+                // pixels instead of the flood-fill void.
+                cellType = CellType.Road;
+            }
+
             bool isSameCell = !isBackground || cellType == cellFgType;
             if (isBackground && (cellType == cellFgType || cellType == CellType.Unloaded))
             {
@@ -299,9 +315,51 @@ namespace Fodinae.World.Terrain
             Vector2 uv3 = new Vector2(0, 1);
 
             int descriptor = isSameCell ? precalc.CellTilingDescriptors[x, y] : 0;
-            float packedW = hasTileGroup ? 1f : 0f;
+            int cornerSideMask = precalc.CellCornerVariants[x, y];
+            bool useNeighborVariants =
+                !isBackground &&
+                cellFgType == CellType.BuildingWall &&
+                cornerSideMask != 0;
+            float packedW = hasTileGroup || useNeighborVariants ? 1f : 0f;
+            if (useNeighborVariants)
+            {
+                // Walls with orthogonally adjacent corner cells use their own
+                // variant tiles (columns 9/10 of the wall sheet). The base
+                // orientation comes from the TileGroup descriptor (it is
+                // correct for corners on the left or on top); a single corner
+                // on the right/bottom and the vertical double-corner pair
+                // additionally mirror/rotate toward the actual corner sides.
+                bool hasLeft = (cornerSideMask & 1) != 0;
+                bool hasRight = (cornerSideMask & 2) != 0;
+                bool hasTop = (cornerSideMask & 4) != 0;
+                bool hasBottom = (cornerSideMask & 8) != 0;
+                int cornerCount =
+                    (hasLeft ? 1 : 0) +
+                    (hasRight ? 1 : 0) +
+                    (hasTop ? 1 : 0) +
+                    (hasBottom ? 1 : 0);
+                int column = RenderingConstants.BUILDING_WALL_VARIANT_BASE_TILE +
+                    Math.Min(cornerCount, 2);
+                byte transforms = (byte)(descriptor & 0xE0);
+                if (cornerCount == 1 && hasRight)
+                {
+                    transforms ^= 0x40;
+                }
 
-            if (hasTileGroup && descriptor != 0)
+                if (cornerCount == 1 && hasBottom)
+                {
+                    transforms ^= 0x40;
+                }
+
+                if (cornerCount >= 2 && !hasLeft && !hasRight)
+                {
+                    transforms ^= 0x80;
+                }
+
+                descriptor = (byte)(transforms | (column & 0x1F));
+            }
+
+            if ((hasTileGroup || useNeighborVariants) && descriptor != 0)
             {
                 if ((descriptor & 0x40) != 0)
                 {
