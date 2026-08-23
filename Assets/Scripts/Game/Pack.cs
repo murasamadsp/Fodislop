@@ -9,6 +9,7 @@ using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
+using Fodinae.Networking.Buildings;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -31,6 +32,7 @@ namespace Fodinae.Game
         private EffekseerHandle _effekseerHandle;
         private EffekseerEffectAsset? _effekseerAsset;
         private bool _hasEffekseerEffect;
+        private Vector3 _appliedRoofOffset;
 
         protected void Awake()
         {
@@ -39,6 +41,10 @@ namespace Fodinae.Game
             {
                 _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
             }
+
+            // Roofs must draw above the terrain door-overlay mesh so doorway
+            // cells stay under the building roof texture.
+            _spriteRenderer.sortingOrder = RenderingConstants.PACK_ROOF_SORTING_ORDER;
 
             if (Application.isPlaying)
             {
@@ -111,10 +117,29 @@ namespace Fodinae.Game
                     Destroy(_packSprite);
                 }
 
-                // Use central PIXELS_PER_UNIT for consistency
-                _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
+                // Use terrain tile density (CELL_SIZE px per unit) so roofs
+                // authored in cell pixels render at their authored world size.
+                _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.CELL_SIZE);
                 _spriteRenderer.sprite = _packSprite;
                 _spriteRenderer.enabled = true;
+
+                // Центрируем крышу по строевой части сигнатуры (стены/углы/
+                // двери, без дорожных хвостов): якорь пака не всегда совпадает
+                // с центром здания. Вычитание _appliedRoofOffset делает сдвиг
+                // идемпотентным при повторных загрузках варианта.
+                if (_packType != null &&
+                    BuildingTemplates.TryGet(_packType.Value, out PackBuilding? packBuilding))
+                {
+                    // Roof center is declared manually per pack template
+                    // (anchor-relative, server axes; world Y is flipped).
+                    var center = packBuilding.RoofCenterOffsetCells;
+                    var desiredOffset = new Vector3(
+                        center.x * GameConstants.World.CellSize,
+                        -center.y * GameConstants.World.CellSize,
+                        0f);
+                    _spriteRenderer.transform.position += desiredOffset - _appliedRoofOffset;
+                    _appliedRoofOffset = desiredOffset;
+                }
 
                 UpdateClanPosition();
                 return;
