@@ -91,5 +91,9 @@
         <!-- ════════════ НАВЫКИ И ПРОГРЕСС ════════════ -->
         <ui:VisualElement name="SkillContainer" class="hud-skill-container" />
 
+        <ui:VisualElement name="WorldMapOverlay" class="world-map-overlay" picking-mode="Ignore">
+            <ui:Image name="WorldMapImage" class="world-map-image" picking-mode="Ignore" />
+        </ui:VisualElement>
+
     </ui:VisualElement>
 </ui:UXML>

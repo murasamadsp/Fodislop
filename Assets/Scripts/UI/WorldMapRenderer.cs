@@ -9,7 +9,7 @@ using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
+using UnityEngine.UIElements;
 using VContainer;
 
 namespace Fodinae.UI
@@ -26,10 +26,11 @@ namespace Fodinae.UI
 
         private int _texWidth;
         private int _texHeight;
-        private int _lastCanvasWidth = -1;
-        private int _lastCanvasHeight = -1;
-        private Canvas? _canvas;
-        private RawImage? _rawImage;
+        private int _lastPanelWidth = -1;
+        private int _lastPanelHeight = -1;
+        private UIDocument? _document;
+        private VisualElement? _mapOverlay;
+        private Image? _mapImage;
         private Texture2D? _mapTexture;
         private Color32[]? _pixelBuffer;
         private Color32[] _cellColorTable = new Color32[256];
@@ -49,6 +50,8 @@ namespace Fodinae.UI
 
         [Inject]
         private MapManager? _manager;
+        [Inject]
+        private UIDocument? _injectedDocument;
         private PlayerMovementController? _player;
 
         private bool _isDragging;
@@ -102,7 +105,7 @@ namespace Fodinae.UI
 
             EnsurePlayerBinding();
 
-            CreateCanvas();
+            BindUi();
             InitColorTable();
             InitTexture();
 
@@ -131,7 +134,7 @@ namespace Fodinae.UI
                 _viewCenterY = h / 2f;
             }
 
-            if (_canvas != null && !_canvas.gameObject.activeSelf)
+            if (_mapOverlay != null)
             {
                 Hide();
             }
@@ -144,11 +147,6 @@ namespace Fodinae.UI
             if (_mapTexture != null)
             {
                 Destroy(_mapTexture);
-            }
-
-            if (_canvas != null)
-            {
-                Destroy(_canvas.gameObject);
             }
 
             PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
@@ -204,21 +202,8 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            ISessionContainer? session = SessionAccess.Resolve();
-            if (session == null)
-            {
-                _initialized = false;
-                return;
-            }
-
-            _storage = session.TryResolve<IWorldDataStorage>();
-            _manager = session.TryResolve<MapManager>();
-            if (_storage == null || _manager == null)
-            {
-                _initialized = false;
-                return;
-            }
-
+            // Dependencies are injected once by the game resolver. Reinitialize
+            // only transient map bindings when the component is re-enabled.
             EnsurePlayerBinding();
 
             if (_storage is not MapStorage mapStorage || mapStorage.CellLayer == null)
@@ -352,12 +337,12 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_canvas != null)
+            if (_mapOverlay != null)
             {
-                Rect canvasRect = _canvas.pixelRect;
-                int curW = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : Screen.width;
-                int curH = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : Screen.height;
-                if (curW > 0 && curH > 0 && (curW != _lastCanvasWidth || curH != _lastCanvasHeight))
+                Rect panelRect = _mapOverlay.worldBound;
+                int curW = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 0;
+                int curH = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 0;
+                if (curW > 0 && curH > 0 && (curW != _lastPanelWidth || curH != _lastPanelHeight))
                 {
                     InitTexture();
                     _renderRequested = true;
@@ -381,26 +366,12 @@ namespace Fodinae.UI
 
         public void Show()
         {
-            if (_storage == null || _manager == null)
+            if (_storage == null || _manager == null || _mapOverlay == null)
             {
-                ISessionContainer? session = SessionAccess.Resolve();
-                if (session == null)
-                {
-                    return;
-                }
-
-                _storage ??= session.TryResolve<IWorldDataStorage>();
-                _manager ??= session.TryResolve<MapManager>();
-                if (_storage == null || _manager == null)
-                {
-                    return;
-                }
+                return;
             }
 
-            if (_canvas != null)
-            {
-                _canvas.gameObject.SetActive(true);
-            }
+            _mapOverlay.style.display = DisplayStyle.Flex;
 
             enabled = true;
             _lastRenderTime = -1f;
@@ -415,9 +386,9 @@ namespace Fodinae.UI
 
         public void Hide()
         {
-            if (_canvas != null)
+            if (_mapOverlay != null)
             {
-                _canvas.gameObject.SetActive(false);
+                _mapOverlay.style.display = DisplayStyle.None;
             }
 
             enabled = false;
@@ -436,25 +407,19 @@ namespace Fodinae.UI
             ClampViewCenter();
         }
 
-        private void CreateCanvas()
+        private void BindUi()
         {
-            _canvas = new GameObject("MapCanvas").AddComponent<Canvas>();
-            _canvas.transform.SetParent(transform, false);
-            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _canvas.sortingOrder = 100;
-            _canvas.gameObject.AddComponent<CanvasScaler>();
-
-            var go = new GameObject("MapRawImage");
-            go.transform.SetParent(_canvas.transform, false);
-            _rawImage = go.AddComponent<RawImage>();
-            _rawImage.color = Color.white;
-            _rawImage.raycastTarget = false;
-
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
-            rt.anchoredPosition = Vector2.zero;
+            _document = _injectedDocument ??
+                throw new InvalidOperationException(
+                    "WorldMapRenderer requires an injected UIDocument.");
+            _mapOverlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay") ??
+                throw new InvalidOperationException(
+                    "WorldMapRenderer requires the WorldMapOverlay element in PlayerHUD.uxml.");
+            _mapImage = _mapOverlay.Q<Image>("WorldMapImage") ??
+                throw new InvalidOperationException(
+                    "WorldMapRenderer requires the WorldMapImage element in PlayerHUD.uxml.");
+            _mapOverlay.style.display = DisplayStyle.Flex;
+            _mapImage.image = null;
         }
 
         private void InitColorTable()
@@ -474,15 +439,14 @@ namespace Fodinae.UI
 
         private void InitTexture()
         {
-            Canvas canvas = _canvas ?? throw new InvalidOperationException(
-                "[WorldMapRenderer] Canvas must be created before the map texture.");
-            Canvas.ForceUpdateCanvases();
-            Rect canvasRect = canvas.pixelRect;
-            int width = canvasRect.width > 0f ? Mathf.RoundToInt(canvasRect.width) : (Screen.width > 0 ? Screen.width : 1920);
-            int height = canvasRect.height > 0f ? Mathf.RoundToInt(canvasRect.height) : (Screen.height > 0 ? Screen.height : 1080);
+            VisualElement overlay = _mapOverlay ?? throw new InvalidOperationException(
+                "[WorldMapRenderer] UI must be bound before the map texture.");
+            Rect panelRect = overlay.worldBound;
+            int width = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 1920;
+            int height = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 1080;
 
             // Bound map texture resolution to prevent high-DPI Retina allocations (e.g. 7.3M texels).
-            // ScreenSpaceOverlay RawImage scales this buffer seamlessly across the screen.
+            // UI Toolkit scales this buffer through the WorldMapImage USS layout.
             const int MAX_MAP_WIDTH = 960;
             const int MAX_MAP_HEIGHT = 540;
 
@@ -497,8 +461,8 @@ namespace Fodinae.UI
 
             _texWidth = Mathf.Max(16, targetWidth);
             _texHeight = Mathf.Max(16, targetHeight);
-            _lastCanvasWidth = width;
-            _lastCanvasHeight = height;
+            _lastPanelWidth = width;
+            _lastPanelHeight = height;
 
             if (_mapTexture != null)
             {
@@ -518,9 +482,9 @@ namespace Fodinae.UI
 
             _pixelBuffer = new Color32[_texWidth * _texHeight];
 
-            if (_rawImage != null)
+            if (_mapImage != null)
             {
-                _rawImage.texture = _mapTexture;
+                _mapImage.image = _mapTexture;
             }
         }
 
@@ -685,7 +649,7 @@ namespace Fodinae.UI
             {
                 int rowStart = py * texW;
 
-                // Texture2D row zero is the bottom of the displayed RawImage.
+                // Texture2D row zero is the bottom of the displayed map image.
                 // Server coordinates use a top-left origin, so the bottom texture
                 // row must sample the largest server Y in the viewport.
                 float screenRowFromTop = (texH - 1 - py) + 0.5f;
@@ -783,7 +747,8 @@ namespace Fodinae.UI
 
         private void HandleMouseScroll()
         {
-            if (!enabled || _canvas == null || !_canvas.gameObject.activeSelf || Mouse.current == null)
+            if (!enabled || _mapOverlay == null ||
+                _mapOverlay.resolvedStyle.display == DisplayStyle.None || Mouse.current == null)
             {
                 return;
             }
@@ -824,14 +789,13 @@ namespace Fodinae.UI
         {
             worldX = 0f;
             worldY = 0f;
-            if (Mouse.current == null || _rawImage == null ||
+            if (Mouse.current == null || _mapImage == null || _document?.rootVisualElement.panel == null ||
                 _texWidth <= 0 || _texHeight <= 0)
             {
                 return false;
             }
 
-            RectTransform rectTransform = _rawImage.rectTransform;
-            Rect rect = rectTransform.rect;
+            Rect rect = _mapImage.worldBound;
             if (rect.width <= 0f || rect.height <= 0f ||
                 float.IsNaN(rect.width) || float.IsNaN(rect.height) ||
                 float.IsInfinity(rect.width) || float.IsInfinity(rect.height))
@@ -839,17 +803,11 @@ namespace Fodinae.UI
                 return false;
             }
 
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                rectTransform,
-                Mouse.current.position.ReadValue(),
-                null,
-                out Vector2 localPoint))
-            {
-                return false;
-            }
-
-            float pixelX = ((localPoint.x - rect.xMin) / rect.width) * _texWidth;
-            float pixelY = ((localPoint.y - rect.yMin) / rect.height) * _texHeight;
+            Vector2 panelPoint = RuntimePanelUtils.ScreenToPanel(
+                _document.rootVisualElement.panel,
+                Mouse.current.position.ReadValue());
+            float pixelX = ((panelPoint.x - rect.xMin) / rect.width) * _texWidth;
+            float pixelY = ((panelPoint.y - rect.yMin) / rect.height) * _texHeight;
             worldX = _viewCenterX +
                 ((pixelX - (_texWidth * 0.5f)) * _cellsPerPixel);
             worldY = _viewCenterY +
@@ -859,30 +817,23 @@ namespace Fodinae.UI
 
         private void ApplyCursorAnchor(float worldX, float worldY)
         {
-            if (Mouse.current == null || _rawImage == null ||
+            if (Mouse.current == null || _mapImage == null || _document?.rootVisualElement.panel == null ||
                 _texWidth <= 0 || _texHeight <= 0)
             {
                 return;
             }
 
-            RectTransform rectTransform = _rawImage.rectTransform;
-            Rect rect = rectTransform.rect;
+            Rect rect = _mapImage.worldBound;
             if (rect.width <= 0f || rect.height <= 0f)
             {
                 return;
             }
 
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                rectTransform,
-                Mouse.current.position.ReadValue(),
-                null,
-                out Vector2 localPoint))
-            {
-                return;
-            }
-
-            float pixelX = ((localPoint.x - rect.xMin) / rect.width) * _texWidth;
-            float pixelY = ((localPoint.y - rect.yMin) / rect.height) * _texHeight;
+            Vector2 panelPoint = RuntimePanelUtils.ScreenToPanel(
+                _document.rootVisualElement.panel,
+                Mouse.current.position.ReadValue());
+            float pixelX = ((panelPoint.x - rect.xMin) / rect.width) * _texWidth;
+            float pixelY = ((panelPoint.y - rect.yMin) / rect.height) * _texHeight;
             _viewCenterX = worldX -
                 ((pixelX - (_texWidth * 0.5f)) * _cellsPerPixel);
             _viewCenterY = worldY -
