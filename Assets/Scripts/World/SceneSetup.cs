@@ -3,10 +3,9 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.UI;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.World
 {
@@ -17,12 +16,27 @@ namespace Fodinae.World
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {
-        private WorldBackgroundSetup? _backgroundSetup;
+        [Inject]
+        private ITextureStorageService? _textureStorage;
+        [Inject]
+        private SurfaceRenderer? _surfaceRenderer;
         private bool _surfaceRendererSetupStarted;
 
-        protected void Awake()
+        protected void Start()
         {
-            SetupWorldBackground();
+            TryInitialize();
+        }
+
+        protected void Update()
+        {
+            if (!_surfaceRendererSetupStarted)
+            {
+                TryInitialize();
+            }
+        }
+
+        private void TryInitialize()
+        {
             TryStartSurfaceRendererSetup();
         }
 
@@ -33,22 +47,14 @@ namespace Fodinae.World
                 return;
             }
 
-            // The readiness test has to be the resolve itself, not "does a session container
-            // exist". ISessionContainer.Current points at the Bootstrap container from
-            // Bootstrap's own Awake onwards, while VContainer defers building the game scope
-            // until after every Awake in the scene has run. Between those two points a
-            // container exists but none of the game-scope services are in it, so gating on
-            // the container let this start too early and throw on the very first frame.
-            ITextureStorageService? textureStorage =
-                SessionAccess.Resolve()?.TryResolve<ITextureStorageService>();
-            if (textureStorage == null)
+            if (_textureStorage == null)
             {
                 return;
             }
 
             _surfaceRendererSetupStarted = true;
             SetupSurfaceRendererAsync(
-                textureStorage,
+                _textureStorage,
                 this.GetCancellationTokenOnDestroy()).Forget();
         }
 
@@ -89,10 +95,9 @@ namespace Fodinae.World
                     TextureWrapMode.Clamp);
 
                 SurfaceRenderer surfaceRenderer =
-                    SessionAccess.Resolve()?.TryResolve<SurfaceRenderer>() ??
-                    FindAnyObjectByType<SurfaceRenderer>(FindObjectsInactive.Include) ??
+                    _surfaceRenderer ??
                     throw new InvalidOperationException(
-                        "SceneSetup requires the registered SurfaceRenderer.");
+                        "SceneSetup requires the injected SurfaceRenderer.");
                 surfaceRenderer.SetLocalAssets(
                     transitTexture,
                     perspectiveTexture,
@@ -115,28 +120,5 @@ namespace Fodinae.World
             }
         }
 
-        private void SetupWorldBackground()
-        {
-            // Find or create the background setup component
-            _backgroundSetup = FindAnyObjectByType<WorldBackgroundSetup>();
-
-            if (_backgroundSetup == null)
-            {
-                // Create a new GameObject for background setup
-                var setupGO = new GameObject("WorldBackgroundSetup");
-                _backgroundSetup = setupGO.AddComponent<WorldBackgroundSetup>();
-
-                if (Application.isPlaying)
-                {
-                    DontDestroyOnLoad(setupGO);
-                }
-
-                Debug.Log("[SceneSetup] WorldBackgroundSetup automatically created");
-            }
-            else
-            {
-                Debug.Log("[SceneSetup] WorldBackgroundSetup already exists in scene");
-            }
-        }
     }
 }

@@ -105,6 +105,7 @@ namespace Fodinae.Core
             _resolver.Resolve<PlayerMovementController>();
             _resolver.Resolve<CameraFollow>();
             _resolver.Resolve<TerrainRenderer>();
+            _resolver.Resolve<WorldBackgroundSetup>();
             _resolver.Resolve<WorldEntityBatchRenderer>();
 
             // UI-сервисы: создаём ПЕРЕД GameManager чтобы SetupUI находил их через

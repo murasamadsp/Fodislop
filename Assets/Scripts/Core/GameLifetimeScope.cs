@@ -119,6 +119,7 @@ namespace Fodinae.Core
 
             RegisterManager<MapManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<TerrainRenderer>(builder);
+            RegisterManager<WorldBackgroundSetup>(builder);
             RegisterManager<WorldTextureManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PacketHandler>(builder).AsImplementedInterfaces().AsSelf();

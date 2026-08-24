@@ -1,14 +1,15 @@
 #nullable enable
 
-using System;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.World
 {
     public class WorldBackgroundSetup : MonoBehaviour
     {
-        private TerrainRenderer? _backgroundRenderer;
+        [Inject]
+        private TerrainRenderer _backgroundRenderer = null!;
 
         protected void Awake()
         {
@@ -17,16 +18,7 @@ namespace Fodinae.World
                 return;
             }
 
-            SetupBackgroundRenderer();
             EnsureBackgroundConfiguration();
-        }
-
-        private void SetupBackgroundRenderer()
-        {
-            _backgroundRenderer = FindAnyObjectByType<TerrainRenderer>(
-                FindObjectsInactive.Include) ??
-                throw new InvalidOperationException(
-                    "WorldBackgroundSetup requires the scene TerrainRenderer.");
         }
 
         private void EnsureBackgroundConfiguration()
@@ -52,7 +44,7 @@ namespace Fodinae.World
             }
         }
 
-        public TerrainRenderer? GetBackgroundRenderer()
+        public TerrainRenderer GetBackgroundRenderer()
         {
             return _backgroundRenderer;
         }
