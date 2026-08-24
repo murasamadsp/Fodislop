@@ -202,6 +202,7 @@ namespace Fodinae.UI
                 var go = new GameObject("WorldMapRenderer");
                 go.transform.SetParent(transform, false);
                 _mapRenderer = go.AddComponent<WorldMapRenderer>();
+                _resolver.Inject(_mapRenderer);
             }
 
             _mapRenderer.Show();

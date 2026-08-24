@@ -2,7 +2,6 @@
 
 using System;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Player;
@@ -71,18 +70,6 @@ namespace Fodinae.UI
         private float _playerBlinkTimer;
         private bool _playerBlinkState = true;
 
-        protected void Awake()
-        {
-            ISessionContainer? session = SessionAccess.Resolve();
-            if (session == null)
-            {
-                return;
-            }
-
-            _storage ??= session.TryResolve<IWorldDataStorage>();
-            _manager ??= session.TryResolve<MapManager>();
-        }
-
         protected void Start()
         {
             TryInitialize();
@@ -103,18 +90,11 @@ namespace Fodinae.UI
                 return;
             }
 
-            ISessionContainer? session = SessionAccess.Resolve();
-            if (session == null)
+            if (_storage == null || _manager == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "WorldMapRenderer requires injected IWorldDataStorage and MapManager dependencies.");
             }
-
-            _storage ??= session.TryResolve<IWorldDataStorage>() ??
-                throw new InvalidOperationException(
-                    "WorldMapRenderer requires IWorldDataStorage after the resolver was initialized.");
-            _manager ??= session.TryResolve<MapManager>() ??
-                throw new InvalidOperationException(
-                    "WorldMapRenderer requires MapManager after the resolver was initialized.");
             if (!_manager.IsWorldInitialized || !_storage.IsReady)
             {
                 return;
