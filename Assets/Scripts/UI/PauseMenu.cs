@@ -114,7 +114,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            _doc ??= _resolver.Resolve<UIDocument>() ?? FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null)
             {
                 return;

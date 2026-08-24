@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core.Interfaces;
 using Fodinae.UI.Builders;
 using MinesServer.Networking.Server.Packets.GUI;
 using MinesServer.Networking.Server.Packets.GUI.Components;
@@ -12,7 +13,15 @@ namespace Fodinae
 {
     public class PacketUIBuilder
     {
+        private readonly IAssetLoader _assetLoader;
         private readonly PacketUIBuilderFactory _builderFactory = new();
+
+        public PacketUIBuilder(IAssetLoader assetLoader)
+        {
+            _assetLoader = assetLoader ?? throw new ArgumentNullException(nameof(assetLoader));
+        }
+
+        internal IAssetLoader AssetLoader => _assetLoader;
 
         public VisualElement? Build(IGUIComponentPacket packet)
         {

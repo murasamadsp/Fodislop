@@ -23,13 +23,15 @@ namespace Fodinae.Networking.Processors
     public class WindowPacketProcessor : IPacketProcessor<OpenWindowPacket>, IPacketProcessor<CloseWindowPacket>, IInputBlocker
     {
         private readonly ISessionContainer _session;
+        private readonly IAssetLoader _assetLoader;
         private UIDocument _uiDocument = null!;
         private ModalWindowHandler _modalWindowHandler = null!;
         private readonly List<(string tag, VisualElement root, WindowBinding binding, List<VisualElement> clickableElements)> _openWindows = new();
 
-        public WindowPacketProcessor(ISessionContainer session)
+        public WindowPacketProcessor(ISessionContainer session, IAssetLoader assetLoader)
         {
             _session = session;
+            _assetLoader = assetLoader;
         }
 
         public bool HasOpenWindows => _openWindows.Count > 0;
@@ -52,7 +54,7 @@ namespace Fodinae.Networking.Processors
 
             Debug.Log($"[WindowPacketProcessor] Opening window '{packet.WindowTag}'");
 
-            var builder = new PacketUIBuilder();
+            var builder = new PacketUIBuilder(_assetLoader);
             var element = builder.Build(packet.Content);
             if (element == null)
             {

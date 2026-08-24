@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.UI.HUD.Inventory.Interfaces;
@@ -158,14 +157,11 @@ namespace Fodinae.UI.HUD.Inventory.View
                 return;
             }
 
-            _doc ??= SessionAccess.Resolve()?.TryResolve<UIDocument>() ??
-                     FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null)
             {
                 return;
             }
 
-            _model ??= SessionAccess.Resolve()?.TryResolve<IInventoryModel>();
             if (_model == null)
             {
                 if (!Application.isPlaying)

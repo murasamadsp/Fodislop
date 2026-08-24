@@ -4,9 +4,6 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae;
-using Fodinae.Core;
-using Fodinae.Core.DI;
-using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual; // Corrected using directive for ImagePacket
 using UnityEngine;
@@ -34,7 +31,7 @@ namespace Fodinae.UI.Builders
                 cts.Dispose();
             });
 
-            LoadImage(element, imagePacket.URI, cts.Token).Forget();
+            LoadImage(element, imagePacket.URI, builder.AssetLoader, cts.Token).Forget();
 
             return element;
         }
@@ -42,11 +39,9 @@ namespace Fodinae.UI.Builders
         private static async UniTask LoadImage(
             VisualElement element,
             string uri,
+            IAssetLoader loader,
             CancellationToken token)
         {
-            IAssetLoader loader = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() ??
-                throw new InvalidOperationException(
-                    "Image packet loading requires a registered IAssetLoader.");
             Texture2D? texture;
             try
             {
