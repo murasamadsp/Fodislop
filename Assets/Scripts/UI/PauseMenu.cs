@@ -174,11 +174,6 @@ namespace Fodinae.UI
                 _doc.panelSettings.scale = savedScale;
             }
 
-            foreach (var canvas in FindObjectsByType<Canvas>())
-            {
-                canvas.scaleFactor = savedScale;
-            }
-
             _initialized = true;
         }
 
@@ -550,10 +545,6 @@ namespace Fodinae.UI
                         _doc.panelSettings.scale = v;
                     }
 
-                    foreach (Canvas canvas in FindObjectsByType<Canvas>())
-                    {
-                        canvas.scaleFactor = v;
-                    }
                 },
                 0.5f,
                 2f));
