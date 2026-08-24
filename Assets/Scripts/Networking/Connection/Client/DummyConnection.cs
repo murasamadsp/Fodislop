@@ -42,7 +42,6 @@ using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using MinesServer.Networking.Shared;
 using MinesServer.Networking.Shared.Packets;
-using Newtonsoft.Json;
 using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client
@@ -56,6 +55,7 @@ namespace MinesServer.Networking.Connection.Client
         public DummyConnection(ISessionContainer session)
         {
             _session = session;
+            _validTokens = _tokenStore.Load();
         }
 
         public ConnectionStatus ConnectionStatus => _status;
@@ -68,10 +68,8 @@ namespace MinesServer.Networking.Connection.Client
 
         public static bool IgnoreCollision = false;
 
-        private static readonly string TokenStorePath =
-            Path.Combine(Application.temporaryCachePath, "server_tokens.json");
-
-        private static readonly HashSet<string> _validTokens = LoadTokensFromFile();
+        private readonly DummyTokenStore _tokenStore = new();
+        private readonly HashSet<string> _validTokens;
         private bool _awaitingAuth;
 
         private const ushort _mockBotId = 456;
@@ -239,43 +237,6 @@ namespace MinesServer.Networking.Connection.Client
             await UniTask.Delay(IgnoreCollision ? 20 : 200);
             SendMapChunksAround(_x, _y);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
-        }
-
-        private static HashSet<string> LoadTokensFromFile()
-        {
-            try
-            {
-                if (!File.Exists(TokenStorePath))
-                {
-                    return new HashSet<string>();
-                }
-
-                string json = File.ReadAllText(TokenStorePath);
-                var tokens = JsonConvert.DeserializeObject<List<string>>(json);
-                if (tokens != null && tokens.Count > 0)
-                {
-                    return new HashSet<string>(tokens);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[DummyConnection] Failed to load tokens: {ex.Message}");
-            }
-
-            return new HashSet<string>();
-        }
-
-        private static void SaveTokensToFile()
-        {
-            try
-            {
-                string json = JsonConvert.SerializeObject(new List<string>(_validTokens));
-                File.WriteAllText(TokenStorePath, json);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogWarning($"[DummyConnection] Failed to save tokens: {ex.Message}");
-            }
         }
 
         /// <summary>
@@ -959,7 +920,7 @@ namespace MinesServer.Networking.Connection.Client
 
                 string newToken = Guid.NewGuid().ToString("N");
                 _validTokens.Add(newToken);
-                SaveTokensToFile();
+                _tokenStore.Save(_validTokens);
                 OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(newToken)));
 
                 InitWorld();
