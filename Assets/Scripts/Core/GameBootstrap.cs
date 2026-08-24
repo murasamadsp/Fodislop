@@ -117,6 +117,7 @@ namespace Fodinae.Core
             _resolver.Resolve<IInputBlocker>();
             _resolver.Resolve<MinimapController>();
             _resolver.Resolve<WorldMapController>();
+            _resolver.Resolve<WorldMapRenderer>();
             _resolver.Resolve<DisplayManager>();
             _resolver.Resolve<UIInputManager>();
             _resolver.Resolve<PlayerHUDView>();

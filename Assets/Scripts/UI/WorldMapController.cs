@@ -30,6 +30,8 @@ namespace Fodinae.UI
         private FPSCounter? _injectedFps;
         [Inject]
         private MinimapController? _injectedMinimap;
+        [Inject]
+        private WorldMapRenderer? _injectedMapRenderer;
 
         private CameraFollow? _cameraFollow;
         private PlayerMovementController? _player;
@@ -93,6 +95,7 @@ namespace Fodinae.UI
             _inventory = _injectedInventory ?? _resolver.Resolve<Fodinae.UI.HUD.Inventory.View.InventoryView>();
             _fps = _injectedFps ?? _resolver.Resolve<FPSCounter>();
             _minimap = _injectedMinimap ?? _resolver.Resolve<MinimapController>();
+            _mapRenderer = _injectedMapRenderer ?? _resolver.Resolve<WorldMapRenderer>();
 
             _player = PlayerMovementController.LocalPlayer;
             if (_player == null && !_playerSpawnSubscription)
@@ -197,19 +200,14 @@ namespace Fodinae.UI
                 _cameraFollow.SetScrollEnabled(false);
             }
 
-            if (_mapRenderer == null)
-            {
-                var go = new GameObject("WorldMapRenderer");
-                go.transform.SetParent(transform, false);
-                _mapRenderer = go.AddComponent<WorldMapRenderer>();
-                _resolver.Inject(_mapRenderer);
-            }
-
-            _mapRenderer.Show();
+            WorldMapRenderer mapRenderer = _mapRenderer ??
+                throw new InvalidOperationException(
+                    "WorldMapController requires the registered WorldMapRenderer.");
+            mapRenderer.Show();
 
             SetHudVisible(false);
 
-            _mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
+            mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
         }
 
         private void ExitMapMode()
