@@ -28,7 +28,6 @@ public static class ProjectRuntimeContracts
     {
         public const string Terrain = "Universal Render Pipeline/Custom/Terrain";
         public const string DynamicEmission = "Hidden/Fodinae/DynamicEmission";
-        public const string Velocity = "Fodinae/PostProcessing/Velocity";
         public const string WorldSurface = "Fodinae/World Surface";
     }
 

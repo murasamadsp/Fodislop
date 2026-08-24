@@ -23,7 +23,7 @@ csharp_indent_case_contents = true
 csharp_space_after_cast = false
 csharp_prefer_braces = true
 
-# Использование var (не заставляемvar на int/float/string/bool примитивах)
+# Использование var (не заставляем var на int/float/string/bool примитивах)
 dotnet_style_predefined_type_for_member_access_keyword_state = true:suggestion
 csharp_style_var_for_built_in_types = false:silent
 csharp_style_var_when_type_is_apparent = true:suggestion
@@ -195,14 +195,6 @@ dotnet_diagnostic.UNT0043.severity = warning  # Опечатка в conditional 
 
 # Vendored VContainer — полностью отключаем внешние анализаторы
 [Assets/Scripts/VContainer/**/*.cs]
-dotnet_diagnostic.SA*.severity = none
-dotnet_diagnostic.CA*.severity = none
-dotnet_diagnostic.RCS*.severity = none
-dotnet_diagnostic.S*.severity = none
-dotnet_diagnostic.UNT*.severity = none
-
-# Vendored MG.GIF decoder — подавляем анализаторы для стороннего кода
-[Assets/Scripts/MgGifDecoder/**/*.cs]
 dotnet_diagnostic.SA*.severity = none
 dotnet_diagnostic.CA*.severity = none
 dotnet_diagnostic.RCS*.severity = none

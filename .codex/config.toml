@@ -1,3 +1,12 @@
 [mcp_servers.mcp-unity]
 command = "node"
 args = ["Packages/com.gamelovers.mcp-unity/Server~/build/index.js"]
+
+[mcp_servers.mcp-unity.tools.get_gameobject]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.execute_menu_item]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.run_tests]
+approval_mode = "approve"

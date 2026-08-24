@@ -72,6 +72,8 @@ public readonly record struct ShaderDefaultsSnapshot(
     Color TerrainDebugColor,
     bool TerrainDebugMode,
     float BloomThreshold,
+    float BloomSoftKnee,
+    float BloomRadius,
     float BloomScatter,
     Color BloomTint,
     Color TransitEmissionColor,
@@ -96,5 +98,4 @@ public readonly record struct ShaderDefaultsSnapshot(
     float EigengrauDarknessThreshold,
     float EigengrauNoiseScale,
     float EigengrauAnimationSpeed,
-    float MotionBlurIntensity,
-    int MotionBlurMaxSamples);
+    float MotionBlurIntensity);

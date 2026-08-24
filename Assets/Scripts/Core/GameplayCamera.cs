@@ -31,13 +31,58 @@ namespace Fodinae.Core;
 // its own scene precisely so lazily-created objects land in the right place.
 public static class GameplayCamera
 {
+    // Every current caller re-resolves each frame (LateUpdate, Update, even
+    // PostProcessRendererFeature.Execute - once per camera per frame). Without
+    // this cache, every one of those ~20 call sites pays for Camera.main plus,
+    // on any miss, a full Object.FindObjectsByType<Camera>() scan-and-allocate
+    // - exactly the per-frame O(heap) pattern this project's conventions ban
+    // outright. The steady-state gameplay camera does not change frame to
+    // frame, so caching the last resolved instance and only re-running the
+    // real lookup after a scene load/unload (see the SceneManager
+    // subscriptions below) turns every one of those call sites back into an
+    // O(1) field read for the overwhelming majority of frames.
+    private static Camera? _cachedCamera;
+    private static bool _subscribed;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetForDomainReload()
+    {
+        _cachedCamera = null;
+        _subscribed = false;
+    }
+
+    private static void EnsureSubscribed()
+    {
+        if (_subscribed)
+        {
+            return;
+        }
+
+        _subscribed = true;
+        SceneManager.sceneLoaded += (_, _) => _cachedCamera = null;
+        SceneManager.sceneUnloaded += _ => _cachedCamera = null;
+    }
+
     // Returns null rather than guessing when no gameplay camera exists yet -
     // which is the normal state while only the menu is loaded. Callers are
-    // expected to retry; every current caller already re-resolves each frame or
-    // on demand.
+    // expected to retry.
     public static Camera? Resolve()
     {
+        EnsureSubscribed();
+
         Scene activeScene = SceneManager.GetActiveScene();
+        if (_cachedCamera != null && IsUsable(_cachedCamera, activeScene))
+        {
+            return _cachedCamera;
+        }
+
+        Camera? resolved = ResolveUncached(activeScene);
+        _cachedCamera = resolved;
+        return resolved;
+    }
+
+    private static Camera? ResolveUncached(Scene activeScene)
+    {
         if (!string.Equals(activeScene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase))
         {
             Camera? activeCamera = ResolveIn(activeScene);

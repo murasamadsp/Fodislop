@@ -49,6 +49,38 @@ namespace Fodinae.World.Terrain
             Array.Clear(_metadataReady, 0, _metadataReady.Length);
         }
 
+        public void RefreshTextureMetadata(
+            HashSet<CellType> cellTypes,
+            MapManager mapManager,
+            ITextureService textureService,
+            List<TextureAtlas> atlases)
+        {
+            foreach (CellType cellType in cellTypes)
+            {
+                int index = (int)cellType;
+                if ((uint)index < (uint)_metadataReady.Length)
+                {
+                    _metadataReady[index] = false;
+                }
+            }
+
+            for (int x = 0; x < _cacheWidth; x++)
+            {
+                for (int y = 0; y < _cacheHeight; y++)
+                {
+                    CellType cellType = _cellCache[x, y].Type;
+                    if (!cellTypes.Contains(cellType))
+                    {
+                        continue;
+                    }
+
+                    _cellCache[x, y] = CreateCachedData(
+                        cellType,
+                        GetMetadata(cellType, mapManager, textureService, atlases));
+                }
+            }
+        }
+
         public CachedCellData GetCellData(int x, int y)
         {
             if (x < 0 || x >= _cacheWidth || y < 0 || y >= _cacheHeight)

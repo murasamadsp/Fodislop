@@ -15,7 +15,7 @@ using VContainer.Unity;
 namespace Fodinae.Core
 {
     [DefaultExecutionOrder(-30000)]
-    public class BootstrapLifetimeScope : LifetimeScope
+    public class BootstrapLifetimeScope : LifetimeScope, IMainMenuNavigation
     {
         private const string MainMenuSceneName = "MainMenu";
 
@@ -24,22 +24,41 @@ namespace Fodinae.Core
         private const string GatewaySceneName = "Gateway";
         private const string MainGameSceneName = "MainGame";
 
-        public static BootstrapLifetimeScope? Instance { get; private set; }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
+        /// <summary>
+        /// Stops Unity capturing a managed stack trace for plain
+        /// <see cref="LogType.Log"/> messages.
+        /// </summary>
+        /// <remarks>
+        /// The stack trace, not the message, is what makes Debug.Log expensive:
+        /// Unity walks and formats the managed call stack on every single call,
+        /// on the calling thread. For an informational log nobody reads the
+        /// stack of, that is pure cost, and it is paid in the editor and in
+        /// development builds - exactly where anyone is looking at a frame
+        /// graph and wondering about unexplained spikes.
+        ///
+        /// Warning, Error, Assert and Exception are deliberately untouched:
+        /// their stack traces are the whole point, and FailFastLogHandler acts
+        /// on them.
+        ///
+        /// Runs before the first scene loads so no log beats it to the punch.
+        /// </remarks>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void ConfigureLogStackTraces()
         {
-            Instance = null;
+            Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
         }
 
         protected override void Awake()
         {
-            Instance = this;
+            // Fail-fast сторож вешается раньше всех систем: первая ошибка
+            // (включая ошибки старта самого скоупа) останавливает приложение.
+            FailFastLogHandler.EnsureRegistered();
+
             DontDestroyOnLoad(gameObject);
             base.Awake();
             if (Container != null)
             {
-                ServiceLocator.Initialize(Container);
+                SceneManager.sceneLoaded += OnSceneLoaded;
                 Container.Resolve<ISessionContainer>().Set(Container);
 
                 // ClientConfigManager is a lazy Bootstrap-tier singleton — it only
@@ -54,6 +73,20 @@ namespace Fodinae.Core
             }
         }
 
+        protected override void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            base.OnDestroy();
+        }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name == GatewaySceneName || scene.name == MainMenuSceneName)
+            {
+                InjectSceneBehaviours(scene);
+            }
+        }
+
 
         protected void Start()
         {
@@ -62,6 +95,8 @@ namespace Fodinae.Core
 
         private async UniTask EnsureGatewayLoadedAsync()
         {
+            await RuntimeAssetPaths.EnsureReadyAsync();
+
             // Если меню уже в сцене (запуск прямо из MainMenu в редакторе),
             // ворота пропускаем — иначе они перекроют уже готовый экран.
             if (SceneManager.GetSceneByName(MainMenuSceneName).isLoaded)
@@ -80,6 +115,7 @@ namespace Fodinae.Core
             if (gateway.IsValid() && gateway.isLoaded)
             {
                 SceneManager.SetActiveScene(gateway);
+                InjectSceneBehaviours(gateway);
             }
         }
 
@@ -95,6 +131,18 @@ namespace Fodinae.Core
             if (menuScene.IsValid() && menuScene.isLoaded)
             {
                 SceneManager.SetActiveScene(menuScene);
+                InjectSceneBehaviours(menuScene);
+            }
+        }
+
+        private void InjectSceneBehaviours(Scene scene)
+        {
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+                {
+                    Container.Inject(behaviour);
+                }
             }
         }
 
@@ -115,9 +163,9 @@ namespace Fodinae.Core
             // PacketHandler.OnDestroy means it happens inside the unload, after
             // packets have already had a chance to reach processors that resolve
             // managers out of a dying container.
-            ServiceLocator.Resolve<ISessionContainer>().TryResolve<PacketHandler>()?.Shutdown();
-
-            ServiceLocator.Resolve<IConnectionService>()?.Disconnect();
+            ISessionContainer session = Container.Resolve<ISessionContainer>();
+            session.TryResolve<PacketHandler>()?.Shutdown();
+            Container.Resolve<IConnectionService>().Disconnect();
 
             // Ambient resolution is pointed back at Bootstrap BEFORE the unload,
             // not after it.
@@ -137,8 +185,7 @@ namespace Fodinae.Core
             // Repointing first means those late resolves hit the Bootstrap
             // container, where none of them are registered, and TryResolve
             // simply returns null.
-            ServiceLocator.Initialize(Container);
-            Container.Resolve<ISessionContainer>().Set(Container);
+            session.Set(Container);
 
             Scene mainGameScene = SceneManager.GetSceneByName(MainGameSceneName);
             if (mainGameScene.isLoaded)
@@ -151,6 +198,9 @@ namespace Fodinae.Core
 
         protected override void Configure(IContainerBuilder builder)
         {
+            builder.Register<IMainMenuNavigation>(
+                resolver => resolver.Resolve<BootstrapLifetimeScope>(),
+                Lifetime.Singleton);
             builder.RegisterInstance(ProjectDefaultsLoader.LoadRequired());
             builder.RegisterInstance(GraphicsQualityProfileLoader.LoadRequired());
 

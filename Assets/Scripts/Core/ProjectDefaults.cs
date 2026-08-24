@@ -246,6 +246,10 @@ namespace Fodinae.Core
             [SerializeField]
             private float _bloomThreshold;
             [SerializeField]
+            private float _bloomSoftKnee = 0.5f;
+            [SerializeField]
+            private float _bloomRadius = 3f;
+            [SerializeField]
             private float _bloomScatter;
             [SerializeField]
             private Color _bloomTint;
@@ -295,8 +299,6 @@ namespace Fodinae.Core
             private float _eigengrauAnimationSpeed;
             [SerializeField]
             private float _motionBlurIntensity;
-            [SerializeField]
-            private int _motionBlurMaxSamples;
 
             public ShaderDefaultsSnapshot CreateSnapshot() => new(
                 _terrainFlowScale,
@@ -306,6 +308,8 @@ namespace Fodinae.Core
                 _terrainDebugColor,
                 _terrainDebugMode,
                 _bloomThreshold,
+                _bloomSoftKnee,
+                _bloomRadius,
                 _bloomScatter,
                 _bloomTint,
                 _transitEmissionColor,
@@ -330,8 +334,7 @@ namespace Fodinae.Core
                 _eigengrauDarknessThreshold,
                 _eigengrauNoiseScale,
                 _eigengrauAnimationSpeed,
-                _motionBlurIntensity,
-                _motionBlurMaxSamples);
+                _motionBlurIntensity);
 
             public void Validate()
             {
@@ -342,6 +345,8 @@ namespace Fodinae.Core
                 ValidateColor(_terrainShimmerColor, nameof(_terrainShimmerColor));
                 ValidateColor(_terrainDebugColor, nameof(_terrainDebugColor));
                 ValidateRange(_bloomThreshold, 0f, 2f, nameof(_bloomThreshold));
+                ValidateRange(_bloomSoftKnee, 0f, 1f, nameof(_bloomSoftKnee));
+                ValidateRange(_bloomRadius, 0.5f, 8f, nameof(_bloomRadius));
                 ValidateRange(_bloomScatter, 0.1f, 1f, nameof(_bloomScatter));
                 ValidateColor(_bloomTint, nameof(_bloomTint));
                 ValidateColor(_transitEmissionColor, nameof(_transitEmissionColor));
@@ -375,7 +380,6 @@ namespace Fodinae.Core
                 ValidateRange(_eigengrauAnimationSpeed, 1f, 60f, nameof(_eigengrauAnimationSpeed));
                 ValidateRange(_eigengrauIntensity, 0f, 1f, nameof(_eigengrauIntensity));
                 ValidateRange(_motionBlurIntensity, 0f, 1f, nameof(_motionBlurIntensity));
-                ValidateRange(_motionBlurMaxSamples, 2, 32, nameof(_motionBlurMaxSamples));
             }
 
             private static void ValidateColor(Color value, string name)

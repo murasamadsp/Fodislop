@@ -1,69 +1,69 @@
 <Project>
-  <!--
+    <!--
     Языковой уровень: реальное значение пишет CsProjFix.cs в каждый .csproj (12.0).
     Здесь — fallback для проектов без собственного тега. Держать в синхронизации с CsProjFix!
 
     Nullable и code-style enforcement — ТОЛЬКО для нашего кода:
     vendored-проекты (UniTask, Effekseer, MinesServer.*) собираются как есть, без нашей политики.
   -->
-  <PropertyGroup>
-    <LangVersion>12.0</LangVersion>
-  </PropertyGroup>
+    <PropertyGroup>
+        <LangVersion>12.0</LangVersion>
+    </PropertyGroup>
 
-  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor' Or '$(MSBuildProjectName)' == 'Tests' Or '$(MSBuildProjectName)' == 'Tests.Editor'">
-    <Nullable>enable</Nullable>
-    <!-- IDE-правила .editorconfig (naming, IDE0051/52 и т.д.) подхватываются dotnet build, а не только IDE -->
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-  </PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
+        <Nullable>enable</Nullable>
+        <!-- Свой код обязан быть nullable-чистым: нарушение CS86xx даёт warning,
+         который валит pre-commit-lint.sh/CI (см. scripts/pre-commit-lint.sh).
+         Вендоренный VContainer глушится per-item NoWarn ниже. -->
+        <!-- IDE-правила .editorconfig (naming, IDE0051/52 и т.д.) подхватываются dotnet build, а не только IDE -->
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    </PropertyGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
-    <!-- Стиль и форматирование -->
-    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <ItemGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
+        <!-- Стиль и форматирование -->
+        <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
 
-    <!-- Упрощение кода, dead code, паттерны (RCS-правила) -->
-    <PackageReference Include="Roslynator.Analyzers" Version="4.12.9">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+        <!-- Упрощение кода, dead code, паттерны (RCS-правила) -->
+        <PackageReference Include="Roslynator.Analyzers" Version="4.12.9">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
 
-    <!-- Unity-специфика: GetComponent в Update, null checks и т.д. (UNT-правила) -->
-    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.22.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+        <!-- Unity-специфика: GetComponent в Update, null checks и т.д. (UNT-правила) -->
+        <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.22.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
 
-    <!-- Правила длины файлов (>1000 строк) и методов (Sonar-правила S104, S138) -->
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="9.16.0.82469">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
+        <!-- Правила длины файлов (>1000 строк) и методов (Sonar-правила S104, S138) -->
+        <PackageReference Include="SonarAnalyzer.CSharp" Version="9.16.0.82469">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
 
-  <!--
+    <!--
     Проброс .stylecop.json во все генерируемые Unity .csproj проекты как AdditionalFiles.
     Это необходимо, чтобы Roslyn-анализаторы (StyleCop.Analyzers) видели локальные правила
     и отключали избыточные предупреждения (например, требования обязательных заголовков и XML-документации).
   -->
-  <ItemGroup>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory).stylecop.json" Link=".stylecop.json" />
-  </ItemGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory).stylecop.json" Link=".stylecop.json" />
+    </ItemGroup>
 
-  <!--
-    Вендоред код: VContainer и MgGifDecoder не трогаем — никаких правок в их файлах.
+    <!--
+    Вендоред код: VContainer не трогаем — никаких правок в его файлах.
     Nullable-предупреждения компилятора (CS8xxx) для этих файлов глушатся через
     per-item метаданные <NoWarn> — единственный корректный MSBuild-способ без изменения
     исходников сторонней библиотеки. Не путать с #pragma warning disable (это в коде).
-    При обновлении библиотек эти метаданные продолжают работать.
+    При обновлении библиотеки эти метаданные продолжают работать.
   -->
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
-    <Compile Update="Assets/Scripts/VContainer/**/*.cs">
-      <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8620;CS8625;CS8629;CS8631;CS8669;SA1633;SA1503;SA1107;SA1200;SA1309;SA1310;SA1313;SA1516;SA0001;RCS1075;S108</NoWarn>
-    </Compile>
-    <Compile Update="Assets/Scripts/MgGifDecoder/**/*.cs">
-      <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8620;CS8625;CS8629;CS8631;CS8669;SA1633;SA1200;SA0001</NoWarn>
-    </Compile>
-  </ItemGroup>
+    <ItemGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor'">
+        <Compile Update="Assets/Scripts/VContainer/**/*.cs">
+            <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8618;CS8619;CS8620;CS8625;CS8629;CS8631;CS8669;SA1633;SA1503;SA1107;SA1200;SA1309;SA1310;SA1313;SA1516;SA0001;RCS1075;S108</NoWarn>
+        </Compile>
+    </ItemGroup>
 </Project>

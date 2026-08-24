@@ -142,7 +142,10 @@ namespace Fodinae.Game.Managers
             _nextMapFlushTime = Time.unscaledTime + DurableMapFlushInterval;
             if (_worldStorage is MapStorage storage && storage.HasDirtyChunks)
             {
-                storage.Flush();
+                // Not durable: see MapStorage.Flush. The fsync belongs to
+                // OnApplicationQuit/Pause/LowMemory above, which still pass the
+                // default. Here it only bought a periodic main-thread stall.
+                storage.Flush(durable: false);
             }
         }
 

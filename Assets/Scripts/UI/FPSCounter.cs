@@ -22,6 +22,8 @@ namespace Fodinae.UI
 
         [Inject]
         private UIDocument? _injectedDoc;
+        [Inject]
+        private TerrariaLightingEngine _lightingEngine = null!;
 
         private UIDocument? _doc;
         private VisualElement? _rootElement;
@@ -138,11 +140,12 @@ namespace Fodinae.UI
                 if (keyboard.f3Key.wasPressedThisFrame)
                 {
                     _showDetailedProfiler = !_showDetailedProfiler;
+                    FrameProfiler.SetAllocationTrackingEnabled(_showDetailedProfiler);
                 }
 
                 if (keyboard.f2Key.wasPressedThisFrame)
                 {
-                    var engine = TerrariaLightingEngine.Instance;
+                    TerrariaLightingEngine? engine = _lightingEngine;
                     if (engine != null)
                     {
                         _currentDebugViewIndex = (_currentDebugViewIndex + 1) % 6;
@@ -175,7 +178,7 @@ namespace Fodinae.UI
                 }
                 else
                 {
-                    var engine = TerrariaLightingEngine.Instance;
+                    TerrariaLightingEngine? engine = _lightingEngine;
                     string debugViewStr = engine != null ? engine.ActiveDebugView.ToString() : "Off";
                     float gcAllocKb = FrameProfiler.GcAllocPerFrameBytes / 1024f;
 
@@ -183,7 +186,9 @@ namespace Fodinae.UI
                         $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_pingMs}ms  Online: {_onlinePlayers}\n" +
                         $"<color=#aaffaa>[Terrain CPU]</color> Mesh: {FrameProfiler.TerrainMeshTimeMs:F2}ms | Flood: {FrameProfiler.TerrainFloodFillTimeMs:F2}ms | Cache: {FrameProfiler.TerrainCacheTimeMs:F2}ms | Upload: {FrameProfiler.TerrainGpuUploadTimeMs:F2}ms\n" +
                         $"<color=#ffffaa>[Lighting GPU]</color> Solve: {FrameProfiler.LightingSolveTimeMs:F2}ms | DynLights: {FrameProfiler.ActiveDynamicLights} | View: {debugViewStr} [F2]\n" +
-                        $"<color=#ffaaff>[Memory]</color> GC: {gcAllocKb:F1} KB/f | [F3 to close]";
+                        $"<color=#ffaaff>[Memory]</color> GC: {gcAllocKb:F1} KB/f | " +
+                        $"{FrameProfiler.GcAllocTotalPerSecondBytes / (1024f * 1024f):F2} MB/s | " +
+                        $"collections: {FrameProfiler.GcCollectionCount} | [F3 to close]";
                 }
             }
         }

@@ -31,6 +31,7 @@ namespace Fodinae.Audio.Backend
         private IAssetLoader _assetLoader = null!;
         private bool _configApplied;
         private bool _configWaitLogged;
+        private bool _pausedInBackground;
 
         public bool IsInitialized => _backend != null;
 
@@ -94,6 +95,21 @@ namespace Fodinae.Audio.Backend
             }
         }
 
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            bool shouldPause = !hasFocus &&
+                _clientConfig != null &&
+                _clientConfig.Config != null &&
+                _clientConfig.Config.MuteAudioInBackground;
+            if (_pausedInBackground == shouldPause)
+            {
+                return;
+            }
+
+            _backend?.SetPaused(shouldPause);
+            _pausedInBackground = shouldPause;
+        }
+
         public void ResetBackend()
         {
             try
@@ -102,6 +118,7 @@ namespace Fodinae.Audio.Backend
                 _backend = new FmodAudioBackend();
                 _backend.Initialize(this);
                 ApplySavedBusVolumes();
+                _backend.SetPaused(_pausedInBackground);
                 Debug.Log($"{TAG} Audio backend successfully re-initialized after device change.");
             }
             catch (System.Exception ex)

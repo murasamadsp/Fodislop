@@ -2,7 +2,10 @@
 
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace Fodinae.Core
 {
@@ -26,6 +29,65 @@ namespace Fodinae.Core
 
         private static string? _texturesRoot;
         private static bool _resolved;
+
+        /// <summary>
+        /// Makes archived StreamingAssets available through ordinary file APIs.
+        /// Android stores them inside the APK, while the texture decoders
+        /// require seekable files. Other supported platforms need no copy.
+        /// </summary>
+        public static async UniTask EnsureReadyAsync()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            string extractedRoot = Path.Combine(
+                Application.persistentDataPath,
+                "BundledAssets",
+                TexturesFolderName);
+            string markerPath = Path.Combine(extractedRoot, ".manifest");
+            string manifest = await DownloadTextAsync(
+                CombineStreamingUri(Application.streamingAssetsPath, "Textures.manifest"));
+            if (!File.Exists(markerPath) ||
+                !string.Equals(await File.ReadAllTextAsync(markerPath), manifest, System.StringComparison.Ordinal))
+            {
+                if (Directory.Exists(extractedRoot))
+                {
+                    Directory.Delete(extractedRoot, recursive: true);
+                }
+
+                Directory.CreateDirectory(extractedRoot);
+                string[] relativeFiles = manifest
+                    .Split(['\r', '\n'], System.StringSplitOptions.RemoveEmptyEntries)
+                    .Select(path => path.Trim())
+                    .Where(path => path.Length > 0)
+                    .ToArray();
+                foreach (string relativeFile in relativeFiles)
+                {
+                    string destination = Path.Combine(
+                        extractedRoot,
+                        relativeFile.Replace('/', Path.DirectorySeparatorChar));
+                    string? directory = Path.GetDirectoryName(destination);
+                    if (directory == null)
+                    {
+                        throw new InvalidDataException(
+                            $"Bundled texture has no destination directory: {relativeFile}");
+                    }
+
+                    Directory.CreateDirectory(directory);
+                    byte[] bytes = await DownloadBytesAsync(
+                        CombineStreamingUri(
+                            Application.streamingAssetsPath,
+                            $"Textures/{relativeFile}"));
+                    await File.WriteAllBytesAsync(destination, bytes);
+                }
+
+                await File.WriteAllTextAsync(markerPath, manifest);
+            }
+
+            _texturesRoot = extractedRoot;
+            _resolved = true;
+#else
+            await UniTask.CompletedTask;
+#endif
+        }
 
         /// <summary>
         /// Каталог с текстурами, либо null, если его нет ни по одному пути.
@@ -100,5 +162,34 @@ namespace Fodinae.Core
 
             return null;
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private static async UniTask<string> DownloadTextAsync(string uri)
+        {
+            byte[] bytes = await DownloadBytesAsync(uri);
+            return System.Text.Encoding.UTF8.GetString(bytes);
+        }
+
+        private static async UniTask<byte[]> DownloadBytesAsync(string uri)
+        {
+            using UnityWebRequest request = UnityWebRequest.Get(uri);
+            await request.SendWebRequest().ToUniTask();
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                throw new IOException(
+                    $"Failed to extract required bundled asset '{uri}': {request.error}");
+            }
+
+            return request.downloadHandler.data;
+        }
+
+        private static string CombineStreamingUri(string root, string relativePath)
+        {
+            string encodedPath = string.Join(
+                "/",
+                relativePath.Split('/').Select(System.Uri.EscapeDataString));
+            return $"{root.TrimEnd('/')}/{encodedPath}";
+        }
+#endif
     }
 }

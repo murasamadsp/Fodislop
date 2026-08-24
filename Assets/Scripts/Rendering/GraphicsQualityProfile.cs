@@ -1,6 +1,8 @@
 #nullable enable
 
 using System;
+using Fodinae.Rendering.PostProcessing;
+using Fodinae.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -20,11 +22,13 @@ namespace Fodinae.Rendering
     [Serializable]
     public struct GraphicsQualitySettings : IEquatable<GraphicsQualitySettings>
     {
+        public const int MinimumLightingTextureDimension = 256;
+
         [FormerlySerializedAs("LightingPixelsPerCell")]
         [Min(1)]
         [Tooltip("Нижняя граница lighting-пикселей на клетку. Фактическое разрешение считается от render target базовой камеры.")]
         public int LightingMinimumPixelsPerCell;
-        [Min(128)]
+        [Min(MinimumLightingTextureDimension)]
         [Tooltip("Максимальный размер lighting field в пикселях.")]
         public int LightingMaximumTextureDimension;
         [Min(1)]
@@ -48,6 +52,10 @@ namespace Fodinae.Rendering
         [Range(0, 8)]
         [Tooltip("MSAA sample count для данного quality tier.")]
         public int AntiAliasing;
+        [Tooltip("Off/PerBlock/PerPixel режим освещения. Ultra всегда принудительно PerPixel.")]
+        public LightingQualityMode LightingQuality;
+        [Tooltip("Full/Essential/Off объём пост-обработки. Essential выключает bloom и motion blur — самую дорогую часть стека.")]
+        public PostProcessQualityMode PostProcessQuality;
 
         public GraphicsQualitySettings(
             int lightingPixelsPerCell,
@@ -58,7 +66,9 @@ namespace Fodinae.Rendering
             int lightingCascadeAtlasLimit,
             float renderScale,
             int vSyncCount,
-            int antiAliasing)
+            int antiAliasing,
+            LightingQualityMode lightingQuality = LightingQualityMode.PerBlock,
+            PostProcessQualityMode postProcessQuality = PostProcessQualityMode.Full)
         {
             LightingMinimumPixelsPerCell = lightingPixelsPerCell;
             LightingMaximumTextureDimension = lightingMaximumTextureDimension;
@@ -69,6 +79,8 @@ namespace Fodinae.Rendering
             RenderScale = renderScale;
             VSyncCount = vSyncCount;
             AntiAliasing = antiAliasing;
+            LightingQuality = lightingQuality;
+            PostProcessQuality = postProcessQuality;
         }
 
         public readonly bool Equals(GraphicsQualitySettings other)
@@ -81,7 +93,9 @@ namespace Fodinae.Rendering
                 LightingCascadeAtlasLimit == other.LightingCascadeAtlasLimit &&
                 RenderScale.Equals(other.RenderScale) &&
                 VSyncCount == other.VSyncCount &&
-                AntiAliasing == other.AntiAliasing;
+                AntiAliasing == other.AntiAliasing &&
+                LightingQuality == other.LightingQuality &&
+                PostProcessQuality == other.PostProcessQuality;
         }
 
         public override readonly bool Equals(object? obj)
@@ -106,6 +120,8 @@ namespace Fodinae.Rendering
             hash.Add(settings.RenderScale);
             hash.Add(settings.VSyncCount);
             hash.Add(settings.AntiAliasing);
+            hash.Add(settings.LightingQuality);
+            hash.Add(settings.PostProcessQuality);
             return hash.ToHashCode();
         }
 
@@ -183,7 +199,8 @@ namespace Fodinae.Rendering
             string context)
         {
             if (settings.LightingMinimumPixelsPerCell < 1 ||
-                settings.LightingMaximumTextureDimension < 128 ||
+                settings.LightingMaximumTextureDimension <
+                    GraphicsQualitySettings.MinimumLightingTextureDimension ||
                 settings.LightingMaximumLightCount < 1 ||
                 settings.LightingMaximumRaySteps < 1 ||
                 settings.LightingUpdatesPerSecond <= 0f ||
@@ -194,6 +211,39 @@ namespace Fodinae.Rendering
             {
                 throw new InvalidOperationException(
                     $"Graphics quality settings '{context}' contain invalid technical values.");
+            }
+
+            if (!Enum.IsDefined(typeof(LightingQualityMode), settings.LightingQuality))
+            {
+                // A value outside the known tiers would otherwise sail
+                // through here (it satisfies every check above) and only
+                // fail once PauseMenu tries to index its 3-entry tier-name
+                // array with it - a crash on opening Settings instead of a
+                // clear error at load/apply time. Catch it at the same
+                // boundary every other enum-typed config field is caught at
+                // (compare ClientConfigManager's GraphicsPreset check).
+                throw new InvalidOperationException(
+                    $"Graphics quality settings '{context}' has an undefined " +
+                    $"LightingQuality value ({(int)settings.LightingQuality}).");
+            }
+
+            if (!Enum.IsDefined(typeof(PostProcessQualityMode), settings.PostProcessQuality))
+            {
+                // Same reasoning as the LightingQuality check above: an
+                // out-of-range int satisfies every numeric check and only
+                // surfaces later as an IndexOutOfRangeException in the
+                // PauseMenu tier-name array.
+                throw new InvalidOperationException(
+                    $"Graphics quality settings '{context}' has an undefined " +
+                    $"PostProcessQuality value ({(int)settings.PostProcessQuality}).");
+            }
+
+            if (context == nameof(GraphicsPreset.Ultra) &&
+                settings.LightingQuality != LightingQualityMode.PerPixel)
+            {
+                throw new InvalidOperationException(
+                    $"Graphics quality settings '{context}' must use {nameof(LightingQualityMode.PerPixel)} " +
+                    "lighting - Ultra is locked to it.");
             }
         }
     }

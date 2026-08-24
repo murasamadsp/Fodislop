@@ -62,6 +62,11 @@ namespace Fodinae.UI
             set => _isEnabled = value;
         }
 
+        private void Awake()
+        {
+            useGUILayout = false;
+        }
+
         private void Update()
         {
             if (Keyboard.current != null && Keyboard.current.f3Key.wasPressedThisFrame)
@@ -115,7 +120,7 @@ namespace Fodinae.UI
 
                 if (kb.digit8Key.wasPressedThisFrame || kb.numpad8Key.wasPressedThisFrame || kb.f8Key.wasPressedThisFrame)
                 {
-                    var le = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>() ?? Fodinae.World.Lighting.TerrariaLightingEngine.Instance;
+                    var le = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>();
                     if (le != null)
                     {
                         float current = le.DynamicLightIntensity;
@@ -160,8 +165,7 @@ namespace Fodinae.UI
                 // Solves per second, not per frame: the engine skips solves on
                 // its own cadence, so "how expensive is one solve" only means
                 // something next to "how often does one happen".
-                var lighting = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>() ??
-                    Fodinae.World.Lighting.TerrariaLightingEngine.Instance;
+                var lighting = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>();
                 if (lighting != null)
                 {
                     ulong solveCount = lighting.SolveCount;
@@ -308,7 +312,7 @@ namespace Fodinae.UI
                 }
             }
 
-            var lighting = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>() ?? Fodinae.World.Lighting.TerrariaLightingEngine.Instance;
+            var lighting = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>();
             var ppController = _session?.TryResolve<Fodinae.Rendering.PostProcessing.PostProcessController>();
 
             _sb.AppendLine("---");
@@ -325,10 +329,21 @@ namespace Fodinae.UI
             _sb.AppendLine("<b>[Lighting (Pure 1-Pass Radiance Cascades)]</b>");
             _sb.AppendLine($"[8/F8] DynLights: {dynLightState}");
             _sb.AppendLine($"CPU Meshing: {FrameProfiler.TerrainMeshTimeMs:F2}ms | FloodFill: {FrameProfiler.TerrainFloodFillTimeMs:F2}ms");
+            // TerrainRebuildCount/TerrainFullPopulateCount were already tracked
+            // by TerrainRenderer but never surfaced anywhere - the one signal
+            // that answers "is the Parallel.For terrain rebuild path firing
+            // every frame or only on real region changes" sat uncollected.
+            // Full > Rebuild would mean canScrollCache is false almost every
+            // time, i.e. every rebuild pays for TerrainCellCache.PopulateFull +
+            // TerrainPrecalculator.PrecalculateFull + TerrainMeshBuilder.BuildFull
+            // - three Parallel.For passes instead of the cheap scroll/incremental
+            // ones.
+            _sb.AppendLine(
+                $"Terrain Rebuilds: {FrameProfiler.TerrainRebuildCount} | Full Populate: {FrameProfiler.TerrainFullPopulateCount}");
             AppendLightingCost(lighting);
 
             const float boxWidth = 560f;
-            const float boxHeight = 340f;
+            const float boxHeight = 360f;
             Rect rect = new Rect(10f, 10f, boxWidth, boxHeight);
 
             GUI.Box(rect, GUIContent.none, _boxStyle);
@@ -391,7 +406,13 @@ namespace Fodinae.UI
         {
             if (_boxStyle == null)
             {
-                var bgTex = new Texture2D(1, 1);
+                Texture2D bgTex = RuntimeTextureFactory.CreateRgba32NoMip(
+                    1,
+                    1,
+                    "InGameDebugOverlayBackground",
+                    RuntimeTextureColorSpace.Srgb,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
                 bgTex.SetPixel(0, 0, new Color(0.05f, 0.05f, 0.08f, 0.85f));
                 bgTex.Apply();
 

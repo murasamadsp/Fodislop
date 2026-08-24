@@ -22,6 +22,7 @@ MonoBehaviour:
     RenderScale: 0.65
     VSyncCount: 0
     AntiAliasing: 0
+    PostProcessQuality: 1
   _low:
     LightingMinimumPixelsPerCell: 1
     LightingMaximumTextureDimension: 512
@@ -32,6 +33,7 @@ MonoBehaviour:
     RenderScale: 0.8
     VSyncCount: 0
     AntiAliasing: 0
+    PostProcessQuality: 2
   _medium:
     LightingMinimumPixelsPerCell: 2
     LightingMaximumTextureDimension: 768
@@ -42,6 +44,7 @@ MonoBehaviour:
     RenderScale: 0.9
     VSyncCount: 1
     AntiAliasing: 0
+    PostProcessQuality: 0
   _high:
     LightingMinimumPixelsPerCell: 2
     LightingMaximumTextureDimension: 960
@@ -52,6 +55,7 @@ MonoBehaviour:
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
+    PostProcessQuality: 0
   _veryHigh:
     LightingMinimumPixelsPerCell: 4
     LightingMaximumTextureDimension: 1024
@@ -62,6 +66,7 @@ MonoBehaviour:
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
+    PostProcessQuality: 0
   _ultra:
     LightingMinimumPixelsPerCell: 4
     LightingMaximumTextureDimension: 1280
@@ -72,3 +77,5 @@ MonoBehaviour:
     RenderScale: 1
     VSyncCount: 1
     AntiAliasing: 0
+    PostProcessQuality: 0
+    LightingQuality: 2

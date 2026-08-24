@@ -19,6 +19,7 @@ using MinesServer.Networking.Connection;
 using MinesServer.Networking.Connection.Client;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Shared;
+using Unity.Profiling;
 using UnityEngine;
 using VContainer;
 
@@ -26,13 +27,8 @@ namespace Fodinae.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService
     {
-        public static ConnectionManager? Instance { get; private set; }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            Instance = null;
-        }
+        private static readonly ProfilerMarker PacketDrainMarker =
+            new("Fodinae.Net.DrainPacketQueue");
 
         // Бюджет на обработку входящих пакетов — доля времени КАДРА, а не стены часов.
         // Пропорция к deltaTime масштабирует пропускную способность с частотой кадров
@@ -74,11 +70,6 @@ namespace Fodinae.Networking.Connection
         [System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0052", Justification = "Хранит причину дисконнекта для реконнект-статуса")]
         private string _disconnectReason = string.Empty;
 
-        protected void Awake()
-        {
-            Instance = this;
-        }
-
         protected void OnDestroy()
         {
             Disconnect();
@@ -99,6 +90,7 @@ namespace Fodinae.Networking.Connection
         /// </summary>
         private void DrainPacketQueue()
         {
+            using var marker = PacketDrainMarker.Auto();
             float budgetSeconds = Mathf.Min(
                 Time.unscaledDeltaTime * PacketDrainBudgetFractionOfFrame,
                 PacketDrainBudgetMaximumSeconds);
@@ -149,7 +141,7 @@ namespace Fodinae.Networking.Connection
             if (status != _reconnectStatus)
             {
                 _reconnectStatus = status;
-                ReconnectUI.Instance?.SetStatus(status);
+                _session.TryResolve<ReconnectUI>()?.SetStatus(status);
             }
 
             if (_reconnectCountdown <= 0f)
@@ -185,7 +177,7 @@ namespace Fodinae.Networking.Connection
             Connection.Connect();
 
             _reconnectStatus = "Подключение...";
-            ReconnectUI.Instance?.SetStatus(_reconnectStatus);
+            _session.TryResolve<ReconnectUI>()?.SetStatus(_reconnectStatus);
         }
 
         /// <summary>
@@ -286,7 +278,7 @@ namespace Fodinae.Networking.Connection
             _disconnectReason = reason;
             Disconnect();
             _session.TryResolve<GameManager>()?.DeauthorizeUI();
-            ReconnectUI.Instance?.ShowDisconnectReason(reason);
+            _session.TryResolve<ReconnectUI>()?.ShowDisconnectReason(reason);
         }
 
         public void HandleServerReconnect()
@@ -297,7 +289,7 @@ namespace Fodinae.Networking.Connection
             _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
             Disconnect();
             _session.TryResolve<GameManager>()?.SetState(Game.Managers.GameState.Disconnected);
-            ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
+            _session.TryResolve<ReconnectUI>()?.ShowReconnecting(_reconnectStatus);
         }
 
         public void StartManualReconnect()
@@ -305,7 +297,7 @@ namespace Fodinae.Networking.Connection
             _shouldAutoReconnect = true;
             _reconnectBackoff.Reset();
             _reconnectCountdown = _reconnectBackoff.CurrentDelay;
-            ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
+            _session.TryResolve<ReconnectUI>()?.ShowReconnecting(_reconnectStatus);
         }
 
         private void OnConnected()
@@ -313,7 +305,7 @@ namespace Fodinae.Networking.Connection
             _shouldAutoReconnect = false;
             _reconnectBackoff.Reset();
             _reconnectStatus = string.Empty;
-            ReconnectUI.Instance?.Hide();
+            _session.TryResolve<ReconnectUI>()?.Hide();
 
             int version = _useOldClient ? 0 : 1;
             string token = AuthTokenManager.LoadToken();
@@ -348,7 +340,7 @@ namespace Fodinae.Networking.Connection
                 _reconnectCountdown = _reconnectBackoff.CurrentDelay;
                 _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
                 gameManager?.SetState(Game.Managers.GameState.Disconnected);
-                ReconnectUI.Instance?.ShowReconnecting(_reconnectStatus);
+                _session.TryResolve<ReconnectUI>()?.ShowReconnecting(_reconnectStatus);
             }
         }
 

@@ -37,7 +37,6 @@ namespace Fodinae.Game
 
         private VFXPool.PooledSlot? _slot;
         private GameObject? _gameObject;
-        private SpriteRenderer? _spriteRenderer;
 
         private Color _primaryColor = Color.white;
         private float _speed = 1f;
@@ -86,7 +85,6 @@ namespace Fodinae.Game
             if (slot != null)
             {
                 _gameObject = slot.GameObject;
-                _spriteRenderer = slot.SpriteRenderer;
             }
 
             ParseParameters();
@@ -131,10 +129,8 @@ namespace Fodinae.Game
 
                 if (_currentFrame < _animationFrames.Length)
                 {
-                    if (_spriteRenderer != null)
-                    {
-                        _spriteRenderer.sprite = _animationFrames[_currentFrame];
-                    }
+                    _slot?.SetSprite(_animationFrames[_currentFrame]);
+                    _slot?.SetEnabled(true);
                 }
                 else
                 {
@@ -351,12 +347,8 @@ namespace Fodinae.Game
                 }
             }
 
-            if (_spriteRenderer != null)
-            {
-                _spriteRenderer.sortingOrder = -500;
-                _spriteRenderer.color = _primaryColor;
-                _spriteRenderer.sprite = null;
-            }
+            _slot?.SetColor(_primaryColor);
+            _slot?.SetSprite(null);
         }
 
         private void PlayAudio()
@@ -395,10 +387,8 @@ namespace Fodinae.Game
                     _currentFrame = 0;
                     _frameDuration = animData.FrameDuration / Mathf.Max(0.01f, _speed);
                     _isAnimated = true;
-                    if (_spriteRenderer != null)
-                    {
-                        _spriteRenderer.sprite = _animationFrames[0];
-                    }
+                    _slot?.SetSprite(_animationFrames[0]);
+                    _slot?.SetEnabled(true);
 
                     _maxLifetime = (_animationFrames.Length * _frameDuration) + 0.5f;
                     return;
@@ -412,15 +402,13 @@ namespace Fodinae.Game
 
                 if (texture != null)
                 {
-                    if (_spriteRenderer != null)
-                    {
-                        _ownedStaticSprite = Sprite.Create(
-                            texture,
-                            new Rect(0, 0, texture.width, texture.height),
-                            new Vector2(0.5f, 0.5f),
-                            RenderingConstants.PIXELS_PER_UNIT);
-                        _spriteRenderer.sprite = _ownedStaticSprite;
-                    }
+                    _ownedStaticSprite = Sprite.Create(
+                        texture,
+                        new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f),
+                        RenderingConstants.PIXELS_PER_UNIT);
+                    _slot?.SetSprite(_ownedStaticSprite);
+                    _slot?.SetEnabled(true);
 
                     _maxLifetime = 1f;
                     return;
@@ -461,6 +449,9 @@ namespace Fodinae.Game
                 var effectAsset = await RuntimeEffekseerLoader.LoadEffectAsync(
                     bytes,
                     _effectType.ToString(),
+                    TryResolve<IAssetLoader>() as ClientAssetLoader ??
+                        throw new InvalidOperationException(
+                            "ClientAssetLoader is unavailable for runtime Effekseer textures."),
                     texturePathMapper: path =>
                     {
                         if (_textureOverrideMap != null && _textureOverrideMap.TryGetValue(path, out var mapped))
@@ -511,10 +502,7 @@ namespace Fodinae.Game
 
                 _hasEffekseerEffect = true;
 
-                if (_spriteRenderer != null)
-                {
-                    _spriteRenderer.enabled = false;
-                }
+                _slot?.SetEnabled(false);
 
                 _maxLifetime = 10f;
                 return true;
@@ -587,7 +575,6 @@ namespace Fodinae.Game
             }
 
             _gameObject = null;
-            _spriteRenderer = null;
         }
     }
 }

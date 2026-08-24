@@ -105,7 +105,7 @@ namespace Fodinae.Core
             _resolver.Resolve<PlayerMovementController>();
             _resolver.Resolve<CameraFollow>();
             _resolver.Resolve<TerrainRenderer>();
-            _resolver.Resolve<TentacleBatchRenderer>();
+            _resolver.Resolve<WorldEntityBatchRenderer>();
 
             // UI-сервисы: создаём ПЕРЕД GameManager чтобы SetupUI находил их через
             // FindAnyObjectByType(FindObjectsInactive.Include) и не создавал дубликаты.
@@ -139,7 +139,7 @@ namespace Fodinae.Core
             _resolver.Resolve<RobotManager>();
 
             // UI создаётся ПОСЛЕ того как все менеджеры-синглтоны уже построены и контейнер
-            // полностью собран. AddInjectedComponent -> ServiceLocator.Inject не пере-резолвит
+            // полностью собран. Повторная инъекция не пере-резолвит
             // ничего, что находится в процессе построения.
             gameManager.EnsureUISetup();
 
@@ -271,7 +271,6 @@ namespace Fodinae.Core
         {
             ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.Terrain);
             ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.DynamicEmission);
-            ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.Velocity);
             ValidateShader(errors, ProjectRuntimeContracts.ShaderNames.WorldSurface);
 
             if (Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute) == null)

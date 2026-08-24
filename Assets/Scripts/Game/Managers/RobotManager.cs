@@ -87,7 +87,6 @@ namespace Fodinae.Game.Managers
 
             GameObject robotGo = new GameObject($"Robot_{botId}");
             robotGo.transform.SetParent(transform);
-            robotGo.AddComponent<SpriteRenderer>();
 
             robot = robotGo.GetComponent<Robot>();
             if (robot == null)

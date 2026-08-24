@@ -52,6 +52,9 @@ namespace Fodinae.Game.Managers
 
         public bool IsDisposed { get; private set; }
 
+        public event Action<int, int>? CellChanged;
+        public event Action<int, int, int, int>? RegionChanged;
+
         public void EnsureEditorInitialized()
         {
 #if UNITY_EDITOR
@@ -75,6 +78,8 @@ namespace Fodinae.Game.Managers
             {
                 throw new ArgumentException("[MapStorage] World code name cannot be null or empty", nameof(worldCodeName));
             }
+
+            worldCodeName = SanitizeWorldCodeName(worldCodeName);
 
             if (width <= 0 || height <= 0)
             {
@@ -129,6 +134,24 @@ namespace Fodinae.Game.Managers
             }
         }
 
+        /// <summary>
+        /// Заменяет символы, недопустимые в именах файлов Windows, чтобы имя мира
+        /// от сервера не роняло путь ({name}.mapb) на любой платформе.
+        /// </summary>
+        private static string SanitizeWorldCodeName(string worldCodeName)
+        {
+            char[] invalid = Path.GetInvalidFileNameChars();
+            var sanitized = new System.Text.StringBuilder(worldCodeName.Length);
+            foreach (char c in worldCodeName)
+            {
+                sanitized.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+            }
+
+            // Завершающие точка/пробел недопустимы в именах файлов Windows.
+            string result = sanitized.ToString().TrimEnd('.', ' ');
+            return string.IsNullOrEmpty(result) ? "world" : result;
+        }
+
         private static void CreateBackup(string mapPath, string worldCodeName)
         {
             if (!File.Exists(mapPath))
@@ -171,7 +194,7 @@ namespace Fodinae.Game.Managers
 
             _cellLayer[x, y] = type;
             Revision++;
-            TerrainRenderer.OnCellChanged(x, y);
+            CellChanged?.Invoke(x, y);
         }
 
         public void SetRegion(
@@ -234,7 +257,7 @@ namespace Fodinae.Game.Managers
             if (changedCells > 0)
             {
                 Revision++;
-                TerrainRenderer.OnRegionChanged(startX, startY, width, height);
+                RegionChanged?.Invoke(startX, startY, width, height);
             }
 
             // SetRegion materializes chunks synchronously, so WorldLayer's
@@ -252,6 +275,37 @@ namespace Fodinae.Game.Managers
         /// </summary>
         public void Flush()
         {
+            // A separate overload rather than an optional parameter: an
+            // optional parameter does not match IWorldDataStorage.Flush(),
+            // which declares none, so the type stops implementing the
+            // interface.
+            Flush(durable: true);
+        }
+
+        /// <summary>
+        /// Persists all dirty map chunks, optionally forcing them onto the
+        /// physical drive.
+        /// </summary>
+        /// <param name="durable">
+        /// Whether to force the bytes all the way onto the physical drive.
+        /// <para>
+        /// This is <c>FileStream.Flush(true)</c>, which on macOS issues
+        /// F_FULLFSYNC and blocks until the drive acknowledges the write - tens
+        /// of milliseconds, routinely. It belongs to quit, pause and low-memory,
+        /// where the process is about to stop and the cost is paid once.
+        /// </para>
+        /// <para>
+        /// It must not be on the five-second autosave from MapManager.Update,
+        /// which is on the main thread: that turns a periodic save into a
+        /// periodic stall, visible as an evenly spaced comb of spikes through
+        /// an otherwise flat frame graph. Passing false still flushes the
+        /// managed buffers to the OS, so the data survives a process crash -
+        /// only an OS crash or power loss can lose it, and the next durable
+        /// flush on quit closes that window.
+        /// </para>
+        /// </param>
+        public void Flush(bool durable)
+        {
             if (_cellLayer == null || !_isInitialized || IsDisposed)
             {
                 return;
@@ -259,7 +313,7 @@ namespace Fodinae.Game.Managers
 
             try
             {
-                _cellLayer.Flush(flushToDisk: true);
+                _cellLayer.Flush(flushToDisk: durable);
             }
             catch (Exception ex) when (
                 ex is IOException ||

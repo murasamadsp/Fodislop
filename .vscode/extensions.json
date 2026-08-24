@@ -1,7 +1,7 @@
 {
-    "recommendations": [
-        "ms-dotnettools.csdevkit",
-        "visualstudiotoolsforunity.vstuc",
-        "editorconfig.editorconfig"
-    ]
+  "recommendations": [
+    "ms-dotnettools.csdevkit",
+    "visualstudiotoolsforunity.vstuc",
+    "editorconfig.editorconfig"
+  ]
 }

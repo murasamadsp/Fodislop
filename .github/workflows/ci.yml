@@ -47,11 +47,16 @@ jobs:
           key: nuget-${{ hashFiles('**/*.csproj', '**/packages-lock.json') }}
           restore-keys: nuget-
 
-      - name: Build dependencies
+      # Unity-generated .csproj reference Unity editor DLLs by absolute path.
+      # Without a provisioned Unity install the build cannot resolve them, so
+      # fail fast with a clear message instead of a misleading restore error.
+      - name: Check Unity editor references
         run: |
-          for csproj in MinesServer*.csproj Effekseer*.csproj UniTask*.csproj McpUnity*.csproj; do
-            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo || true
-          done
+          hint="$(grep -m1 '<HintPath>' Assembly-CSharp.csproj | sed -E 's/.*<HintPath>(.*)<\/HintPath>.*/\1/')"
+          if [ -z "$hint" ] || [ ! -f "$hint" ]; then
+            echo "::error::Unity editor DLL not found at '$hint'. C# analysis requires Unity 6000.5.0f1 on the runner (or regenerate the .csproj on this machine)."
+            exit 1
+          fi
 
       - name: Build & analyze
         id: lint

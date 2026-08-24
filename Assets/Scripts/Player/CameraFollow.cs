@@ -13,14 +13,6 @@ namespace Fodinae.Player
     [ExecuteAlways]
     public class CameraFollow : MonoBehaviour
     {
-        public static CameraFollow? Instance { get; private set; }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            Instance = null;
-        }
-
         [Header("Follow Settings")]
         public const float DefaultOrthographicSize = 7f;
         public const float DefaultCameraDepthZ = -10f;
@@ -41,6 +33,9 @@ namespace Fodinae.Player
         [SerializeField]
         private float _zoomSmoothness = 8f;
 
+        private const float ZoomSettleEpsilon = 0.001f;
+        private const float FollowSettleEpsilonSquared = 0.000001f;
+
         private float _originalZ;
         private Camera? _camera;
         private PlayerMovementController? _subscribedPlayer;
@@ -60,7 +55,6 @@ namespace Fodinae.Player
 
         protected void Awake()
         {
-            Instance = this;
             _camera = GetComponent<Camera>();
         }
 
@@ -127,17 +121,13 @@ namespace Fodinae.Player
 
         private void InitializeInput()
         {
-            _scrollAction = new InputAction("Scroll", binding: "<Mouse>/scroll");
-            _scrollAction.Enable();
+            _scrollAction = InputSystem.actions?.FindAction(
+                "UI/ScrollWheel",
+                throwIfNotFound: true);
         }
 
         protected void OnDestroy()
         {
-            if (Instance == this)
-            {
-                Instance = null;
-            }
-
             if (_subscribedPlayer != null)
             {
                 _subscribedPlayer.OnPlayerMoved -= HandlePlayerMoved;
@@ -160,13 +150,6 @@ namespace Fodinae.Player
 
         private void DisposeScrollAction()
         {
-            if (_scrollAction == null)
-            {
-                return;
-            }
-
-            _scrollAction.Disable();
-            _scrollAction.Dispose();
             _scrollAction = null;
         }
 
@@ -275,8 +258,20 @@ namespace Fodinae.Player
                 _targetZoom = Mathf.Clamp(_targetZoom, _minZoom, _maxZoom);
             }
 
-            _currentZoom = Mathf.Lerp(_currentZoom, _targetZoom, _zoomSmoothness * Time.deltaTime);
-            _camera.orthographicSize = _currentZoom;
+            float nextZoom = Mathf.Lerp(
+                _currentZoom,
+                _targetZoom,
+                _zoomSmoothness * Time.deltaTime);
+            if (Mathf.Abs(nextZoom - _targetZoom) <= ZoomSettleEpsilon)
+            {
+                nextZoom = _targetZoom;
+            }
+
+            _currentZoom = nextZoom;
+            if (!Mathf.Approximately(_camera.orthographicSize, _currentZoom))
+            {
+                _camera.orthographicSize = _currentZoom;
+            }
 
             if (Mathf.Abs(_currentZoom - _lastZoom) > 0.01f)
             {
@@ -312,7 +307,25 @@ namespace Fodinae.Player
             // smoothTime ≈ 1 / _smoothSpeed gives equivalent response to the old Lerp, but we
             // tune it a touch snappier to reduce swimmy lag at high movement speeds.
             float smoothTime = 1f / Mathf.Max(_smoothSpeed, 0.001f);
-            transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref _followVelocity, smoothTime, float.PositiveInfinity, Time.deltaTime);
+            if ((transform.position - desiredPosition).sqrMagnitude <= FollowSettleEpsilonSquared &&
+                _followVelocity.sqrMagnitude <= FollowSettleEpsilonSquared)
+            {
+                if (transform.position != desiredPosition)
+                {
+                    transform.position = desiredPosition;
+                }
+
+                _followVelocity = Vector3.zero;
+                return;
+            }
+
+            transform.position = Vector3.SmoothDamp(
+                transform.position,
+                desiredPosition,
+                ref _followVelocity,
+                smoothTime,
+                float.PositiveInfinity,
+                Time.deltaTime);
         }
 
         public void SnapToTarget()

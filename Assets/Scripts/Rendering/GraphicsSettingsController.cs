@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Player.Logic;
@@ -62,12 +64,18 @@ public sealed class GraphicsSettingsController
         _clientConfig.Save();
     }
 
-    public void ApplyCustomWorldMaterialSettings()
+    public void UpdatePostProcessSettings(Action<ClientConfig> update)
+    {
+        _clientConfig.UpdatePostProcessAndSave(update);
+        _postProcessController.ApplyClientConfig();
+    }
+
+    public void UpdateCustomWorldMaterialSettings(Action<ClientConfig> update)
     {
         MarkCustom();
+        _clientConfig.UpdateAndSave(update);
         _terrainRenderer.ApplyClientConfig();
         _surfaceRenderer.ApplyClientConfig();
-        _clientConfig.Save();
     }
 
     private void ApplyAll()

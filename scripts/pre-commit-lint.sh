@@ -11,10 +11,15 @@ export DOTNET_CLI_HOME="$LINT_DOTNET_HOME"
 echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
+echo "--- Step 0: Auditing project architecture and settings invariants ---"
+"$(dirname "$0")/check-forbidden-patterns.sh"
+
 PLATFORM="$(uname -s)"
 if [ "$PLATFORM" != "Windows_NT" ] && [ "$CI" != "true" ]; then
-    echo "Notice: Skipping C# build checks on $PLATFORM (Unity-generated .NET Framework 4.7.1 csproj is not buildable outside Windows)."
-    echo "Run Unity Editor or Windows CI for full analyzer validation."
+    echo "Notice: Skipping C# build checks on $PLATFORM (Unity-generated .csproj reference"
+    echo "Unity editor DLLs by absolute path, so the build only works on machines with"
+    echo "Unity 6000.5.0f1 installed, or in CI)."
+    echo "Run Unity Editor or CI for full analyzer validation."
     exit 0
 fi
 
@@ -119,9 +124,9 @@ for PROJECT_FILE in "${PROJECTS[@]}"; do
         PROJECT_ERRORS=$(echo "$BUILD_LOG" | grep -E ": error " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || true)
 
         # Only catch warnings in user codebase (Assets/Scripts or Assets/Editor)
-        # Exclude vendored VContainer and MgGifDecoder from linting
+        # Exclude vendored VContainer from linting
         # In CI mode check all codebase warnings, locally check staged files
-        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" | grep -v "Assets/Scripts/MgGifDecoder/" || true)
+        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" || true)
         PROJECT_WARNINGS=""
 
         if [ "$CI" = "true" ]; then

@@ -47,10 +47,7 @@ namespace Fodinae.Effekseer
         /// from the server. Example: <c>path => "VFX/" + path</c>.
         /// Return null from the mapper to skip a texture.
         /// </param>
-        /// <param name="clientAssetLoader">
-        /// The asset loader instance to use for texture downloads.
-        /// Defaults to <see cref="ClientAssetLoader.Instance"/>.
-        /// </param>
+        /// <param name="clientAssetLoader">The injected asset loader used for texture downloads.</param>
         /// <param name="textureTimeoutSeconds">
         /// Per-texture download timeout. Defaults to 10 seconds.
         /// </param>
@@ -62,8 +59,8 @@ namespace Fodinae.Effekseer
         public static async UniTask<EffekseerEffectAsset> LoadEffectAsync(
             byte[] efkBytes,
             string effectName,
+            ClientAssetLoader clientAssetLoader,
             Func<string, string>? texturePathMapper = null,
-            ClientAssetLoader? clientAssetLoader = null,
             int textureTimeoutSeconds = 10)
         {
             if (efkBytes == null || efkBytes.Length < 4)
@@ -79,11 +76,9 @@ namespace Fodinae.Effekseer
                     "EffekseerSystem must be initialized before loading a runtime effect.");
             }
 
-            var loader = clientAssetLoader ?? (ServiceLocator.Resolve<IAssetLoader>() as ClientAssetLoader);
-            if (loader == null)
+            if (clientAssetLoader == null)
             {
-                throw new InvalidOperationException(
-                    "A ClientAssetLoader is required to load runtime effect textures.");
+                throw new ArgumentNullException(nameof(clientAssetLoader));
             }
 
             // ----- 1. Parse resource paths from the .efk binary -----
@@ -113,7 +108,7 @@ namespace Fodinae.Effekseer
                         continue;
                     }
 
-                    var tex = await DownloadTextureAsync(loader, serverPath, textureTimeoutSeconds);
+                    var tex = await DownloadTextureAsync(clientAssetLoader, serverPath, textureTimeoutSeconds);
                     textureResources.Add(new EffekseerTextureResource
                     {
                         path = rawPath,

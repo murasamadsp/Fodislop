@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Fodinae.Core;
 using Fodinae.Rendering;
 
@@ -13,6 +14,8 @@ namespace Fodinae.Core.Interfaces
         void MarkGraphicsAsCustom();
         void SelectGraphicsPreset(GraphicsPreset preset);
         void SetCustomGraphicsSettings(GraphicsQualitySettings settings);
+        void UpdatePostProcessAndSave(Action<ClientConfig> update);
+        void UpdateAndSave(Action<ClientConfig> update);
         void Load();
         void Save();
 

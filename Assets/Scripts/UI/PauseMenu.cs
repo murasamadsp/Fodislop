@@ -15,6 +15,7 @@ using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI.Programmator;
 using Fodinae.World.Lighting;
+using Fodinae.World.Lighting.Quality;
 using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets.GUI;
 using MinesServer.Networking.Shared.Packets;
@@ -42,7 +43,11 @@ namespace Fodinae.UI
         [Inject]
         private GraphicsSettingsController _graphicsSettings = null!;
         [Inject]
+        private DisplayManager _displayManager = null!;
+        [Inject]
         private IObjectResolver _resolver = null!;
+        [Inject]
+        private IMainMenuNavigation _mainMenuNavigation = null!;
         private VisualElement? _menuPanel;
         private TemplateContainer? _menuTree;
         private VisualElement? _mainPage;
@@ -52,6 +57,7 @@ namespace Fodinae.UI
         private float _originalScale;
         private bool _originalScaleCaptured;
         private Button? _fullscreenButton;
+        private readonly List<Action> _settingsRefreshers = [];
         private bool _initialized;
         private bool _initializationFailed;
 
@@ -123,11 +129,12 @@ namespace Fodinae.UI
             _postProcessController ??= _resolver.Resolve<PostProcessController>();
             _terrainRenderer ??= _resolver.Resolve<TerrainRenderer>();
             _graphicsSettings ??= _resolver.Resolve<GraphicsSettingsController>();
+            _displayManager ??= _resolver.Resolve<DisplayManager>();
 
             if (_clientConfig == null || _clientConfig.Config == null || _networkService == null ||
                 _audioSystem == null || _connectionService == null || _inputBlocker == null ||
                 _lightingEngine == null || _postProcessController == null || _terrainRenderer == null ||
-                _graphicsSettings == null)
+                _graphicsSettings == null || _displayManager == null)
             {
                 return;
             }
@@ -203,7 +210,7 @@ namespace Fodinae.UI
             container.Add(label);
 
             var slider = new Slider(min, max);
-            slider.value = initialValue;
+            slider.SetValueWithoutNotify(initialValue);
             void UpdateLabel(float value)
             {
                 label.text = $"{labelText}: {value:F2}";
@@ -516,7 +523,8 @@ namespace Fodinae.UI
             }));
 #endif
 
-            var graphicsRefreshers = new List<Action>();
+            _settingsRefreshers.Clear();
+            ICollection<Action> graphicsRefreshers = _settingsRefreshers;
             audioSection.Add(CreateAudioSlider("Общая громкость", AudioBusType.Master));
             audioSection.Add(CreateAudioSlider("Звуковые эффекты", AudioBusType.SFX));
             audioSection.Add(CreateAudioSlider("Музыка", AudioBusType.Music));
@@ -526,11 +534,8 @@ namespace Fodinae.UI
             Toggle muteInBackgroundToggle = CreateBoundToggle(
                 "Глушить звук в фоне",
                 () => _clientConfig.Config.MuteAudioInBackground,
-                value =>
-                {
-                    _clientConfig.Config.MuteAudioInBackground = value;
-                    _clientConfig.Save();
-                },
+                value => _clientConfig.UpdateAndSave(
+                    config => config.MuteAudioInBackground = value),
                 graphicsRefreshers);
             audioSection.Add(muteInBackgroundToggle);
 
@@ -539,11 +544,15 @@ namespace Fodinae.UI
                 _clientConfig.Config.UiScale,
                 v =>
                 {
-                    _clientConfig.Config.UiScale = v;
-                    _clientConfig.Save();
+                    _clientConfig.UpdateAndSave(config => config.UiScale = v);
                     if (_doc != null && _doc.panelSettings != null)
                     {
                         _doc.panelSettings.scale = v;
+                    }
+
+                    foreach (Canvas canvas in FindObjectsByType<Canvas>())
+                    {
+                        canvas.scaleFactor = v;
                     }
                 },
                 0.5f,
@@ -566,11 +575,11 @@ namespace Fodinae.UI
                 }
             }
 
-            int currentResIndex = 0;
+            int currentResIndex = -1;
             for (int i = 0; i < uniqueResolutions.Count; i++)
             {
-                if (uniqueResolutions[i].width == Screen.currentResolution.width &&
-                    uniqueResolutions[i].height == Screen.currentResolution.height)
+                if (uniqueResolutions[i].width == Screen.width &&
+                    uniqueResolutions[i].height == Screen.height)
                 {
                     currentResIndex = i;
                     break;
@@ -582,8 +591,10 @@ namespace Fodinae.UI
             {
                 resolutionButton.text = uniqueResolutions.Count == 0
                     ? "Разрешения недоступны"
-                    : $"Разрешение: {uniqueResolutions[currentResIndex].width} x " +
-                      uniqueResolutions[currentResIndex].height;
+                    : currentResIndex >= 0
+                        ? $"Разрешение: {uniqueResolutions[currentResIndex].width} x " +
+                          uniqueResolutions[currentResIndex].height
+                        : $"Разрешение: {Screen.width} x {Screen.height}";
             }
 
             resolutionButton.clicked += () =>
@@ -592,10 +603,17 @@ namespace Fodinae.UI
                 {
                     currentResIndex = (currentResIndex + 1) % uniqueResolutions.Count;
                     var resolution = uniqueResolutions[currentResIndex];
-                    Screen.SetResolution(
+                    // Goes through DisplayManager, not Screen.SetResolution
+                    // directly - that's the only path that persists the
+                    // choice to ClientConfig and normalizes ExclusiveFullScreen
+                    // on macOS. A direct Screen.SetResolution call here would
+                    // silently revert to the last saved resolution on next
+                    // launch, same bug ToggleFullscreen had.
+                    _displayManager.SetResolution(
                         resolution.width,
                         resolution.height,
-                        Screen.fullScreen);
+                        Screen.fullScreenMode,
+                        (int)resolution.refreshRateRatio.value);
                     Debug.Log(
                         $"[PauseMenu] Resolution: {resolution.width}x{resolution.height}");
                     UpdateResolutionButton();
@@ -605,6 +623,22 @@ namespace Fodinae.UI
             resolutionButton.AddToClassList("pause-btn");
             UpdateResolutionButton();
             displaySection.Add(resolutionButton);
+
+            // Replaces a "VSync" button that used to live in the Custom
+            // graphics profile and edit GraphicsQualitySettings.VSyncCount -
+            // a field that is deliberately never applied anywhere (see the
+            // remark on TerrariaLightingEngine.ApplyUnityRenderingSettings:
+            // VSync is DisplayManager's alone, to avoid two owners fighting
+            // over QualitySettings.vSyncCount). That button compiled, looked
+            // like a working control, and did nothing when clicked - this is
+            // the real one, wired to the config field DisplayManager actually
+            // reads.
+            Toggle vSyncToggle = CreateBoundToggle(
+                "Вертикальная синхронизация",
+                () => _clientConfig.Config.VSync,
+                value => _displayManager.SetVSync(value),
+                graphicsRefreshers);
+            displaySection.Add(vSyncToggle);
 
             Foldout customGraphicsSection = null!;
             string[] graphicsPresetNames =
@@ -666,6 +700,105 @@ namespace Fodinae.UI
             UpdateLightingQualityButton();
             graphicsSection.Add(lightingQuality);
 
+            // Off/PerBlock/PerPixel tier. Standard presets pick this from the
+            // GraphicsQualityProfile asset (Ultra is always PerPixel), so the
+            // button is read-only outside the Custom profile - cycling it only
+            // makes sense once there is somewhere per-player to store the
+            // choice.
+            string[] lightingQualityTierNames =
+            [
+                "Поблоковое",
+                "Выключено",
+                "Попиксельное",
+                "Попиксельное + Bilinear Fix",
+            ];
+            var lightingQualityTierButton = new Button();
+            void UpdateLightingQualityTierButton()
+            {
+                GraphicsPreset preset = _graphicsSettings.SelectedPreset;
+                LightingQualityMode mode = preset == GraphicsPreset.Custom
+                    ? _graphicsSettings.CustomSettings.LightingQuality
+                    : _lightingEngine.ActiveLightingQuality;
+                lightingQualityTierButton.text =
+                    $"Качество освещения: {lightingQualityTierNames[(int)mode]}";
+                lightingQualityTierButton.SetEnabled(preset == GraphicsPreset.Custom);
+            }
+
+            lightingQualityTierButton.clicked += () =>
+            {
+                if (_graphicsSettings.SelectedPreset != GraphicsPreset.Custom)
+                {
+                    return;
+                }
+
+                ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.LightingQuality = settings.LightingQuality switch
+                    {
+                        LightingQualityMode.Off => LightingQualityMode.PerBlock,
+                        LightingQualityMode.PerBlock => LightingQualityMode.PerPixel,
+                        LightingQualityMode.PerPixel => LightingQualityMode.PerPixelBilinearFix,
+                        _ => LightingQualityMode.Off,
+                    };
+                    return settings;
+                });
+                UpdateLightingQualityTierButton();
+            };
+            lightingQualityTierButton.AddToClassList("pause-btn");
+            graphicsRefreshers.Add(UpdateLightingQualityTierButton);
+            UpdateLightingQualityTierButton();
+            graphicsSection.Add(lightingQualityTierButton);
+
+            // Same shape as the lighting tier above: read-only for standard
+            // presets, cycleable on Custom. Named by cost rather than by effect
+            // list, because "Основное" is the tier that keeps the look and drops
+            // bloom and motion blur - the two effects that are most of the
+            // stack's cost.
+            string[] postProcessTierNames =
+            [
+                "Полная",
+                "Выключена",
+                "Основное",
+            ];
+            var postProcessTierButton = new Button();
+            void UpdatePostProcessTierButton()
+            {
+                GraphicsPreset preset = _graphicsSettings.SelectedPreset;
+
+                // No resolver to consult, unlike the lighting tier: nothing
+                // overrides this value per preset, so the stored settings are
+                // the active settings whichever preset is selected.
+                PostProcessQualityMode mode =
+                    _clientConfig.Config.GraphicsQualitySettings.PostProcessQuality;
+                postProcessTierButton.text =
+                    $"Пост-обработка: {postProcessTierNames[(int)mode]}";
+                postProcessTierButton.SetEnabled(preset == GraphicsPreset.Custom);
+            }
+
+            postProcessTierButton.clicked += () =>
+            {
+                if (_graphicsSettings.SelectedPreset != GraphicsPreset.Custom)
+                {
+                    return;
+                }
+
+                ApplyCustomTechnicalSettings(settings =>
+                {
+                    settings.PostProcessQuality = settings.PostProcessQuality switch
+                    {
+                        PostProcessQualityMode.Off => PostProcessQualityMode.Essential,
+                        PostProcessQualityMode.Essential => PostProcessQualityMode.Full,
+                        _ => PostProcessQualityMode.Off,
+                    };
+                    return settings;
+                });
+                UpdatePostProcessTierButton();
+            };
+            postProcessTierButton.AddToClassList("pause-btn");
+            graphicsRefreshers.Add(UpdatePostProcessTierButton);
+            UpdatePostProcessTierButton();
+            graphicsSection.Add(postProcessTierButton);
+
             customGraphicsSection = new Foldout
             {
                 text = "Пользовательский профиль",
@@ -719,7 +852,7 @@ namespace Fodinae.UI
                     settings.LightingMaximumTextureDimension = Mathf.RoundToInt(value);
                     return settings;
                 }),
-                128f,
+                GraphicsQualitySettings.MinimumLightingTextureDimension,
                 4096f,
                 graphicsRefreshers));
             customGraphicsSection.Add(CreateBoundSlider(
@@ -777,24 +910,6 @@ namespace Fodinae.UI
                 0.5f,
                 1f,
                 graphicsRefreshers));
-
-            var customVSyncButton = new Button();
-            void RefreshCustomVSync()
-            {
-                customVSyncButton.text =
-                    $"VSync: {_graphicsSettings.CustomSettings.VSyncCount}";
-            }
-
-            customVSyncButton.clicked += () => ApplyCustomTechnicalSettings(settings =>
-            {
-                settings.VSyncCount = (settings.VSyncCount + 1) % 5;
-                return settings;
-            });
-            customVSyncButton.AddToClassList("pause-btn");
-            graphicsRefreshers.Add(RefreshCustomVSync);
-            RefreshCustomVSync();
-            customGraphicsSection.Add(customVSyncButton);
-
 
             var customAntiAliasingButton = new Button();
             void RefreshCustomAntiAliasing()
@@ -892,92 +1007,88 @@ namespace Fodinae.UI
                 8f,
                 graphicsRefreshers));
             advancedGraphicsSection.Add(CreateLabel("Динамические источники"));
-            Robot? localRobot = PlayerMovementController.LocalPlayer?.GetComponent<Robot>();
-            if (localRobot != null)
+            Robot? ResolveLocalRobot()
             {
-                advancedGraphicsSection.Add(CreateBoundSlider(
-                    "Мощность emission игрока",
-                    () => localRobot != null ? localRobot.DynamicLightIntensity : 0f,
-                    value =>
-                    {
-                        MarkGraphicsCustom();
-                        if (localRobot != null)
-                        {
-                            localRobot.SetDynamicLightIntensity(value);
-                        }
-                    },
-                    0f,
-                    4f,
-                    graphicsRefreshers));
-                advancedGraphicsSection.Add(CreateBoundSlider(
-                    "Частота расчёта dynamic emission",
-                    () => _lightingEngine.DynamicLightUpdatesPerSecond,
-                    value =>
-                    {
-                        MarkGraphicsCustom();
-                        _lightingEngine.SetDynamicLightUpdatesPerSecond(value);
-                    },
-                    1f,
-                    LightingConfigLimits.DynamicLightUpdatesPerSecond,
-                    graphicsRefreshers));
-
-                advancedGraphicsSection.Add(CreateBoundSlider(
-                    "Цвет источника: красный",
-                    () => localRobot != null ? localRobot.DynamicLightColor.r : 0f,
-                    value =>
-                    {
-                        MarkGraphicsCustom();
-                        if (localRobot == null)
-                        {
-                            return;
-                        }
-
-                        Color color = localRobot.DynamicLightColor;
-                        localRobot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
-                    },
-                    0f,
-                    1f,
-                    graphicsRefreshers));
-                advancedGraphicsSection.Add(CreateBoundSlider(
-                    "Цвет источника: зелёный",
-                    () => localRobot != null ? localRobot.DynamicLightColor.g : 0f,
-                    value =>
-                    {
-                        MarkGraphicsCustom();
-                        if (localRobot == null)
-                        {
-                            return;
-                        }
-
-                        Color color = localRobot.DynamicLightColor;
-                        localRobot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
-                    },
-                    0f,
-                    1f,
-                    graphicsRefreshers));
-                advancedGraphicsSection.Add(CreateBoundSlider(
-                    "Цвет источника: синий",
-                    () => localRobot != null ? localRobot.DynamicLightColor.b : 0f,
-                    value =>
-                    {
-                        MarkGraphicsCustom();
-                        if (localRobot == null)
-                        {
-                            return;
-                        }
-
-                        Color color = localRobot.DynamicLightColor;
-                        localRobot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
-                    },
-                    0f,
-                    1f,
-                    graphicsRefreshers));
+                return PlayerMovementController.LocalPlayer?.GetComponent<Robot>();
             }
-            else
-            {
-                advancedGraphicsSection.Add(CreateLabel(
-                    "Источник игрока недоступен до появления локального робота."));
-            }
+
+            advancedGraphicsSection.Add(CreateBoundSlider(
+                "Мощность emission игрока",
+                () => ResolveLocalRobot()?.DynamicLightIntensity ?? 0f,
+                value =>
+                {
+                    MarkGraphicsCustom();
+                    ResolveLocalRobot()?.SetDynamicLightIntensity(value);
+                },
+                0f,
+                4f,
+                graphicsRefreshers));
+            advancedGraphicsSection.Add(CreateBoundSlider(
+                "Частота расчёта dynamic emission",
+                () => _lightingEngine.DynamicLightUpdatesPerSecond,
+                value =>
+                {
+                    MarkGraphicsCustom();
+                    _lightingEngine.SetDynamicLightUpdatesPerSecond(value);
+                },
+                1f,
+                LightingConfigLimits.DynamicLightUpdatesPerSecond,
+                graphicsRefreshers));
+
+            advancedGraphicsSection.Add(CreateBoundSlider(
+                "Цвет источника: красный",
+                () => ResolveLocalRobot()?.DynamicLightColor.r ?? 0f,
+                value =>
+                {
+                    MarkGraphicsCustom();
+                    Robot? localRobot = ResolveLocalRobot();
+                    if (localRobot == null)
+                    {
+                        return;
+                    }
+
+                    Color color = localRobot.DynamicLightColor;
+                    localRobot.SetDynamicLightColor(new Color(value, color.g, color.b, 1f));
+                },
+                0f,
+                1f,
+                graphicsRefreshers));
+            advancedGraphicsSection.Add(CreateBoundSlider(
+                "Цвет источника: зелёный",
+                () => ResolveLocalRobot()?.DynamicLightColor.g ?? 0f,
+                value =>
+                {
+                    MarkGraphicsCustom();
+                    Robot? localRobot = ResolveLocalRobot();
+                    if (localRobot == null)
+                    {
+                        return;
+                    }
+
+                    Color color = localRobot.DynamicLightColor;
+                    localRobot.SetDynamicLightColor(new Color(color.r, value, color.b, 1f));
+                },
+                0f,
+                1f,
+                graphicsRefreshers));
+            advancedGraphicsSection.Add(CreateBoundSlider(
+                "Цвет источника: синий",
+                () => ResolveLocalRobot()?.DynamicLightColor.b ?? 0f,
+                value =>
+                {
+                    MarkGraphicsCustom();
+                    Robot? localRobot = ResolveLocalRobot();
+                    if (localRobot == null)
+                    {
+                        return;
+                    }
+
+                    Color color = localRobot.DynamicLightColor;
+                    localRobot.SetDynamicLightColor(new Color(color.r, color.g, value, 1f));
+                },
+                0f,
+                1f,
+                graphicsRefreshers));
 
             advancedGraphicsSection.Add(CreateLabel("Физическое поглощение"));
             advancedGraphicsSection.Add(CreateBoundColorControls(
@@ -1050,7 +1161,7 @@ namespace Fodinae.UI
                 8f,
                 graphicsRefreshers));
             advancedGraphicsSection.Add(CreateLabel("Границы расчёта"));
-            advancedGraphicsSection.Add(CreateBoundSlider(
+            VisualElement maximumLightMultiplierSlider = CreateBoundSlider(
                 "Максимум светового множителя",
                 () => GetLightingValue(static engine => engine.MaximumLightMultiplier),
                 value => ApplyLightingSetting(
@@ -1059,7 +1170,16 @@ namespace Fodinae.UI
                         engine.SetMaximumLightMultiplier(setting)),
                 0.25f,
                 LightingConfigLimits.MaximumLightMultiplier,
-                graphicsRefreshers));
+                graphicsRefreshers);
+            void RefreshMaximumLightMultiplierState()
+            {
+                maximumLightMultiplierSlider.SetEnabled(_lightingEngine.EnableFinalLightingClamp);
+            }
+
+            graphicsRefreshers.Add(RefreshMaximumLightMultiplierState);
+            RefreshMaximumLightMultiplierState();
+            advancedGraphicsSection.Add(maximumLightMultiplierSlider);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             advancedGraphicsSection.Add(CreateBoundSlider(
                 "Пропускание света — диагностика",
                 () => GetLightingValue(static engine => engine.TransmittanceDebugDistanceCells),
@@ -1070,6 +1190,7 @@ namespace Fodinae.UI
                 2f,
                 32f,
                 graphicsRefreshers));
+#endif
             advancedGraphicsSection.Add(CreateBoundSlider(
                 "Минимальное пропускание каскадов",
                 () => GetLightingValue(static engine => engine.MinimumTransmission),
@@ -1095,6 +1216,7 @@ namespace Fodinae.UI
                 {
                     MarkGraphicsCustom();
                     _lightingEngine.SetFinalLightingClampEnabled(value);
+                    RefreshMaximumLightMultiplierState();
                 },
                 graphicsRefreshers);
             advancedGraphicsSection.Add(finalLightingClampToggle);
@@ -1181,7 +1303,7 @@ namespace Fodinae.UI
             {
                 MarkGraphicsCustom();
                 _lightingEngine.ResetRuntimeLightingPreferences();
-                localRobot?.ResetDynamicLightPreferences();
+                ResolveLocalRobot()?.ResetDynamicLightPreferences();
                 foreach (Action refresh in graphicsRefreshers)
                 {
                     refresh();
@@ -1197,260 +1319,388 @@ namespace Fodinae.UI
 #endif
 
             _postProcessController.EnsureVolumeSetup();
-            var pp = _postProcessController;
-            void SavePostProcess(Action apply)
+            void SavePostProcess(Action<ClientConfig> update)
             {
-                MarkGraphicsCustom();
-                apply();
-                _clientConfig.Save();
+                _graphicsSettings.UpdatePostProcessSettings(update);
             }
 
+            void AddPostProcessGroup(string title)
+            {
+                var label = new Label(title);
+                label.AddToClassList("pause-subsection-title");
+                postProcessSection.Add(label);
+            }
+
+            AddPostProcessGroup("Свечение");
             postProcessSection.Add(CreateBoundSlider(
                 "Свечение",
                 () => _clientConfig.Config.BloomIntensity,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.BloomIntensity = value;
-                    pp.ApplyClientConfig();
-                }),
-                0f,
-                5f,
-                graphicsRefreshers));
-            postProcessSection.Add(CreateBoundSlider(
-                "Порог свечения",
-                () => _clientConfig.Config.BloomThreshold,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.BloomThreshold = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.BloomIntensity = value),
                 0f,
                 2f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
+                "Порог свечения",
+                () => _clientConfig.Config.BloomThreshold,
+                value => SavePostProcess(config => config.BloomThreshold = value),
+                0f,
+                2f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Мягкость порога свечения",
+                () => _clientConfig.Config.BloomSoftKnee,
+                value => SavePostProcess(config => config.BloomSoftKnee = value),
+                0f,
+                1f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Радиус свечения",
+                () => _clientConfig.Config.BloomRadius,
+                value => SavePostProcess(config => config.BloomRadius = value),
+                0.5f,
+                8f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
                 "Рассеивание свечения",
                 () => _clientConfig.Config.BloomScatter,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.BloomScatter = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.BloomScatter = value),
                 0.1f,
                 1f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundColorControls(
                 "Цвет свечения",
                 () => _clientConfig.Config.BloomTint,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.BloomTint = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.BloomTint = value),
                 0f,
-                8f,
+                2f,
                 graphicsRefreshers));
+            AddPostProcessGroup("Камера и цвет");
             postProcessSection.Add(CreateBoundSlider(
                 "Виньетка",
                 () => _clientConfig.Config.VignetteIntensity,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteIntensity = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.VignetteIntensity = value),
                 0f,
                 1f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
                 "Мягкость виньетки",
                 () => _clientConfig.Config.VignetteSmoothness,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteSmoothness = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.VignetteSmoothness = value),
                 0.01f,
+                1f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Центр виньетки X",
+                () => _clientConfig.Config.VignetteCenter.x,
+                value => SavePostProcess(config =>
+                    config.VignetteCenter = new Vector2(value, config.VignetteCenter.y)),
+                0f,
+                1f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Центр виньетки Y",
+                () => _clientConfig.Config.VignetteCenter.y,
+                value => SavePostProcess(config =>
+                    config.VignetteCenter = new Vector2(config.VignetteCenter.x, value)),
+                0f,
                 1f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundColorControls(
                 "Цвет виньетки",
                 () => _clientConfig.Config.VignetteColor,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.VignetteColor = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.VignetteColor = value),
                 0f,
                 1f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
                 "Хроматическая аберрация",
                 () => _clientConfig.Config.ChromaticAberrationIntensity,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ChromaticAberrationIntensity = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(
+                    config => config.ChromaticAberrationIntensity = value),
                 0f,
-                1f,
+                0.25f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
                 "Экспозиция",
                 () => _clientConfig.Config.ColorGradingExposure,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ColorGradingExposure = value;
-                    pp.ApplyClientConfig();
-                }),
-                -4f,
-                4f,
+                value => SavePostProcess(config => config.ColorGradingExposure = value),
+                -2f,
+                2f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
                 "Контраст",
                 () => _clientConfig.Config.ColorGradingContrast,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ColorGradingContrast = value;
-                    pp.ApplyClientConfig();
-                }),
-                -1f,
-                1f,
+                value => SavePostProcess(config => config.ColorGradingContrast = value),
+                -0.5f,
+                0.5f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
                 "Насыщенность",
                 () => _clientConfig.Config.ColorGradingSaturation,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ColorGradingSaturation = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.ColorGradingSaturation = value),
                 0f,
                 2f,
                 graphicsRefreshers));
             Toggle toneMappingToggle = CreateBoundToggle(
                 "Тональное отображение",
                 () => _clientConfig.Config.ColorGradingToneMapping,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ColorGradingToneMapping = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.ColorGradingToneMapping = value),
                 graphicsRefreshers);
             postProcessSection.Add(toneMappingToggle);
             postProcessSection.Add(CreateBoundSlider(
                 "Белая точка tone mapping",
                 () => _clientConfig.Config.ColorGradingToneMappingWhitePoint,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ColorGradingToneMappingWhitePoint = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(
+                    config => config.ColorGradingToneMappingWhitePoint = value),
                 0.25f,
                 8f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundColorControls(
                 "Цветовой фильтр",
                 () => _clientConfig.Config.ColorGradingFilter,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.ColorGradingFilter = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.ColorGradingFilter = value),
                 0f,
                 1f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
                 "Зернистость",
                 () => _clientConfig.Config.EigengrauIntensity,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauIntensity = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.EigengrauIntensity = value),
                 0f,
-                1f,
+                0.25f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundColorControls(
                 "Цвет зернистости",
                 () => _clientConfig.Config.EigengrauColor,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.EigengrauColor = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.EigengrauColor = value),
                 0f,
                 1f,
                 graphicsRefreshers));
             postProcessSection.Add(CreateBoundSlider(
+                "Порог темноты зернистости",
+                () => _clientConfig.Config.EigengrauDarknessThreshold,
+                value => SavePostProcess(config => config.EigengrauDarknessThreshold = value),
+                0.02f,
+                0.75f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Масштаб зернистости",
+                () => _clientConfig.Config.EigengrauNoiseScale,
+                value => SavePostProcess(config => config.EigengrauNoiseScale = value),
+                0.75f,
+                2f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Скорость зернистости",
+                () => _clientConfig.Config.EigengrauAnimationSpeed,
+                value => SavePostProcess(config => config.EigengrauAnimationSpeed = value),
+                1f,
+                60f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
                 "Размытие движения",
                 () => _clientConfig.Config.MotionBlurIntensity,
-                value => SavePostProcess(() =>
-                {
-                    _clientConfig.Config.MotionBlurIntensity = value;
-                    pp.ApplyClientConfig();
-                }),
+                value => SavePostProcess(config => config.MotionBlurIntensity = value),
+                0f,
+                0.5f,
+                graphicsRefreshers));
+
+            AdvancedPostProcessSettings Advanced() =>
+                _clientConfig.Config.AdvancedPostProcess;
+            void SaveAdvanced(Action<AdvancedPostProcessSettings> update)
+            {
+                SavePostProcess(config => update(config.AdvancedPostProcess));
+            }
+
+            AddPostProcessGroup("Детализация");
+            postProcessSection.Add(CreateBoundSlider(
+                "Локальная чёткость",
+                () => Advanced().LocalContrastIntensity,
+                value => SaveAdvanced(settings => settings.LocalContrastIntensity = value),
+                0f,
+                0.5f,
+                graphicsRefreshers));
+            AddPostProcessGroup("Оптические эффекты");
+            postProcessSection.Add(CreateBoundSlider(
+                "Световая пыль на визоре",
+                () => Advanced().LensDirtIntensity,
+                value => SaveAdvanced(settings => settings.LensDirtIntensity = value),
+                0f,
+                0.35f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Масштаб световой пыли",
+                () => Advanced().LensDirtScale,
+                value => SaveAdvanced(settings => settings.LensDirtScale = value),
+                0.25f,
+                16f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Анаморфные лучи",
+                () => Advanced().AnamorphicIntensity,
+                value => SaveAdvanced(settings => settings.AnamorphicIntensity = value),
                 0f,
                 1f,
                 graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Длина анаморфных лучей",
+                () => Advanced().AnamorphicLength,
+                value => SaveAdvanced(settings => settings.AnamorphicLength = value),
+                0.25f,
+                8f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Хроматическая дифракция",
+                () => Advanced().ChromaticDiffractionIntensity,
+                value => SaveAdvanced(
+                    settings => settings.ChromaticDiffractionIntensity = value),
+                0f,
+                0.5f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Тепловая рефракция",
+                () => Advanced().HeatRefractionIntensity,
+                value => SaveAdvanced(settings => settings.HeatRefractionIntensity = value),
+                0f,
+                0.25f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Размер тепловых волн",
+                () => Advanced().HeatRefractionScale,
+                value => SaveAdvanced(settings => settings.HeatRefractionScale = value),
+                0.25f,
+                16f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Микроблики материалов",
+                () => Advanced().GlintIntensity,
+                value => SaveAdvanced(settings => settings.GlintIntensity = value),
+                0f,
+                0.5f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Порог микробликов",
+                () => Advanced().GlintThreshold,
+                value => SaveAdvanced(settings => settings.GlintThreshold = value),
+                0f,
+                4f,
+                graphicsRefreshers));
+            AddPostProcessGroup("Атмосфера");
+            postProcessSection.Add(CreateBoundSlider(
+                "Светящаяся пыль",
+                () => Advanced().VolumetricDustIntensity,
+                value => SaveAdvanced(settings => settings.VolumetricDustIntensity = value),
+                0f,
+                0.25f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Масштаб светящейся пыли",
+                () => Advanced().VolumetricDustScale,
+                value => SaveAdvanced(settings => settings.VolumetricDustScale = value),
+                0.1f,
+                8f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Скорость светящейся пыли",
+                () => Advanced().VolumetricDustSpeed,
+                value => SaveAdvanced(settings => settings.VolumetricDustSpeed = value),
+                0f,
+                2f,
+                graphicsRefreshers));
+            AddPostProcessGroup("Физика дисплея");
+            postProcessSection.Add(CreateBoundSlider(
+                "Структура люминофора",
+                () => Advanced().PhosphorMaskIntensity,
+                value => SaveAdvanced(settings => settings.PhosphorMaskIntensity = value),
+                0f,
+                0.35f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Перцептивный dithering",
+                () => Advanced().DitheringIntensity,
+                value => SaveAdvanced(settings => settings.DitheringIntensity = value),
+                0f,
+                1f,
+                graphicsRefreshers));
+            AddPostProcessGroup("Temporal");
+            postProcessSection.Add(CreateBoundSlider(
+                "Послесвечение люминофора",
+                () => Advanced().TemporalPersistenceIntensity,
+                value => SaveAdvanced(
+                    settings => settings.TemporalPersistenceIntensity = value),
+                0f,
+                0.8f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Затухание послесвечения",
+                () => Advanced().TemporalPersistenceDecay,
+                value => SaveAdvanced(
+                    settings => settings.TemporalPersistenceDecay = value),
+                0f,
+                0.98f,
+                graphicsRefreshers));
+            postProcessSection.Add(CreateBoundSlider(
+                "Temporal stability света",
+                () => Advanced().LightStability,
+                value => SaveAdvanced(settings => settings.LightStability = value),
+                0f,
+                0.9f,
+                graphicsRefreshers));
 
-            void SaveShaderSetting(Action apply)
+            void SaveShaderSetting(Action<ClientConfig> update)
             {
-                apply();
-                _graphicsSettings.ApplyCustomWorldMaterialSettings();
+                _graphicsSettings.UpdateCustomWorldMaterialSettings(update);
             }
 
             worldMaterialsSection.Add(CreateBoundSlider(
                 "Скорость shimmer террейна",
                 () => _clientConfig.Config.TerrainShimmerSpeedScale,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainShimmerSpeedScale = value),
+                value => SaveShaderSetting(
+                    config => config.TerrainShimmerSpeedScale = value),
                 0f,
                 10f,
                 graphicsRefreshers));
             worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет shimmer террейна",
                 () => _clientConfig.Config.TerrainShimmerColor,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainShimmerColor = value),
+                value => SaveShaderSetting(config => config.TerrainShimmerColor = value),
                 0f,
                 8f,
                 graphicsRefreshers));
             worldMaterialsSection.Add(CreateBoundSlider(
                 "Скорость пульсации террейна",
                 () => _clientConfig.Config.TerrainPulseSpeedScale,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TerrainPulseSpeedScale = value),
+                value => SaveShaderSetting(config => config.TerrainPulseSpeedScale = value),
                 0f,
                 10f,
                 graphicsRefreshers));
             worldMaterialsSection.Add(CreateBoundSlider(
                 "Излучение поверхности мира",
                 () => _clientConfig.Config.TransitEmissionStrength,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TransitEmissionStrength = value),
+                value => SaveShaderSetting(config => config.TransitEmissionStrength = value),
                 0f,
                 8f,
                 graphicsRefreshers));
             worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет излучения поверхности",
                 () => _clientConfig.Config.TransitEmissionColor,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.TransitEmissionColor = value),
+                value => SaveShaderSetting(config => config.TransitEmissionColor = value),
                 0f,
                 8f,
                 graphicsRefreshers));
             worldMaterialsSection.Add(CreateBoundSlider(
                 "Излучение дальней поверхности",
                 () => _clientConfig.Config.PerspectiveEmissionStrength,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.PerspectiveEmissionStrength = value),
+                value => SaveShaderSetting(
+                    config => config.PerspectiveEmissionStrength = value),
                 0f,
                 8f,
                 graphicsRefreshers));
             worldMaterialsSection.Add(CreateBoundColorControls(
                 "Цвет дальней поверхности",
                 () => _clientConfig.Config.PerspectiveEmissionColor,
-                value => SaveShaderSetting(() =>
-                    _clientConfig.Config.PerspectiveEmissionColor = value),
+                value => SaveShaderSetting(
+                    config => config.PerspectiveEmissionColor = value),
                 0f,
                 8f,
                 graphicsRefreshers));
@@ -1495,30 +1745,30 @@ namespace Fodinae.UI
 
         private void SetBusVolumeInConfig(AudioBusType busType, float volume)
         {
-            var config = _clientConfig.Config;
-            switch (busType)
+            _clientConfig.UpdateAndSave(config =>
             {
-                case AudioBusType.Master:
-                    config.MasterVolume = volume;
-                    break;
-                case AudioBusType.SFX:
-                    config.SfxVolume = volume;
-                    break;
-                case AudioBusType.Music:
-                    config.MusicVolume = volume;
-                    break;
-                case AudioBusType.Voice:
-                    config.VoiceVolume = volume;
-                    break;
-                case AudioBusType.Ambience:
-                    config.AmbienceVolume = volume;
-                    break;
-                case AudioBusType.UI:
-                    config.UiVolume = volume;
-                    break;
-            }
-
-            _clientConfig.Save();
+                switch (busType)
+                {
+                    case AudioBusType.Master:
+                        config.MasterVolume = volume;
+                        break;
+                    case AudioBusType.SFX:
+                        config.SfxVolume = volume;
+                        break;
+                    case AudioBusType.Music:
+                        config.MusicVolume = volume;
+                        break;
+                    case AudioBusType.Voice:
+                        config.VoiceVolume = volume;
+                        break;
+                    case AudioBusType.Ambience:
+                        config.AmbienceVolume = volume;
+                        break;
+                    case AudioBusType.UI:
+                        config.UiVolume = volume;
+                        break;
+                }
+            });
         }
 
         private Button CreateButton(string text, System.Action action)
@@ -1591,11 +1841,25 @@ namespace Fodinae.UI
 
         private void ToggleFullscreen()
         {
-            Screen.fullScreen = !Screen.fullScreen;
+            // Goes through DisplayManager for the same reason the resolution
+            // button does: a bare `Screen.fullScreen = ...` assignment never
+            // reaches ClientConfig, so the choice silently reverts to
+            // whatever FullScreenMode was last saved the next time
+            // DisplayManager.ApplyDisplaySettings runs on launch.
+            FullScreenMode nextMode = Screen.fullScreenMode == FullScreenMode.Windowed
+                ? FullScreenMode.FullScreenWindow
+                : FullScreenMode.Windowed;
+            _displayManager.SetResolution(
+                Screen.width,
+                Screen.height,
+                nextMode,
+                (int)Screen.currentResolution.refreshRateRatio.value);
             Debug.Log($"[PauseMenu] Fullscreen: {Screen.fullScreen}");
             if (_fullscreenButton != null)
             {
-                _fullscreenButton.text = Screen.fullScreen ? "Полный экран" : "Оконный";
+                _fullscreenButton.text = nextMode == FullScreenMode.Windowed
+                    ? "Оконный"
+                    : "Полный экран";
             }
         }
 
@@ -1628,7 +1892,6 @@ namespace Fodinae.UI
 
         private void CloseMenu()
         {
-            SendClientConfig();
             HideMenu();
         }
 
@@ -1647,27 +1910,13 @@ namespace Fodinae.UI
             }
         }
 
-        private void SendClientConfig()
-        {
-            var context = new List<StringPairPacket>();
-
-            // Слайдеры громкости ограничены 0..1, но значение в конфиге может выйти
-            // за диапазон (старые/ручные правки) — clamp до байта, иначе переполнение.
-            context.Add(new StringPairPacket("master_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Master)) * 255).ToString()));
-            context.Add(new StringPairPacket("sfx_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.SFX)) * 255).ToString()));
-            context.Add(new StringPairPacket("music_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Music)) * 255).ToString()));
-            context.Add(new StringPairPacket("ambience_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Ambience)) * 255).ToString()));
-            context.Add(new StringPairPacket("voice_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.Voice)) * 255).ToString()));
-            context.Add(new StringPairPacket("ui_volume", ((byte)Mathf.Clamp01(GetConfiguredBusVolume(AudioBusType.UI)) * 255).ToString()));
-
-            context.Add(new StringPairPacket("ui_scale", _clientConfig.Config.UiScale.ToString("F2")));
-
-            Debug.Log($"[PauseMenu] Sending save_client_config with {context.Count} entries");
-            _networkService.Send(new ElementClickPacket("save_client_config", 0, context));
-        }
-
         private void OpenSettings()
         {
+            foreach (Action refresh in _settingsRefreshers)
+            {
+                refresh();
+            }
+
             if (_mainPage != null)
             {
                 _mainPage.style.display = DisplayStyle.None;
@@ -1717,7 +1966,7 @@ namespace Fodinae.UI
                 () =>
                 {
                     CloseMenu();
-                    BootstrapLifetimeScope.Instance?.ReturnToMainMenu();
+                    _mainMenuNavigation.ReturnToMainMenu();
                 });
         }
 

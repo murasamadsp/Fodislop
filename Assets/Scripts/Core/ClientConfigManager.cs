@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using Fodinae.Core.Interfaces;
 using Fodinae.Rendering;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.World.Lighting;
 using UnityEngine;
 using VContainer;
@@ -20,14 +21,6 @@ namespace Fodinae.Core
     {
         private const string ConfigFileName = "client_config.json";
         private const string ConfigDirectory = "Config";
-
-        public static ClientConfigManager? Instance { get; private set; }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            Instance = null;
-        }
 
         public ClientConfig Config { get; private set; } = null!;
         public string ConfigFilePath => GetConfigPath();
@@ -46,7 +39,6 @@ namespace Fodinae.Core
 
         private void Awake()
         {
-            Instance = this;
         }
 
         private void Start()
@@ -64,7 +56,7 @@ namespace Fodinae.Core
 
         private void TryInitialize()
         {
-            if (_initialized || !ServiceLocator.IsInitialized)
+            if (_initialized)
             {
                 return;
             }
@@ -182,6 +174,8 @@ namespace Fodinae.Core
                 TerrainDebugColor = shaders.TerrainDebugColor,
                 TerrainDebugMode = shaders.TerrainDebugMode,
                 BloomThreshold = shaders.BloomThreshold,
+                BloomSoftKnee = shaders.BloomSoftKnee,
+                BloomRadius = shaders.BloomRadius,
                 BloomScatter = shaders.BloomScatter,
                 BloomTint = shaders.BloomTint,
                 TransitEmissionColor = shaders.TransitEmissionColor,
@@ -207,7 +201,6 @@ namespace Fodinae.Core
                 EigengrauNoiseScale = shaders.EigengrauNoiseScale,
                 EigengrauAnimationSpeed = shaders.EigengrauAnimationSpeed,
                 MotionBlurIntensity = shaders.MotionBlurIntensity,
-                MotionBlurMaxSamples = shaders.MotionBlurMaxSamples,
                 UseDummyConnection = true,
                 ServerHost = "127.0.0.1",
                 ServerPort = 7777,
@@ -245,6 +238,7 @@ namespace Fodinae.Core
             Config.GraphicsQualitySettings = _graphicsQualityProfile.Get(preset);
             ApplyLightingDefaults(Config, _projectDefaults.Lighting);
             ApplyShaderDefaults(Config, _projectDefaults.Shaders);
+            Config.AdvancedPostProcess = new AdvancedPostProcessSettings();
         }
 
         public void SetCustomGraphicsSettings(GraphicsQualitySettings settings)
@@ -252,6 +246,59 @@ namespace Fodinae.Core
             MarkGraphicsAsCustom();
             GraphicsQualityProfile.ValidateSettings(settings, "Custom");
             Config.GraphicsQualitySettings = settings;
+        }
+
+        public void UpdateAndSave(Action<ClientConfig> update)
+        {
+            if (update == null)
+            {
+                throw new ArgumentNullException(nameof(update));
+            }
+
+            update(Config);
+            Save();
+        }
+
+        public void UpdatePostProcessAndSave(Action<ClientConfig> update)
+        {
+            if (update == null)
+            {
+                throw new ArgumentNullException(nameof(update));
+            }
+
+            MarkGraphicsAsCustom();
+            update(Config);
+            PromotePostProcessQualityForEnabledEffects(Config);
+            Save();
+        }
+
+        private static void PromotePostProcessQualityForEnabledEffects(ClientConfig config)
+        {
+            AdvancedPostProcessSettings advanced = config.AdvancedPostProcess;
+            bool requiresFull = config.BloomIntensity > 0f ||
+                config.MotionBlurIntensity > 0f ||
+                advanced.RequiresBloomTexture();
+            bool requiresEssential = requiresFull ||
+                config.VignetteIntensity > 0f ||
+                config.ChromaticAberrationIntensity > 0f ||
+                config.ColorGradingToneMapping ||
+                Mathf.Abs(config.ColorGradingExposure) > 0.001f ||
+                Mathf.Abs(config.ColorGradingContrast) > 0.001f ||
+                Mathf.Abs(config.ColorGradingSaturation - 1f) > 0.001f ||
+                config.EigengrauIntensity > 0f ||
+                advanced.HasAnyEffects();
+
+            GraphicsQualitySettings quality = config.GraphicsQualitySettings;
+            if (requiresFull)
+            {
+                quality.PostProcessQuality = PostProcessQualityMode.Full;
+            }
+            else if (requiresEssential && quality.PostProcessQuality == PostProcessQualityMode.Off)
+            {
+                quality.PostProcessQuality = PostProcessQualityMode.Essential;
+            }
+
+            config.GraphicsQualitySettings = quality;
         }
 
         public void Save()
@@ -362,6 +409,8 @@ namespace Fodinae.Core
             ValidateColor(config.TerrainShimmerColor, nameof(config.TerrainShimmerColor));
             ValidateColor(config.TerrainDebugColor, nameof(config.TerrainDebugColor));
             ValidateFloat(config.BloomThreshold, 0f, 2f, nameof(config.BloomThreshold));
+            ValidateFloat(config.BloomSoftKnee, 0f, 1f, nameof(config.BloomSoftKnee));
+            ValidateFloat(config.BloomRadius, 0.5f, 8f, nameof(config.BloomRadius));
             ValidateFloat(config.BloomScatter, 0.1f, 1f, nameof(config.BloomScatter));
             ValidateColor(config.BloomTint, nameof(config.BloomTint));
             ValidateColor(config.TransitEmissionColor, nameof(config.TransitEmissionColor));
@@ -391,7 +440,26 @@ namespace Fodinae.Core
             ValidateFloat(config.EigengrauNoiseScale, 0.75f, 2f, nameof(config.EigengrauNoiseScale));
             ValidateFloat(config.EigengrauAnimationSpeed, 1f, 60f, nameof(config.EigengrauAnimationSpeed));
             ValidateFloat(config.MotionBlurIntensity, 0f, 1f, nameof(config.MotionBlurIntensity));
-            ValidateInt(config.MotionBlurMaxSamples, 2, 32, nameof(config.MotionBlurMaxSamples));
+            AdvancedPostProcessSettings advanced = config.AdvancedPostProcess ??
+                throw new InvalidDataException("AdvancedPostProcess settings are missing.");
+            ValidateFloat(advanced.LocalContrastIntensity, 0f, 0.5f, nameof(advanced.LocalContrastIntensity));
+            ValidateFloat(advanced.LensDirtIntensity, 0f, 0.35f, nameof(advanced.LensDirtIntensity));
+            ValidateFloat(advanced.LensDirtScale, 0.25f, 16f, nameof(advanced.LensDirtScale));
+            ValidateFloat(advanced.AnamorphicIntensity, 0f, 1f, nameof(advanced.AnamorphicIntensity));
+            ValidateFloat(advanced.AnamorphicLength, 0.25f, 8f, nameof(advanced.AnamorphicLength));
+            ValidateFloat(advanced.ChromaticDiffractionIntensity, 0f, 0.5f, nameof(advanced.ChromaticDiffractionIntensity));
+            ValidateFloat(advanced.HeatRefractionIntensity, 0f, 0.25f, nameof(advanced.HeatRefractionIntensity));
+            ValidateFloat(advanced.HeatRefractionScale, 0.25f, 16f, nameof(advanced.HeatRefractionScale));
+            ValidateFloat(advanced.GlintIntensity, 0f, 0.5f, nameof(advanced.GlintIntensity));
+            ValidateFloat(advanced.GlintThreshold, 0f, 4f, nameof(advanced.GlintThreshold));
+            ValidateFloat(advanced.VolumetricDustIntensity, 0f, 0.25f, nameof(advanced.VolumetricDustIntensity));
+            ValidateFloat(advanced.VolumetricDustScale, 0.1f, 8f, nameof(advanced.VolumetricDustScale));
+            ValidateFloat(advanced.VolumetricDustSpeed, 0f, 2f, nameof(advanced.VolumetricDustSpeed));
+            ValidateFloat(advanced.PhosphorMaskIntensity, 0f, 0.35f, nameof(advanced.PhosphorMaskIntensity));
+            ValidateFloat(advanced.DitheringIntensity, 0f, 1f, nameof(advanced.DitheringIntensity));
+            ValidateFloat(advanced.TemporalPersistenceIntensity, 0f, 0.8f, nameof(advanced.TemporalPersistenceIntensity));
+            ValidateFloat(advanced.TemporalPersistenceDecay, 0f, 0.98f, nameof(advanced.TemporalPersistenceDecay));
+            ValidateFloat(advanced.LightStability, 0f, 0.9f, nameof(advanced.LightStability));
             if (string.IsNullOrWhiteSpace(config.ServerHost))
             {
                 throw new InvalidDataException(
@@ -399,6 +467,11 @@ namespace Fodinae.Core
             }
 
             ValidateInt(config.ServerPort, 1, 65535, nameof(config.ServerPort));
+            if (!Enum.IsDefined(typeof(FullScreenMode), config.FullScreenMode))
+            {
+                throw new InvalidDataException(
+                    $"Client config value 'FullScreenMode' must be a valid FullScreenMode value, got {config.FullScreenMode}.");
+            }
         }
 
         private bool Migrate(ClientConfig config)
@@ -427,7 +500,6 @@ namespace Fodinae.Core
                 config.ColorGradingToneMapping = shaders.ColorGradingToneMapping;
                 config.EigengrauIntensity = shaders.EigengrauIntensity;
                 config.MotionBlurIntensity = shaders.MotionBlurIntensity;
-                config.MotionBlurMaxSamples = shaders.MotionBlurMaxSamples;
                 config.SchemaVersion = 2;
                 migrated = true;
             }
@@ -517,6 +589,88 @@ namespace Fodinae.Core
                 migrated = true;
             }
 
+            if (config.SchemaVersion < 11)
+            {
+                // Schema 11 carried no new fields: the version was bumped to
+                // force a re-save after the schema-10 display fields landed.
+                // JsonUtility fills missing fields (Language, VSync,
+                // MuteAudioInBackground, FullScreenMode, TargetFrameRate,
+                // UseDummyConnection, ServerHost, ServerPort) from their C#
+                // initializers, so an old persisted file already holds safe
+                // defaults. Only the version marker needs updating.
+                config.SchemaVersion = 11;
+                migrated = true;
+            }
+
+            if (config.SchemaVersion < 12)
+            {
+                // The old Custom slider allowed 128 even though the maximum
+                // zoom viewport plus the stable lighting border is wider than
+                // that. Such a config validated successfully and then failed
+                // deterministically before the first lighting solve. Raise the
+                // persisted hard limit to the smallest supported field size;
+                // this is a schema correction, not a runtime quality fallback.
+                config.GraphicsQualitySettings.LightingMaximumTextureDimension =
+                    Mathf.Max(
+                        config.GraphicsQualitySettings.LightingMaximumTextureDimension,
+                        GraphicsQualitySettings.MinimumLightingTextureDimension);
+                config.SchemaVersion = 12;
+                migrated = true;
+            }
+
+            if (config.SchemaVersion < 13)
+            {
+                config.BloomSoftKnee = shaders.BloomSoftKnee;
+                config.BloomRadius = shaders.BloomRadius;
+                config.SchemaVersion = 13;
+                migrated = true;
+            }
+
+            if (config.SchemaVersion < 14)
+            {
+                config.AdvancedPostProcess = new AdvancedPostProcessSettings();
+                config.SchemaVersion = 14;
+                migrated = true;
+            }
+
+            if (config.SchemaVersion < 15)
+            {
+                AdvancedPostProcessSettings advanced = config.AdvancedPostProcess;
+                config.BloomIntensity = Mathf.Clamp(config.BloomIntensity, 0f, 2f);
+                config.BloomTint = new Color(
+                    Mathf.Clamp(config.BloomTint.r, 0f, 2f),
+                    Mathf.Clamp(config.BloomTint.g, 0f, 2f),
+                    Mathf.Clamp(config.BloomTint.b, 0f, 2f),
+                    Mathf.Clamp01(config.BloomTint.a));
+                config.ChromaticAberrationIntensity = Mathf.Clamp(
+                    config.ChromaticAberrationIntensity,
+                    0f,
+                    0.25f);
+                config.ColorGradingExposure = Mathf.Clamp(
+                    config.ColorGradingExposure,
+                    -2f,
+                    2f);
+                config.ColorGradingContrast = Mathf.Clamp(
+                    config.ColorGradingContrast,
+                    -0.5f,
+                    0.5f);
+                config.EigengrauIntensity = Mathf.Clamp(config.EigengrauIntensity, 0f, 0.25f);
+                config.MotionBlurIntensity = Mathf.Clamp(config.MotionBlurIntensity, 0f, 0.5f);
+                advanced.LocalContrastIntensity = Mathf.Clamp(advanced.LocalContrastIntensity, 0f, 0.5f);
+                advanced.LensDirtIntensity = Mathf.Clamp(advanced.LensDirtIntensity, 0f, 0.35f);
+                advanced.AnamorphicIntensity = Mathf.Clamp01(advanced.AnamorphicIntensity);
+                advanced.ChromaticDiffractionIntensity = Mathf.Clamp(advanced.ChromaticDiffractionIntensity, 0f, 0.5f);
+                advanced.HeatRefractionIntensity = Mathf.Clamp(advanced.HeatRefractionIntensity, 0f, 0.25f);
+                advanced.GlintIntensity = Mathf.Clamp(advanced.GlintIntensity, 0f, 0.5f);
+                advanced.VolumetricDustIntensity = Mathf.Clamp(advanced.VolumetricDustIntensity, 0f, 0.25f);
+                advanced.PhosphorMaskIntensity = Mathf.Clamp(advanced.PhosphorMaskIntensity, 0f, 0.35f);
+                advanced.TemporalPersistenceIntensity = Mathf.Clamp(advanced.TemporalPersistenceIntensity, 0f, 0.8f);
+                advanced.TemporalPersistenceDecay = Mathf.Clamp(advanced.TemporalPersistenceDecay, 0f, 0.98f);
+                advanced.LightStability = Mathf.Clamp(advanced.LightStability, 0f, 0.9f);
+                config.SchemaVersion = 15;
+                migrated = true;
+            }
+
             if (GraphicsQualityProfile.IsStandard(config.GraphicsPreset))
             {
                 GraphicsQualitySettings standardSettings =
@@ -537,6 +691,7 @@ namespace Fodinae.Core
                 {
                     ApplyLightingDefaults(config, _projectDefaults.Lighting);
                     ApplyShaderDefaults(config, _projectDefaults.Shaders);
+                    config.AdvancedPostProcess = new AdvancedPostProcessSettings();
                     Debug.Log(
                         "[ClientConfigManager] ProjectDefaults changed; refreshed the selected " +
                         "immutable standard graphics preset.");
@@ -578,6 +733,8 @@ namespace Fodinae.Core
             config.TerrainDebugColor = shaders.TerrainDebugColor;
             config.TerrainDebugMode = shaders.TerrainDebugMode;
             config.BloomThreshold = shaders.BloomThreshold;
+            config.BloomSoftKnee = shaders.BloomSoftKnee;
+            config.BloomRadius = shaders.BloomRadius;
             config.BloomScatter = shaders.BloomScatter;
             config.BloomTint = shaders.BloomTint;
             config.TransitEmissionColor = shaders.TransitEmissionColor;
@@ -603,7 +760,6 @@ namespace Fodinae.Core
             config.EigengrauNoiseScale = shaders.EigengrauNoiseScale;
             config.EigengrauAnimationSpeed = shaders.EigengrauAnimationSpeed;
             config.MotionBlurIntensity = shaders.MotionBlurIntensity;
-            config.MotionBlurMaxSamples = shaders.MotionBlurMaxSamples;
         }
 
         private static void ApplyLightingDefaults(
@@ -663,6 +819,8 @@ namespace Fodinae.Core
                 config.TerrainDebugColor == shaders.TerrainDebugColor &&
                 config.TerrainDebugMode == shaders.TerrainDebugMode &&
                 config.BloomThreshold == shaders.BloomThreshold &&
+                config.BloomSoftKnee == shaders.BloomSoftKnee &&
+                config.BloomRadius == shaders.BloomRadius &&
                 config.BloomScatter == shaders.BloomScatter &&
                 config.BloomTint == shaders.BloomTint &&
                 config.TransitEmissionColor == shaders.TransitEmissionColor &&
@@ -687,8 +845,7 @@ namespace Fodinae.Core
                 config.EigengrauDarknessThreshold == shaders.EigengrauDarknessThreshold &&
                 config.EigengrauNoiseScale == shaders.EigengrauNoiseScale &&
                 config.EigengrauAnimationSpeed == shaders.EigengrauAnimationSpeed &&
-                config.MotionBlurIntensity == shaders.MotionBlurIntensity &&
-                config.MotionBlurMaxSamples == shaders.MotionBlurMaxSamples;
+                config.MotionBlurIntensity == shaders.MotionBlurIntensity;
         }
 
         private static void ValidateFloat(float value, float minimum, float maximum, string name)

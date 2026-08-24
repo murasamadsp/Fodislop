@@ -25,8 +25,14 @@ namespace Fodinae
 {
     public class DiagnosticRunner : MonoBehaviour
     {
-        private static string LogPath => Path.Combine(Application.dataPath, "..", "diagnostic.txt");
-        private static string MemoryLogPath => Path.Combine(Application.dataPath, "..", "memory_growth.txt");
+        // Диагностика пишется в persistentDataPath (Application.dataPath/.. — каталог
+        // установки: на Windows в Program Files это UnauthorizedAccessException каждые
+        // 5 секунд). Файлы живут только в dev-сборках/редакторе.
+        private static string LogPath =>
+            Path.Combine(Application.persistentDataPath, "diagnostic.txt");
+        private static string MemoryLogPath =>
+            Path.Combine(Application.persistentDataPath, "memory_growth.txt");
+        private static readonly object MemoryLogWriteLock = new();
         private float _nextMemorySampleTime;
         private Camera? _mainCamera;
 
@@ -40,6 +46,7 @@ namespace Fodinae
 
         protected void Update()
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Time.unscaledTime >= _nextMemorySampleTime)
             {
                 _nextMemorySampleTime = Time.unscaledTime + 5f;
@@ -53,6 +60,7 @@ namespace Fodinae
             {
                 WriteSnapshot();
             }
+#endif
         }
 
         private void WriteMemorySample()
@@ -63,7 +71,7 @@ namespace Fodinae
             }
 
             MapStorage? ms = _session.TryResolve<MapStorage>();
-            var lighting = TerrariaLightingEngine.Instance;
+            TerrariaLightingEngine? lighting = _session.TryResolve<TerrariaLightingEngine>();
             string line =
                 $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
                 $"allocated={Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):F1}MB " +
@@ -71,6 +79,8 @@ namespace Fodinae
                 $"graphics={Profiler.GetAllocatedMemoryForGraphicsDriver() / (1024f * 1024f):F1}MB " +
                 $"mono={Profiler.GetMonoUsedSizeLong() / (1024f * 1024f):F1}MB " +
                 $"gc={System.GC.GetTotalMemory(false) / (1024f * 1024f):F1}MB " +
+                $"allocRate={Fodinae.Core.FrameProfiler.GcAllocTotalPerSecondBytes / (1024f * 1024f):F2}MB/s " +
+                $"collections={Fodinae.Core.FrameProfiler.GcCollectionCount} " +
                 $"runtimeEffects={RuntimeEffekseerLoader.ActiveRuntimeEffectCount} " +
                 $"chunks={ms?.CellLayer?.GetLoadedCount() ?? 0} " +
                 $"lightingSolves={lighting?.SolveCount ?? 0} " +
@@ -81,7 +91,22 @@ namespace Fodinae
                 $"lightingField={lighting?.FieldWidth ?? 0}x{lighting?.FieldHeight ?? 0} " +
                 $"lightingAtlas={lighting?.AtlasEntryCount ?? 0}\n";
 
-            File.AppendAllText(MemoryLogPath, line);
+            // Off the main thread. File.AppendAllText opens, writes and closes
+            // the file synchronously; on a five-second timer that is a periodic
+            // main-thread stall in exactly the builds this component runs in -
+            // the editor and development builds, which is where anyone is
+            // looking at a frame graph. The line is already fully built, so
+            // nothing Unity-thread-affine crosses over.
+            string sampleLine = line;
+            string logPath = MemoryLogPath;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                lock (MemoryLogWriteLock)
+                {
+                    File.AppendAllText(logPath, sampleLine);
+                }
+            });
+
         }
 
         private void WriteSnapshot()

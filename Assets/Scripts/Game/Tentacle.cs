@@ -6,8 +6,8 @@ namespace Fodinae.Game;
 
 /// <summary>
 /// Simulated spring-chain tail segment. Owns only simulation state —
-/// rendering is delegated to <see cref="TentacleBatchRenderer"/>, which
-/// merges all tentacles of all robots into one mesh per tail texture.
+/// rendering is delegated to <see cref="WorldEntityBatchRenderer"/>, which
+/// merges all tentacles of all robots into one atlas-backed mesh.
 /// </summary>
 public class Tentacle
 {
@@ -16,7 +16,7 @@ public class Tentacle
     private const float START_WIDTH = 0.15f;
     private const float END_WIDTH = 0.02f;
 
-    private readonly TentacleBatchRenderer _renderer;
+    private readonly WorldEntityBatchRenderer _renderer;
     private readonly Texture2D _texture;
     private readonly float _wiggleOffset;
     private readonly float _sliceOffsetV;
@@ -27,13 +27,13 @@ public class Tentacle
     private readonly float[] _segmentLengths;
     private bool _isActive = true;
 
-    public Tentacle(TentacleBatchRenderer renderer, Texture2D texture, Vector3 startPosition, float wiggleOffset, int sliceIndex, int totalSlices)
+    public Tentacle(WorldEntityBatchRenderer renderer, Texture2D texture, Vector3 startPosition, float wiggleOffset, int sliceIndex, int totalSlices)
     {
         _renderer = renderer;
         _texture = texture;
         _wiggleOffset = wiggleOffset;
 
-        const int count = TentacleBatchRenderer.POINT_COUNT;
+        const int count = WorldEntityBatchRenderer.POINT_COUNT;
         _positions = new Vector3[count];
         _renderPoints = new Vector3[count];
         _velocities = new Vector3[count];
@@ -57,6 +57,8 @@ public class Tentacle
     }
 
     public bool IsActive => _isActive;
+
+    internal Texture2D Texture => _texture;
 
     public bool IsSettled
     {
@@ -145,9 +147,13 @@ public class Tentacle
     /// orthographic camera, replacing what LineRenderer used to rebuild on
     /// the CPU every frame per tentacle.
     /// </summary>
-    public void WriteGeometry(Vector3[] verts, Vector2[] uvs, int vertBase)
+    public void WriteGeometry(
+        Vector3[] verts,
+        Vector2[] uvs,
+        int vertBase,
+        Rect atlasRect)
     {
-        const int count = TentacleBatchRenderer.POINT_COUNT;
+        const int count = WorldEntityBatchRenderer.POINT_COUNT;
 
         float totalLength = 0f;
         for (int i = 1; i < count; i++)
@@ -196,8 +202,13 @@ public class Tentacle
             verts[vi] = p - (perpendicular * halfWidth);
             verts[vi + 1] = p + (perpendicular * halfWidth);
 
-            uvs[vi] = new Vector2(u, _sliceOffsetV);
-            uvs[vi + 1] = new Vector2(u, _sliceOffsetV + _sliceScaleV);
+            float atlasU = atlasRect.xMin + (u * atlasRect.width);
+            uvs[vi] = new Vector2(
+                atlasU,
+                atlasRect.yMin + (_sliceOffsetV * atlasRect.height));
+            uvs[vi + 1] = new Vector2(
+                atlasU,
+                atlasRect.yMin + ((_sliceOffsetV + _sliceScaleV) * atlasRect.height));
         }
     }
 

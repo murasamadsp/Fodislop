@@ -28,6 +28,8 @@ namespace Fodinae.Game.Managers
         // one WorldHeight read while spawning a pack, long after both are alive.
         [Inject]
         private ISessionContainer _session = null!;
+        [Inject]
+        private IObjectResolver _resolver = null!;
 
         private IMapDataProvider MapData =>
             _session.TryResolve<IMapDataProvider>() ??
@@ -47,6 +49,7 @@ namespace Fodinae.Game.Managers
             go.transform.SetParent(transform);
             go.transform.position = CoordinateUtils.ServerToUnityPos(x, y, MapData.WorldHeight);
             pack = go.AddComponent<Pack>();
+            _resolver.Inject(pack);
             pack.Initialize(packType, variant, linkedClan);
             _packs[pos] = pack;
         }

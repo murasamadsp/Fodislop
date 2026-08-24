@@ -12,15 +12,6 @@ namespace Fodinae.UI
 {
     public class ReconnectUI : MonoBehaviour
     {
-        private static ReconnectUI? _instance;
-        public static ReconnectUI? Instance => _instance;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            _instance = null;
-        }
-
         [Inject]
         private UIDocument _doc = null!;
         [Inject]
@@ -33,24 +24,6 @@ namespace Fodinae.UI
         private bool _reconnectStatusSet;
         private bool _initialized;
 
-        private void Awake()
-        {
-            _instance = this;
-        }
-
-        private void OnEnable()
-        {
-            _instance = this;
-        }
-
-        private void OnDisable()
-        {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
-        }
-
         private void Update()
         {
             if (!_initialized)
@@ -61,11 +34,6 @@ namespace Fodinae.UI
 
         private void OnDestroy()
         {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
-
             _reconnectOverlay?.RemoveFromHierarchy();
             _disconnectOverlay?.RemoveFromHierarchy();
             _reconnectOverlay = null;

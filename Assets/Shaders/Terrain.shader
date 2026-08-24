@@ -35,6 +35,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ FODINAE_WORLD_LIGHTING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "TerrainTileAddressing.hlsl"
@@ -95,6 +96,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             float3 GetTerrariaLightColor(float2 worldPos)
             {
+                #if !defined(FODINAE_WORLD_LIGHTING)
+                    return 1.0;
+                #else
                 float2 lightUV = GetWorldLightUv(worldPos);
                 if (_WorldLightDebugView != 0)
                 {
@@ -108,6 +112,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return _WorldLightTexture.Sample(
                     sampler_WorldLightTexture,
                     lightUV).rgb;
+                #endif
             }
 
             float3 RgbToHsv(float3 c)
@@ -518,7 +523,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     : 0.0;
                 bool hasRoundedPhysicalContour = (lightingFlags & 32u) != 0u;
                 bool isPhysicalMass = (lightingFlags & 64u) != 0u;
-                float occupancy = isPhysicalMass ? isForeground : 0.0;
+                // Occupancy — физическая масса переднего плана. isPhysicalMass уже
+                // гарантирует !isBackground (фон никогда не получает флаг 64),
+                // поэтому isForeground здесь избыточен и только добавлял хрупкую
+                // зависимость от точности positionOS.z.
+                float occupancy = isPhysicalMass ? 1.0 : 0.0;
                 float2 contourUV = input.packedData.x > 0.5 ? input.packedData.zw : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(

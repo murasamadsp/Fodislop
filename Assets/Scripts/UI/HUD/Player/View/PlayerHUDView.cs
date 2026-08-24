@@ -1066,17 +1066,7 @@ namespace Fodinae.UI.HUD.Player.View
         private void StartBounce(SkillType skill, Label arrow)
         {
             StopBounce(skill, arrow);
-
-            float t = 0f;
-            var item = arrow.schedule.Execute(() =>
-            {
-                t += Time.unscaledDeltaTime;
-                float offsetY = Mathf.Sin(t * 2f * Mathf.PI) * 3f;
-                arrow.style.translate = new Translate(0, offsetY);
-            });
-            item.Every(33);
-
-            _bounceSchedules[skill] = item;
+            arrow.style.translate = new Translate(0, 0);
         }
 
         private void StopBounce(SkillType skill, Label arrow)
@@ -1090,23 +1080,29 @@ namespace Fodinae.UI.HUD.Player.View
             arrow.style.translate = new Translate(0, 0);
         }
 
+        // Full height of .hud-skill-bar-container in HUD.uss. The fill is sized
+        // to this once and then scaled, so the animation never touches layout.
+        private const float SkillBarHeightPixels = 24f;
+
+        /// <summary>
+        /// Applies skill progress without installing a permanent UI scheduler.
+        /// </summary>
+        /// <remarks>
+        /// A scheduler per skill used to mutate inline transforms every 33 ms
+        /// for the entire session. Even though transforms avoid Yoga layout,
+        /// every mutation still invalidates UI Toolkit painting. Progress only
+        /// changes when a new packet arrives, so its visual state does too.
+        /// </remarks>
         private void StartBarPulse(SkillType skill, VisualElement barFill, float progress)
         {
             StopBarPulse(skill);
 
-            float baseSeg = Mathf.Floor(progress * 20f);
-            float baseH = baseSeg * (24f / 20f);
-            barFill.style.height = new Length(baseH, LengthUnit.Pixel);
+            float normalizedProgress = Mathf.Clamp01(progress);
 
-            float t = 0f;
-            var item = barFill.schedule.Execute(() =>
-            {
-                t += Time.unscaledDeltaTime;
-                float pulse = (Mathf.Sin(t * 2f * Mathf.PI * 0.5f) + 1f) * (24f / 20f);
-                barFill.style.height = new Length(Mathf.Min(baseH + pulse, 24f), LengthUnit.Pixel);
-            });
-            item.Every(33);
-            _pulseSchedules[skill] = item;
+            barFill.style.height = new Length(SkillBarHeightPixels, LengthUnit.Pixel);
+            barFill.style.transformOrigin =
+                new TransformOrigin(Length.Percent(50f), Length.Percent(100f));
+            barFill.style.scale = new Scale(new Vector2(1f, normalizedProgress));
         }
 
         private void StopBarPulse(SkillType skill)
@@ -1115,6 +1111,14 @@ namespace Fodinae.UI.HUD.Player.View
             {
                 existing.Pause();
                 _pulseSchedules.Remove(skill);
+            }
+
+            // Leaves the bar full rather than frozen mid-pulse. Both callers
+            // want that: the skill reached maximum (StopBounce path), or
+            // StartBarPulse is about to set its own scale immediately after.
+            if (_skillIcons.TryGetValue(skill, out var icon) && icon.barFill != null)
+            {
+                icon.barFill.style.scale = new Scale(Vector2.one);
             }
         }
 

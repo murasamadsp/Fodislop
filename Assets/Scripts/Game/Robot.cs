@@ -32,7 +32,7 @@ namespace Fodinae.Game
         private byte _clanId;
         [SerializeField]
         private SpriteRenderer? _spriteRenderer;
-        private SpriteRenderer? _clanRenderer;
+        private Transform? _clanTransform;
         private TextMeshPro? _nicknameText;
         [SerializeField]
         private string _nickname = string.Empty;
@@ -45,7 +45,7 @@ namespace Fodinae.Game
         [Header("Dynamic Emission")]
         [SerializeField]
         [Tooltip("Разрешает Robot регистрировать dynamic emission source в TerrariaLightingEngine.")]
-        private bool _emitsDynamicLight = true;
+        private bool _emitsDynamicLight;
         [SerializeField]
         [Range(0f, 4f)]
         [Tooltip("Интенсивность dynamic emission. HDR-значение выше 1 усиливает источник.")]
@@ -83,6 +83,8 @@ namespace Fodinae.Game
         private bool _dynamicLightEnabled;
         private int _dynamicLightId;
         private TerrariaLightingEngine? _lastDynamicLightEngine;
+        private WorldEntityBatchRenderer.SpriteHandle? _bodyBatchHandle;
+        private WorldEntityBatchRenderer.SpriteHandle? _clanBatchHandle;
         private uint _lastDynamicLightGeneration;
         private Vector2 _lastDynamicLightPosition;
         private Color _lastDynamicLightColor;
@@ -98,10 +100,11 @@ namespace Fodinae.Game
         private ushort _pendingServerX;
         private ushort _pendingServerY;
         private bool _hasReceivedInitialPosition;
-        [Inject]
-        private TentacleBatchRenderer _tentacleBatchRenderer = null!;
+        private WorldEntityBatchRenderer _entityBatchRenderer = null!;
         [Inject]
         private IObjectResolver _resolver = null!;
+        [Inject]
+        private TerrariaLightingEngine _lightingEngine = null!;
 
         public uint BotId => _botId;
         public int PlayerId => _playerId;
@@ -113,6 +116,13 @@ namespace Fodinae.Game
         public float DynamicLightIntensity => _dynamicLightIntensity;
 
         public Color DynamicLightColor => _dynamicLightColor;
+
+        [Inject]
+        private void InitializeEntityBatch(WorldEntityBatchRenderer entityBatchRenderer)
+        {
+            _entityBatchRenderer = entityBatchRenderer;
+            EnsureBatchHandles();
+        }
 
         /// <summary>
         /// The logical facing angle in Unity degrees (raw <c>_targetAngle</c>),
@@ -151,9 +161,9 @@ namespace Fodinae.Game
         public void ClearClanBadge()
         {
             _clanId = 0;
-            if (_clanRenderer != null)
+            if (_clanBatchHandle != null)
             {
-                _clanRenderer.sprite = null;
+                _entityBatchRenderer.SetSprite(_clanBatchHandle, null);
             }
 
             if (_clanSprite != null)
@@ -187,11 +197,6 @@ namespace Fodinae.Game
                 _spriteRenderer.enabled = false;
             }
 
-            if (!IsLocalPlayer && !TryGetComponent<MotionBlurTag>(out _))
-            {
-                gameObject.AddComponent<MotionBlurTag>();
-            }
-
             transform.localScale = Vector3.one;
             _targetPosition = transform.position;
             _serverPosition = transform.position;
@@ -223,7 +228,7 @@ namespace Fodinae.Game
 
         protected void OnDisable()
         {
-            TerrariaLightingEngine.Instance?.RemoveDynamicLight(_dynamicLightId);
+            _lightingEngine?.RemoveDynamicLight(_dynamicLightId);
             _hasSubmittedDynamicLight = false;
             SetTentaclesActive(false);
         }
@@ -271,21 +276,50 @@ namespace Fodinae.Game
 
             var clanGo = new GameObject("ClanIcon");
             clanGo.transform.SetParent(transform);
-            _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
-            if (Application.isPlaying)
+            _clanTransform = clanGo.transform;
+            _clanTransform.localScale = Vector3.one * 0.8f;
+        }
+
+        private void EnsureBatchHandles()
+        {
+            if (!Application.isPlaying)
             {
-                _clanRenderer.enabled = false;
+                return;
             }
 
-            UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 100);
-            _clanRenderer.transform.localScale = Vector3.one * 0.8f;
+            if (_entityBatchRenderer == null)
+            {
+                throw new InvalidOperationException(
+                    $"{TAG} WorldEntityBatchRenderer is required for batched entity rendering.");
+            }
+
+            _bodyBatchHandle ??= _entityBatchRenderer.RegisterSprite(transform, 0);
+            if (_clanTransform != null)
+            {
+                _clanBatchHandle ??=
+                    _entityBatchRenderer.RegisterSprite(_clanTransform, 100);
+            }
+        }
+
+        private static Bounds TransformSpriteBounds(Transform spriteTransform, Sprite sprite)
+        {
+            Bounds local = sprite.bounds;
+            Vector3 minimum = spriteTransform.TransformPoint(local.min);
+            Vector3 maximum = spriteTransform.TransformPoint(local.max);
+            return new Bounds((minimum + maximum) * 0.5f, maximum - minimum);
+        }
+
+        public void SetBatchedBodyVisible(bool visible)
+        {
+            EnsureBatchHandles();
+            _bodyBatchHandle?.SetEnabled(visible);
         }
 
         private void ApplyWorldUiLayer()
         {
-            if (_clanRenderer == null)
+            if (_clanTransform == null)
             {
-                _clanRenderer = transform.Find("ClanIcon")?.GetComponent<SpriteRenderer>();
+                _clanTransform = transform.Find("ClanIcon");
             }
 
             if (_nicknameText != null)
@@ -297,10 +331,6 @@ namespace Fodinae.Game
                 }
             }
 
-            if (_clanRenderer != null)
-            {
-                UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 100);
-            }
         }
 
         protected void Start()
@@ -454,7 +484,7 @@ namespace Fodinae.Game
 
         private void UpdateDynamicLight()
         {
-            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            TerrariaLightingEngine? lighting = _lightingEngine;
             if (!_dynamicLightEnabled || lighting == null || !lighting.IsRuntimeConfigReady)
             {
                 if (_hasSubmittedDynamicLight)
@@ -505,7 +535,7 @@ namespace Fodinae.Game
         public void SetDynamicLightIntensity(float intensity)
         {
             _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
-            TerrariaLightingEngine.Instance?.SetDynamicLightSettings(
+            _lightingEngine?.SetDynamicLightSettings(
                 _dynamicLightIntensity,
                 _dynamicLightColor);
         }
@@ -517,7 +547,7 @@ namespace Fodinae.Game
                 Mathf.Max(0f, color.g),
                 Mathf.Max(0f, color.b),
                 1f);
-            TerrariaLightingEngine.Instance?.SetDynamicLightSettings(
+            _lightingEngine?.SetDynamicLightSettings(
                 _dynamicLightIntensity,
                 _dynamicLightColor);
         }
@@ -529,7 +559,7 @@ namespace Fodinae.Game
                 return;
             }
 
-            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            TerrariaLightingEngine? lighting = _lightingEngine;
             _dynamicLightIntensity = lighting?.DynamicLightIntensity ??
                 _projectDefaults.Lighting.DynamicLightIntensity;
             _dynamicLightColor = lighting?.DynamicLightColor ??
@@ -540,7 +570,7 @@ namespace Fodinae.Game
         private void InitializeDynamicLightSettings()
         {
             LightingDefaultsSnapshot defaults = _projectDefaults.Lighting;
-            TerrariaLightingEngine? lighting = TerrariaLightingEngine.Instance;
+            TerrariaLightingEngine? lighting = _lightingEngine;
             _dynamicLightIntensity = lighting?.IsRuntimeConfigReady == true
                 ? lighting.DynamicLightIntensity
                 : defaults.DynamicLightIntensity;
@@ -568,12 +598,12 @@ namespace Fodinae.Game
         private void CreateTentacles(Texture2D tailTexture)
         {
             ClearTentacles();
-            if (_tentacleBatchRenderer == null && _resolver != null)
+            if (_entityBatchRenderer == null && _resolver != null)
             {
-                _tentacleBatchRenderer = _resolver.Resolve<TentacleBatchRenderer>();
+                _entityBatchRenderer = _resolver.Resolve<WorldEntityBatchRenderer>();
             }
 
-            if (_tentacleBatchRenderer == null)
+            if (_entityBatchRenderer == null)
             {
                 return;
             }
@@ -584,7 +614,7 @@ namespace Fodinae.Game
             for (int i = 0; i < 4; i++)
             {
                 _tentacles[i] = new Tentacle(
-                    _tentacleBatchRenderer,
+                    _entityBatchRenderer,
                     tailTexture,
                     transform.position,
                     offsets[i],
@@ -662,10 +692,9 @@ namespace Fodinae.Game
 
             if (_nicknameText != null)
             {
-                SpriteRenderer spriteRenderer = _spriteRenderer ??
-                    throw new InvalidOperationException(
-                        $"{TAG} SpriteRenderer is required to anchor nickname for bot {_botId}.");
-                Bounds spriteBounds = spriteRenderer.bounds;
+                Bounds spriteBounds = _skinSprite != null
+                    ? TransformSpriteBounds(transform, _skinSprite)
+                    : new Bounds(position, Vector3.one);
                 Vector3 topRight = new(spriteBounds.max.x, spriteBounds.max.y + 0.5f, position.z);
 
                 // World-space labels use the actual rendered sprite bounds, not a
@@ -676,9 +705,9 @@ namespace Fodinae.Game
                     Quaternion.identity);
             }
 
-            if (_clanRenderer != null)
+            if (_clanTransform != null)
             {
-                _clanRenderer.transform.SetPositionAndRotation(position + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
+                _clanTransform.SetPositionAndRotation(position + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
             }
 
             _lastLabelsPosition = position;
@@ -700,14 +729,16 @@ namespace Fodinae.Game
                 _spriteRenderer.color = Color.white;
             }
 
+            _bodyBatchHandle?.SetColor(Color.white);
+
             if (_nicknameText != null)
             {
                 _nicknameText.text = string.Empty;
             }
 
-            if (_clanRenderer != null)
+            if (_clanBatchHandle != null)
             {
-                _clanRenderer.sprite = null;
+                _entityBatchRenderer.SetSprite(_clanBatchHandle, null);
             }
         }
 
@@ -734,6 +765,8 @@ namespace Fodinae.Game
             {
                 _spriteRenderer.color = Color.white;
             }
+
+            _bodyBatchHandle?.SetColor(Color.white);
 
             if (_nicknameText != null)
             {
@@ -882,8 +915,6 @@ namespace Fodinae.Game
                 return;
             }
 
-            SpriteRenderer spriteRenderer = _spriteRenderer ?? throw new InvalidOperationException(
-                $"{TAG} SpriteRenderer is missing for bot {_botId} skin load.");
             if (skinTexture == null)
             {
                 return;
@@ -895,10 +926,11 @@ namespace Fodinae.Game
             }
 
             _skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
-            spriteRenderer.sprite = _skinSprite;
+            EnsureBatchHandles();
+            _entityBatchRenderer.SetSprite(_bodyBatchHandle!, _skinSprite);
             if (!IsLocalPlayer)
             {
-                spriteRenderer.enabled = true;
+                _bodyBatchHandle!.SetEnabled(true);
             }
         }
 
@@ -972,8 +1004,6 @@ namespace Fodinae.Game
                 return;
             }
 
-            SpriteRenderer clanRenderer = _clanRenderer ?? throw new InvalidOperationException(
-                $"{TAG} Clan SpriteRenderer is missing for bot {_botId}.");
             if (clanTexture == null)
             {
                 return;
@@ -986,8 +1016,9 @@ namespace Fodinae.Game
             }
 
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
-            clanRenderer.sprite = _clanSprite;
-            clanRenderer.enabled = true;
+            EnsureBatchHandles();
+            _entityBatchRenderer.SetSprite(_clanBatchHandle!, _clanSprite);
+            _clanBatchHandle!.SetEnabled(true);
         }
 
         private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
@@ -1057,6 +1088,11 @@ namespace Fodinae.Game
             _cts?.Dispose();
 
             _robotService?.UnregisterRobot(_botId);
+
+            _entityBatchRenderer?.UnregisterSprite(_bodyBatchHandle);
+            _entityBatchRenderer?.UnregisterSprite(_clanBatchHandle);
+            _bodyBatchHandle = null;
+            _clanBatchHandle = null;
 
             if (_skinSprite != null)
             {

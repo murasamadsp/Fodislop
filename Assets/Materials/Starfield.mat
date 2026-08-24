@@ -31,13 +31,13 @@ Material:
     - _Density: 96
     - _GlowSize: 0.06
     - _NebulaIntensity: 0.65
-    - _ShaderTime: 67.519775
+    - _ShaderTime: 9.458551
     - _TwinkleAmount: 0.1
     - _TwinkleSpeed: 0.8
     m_Colors:
     - _NebulaColor1: {r: 0.025, g: 0.054999977, b: 0.10999996, a: 1}
     - _NebulaColor2: {r: 0.089999996, g: 0.044999972, b: 0.025, a: 1}
-    - _ParallaxOffset: {r: 0.0017017544, g: 0.0007904762, b: 0, a: 0}
+    - _ParallaxOffset: {r: 0.001722807, g: 0.0006698413, b: 0, a: 0}
     - _SkyColor: {r: 0.012, g: 0.018, b: 0.032, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

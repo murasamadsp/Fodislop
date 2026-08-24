@@ -37,6 +37,14 @@ namespace Fodinae
         private long _totalDecodedBytes;
         private int _unloadUnusedAssetsRequested;
 
+        // Wall clock rather than Time.unscaledTime: cache maintenance runs from
+        // asset-decode continuations that are not guaranteed to be on the main
+        // thread, and Unity's time API is.
+        private static readonly System.Diagnostics.Stopwatch UnusedAssetsClock =
+            System.Diagnostics.Stopwatch.StartNew();
+        private const double MinimumSecondsBetweenUnusedAssetCollections = 30.0;
+        private double _nextUnusedAssetsCollectionSeconds;
+
         public AssetCache(Func<string, CancellationToken, int, UniTask<byte[]?>> bytesLoader)
         {
             _bytesLoader = bytesLoader ?? throw new ArgumentNullException(nameof(bytesLoader));
@@ -111,7 +119,10 @@ namespace Fodinae
             }
 
             RebuildAccessOrder();
-            RequestUnusedAssetsCollection();
+
+            // No collection here. Evicting one entry is never a reason to walk
+            // the whole heap; the interval-gated request from
+            // TrimDecodedIfNeeded covers the memory this frees.
         }
 
         /// <summary>Clear all cached entries.</summary>
@@ -137,7 +148,11 @@ namespace Fodinae
 
             Interlocked.Exchange(ref _totalBytes, 0);
             Interlocked.Exchange(ref _totalDecodedBytes, 0);
-            RequestUnusedAssetsCollection();
+
+            // Clear is a deliberate teardown - a world unload, not maintenance -
+            // and it just dropped every reference the cache held, so this is the
+            // one place the scan is worth its cost immediately.
+            RequestUnusedAssetsCollection(force: true);
         }
 
         /// <summary>Set the maximum cache size in bytes. Default is 256 MB.</summary>
@@ -211,12 +226,51 @@ namespace Fodinae
             }
         }
 
-        private void RequestUnusedAssetsCollection()
+        /// <summary>
+        /// Asks Unity to reclaim assets nothing references any more, at most
+        /// once every <see cref="MinimumSecondsBetweenUnusedAssetCollections"/>.
+        /// </summary>
+        /// <remarks>
+        /// Resources.UnloadUnusedAssets is the profiler's
+        /// GarbageCollectSharedAssets: it walks every managed object and every
+        /// Unity object alive in the process to decide what is still
+        /// referenced. It is one of the most expensive things a running game
+        /// can do, and it is not a cache-maintenance operation.
+        ///
+        /// The only guard here used to be _unloadUnusedAssetsRequested, which
+        /// prevents two scans overlapping and nothing else: the flag clears the
+        /// instant a scan completes, so the next trim - or the next single
+        /// entry eviction, which used to call this too - started another one
+        /// immediately. Under steady eviction pressure, which is the normal
+        /// state while textures stream in, that is a continuous back-to-back
+        /// loop of full-heap liveness scans, and it looks exactly like a
+        /// profile dominated by GC_mark_from and liveness scanning while the
+        /// PlayerLoop itself is idle.
+        ///
+        /// The interval, not the flag, is what makes this safe. Trimming
+        /// already dropped the cache's own references; those objects stay
+        /// reclaimable until the next scan gets to them, so deferring costs
+        /// memory headroom for a while and nothing else.
+        /// </remarks>
+        /// <param name="force">
+        /// Bypasses the interval, for the deliberate teardown in
+        /// <see cref="Clear"/>. Never pass true from a maintenance path.
+        /// </param>
+        private void RequestUnusedAssetsCollection(bool force = false)
         {
+            double now = UnusedAssetsClock.Elapsed.TotalSeconds;
+            if (!force && now < _nextUnusedAssetsCollectionSeconds)
+            {
+                return;
+            }
+
             if (Interlocked.Exchange(ref _unloadUnusedAssetsRequested, 1) != 0)
             {
                 return;
             }
+
+            _nextUnusedAssetsCollectionSeconds =
+                now + MinimumSecondsBetweenUnusedAssetCollections;
 
             Resources.UnloadUnusedAssets().completed += _ =>
             {

@@ -836,13 +836,21 @@ namespace Fodinae
 
         private void WriteChunkRLE(BinaryWriter writer, T[] chunk)
         {
+            // EqualityComparer<T>.Default, matching the two other equality
+            // sites in this class, and not the plain .Equals this loop used to
+            // call. T is only constrained to `unmanaged`, so `.Equals(current)`
+            // binds to ValueType.Equals(object) and boxes `current` on every
+            // single comparison - once per cell, 1024 per chunk, for every
+            // dirty chunk of every flush and every LRU eviction. The comparer
+            // resolves to a specialized non-boxing implementation instead.
+            EqualityComparer<T> comparer = EqualityComparer<T>.Default;
             int ptr = 0;
             while (ptr < _chunkArea)
             {
                 T current = chunk[ptr];
                 ushort count = 1;
                 ptr++;
-                while (ptr < _chunkArea && count < ushort.MaxValue && chunk[ptr].Equals(current))
+                while (ptr < _chunkArea && count < ushort.MaxValue && comparer.Equals(chunk[ptr], current))
                 {
                     count++;
                     ptr++;

@@ -13,8 +13,6 @@ namespace Fodinae.Rendering
         [Inject]
         private IClientConfigManager _clientConfig = null!;
 
-        private bool _isMutedInBackground;
-
         protected void Start()
         {
             ApplyDisplaySettings();
@@ -29,9 +27,10 @@ namespace Fodinae.Rendering
 
             var config = _clientConfig.Config;
 
-            // VSync & FrameRate
+            // Display synchronization is independent from simulation/render throughput.
+            // The client never imposes an application-level FPS ceiling.
             QualitySettings.vSyncCount = config.VSync ? 1 : 0;
-            Application.targetFrameRate = config.VSync ? -1 : config.TargetFrameRate;
+            Application.targetFrameRate = -1;
 
             // Кап максимальной дельты кадра: долгий кадр на слабой машине не должен
             // превращаться в «спираль смерти» (гигантский скачок симуляции на
@@ -41,7 +40,7 @@ namespace Fodinae.Rendering
             // Resolution & Screen Mode
             if (config.ResolutionWidth > 0 && config.ResolutionHeight > 0)
             {
-                var mode = (FullScreenMode)config.FullScreenMode;
+                var mode = NormalizeFullScreenMode((FullScreenMode)config.FullScreenMode);
                 int refresh = config.RefreshRate > 0 ? config.RefreshRate : (int)Screen.currentResolution.refreshRateRatio.value;
                 Screen.SetResolution(config.ResolutionWidth, config.ResolutionHeight, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refresh), denominator = 1 });
             }
@@ -54,11 +53,14 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.Config.ResolutionWidth = width;
-            _clientConfig.Config.ResolutionHeight = height;
-            _clientConfig.Config.FullScreenMode = (int)mode;
-            _clientConfig.Config.RefreshRate = refreshRate;
-            _clientConfig.Save();
+            mode = NormalizeFullScreenMode(mode);
+            _clientConfig.UpdateAndSave(config =>
+            {
+                config.ResolutionWidth = width;
+                config.ResolutionHeight = height;
+                config.FullScreenMode = (int)mode;
+                config.RefreshRate = refreshRate;
+            });
 
             Screen.SetResolution(width, height, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refreshRate), denominator = 1 });
         }
@@ -70,27 +72,10 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.Config.VSync = enabled;
-            _clientConfig.Save();
+            _clientConfig.UpdateAndSave(config => config.VSync = enabled);
 
             QualitySettings.vSyncCount = enabled ? 1 : 0;
-            Application.targetFrameRate = enabled ? -1 : _clientConfig.Config.TargetFrameRate;
-        }
-
-        public void SetTargetFrameRate(int fps)
-        {
-            if (_clientConfig?.Config == null)
-            {
-                return;
-            }
-
-            _clientConfig.Config.TargetFrameRate = fps;
-            _clientConfig.Save();
-
-            if (!QualitySettings.vSyncCount.Equals(1))
-            {
-                Application.targetFrameRate = fps;
-            }
+            Application.targetFrameRate = -1;
         }
 
         public void SetMuteInBackground(bool mute)
@@ -100,8 +85,7 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.Config.MuteAudioInBackground = mute;
-            _clientConfig.Save();
+            _clientConfig.UpdateAndSave(config => config.MuteAudioInBackground = mute);
         }
 
         public IReadOnlyList<Resolution> GetSupportedResolutions()
@@ -109,18 +93,21 @@ namespace Fodinae.Rendering
             return Screen.resolutions;
         }
 
-        protected void OnApplicationFocus(bool hasFocus)
+        /// <summary>
+        /// Unity на macOS не поддерживает ExclusiveFullScreen — единственный
+        /// полноэкранный режим там FullScreenWindow. Маппим до вызова
+        /// Screen.SetResolution, чтобы конфиг «exclusive» не ронял окно на Mac.
+        /// </summary>
+        private static FullScreenMode NormalizeFullScreenMode(FullScreenMode mode)
         {
-            if (_clientConfig?.Config != null && _clientConfig.Config.MuteAudioInBackground)
-            {
-                AudioListener.pause = !hasFocus;
-                _isMutedInBackground = !hasFocus;
-            }
-            else if (_isMutedInBackground)
-            {
-                AudioListener.pause = false;
-                _isMutedInBackground = false;
-            }
+#if UNITY_STANDALONE_OSX
+            return mode == FullScreenMode.ExclusiveFullScreen
+                ? FullScreenMode.FullScreenWindow
+                : mode;
+#else
+            return mode;
+#endif
         }
+
     }
 }

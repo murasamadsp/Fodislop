@@ -46,25 +46,44 @@ namespace Fodinae
 
             foreach (var prop in packet.AttachedProperties)
             {
-                if (prop.Key == "Canvas.X" && float.TryParse(prop.Value, out float left))
+                // Протокольные числа всегда в инвариантной культуре (точка как
+                // десятичный разделитель) — на Windows с региональными RU/DE/TR
+                // float.TryParse по текущей культуре молча теряет геометрию окон.
+                if (prop.Key == "Canvas.X" && float.TryParse(
+                        prop.Value,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out float left))
                 {
                     element.style.position = Position.Absolute;
                     element.style.left = left;
                 }
 
-                if (prop.Key == "Canvas.Y" && float.TryParse(prop.Value, out float top))
+                if (prop.Key == "Canvas.Y" && float.TryParse(
+                        prop.Value,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out float top))
                 {
                     element.style.position = Position.Absolute;
                     element.style.top = top;
                 }
 
-                if (prop.Key == "Canvas.Width" && float.TryParse(prop.Value, out float width))
+                if (prop.Key == "Canvas.Width" && float.TryParse(
+                        prop.Value,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out float width))
                 {
                     element.style.position = Position.Absolute;
                     element.style.width = width;
                 }
 
-                if (prop.Key == "Canvas.Height" && float.TryParse(prop.Value, out float height))
+                if (prop.Key == "Canvas.Height" && float.TryParse(
+                        prop.Value,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out float height))
                 {
                     element.style.position = Position.Absolute;
                     element.style.height = height;

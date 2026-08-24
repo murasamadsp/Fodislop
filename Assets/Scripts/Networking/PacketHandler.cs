@@ -68,8 +68,6 @@ namespace Fodinae.Networking
         [Inject]
         private ConnectionProcessor _connection = null!;
         [Inject]
-        private ClientConfigProcessor _clientConfig = null!;
-        [Inject]
         private MissionArrowProcessor _missionArrow = null!;
         [Inject]
         private WindowPacketProcessor _windowProcessor = null!;
@@ -119,9 +117,28 @@ namespace Fodinae.Networking
                 return true;
             }
 
-            if (_mapDataProvider == null || _mapStorageInterface == null ||
-                _uiDocument == null || _networkService == null ||
-                _windowProcessor == null || _session == null)
+            if (_session == null ||
+                _worldInit == null ||
+                _robotInfo == null ||
+                _mapRegion == null ||
+                _audio == null ||
+                _playerInfo == null ||
+                _robotPosition == null ||
+                _chat == null ||
+                _mission == null ||
+                _pack == null ||
+                _connection == null ||
+                _missionArrow == null ||
+                _windowProcessor == null ||
+                _networkService == null ||
+                _mapStorageInterface == null ||
+                _gameManager == null ||
+                _mapDataProvider == null ||
+                _uiDocument == null ||
+                _playerStats == null ||
+                _status == null ||
+                _inventory == null ||
+                _clan == null)
             {
                 return false;
             }
@@ -205,7 +222,6 @@ namespace Fodinae.Networking
             _networkService.Subscribe<ReconnectPacket>(_connection.Process);
             _networkService.Subscribe<AuthTokenPacket>(HandleAuthTokenPacket);
             _networkService.Subscribe<OpenURLPacket>(OpenURL.Process);
-            _networkService.Subscribe<ClientConfigPacket>(_clientConfig.Process);
             _networkService.Subscribe<MissionArrowPacket>(_missionArrow.Process);
 
             _isSubscribed = true;
@@ -293,7 +309,6 @@ namespace Fodinae.Networking
                 _networkService.Unsubscribe<ReconnectPacket>(_connection.Process);
                 _networkService.Unsubscribe<AuthTokenPacket>(HandleAuthTokenPacket);
                 _networkService.Unsubscribe<OpenURLPacket>(OpenURL.Process);
-                _networkService.Unsubscribe<ClientConfigPacket>(_clientConfig.Process);
                 _networkService.Unsubscribe<MissionArrowPacket>(_missionArrow.Process);
             }
 

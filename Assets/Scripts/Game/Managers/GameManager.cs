@@ -50,6 +50,8 @@ namespace Fodinae.Game.Managers
         private IPlayerStats _playerStats = null!;
         [Inject]
         private IObjectResolver _resolver = null!;
+        [Inject]
+        private TerrainRenderer _terrainRenderer = null!;
 
         private GameObject? _uiRoot;
         private bool _worldLoadPending;
@@ -215,7 +217,7 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
-            TerrainRenderer? terrain = TerrainRenderer.Instance;
+            TerrainRenderer? terrain = _terrainRenderer;
             if (terrain == null || !terrain.IsReadyForGameplay)
             {
                 return;
@@ -246,7 +248,7 @@ namespace Fodinae.Game.Managers
             Debug.Log($"[Probe] WorldLoaded {UnityEngine.Time.realtimeSinceStartup:F3}");
             SetState(GameState.InGame);
             player.SetGameplayVisible();
-            CameraFollow.Instance?.SnapToTarget();
+            _resolver.Resolve<CameraFollow>().SnapToTarget();
             AuthorizeUI();
             int robotCount = _robotService?.RobotCount ?? -1;
             Debug.Log(

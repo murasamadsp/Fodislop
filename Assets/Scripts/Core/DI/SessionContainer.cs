@@ -69,17 +69,17 @@ namespace Fodinae.Core.DI
     }
 
     /// <summary>
-    /// Ambient access for code that lives outside the DI graph — runtime
-    /// AddComponent'd views (ProgrammatorGrid) and execute-always UI (MainMenu)
-    /// never get [Inject] fields filled. Routes through the pre-existing
-    /// <see cref="BootstrapLifetimeScope.Instance"/> singleton, so no new static
-    /// state is introduced; returns null when no scope is built yet.
+    /// Temporary bridge for code that is created outside the DI graph. It keeps
+    /// no resolver or service in static state; runtime-created components should
+    /// still be injected by their owning factory whenever possible.
     /// </summary>
     public static class SessionAccess
     {
         public static ISessionContainer? Resolve()
         {
-            BootstrapLifetimeScope? bootstrap = BootstrapLifetimeScope.Instance;
+            BootstrapLifetimeScope? bootstrap =
+                UnityEngine.Object.FindAnyObjectByType<BootstrapLifetimeScope>(
+                    UnityEngine.FindObjectsInactive.Include);
             if (bootstrap == null || bootstrap.Container == null)
             {
                 return null;

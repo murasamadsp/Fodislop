@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Auth;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -47,6 +48,7 @@ namespace Fodinae.UI
         private readonly TextField _login;
         private readonly Toggle _autoLogin;
         private readonly Label _hint;
+        private readonly IClientConfigManager _clientConfig;
 
         /// <summary>Вызывается, когда игрок прошёл ворота и меню можно показывать.</summary>
         public event Action? Passed;
@@ -58,7 +60,8 @@ namespace Fodinae.UI
             Button tabRegister,
             TextField login,
             Toggle autoLogin,
-            Label hint)
+            Label hint,
+            IClientConfigManager clientConfig)
         {
             _loginForm = loginForm;
             _registerForm = registerForm;
@@ -67,13 +70,16 @@ namespace Fodinae.UI
             _login = login;
             _autoLogin = autoLogin;
             _hint = hint;
+            _clientConfig = clientConfig;
         }
 
         /// <summary>
         /// Собирает ворота из уже склонированного дерева. Возвращает null, если
         /// разметки нет — тогда меню просто работает как раньше.
         /// </summary>
-        public static AuthGate? TryCreate(VisualElement tree)
+        public static AuthGate? TryCreate(
+            VisualElement tree,
+            IClientConfigManager clientConfig)
         {
             var loginForm = tree.Q<VisualElement>("AuthLoginForm");
             var registerForm = tree.Q<VisualElement>("AuthRegisterForm");
@@ -91,7 +97,15 @@ namespace Fodinae.UI
                 return null;
             }
 
-            var gate = new AuthGate(loginForm, registerForm, tabLogin, tabRegister, login, autoLogin, hint);
+            var gate = new AuthGate(
+                loginForm,
+                registerForm,
+                tabLogin,
+                tabRegister,
+                login,
+                autoLogin,
+                hint,
+                clientConfig);
             gate.Bind(tree);
             return gate;
         }
@@ -163,15 +177,7 @@ namespace Fodinae.UI
 
         private void StartOffline()
         {
-            ClientConfigManager? config = ClientConfigManager.Instance;
-            if (config == null)
-            {
-                ShowHint("Конфигурация клиента недоступна — офлайн-режим не включён.", warn: true);
-                return;
-            }
-
-            config.Config.UseDummyConnection = true;
-            config.Save();
+            _clientConfig.UpdateAndSave(config => config.UseDummyConnection = true);
             ShowHint("Офлайн-режим: локальная песочница без сервера.", warn: false);
             Pass();
         }

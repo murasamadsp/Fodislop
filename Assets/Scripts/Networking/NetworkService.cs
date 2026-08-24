@@ -24,14 +24,6 @@ namespace Fodinae.Networking
 {
     public class NetworkService : MonoBehaviour, INetworkService
     {
-        public static NetworkService? Instance { get; private set; }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            Instance = null;
-        }
-
         [Inject]
         private IConnectionService _connectionService = null!;
         [Inject]
@@ -47,7 +39,6 @@ namespace Fodinae.Networking
 
         protected void Awake()
         {
-            Instance = this;
         }
 
         protected void OnEnable()
@@ -63,10 +54,6 @@ namespace Fodinae.Networking
         protected void OnDestroy()
         {
             UnsubscribeFromConnection();
-            if (Instance == this)
-            {
-                Instance = null;
-            }
         }
 
         /// <summary>

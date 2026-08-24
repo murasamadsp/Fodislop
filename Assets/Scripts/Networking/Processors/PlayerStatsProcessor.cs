@@ -53,7 +53,12 @@ namespace Fodinae.Networking.Processors
 
         public void Process(BasketPacket packet)
         {
-            UnityEngine.Debug.Log($"[Probe] Basket {UnityEngine.Time.realtimeSinceStartup:F3} cap={packet.Capacity}");
+            // The [Probe] log that stood here fired on every BasketPacket -
+            // several times a second, forever. The other [Probe] logs are
+            // one-shot load timings; this one was in a per-packet path, and in
+            // the editor every Debug.Log captures and formats a managed stack
+            // trace, adds a console entry and writes to Editor.log. 531 of them
+            // in the current session log.
             var s = _stats;
             if (s != null)
             {

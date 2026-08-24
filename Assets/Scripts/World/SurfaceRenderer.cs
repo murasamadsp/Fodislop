@@ -8,12 +8,16 @@ using Fodinae.World.Lighting;
 using UnityEngine;
 using UnityEngine.Rendering;
 using VContainer;
+using Unity.Profiling;
 
 namespace Fodinae.World
 {
     [DisallowMultipleComponent]
     public class SurfaceRenderer : MonoBehaviour, ILightingGeometryContributor
     {
+        private static readonly ProfilerMarker SurfaceLateUpdateMarker =
+            new("Fodinae.Surface.LateUpdate");
+
         private const string SurfaceShaderName = ProjectRuntimeContracts.ShaderNames.WorldSurface;
         private const string TransitObjectName = "SurfaceTransit";
         private const string PerspectiveObjectName = "SurfacePerspective";
@@ -26,6 +30,8 @@ namespace Fodinae.World
         private const float TransitTileWidth = 32f;
         private const float PerspectiveTileWidth = 5f;
         private const float BoundaryOverscan = 2f;
+        private const float GeometryCacheQuantum = 32f;
+        private const float GeometryCachePadding = 16f;
         private static readonly int[] QuadTriangles =
         [
             0, 1, 2, 3, 2, 1,
@@ -80,9 +86,8 @@ namespace Fodinae.World
         private ulong _lightingGeometryRevision = 1;
         private int _lastWorldWidth = int.MinValue;
         private int _lastWorldHeight = int.MinValue;
-        private Vector3 _lastCameraPosition = new(float.NaN, float.NaN, float.NaN);
-        private float _lastCameraOrthoSize = float.NaN;
-        private float _lastCameraAspect = float.NaN;
+        private Rect _cachedCoverageRect;
+        private bool _hasCachedCoverage;
         private bool _initialized;
         private bool _registered;
 
@@ -204,6 +209,7 @@ namespace Fodinae.World
 
         protected void LateUpdate()
         {
+            using var marker = SurfaceLateUpdateMarker.Auto();
             if (!_mapManager.IsWorldInitialized)
             {
                 return;
@@ -226,11 +232,11 @@ namespace Fodinae.World
             }
 
             Camera mainCamera = _mainCamera;
+            Rect visibleRect = GetVisibleRect(mainCamera);
             if (_lastWorldWidth == _mapManager.WorldWidth &&
                 _lastWorldHeight == _mapManager.WorldHeight &&
-                _lastCameraPosition == mainCamera.transform.position &&
-                Mathf.Approximately(_lastCameraOrthoSize, mainCamera.orthographicSize) &&
-                Mathf.Approximately(_lastCameraAspect, mainCamera.aspect))
+                _hasCachedCoverage &&
+                Contains(_cachedCoverageRect, visibleRect))
             {
                 return;
             }
@@ -238,7 +244,7 @@ namespace Fodinae.World
             RebuildVisibleGeometry(
                 _mapManager.WorldWidth,
                 _mapManager.WorldHeight,
-                mainCamera);
+                visibleRect);
         }
 
         protected void OnDisable()
@@ -367,7 +373,7 @@ namespace Fodinae.World
         private void RebuildVisibleGeometry(
             int worldWidth,
             int worldHeight,
-            Camera mainCamera)
+            Rect visibleRect)
         {
             if (worldWidth <= 0 || worldHeight <= 0)
             {
@@ -375,19 +381,11 @@ namespace Fodinae.World
                     $"SurfaceRenderer received invalid world dimensions {worldWidth}x{worldHeight}.");
             }
 
-            float halfHeight = mainCamera.orthographicSize + BoundaryOverscan;
-            float halfWidth = (mainCamera.orthographicSize * mainCamera.aspect) +
-                BoundaryOverscan;
-            Vector3 cameraPosition = mainCamera.transform.position;
-            Rect visibleRect = Rect.MinMaxRect(
-                cameraPosition.x - halfWidth,
-                cameraPosition.y - halfHeight,
-                cameraPosition.x + halfWidth,
-                cameraPosition.y + halfHeight);
+            Rect coverageRect = BuildCoverageRect(visibleRect);
 
-            UpdateBoundaryMesh(_redRockMesh!, visibleRect, worldWidth, worldHeight);
-            UpdateTransitMesh(_transitMesh!, visibleRect, worldHeight);
-            UpdatePerspectiveMesh(_perspectiveMesh!, visibleRect, worldHeight);
+            UpdateBoundaryMesh(_redRockMesh!, coverageRect, worldWidth, worldHeight);
+            UpdateTransitMesh(_transitMesh!, coverageRect, worldHeight);
+            UpdatePerspectiveMesh(_perspectiveMesh!, coverageRect, worldHeight);
 
             if (_lastWorldWidth != worldWidth || _lastWorldHeight != worldHeight)
             {
@@ -397,9 +395,44 @@ namespace Fodinae.World
 
             _lastWorldWidth = worldWidth;
             _lastWorldHeight = worldHeight;
-            _lastCameraPosition = cameraPosition;
-            _lastCameraOrthoSize = mainCamera.orthographicSize;
-            _lastCameraAspect = mainCamera.aspect;
+            _cachedCoverageRect = coverageRect;
+            _hasCachedCoverage = true;
+        }
+
+        private static Rect GetVisibleRect(Camera camera)
+        {
+            float halfHeight = camera.orthographicSize + BoundaryOverscan;
+            float halfWidth = (camera.orthographicSize * camera.aspect) +
+                BoundaryOverscan;
+            Vector3 position = camera.transform.position;
+            return Rect.MinMaxRect(
+                position.x - halfWidth,
+                position.y - halfHeight,
+                position.x + halfWidth,
+                position.y + halfHeight);
+        }
+
+        private static Rect BuildCoverageRect(Rect visibleRect)
+        {
+            float minX = Mathf.Floor(
+                (visibleRect.xMin - GeometryCachePadding) / GeometryCacheQuantum) *
+                GeometryCacheQuantum;
+            float minY = Mathf.Floor(
+                (visibleRect.yMin - GeometryCachePadding) / GeometryCacheQuantum) *
+                GeometryCacheQuantum;
+            float maxX = Mathf.Ceil(
+                (visibleRect.xMax + GeometryCachePadding) / GeometryCacheQuantum) *
+                GeometryCacheQuantum;
+            float maxY = Mathf.Ceil(
+                (visibleRect.yMax + GeometryCachePadding) / GeometryCacheQuantum) *
+                GeometryCacheQuantum;
+            return Rect.MinMaxRect(minX, minY, maxX, maxY);
+        }
+
+        private static bool Contains(Rect outer, Rect inner)
+        {
+            return inner.xMin >= outer.xMin && inner.xMax <= outer.xMax &&
+                inner.yMin >= outer.yMin && inner.yMax <= outer.yMax;
         }
 
         private void UpdateBoundaryMesh(

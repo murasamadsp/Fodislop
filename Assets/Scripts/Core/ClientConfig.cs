@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Rendering;
+using Fodinae.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -10,7 +11,7 @@ namespace Fodinae.Core
     [Serializable]
     public class ClientConfig
     {
-        public const int CurrentSchemaVersion = 11;
+        public const int CurrentSchemaVersion = 15;
 
         public int SchemaVersion;
         public string ProjectDefaultsHash = string.Empty;
@@ -60,6 +61,8 @@ namespace Fodinae.Core
         public Color TerrainDebugColor;
         public bool TerrainDebugMode;
         public float BloomThreshold;
+        public float BloomSoftKnee;
+        public float BloomRadius;
         public float BloomScatter;
         public Color BloomTint;
         public Color TransitEmissionColor;
@@ -85,7 +88,7 @@ namespace Fodinae.Core
         public float EigengrauNoiseScale;
         public float EigengrauAnimationSpeed;
         public float MotionBlurIntensity;
-        public int MotionBlurMaxSamples;
+        public AdvancedPostProcessSettings AdvancedPostProcess = new();
 
         // Сетевое подключение. DummyConnection — заглушка для локального теста без
         // сервера. При UseDummyConnection = false клиент подключается к реальному

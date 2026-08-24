@@ -59,13 +59,11 @@ namespace Fodinae.Core
         // every other way the scene can go away, including play-mode exit.
         protected override void OnDestroy()
         {
-            BootstrapLifetimeScope? bootstrap = BootstrapLifetimeScope.Instance;
-            if (bootstrap != null && bootstrap.Container != null)
+            if (Parent != null && Parent.Container != null)
             {
-                ServiceLocator.Initialize(bootstrap.Container);
-                if (bootstrap.Container.TryResolve(out ISessionContainer session))
+                if (Parent.Container.TryResolve(out ISessionContainer session))
                 {
-                    session.Set(bootstrap.Container);
+                    session.Set(Parent.Container);
                 }
             }
 
@@ -110,7 +108,6 @@ namespace Fodinae.Core
             var newStorage = new MapStorage();
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
 
-            builder.RegisterBuildCallback(_ => ServiceLocator.Initialize(_));
             builder.RegisterBuildCallback(container => container.Resolve<ISessionContainer>().Set(container));
 
             // Register (не RegisterInstance): VContainer сам конструирует и инжектит [Inject]-поля.
@@ -142,14 +139,13 @@ namespace Fodinae.Core
             builder.Register<MissionProcessor>(Lifetime.Singleton);
             builder.Register<PackProcessor>(Lifetime.Singleton);
             builder.Register<ConnectionProcessor>(Lifetime.Singleton);
-            builder.Register<ClientConfigProcessor>(Lifetime.Singleton);
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
             RegisterManager<GameManager>(builder);
             RegisterManager<VFXPool>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<PackManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<RobotManager>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<TentacleBatchRenderer>(builder);
+            RegisterManager<WorldEntityBatchRenderer>(builder);
 
             // PlayerMovementController живёт на PrefabInstance объекта Player (тег "Player") в сцене.
             // RegisterManager<T> через FindAnyObjectByType может не найти его надёжно до инициализации

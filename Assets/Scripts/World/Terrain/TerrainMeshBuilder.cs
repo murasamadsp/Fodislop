@@ -20,6 +20,36 @@ namespace Fodinae.World.Terrain
         private int[] _bgAtlasIndices = Array.Empty<int>();
         private int[] _fgAtlasIndices = Array.Empty<int>();
 
+        /// <summary>
+        /// Whether the last <see cref="BuildRegion"/> changed which submesh any
+        /// quad belongs to, and so requires the index lists to be re-uploaded.
+        /// </summary>
+        /// <remarks>
+        /// Almost always false. A quad's submesh is its texture atlas, and a
+        /// streamed chunk or a mined cell changes the cell's appearance far
+        /// more often than it moves that cell onto a different atlas. Rebuilding
+        /// the lists regardless meant every incremental patch, however small,
+        /// cleared every submesh list and re-appended twelve ints for every quad
+        /// in the viewport - the whole grid's worth of List&lt;int&gt;.Add on the
+        /// main thread, to usually reproduce the identical lists.
+        /// </remarks>
+        public bool IndicesChanged { get; private set; }
+
+        /// <summary>
+        /// The span of <see cref="VertexBuffer"/> the last
+        /// <see cref="BuildRegion"/> actually wrote, as a vertex offset and
+        /// count. Zero count means it wrote nothing.
+        /// </summary>
+        /// <remarks>
+        /// Quads are indexed x-major (<c>x * meshHeight + y</c>), so a
+        /// rectangle occupies one contiguous run per column and this span is
+        /// the smallest range covering all of them - tight when the dirty rect
+        /// is narrow in x, which is the common case for a walking player.
+        /// </remarks>
+        public int DirtyVertexStart { get; private set; }
+
+        public int DirtyVertexCount { get; private set; }
+
         public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
         {
             _cellSize = cellSize;
@@ -50,6 +80,12 @@ namespace Fodinae.World.Terrain
             }
 
             EnsureCapacity(meshWidth, meshHeight, _cellSize);
+
+            // A full build rewrites everything, so the incremental bookkeeping
+            // reports exactly that to anyone who reads it after this call.
+            IndicesChanged = true;
+            DirtyVertexStart = 0;
+            DirtyVertexCount = _vertexBuffer.Length;
 
             System.Threading.Tasks.Parallel.For(0, meshWidth, x =>
             {
@@ -111,6 +147,20 @@ namespace Fodinae.World.Terrain
             int clampedStartX = Mathf.Clamp(startX, 0, meshWidth);
             int clampedStartY = Mathf.Clamp(startY, 0, meshHeight);
 
+            if (endX <= clampedStartX || endY <= clampedStartY)
+            {
+                IndicesChanged = false;
+                DirtyVertexStart = 0;
+                DirtyVertexCount = 0;
+                return;
+            }
+
+            int firstQuad = (clampedStartX * meshHeight) + clampedStartY;
+            int lastQuad = ((endX - 1) * meshHeight) + (endY - 1);
+            DirtyVertexStart = firstQuad * 8;
+            DirtyVertexCount = ((lastQuad + 1) * 8) - DirtyVertexStart;
+
+            bool atlasAssignmentChanged = false;
             for (int x = clampedStartX; x < endX; x++)
             {
                 int gridX = minX + x;
@@ -119,9 +169,26 @@ namespace Fodinae.World.Terrain
                     int unityY = minY + y;
                     int quadIdx = (x * meshHeight) + y;
                     int baseIdx = quadIdx * 8;
+                    int previousBackgroundAtlas = _bgAtlasIndices[quadIdx];
+                    int previousForegroundAtlas = _fgAtlasIndices[quadIdx];
                     _bgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, baseIdx, atlases, useColorLod, mapManager, textureManager);
                     _fgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, baseIdx + 4, atlases, useColorLod, mapManager, textureManager);
+                    if (_bgAtlasIndices[quadIdx] != previousBackgroundAtlas ||
+                        _fgAtlasIndices[quadIdx] != previousForegroundAtlas)
+                    {
+                        atlasAssignmentChanged = true;
+                    }
                 }
+            }
+
+            IndicesChanged = atlasAssignmentChanged;
+            if (!atlasAssignmentChanged)
+            {
+                // The vertices moved onto different textures within the same
+                // atlases, so every triangle still belongs to the submesh it
+                // already belonged to. Rebuilding the lists would reproduce
+                // them byte for byte.
+                return;
             }
 
             for (int i = 0; i < subMeshIndices.Length; i++)
@@ -156,6 +223,110 @@ namespace Fodinae.World.Terrain
                     fgList.Add(fgIdx + 2);
                     fgList.Add(fgIdx + 1);
                     fgList.Add(fgIdx + 0);
+                }
+            }
+        }
+
+        public void BuildTextureCells(
+            HashSet<CellType> cellTypes,
+            TerrainCellCache cellCache,
+            TerrainPrecalculator precalc,
+            BackgroundFloodFill bgFloodFill,
+            int minX,
+            int minY,
+            int meshWidth,
+            int meshHeight,
+            int worldWidth,
+            int worldHeight,
+            List<TextureAtlas> atlases,
+            List<int>[] subMeshIndices,
+            bool useColorLod,
+            MapManager mapManager,
+            ITextureService textureManager)
+        {
+            bool atlasAssignmentChanged = false;
+            int firstDirtyQuad = int.MaxValue;
+            int lastDirtyQuad = -1;
+            for (int x = 0; x < meshWidth; x++)
+            {
+                int gridX = minX + x;
+                for (int y = 0; y < meshHeight; y++)
+                {
+                    CellType foregroundType = cellCache.GetCellData(x + 1, y + 1).Type;
+                    CellType backgroundType = bgFloodFill.Buffer[x, y];
+                    if (!cellTypes.Contains(foregroundType) && !cellTypes.Contains(backgroundType))
+                    {
+                        continue;
+                    }
+
+                    int quadIndex = (x * meshHeight) + y;
+                    int baseIndex = quadIndex * 8;
+                    int previousBackgroundAtlas = _bgAtlasIndices[quadIndex];
+                    int previousForegroundAtlas = _fgAtlasIndices[quadIndex];
+                    _bgAtlasIndices[quadIndex] = FillQuadData(
+                        x, y, gridX, minY + y, cellCache, precalc, bgFloodFill,
+                        worldWidth, worldHeight, true, baseIndex, atlases, useColorLod,
+                        mapManager, textureManager);
+                    _fgAtlasIndices[quadIndex] = FillQuadData(
+                        x, y, gridX, minY + y, cellCache, precalc, bgFloodFill,
+                        worldWidth, worldHeight, false, baseIndex + 4, atlases, useColorLod,
+                        mapManager, textureManager);
+                    atlasAssignmentChanged |=
+                        _bgAtlasIndices[quadIndex] != previousBackgroundAtlas ||
+                        _fgAtlasIndices[quadIndex] != previousForegroundAtlas;
+                    firstDirtyQuad = Mathf.Min(firstDirtyQuad, quadIndex);
+                    lastDirtyQuad = Mathf.Max(lastDirtyQuad, quadIndex);
+                }
+            }
+
+            IndicesChanged = atlasAssignmentChanged;
+            DirtyVertexStart = lastDirtyQuad >= 0 ? firstDirtyQuad * 8 : 0;
+            DirtyVertexCount = lastDirtyQuad >= 0 ? ((lastDirtyQuad + 1) * 8) - DirtyVertexStart : 0;
+            if (!atlasAssignmentChanged)
+            {
+                return;
+            }
+
+            RebuildSubMeshIndices(meshWidth, meshHeight, subMeshIndices);
+        }
+
+        private void RebuildSubMeshIndices(
+            int meshWidth,
+            int meshHeight,
+            List<int>[] subMeshIndices)
+        {
+            for (int i = 0; i < subMeshIndices.Length; i++)
+            {
+                subMeshIndices[i].Clear();
+            }
+
+            int totalQuads = meshWidth * meshHeight;
+            for (int i = 0; i < totalQuads; i++)
+            {
+                int backgroundAtlas = _bgAtlasIndices[i];
+                if (backgroundAtlas >= 0 && backgroundAtlas < subMeshIndices.Length)
+                {
+                    List<int> indices = subMeshIndices[backgroundAtlas];
+                    int baseIndex = i * 8;
+                    indices.Add(baseIndex);
+                    indices.Add(baseIndex + 3);
+                    indices.Add(baseIndex + 2);
+                    indices.Add(baseIndex + 2);
+                    indices.Add(baseIndex + 1);
+                    indices.Add(baseIndex);
+                }
+
+                int foregroundAtlas = _fgAtlasIndices[i];
+                if (foregroundAtlas >= 0 && foregroundAtlas < subMeshIndices.Length)
+                {
+                    List<int> indices = subMeshIndices[foregroundAtlas];
+                    int baseIndex = (i * 8) + 4;
+                    indices.Add(baseIndex);
+                    indices.Add(baseIndex + 3);
+                    indices.Add(baseIndex + 2);
+                    indices.Add(baseIndex + 2);
+                    indices.Add(baseIndex + 1);
+                    indices.Add(baseIndex);
                 }
             }
         }
@@ -316,11 +487,13 @@ namespace Fodinae.World.Terrain
                 animOffset = (seed % 6283) / 1000f;
             }
 
+            // Любой непустой блок переднего плана — физическая масса: свет обязан
+            // поглощаться всеми блоками одинаково, без зависимости от уникальных
+            // свойств DropsShadow/Passable (иначе у блоков без DropsShadow
+            // occupancy = 0 и свет проходит насквозь).
             bool isPhysicalMass =
                 !isBackground &&
-                cellFgType != CellType.Empty &&
-                ((props & CellConfigProperties.DropsShadow) != 0 ||
-                 (props & CellConfigProperties.Passable) == 0);
+                cellFgType != CellType.Empty;
             Vector4 animDataVec = new(
                 (float)animType,
                 animSpeed,

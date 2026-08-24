@@ -2,9 +2,11 @@
 
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae.UI
 {
@@ -79,6 +81,9 @@ namespace Fodinae.UI
         private int _step;
         private bool _leaving;
 
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
+
         // Start, а не OnEnable: дерево строится здесь же, и порядок OnEnable
         // между UIDocument и этим компонентом зависел бы от порядка компонентов
         // в сцене. Start гарантированно идёт после всех OnEnable.
@@ -110,7 +115,7 @@ namespace Fodinae.UI
             // некому и форма входа осталась бы видимой поверх онбординга.
             _gatewayRoot = _root.Q<VisualElement>("GatewayRoot") ?? _root;
 
-            _authGate = AuthGate.TryCreate(_root);
+            _authGate = AuthGate.TryCreate(_root, _clientConfig);
             if (_authGate == null)
             {
                 Debug.LogWarning("[Gateway] Ворота входа не собрались — сразу уходим в меню.");
@@ -166,7 +171,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            ClientConfig? config = ClientConfigManager.Instance?.Config;
+            ClientConfig config = _clientConfig.Config;
 
             var uiScale = _root.Q<DropdownField>("OnbUiScale");
             if (uiScale != null)
@@ -178,7 +183,7 @@ namespace Fodinae.UI
                 }
 
                 uiScale.choices = labels;
-                uiScale.index = IndexOfUiScale(config?.UiScale ?? 1f);
+                uiScale.index = IndexOfUiScale(config.UiScale);
 
                 // Применяем сразу при выборе, а не по кнопке «Далее»: смысл
                 // этой настройки в том, чтобы увидеть результат на себе.
@@ -195,7 +200,7 @@ namespace Fodinae.UI
                 }
 
                 frameRate.choices = labels;
-                frameRate.index = IndexOfFrameRate(config?.TargetFrameRate ?? -1);
+                frameRate.index = IndexOfFrameRate(config.TargetFrameRate);
             }
 
             var preset = _root.Q<DropdownField>("OnbGraphicsPreset");
@@ -209,13 +214,13 @@ namespace Fodinae.UI
             }
 
             var vsync = _root.Q<Toggle>("OnbVSync");
-            if (vsync != null && config != null)
+            if (vsync != null)
             {
                 vsync.SetValueWithoutNotify(config.VSync);
             }
 
             var mute = _root.Q<Toggle>("OnbMuteInBackground");
-            if (mute != null && config != null)
+            if (mute != null)
             {
                 mute.SetValueWithoutNotify(config.MuteAudioInBackground);
             }
@@ -296,39 +301,32 @@ namespace Fodinae.UI
 
         private void SaveSettings()
         {
-            ClientConfigManager? manager = ClientConfigManager.Instance;
-            if (manager == null)
+            _clientConfig.UpdateAndSave(config =>
             {
-                return;
-            }
+                var uiScale = _root.Q<DropdownField>("OnbUiScale");
+                if (uiScale != null)
+                {
+                    config.UiScale = ValueOfUiScale(uiScale.index);
+                }
 
-            ClientConfig config = manager.Config;
+                var frameRate = _root.Q<DropdownField>("OnbFrameRate");
+                if (frameRate != null && frameRate.index >= 0 && frameRate.index < FrameRates.Length)
+                {
+                    config.TargetFrameRate = FrameRates[frameRate.index].Value;
+                }
 
-            var uiScale = _root.Q<DropdownField>("OnbUiScale");
-            if (uiScale != null)
-            {
-                config.UiScale = ValueOfUiScale(uiScale.index);
-            }
+                var vsync = _root.Q<Toggle>("OnbVSync");
+                if (vsync != null)
+                {
+                    config.VSync = vsync.value;
+                }
 
-            var frameRate = _root.Q<DropdownField>("OnbFrameRate");
-            if (frameRate != null && frameRate.index >= 0 && frameRate.index < FrameRates.Length)
-            {
-                config.TargetFrameRate = FrameRates[frameRate.index].Value;
-            }
-
-            var vsync = _root.Q<Toggle>("OnbVSync");
-            if (vsync != null)
-            {
-                config.VSync = vsync.value;
-            }
-
-            var mute = _root.Q<Toggle>("OnbMuteInBackground");
-            if (mute != null)
-            {
-                config.MuteAudioInBackground = mute.value;
-            }
-
-            manager.Save();
+                var mute = _root.Q<Toggle>("OnbMuteInBackground");
+                if (mute != null)
+                {
+                    config.MuteAudioInBackground = mute.value;
+                }
+            });
         }
 
         /// <summary>
@@ -339,7 +337,7 @@ namespace Fodinae.UI
         /// </summary>
         private void ApplySavedUiScale()
         {
-            float saved = ClientConfigManager.Instance?.Config.UiScale ?? 0f;
+            float saved = _clientConfig.Config.UiScale;
 
             // Ноль означает «в конфиге ничего нет» — множитель ноль погасил бы
             // весь интерфейс, поэтому такое значение трактуем как штатное.

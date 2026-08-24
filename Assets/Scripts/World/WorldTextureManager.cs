@@ -53,6 +53,37 @@ namespace Fodinae.World
         private readonly ConcurrentDictionary<CellType, byte> _inFlightCellTypeRequests = new();
         public int PendingCellTextureRequests => _inFlightCellTypeRequests.Count;
 
+        /// <summary>
+        /// Earliest time each cell type whose texture load failed may be
+        /// requested again, in <see cref="RetryClock"/> seconds.
+        /// </summary>
+        /// <remarks>
+        /// Without this, a cell type whose texture cannot be produced at all -
+        /// the server does not have it, or the file is corrupt - is retried
+        /// forever. Nothing remembers the failure: the request is removed from
+        /// _pendingRequests in a finally, _inFlightCellTypeRequests is cleared
+        /// in another, and TerrainCellCache re-arms the whole thing because it
+        /// calls RequestTexture for any metadata whose IsTextureReady is false
+        /// and drops that metadata on every ClearCaches - which fires on every
+        /// Cells/ texture that arrives.
+        ///
+        /// So each arriving texture restarted a request for every missing one,
+        /// and each of those failed the same way and threw. The throw is the
+        /// expensive half: it escapes TrackedRequestTextureAsync, which is
+        /// fire-and-forget, so UniTask reports it as an unobserved exception
+        /// and Unity formats a managed stack trace for each one. Exception
+        /// construction, stack capture and log formatting are all managed
+        /// allocation, which is what the profile was full of.
+        ///
+        /// A cooldown rather than a permanent blacklist: a failure early in the
+        /// session usually means "not streamed yet", and that has to be allowed
+        /// to recover on its own.
+        /// </remarks>
+        private readonly ConcurrentDictionary<CellType, double> _cellTextureRetryTimes = new();
+        private static readonly System.Diagnostics.Stopwatch RetryClock =
+            System.Diagnostics.Stopwatch.StartNew();
+        private const double FailedCellTextureRetrySeconds = 30.0;
+
         private Texture2D? _cachedEmptyTexture;
 
         public uint TextureRevision { get; private set; }
@@ -159,8 +190,18 @@ namespace Fodinae.World
         {
             EnsureInitialized();
             if (_textureCache.TryGetTexture(cellType, out _) ||
-                _pendingRequests.ContainsKey(cellType) ||
-                !_inFlightCellTypeRequests.TryAdd(cellType, 0))
+                _pendingRequests.ContainsKey(cellType))
+            {
+                return;
+            }
+
+            if (_cellTextureRetryTimes.TryGetValue(cellType, out double retryAfterSeconds) &&
+                RetryClock.Elapsed.TotalSeconds < retryAfterSeconds)
+            {
+                return;
+            }
+
+            if (!_inFlightCellTypeRequests.TryAdd(cellType, 0))
             {
                 return;
             }
@@ -173,6 +214,29 @@ namespace Fodinae.World
             try
             {
                 await GetCellTextureCoordinate(cellType, 0, 0);
+                _cellTextureRetryTimes.TryRemove(cellType, out _);
+            }
+            catch (Exception exception)
+            {
+                // Caught here rather than left to escape. This method is
+                // fire-and-forget, so an escaping exception becomes an
+                // unobserved-task report with a formatted managed stack trace
+                // every time the request is retried - and the retry used to be
+                // every time a texture arrived.
+                bool firstFailure = !_cellTextureRetryTimes.ContainsKey(cellType);
+                _cellTextureRetryTimes[cellType] =
+                    RetryClock.Elapsed.TotalSeconds + FailedCellTextureRetrySeconds;
+
+                if (firstFailure)
+                {
+                    // Logged once per cell type, not once per attempt: a cell
+                    // type with no texture on the server would otherwise fill
+                    // the console for the whole session.
+                    Debug.LogWarning(
+                        $"[WorldTextureManager] Texture for cell type {cellType} could not be " +
+                        $"loaded: {exception.Message}. Retrying at most every " +
+                        $"{FailedCellTextureRetrySeconds:F0}s.");
+                }
             }
             finally
             {

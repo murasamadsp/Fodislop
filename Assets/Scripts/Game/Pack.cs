@@ -14,19 +14,24 @@ using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.Game
 {
     public class Pack : MonoBehaviour
     {
-        private SpriteRenderer? _spriteRenderer;
-        private SpriteRenderer? _clanRenderer;
+        private Transform? _clanTransform;
         private PackType? _packType;
         private byte _variant;
         private byte _linkedClan;
         private CancellationTokenSource? _cts;
         private Sprite? _packSprite;
         private Sprite? _clanSprite;
+        private WorldEntityBatchRenderer.SpriteHandle? _packBatchHandle;
+        private WorldEntityBatchRenderer.SpriteHandle? _clanBatchHandle;
+
+        [Inject]
+        private WorldEntityBatchRenderer _entityBatchRenderer = null!;
 
         private EffekseerHandle _effekseerHandle;
         private EffekseerEffectAsset? _effekseerAsset;
@@ -34,27 +39,15 @@ namespace Fodinae.Game
 
         protected void Awake()
         {
-            _spriteRenderer = GetComponent<SpriteRenderer>();
-            if (_spriteRenderer == null)
+            if (TryGetComponent<SpriteRenderer>(out var obsoleteRenderer))
             {
-                _spriteRenderer = gameObject.AddComponent<SpriteRenderer>();
-            }
-
-            if (Application.isPlaying)
-            {
-                _spriteRenderer.enabled = false;
+                obsoleteRenderer.enabled = false;
             }
 
             var clanGo = new GameObject("ClanIcon");
             clanGo.transform.SetParent(transform);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
-            _clanRenderer = clanGo.AddComponent<SpriteRenderer>();
-            if (Application.isPlaying)
-            {
-                _clanRenderer.enabled = false;
-            }
-
-            UnityRenderLayerContracts.ApplyWorldUI(_clanRenderer, 10);
+            _clanTransform = clanGo.transform;
         }
 
         public void Initialize(PackType packType, byte variant, byte linkedClan)
@@ -99,7 +92,7 @@ namespace Fodinae.Game
                 loader,
                 packPath,
                 token);
-            if (token.IsCancellationRequested || _spriteRenderer == null)
+            if (token.IsCancellationRequested)
             {
                 return;
             }
@@ -113,8 +106,9 @@ namespace Fodinae.Game
 
                 // Use central PIXELS_PER_UNIT for consistency
                 _packSprite = Sprite.Create(packTexture, new Rect(0, 0, packTexture.width, packTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
-                _spriteRenderer.sprite = _packSprite;
-                _spriteRenderer.enabled = true;
+                EnsureBatchHandles();
+                _entityBatchRenderer.SetSprite(_packBatchHandle!, _packSprite);
+                _packBatchHandle!.SetEnabled(true);
 
                 UpdateClanPosition();
                 return;
@@ -137,6 +131,7 @@ namespace Fodinae.Game
             var effectAsset = await RuntimeEffekseerLoader.LoadEffectAsync(
                 efkBytes,
                 $"Pack_{packName}_{_variant}",
+                loader,
                 texturePathMapper: path => $"{packPath}/{path}",
                 textureTimeoutSeconds: 10);
 
@@ -149,11 +144,7 @@ namespace Fodinae.Game
             _hasEffekseerEffect = true;
             _effekseerAsset = effectAsset;
 
-            // Hide sprite renderer — the Effekseer effect handles visuals
-            if (_spriteRenderer != null)
-            {
-                _spriteRenderer.enabled = false;
-            }
+            _packBatchHandle?.SetEnabled(false);
 
             Debug.Log($"[Pack] Playing Effekseer effect for pack '{packName}' variant {_variant} at {transform.position}");
         }
@@ -162,9 +153,9 @@ namespace Fodinae.Game
         {
             if (_linkedClan == 0)
             {
-                if (_clanRenderer != null)
+                if (_clanBatchHandle != null)
                 {
-                    _clanRenderer.sprite = null;
+                    _entityBatchRenderer.SetSprite(_clanBatchHandle, null);
                 }
 
                 return;
@@ -180,7 +171,7 @@ namespace Fodinae.Game
                 loader,
                 $"Clan/{_linkedClan}",
                 token);
-            if (token.IsCancellationRequested || clanTexture == null || _clanRenderer == null)
+            if (token.IsCancellationRequested || clanTexture == null || _clanTransform == null)
             {
                 return;
             }
@@ -191,9 +182,10 @@ namespace Fodinae.Game
             }
 
             _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
-            _clanRenderer.sprite = _clanSprite;
-            _clanRenderer.enabled = true;
-            _clanRenderer.transform.localScale = Vector3.one * 0.8f;
+            _clanTransform.localScale = Vector3.one * 0.8f;
+            EnsureBatchHandles();
+            _entityBatchRenderer.SetSprite(_clanBatchHandle!, _clanSprite);
+            _clanBatchHandle!.SetEnabled(true);
 
             UpdateClanPosition();
         }
@@ -221,7 +213,7 @@ namespace Fodinae.Game
 
         private void UpdateClanPosition()
         {
-            if (_clanRenderer == null)
+            if (_clanTransform == null)
             {
                 return;
             }
@@ -229,7 +221,7 @@ namespace Fodinae.Game
             // Position to the right and slightly below the center
             float packWidth = _packSprite != null ? _packSprite.texture.width : RenderingConstants.PIXELS_PER_UNIT;
             float xOffset = (packWidth / (RenderingConstants.PIXELS_PER_UNIT * 2)) + 0.1f; // Right edge + 0.1 gap
-            _clanRenderer.transform.localPosition = new Vector3(xOffset, -0.5f, 0);
+            _clanTransform.localPosition = new Vector3(xOffset, -0.5f, 0);
         }
 
         protected void Update()
@@ -241,10 +233,7 @@ namespace Fodinae.Game
                 RuntimeEffekseerLoader.DestroyEffect(_effekseerAsset);
                 _effekseerAsset = null;
 
-                if (_spriteRenderer != null)
-                {
-                    _spriteRenderer.enabled = true;
-                }
+                _packBatchHandle?.SetEnabled(_packSprite != null);
             }
         }
 
@@ -259,12 +248,31 @@ namespace Fodinae.Game
             }
         }
 
+        private void EnsureBatchHandles()
+        {
+            if (_entityBatchRenderer == null)
+            {
+                throw new InvalidOperationException(
+                    "Pack requires WorldEntityBatchRenderer for batched world rendering.");
+            }
+
+            _packBatchHandle ??= _entityBatchRenderer.RegisterSprite(transform, 0);
+            if (_clanTransform != null)
+            {
+                _clanBatchHandle ??=
+                    _entityBatchRenderer.RegisterSprite(_clanTransform, 10);
+            }
+        }
+
         protected void OnDestroy()
         {
             _cts?.Cancel();
             _cts?.Dispose();
 
             StopEffekseerEffect();
+
+            _entityBatchRenderer?.UnregisterSprite(_packBatchHandle);
+            _entityBatchRenderer?.UnregisterSprite(_clanBatchHandle);
 
             if (_packSprite != null)
             {

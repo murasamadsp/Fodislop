@@ -132,11 +132,6 @@ namespace MinesServer.Networking.Connection.Client
         // private const int _maxDepth = 200;
         // private bool _depthWarningActive;
 
-        private byte _clientMasterVolume = 255;
-        private readonly Dictionary<string, byte> _clientSoundVolumes = new();
-        private RendererMode _clientRenderer = RendererMode.Default;
-        private readonly List<StringPairPacket> _clientKeybinds = new();
-        private readonly List<string> _clientUnrenderedTextures = new();
         private float _digCooldown = 0.3f;
         private int _maxGlobalChatLength = 50;
         private int _maxLocalChatLength = 20;
@@ -215,6 +210,12 @@ namespace MinesServer.Networking.Connection.Client
             _worldLayer?.Dispose();
             _worldLayer = null;
 
+            // Cleared so the buff loop can start again on the next connection.
+            // It was never reset, so after one disconnect StartBuffLoop's guard
+            // stayed latched and the loop never came back - the mirror image of
+            // the other four loops, which had no guard at all and duplicated.
+            _buffLoopStarted = false;
+
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
             DisconnectAsync(_lifecycleVersion).Forget();
@@ -277,8 +278,39 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
+        /// <summary>
+        /// Whether a background mock loop started at
+        /// <paramref name="lifecycleVersion"/> should still be running.
+        /// </summary>
+        /// <remarks>
+        /// The loops used to test <c>_status == Connected</c> and nothing else,
+        /// which made them immortal. Dispose did not touch _status, so every
+        /// loop on a disposed instance kept running forever - and since a new
+        /// DummyConnection is built for each connection, a menu-game-menu-game
+        /// cycle left a full set of them behind each time. RunCircularBots
+        /// alone allocates a List, an array and six position packets every
+        /// 100ms, so each leaked set is a permanent fixed-rate garbage source
+        /// that nothing can ever stop.
+        ///
+        /// Comparing the captured lifecycle version as well ties every loop to
+        /// the connection that started it: one bump retires all of them at
+        /// once, whether the trigger was a disconnect, a reconnect or a
+        /// dispose.
+        /// </remarks>
+        private bool LoopAlive(int lifecycleVersion)
+        {
+            return _status == ConnectionStatus.Connected &&
+                lifecycleVersion == _lifecycleVersion;
+        }
+
         public void Dispose()
         {
+            // Retires every background loop belonging to this instance. Without
+            // this the loops outlive the object that owns them.
+            _lifecycleVersion++;
+            _status = ConnectionStatus.Disconnected;
+            _buffLoopStarted = false;
+
             _worldLayer?.Dispose();
             _worldLayer = null;
         }
@@ -915,42 +947,6 @@ namespace MinesServer.Networking.Connection.Client
             {
                 OnReceived?.Invoke(new ServerPacket(new MissionArrowPacket((ushort)_x, (ushort)_y)));
             }
-            else if (packet.WindowTag == "save_client_config")
-            {
-                foreach (var kv in packet.Context)
-                {
-                    switch (kv.Key)
-                    {
-                        case "master_volume":
-                            if (byte.TryParse(kv.Value, out var masterVol))
-                            {
-                                _clientMasterVolume = masterVol;
-                            }
-
-                            break;
-                        case string key when key.EndsWith("_volume") && key.Length > 7:
-                            string soundKey = key.Substring(0, key.Length - 7);
-                            if (byte.TryParse(kv.Value, out var soundVol))
-                            {
-                                _clientSoundVolumes[soundKey] = soundVol;
-                            }
-
-                            break;
-                        case "renderer":
-                            if (Enum.TryParse<RendererMode>(kv.Value, out var renderer))
-                            {
-                                _clientRenderer = renderer;
-                            }
-
-                            break;
-                        case "keybind":
-                            _clientKeybinds.Add(new StringPairPacket("unknown", kv.Value));
-                            break;
-                    }
-                }
-
-                SendClientConfigPacket();
-            }
             else if (packet.WindowTag == "auth")
             {
                 if (!_awaitingAuth)
@@ -1083,7 +1079,7 @@ namespace MinesServer.Networking.Connection.Client
                 string.Empty)));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-            RunCircularBots(6).Forget();
+            RunCircularBots(6, _lifecycleVersion).Forget();
             _x = 25;
             _y = 50;
             SendMapChunksAround(_x, _y);
@@ -1101,7 +1097,7 @@ namespace MinesServer.Networking.Connection.Client
             OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
 
             SendSkillProgressMock();
-            SendChatMock().Forget();
+            SendChatMock(_lifecycleVersion).Forget();
 
             OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
             OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
@@ -1119,8 +1115,8 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             StartBuffLoop();
-            SendPingMock().Forget();
-            SendDailyBonusMock().Forget();
+            SendPingMock(_lifecycleVersion).Forget();
+            SendDailyBonusMock(_lifecycleVersion).Forget();
 
             OnReceived?.Invoke(new ServerPacket(
                 new MovementSpeedPacket(CreateTestMovementSpeeds(_cellConfigs!))));
@@ -1157,17 +1153,6 @@ namespace MinesServer.Networking.Connection.Client
                 new PackPacket(227, 50, PackType.Teleport, 0, 1),
                 new PackPacket(25, 48, PackType.Market, 0, 0),
             })));
-
-            SendClientConfigPacket();
-        }
-
-        private void SendClientConfigPacket()
-        {
-            OnReceived?.Invoke(new ServerPacket(new ClientConfigPacket(
-                new SoundConfigPacket(_clientMasterVolume, _clientSoundVolumes),
-                _clientRenderer,
-                _clientKeybinds,
-                _clientUnrenderedTextures)));
 
             var serverConfig = _session.TryResolve<ServerConfig>();
             serverConfig?.ApplyValues(_digCooldown, _maxGlobalChatLength, _maxLocalChatLength);
@@ -1363,12 +1348,12 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             _buffLoopStarted = true;
-            CheckBuffsLoop().Forget();
+            CheckBuffsLoop(_lifecycleVersion).Forget();
         }
 
-        private async UniTaskVoid CheckBuffsLoop()
+        private async UniTaskVoid CheckBuffsLoop(int lifecycleVersion)
         {
-            while (_status == ConnectionStatus.Connected)
+            while (LoopAlive(lifecycleVersion))
             {
                 await UniTask.Delay(1000);
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -1786,20 +1771,20 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
-        private async UniTaskVoid SendDailyBonusMock()
+        private async UniTaskVoid SendDailyBonusMock(int lifecycleVersion)
         {
-            while (_status == ConnectionStatus.Connected)
+            while (LoopAlive(lifecycleVersion))
             {
                 _bonusClaimed = false;
                 _bonusCountdown = Math.Max(_bonusCountdown, 10);
 
-                while (_bonusCountdown > 0 && !_bonusClaimed && _status == ConnectionStatus.Connected)
+                while (_bonusCountdown > 0 && !_bonusClaimed && LoopAlive(lifecycleVersion))
                 {
                     await UniTask.Delay(1000);
                     _bonusCountdown--;
                 }
 
-                if (_status != ConnectionStatus.Connected)
+                if (!LoopAlive(lifecycleVersion))
                 {
                     break;
                 }
@@ -1808,12 +1793,12 @@ namespace MinesServer.Networking.Connection.Client
                 _pendingBonusAmount = (int)PickRandomAmount(_pendingBonusItem);
                 OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(true)));
 
-                while (!_bonusClaimed && _status == ConnectionStatus.Connected)
+                while (!_bonusClaimed && LoopAlive(lifecycleVersion))
                 {
                     await UniTask.Delay(500);
                 }
 
-                if (_status != ConnectionStatus.Connected)
+                if (!LoopAlive(lifecycleVersion))
                 {
                     break;
                 }
@@ -2158,7 +2143,7 @@ namespace MinesServer.Networking.Connection.Client
                 $"Prebaked map '{path}' contains invalid dimensions.");
         }
 
-        private async UniTaskVoid RunCircularBots(int count)
+        private async UniTaskVoid RunCircularBots(int count, int lifecycleVersion)
         {
             const int BASE_ID = 1000;
             const float CENTER_X = 30f;
@@ -2186,7 +2171,7 @@ namespace MinesServer.Networking.Connection.Client
                 bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
             }
 
-            while (_status == ConnectionStatus.Connected)
+            while (LoopAlive(lifecycleVersion))
             {
                 var positions = new List<IHBPacket>(bots.Count);
                 for (int i = 0; i < bots.Count; i++)
@@ -2248,7 +2233,7 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid SendChatMock()
+        private async UniTaskVoid SendChatMock(int lifecycleVersion)
         {
             var names = new[] { "Alice", "Bob", "Charlie", "Darkar25", "Eve" };
             var messages = new[]
@@ -2258,7 +2243,7 @@ namespace MinesServer.Networking.Connection.Client
             };
             var rng = new System.Random();
 
-            while (_status == ConnectionStatus.Connected)
+            while (LoopAlive(lifecycleVersion))
             {
                 await UniTask.Delay(8000 + rng.Next(4000));
 
@@ -2277,10 +2262,10 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid SendPingMock()
+        private async UniTaskVoid SendPingMock(int lifecycleVersion)
         {
             await UniTask.Delay(2000);
-            while (_status == ConnectionStatus.Connected)
+            while (LoopAlive(lifecycleVersion))
             {
                 OnReceived?.Invoke(new ServerPacket(new PingPacket(DateTimeOffset.UtcNow.Ticks, _rng.Next(15, 60))));
                 await UniTask.Delay(5000);
@@ -2358,6 +2343,20 @@ namespace MinesServer.Networking.Connection.Client
                 return new List<(ushort, ushort)>();
             }
 
+            // The flood fill has no natural stopping point: an unreachable
+            // target (a click into solid rock, or across a wall) drains the
+            // queue only after every passable cell in the world has been
+            // visited. Each of those visits is a GetServerCell, which pulls a
+            // chunk in from disk through the LRU, so the walk is not just long
+            // - it thrashes chunk IO on the main thread while the frame is
+            // blocked. cellsChecked below was already counted for exactly this
+            // reason and then never read; this is the cap it was counted for.
+            // The bound is generous next to any real click (a screen is ~100x60
+            // cells) and still turns the unreachable case into a dropped frame
+            // instead of a freeze.
+            const int MaximumCellsChecked = 20000;
+
+            MapManager? mapManager = _session.TryResolve<MapManager>();
             var dirs = new (int dx, int dy)[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
             var visited = new HashSet<(ushort, ushort)>();
             var cameFrom = new Dictionary<(ushort, ushort), (ushort, ushort)>();
@@ -2371,6 +2370,11 @@ namespace MinesServer.Networking.Connection.Client
             {
                 var cur = queue.Dequeue();
                 cellsChecked++;
+                if (cellsChecked > MaximumCellsChecked)
+                {
+                    break;
+                }
+
                 if (cur.X == targetX && cur.Y == targetY)
                 {
                     found = true;
@@ -2393,7 +2397,11 @@ namespace MinesServer.Networking.Connection.Client
                     }
 
                     CellType cellType = GetServerCell((ushort)nx, (ushort)ny);
-                    var cellConfig = _session.TryResolve<MapManager>()?.GetCellConfig(cellType);
+
+                    // Resolved once above, not once per neighbour: this is the
+                    // innermost statement of the search, and a container lookup
+                    // here costs more than the cell test it feeds.
+                    var cellConfig = mapManager?.GetCellConfig(cellType);
                     bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
                     if (!isPassable)
                     {

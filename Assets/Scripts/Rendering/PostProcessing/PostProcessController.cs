@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using VContainer;
+using Unity.Profiling;
 
 namespace Fodinae.Rendering.PostProcessing
 {
@@ -19,6 +20,10 @@ namespace Fodinae.Rendering.PostProcessing
         public static ClampedFloatParameter BloomIntensity() => new(0f, 0f, 5f);
 
         public static ClampedFloatParameter BloomThreshold() => new(0f, 0f, 2f);
+
+        public static ClampedFloatParameter BloomSoftKnee() => new(0.5f, 0f, 1f);
+
+        public static ClampedFloatParameter BloomRadius() => new(3f, 0.5f, 8f);
 
         public static ClampedFloatParameter BloomScatter() => new(0.1f, 0.1f, 1f);
 
@@ -58,19 +63,17 @@ namespace Fodinae.Rendering.PostProcessing
 
         public static ClampedFloatParameter MotionBlurIntensity() => new(0f, 0f, 1f);
 
-        public static ClampedIntParameter MotionBlurMaxSamples() => new(2, 2, 32);
     }
 
     [DisallowMultipleComponent]
     public class PostProcessController : MonoBehaviour
     {
-        private static PostProcessController? _instance;
-        public static PostProcessController Instance => _instance!;
+        private static readonly ProfilerMarker PostProcessLateUpdateMarker =
+            new("Fodinae.PostProcess.LateUpdate");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForDomainReload()
         {
-            _instance = null;
         }
 
         [SerializeField]
@@ -89,6 +92,7 @@ namespace Fodinae.Rendering.PostProcessing
         private float _lastWorldUiFarClipPlane = float.NaN;
         private Matrix4x4 _lastWorldUiProjection;
         private bool _hasWorldUiProjection;
+        private bool _worldUiSeparationRequired = true;
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -193,16 +197,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void Awake()
         {
-            _instance = this;
             _mainCamera = GameplayCamera.Resolve();
         }
 
         private void OnDestroy()
         {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
         }
 
         private void OnEnable()
@@ -301,10 +300,23 @@ namespace Fodinae.Rendering.PostProcessing
             ClientConfig config = clientConfigManager.Config ??
                 throw new InvalidOperationException(
                     "PostProcessController requires an initialized ClientConfig.");
+            // The graphics preset used to stop at this class's doorstep: every
+            // value below is an artistic one from ClientConfig, and nothing
+            // here ever read GraphicsQualitySettings. That made the whole
+            // post-processing stack cost the same on VeryLow as on Ultra -
+            // bloom pyramid, motion blur and all - no matter which preset the
+            // player picked, and it kept costing that with world lighting
+            // switched off, because the two subsystems are unrelated.
+            PostProcessRenderPass.SetAdvancedSettings(config.AdvancedPostProcess);
+
             BloomIntensity = config.BloomIntensity;
             BloomComponent bloom = GetRequired(_bloom, nameof(_bloom));
             bloom.threshold.overrideState = true;
             bloom.threshold.value = config.BloomThreshold;
+            bloom.softKnee.overrideState = true;
+            bloom.softKnee.value = config.BloomSoftKnee;
+            bloom.radius.overrideState = true;
+            bloom.radius.value = config.BloomRadius;
             bloom.scatter.overrideState = true;
             bloom.scatter.value = config.BloomScatter;
             bloom.tint.overrideState = true;
@@ -344,7 +356,22 @@ namespace Fodinae.Rendering.PostProcessing
             MotionBlurIntensity = config.MotionBlurIntensity;
             MotionBlurComponent motionBlur = GetRequired(_motionBlur, nameof(_motionBlur));
             motionBlur.maxSamples.overrideState = true;
-            motionBlur.maxSamples.value = config.MotionBlurMaxSamples;
+
+            // Enable the renderer pass only after every Volume value and every
+            // fused setting has been applied as one coherent configuration.
+            PostProcessRenderPass.SetQuality(
+                config.GraphicsQualitySettings.PostProcessQuality);
+
+            _worldUiSeparationRequired =
+                config.GraphicsQualitySettings.PostProcessQuality != PostProcessQualityMode.Off &&
+                (bloom.active || vignette.active ||
+                    GetRequired(_chromaticAberration, nameof(_chromaticAberration)).active ||
+                    colorGrading.active || eigengrau.active || motionBlur.active ||
+                    config.AdvancedPostProcess.HasAnyEffects());
+            if (_configuredMainCamera != null && _configuredMainCameraData != null)
+            {
+                ConfigureWorldUiRendering(_configuredMainCamera, _configuredMainCameraData);
+            }
         }
 
         public float Exposure
@@ -378,6 +405,7 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
+            using var marker = PostProcessLateUpdateMarker.Auto();
             if (_mainCamera == null)
             {
                 _mainCamera = GameplayCamera.Resolve();
@@ -394,23 +422,30 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            bool cameraSeparationIsBroken =
-                _configuredMainCamera != mainCamera ||
-                _configuredMainCameraData == null ||
-                _worldUiCamera == null ||
-                _worldUiCameraData == null ||
-                (mainCamera.cullingMask & _worldUiLayerMask) != 0 ||
-                _worldUiCamera.cullingMask != _worldUiLayerMask ||
-                _worldUiCameraData.renderType != CameraRenderType.Overlay ||
-                _worldUiCameraData.renderPostProcessing ||
-                !_configuredMainCameraData.cameraStack.Contains(_worldUiCamera);
+            bool cameraSeparationIsBroken = _worldUiSeparationRequired
+                ? _configuredMainCamera != mainCamera ||
+                    _configuredMainCameraData == null ||
+                    _worldUiCamera == null ||
+                    _worldUiCameraData == null ||
+                    (mainCamera.cullingMask & _worldUiLayerMask) != 0 ||
+                    !_worldUiCamera.enabled ||
+                    _worldUiCamera.cullingMask != _worldUiLayerMask ||
+                    _worldUiCameraData.renderType != CameraRenderType.Overlay ||
+                    _worldUiCameraData.renderPostProcessing ||
+                    !_configuredMainCameraData.cameraStack.Contains(_worldUiCamera)
+                : _configuredMainCamera != mainCamera ||
+                    _configuredMainCameraData == null ||
+                    (mainCamera.cullingMask & _worldUiLayerMask) == 0 ||
+                    (_worldUiCamera != null && _worldUiCamera.enabled) ||
+                    (_worldUiCamera != null &&
+                        _configuredMainCameraData.cameraStack.Contains(_worldUiCamera));
 
             if (cameraSeparationIsBroken)
             {
                 EnsureCameraSetup(mainCamera);
             }
 
-            if (_worldUiCamera == null)
+            if (!_worldUiSeparationRequired || _worldUiCamera == null)
             {
                 return;
             }
@@ -469,7 +504,37 @@ namespace Fodinae.Rendering.PostProcessing
 
             _configuredMainCamera = mainCamera;
             _configuredMainCameraData = cameraData;
-            EnsureWorldUiCamera(mainCamera, cameraData);
+            ConfigureWorldUiRendering(mainCamera, cameraData);
+        }
+
+        private void ConfigureWorldUiRendering(
+            Camera mainCamera,
+            UniversalAdditionalCameraData mainCameraData)
+        {
+            int uiLayer = UnityRenderLayerContracts.RequireWorldUIGameObjectLayer();
+            UnityRenderLayerContracts.RequireWorldUISortingLayer();
+            _worldUiLayerMask = 1 << uiLayer;
+
+            if (_worldUiSeparationRequired)
+            {
+                EnsureWorldUiCamera(mainCamera, mainCameraData);
+                return;
+            }
+
+            mainCamera.cullingMask |= _worldUiLayerMask;
+            if (_worldUiCamera == null)
+            {
+                Transform? existingTransform = mainCamera.transform.Find("WorldUICamera");
+                _worldUiCamera = existingTransform != null
+                    ? existingTransform.GetComponent<Camera>()
+                    : null;
+            }
+
+            if (_worldUiCamera != null)
+            {
+                mainCameraData.cameraStack.Remove(_worldUiCamera);
+                _worldUiCamera.enabled = false;
+            }
         }
 
         private void EnsureWorldUiCamera(Camera mainCamera, UniversalAdditionalCameraData mainCameraData)
@@ -493,6 +558,7 @@ namespace Fodinae.Rendering.PostProcessing
             _worldUiCamera.cullingMask = _worldUiLayerMask;
             _worldUiCamera.clearFlags = CameraClearFlags.Nothing;
             _worldUiCamera.depth = mainCamera.depth + 1f;
+            _worldUiCamera.enabled = true;
 
             _worldUiCameraData = _worldUiCamera.GetComponent<UniversalAdditionalCameraData>();
             if (_worldUiCameraData == null)

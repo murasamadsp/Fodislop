@@ -20,7 +20,6 @@ const COLLAPSED_DIRS = new Map([
   ['Assets/Plugins/FMOD', '# Vendored пакет'],
   ['Assets/Plugins/UniTask', '# Vendored пакет'],
   ['Assets/Scripts/VContainer', '# Vendored VContainer 1.19'],
-  ['Assets/Scripts/MgGifDecoder', '# GIF-декодер'],
   ['Assets/TextMesh Pro', '# TMP шрифты и шейдеры'],
   ['Assets/Resources/Programmator', '# 166 ассетов/изображений'],
   ['Assets/Resources/Styles', '# USS стили UI'],

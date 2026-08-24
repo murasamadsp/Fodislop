@@ -338,6 +338,8 @@ namespace Fodinae.Player.Logic
             {
                 renderer.enabled = true;
             }
+
+            _robot?.SetBatchedBodyVisible(true);
         }
 
         private void ApplyMovement()
@@ -367,6 +369,15 @@ namespace Fodinae.Player.Logic
 
                 if (direction != Vector2Int.zero)
                 {
+                    // The authoritative dig cooldown gates movement as well as
+                    // repeated digging. Without this check auto-dig used the
+                    // current terrain cell's movement delay and could send a
+                    // BzPacket every movement tick, ignoring ServerConfig.
+                    if (IsDigCooldownActive())
+                    {
+                        return;
+                    }
+
                     Direction packetDirection = direction.x switch
                     {
                         1 => Direction.Right,
@@ -500,10 +511,7 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            var serverConfig = _serverConfig ?? throw new InvalidOperationException(
-                "[PlayerMovementController] IServerConfig is required for dig cooldown.");
-            float digCooldown = serverConfig.DigCooldown;
-            if (!_input.WantsToDig || Time.time - _lastDigTime < digCooldown)
+            if (!_input.WantsToDig || IsDigCooldownActive())
             {
                 return;
             }
@@ -523,6 +531,21 @@ namespace Fodinae.Player.Logic
 
             _networkService?.Send(new ActionClientPacket(serverX, serverY, new BzPacket()));
             _lastDigTime = Time.time;
+        }
+
+        private bool IsDigCooldownActive()
+        {
+            IServerConfig serverConfig = _serverConfig ?? throw new InvalidOperationException(
+                "[PlayerMovementController] IServerConfig is required for dig cooldown.");
+            return IsDigCooldownActive(Time.time, _lastDigTime, serverConfig.DigCooldown);
+        }
+
+        public static bool IsDigCooldownActive(
+            float currentTime,
+            float lastDigTime,
+            float serverCooldown)
+        {
+            return currentTime - lastDigTime < serverCooldown;
         }
 
 #if UNITY_EDITOR

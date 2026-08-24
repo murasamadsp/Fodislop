@@ -18,6 +18,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
+using VContainer;
 
 namespace Fodinae
 {
@@ -147,31 +148,12 @@ namespace Fodinae
         private GameManager? _gameManager;
         private bool _built;
         private bool _subscribed;
+        private bool _teardownStarted;
 
-        // MainMenu живёт вне DI-графа (ExecuteAlways, сцена без скоупа) — текущий
-        // контейнер сессии получаем через BootstrapLifetimeScope.Instance.
-        //
-        // НЕ кэшируем: с Enter Play Mode Options (Reload Domain/Scene disabled)
-        // этот компонент и его поля переживают play-сессии, а SessionContainer —
-        // объект сессии. Закэшированный экземпляр из прошлой сессии указывает на
-        // выброшенный контейнер (Current мёртв), тогда как новый игровой скоуп
-        // переключает Current у СВОЕГО SessionContainer. Закэшированный давал
-        // TryResolve<GameManager> == null ровно после загрузки MainGame — спуск
-        // умирал с «GameManager is required». Резолв каждый раз — дешёвый
-        // TryResolve из живого Bootstrap-контейнера.
-        private ISessionContainer? Session
-        {
-            get
-            {
-                ISessionContainer? fresh = SessionAccess.Resolve();
-                if (fresh != null && fresh.Current != null)
-                {
-                    return fresh;
-                }
+        [Inject]
+        private ISessionContainer? _session;
 
-                return null;
-            }
-        }
+        private ISessionContainer? Session => _session?.Current != null ? _session : null;
 
         protected void OnValidate()
         {
@@ -183,6 +165,11 @@ namespace Fodinae
 
         protected void OnEnable()
         {
+            if (_teardownStarted)
+            {
+                return;
+            }
+
             _doc = GetComponent<UIDocument>();
             if (_doc == null || _doc.rootVisualElement == null)
             {
@@ -261,6 +248,7 @@ namespace Fodinae
         private Texture2D? _spaceBgTexture;
         private MenuSceneryController? _scenery;
         private MenuStarfield? _starfield;
+        private float _scenerySearchStartedAt = -1f;
 
         private void BindUiElements(VisualElement tree)
         {
@@ -509,7 +497,13 @@ namespace Fodinae
 
             if (_scenery == null)
             {
-                if (!_scenerySearchWarned && Time.time > 3f)
+                if (_scenerySearchStartedAt < 0f)
+                {
+                    _scenerySearchStartedAt = Time.realtimeSinceStartup;
+                }
+
+                if (!_scenerySearchWarned &&
+                    Time.realtimeSinceStartup - _scenerySearchStartedAt > 3f)
                 {
                     Debug.LogWarning(
                         "[MainMenu] MenuSceneryController не зарегистрировался за 3 с — планета останется пустой.");
@@ -518,6 +512,8 @@ namespace Fodinae
 
                 return;
             }
+
+            _scenerySearchStartedAt = -1f;
 
             // Риг рисует в текстуру размером с этот элемент, поэтому размер надо
             // ему сообщить. Берётся resolvedStyle, а не значение из USS: панель
@@ -628,6 +624,11 @@ namespace Fodinae
 
         protected void Update()
         {
+            if (_teardownStarted)
+            {
+                return;
+            }
+
             // Enter Play Mode Options (Reload Domain/Scene disabled) re-creates
             // the UIDocument's panel on play entry WITHOUT re-running OnEnable:
             // the tree built at scene load stays attached to the old, disposed
@@ -1064,7 +1065,7 @@ namespace Fodinae
                 return LoadPhase.SpawnSync;
             }
 
-            TerrainRenderer? terrain = TerrainRenderer.Instance;
+            TerrainRenderer? terrain = Session.TryResolve<TerrainRenderer>();
             if (terrain == null || !terrain.IsReadyForGameplay)
             {
                 return LoadPhase.TerrainMesh;
@@ -1501,7 +1502,27 @@ namespace Fodinae
 
         private void OnWorldLoaded()
         {
+            if (_teardownStarted)
+            {
+                return;
+            }
+
+            _teardownStarted = true;
             _loadingActive = false;
+
+            // Scene unload completes asynchronously. Stop both off-screen HDR
+            // renderers now, before the first gameplay frame is presented.
+            // Otherwise the planet camera and starfield blit keep consuming a
+            // full render pass behind the game until unload finally completes.
+            if (_scenery != null)
+            {
+                _scenery.gameObject.SetActive(false);
+            }
+
+            if (_starfield != null)
+            {
+                _starfield.gameObject.SetActive(false);
+            }
 
             // Маршрут доводится до конца: раньше третий шаг не подсвечивался
             // никогда, и полоса внизу навсегда застревала на «СПУСК».

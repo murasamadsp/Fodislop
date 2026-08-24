@@ -8,6 +8,9 @@ namespace Fodinae.Core.Interfaces
 {
     public interface IWorldDataStorage
     {
+        event System.Action<int, int>? CellChanged;
+        event System.Action<int, int, int, int>? RegionChanged;
+
         bool IsReady { get; }
         long Revision { get; }
         WorldLayer<CellType>? CellLayer { get; }
