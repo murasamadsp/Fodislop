@@ -35,6 +35,8 @@ PATTERNS=(
     'ServerConfig[^;]*(Master|Sfx|Music|Ambience|Voice|Ui)Volume'
     '_clientConfig\.Config\.[A-Za-z0-9_]+[[:space:]]*='
     '_clientConfig\.Save[[:space:]]*\('
+    '(FindAnyObjectByType|FindFirstObjectByType|FindObjectsByType)<Canvas>'
+    'using[[:space:]]+UnityEngine\.UI;'
 )
 
 RULE_NAMES=(
@@ -64,6 +66,8 @@ RULE_NAMES=(
     'audio volume in ServerConfig'
     'direct ClientConfig field mutation'
     'unowned ClientConfig persistence'
+    'screen-space uGUI Canvas lookup'
+    'screen-space uGUI namespace'
 )
 
 # Per-rule path exemptions. Tests may construct tiny fixture textures directly;
@@ -95,6 +99,8 @@ ALLOW_REGEX=(
     '^$'
     '^$'
     '^(Assets/Scripts/Rendering/GraphicsSettingsController\.cs|Assets/Scripts/Rendering/DisplayManager\.cs|Assets/Scripts/World/Lighting/TerrariaLightingEngine\.cs)$'
+    '^$'
+    '^$'
 )
 
 # Narrow line-level exemptions for the canonical declaration of a shared
@@ -114,6 +120,8 @@ ALLOW_CONTENT_REGEX=(
     '^$'
     '^$'
     'return atlasDimension <= 256 \? 3 : 4;'
+    '^$'
+    '^$'
     '^$'
     '^$'
     '^$'
