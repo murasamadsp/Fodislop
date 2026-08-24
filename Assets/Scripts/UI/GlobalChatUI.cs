@@ -4,7 +4,6 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
@@ -59,9 +58,6 @@ namespace Fodinae.UI
         [Inject]
         private IInputBlocker _inputBlocker = null!;
 
-        [Inject]
-        private ISessionContainer _session = null!;
-
         protected void Start()
         {
             TryInitialize();
@@ -69,12 +65,11 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || _session?.Current == null)
+            if (_initialized)
             {
                 return;
             }
 
-            _doc ??= FindAnyObjectByType<UIDocument>(FindObjectsInactive.Include);
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
                 _serverConfig == null || _inputBlocker == null)
             {

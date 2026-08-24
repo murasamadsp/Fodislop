@@ -89,6 +89,8 @@ namespace Fodinae.UI.HUD.Player.View
         [Inject]
         private INetworkService _networkService = null!;
         [Inject]
+        private IObjectResolver _resolver = null!;
+        [Inject]
         private ISessionContainer _session = null!;
         private VisualElement? _missionPanel;
         private Label? _missionTitleLabel;
@@ -1139,10 +1141,10 @@ namespace Fodinae.UI.HUD.Player.View
             _buildingsPopup = CreatePopup("Мои здания");
             _faqPopup = CreatePopup("FAQ");
 
-            // ProgrammatorGrid сам ретраит UIDocument-инъекцию из Update, поэтому
-            // ручной Inject здесь не обязателен и безопасен при любом состоянии
-            // текущего контейнера.
+            // ProgrammatorGrid создаётся динамически, поэтому инжектим его через
+            // текущий игровой resolver сразу после AddComponent.
             _programmatorGrid = gameObject.AddComponent<ProgrammatorGrid>();
+            _resolver.Inject(_programmatorGrid);
 
             root.Add(_respawnPopup);
             root.Add(_buildingsPopup);

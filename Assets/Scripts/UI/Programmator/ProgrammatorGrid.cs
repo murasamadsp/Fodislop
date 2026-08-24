@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Fodinae.Core.DI;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -91,14 +90,7 @@ namespace Fodinae.UI.Programmator
 
             if (_doc == null)
             {
-                // ProgrammatorGrid создаётся ручным AddComponent из PlayerHUDView и не
-                // получает [Inject]-полей: резолвим UIDocument через текущий контейнер
-                // сессии. Update ретраит TryBuildUI — ждём готовности молча.
-                UIDocument? resolved = SessionAccess.Resolve()?.TryResolve<UIDocument>();
-                if (resolved != null)
-                {
-                    _doc = resolved;
-                }
+                return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null)
