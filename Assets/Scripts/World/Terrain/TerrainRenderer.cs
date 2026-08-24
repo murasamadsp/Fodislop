@@ -1126,9 +1126,8 @@ namespace Fodinae.World.Terrain
                     $"atlases={_textureService?.GetAllAtlases().Count ?? 0}, " +
                     $"storageReady={_storage?.IsReady ?? false}.");
                 Debug.LogException(ex);
-                GameErrorUI.ReportFatal(
-                    "Terrain rendering failed because world texture metadata is invalid.",
-                    ex);
+                Debug.LogError(
+                    $"[TerrainRenderer] FATAL: terrain rendering failed because world texture metadata is invalid: {ex}");
             }
 
             bool needReassignMaterials = materialsChanged;

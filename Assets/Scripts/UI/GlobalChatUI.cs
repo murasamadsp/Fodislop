@@ -100,7 +100,7 @@ namespace Fodinae.UI
                 }
                 catch (Exception ex)
                 {
-                    GameErrorUI.ReportError("Не удалось запросить историю чата", ex);
+                    Debug.LogWarning($"[GlobalChatUI] Не удалось запросить историю чата: {ex}");
                 }
             }
         }
@@ -286,7 +286,7 @@ namespace Fodinae.UI
             }
             catch (Exception ex)
             {
-                GameErrorUI.ReportError("Не удалось отправить сообщение в чат", ex);
+                Debug.LogWarning($"[GlobalChatUI] Не удалось отправить сообщение в чат: {ex}");
             }
 
             _inputField.value = string.Empty;
@@ -500,7 +500,7 @@ namespace Fodinae.UI
             }
             catch (Exception ex)
             {
-                GameErrorUI.ReportError("Не удалось отправить изменение цвета чата", ex);
+                Debug.LogWarning($"[GlobalChatUI] Не удалось отправить изменение цвета чата: {ex}");
             }
         }
     }

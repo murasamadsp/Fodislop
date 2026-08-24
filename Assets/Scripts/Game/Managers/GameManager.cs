@@ -147,13 +147,6 @@ namespace Fodinae.Game.Managers
                 AddInjectedComponent<AssetLoadingIndicator>(loaderGO);
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<GameErrorUI>(FindObjectsInactive.Include) == null)
-            {
-                var errorGO = new GameObject("ErrorUI");
-                errorGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<GameErrorUI>(errorGO);
-            }
-
             if (UnityEngine.Object.FindAnyObjectByType<MissionArrowUI>(FindObjectsInactive.Include) == null)
             {
                 var arrowGO = new GameObject("MissionArrowUI");
