@@ -227,28 +227,27 @@ namespace Fodinae.Core
                 errors.Add("UIDocument is null after VContainer build — UI will NOT be created");
             }
 
-            var terrain = UnityEngine.Object.FindAnyObjectByType<TerrainRenderer>();
-            if (terrain == null)
+            if (!resolver.TryResolve<TerrainRenderer>(out _))
             {
                 errors.Add("TerrainRenderer not found in scene — terrain mesh will NOT be rendered");
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<SurfaceRenderer>() == null)
+            if (!resolver.TryResolve<SurfaceRenderer>(out _))
             {
                 errors.Add("SurfaceRenderer not found — world boundary surface will NOT be rendered");
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<MinimapController>() == null)
+            if (!resolver.TryResolve<MinimapController>(out _))
             {
                 errors.Add("MinimapController not found — minimap will NOT be rendered");
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<PostProcessController>() == null)
+            if (!resolver.TryResolve<PostProcessController>(out _))
             {
                 errors.Add("PostProcessController not found — screen post-processing will NOT run");
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<TerrariaLightingEngine>() == null)
+            if (!resolver.TryResolve<TerrariaLightingEngine>(out _))
             {
                 errors.Add("TerrariaLightingEngine not found — world lighting will NOT run");
             }
@@ -321,8 +320,7 @@ namespace Fodinae.Core
 
             foreach (var type in criticalTypes)
             {
-                var instance = UnityEngine.Object.FindAnyObjectByType(type, FindObjectsInactive.Include);
-                if (instance == null)
+                if (!resolver.TryResolve(type, out object? instance))
                 {
                     continue;
                 }
