@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.IO;
 using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 using VContainer;
@@ -24,10 +23,12 @@ namespace Fodinae.Audio.Backend
     public sealed class FmodAudioBackend
     {
         private AudioSystem _system = null!;
+        private IAssetLoader _assetLoader = null!;
 
-        public void Initialize(AudioSystem system)
+        public void Initialize(AudioSystem system, IAssetLoader assetLoader)
         {
             _system = system;
+            _assetLoader = assetLoader;
             LoadRequiredBanksAsync().Forget();
         }
 
@@ -111,14 +112,7 @@ namespace Fodinae.Audio.Backend
             }
             else
             {
-                ISessionContainer? session = SessionAccess.Resolve();
-                if (session == null)
-                {
-                    return false;
-                }
-
-                var assetLoader = session.TryResolve<IAssetLoader>() as ClientAssetLoader;
-                if (assetLoader != null)
+                if (_assetLoader is ClientAssetLoader assetLoader)
                 {
                     var relativeRemotePath = $"{BANK_PATH}/{cleanBankName}.bank";
                     if (assetLoader.IsKnownMissing(relativeRemotePath))

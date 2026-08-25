@@ -38,11 +38,11 @@ namespace Fodinae.Audio.Backend
         private void Awake()
         {
             _backend = new FmodAudioBackend();
-            _backend.Initialize(this);
         }
 
         private void Start()
         {
+            _backend.Initialize(this, _assetLoader);
             TryApplySavedBusVolumes();
         }
 
@@ -116,7 +116,7 @@ namespace Fodinae.Audio.Backend
             {
                 _backend?.Shutdown();
                 _backend = new FmodAudioBackend();
-                _backend.Initialize(this);
+                _backend.Initialize(this, _assetLoader);
                 ApplySavedBusVolumes();
                 _backend.SetPaused(_pausedInBackground);
                 Debug.Log($"{TAG} Audio backend successfully re-initialized after device change.");
