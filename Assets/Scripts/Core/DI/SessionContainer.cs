@@ -68,25 +68,4 @@ namespace Fodinae.Core.DI
             where T : class;
     }
 
-    /// <summary>
-    /// Temporary bridge for code that is created outside the DI graph. It keeps
-    /// no resolver or service in static state; runtime-created components should
-    /// still be injected by their owning factory whenever possible.
-    /// </summary>
-    public static class SessionAccess
-    {
-        public static ISessionContainer? Resolve()
-        {
-            BootstrapLifetimeScope? bootstrap =
-                UnityEngine.Object.FindAnyObjectByType<BootstrapLifetimeScope>(
-                    UnityEngine.FindObjectsInactive.Include);
-            if (bootstrap == null || bootstrap.Container == null)
-            {
-                return null;
-            }
-
-            bootstrap.Container.TryResolve(out ISessionContainer session);
-            return session;
-        }
-    }
 }
