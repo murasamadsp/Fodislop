@@ -105,7 +105,14 @@ namespace Fodinae.UI
 
             EnsurePlayerBinding();
 
-            BindUi();
+            if (!BindUi())
+            {
+                // PlayerHUDView attaches PlayerHUD.uxml after the shared
+                // UIDocument has been injected. Keep this renderer idle until
+                // that one-time UI build completes instead of treating the
+                // transient empty root as a broken scene contract.
+                return;
+            }
             InitColorTable();
             InitTexture();
 
@@ -407,19 +414,23 @@ namespace Fodinae.UI
             ClampViewCenter();
         }
 
-        private void BindUi()
+        private bool BindUi()
         {
             _document = _injectedDocument ??
                 throw new InvalidOperationException(
                     "WorldMapRenderer requires an injected UIDocument.");
-            _mapOverlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay") ??
-                throw new InvalidOperationException(
-                    "WorldMapRenderer requires the WorldMapOverlay element in PlayerHUD.uxml.");
-            _mapImage = _mapOverlay.Q<Image>("WorldMapImage") ??
-                throw new InvalidOperationException(
-                    "WorldMapRenderer requires the WorldMapImage element in PlayerHUD.uxml.");
+            VisualElement? overlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay");
+            Image? image = overlay?.Q<Image>("WorldMapImage");
+            if (overlay == null || image == null)
+            {
+                return false;
+            }
+
+            _mapOverlay = overlay;
+            _mapImage = image;
             _mapOverlay.style.display = DisplayStyle.Flex;
             _mapImage.image = null;
+            return true;
         }
 
         private void InitColorTable()
