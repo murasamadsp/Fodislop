@@ -203,7 +203,7 @@ namespace Fodinae.Player
                     _camera.orthographicSize = DefaultOrthographicSize;
                 }
 
-                var player = PlayerMovementController.LocalPlayer ?? FindAnyObjectByType<PlayerMovementController>();
+                var player = PlayerMovementController.LocalPlayer;
                 if (player != null)
                 {
                     transform.position = new Vector3(player.transform.position.x, player.transform.position.y, DefaultCameraDepthZ);
