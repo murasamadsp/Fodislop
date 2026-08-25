@@ -77,7 +77,8 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _respawnPopup;
         private VisualElement? _buildingsPopup;
         private VisualElement? _faqPopup;
-        private ProgrammatorGrid? _programmatorGrid;
+        [Inject]
+        private ProgrammatorGrid _programmatorGrid = null!;
         private bool _initializationStarted;
 
         [Inject]
@@ -88,8 +89,6 @@ namespace Fodinae.UI.HUD.Player.View
         private IAssetLoader _assetLoader = null!;
         [Inject]
         private INetworkService _networkService = null!;
-        [Inject]
-        private IObjectResolver _resolver = null!;
         [Inject]
         private ISessionContainer _session = null!;
         private VisualElement? _missionPanel;
@@ -1140,11 +1139,6 @@ namespace Fodinae.UI.HUD.Player.View
             _respawnPopup = CreateRespawnPopup();
             _buildingsPopup = CreatePopup("Мои здания");
             _faqPopup = CreatePopup("FAQ");
-
-            // ProgrammatorGrid создаётся динамически, поэтому инжектим его через
-            // текущий игровой resolver сразу после AddComponent.
-            _programmatorGrid = gameObject.AddComponent<ProgrammatorGrid>();
-            _resolver.Inject(_programmatorGrid);
 
             root.Add(_respawnPopup);
             root.Add(_buildingsPopup);

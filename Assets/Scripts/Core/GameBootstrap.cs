@@ -107,6 +107,7 @@ namespace Fodinae.Core
             _resolver.Resolve<TerrainRenderer>();
             _resolver.Resolve<WorldBackgroundSetup>();
             _resolver.Resolve<WorldEntityBatchRenderer>();
+            _resolver.Resolve<ProgrammatorGrid>();
 
             // UI-сервисы создаём до GameManager: SetupUI только активирует уже
             // зарегистрированные компоненты и не создаёт дубликаты.

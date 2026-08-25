@@ -189,6 +189,7 @@ namespace Fodinae.Core
             RegisterManager<TerrariaLightingEngine>(builder);
             RegisterManager<SurfaceRenderer>(builder);
             RegisterManager<CameraFollow>(builder);
+            RegisterManager<ProgrammatorGrid>(builder);
             RegisterManager<PlayerHUDView>(builder);
             RegisterManager<InventoryView>(builder);
             RegisterManager<PauseMenu>(builder);
