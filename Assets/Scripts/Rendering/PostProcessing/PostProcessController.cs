@@ -51,6 +51,12 @@ namespace Fodinae.Rendering.PostProcessing
         [Inject]
         private IClientConfigManager? _clientConfigManager;
 
+        [Inject]
+        private void Construct(Volume volume)
+        {
+            _volume = volume ?? throw new ArgumentNullException(nameof(volume));
+        }
+
         public float BloomIntensity
         {
             get => GetRequired(_bloom, nameof(_bloom)).intensity.value;

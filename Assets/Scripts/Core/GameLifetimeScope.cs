@@ -25,6 +25,7 @@ using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using global::Fodinae.Core.Localization;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
@@ -185,6 +186,23 @@ namespace Fodinae.Core
             RegisterManager<AssetLoadingIndicator>(builder);
             RegisterManager<MissionArrowUI>(builder);
             RegisterManager<DiagnosticRunner>(builder);
+            Volume? postProcessVolume = null;
+            foreach (Volume candidate in FindObjectsByType<Volume>(FindObjectsInactive.Include))
+            {
+                if (candidate.gameObject.scene == _ownScene)
+                {
+                    postProcessVolume = candidate;
+                    break;
+                }
+            }
+
+            if (postProcessVolume == null)
+            {
+                throw new InvalidOperationException(
+                    "The scene must contain a Volume for PostProcessController.");
+            }
+
+            builder.RegisterComponent(postProcessVolume);
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
             RegisterManager<SurfaceRenderer>(builder);
