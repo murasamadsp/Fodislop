@@ -3,6 +3,10 @@
     "rootNamespace": "Fodinae.Tests",
     "references": [
         "Fodinae.Runtime",
+        "MinesServer.Data",
+        "MinesServer.Networking",
+        "MinesServer.Networking.Connection",
+        "MinesServer.Networking.Connection.Client",
         "Unity.TestRunner",
         "UnityEditor.TestRunner"
     ],

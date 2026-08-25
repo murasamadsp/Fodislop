@@ -2,7 +2,8 @@
     "name": "Fodinae.Editor",
     "rootNamespace": "Fodinae.Editor",
     "references": [
-        "Fodinae.Runtime"
+        "Fodinae.Runtime",
+        "Fodinae.Tests.Editor"
     ],
     "includePlatforms": [
         "Editor"
