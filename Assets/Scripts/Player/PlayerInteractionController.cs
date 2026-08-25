@@ -18,7 +18,6 @@ namespace Fodinae.Player
     public class PlayerInteractionController : MonoBehaviour
     {
         private Camera? _mainCamera;
-        private UIDocument[] _uiDocuments = [];
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
         private UIDocument? _injectedUiDoc;
@@ -130,53 +129,7 @@ namespace Fodinae.Player
                 }
             }
 
-            if (_uiDocuments.Length == 0 || !HasLiveUiDocument())
-            {
-                RefreshUiDocuments();
-            }
-
-            foreach (UIDocument candidate in _uiDocuments)
-            {
-                if (candidate == null || !candidate.isActiveAndEnabled || candidate == doc)
-                {
-                    continue;
-                }
-
-                var root = candidate.rootVisualElement;
-                if (root?.panel == null)
-                {
-                    continue;
-                }
-
-                // ScreenToPanel переводит экранные координаты (низ-лево, как в Input
-                // System) в координаты панели с учётом её масштаба.
-                var panelPos = RuntimePanelUtils.ScreenToPanel(root.panel, mousePos);
-                var picked = root.panel.Pick(panelPos);
-                if (picked != null && picked != root && picked is not TemplateContainer)
-                {
-                    return true;
-                }
-            }
-
             return false;
-        }
-
-        private bool HasLiveUiDocument()
-        {
-            for (int i = 0; i < _uiDocuments.Length; i++)
-            {
-                if (_uiDocuments[i] != null && _uiDocuments[i].isActiveAndEnabled)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private void RefreshUiDocuments()
-        {
-            _uiDocuments = Object.FindObjectsByType<UIDocument>(FindObjectsInactive.Exclude);
         }
 
         private void HandleKeyboardInput()
