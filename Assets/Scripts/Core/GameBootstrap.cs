@@ -148,9 +148,9 @@ namespace Fodinae.Core
             // ничего, что находится в процессе построения.
             gameManager.EnsureUISetup();
 
-            foreach (var terrain in UnityEngine.Object.FindObjectsByType<TerrainRenderer>())
+            if (_resolver.TryResolve<TerrainRenderer>(out TerrainRenderer? terrainRenderer))
             {
-                terrain.EnsureSubscriptions();
+                terrainRenderer.EnsureSubscriptions();
             }
 
             ValidateStartup(_resolver);
