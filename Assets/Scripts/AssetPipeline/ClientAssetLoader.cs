@@ -8,7 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking.Connection;
 using Fodinae.World;
@@ -29,7 +28,7 @@ namespace Fodinae
     [DefaultExecutionOrder(-10000)]
     public class ClientAssetLoader : MonoBehaviour, IAssetLoader
     {
-        private readonly AssetCache _cache = new(LoadBytesFromServerInternal);
+        private AssetCache _cache = null!;
 
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
@@ -73,6 +72,7 @@ namespace Fodinae
 
         protected void Awake()
         {
+            _cache = new AssetCache(LoadBytesFromServer);
             _loopCts = new CancellationTokenSource();
             ProcessBatchLoop(_loopCts.Token).Forget();
         }
@@ -253,15 +253,6 @@ namespace Fodinae
                 cm.OnPacketReceived += OnPacketReceived;
                 _packetSubscribed = true;
             }
-        }
-
-        private static async UniTask<byte[]?> LoadBytesFromServerInternal(string filename, CancellationToken ct, int timeoutSeconds)
-        {
-            var instance = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() as ClientAssetLoader ??
-                throw new InvalidOperationException(
-                    "ClientAssetLoader is not registered in the active container.");
-
-            return await instance.LoadBytesFromServer(filename, ct, timeoutSeconds);
         }
 
         private async UniTask<byte[]?> LoadBytesFromServer(string filename, CancellationToken ct, int timeoutSeconds)
