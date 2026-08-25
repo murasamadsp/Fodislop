@@ -1079,7 +1079,8 @@ namespace MinesServer.Networking.Connection.Client
             SendDailyBonusMock(_lifecycleVersion).Forget();
 
             OnReceived?.Invoke(new ServerPacket(
-                new MovementSpeedPacket(CreateTestMovementSpeeds(_cellConfigs!))));
+                new MovementSpeedPacket(
+                    DummyCellConfigurationUtilities.CreateMovementSpeeds(_cellConfigs!))));
 
             // Depth warning/damage feature disabled in DummyConnection
             // OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
@@ -1901,26 +1902,6 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
 
             return configs;
-        }
-
-        private static Dictionary<CellType, ushort> CreateTestMovementSpeeds(
-            CellConfigurationPacket[] configurations)
-        {
-            var speeds = new Dictionary<CellType, ushort>(configurations.Length);
-            for (int index = 0; index < configurations.Length; index++)
-            {
-                CellConfigurationPacket configuration = configurations[index];
-                if (configuration.Properties == CellConfigProperties.None &&
-                    index != (int)CellType.Empty)
-                {
-                    continue;
-                }
-
-                bool passable = (configuration.Properties & CellConfigProperties.Passable) != 0;
-                speeds[(CellType)index] = (ushort)(passable ? 20 : 100);
-            }
-
-            return speeds;
         }
 
         private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
