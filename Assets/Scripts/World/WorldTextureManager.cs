@@ -132,7 +132,11 @@ namespace Fodinae.World
             }
 
             _textureCache = new CellTextureCache();
-            _currentAtlas = new TextureAtlas(_initialAtlasSize, _cellTextureSize, _texturePadding);
+            _currentAtlas = new TextureAtlas(
+                _initialAtlasSize,
+                _cellTextureSize,
+                _texturePadding,
+                GetCachedTexture);
 
             _atlases = new List<TextureAtlas>();
             _atlases.Add(_currentAtlas);
@@ -579,7 +583,11 @@ namespace Fodinae.World
                 var newSize = Mathf.Min(_currentAtlas.Size * 2, _maxAtlasSize);
                 if (newSize > _currentAtlas.Size)
                 {
-                    var newAtlas = new TextureAtlas(newSize, _cellTextureSize, _texturePadding);
+                    var newAtlas = new TextureAtlas(
+                        newSize,
+                        _cellTextureSize,
+                        _texturePadding,
+                        GetCachedTexture);
                     _atlases.Add(newAtlas);
                     _currentAtlas = newAtlas;
 
@@ -694,7 +702,11 @@ namespace Fodinae.World
             }
 
             _atlases.Clear();
-            _currentAtlas = new TextureAtlas(_initialAtlasSize, _cellTextureSize, _texturePadding);
+            _currentAtlas = new TextureAtlas(
+                _initialAtlasSize,
+                _cellTextureSize,
+                _texturePadding,
+                GetCachedTexture);
             _atlases.Add(_currentAtlas);
             GenerateFlowMap();
             _cachedEmptyTexture = null;

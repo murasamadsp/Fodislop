@@ -5,9 +5,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
-using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -28,6 +25,7 @@ namespace Fodinae.World
         private readonly List<Rectangle> _freeRectangles = new();
         private readonly List<Rectangle> _usedRectangles = new();
         private readonly HashSet<CellType> _dirtyCells = new();
+        private readonly Func<CellType, Texture2D?> _textureResolver;
 
         private bool _isDirty = false;
 
@@ -35,7 +33,7 @@ namespace Fodinae.World
 
         private readonly object _lock = new object();
 
-        public TextureAtlas(int size, int cellSize, int padding)
+        public TextureAtlas(int size, int cellSize, int padding, Func<CellType, Texture2D?> textureResolver)
         {
             if (size <= 0)
             {
@@ -61,6 +59,7 @@ namespace Fodinae.World
             Size = size;
             CELL_SIZE = cellSize;
             Padding = padding;
+            _textureResolver = textureResolver ?? throw new ArgumentNullException(nameof(textureResolver));
 
             _atlasTexture = RuntimeTextureFactory.CreateRgba32NoMip(
                 size,
@@ -473,14 +472,10 @@ namespace Fodinae.World
 
         private Texture2D GetBaseTexture(CellType cellType)
         {
-            var textureService = SessionAccess.Resolve()?.TryResolve<ITextureService>();
-            if (textureService is WorldTextureManager manager)
+            Texture2D? cachedTexture = _textureResolver(cellType);
+            if (cachedTexture != null)
             {
-                var cachedTexture = manager.GetCachedTexture(cellType);
-                if (cachedTexture != null)
-                {
-                    return cachedTexture;
-                }
+                return cachedTexture;
             }
 
             throw new InvalidOperationException(
