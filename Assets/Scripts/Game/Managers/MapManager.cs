@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Fodinae.Core;
+using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -22,17 +23,17 @@ namespace Fodinae.Game.Managers
         private IWorldDataStorage _worldStorage = null!;
         private PackManager _packManager = null!;
         private IRobotService _robotService = null!;
-        private IServerAudioService _audioService = null!;
+        private ISessionContainer _session = null!;
         private bool _hasWorldStorage;
 
         [Inject]
-        public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, IServerAudioService audioService)
+        public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, ISessionContainer session)
         {
             _worldStorage = worldStorage;
             _hasWorldStorage = true;
             _packManager = packManager;
             _robotService = robotService;
-            _audioService = audioService;
+            _session = session;
         }
 
         public Camera MainCamera
@@ -91,7 +92,7 @@ namespace Fodinae.Game.Managers
             _hasWorldStorage = true;
             _packManager = null!;
             _robotService = null!;
-            _audioService = null!;
+            _session = null!;
             IsStandaloneMode = true;
         }
 
@@ -155,7 +156,7 @@ namespace Fodinae.Game.Managers
             IsWorldInitialized = false;
             _packManager?.ClearAllPacks();
             _robotService?.ClearAllRobots();
-            _audioService?.ClearAllEffects();
+            _session?.TryResolve<IServerAudioService>()?.ClearAllEffects();
 
             if (packet == null)
             {
