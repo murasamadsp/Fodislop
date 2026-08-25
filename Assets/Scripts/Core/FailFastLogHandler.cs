@@ -1,5 +1,7 @@
 #nullable enable
 
+using System;
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
@@ -21,6 +23,15 @@ namespace Fodinae.Core
     {
         private static bool _registered;
         private static bool _failing;
+        private static readonly HashSet<string> ReportedFailures = new(StringComparer.Ordinal);
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForSubsystemReload()
+        {
+            _registered = false;
+            _failing = false;
+            ReportedFailures.Clear();
+        }
 
         /// <summary>Подписывает обработчик, если это редактор и подписки ещё нет.</summary>
         public static void EnsureRegistered()
@@ -44,6 +55,16 @@ namespace Fodinae.Core
             }
 
             if (type != LogType.Error && type != LogType.Exception && type != LogType.Assert)
+            {
+                return;
+            }
+
+            // Unity can invoke logMessageReceived once per frame when a scene
+            // MonoBehaviour retries initialization from Update. Fail-fast is a
+            // diagnostic breakpoint, not a second error pipeline: report each
+            // distinct message/stack pair once per play session.
+            string failureKey = string.Concat(type, "\n", message, "\n", stackTrace);
+            if (!ReportedFailures.Add(failureKey))
             {
                 return;
             }
