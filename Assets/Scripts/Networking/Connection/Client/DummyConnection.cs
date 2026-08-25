@@ -4,7 +4,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -1000,9 +999,9 @@ namespace MinesServer.Networking.Connection.Client
             _worldLayer?.Dispose();
             _worldLayer = null;
 
-            string mapbPath = GetProjectServerMapFile(PrebakedWorldCodeName);
+            string mapbPath = DummyWorldMapArchive.ResolveMapFile(PrebakedWorldCodeName);
 
-            (int worldWidth, int worldHeight) = ReadPrebakedWorldDimensions(mapbPath);
+            (int worldWidth, int worldHeight) = DummyWorldMapArchive.ReadDimensions(mapbPath);
             if (worldWidth <= 0 || worldHeight <= 0)
             {
                 throw new InvalidDataException(
@@ -1940,65 +1939,6 @@ namespace MinesServer.Networking.Connection.Client
             };
         }
 
-        private static string GetProjectServerMapFile(string worldCodeName)
-        {
-            string streamingDirectory = Path.Combine(
-                Application.streamingAssetsPath,
-                "WorldMaps");
-            string projectMapPath = Path.Combine(
-                streamingDirectory,
-                $"{worldCodeName}_cells.mapb");
-            if (File.Exists(projectMapPath))
-            {
-                return projectMapPath;
-            }
-
-            string projectArchivePath = Path.Combine(
-                streamingDirectory,
-                $"{worldCodeName}_cells.zip");
-            if (!File.Exists(projectArchivePath))
-            {
-                throw new FileNotFoundException(
-                    $"Dummy server map '{worldCodeName}' is missing both the mapb file and its zip archive.",
-                    projectMapPath);
-            }
-
-            try
-            {
-                string serverCacheDirectory = Path.Combine(
-                    Application.temporaryCachePath,
-                    "DummyServerMaps");
-                Directory.CreateDirectory(serverCacheDirectory);
-                string serverMapPath = Path.Combine(
-                    serverCacheDirectory,
-                    $"{worldCodeName}_cells.mapb");
-                using ZipArchive archive = ZipFile.OpenRead(projectArchivePath);
-                ZipArchiveEntry? mapEntry = archive.GetEntry($"{worldCodeName}_cells.mapb");
-                if (mapEntry == null)
-                {
-                    throw new InvalidDataException(
-                        $"Dummy server archive '{projectArchivePath}' does not contain " +
-                        $"'{worldCodeName}_cells.mapb'.");
-                }
-
-                var cachedInfo = new FileInfo(serverMapPath);
-                if (!cachedInfo.Exists ||
-                    cachedInfo.Length != mapEntry.Length ||
-                    cachedInfo.LastWriteTimeUtc != mapEntry.LastWriteTime.UtcDateTime)
-                {
-                    mapEntry.ExtractToFile(serverMapPath, overwrite: true);
-                }
-
-                return serverMapPath;
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidDataException(
-                    $"Failed to open dummy server map '{worldCodeName}'.",
-                    ex);
-            }
-        }
-
         private void SendMapChunksAround(ushort serverX, ushort serverY)
         {
             const int ChunkSize = 32;
@@ -2073,35 +2013,6 @@ namespace MinesServer.Networking.Connection.Client
             {
                 _worldLayer[serverX, serverY] = type;
             }
-        }
-
-        private static (int width, int height) ReadPrebakedWorldDimensions(string path)
-        {
-            try
-            {
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var br = new BinaryReader(fs);
-                int WIDTH_CHUNKS = br.ReadInt32();
-                int HEIGHT_CHUNKS = br.ReadInt32();
-                int CHUNK_SIZE = br.ReadInt32();
-                br.ReadInt32(); // reserved
-
-                if (WIDTH_CHUNKS > 0 && HEIGHT_CHUNKS > 0 && CHUNK_SIZE > 0 && CHUNK_SIZE <= 1024)
-                {
-                    int w = WIDTH_CHUNKS * CHUNK_SIZE;
-                    int h = HEIGHT_CHUNKS * CHUNK_SIZE;
-                    return (w, h);
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidDataException(
-                    $"Failed reading prebaked map dimensions from '{path}'.",
-                    ex);
-            }
-
-            throw new InvalidDataException(
-                $"Prebaked map '{path}' contains invalid dimensions.");
         }
 
         private async UniTaskVoid RunCircularBots(int count, int lifecycleVersion)
