@@ -528,8 +528,20 @@ namespace Fodinae.World.Lighting
 
         private void Start()
         {
-            TryInitialize();
+            // Scene instances run Start before GameBootstrap injects them. The
+            // explicit PostStart resolution below performs the authoritative
+            // initialization; do not throw every frame while that hand-off is
+            // still pending.
+            if (DependenciesReady)
+            {
+                TryInitialize();
+            }
         }
+
+        private bool DependenciesReady =>
+            _projectDefaults != null &&
+            _clientConfig?.Config != null &&
+            _lightingGeometryRegistry != null;
 
         public void EnsureInitialized()
         {
@@ -538,7 +550,7 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
-            if (_projectDefaults == null || _clientConfig == null || _lightingGeometryRegistry == null)
+            if (!DependenciesReady)
             {
                 throw new InvalidOperationException(
                     "TerrariaLightingEngine requires all DI dependencies before initialization.");
@@ -579,7 +591,11 @@ namespace Fodinae.World.Lighting
         {
             if (!_initialized)
             {
-                TryInitialize();
+                if (DependenciesReady)
+                {
+                    TryInitialize();
+                }
+
                 return;
             }
 
