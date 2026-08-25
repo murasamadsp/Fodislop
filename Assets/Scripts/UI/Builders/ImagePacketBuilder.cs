@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual; // Corrected using directive for ImagePacket
 using UnityEngine;
