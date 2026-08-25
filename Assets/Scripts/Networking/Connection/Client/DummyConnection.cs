@@ -1708,31 +1708,6 @@ namespace MinesServer.Networking.Connection.Client
             UpdatePosition().Forget();
         }
 
-        private static ItemType PickRandomBonusItem()
-        {
-            var items = new[]
-            {
-                ItemType.Teleport, ItemType.Compressor, ItemType.C190, ItemType.Trans,
-                ItemType.Nano, ItemType.Battery, ItemType.ConstructionBot, ItemType.PortableTeleporter,
-                ItemType.Scanner, ItemType.GeoBlackRock, ItemType.GeoRedRock, ItemType.Cred,
-                ItemType.GeoCyan, ItemType.GeoHypno, ItemType.Rem, ItemType.Charge,
-                ItemType.Geopack, ItemType.Poly, ItemType.RazBomb, ItemType.ProtonBomb,
-            };
-            return items[_rng.Next(items.Length)];
-        }
-
-        private static long PickRandomAmount(ItemType item)
-        {
-            return item switch
-            {
-                ItemType.Teleport or ItemType.PortableTeleporter => 1,
-                ItemType.Cred => _rng.Next(5, 11),
-                ItemType.Rem => _rng.Next(50, 101),
-                ItemType.Geopack => _rng.Next(10, 16),
-                _ => _rng.Next(5, 20),
-            };
-        }
-
         private async UniTaskVoid SendDailyBonusMock(int lifecycleVersion)
         {
             while (LoopAlive(lifecycleVersion))
@@ -1751,8 +1726,10 @@ namespace MinesServer.Networking.Connection.Client
                     break;
                 }
 
-                _pendingBonusItem = PickRandomBonusItem();
-                _pendingBonusAmount = (int)PickRandomAmount(_pendingBonusItem);
+                _pendingBonusItem = DummyCellConfigurationUtilities.PickRandomBonusItem(_rng);
+                _pendingBonusAmount = (int)DummyCellConfigurationUtilities.PickRandomAmount(
+                    _pendingBonusItem,
+                    _rng);
                 OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(true)));
 
                 while (!_bonusClaimed && LoopAlive(lifecycleVersion))
