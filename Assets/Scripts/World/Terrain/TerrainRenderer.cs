@@ -483,19 +483,6 @@ namespace Fodinae.World.Terrain
             using var terrainLateUpdateMarker = TerrainLateUpdateMarker.Auto();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
-                if (!Application.isPlaying)
-                {
-                    _mapManager ??= UnityEngine.Object.FindAnyObjectByType<MapManager>(FindObjectsInactive.Include);
-                    _storage ??= _mapManager != null ? _mapManager.WorldStorage : null;
-                    _textureService ??= UnityEngine.Object.FindAnyObjectByType<WorldTextureManager>(FindObjectsInactive.Include);
-
-                    if (_storage != null && _mapManager != null && _textureService != null && _storage.IsReady)
-                    {
-                        EnsureSubscriptions();
-                        _needsRefresh = true;
-                    }
-                }
-
                 if (_mapManager == null || _storage == null || !_storage.IsReady)
                 {
                     return;
@@ -504,15 +491,6 @@ namespace Fodinae.World.Terrain
 
             if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
             {
-                if (!Application.isPlaying)
-                {
-                    var pmc = PlayerMovementController.LocalPlayer ?? UnityEngine.Object.FindAnyObjectByType<PlayerMovementController>(FindObjectsInactive.Include);
-                    if (pmc != null && !pmc.HasServerPosition && _storage != null && _mapManager != null)
-                    {
-                        pmc.InitializeEditorPreview(_storage, _mapManager);
-                    }
-                }
-
                 if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
                 {
                     return;
@@ -561,11 +539,6 @@ namespace Fodinae.World.Terrain
             if (_cachedLightingEngine == null)
             {
                 _cachedLightingEngine = _session?.TryResolve<TerrariaLightingEngine>();
-                if (!Application.isPlaying)
-                {
-                    _cachedLightingEngine ??=
-                        UnityEngine.Object.FindAnyObjectByType<TerrariaLightingEngine>(FindObjectsInactive.Include);
-                }
             }
 
             TerrariaLightingEngine? lightingEngine = _cachedLightingEngine;
