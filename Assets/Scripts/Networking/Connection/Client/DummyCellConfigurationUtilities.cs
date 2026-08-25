@@ -8,6 +8,29 @@ namespace Fodinae.Networking.Connection.Client;
 
 internal static class DummyCellConfigurationUtilities
 {
+    public static void SetConfig(
+        CellConfigurationPacket[] configs,
+        CellType type,
+        CellConfigProperties props,
+        byte reliefGroup,
+        int color = unchecked((int)0xFF808080),
+        CellAnimationType animation = CellAnimationType.None,
+        byte animationSpeed = 0,
+        byte frameOffset = 0,
+        CellDistortionType distortion = (CellDistortionType)0)
+    {
+        configs[(int)type] = new CellConfigurationPacket
+        {
+            Properties = props,
+            ReliefGroup = reliefGroup,
+            Color = color,
+            Animation = animation,
+            AnimationSpeed = animationSpeed,
+            FrameOffset = frameOffset,
+            Distortion = distortion,
+        };
+    }
+
     public static Dictionary<CellType, ushort> CreateMovementSpeeds(
         CellConfigurationPacket[] configurations)
     {

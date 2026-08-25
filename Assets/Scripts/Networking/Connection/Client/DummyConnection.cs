@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using static Fodinae.Networking.Connection.Client.DummyCellConfigurationUtilities;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae;
@@ -1902,22 +1903,6 @@ namespace MinesServer.Networking.Connection.Client
             SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
 
             return configs;
-        }
-
-        private static void SetConfig(CellConfigurationPacket[] configs, CellType type, CellConfigProperties props, byte reliefGroup,
-            int color = unchecked((int)0xFF808080), CellAnimationType animation = CellAnimationType.None,
-            byte animationSpeed = 0, byte frameOffset = 0, CellDistortionType distortion = (CellDistortionType)0)
-        {
-            configs[(int)type] = new CellConfigurationPacket
-            {
-                Properties = props,
-                ReliefGroup = reliefGroup,
-                Color = color,
-                Animation = animation,
-                AnimationSpeed = animationSpeed,
-                FrameOffset = frameOffset,
-                Distortion = distortion,
-            };
         }
 
         private void SendMapChunksAround(ushort serverX, ushort serverY)
