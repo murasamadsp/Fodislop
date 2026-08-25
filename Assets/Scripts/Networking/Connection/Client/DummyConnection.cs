@@ -375,7 +375,7 @@ namespace MinesServer.Networking.Connection.Client
                     if (_worldLayer != null)
                     {
                         CellType cellType = GetServerCell(cellX, cellY);
-                        int crystalIdx = GetCrystalBasketIndex(cellType);
+                        int crystalIdx = DummyCellConfigurationUtilities.GetCrystalBasketIndex(cellType);
                         var mm = _session.TryResolve<MapManager>();
                         var cellConfig = mm?.GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
@@ -2085,20 +2085,6 @@ namespace MinesServer.Networking.Connection.Client
                 OnReceived?.Invoke(new ServerPacket(new PingPacket(DateTimeOffset.UtcNow.Ticks, _rng.Next(15, 60))));
                 await UniTask.Delay(5000);
             }
-        }
-
-        private static int GetCrystalBasketIndex(CellType cell)
-        {
-            return cell switch
-            {
-                CellType.Green => 0,
-                CellType.Blue => 1,
-                CellType.Red => 2,
-                CellType.Violet => 3,
-                CellType.White => 4,
-                CellType.Cyan => 5,
-                _ => -1,
-            };
         }
 
         private (ushort X, ushort Y) GetFrontCell()

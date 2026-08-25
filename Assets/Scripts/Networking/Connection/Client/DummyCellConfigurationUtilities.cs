@@ -9,6 +9,20 @@ namespace Fodinae.Networking.Connection.Client;
 
 internal static class DummyCellConfigurationUtilities
 {
+    public static int GetCrystalBasketIndex(CellType cell)
+    {
+        return cell switch
+        {
+            CellType.Green => 0,
+            CellType.Blue => 1,
+            CellType.Red => 2,
+            CellType.Violet => 3,
+            CellType.White => 4,
+            CellType.Cyan => 5,
+            _ => -1,
+        };
+    }
+
     public static ItemType PickRandomBonusItem(Random random)
     {
         var items = new[]
