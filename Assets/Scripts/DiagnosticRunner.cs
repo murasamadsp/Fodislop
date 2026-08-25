@@ -197,7 +197,7 @@ namespace Fodinae
                 : "  NULL");
 
             sb.AppendLine("\n[TERRAIN]");
-            var terrain = FindAnyObjectByType<TerrainRenderer>();
+            TerrainRenderer? terrain = _session.TryResolve<TerrainRenderer>();
             if (terrain != null)
             {
                 sb.AppendLine($"  activeInHierarchy={terrain.gameObject.activeInHierarchy} enabled={terrain.enabled}");

@@ -246,23 +246,6 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_volume == null)
             {
-                foreach (Volume vol in FindObjectsByType<Volume>(FindObjectsInactive.Include))
-                {
-                    if (vol.profile != null &&
-                        !vol.profile.name.Contains("MenuScenery", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _volume = vol;
-                        break;
-                    }
-                }
-
-
-                _volume ??= FindAnyObjectByType<Volume>(FindObjectsInactive.Include);
-            }
-
-
-            if (_volume == null)
-            {
                 throw new InvalidOperationException(
                     "PostProcessController requires a serialized Volume component.");
             }
