@@ -56,6 +56,11 @@ namespace Fodinae.Game
             internal Sprite? Sprite { get; private set; }
             internal Color Color { get; private set; } = Color.white;
             internal bool Enabled { get; private set; }
+            private Matrix4x4 _lastLocalToWorld;
+            private Sprite? _lastSprite;
+            private Color _lastColor;
+            private bool _lastEnabled;
+            private bool _hasSnapshot;
 
             public void SetSprite(Sprite? sprite)
             {
@@ -74,6 +79,31 @@ namespace Fodinae.Game
             public void SetEnabled(bool enabled)
             {
                 Enabled = enabled && Sprite != null;
+            }
+
+            internal bool HasChanged()
+            {
+                if (Transform == null)
+                {
+                    return _hasSnapshot;
+                }
+
+                return !_hasSnapshot ||
+                    _lastLocalToWorld != Transform.localToWorldMatrix ||
+                    _lastSprite != Sprite ||
+                    _lastColor != Color ||
+                    _lastEnabled != Enabled;
+            }
+
+            internal void CaptureState()
+            {
+                _lastLocalToWorld = Transform == null
+                    ? Matrix4x4.zero
+                    : Transform.localToWorldMatrix;
+                _lastSprite = Sprite;
+                _lastColor = Color;
+                _lastEnabled = Enabled;
+                _hasSnapshot = true;
             }
         }
 
@@ -149,6 +179,18 @@ namespace Fodinae.Game
         protected void LateUpdate()
         {
             using var marker = LateUpdateMarker.Auto();
+            if (!_geometryDirty)
+            {
+                for (int i = 0; i < _sprites.Count; i++)
+                {
+                    if (_sprites[i].HasChanged())
+                    {
+                        _geometryDirty = true;
+                        break;
+                    }
+                }
+            }
+
             if (_geometryDirty && _mesh != null)
             {
                 RebuildMesh();
@@ -389,7 +431,12 @@ namespace Fodinae.Game
 
             _uploadedTentacleCount = activeCount;
             _uploadedSpriteCount = activeSpriteCount;
-            _geometryDirty = _sprites.Count > 0;
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                _sprites[i].CaptureState();
+            }
+
+            _geometryDirty = false;
         }
 
         private static bool IsRenderable(SpriteHandle handle)
