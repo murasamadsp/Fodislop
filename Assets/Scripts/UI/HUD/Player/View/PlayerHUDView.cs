@@ -77,8 +77,7 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _respawnPopup;
         private VisualElement? _buildingsPopup;
         private VisualElement? _faqPopup;
-        [Inject]
-        private ProgrammatorGrid _programmatorGrid = null!;
+        private ProgrammatorGrid? _programmatorGrid;
         private bool _initializationStarted;
 
         [Inject]
@@ -104,6 +103,7 @@ namespace Fodinae.UI.HUD.Player.View
 
         protected void Update()
         {
+            _programmatorGrid?.Tick();
             if (!_initializationStarted)
             {
                 TryStartInitialization();
@@ -159,6 +159,8 @@ namespace Fodinae.UI.HUD.Player.View
 
         protected void OnDestroy()
         {
+            _programmatorGrid?.Dispose();
+            _programmatorGrid = null;
             StopSkeletonPulse();
             foreach (var schedule in _bounceSchedules.Values)
             {
@@ -246,6 +248,8 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void InitializeHUD()
         {
+            _programmatorGrid ??= new ProgrammatorGrid(_doc);
+            _programmatorGrid?.Initialize();
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
 
@@ -1147,7 +1151,7 @@ namespace Fodinae.UI.HUD.Player.View
             CreateRespawnButton(root, () => _respawnPopup.style.display = DisplayStyle.Flex);
             CreateMyBuildingsButton(root, () => _buildingsPopup.style.display = DisplayStyle.Flex);
             CreateFaqButton(root, () => _faqPopup.style.display = DisplayStyle.Flex);
-            CreateProgrammatorButton(root, () => _programmatorGrid.Show());
+            CreateProgrammatorButton(root, () => _programmatorGrid?.Show());
         }
 
         private VisualElement CreatePopup(string title)

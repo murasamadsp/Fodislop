@@ -7,14 +7,12 @@ using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
-using VContainer;
 
-namespace Fodinae.UI.Programmator
-{
-    public class ProgrammatorGrid : MonoBehaviour
+namespace Fodinae.UI.Programmator;
+
+public sealed class ProgrammatorGrid : IDisposable
     {
-        [Inject]
-        private UIDocument _doc = null!;
+        private readonly UIDocument _doc;
         private VisualElement? _popup;
         private VisualElement? _gridContainer;
         private VisualElement?[,]? _cells;
@@ -71,12 +69,12 @@ namespace Fodinae.UI.Programmator
 
         private bool _uiBuilt;
 
-        protected void OnDestroy()
+        public ProgrammatorGrid(UIDocument doc)
         {
-            IsOpen = false;
+            _doc = doc ?? throw new ArgumentNullException(nameof(doc));
         }
 
-        protected void Start()
+        public void Initialize()
         {
             TryBuildUI();
         }
@@ -1660,7 +1658,7 @@ namespace Fodinae.UI.Programmator
             _joystick!.Hide();
         }
 
-        protected void Update()
+        public void Tick()
         {
             if (!_uiBuilt)
             {
@@ -1875,6 +1873,16 @@ namespace Fodinae.UI.Programmator
             _popup!.style.display = DisplayStyle.None;
         }
 
+        public void Dispose()
+        {
+            if (_uiBuilt && _isOpen)
+            {
+                Hide();
+            }
+
+            IsOpen = false;
+        }
+
         private void RefreshAllCells()
         {
             _selectedCells.Clear();
@@ -1902,5 +1910,4 @@ namespace Fodinae.UI.Programmator
                 : $"Ячейка [{col},{row}]: {name} — {desc}";
             _tooltip?.Show(text, Vector2.zero);
         }
-    }
 }
