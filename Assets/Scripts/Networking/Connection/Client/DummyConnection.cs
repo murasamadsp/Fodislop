@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using static Fodinae.Networking.Connection.Client.DummyCellConfigurationUtilities;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae;
@@ -996,7 +995,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private void InitWorld()
         {
-            _cellConfigs = CreateTestCellConfigurations();
+            _cellConfigs = DummyCellConfigurationUtilities.CreateCellConfigurations();
             _worldLayer?.Dispose();
             _worldLayer = null;
 
