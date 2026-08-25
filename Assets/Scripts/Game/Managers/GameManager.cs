@@ -101,26 +101,6 @@ namespace Fodinae.Game.Managers
             _uiRoot.SetActive(false);
             _uiRoot.transform.SetParent(transform);
 
-            if (UnityEngine.Object.FindAnyObjectByType<ReconnectUI>(FindObjectsInactive.Include) == null)
-            {
-                var reconnectGO = new GameObject("ReconnectUI");
-                reconnectGO.transform.SetParent(transform);
-                AddInjectedComponent<ReconnectUI>(reconnectGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<AssetLoadingIndicator>(FindObjectsInactive.Include) == null)
-            {
-                var loaderGO = new GameObject("LoaderContainer");
-                loaderGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<AssetLoadingIndicator>(loaderGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<MissionArrowUI>(FindObjectsInactive.Include) == null)
-            {
-                var arrowGO = new GameObject("MissionArrowUI");
-                arrowGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<MissionArrowUI>(arrowGO);
-            }
         }
 
         public void SetState(GameState newState)
@@ -218,34 +198,6 @@ namespace Fodinae.Game.Managers
                 $"queuedAssets={(_assetLoader is ClientAssetLoader c2 ? c2.QueuedAssetCount : -1)}, " +
                 $"pendingCellTextures={_textureService.PendingCellTextureRequests}");
             OnWorldLoaded?.Invoke();
-        }
-
-        // Runtime-created components never reach GameLifetimeScope's startup injection
-        // scan — inject explicitly so their [Inject] fields are filled immediately.
-        // The temporary SetActive(false) ensures OnEnable/Start are not invoked before
-        // injection completes, matching VContainer's NewGameObjectProvider ordering.
-        private void AddInjectedComponent<T>(GameObject go)
-            where T : Component
-        {
-            AddInjectedComponents(go, typeof(T));
-        }
-
-        private void AddInjectedComponents(GameObject go, params Type[] componentTypes)
-        {
-            bool wasActive = go.activeSelf;
-            go.SetActive(false);
-            try
-            {
-                for (int i = 0; i < componentTypes.Length; i++)
-                {
-                    Component component = go.AddComponent(componentTypes[i]);
-                    _resolver.Inject(component);
-                }
-            }
-            finally
-            {
-                go.SetActive(wasActive);
-            }
         }
 
         public void AuthorizeUI()

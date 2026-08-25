@@ -108,8 +108,8 @@ namespace Fodinae.Core
             _resolver.Resolve<WorldBackgroundSetup>();
             _resolver.Resolve<WorldEntityBatchRenderer>();
 
-            // UI-сервисы: создаём ПЕРЕД GameManager чтобы SetupUI находил их через
-            // FindAnyObjectByType(FindObjectsInactive.Include) и не создавал дубликаты.
+            // UI-сервисы создаём до GameManager: SetupUI только активирует уже
+            // зарегистрированные компоненты и не создаёт дубликаты.
             _resolver.Resolve<GlobalChatUI>();
             _resolver.Resolve<FloatingChatManager>();
             _resolver.Resolve<FPSCounter>();
@@ -124,6 +124,9 @@ namespace Fodinae.Core
             _resolver.Resolve<InventoryView>();
             _resolver.Resolve<PauseMenu>();
             _resolver.Resolve<InGameDebugOverlay>();
+            _resolver.Resolve<ReconnectUI>();
+            _resolver.Resolve<AssetLoadingIndicator>();
+            _resolver.Resolve<MissionArrowUI>();
             PostProcessController postProcessController =
                 _resolver.Resolve<PostProcessController>();
             postProcessController.EnsureVolumeSetup();

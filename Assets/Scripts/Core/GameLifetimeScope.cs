@@ -181,6 +181,9 @@ namespace Fodinae.Core
             RegisterManager<UIInputManager>(builder);
             RegisterManager<FPSCounter>(builder);
             RegisterManager<FloatingChatManager>(builder);
+            RegisterManager<ReconnectUI>(builder);
+            RegisterManager<AssetLoadingIndicator>(builder);
+            RegisterManager<MissionArrowUI>(builder);
             RegisterManager<DiagnosticRunner>(builder);
             RegisterManager<PostProcessController>(builder);
             RegisterManager<TerrariaLightingEngine>(builder);
