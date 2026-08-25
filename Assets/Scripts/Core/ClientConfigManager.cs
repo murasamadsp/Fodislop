@@ -427,7 +427,6 @@ namespace Fodinae.Core
             ValidateFloat(config.ChromaticAberrationIntensity, 0f, 1f, nameof(config.ChromaticAberrationIntensity));
             ValidateFloat(config.ColorGradingExposure, -4f, 4f, nameof(config.ColorGradingExposure));
             ValidateColor(config.ColorGradingFilter, nameof(config.ColorGradingFilter));
-            ValidateFloat(config.ColorGradingContrast, -1f, 1f, nameof(config.ColorGradingContrast));
             ValidateFloat(config.ColorGradingSaturation, 0f, 2f, nameof(config.ColorGradingSaturation));
             ValidateFloat(
                 config.ColorGradingToneMappingWhitePoint,
