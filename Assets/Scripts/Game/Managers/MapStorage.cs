@@ -27,6 +27,7 @@ namespace Fodinae.Game.Managers
         private string _worldCodeName = string.Empty;
         private int _worldWidth;
         private int _worldHeight;
+        private bool _clippedRegionWarningLogged;
 
         public WorldLayer<CellType>? CellLayer => _cellLayer;
 
@@ -89,6 +90,7 @@ namespace Fodinae.Game.Managers
             _worldCodeName = worldCodeName;
             _worldWidth = width;
             _worldHeight = height;
+            _clippedRegionWarningLogged = false;
             const int CHUNK_SIZE = 32;
             int widthChunks = (width + CHUNK_SIZE - 1) / CHUNK_SIZE;
             int heightChunks = (height + CHUNK_SIZE - 1) / CHUNK_SIZE;
@@ -235,10 +237,15 @@ namespace Fodinae.Game.Managers
             int appliedHeight = Math.Min(height, _worldHeight - startY);
             if (appliedWidth != width || appliedHeight != height)
             {
-                Debug.LogWarning(
-                    $"[MapStorage] Clipping padded edge region ({startX},{startY}) " +
-                    $"{width}x{height} to {appliedWidth}x{appliedHeight} " +
-                    $"for world {_worldWidth}x{_worldHeight}.");
+                if (!_clippedRegionWarningLogged)
+                {
+                    Debug.LogWarning(
+                        $"[MapStorage] Clipping padded edge regions to world bounds " +
+                        $"({_worldWidth}x{_worldHeight}); first region " +
+                        $"({startX},{startY}) {width}x{height} -> " +
+                        $"{appliedWidth}x{appliedHeight}.");
+                    _clippedRegionWarningLogged = true;
+                }
             }
 
             // Bulk write: WorldLayer.SetRegion applies the payload chunk-by-chunk
@@ -352,6 +359,7 @@ namespace Fodinae.Game.Managers
                 _worldCodeName = string.Empty;
                 _worldWidth = 0;
                 _worldHeight = 0;
+                _clippedRegionWarningLogged = false;
                 _mapFilePath = null;
                 IsDisposed = true;
                 Revision++;

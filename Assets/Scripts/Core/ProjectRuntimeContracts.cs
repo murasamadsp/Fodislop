@@ -4,16 +4,38 @@ namespace Fodinae.Core;
 
 public static class ProjectRuntimeContracts
 {
-    public const int AssetRequestTimeoutSeconds = 5;
-    public const int LargeAssetRequestTimeoutSeconds = 10;
-    public const long AssetCacheCapacityBytes = 256L * 1024 * 1024;
-    public const long DecodedAssetCacheCapacityBytes = 256L * 1024 * 1024;
-    public const float RobotMoveSpeed = 15f;
-    public const float RobotRotationSpeed = 1080f;
+    public static class World
+    {
+        public const float CellSize = 1f;
+        public const int ChunkSize = 32;
+        public const int MaximumWidth = ushort.MaxValue;
+        public const int MaximumHeight = ushort.MaxValue;
+    }
+
+    public static class Movement
+    {
+        public const float RobotMoveSpeed = 15f;
+        public const float RobotRotationSpeed = 1080f;
+        public const float ReferenceMoveSpeed = 25f;
+    }
+
+    public static class Debug
+    {
+        public const int CollisionDebugRange = 10;
+    }
+
+    public static class AssetStreaming
+    {
+        public const int AssetRequestTimeoutSeconds = 5;
+        public const int LargeAssetRequestTimeoutSeconds = 10;
+        public const long AssetCacheCapacityBytes = 256L * 1024 * 1024;
+        public const long DecodedAssetCacheCapacityBytes = 256L * 1024 * 1024;
+    }
 
     public static class ResourcePaths
     {
         public const string Configuration = "Configuration";
+        public const string ProjectDefaultsAsset = Configuration + "/" + ProjectDefaults.ResourceName;
         public const string GraphicsQualityProfile = "GraphicsQualityProfile";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
@@ -40,9 +62,9 @@ public static class ProjectRuntimeContracts
     public static class RuntimeLimits
     {
         public const int MaximumPacketBatchPerFrame = 250;
-        public const int MaximumWorldWidth = ushort.MaxValue;
-        public const int MaximumWorldHeight = ushort.MaxValue;
-        public const int WorldChunkSize = 32;
+        public const int MaximumWorldWidth = World.MaximumWidth;
+        public const int MaximumWorldHeight = World.MaximumHeight;
+        public const int WorldChunkSize = World.ChunkSize;
         public const int MaximumLightingUpdatesPerSecond = 60;
     }
 }

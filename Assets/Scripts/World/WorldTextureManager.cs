@@ -38,6 +38,8 @@ namespace Fodinae.World
 
         [Inject]
         private ISessionContainer _session = null!;
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
         private CellTextureCache _textureCache = null!;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
@@ -461,10 +463,7 @@ namespace Fodinae.World
             Texture2D? texture = null;
             try
             {
-                IAssetLoader loader = _session.TryResolve<IAssetLoader>() ??
-                    throw new InvalidOperationException(
-                        "IAssetLoader is required to load terrain textures.");
-                texture = await loader.GetTextureAsync(filename);
+                texture = await _assetLoader.GetTextureAsync(filename);
             }
             catch (Exception ex)
             {

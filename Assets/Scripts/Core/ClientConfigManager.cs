@@ -43,16 +43,23 @@ namespace Fodinae.Core
 
         private void Start()
         {
-            TryInitialize();
-        }
-
-        private void Update()
-        {
-            if (!_initialized)
+            if (DependenciesReady)
             {
                 TryInitialize();
             }
         }
+
+        private void Update()
+        {
+            if (!_initialized && DependenciesReady)
+            {
+                TryInitialize();
+            }
+        }
+
+        private bool DependenciesReady =>
+            _projectDefaults != null &&
+            _graphicsQualityProfile != null;
 
         private void TryInitialize()
         {

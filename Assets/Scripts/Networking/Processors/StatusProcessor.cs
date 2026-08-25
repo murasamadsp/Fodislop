@@ -17,6 +17,7 @@ namespace Fodinae.Networking.Processors
         private readonly IPlayerStats _stats;
         private readonly FPSCounter _fps;
         private readonly INetworkService _networkService;
+        private bool _outdatedClientHandled;
 
         public StatusProcessor(IPlayerStats stats, FPSCounter fps, INetworkService networkService)
         {
@@ -48,10 +49,18 @@ namespace Fodinae.Networking.Processors
 
         public void Process(OutdatedClientPacket packet)
         {
+            if (_outdatedClientHandled)
+            {
+                return;
+            }
+
+            _outdatedClientHandled = true;
             string detail = $"\u0412\u0435\u0440\u0441\u0438\u044f: {packet.Name}\n{packet.Description}\n\u0421\u043a\u0430\u0447\u0430\u0442\u044c: {packet.UpdateURL}";
-            Debug.LogError($"[StatusProcessor] \u041a\u043b\u0438\u0435\u043d\u0442 \u0443\u0441\u0442\u0430\u0440\u0435\u043b: {packet.Name}");
-            Debug.LogError($"[StatusProcessor] FATAL: {detail}");
-            Application.OpenURL(packet.UpdateURL);
+            Debug.LogWarning($"[StatusProcessor] Клиент устарел: {detail}");
+            if (!string.IsNullOrWhiteSpace(packet.UpdateURL))
+            {
+                Application.OpenURL(packet.UpdateURL);
+            }
         }
 
         public void Process(AddStatusLinePacket packet)

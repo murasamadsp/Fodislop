@@ -94,7 +94,7 @@ namespace Fodinae.UI
             var asset = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.GatewayUxml);
             if (asset == null)
             {
-                Debug.LogError($"[Gateway] Не найден '{ProjectRuntimeContracts.ResourcePaths.GatewayUxml}'.");
+                Debug.LogWarning($"[Gateway] UI resource '{ProjectRuntimeContracts.ResourcePaths.GatewayUxml}' is missing; returning to main menu.");
                 GoToMainMenu();
                 return;
             }

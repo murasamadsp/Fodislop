@@ -21,6 +21,7 @@ namespace Fodinae.World
         [Inject]
         private SurfaceRenderer? _surfaceRenderer;
         private bool _surfaceRendererSetupStarted;
+        private bool _surfaceSetupFailureLogged;
 
         protected void Start()
         {
@@ -102,6 +103,7 @@ namespace Fodinae.World
                     transitTexture,
                     perspectiveTexture,
                     redRockTexture);
+                _surfaceSetupFailureLogged = false;
                 Debug.Log("[SceneSetup] SurfaceRenderer setup completed successfully.");
             }
             catch (OperationCanceledException)
@@ -110,7 +112,11 @@ namespace Fodinae.World
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[SceneSetup] SurfaceRenderer setup failed: {ex}");
+                if (!_surfaceSetupFailureLogged)
+                {
+                    Debug.LogWarning($"[SceneSetup] SurfaceRenderer setup deferred: {ex.Message}");
+                    _surfaceSetupFailureLogged = true;
+                }
             }
             finally
             {

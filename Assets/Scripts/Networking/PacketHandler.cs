@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
@@ -44,9 +43,8 @@ namespace Fodinae.Networking
         private static readonly OpenURLProcessor OpenURL = new();
         private bool _isInitialized;
         private bool _isSubscribed;
+        private bool _emptyAuthTokenWarningLogged;
 
-        [Inject]
-        private ISessionContainer _session = null!;
         [Inject]
         private WorldInitProcessor _worldInit = null!;
         [Inject]
@@ -117,8 +115,7 @@ namespace Fodinae.Networking
                 return true;
             }
 
-            if (_session == null ||
-                _worldInit == null ||
+            if (_worldInit == null ||
                 _robotInfo == null ||
                 _mapRegion == null ||
                 _audio == null ||
@@ -159,13 +156,6 @@ namespace Fodinae.Networking
 
         private void TrySubscribeToNetworkService()
         {
-            if (_networkService == null && _session != null)
-            {
-                _networkService = _session.TryResolve<INetworkService>() ??
-                    throw new InvalidOperationException(
-                        "PacketHandler requires INetworkService in the active resolver.");
-            }
-
             if (_networkService == null)
             {
                 return;
@@ -339,10 +329,19 @@ namespace Fodinae.Networking
             string newToken = packet.Token;
             if (string.IsNullOrEmpty(newToken))
             {
-                Debug.LogError("[Auth] Received empty token from server");
+                // An empty token is a rejected authentication response, not a
+                // client invariant failure. Keep the auth window/reconnect flow
+                // alive without tripping the editor fail-fast logger.
+                if (!_emptyAuthTokenWarningLogged)
+                {
+                    Debug.LogWarning("[Auth] Server returned an empty authentication token.");
+                    _emptyAuthTokenWarningLogged = true;
+                }
+
                 return;
             }
 
+            _emptyAuthTokenWarningLogged = false;
             Auth.AuthTokenManager.SaveToken(newToken);
 
             var gm = _gameManager;

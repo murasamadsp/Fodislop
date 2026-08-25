@@ -215,11 +215,10 @@ namespace Fodinae.Game.Managers
             }
             catch (Exception ex)
             {
-                Debug.LogError(
+                throw new InvalidOperationException(
                     $"[MapManager] Failed to initialize world '{packet.CodeName}' " +
-                    $"({_width}x{_height}) in storage.");
-                Debug.LogException(ex);
-                throw;
+                    $"({_width}x{_height}) in storage.",
+                    ex);
             }
 
             if (!storage.IsReady)
@@ -453,7 +452,7 @@ namespace Fodinae.Game.Managers
                 if (cam != null && Application.isPlaying)
                 {
                     Vector3 camPos = cam.transform.position;
-                    const int range = GameConstants.Debug.CollisionDebugRange;
+                    const int range = ProjectRuntimeContracts.Debug.CollisionDebugRange;
                     int startX = Mathf.FloorToInt(camPos.x) - range;
                     int startY = Mathf.FloorToInt(camPos.y) - range;
 

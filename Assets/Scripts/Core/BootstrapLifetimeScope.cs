@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Backend;
 using Fodinae.Core.DI;
@@ -23,6 +24,7 @@ namespace Fodinae.Core
         // Он сам загрузит MainMenu и выгрузится, когда игрок пройдёт ворота.
         private const string GatewaySceneName = "Gateway";
         private const string MainGameSceneName = "MainGame";
+        private readonly HashSet<ulong> _injectedSceneHandles = [];
 
         /// <summary>
         /// Stops Unity capturing a managed stack trace for plain
@@ -59,6 +61,7 @@ namespace Fodinae.Core
             if (Container != null)
             {
                 SceneManager.sceneLoaded += OnSceneLoaded;
+                SceneManager.sceneUnloaded += OnSceneUnloaded;
                 Container.Resolve<ISessionContainer>().Set(Container);
 
                 // ClientConfigManager is a lazy Bootstrap-tier singleton — it only
@@ -76,7 +79,13 @@ namespace Fodinae.Core
         protected override void OnDestroy()
         {
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
             base.OnDestroy();
+        }
+
+        private void OnSceneUnloaded(Scene scene)
+        {
+            _injectedSceneHandles.Remove(scene.handle.GetRawData());
         }
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -137,10 +146,23 @@ namespace Fodinae.Core
 
         private void InjectSceneBehaviours(Scene scene)
         {
+            if (!_injectedSceneHandles.Add(scene.handle.GetRawData()))
+            {
+                return;
+            }
+
             foreach (GameObject root in scene.GetRootGameObjects())
             {
                 foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
                 {
+                    // Unity preserves missing-script slots as null entries in
+                    // the component array. They are not injectable behaviours;
+                    // passing one into VContainer produces a teardown-time NRE.
+                    if (behaviour == null || behaviour is LifetimeScope)
+                    {
+                        continue;
+                    }
+
                     Container.Inject(behaviour);
                 }
             }

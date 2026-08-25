@@ -34,8 +34,14 @@ namespace Fodinae
         private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();
         private readonly ConcurrentQueue<RuntimeAssetEntryPacket> _requestQueue = new();
         private readonly ConcurrentDictionary<string, byte> _missingAssets = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, byte> _reportedAssetFailures = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? _loopCts;
         private bool _packetSubscribed;
+        private bool _isDestroyed;
+        private bool _batchLoopFailureLogged;
+
+        private AssetCache Cache => _cache ??
+            throw new ObjectDisposedException(nameof(ClientAssetLoader));
 
         public int PendingAssetCount => _pendingRequests.Count;
         public int QueuedAssetCount => _requestQueue.Count;
@@ -73,6 +79,8 @@ namespace Fodinae
 
         protected void Awake()
         {
+            _isDestroyed = false;
+            _batchLoopFailureLogged = false;
             _cache = new AssetCache(LoadBytesFromServer);
             _loopCts = new CancellationTokenSource();
             ProcessBatchLoop(_loopCts.Token).Forget();
@@ -80,10 +88,18 @@ namespace Fodinae
 
         protected void OnDestroy()
         {
+            // Mark teardown before cancelling: the loop can resume once between
+            // cancellation and its next await continuation.
+            _isDestroyed = true;
             _loopCts?.Cancel();
             _loopCts?.Dispose();
-            _cache.Clear();
+            if (_cache != null)
+            {
+                _cache.Clear();
+                _cache = null!;
+            }
             _missingAssets.Clear();
+            _reportedAssetFailures.Clear();
 
             foreach (KeyValuePair<string, TaskCompletionSource<byte[]>> pending in _pendingRequests)
             {
@@ -134,6 +150,15 @@ namespace Fodinae
 
         private void UnsubscribeFromConnection()
         {
+            // Keep the legacy direct ConnectionManager path teardown-safe as
+            // well. It can be used before the injected subscription is bound.
+            if (_connectionService is ConnectionManager connectionManager)
+            {
+                connectionManager.OnPacketReceived -= OnPacketReceived;
+            }
+
+            _packetSubscribed = false;
+
             if (_subscribedConnection == null)
             {
                 _assetSubscriptionEstablished = false;
@@ -148,7 +173,7 @@ namespace Fodinae
         public UniTask<byte[]?> GetAssetBytesAsync(
             string filename,
             CancellationToken cancellationToken = default,
-            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds)
         {
             string cleanFilename = filename.TrimStart('/').ToLowerInvariant();
             if (IsAudioBank(cleanFilename) && _missingAssets.ContainsKey(cleanFilename))
@@ -156,13 +181,13 @@ namespace Fodinae
                 return UniTask.FromResult<byte[]?>(null);
             }
 
-            return _cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
+            return Cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
         }
 
         public async UniTask<string> GetAssetPathAsync(
             string filename,
             CancellationToken cancellationToken = default,
-            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds)
         {
             var cleanFilename = filename.TrimStart('/').ToLowerInvariant();
             if (IsAudioBank(cleanFilename) && _missingAssets.ContainsKey(cleanFilename))
@@ -196,7 +221,7 @@ namespace Fodinae
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            Texture2D? texture = await _cache.GetTextureAsync(filename, cancellationToken);
+            Texture2D? texture = await Cache.GetTextureAsync(filename, cancellationToken);
             return texture ?? throw new FileNotFoundException(
                 $"Required texture '{filename}' could not be loaded.",
                 filename);
@@ -204,17 +229,17 @@ namespace Fodinae
 
         public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _cache.GetAudioAsync(filename, cancellationToken);
+            return Cache.GetAudioAsync(filename, cancellationToken);
         }
 
         public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _cache.GetSpritesAsync(filename, cancellationToken);
+            return Cache.GetSpritesAsync(filename, cancellationToken);
         }
 
         public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return _cache.GetAnimatedSpritesAsync(filename, cancellationToken);
+            return Cache.GetAnimatedSpritesAsync(filename, cancellationToken);
         }
 
         public async UniTaskVoid LoadAndApplyTexture(Action<Texture2D> applyTextureAction, string filename, CancellationToken cancellationToken)
@@ -238,7 +263,9 @@ namespace Fodinae
 
         public void ClearCache()
         {
-            _cache.Clear();
+            _cache?.Clear();
+            _missingAssets.Clear();
+            _reportedAssetFailures.Clear();
         }
 
         public void EnsurePacketSubscription()
@@ -283,6 +310,7 @@ namespace Fodinae
                     if (localData != null && localData.Length > 0)
                     {
                         await SaveAssetAsync(filename, localData, string.Empty);
+                        _reportedAssetFailures.TryRemove(filename, out _);
                         return localData;
                     }
                 }
@@ -300,6 +328,7 @@ namespace Fodinae
                     var result = await GetAssetBytesFromServer(filename, etag ?? string.Empty, cts.Token);
                     if (result != null && result.Length > 0)
                     {
+                        _reportedAssetFailures.TryRemove(filename, out _);
                         return result;
                     }
                 }
@@ -311,10 +340,13 @@ namespace Fodinae
                 {
                     if (IsAudioBank(filename))
                     {
-                        Debug.Log(
-                            $"[ClientAssetLoader] Optional audio asset '{filename}' unavailable; skipping.");
+                        if (_reportedAssetFailures.TryAdd(filename, 0))
+                        {
+                            Debug.Log(
+                                $"[ClientAssetLoader] Optional audio asset '{filename}' unavailable; skipping.");
+                        }
                     }
-                    else
+                    else if (_reportedAssetFailures.TryAdd(filename, 0))
                     {
                         Debug.LogWarning($"[ClientAssetLoader] Error fetching asset {filename}: {ex.Message}");
                     }
@@ -324,7 +356,13 @@ namespace Fodinae
             // 4. Fallback to cached asset
             if (HasAsset(filename))
             {
-                return await GetAssetAsync(filename);
+                byte[]? cached = await GetAssetAsync(filename);
+                if (cached != null && cached.Length > 0)
+                {
+                    _reportedAssetFailures.TryRemove(filename, out _);
+                }
+
+                return cached;
             }
 
             if (IsTextureFile(filename))
@@ -336,6 +374,7 @@ namespace Fodinae
                     if (localData != null && localData.Length > 0)
                     {
                         await SaveAssetAsync(filename, localData, string.Empty);
+                        _reportedAssetFailures.TryRemove(filename, out _);
                         return localData;
                     }
                 }
@@ -377,7 +416,7 @@ namespace Fodinae
 
         private async UniTaskVoid ProcessBatchLoop(CancellationToken ct)
         {
-            while (!ct.IsCancellationRequested)
+            while (!ct.IsCancellationRequested && !_isDestroyed)
             {
                 try
                 {
@@ -388,7 +427,7 @@ namespace Fodinae
                     break;
                 }
 
-                if (_requestQueue.IsEmpty)
+                if (_isDestroyed || ct.IsCancellationRequested || _requestQueue.IsEmpty)
                 {
                     continue;
                 }
@@ -405,21 +444,48 @@ namespace Fodinae
                     }
                 }
 
-                if (batch.Count > 0)
+                if (batch.Count > 0 && !_isDestroyed && !ct.IsCancellationRequested)
                 {
-                    var connectionService = ConnectionService;
-                    if (connectionService.IsConnected)
+                    try
                     {
-                        var assetRequest = new RuntimeAssetRequestPacket(batch);
-                        connectionService.Send(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
+                        var connectionService = ConnectionService;
+                        if (connectionService.IsConnected)
+                        {
+                            var assetRequest = new RuntimeAssetRequestPacket(batch);
+                            connectionService.Send(new ClientPacket((uint)DateTimeOffset.UtcNow.Ticks, assetRequest));
+                        }
+                        else
+                        {
+                            foreach (var entry in batch)
+                            {
+                                if (_pendingRequests.TryRemove(entry.Filename, out var tcs))
+                                {
+                                    tcs.TrySetException(new Exception("Connection lost while sending asset request batch"));
+                                }
+                            }
+                        }
                     }
-                    else
+                    catch (OperationCanceledException)
                     {
+                        break;
+                    }
+                    catch (ObjectDisposedException) when (_isDestroyed || ct.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    catch (Exception exception)
+                    {
+                        if (!_batchLoopFailureLogged)
+                        {
+                            Debug.LogWarning($"[ClientAssetLoader] Asset request batch deferred: {exception.Message}");
+                            _batchLoopFailureLogged = true;
+                        }
+
                         foreach (var entry in batch)
                         {
                             if (_pendingRequests.TryRemove(entry.Filename, out var tcs))
                             {
-                                tcs.TrySetException(new Exception("Connection lost while sending asset request batch"));
+                                tcs.TrySetException(exception);
                             }
                         }
                     }

@@ -123,7 +123,7 @@ namespace Fodinae.Player
         {
             _scrollAction = InputSystem.actions?.FindAction(
                 "UI/ScrollWheel",
-                throwIfNotFound: true);
+                throwIfNotFound: false);
         }
 
         protected void OnDestroy()
@@ -233,7 +233,7 @@ namespace Fodinae.Player
                 if (!_cameraNullLogged)
                 {
                     _cameraNullLogged = true;
-                    Debug.LogError("[CameraFollow] Camera is null in HandleZoom! (показано один раз)");
+                    Debug.LogWarning("[CameraFollow] Camera is null in HandleZoom; zoom is waiting for camera setup.");
                 }
 
                 return;
@@ -244,7 +244,7 @@ namespace Fodinae.Player
                 if (!_scrollNullLogged)
                 {
                     _scrollNullLogged = true;
-                    Debug.LogError("[CameraFollow] Scroll action is null in HandleZoom! (показано один раз)");
+                    Debug.LogWarning("[CameraFollow] Scroll action is unavailable; mouse-wheel zoom is disabled.");
                 }
 
                 return;
@@ -377,7 +377,11 @@ namespace Fodinae.Player
             }
             else
             {
-                Debug.LogError("[CameraFollow] Cannot set zoom - camera is null!");
+                if (!_cameraNullLogged)
+                {
+                    Debug.LogWarning("[CameraFollow] Ignoring zoom request until the camera is initialized.");
+                    _cameraNullLogged = true;
+                }
             }
         }
 

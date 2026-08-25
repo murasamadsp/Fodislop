@@ -102,5 +102,16 @@ namespace Fodinae.Tests.UI
             Assert.AreEqual(-1, _model.SelectedSlot);
             Assert.AreEqual(-1, selectedIdx);
         }
+
+        [Test]
+        public void InvalidSlotOperations_AreIgnored()
+        {
+            Assert.DoesNotThrow(() => _model.SelectSlot(-1));
+            Assert.DoesNotThrow(() => _model.SelectSlot(InventoryModel.TOTALSLOTS));
+            Assert.DoesNotThrow(() => _model.SwapSlots(-1, 0));
+            Assert.DoesNotThrow(() => _model.SwapSlots(0, InventoryModel.TOTALSLOTS));
+            Assert.IsFalse(_model.TryStackSlots(-1, 0));
+            Assert.IsFalse(_model.TryStackSlots(0, InventoryModel.TOTALSLOTS));
+        }
     }
 }

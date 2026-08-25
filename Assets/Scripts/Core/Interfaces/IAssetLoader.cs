@@ -11,7 +11,7 @@ namespace Fodinae.Core.Interfaces
         UniTask<string> GetAssetPathAsync(
             string filename,
             CancellationToken cancellationToken = default,
-            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds);
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds);
         UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default);
     }
 }

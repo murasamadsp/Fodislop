@@ -32,6 +32,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
         {
             if (index >= 0 && index < _slots.Length)
             {
+                if (AreEquivalent(_slots[index], item))
+                {
+                    return;
+                }
+
                 _slots[index] = item;
                 OnSlotChanged?.Invoke(index);
                 if (index == _selectedSlot)
@@ -53,6 +58,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public void SwapSlots(int from, int to)
         {
+            if (!IsValidSlot(from) || !IsValidSlot(to) || from == to)
+            {
+                return;
+            }
+
             var temp = _slots[from];
             _slots[from] = _slots[to];
             _slots[to] = temp;
@@ -62,6 +72,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public bool TryStackSlots(int from, int to)
         {
+            if (!IsValidSlot(from) || !IsValidSlot(to) || from == to)
+            {
+                return false;
+            }
+
             var fromItem = _slots[from];
             var toItem = _slots[to];
 
@@ -93,6 +108,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public void SelectSlot(int index)
         {
+            if (!IsValidSlot(index))
+            {
+                return;
+            }
+
             if (_selectedSlot == index)
             {
                 return;
@@ -133,6 +153,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public void ClearSelection()
         {
+            if (_selectedSlot < 0)
+            {
+                return;
+            }
+
             _selectedSlot = -1;
             OnSlotSelected?.Invoke(-1);
         }
@@ -145,6 +170,31 @@ namespace Fodinae.UI.HUD.Inventory.Model
             }
 
             _networkService.Send(new UseItemPacket());
+        }
+
+        private static bool AreEquivalent(ItemData? left, ItemData? right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
+                left.IconColor == right.IconColor &&
+                left.Quantity == right.Quantity &&
+                string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                left.ItemType == right.ItemType &&
+                left.Icon == right.Icon;
+        }
+
+        private static bool IsValidSlot(int index)
+        {
+            return index >= 0 && index < TOTALSLOTS;
         }
     }
 }

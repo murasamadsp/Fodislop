@@ -109,8 +109,6 @@ namespace Fodinae.Core
             var newStorage = new MapStorage();
             builder.RegisterInstance(newStorage).As<IWorldDataStorage>().AsSelf();
 
-            builder.RegisterBuildCallback(container => container.Resolve<ISessionContainer>().Set(container));
-
             // Register (не RegisterInstance): VContainer сам конструирует и инжектит [Inject]-поля.
             // RegisterInstance НЕ инжектит уже созданные вручную объекты — _networkService остаётся null.
             builder.Register<InventoryModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();

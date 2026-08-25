@@ -41,7 +41,7 @@ namespace Fodinae.Game
         [SerializeField]
         private string _tailPath = string.Empty;
         [SerializeField]
-        private float _rotationSpeed = ProjectRuntimeContracts.RobotRotationSpeed;
+        private float _rotationSpeed = ProjectRuntimeContracts.Movement.RobotRotationSpeed;
         [Header("Dynamic Emission")]
         [SerializeField]
         [Tooltip("Разрешает Robot регистрировать dynamic emission source в TerrariaLightingEngine.")]
@@ -70,7 +70,7 @@ namespace Fodinae.Game
         private Vector3 _currentVelocity;
         private float _currentAngularVelocity;
         [SerializeField]
-        private float _moveSpeed = ProjectRuntimeContracts.RobotMoveSpeed;
+        private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
         private float _tremor = 0f;
 
         [Inject]
@@ -414,7 +414,7 @@ namespace Fodinae.Game
             // 1. Base smooth time now scales PROPORTIONALLY with speed.
             // Slower = snappier/tighter (low smooth time). Faster = momentum/curves (higher smooth time).
             float speedRatio = Mathf.Clamp01(
-                _moveSpeed / GameConstants.Movement.ReferenceMoveSpeed);
+                _moveSpeed / ProjectRuntimeContracts.Movement.ReferenceMoveSpeed);
             float targetSmoothTime = Mathf.Lerp(MinimumSmoothTime, MaximumSmoothTime, speedRatio);
 
             // 2. Distance factor: get extra snappy when very close to the target (e.g. moving exactly 1 cell and stopping)

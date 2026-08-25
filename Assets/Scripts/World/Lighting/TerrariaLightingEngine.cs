@@ -476,13 +476,13 @@ namespace Fodinae.World.Lighting
 
         public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
-        public float CellSize => GameConstants.World.CellSize;
+        public float CellSize => ProjectRuntimeContracts.World.CellSize;
 
         public Vector4 WorldRect => new(
-            _lastVisibleRegion.x * GameConstants.World.CellSize,
-            _lastVisibleRegion.y * GameConstants.World.CellSize,
-            _lastVisibleRegion.z * GameConstants.World.CellSize,
-            _lastVisibleRegion.w * GameConstants.World.CellSize);
+            _lastVisibleRegion.x * ProjectRuntimeContracts.World.CellSize,
+            _lastVisibleRegion.y * ProjectRuntimeContracts.World.CellSize,
+            _lastVisibleRegion.z * ProjectRuntimeContracts.World.CellSize,
+            _lastVisibleRegion.w * ProjectRuntimeContracts.World.CellSize);
 
         public IReadOnlyList<string> GetCascadeUniformSummaries()
         {
@@ -1033,7 +1033,7 @@ namespace Fodinae.World.Lighting
                 _dynamicSolveInProgress = false;
             }
 
-            const float cellSize = GameConstants.World.CellSize;
+            const float cellSize = ProjectRuntimeContracts.World.CellSize;
             Vector4 worldRect = new(
                 lightingRegion.x * cellSize,
                 lightingRegion.y * cellSize,
@@ -1214,7 +1214,7 @@ namespace Fodinae.World.Lighting
                     "Enabled world lighting cannot publish before its lightmap and region exist.");
             }
 
-            const float cellSize = GameConstants.World.CellSize;
+            const float cellSize = ProjectRuntimeContracts.World.CellSize;
             Shader.EnableKeyword(WorldLightingKeyword);
             _lightingDisabledStatePublished = false;
             Shader.SetGlobalTexture(WorldLightTextureId, _lightmapTexture);

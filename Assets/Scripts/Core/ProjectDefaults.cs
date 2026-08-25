@@ -10,6 +10,7 @@ namespace Fodinae.Core
     public sealed class ProjectDefaults : ScriptableObject
     {
         public const int CurrentSchemaVersion = 1;
+        public const string ResourceName = "ProjectDefaults";
 
         [SerializeField]
         private int _schemaVersion;
@@ -218,14 +219,6 @@ namespace Fodinae.Core
                     LightingConfigLimits.DynamicLightUpdatesPerSecond,
                     nameof(_dynamicLightUpdatesPerSecond));
             }
-
-            private static void ValidateColor(Color value, string name)
-            {
-                ValidateRange(value.r, 0f, float.MaxValue, $"{name}.r");
-                ValidateRange(value.g, 0f, float.MaxValue, $"{name}.g");
-                ValidateRange(value.b, 0f, float.MaxValue, $"{name}.b");
-                ValidateRange(value.a, 0f, float.MaxValue, $"{name}.a");
-            }
         }
 
         [Serializable]
@@ -381,14 +374,14 @@ namespace Fodinae.Core
                 ValidateRange(_eigengrauIntensity, 0f, 1f, nameof(_eigengrauIntensity));
                 ValidateRange(_motionBlurIntensity, 0f, 1f, nameof(_motionBlurIntensity));
             }
+        }
 
-            private static void ValidateColor(Color value, string name)
-            {
-                ValidateRange(value.r, 0f, float.MaxValue, $"{name}.r");
-                ValidateRange(value.g, 0f, float.MaxValue, $"{name}.g");
-                ValidateRange(value.b, 0f, float.MaxValue, $"{name}.b");
-                ValidateRange(value.a, 0f, float.MaxValue, $"{name}.a");
-            }
+        private static void ValidateColor(Color value, string name)
+        {
+            ValidateRange(value.r, 0f, float.MaxValue, $"{name}.r");
+            ValidateRange(value.g, 0f, float.MaxValue, $"{name}.g");
+            ValidateRange(value.b, 0f, float.MaxValue, $"{name}.b");
+            ValidateRange(value.a, 0f, float.MaxValue, $"{name}.a");
         }
 
         private static void ValidateRange(float value, float minimum, float maximum, string name)

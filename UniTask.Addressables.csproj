@@ -15,7 +15,7 @@
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
-    <LangVersion>12.0</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <RootNamespace></RootNamespace>
     <OutputType>Library</OutputType>
     <AssemblyName>UniTask.Addressables</AssemblyName>

@@ -638,27 +638,27 @@ namespace Fodinae
             }
             catch (IOException ioEx)
             {
-                Debug.LogError($"[WorldLayer] Disk I/O error loading chunk {chunkIndex}: {ioEx.Message}");
+                Debug.LogWarning($"[WorldLayer] Disk I/O error loading chunk {chunkIndex}: {ioEx.Message}");
                 ClearLoadingChunk(chunkIndex);
-                throw;
+                return;
             }
             catch (ObjectDisposedException disposedEx)
             {
                 Debug.LogWarning($"[WorldLayer] Stream disposed while loading chunk {chunkIndex}: {disposedEx.Message}");
                 ClearLoadingChunk(chunkIndex);
-                throw;
+                return;
             }
             catch (UnauthorizedAccessException authEx)
             {
-                Debug.LogError($"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
+                Debug.LogWarning($"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
                 ClearLoadingChunk(chunkIndex);
-                throw;
+                return;
             }
             catch (OutOfMemoryException)
             {
                 Debug.LogError($"[WorldLayer] Out of memory while loading chunk {chunkIndex}.");
                 ClearLoadingChunk(chunkIndex);
-                throw;
+                return;
             }
 
             await Cysharp.Threading.Tasks.UniTask.SwitchToMainThread();
@@ -769,7 +769,7 @@ namespace Fodinae
             }
             catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException || ex is UnauthorizedAccessException)
             {
-                Debug.LogError($"[WorldLayer] Background disk save failed for chunk {chunkIndex}: {ex.Message}");
+                Debug.LogWarning($"[WorldLayer] Background disk save failed for chunk {chunkIndex}: {ex.Message}");
             }
         }
 

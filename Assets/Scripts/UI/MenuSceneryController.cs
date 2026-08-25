@@ -212,7 +212,7 @@ namespace Fodinae.UI
                     Shader? resolve = Shader.Find("Fodinae/UI/UnpremultiplyAlpha");
                     if (resolve == null)
                     {
-                        Debug.LogError("[MenuSceneryController] No resolve material assigned and shader 'Fodinae/UI/UnpremultiplyAlpha' not found.");
+                        Debug.LogWarning("[MenuSceneryController] Resolve shader 'Fodinae/UI/UnpremultiplyAlpha' is unavailable; scenery compositing is disabled.");
                     }
                     else
                     {

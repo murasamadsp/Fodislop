@@ -18,7 +18,15 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void AddStatusLine(string tag, string[] text, Color color, byte blinkRate, long expiry)
         {
-            _statusLines[tag] = new StatusLineEntry(text, color, blinkRate, expiry);
+            tag ??= string.Empty;
+            text ??= Array.Empty<string>();
+            if (_statusLines.TryGetValue(tag, out StatusLineEntry existing) &&
+                AreStatusEntriesEqual(existing, text, color, blinkRate, expiry))
+            {
+                return;
+            }
+
+            _statusLines[tag] = new StatusLineEntry((string[])text.Clone(), color, blinkRate, expiry);
             OnStatusLinesChanged?.Invoke();
             OnStatsChanged?.Invoke();
         }
@@ -88,6 +96,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetDailyBonusAvailable(bool available)
         {
+            if (DailyBonusAvailable == available)
+            {
+                return;
+            }
+
             DailyBonusAvailable = available;
             OnDailyBonusChanged?.Invoke();
             OnStatsChanged?.Invoke();
@@ -95,6 +108,12 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetNickname(string nickname)
         {
+            nickname ??= string.Empty;
+            if (string.Equals(Nickname, nickname, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             Nickname = nickname;
             OnNicknameChanged?.Invoke();
             OnStatsChanged?.Invoke();
@@ -102,6 +121,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetLevel(long level)
         {
+            if (Level == level)
+            {
+                return;
+            }
+
             Level = level;
             OnLevelChanged?.Invoke();
             OnStatsChanged?.Invoke();
@@ -109,6 +133,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetHealth(int current, int max)
         {
+            if (Health == current && MaxHealth == max)
+            {
+                return;
+            }
+
             Health = current;
             MaxHealth = max;
             OnHealthChanged?.Invoke();
@@ -117,6 +146,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetCurrency(long money, long creds)
         {
+            if (Money == money && Creds == creds)
+            {
+                return;
+            }
+
             Money = money;
             Creds = creds;
             OnCurrencyChanged?.Invoke();
@@ -125,6 +159,13 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetGeology(int current, int max, CellType cell, string text)
         {
+            text ??= string.Empty;
+            if (GeologyCurrent == current && GeologyMax == max &&
+                string.Equals(GeologyText, text, StringComparison.Ordinal))
+            {
+                return;
+            }
+
             GeologyCurrent = current;
             GeologyMax = max;
             GeologyText = text;
@@ -139,8 +180,16 @@ namespace Fodinae.UI.HUD.Player.Model
                 throw new ArgumentNullException(nameof(contents), "[PlayerStatsModel] Basket contents from server are null");
             }
 
+            if (BasketCapacity == capacity && AreContentsEqual(BasketContents, contents))
+            {
+                return;
+            }
+
             BasketCapacity = capacity;
-            BasketContents = contents;
+            // Packet payload arrays are owned by the networking layer. Keep an
+            // immutable snapshot so a reused/deserialized buffer cannot mutate
+            // the model without raising OnBasketChanged.
+            BasketContents = (long[])contents.Clone();
             int maxPct = 0;
             for (int i = 0; i < BasketContents.Length; i++)
             {
@@ -163,6 +212,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetOnline(int players, int programmator)
         {
+            if (OnlinePlayers == players && OnlineProgrammator == programmator)
+            {
+                return;
+            }
+
             OnlinePlayers = players;
             OnlineProgrammator = programmator;
             OnStatsChanged?.Invoke();
@@ -170,24 +224,48 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetClanId(int clanId)
         {
+            if (ClanId == clanId)
+            {
+                return;
+            }
+
             ClanId = clanId;
             OnStatsChanged?.Invoke();
         }
 
         public void SetMaxDepth(int depth)
         {
+            if (MaxDepth == depth)
+            {
+                return;
+            }
+
             MaxDepth = depth;
             OnStatsChanged?.Invoke();
         }
 
         public void SetCurrentDepth(int serverY)
         {
+            if (CurrentDepth == serverY)
+            {
+                return;
+            }
+
             CurrentDepth = serverY;
             OnStatsChanged?.Invoke();
         }
 
         public void SetMission(string title, string description, long max)
         {
+            title ??= string.Empty;
+            description ??= string.Empty;
+            if (IsMissionActive && string.Equals(MissionTitle, title, StringComparison.Ordinal) &&
+                string.Equals(MissionDescription, description, StringComparison.Ordinal) &&
+                MissionMaxProgress == max && MissionProgress == 0)
+            {
+                return;
+            }
+
             IsMissionActive = true;
             MissionTitle = title;
             MissionDescription = description;
@@ -199,6 +277,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetMissionProgress(long current)
         {
+            if (MissionProgress == current)
+            {
+                return;
+            }
+
             MissionProgress = current;
             OnMissionChanged?.Invoke();
             OnStatsChanged?.Invoke();
@@ -206,6 +289,11 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetMissionMaxProgress(long max)
         {
+            if (MissionMaxProgress == max)
+            {
+                return;
+            }
+
             MissionMaxProgress = max;
             OnMissionChanged?.Invoke();
             OnStatsChanged?.Invoke();
@@ -213,15 +301,26 @@ namespace Fodinae.UI.HUD.Player.Model
 
         public void SetMissionArrow(ushort x, ushort y)
         {
-            Debug.Log($"[PlayerStatsModel] SetMissionArrow: X={x}, Y={y}");
+            if (MissionArrowX == x && MissionArrowY == y)
+            {
+                return;
+            }
+
             MissionArrowX = x;
             MissionArrowY = y;
             OnMissionArrowChanged?.Invoke();
-            OnStatsChanged?.Invoke();
         }
 
         public void ClearMission()
         {
+            if (!IsMissionActive && string.IsNullOrEmpty(MissionTitle) &&
+                string.IsNullOrEmpty(MissionDescription) && MissionProgress == 0 &&
+                MissionMaxProgress == 0 && !MissionArrowX.HasValue && !MissionArrowY.HasValue)
+            {
+                return;
+            }
+
+            bool hadArrow = MissionArrowX.HasValue || MissionArrowY.HasValue;
             IsMissionActive = false;
             MissionTitle = string.Empty;
             MissionDescription = string.Empty;
@@ -230,8 +329,59 @@ namespace Fodinae.UI.HUD.Player.Model
             MissionArrowX = null;
             MissionArrowY = null;
             OnMissionChanged?.Invoke();
-            OnMissionArrowChanged?.Invoke();
+            if (hadArrow)
+            {
+                OnMissionArrowChanged?.Invoke();
+            }
+
             OnStatsChanged?.Invoke();
+        }
+
+        private static bool AreContentsEqual(long[] left, long[] right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left.Length != right.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool AreStatusEntriesEqual(
+            StatusLineEntry existing,
+            string[] text,
+            Color color,
+            byte blinkRate,
+            long expiry)
+        {
+            if (existing.Color != color || existing.BlinkRate != blinkRate || existing.Expiry != expiry ||
+                existing.Text.Length != text.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (!string.Equals(existing.Text[i], text[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }

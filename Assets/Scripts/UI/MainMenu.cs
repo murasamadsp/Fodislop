@@ -375,7 +375,7 @@ namespace Fodinae
         {
             if (image == null)
             {
-                Debug.LogError($"[MainMenu] {debugName} is NULL - element not found when binding UXML tree ({assetPath})");
+                Debug.LogWarning($"[MainMenu] Optional image '{debugName}' is missing from UXML ({assetPath}).");
                 return;
             }
 
@@ -482,7 +482,7 @@ namespace Fodinae
             {
                 if (!_scenerySearchWarned)
                 {
-                    Debug.LogError("[MainMenu] _planetBodyImage is NULL - 'MainMenuPlanetImage' element not found");
+                    Debug.LogWarning("[MainMenu] Optional 'MainMenuPlanetImage' element is missing from UXML.");
                     _scenerySearchWarned = true;
                 }
 

@@ -158,15 +158,17 @@ namespace Fodinae.Core
 
         private void InjectSceneBehaviours()
         {
-            foreach (MonoBehaviour behaviour in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(
-                FindObjectsInactive.Include))
+            foreach (GameObject root in _ownScene.GetRootGameObjects())
             {
-                if (behaviour is LifetimeScope || behaviour.gameObject.scene != _ownScene)
+                foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
                 {
-                    continue;
-                }
+                    if (behaviour == null || behaviour is LifetimeScope)
+                    {
+                        continue;
+                    }
 
-                _resolver.Inject(behaviour);
+                    _resolver.Inject(behaviour);
+                }
             }
         }
 
@@ -175,54 +177,55 @@ namespace Fodinae.Core
             var errors = new System.Collections.Generic.List<string>();
             var warnings = new System.Collections.Generic.List<string>();
 
-            IProjectDefaults defaults = resolver.Resolve<IProjectDefaults>();
-            if (defaults.SchemaVersion != ProjectDefaults.CurrentSchemaVersion ||
+            if (!resolver.TryResolve<IProjectDefaults>(out IProjectDefaults? defaults) ||
+                defaults is null ||
+                defaults.SchemaVersion != ProjectDefaults.CurrentSchemaVersion ||
                 string.IsNullOrWhiteSpace(defaults.ContentHash))
             {
                 errors.Add("ProjectDefaults snapshot is missing or invalid");
             }
 
-            if (resolver.Resolve<IConnectionService>() == null)
+            if (!resolver.TryResolve<IConnectionService>(out _))
             {
                 errors.Add("ConnectionManager is null after VContainer build");
             }
 
-            if (resolver.Resolve<INetworkService>() == null)
+            if (!resolver.TryResolve<INetworkService>(out _))
             {
                 errors.Add("NetworkService is null after VContainer build");
             }
 
-            if (resolver.Resolve<IInputBlocker>() == null)
+            if (!resolver.TryResolve<IInputBlocker>(out _))
             {
                 errors.Add("IInputBlocker is null after VContainer build — input blocking will NOT work");
             }
 
-            if (resolver.Resolve<MapManager>() == null)
+            if (!resolver.TryResolve<MapManager>(out _))
             {
                 errors.Add("MapManager is null after VContainer build");
             }
 
-            if (resolver.Resolve<IWorldDataStorage>() == null)
+            if (!resolver.TryResolve<IWorldDataStorage>(out _))
             {
                 errors.Add("MapStorage is null after VContainer build");
             }
 
-            if (resolver.Resolve<ITextureService>() == null)
+            if (!resolver.TryResolve<ITextureService>(out _))
             {
                 errors.Add("WorldTextureManager is null after VContainer build");
             }
 
-            if (resolver.Resolve<IAudioSystem>() == null)
+            if (!resolver.TryResolve<IAudioSystem>(out _))
             {
                 errors.Add("AudioSystem is null after VContainer build");
             }
 
-            if (resolver.Resolve<GameManager>() == null)
+            if (!resolver.TryResolve<GameManager>(out _))
             {
                 errors.Add("GameManager is null after VContainer build — UI will NOT be created");
             }
 
-            if (resolver.Resolve<UIDocument>() == null)
+            if (!resolver.TryResolve<UIDocument>(out _))
             {
                 errors.Add("UIDocument is null after VContainer build — UI will NOT be created");
             }

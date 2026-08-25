@@ -86,6 +86,11 @@ namespace Fodinae.Audio.Backend
             AudioSettings.OnAudioConfigurationChanged -= OnAudioConfigurationChanged;
         }
 
+        private void OnDestroy()
+        {
+            _backend?.Shutdown();
+        }
+
         private void OnAudioConfigurationChanged(bool deviceChanged)
         {
             if (deviceChanged)
@@ -123,7 +128,10 @@ namespace Fodinae.Audio.Backend
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"{TAG} Error resetting audio backend: {ex.Message}");
+                // Device changes can race with teardown or a transient FMOD
+                // device loss. The backend remains optional; keep gameplay
+                // alive and let the next focus/device event retry initialization.
+                Debug.LogWarning($"{TAG} Audio backend reset deferred: {ex.Message}");
             }
         }
 

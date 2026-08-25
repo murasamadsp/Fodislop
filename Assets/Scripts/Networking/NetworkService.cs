@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking.Connection;
@@ -26,12 +25,11 @@ namespace Fodinae.Networking
     {
         [Inject]
         private IConnectionService _connectionService = null!;
-        [Inject]
-        private ISessionContainer _session = null!;
         private IConnectionService? _subscribedConnection;
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
         private readonly Dictionary<Type, Subscription[]> _subscriberSnapshots = new();
+        private readonly HashSet<Type> _reportedDispatchFailures = [];
         private readonly object _subscribersLock = new();
         private bool _connectionSubscribed;
 
@@ -62,13 +60,6 @@ namespace Fodinae.Networking
         /// </summary>
         public void EnsureConnectionSubscription()
         {
-            if (_connectionService == null && _session != null)
-            {
-                _connectionService = _session.TryResolve<IConnectionService>() ??
-                    throw new InvalidOperationException(
-                        "NetworkService requires IConnectionService in the active resolver.");
-            }
-
             if (_subscribedConnection != null)
             {
                 _subscribedConnection.OnPacketReceived -= OnPacketReceived;
@@ -89,6 +80,10 @@ namespace Fodinae.Networking
             _connectionService.OnPacketReceived += OnPacketReceived;
             _subscribedConnection = _connectionService;
             _connectionSubscribed = true;
+            lock (_subscribersLock)
+            {
+                _reportedDispatchFailures.Clear();
+            }
         }
 
         private void UnsubscribeFromConnection()
@@ -113,6 +108,7 @@ namespace Fodinae.Networking
         }
 
         private PlayerMovementController? _cachedPlayerController;
+        private bool _missingPlayerActionWarningLogged;
 
         public void SendAction(IActionClientPacket action)
         {
@@ -128,9 +124,16 @@ namespace Fodinae.Networking
 
             if (_cachedPlayerController == null)
             {
-                Debug.LogError("[NetworkService] Cannot send action: PlayerMovementController not found.");
+                if (!_missingPlayerActionWarningLogged)
+                {
+                    Debug.LogWarning("[NetworkService] Action dropped: PlayerMovementController is not ready.");
+                    _missingPlayerActionWarningLogged = true;
+                }
+
                 return;
             }
+
+            _missingPlayerActionWarningLogged = false;
 
             Vector2Int pos = _cachedPlayerController.Position;
             ushort serverX = (ushort)pos.x;
@@ -258,7 +261,18 @@ namespace Fodinae.Networking
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[NetworkService] Error dispatching packet {packetType.Name} to subscriber: {ex.Message}\n{ex.StackTrace}");
+                    bool firstFailure;
+                    lock (_subscribersLock)
+                    {
+                        firstFailure = _reportedDispatchFailures.Add(packetType);
+                    }
+
+                    if (firstFailure)
+                    {
+                        Debug.LogException(new InvalidOperationException(
+                            $"[NetworkService] Error dispatching packet {packetType.Name} to subscriber.",
+                            ex));
+                    }
                 }
             }
         }

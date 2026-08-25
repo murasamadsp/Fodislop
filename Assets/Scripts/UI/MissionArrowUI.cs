@@ -102,10 +102,15 @@ namespace Fodinae.UI
                 return;
             }
 
-            Debug.Log("[MissionArrowUI] OnArrowChanged fired");
             PlayerStatsModel stats = _playerStats;
             if (!stats.MissionArrowX.HasValue || !stats.MissionArrowY.HasValue)
             {
+                if (!_targetX.HasValue && !_targetY.HasValue &&
+                    _arrow.style.display == DisplayStyle.None)
+                {
+                    return;
+                }
+
                 Debug.Log("[MissionArrowUI] Arrow cleared (null target)");
                 _targetX = null;
                 _targetY = null;
@@ -114,6 +119,12 @@ namespace Fodinae.UI
                     _arrow.style.display = DisplayStyle.None;
                 }
 
+                return;
+            }
+
+            if (_targetX == stats.MissionArrowX && _targetY == stats.MissionArrowY &&
+                _arrow.style.display == DisplayStyle.Flex)
+            {
                 return;
             }
 

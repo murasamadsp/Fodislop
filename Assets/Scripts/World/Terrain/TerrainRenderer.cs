@@ -30,7 +30,7 @@ namespace Fodinae.World.Terrain
 
         [Header("Configuration")]
         [SerializeField]
-        private float _cellSize = GameConstants.World.CellSize;
+        private float _cellSize = ProjectRuntimeContracts.World.CellSize;
         [SerializeField]
         private Shader? _terrainShader;
         [SerializeField]
@@ -274,11 +274,6 @@ namespace Fodinae.World.Terrain
         protected void Start()
         {
             _mainCamera = GameplayCamera.Resolve();
-            if (_mainCamera == null)
-            {
-                throw new InvalidOperationException(
-                    "TerrainRenderer requires a tagged Main Camera.");
-            }
         }
 
         public void InitializeEditorPreview(IWorldDataStorage storage, MapManager mapManager, ITextureService textureService)
@@ -483,18 +478,12 @@ namespace Fodinae.World.Terrain
             using var terrainLateUpdateMarker = TerrainLateUpdateMarker.Auto();
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
-                if (_mapManager == null || _storage == null || !_storage.IsReady)
-                {
-                    return;
-                }
+                return;
             }
 
             if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
             {
-                if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
-                {
-                    return;
-                }
+                return;
             }
 
             if ((_diagLogged & (1 << 1)) == 0)
@@ -640,7 +629,7 @@ namespace Fodinae.World.Terrain
 
             if (currentGridPos.x == int.MinValue || currentGridPos.y == int.MinValue)
             {
-                Debug.LogError(
+                Debug.LogWarning(
                     $"[TerrainRenderer] Invalid terrain grid position {currentGridPos}. " +
                     $"Camera position={camPos}; desired grid={desiredGridPos}; " +
                     $"last grid={_lastGridPos}; dimensions={_meshWidth}x{_meshHeight}.");
@@ -1092,15 +1081,13 @@ namespace Fodinae.World.Terrain
             catch (Exception ex)
             {
                 _fatalBuildError = true;
-                Debug.LogError(
+                Debug.LogException(new InvalidOperationException(
                     $"[TerrainRenderer] Build failed: grid=({minX},{minY}) " +
                     $"size={_meshWidth}x{_meshHeight}, world=" +
                     $"{_mapManager?.WorldWidth ?? 0}x{_mapManager?.WorldHeight ?? 0}, " +
                     $"atlases={_textureService?.GetAllAtlases().Count ?? 0}, " +
-                    $"storageReady={_storage?.IsReady ?? false}.");
-                Debug.LogException(ex);
-                Debug.LogError(
-                    $"[TerrainRenderer] FATAL: terrain rendering failed because world texture metadata is invalid: {ex}");
+                    $"storageReady={_storage?.IsReady ?? false}.",
+                    ex));
             }
 
             bool needReassignMaterials = materialsChanged;

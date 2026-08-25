@@ -160,7 +160,7 @@ namespace Fodinae.UI
                 // Не бросаем из Update-ретрая: это зациклило бы исключения каждый кадр.
                 // Логируем один раз и помечаем как неинициализируемое — меню просто
                 // не откроется, игра продолжит работать.
-                Debug.LogError($"[PauseMenu] Cannot build menu: {exception.Message}");
+                Debug.LogWarning($"[PauseMenu] Menu unavailable: {exception.Message}");
                 _initializationFailed = true;
                 return;
             }

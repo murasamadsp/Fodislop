@@ -1042,7 +1042,6 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void OnSkillProgress(SkillType skill, long current, long max)
         {
-            Debug.Log($"[PlayerHUD] OnSkillProgress: skill={skill}, current={current}, max={max}");
             if (!_skillIcons.TryGetValue(skill, out var icon))
             {
                 var created = CreateSkillIcon(skill);

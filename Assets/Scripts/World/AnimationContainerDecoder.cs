@@ -109,7 +109,7 @@ namespace Fodinae.World
             }
             catch (Exception e)
             {
-                Debug.LogError($"[AnimationContainerDecoder] GIF decode failed: {e.Message}\n{e.StackTrace}");
+                Debug.LogWarning($"[AnimationContainerDecoder] GIF decode failed; asset will be skipped: {e.Message}");
                 throw new InvalidOperationException($"GIF decode failed: {e.Message}", e);
             }
         }
@@ -330,7 +330,7 @@ namespace Fodinae.World
                     UnityEngine.Object.Destroy(atlas);
                 }
 
-                Debug.LogError($"[AnimationContainerDecoder] WebP decode failed: {e.Message}");
+                Debug.LogWarning($"[AnimationContainerDecoder] WebP decode failed; asset will be skipped: {e.Message}");
                 throw new InvalidOperationException($"WebP decode failed: {e.Message}", e);
             }
         }

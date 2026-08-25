@@ -32,8 +32,8 @@ namespace Fodinae
         private readonly ConcurrentQueue<string> _decodedAccessOrder = new();
         private readonly Func<string, CancellationToken, int, UniTask<byte[]?>> _bytesLoader;
         private long _totalBytes;
-        private long _maxBytes = ProjectRuntimeContracts.AssetCacheCapacityBytes;
-        private long _maxDecodedBytes = ProjectRuntimeContracts.DecodedAssetCacheCapacityBytes;
+        private long _maxBytes = ProjectRuntimeContracts.AssetStreaming.AssetCacheCapacityBytes;
+        private long _maxDecodedBytes = ProjectRuntimeContracts.AssetStreaming.DecodedAssetCacheCapacityBytes;
         private long _totalDecodedBytes;
         private int _unloadUnusedAssetsRequested;
 
@@ -54,7 +54,7 @@ namespace Fodinae
         public UniTask<byte[]?> GetBytesAsync(
             string filename,
             CancellationToken ct = default,
-            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetBytesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -64,7 +64,7 @@ namespace Fodinae
         public UniTask<Texture2D?> GetTextureAsync(
             string filename,
             CancellationToken ct = default,
-            int timeoutSeconds = ProjectRuntimeContracts.AssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.AssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetTextureAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -74,7 +74,7 @@ namespace Fodinae
         public UniTask<AudioClip?> GetAudioAsync(
             string filename,
             CancellationToken ct = default,
-            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAudioAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -84,7 +84,7 @@ namespace Fodinae
         public UniTask<Sprite[]?> GetSpritesAsync(
             string filename,
             CancellationToken ct = default,
-            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -97,7 +97,7 @@ namespace Fodinae
         public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(
             string filename,
             CancellationToken ct = default,
-            int timeoutSeconds = ProjectRuntimeContracts.LargeAssetRequestTimeoutSeconds)
+            int timeoutSeconds = ProjectRuntimeContracts.AssetStreaming.LargeAssetRequestTimeoutSeconds)
         {
             var entry = _entries.GetOrAdd(filename, name => new CacheEntry(name, this));
             return entry.GetAnimatedSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
@@ -342,6 +342,7 @@ namespace Fodinae
 
             private AudioClip? _audio;
             private TaskCompletionSource<AudioClip?>? _audioPromise;
+            private bool _wavWarningLogged;
 
             private Sprite[]? _sprites;
             private TaskCompletionSource<Sprite[]?>? _spritePromise;
@@ -760,7 +761,12 @@ namespace Fodinae
                         throw emptyEx;
                     }
 
-                    UnityEngine.Debug.LogWarning("[AssetCache] WavUtility is deprecated. Decoding wav is not supported.");
+                    if (!_wavWarningLogged)
+                    {
+                        UnityEngine.Debug.LogWarning(
+                            $"[AssetCache] WAV decoding is unsupported for '{_filename}'; request will fail.");
+                        _wavWarningLogged = true;
+                    }
                     AudioClip? clip = null;
                     TaskCompletionSource<AudioClip?>? audioPromise;
                     lock (_lock)

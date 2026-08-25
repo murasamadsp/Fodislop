@@ -14,15 +14,17 @@ public static class ProjectDefaultsLoader
         if (assets.Length != 1)
         {
             throw new InvalidOperationException(
-                $"Exactly one ProjectDefaults asset is required under Resources/Configuration; " +
+                $"Exactly one ProjectDefaults asset is required under " +
+                $"Resources/{ProjectRuntimeContracts.ResourcePaths.Configuration}; " +
                 $"found {assets.Length}.");
         }
 
         ProjectDefaults asset = assets[0];
-        if (!string.Equals(asset.name, "ProjectDefaults", StringComparison.Ordinal))
+        if (!string.Equals(asset.name, ProjectDefaults.ResourceName, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Project defaults asset must be named 'ProjectDefaults', not '{asset.name}'.");
+                $"Project defaults asset must be named '{ProjectDefaults.ResourceName}', " +
+                $"not '{asset.name}'.");
         }
 
         return asset.CreateSnapshot();

@@ -21,10 +21,10 @@ namespace Fodinae.UI.Builders
             {
                 value = Mathf.Clamp(sliderPkt.DefaultValue, sliderPkt.MinValue, sliderPkt.MaxValue),
             };
-            var knob = builder.Build(sliderPkt.Knob)!;
+            VisualElement? knob = builder.Build(sliderPkt.Knob);
             if (knob == null)
             {
-                Debug.LogError("Slider knob is null");
+                Debug.LogWarning("[PacketUI] Slider packet has no knob element; using the default slider visuals.");
                 return slider;
             }
 
@@ -41,7 +41,7 @@ namespace Fodinae.UI.Builders
             var dragContainer = slider.Q(className: "unity-base-slider__drag-container");
             if (dragContainer == null)
             {
-                Debug.LogError("Slider drag container not found.");
+                Debug.LogWarning("[PacketUI] Slider drag container is unavailable in this UI Toolkit version.");
                 return slider;
             }
 
@@ -50,7 +50,7 @@ namespace Fodinae.UI.Builders
             var dragger = dragContainer.Q(className: "unity-base-slider__dragger");
             if (dragger == null)
             {
-                Debug.LogError("Slider dragger not found inside drag container.");
+                Debug.LogWarning("[PacketUI] Slider dragger is unavailable in this UI Toolkit version.");
                 return slider;
             }
 
