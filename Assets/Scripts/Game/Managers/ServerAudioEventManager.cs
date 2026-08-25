@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
 using Fodinae.World;
@@ -22,12 +21,34 @@ namespace Fodinae.Game.Managers
         [Inject]
         private IVFXService _vfxService = null!;
 
+        [Inject]
+        private IRobotService _robotService = null!;
+
+        [Inject]
+        private IAudioSystem _audioSystem = null!;
+
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
+
+        [Inject]
+        private MapManager _mapManager = null!;
+
+        [Inject]
+        private VFXPool _vfxPool = null!;
+
         public void PlayEffect(AudioPacket packet)
         {
             var vfxType = MapAudioToVFX(packet.EffectType);
             VFXPool.PooledSlot? slot = _vfxService.Acquire(vfxType);
 
-            var effect = new ServerAudioEvent(packet, slot);
+            var effect = new ServerAudioEvent(
+                packet,
+                slot,
+                _robotService,
+                _audioSystem,
+                _assetLoader,
+                _mapManager,
+                _vfxPool);
             _activeEffects.Add(effect);
         }
 

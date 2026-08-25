@@ -8,7 +8,6 @@ using Cysharp.Threading.Tasks;
 using Effekseer;
 using Fodinae.Audio.Backend;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
@@ -34,6 +33,11 @@ namespace Fodinae.Game
         private readonly ushort _sourceY;
         private readonly ushort _targetBotId;
         private readonly IReadOnlyList<StringPairPacket> _parameters;
+        private readonly IRobotService _robotService;
+        private readonly IAudioSystem _audioSystem;
+        private readonly IAssetLoader _assetLoader;
+        private readonly MapManager _mapManager;
+        private readonly VFXPool _vfxPool;
 
         private VFXPool.PooledSlot? _slot;
         private GameObject? _gameObject;
@@ -73,7 +77,14 @@ namespace Fodinae.Game
 
         private readonly CancellationTokenSource _cts = new();
 
-        public ServerAudioEvent(AudioPacket packet, VFXPool.PooledSlot? slot)
+        public ServerAudioEvent(
+            AudioPacket packet,
+            VFXPool.PooledSlot? slot,
+            IRobotService robotService,
+            IAudioSystem audioSystem,
+            IAssetLoader assetLoader,
+            MapManager mapManager,
+            VFXPool vfxPool)
         {
             _effectType = packet.EffectType;
             _sourceX = packet.X;
@@ -81,6 +92,11 @@ namespace Fodinae.Game
             _targetBotId = packet.TargetBotId;
             _parameters = packet.Parameters;
             _slot = slot;
+            _robotService = robotService;
+            _audioSystem = audioSystem;
+            _assetLoader = assetLoader;
+            _mapManager = mapManager;
+            _vfxPool = vfxPool;
 
             if (slot != null)
             {
@@ -102,12 +118,6 @@ namespace Fodinae.Game
         }
 
         public bool IsDisposed => _slotReleased;
-
-        private static T? TryResolve<T>()
-            where T : class
-        {
-            return SessionAccess.Resolve()?.TryResolve<T>();
-        }
 
         public void Update()
         {
@@ -142,7 +152,7 @@ namespace Fodinae.Game
             {
                 if (_hasSourceBot)
                 {
-                    var sourceBot = TryResolve<IRobotService>()?.GetOrCreateRobot(_sourceBotId);
+                    var sourceBot = _robotService.GetOrCreateRobot(_sourceBotId);
                     if (sourceBot != null)
                     {
                         _effekseerHandle.SetLocation(sourceBot.transform.position);
@@ -151,7 +161,7 @@ namespace Fodinae.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = (TryResolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (_robotService as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -320,8 +330,7 @@ namespace Fodinae.Game
 
             if (_hasSourceBot)
             {
-                var service = TryResolve<IRobotService>();
-                var sourceBot = service is RobotManager manager ? manager.GetOrCreateRobot(_sourceBotId) : null;
+                var sourceBot = (_robotService as RobotManager)?.GetOrCreateRobot(_sourceBotId);
                 pos = sourceBot != null
                     ? sourceBot.transform.position
                     : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
@@ -340,7 +349,7 @@ namespace Fodinae.Game
 
             if (_targetBotId != 0 && _gameObject != null)
             {
-                var targetBot = (TryResolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
+                var targetBot = (_robotService as RobotManager)?.GetOrCreateRobot(_targetBotId);
                 if (targetBot != null)
                 {
                     _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle + 180f);
@@ -353,14 +362,8 @@ namespace Fodinae.Game
 
         private void PlayAudio()
         {
-            var audioSystem = TryResolve<IAudioSystem>();
-            if (audioSystem == null)
-            {
-                return;
-            }
-
             string eventName = GetSfxEventName(_effectType);
-            audioSystem.PlayAt(eventName, _intendedWorldPosition);
+            _audioSystem.PlayAt(eventName, _intendedWorldPosition);
         }
 
         private async UniTaskVoid LoadVisualAsync(CancellationToken token)
@@ -368,8 +371,7 @@ namespace Fodinae.Game
             try
             {
                 var filename = $"VFX/{_effectType.ToString().ToLowerInvariant()}";
-                var loader = TryResolve<IAssetLoader>() as ClientAssetLoader;
-                if (loader == null)
+                if (_assetLoader is not ClientAssetLoader loader)
                 {
                     MarkVisualCompleted();
                     return;
@@ -449,7 +451,7 @@ namespace Fodinae.Game
                 var effectAsset = await RuntimeEffekseerLoader.LoadEffectAsync(
                     bytes,
                     _effectType.ToString(),
-                    TryResolve<IAssetLoader>() as ClientAssetLoader ??
+                    _assetLoader as ClientAssetLoader ??
                         throw new InvalidOperationException(
                             "ClientAssetLoader is unavailable for runtime Effekseer textures."),
                     texturePathMapper: path =>
@@ -488,7 +490,7 @@ namespace Fodinae.Game
 
                 if (_targetBotId != 0)
                 {
-                    var targetBot = (TryResolve<IRobotService>() as RobotManager)?.GetOrCreateRobot(_targetBotId);
+                    var targetBot = (_robotService as RobotManager)?.GetOrCreateRobot(_targetBotId);
                     if (targetBot != null)
                     {
                         _effekseerHandle.SetTargetLocation(targetBot.transform.position);
@@ -519,12 +521,9 @@ namespace Fodinae.Game
             }
         }
 
-        private static int GetWorldHeight()
+        private int GetWorldHeight()
         {
-            MapManager mapManager = TryResolve<MapManager>() ??
-                throw new InvalidOperationException(
-                    "[ServerAudioEvent] MapManager is required for server-to-world coordinate conversion.");
-            return mapManager.WorldHeight;
+            return _mapManager.WorldHeight;
         }
 
         private void MarkVisualCompleted()
@@ -564,7 +563,7 @@ namespace Fodinae.Game
 
             if (_slot != null)
             {
-                TryResolve<VFXPool>()?.Release(_slot);
+                _vfxPool.Release(_slot);
                 _slot = null;
             }
 
