@@ -1,8 +1,6 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.DI;
-using Fodinae.Game.Managers;
 using UnityEngine;
 
 namespace Fodinae.World
@@ -16,15 +14,9 @@ namespace Fodinae.World
                 return worldHeight;
             }
 
-            var mm = SessionAccess.Resolve()?.TryResolve<MapManager>();
-            if (mm != null && mm.WorldHeight > 0)
-            {
-                return mm.WorldHeight;
-            }
-
             throw new InvalidOperationException(
                 "[CoordinateUtils] World height is required for coordinate conversion, " +
-                "but WorldInitPacket has not initialized MapManager.");
+                "and must be supplied by the world data owner.");
         }
 
         /// <summary>
