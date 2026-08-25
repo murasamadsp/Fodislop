@@ -320,7 +320,7 @@ namespace Fodinae.Core
 
             foreach (var type in criticalTypes)
             {
-                if (!resolver.TryResolve(type, out object? instance))
+                if (!_resolver.TryResolve(type, out object? instance))
                 {
                     continue;
                 }

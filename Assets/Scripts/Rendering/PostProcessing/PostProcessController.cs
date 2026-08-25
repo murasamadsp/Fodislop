@@ -285,7 +285,7 @@ namespace Fodinae.Rendering.PostProcessing
 
             MotionBlurIntensity = config.MotionBlurIntensity;
             MotionBlurComponent motionBlur = GetRequired(_motionBlur, nameof(_motionBlur));
-            motionBlur.maxSamples.overrideState = true;
+            motionBlur.intensity.overrideState = true;
 
             // Enable the renderer pass only after every Volume value and every
             // fused setting has been applied as one coherent configuration.

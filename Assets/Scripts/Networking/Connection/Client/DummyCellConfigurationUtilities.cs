@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 
-namespace Fodinae.Networking.Connection.Client;
+namespace MinesServer.Networking.Connection.Client;
 
 internal static class DummyCellConfigurationUtilities
 {

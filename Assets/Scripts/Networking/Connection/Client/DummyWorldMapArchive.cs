@@ -5,7 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using UnityEngine;
 
-namespace Fodinae.Networking.Connection.Client;
+namespace MinesServer.Networking.Connection.Client;
 
 internal static class DummyWorldMapArchive
 {
