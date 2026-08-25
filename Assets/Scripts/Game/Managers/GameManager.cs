@@ -108,38 +108,6 @@ namespace Fodinae.Game.Managers
                 AddInjectedComponent<ReconnectUI>(reconnectGO);
             }
 
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>(FindObjectsInactive.Include) == null)
-            {
-                var invGO = new GameObject("InventoryRoot");
-                invGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<Fodinae.UI.HUD.Inventory.View.InventoryView>(invGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>(FindObjectsInactive.Include) == null)
-            {
-                var hudGO = new GameObject("PlayerHUD");
-                hudGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<Fodinae.UI.HUD.Player.View.PlayerHUDView>(hudGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>(FindObjectsInactive.Include) == null)
-            {
-                var pauseGO = new GameObject("PauseMenu");
-                pauseGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<PauseMenu>(pauseGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>(FindObjectsInactive.Include) == null)
-            {
-                var chatGO = new GameObject("ChatSystem");
-                chatGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponents(
-                    chatGO,
-                    typeof(LocalChatPopup),
-                    typeof(GlobalChatUI),
-                    typeof(FloatingChatManager));
-            }
-
             if (UnityEngine.Object.FindAnyObjectByType<AssetLoadingIndicator>(FindObjectsInactive.Include) == null)
             {
                 var loaderGO = new GameObject("LoaderContainer");
