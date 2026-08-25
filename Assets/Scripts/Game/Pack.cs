@@ -5,7 +5,6 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Effekseer;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
@@ -32,6 +31,9 @@ namespace Fodinae.Game
 
         [Inject]
         private WorldEntityBatchRenderer _entityBatchRenderer = null!;
+
+        [Inject]
+        private IAssetLoader _assetLoader = null!;
 
         private EffekseerHandle _effekseerHandle;
         private EffekseerEffectAsset? _effekseerAsset;
@@ -82,8 +84,7 @@ namespace Fodinae.Game
             string packPath = $"Pack/{packName}/{_variant}";
 
             // 1. Try loading as a texture (existing behavior — static or animated sprite)
-            var loader = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() as ClientAssetLoader;
-            if (loader == null)
+            if (_assetLoader is not ClientAssetLoader loader)
             {
                 return;
             }
@@ -161,8 +162,7 @@ namespace Fodinae.Game
                 return;
             }
 
-            var loader = SessionAccess.Resolve()?.TryResolve<IAssetLoader>() as ClientAssetLoader;
-            if (loader == null)
+            if (_assetLoader is not ClientAssetLoader loader)
             {
                 return;
             }
