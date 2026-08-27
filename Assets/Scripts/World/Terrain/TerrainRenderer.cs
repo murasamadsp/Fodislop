@@ -148,6 +148,14 @@ namespace Fodinae.World.Terrain
             ClientConfig config = clientConfigManager.Config ??
                 throw new InvalidOperationException(
                     "TerrainRenderer requires an initialized ClientConfig.");
+
+            bool enableDistortion = config.EnableTerrainDistortion;
+            if (_precalc.EnableDistortion != enableDistortion)
+            {
+                _precalc.EnableDistortion = enableDistortion;
+                _needsRefresh = true;
+            }
+
             if (_materials.Length == 0)
             {
                 // The config is the source of truth. Atlas materials are created

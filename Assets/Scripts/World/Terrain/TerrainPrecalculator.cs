@@ -16,6 +16,7 @@ namespace Fodinae.World.Terrain
         public bool[,] CellIsRelief { get; private set; } = null!;
         public byte[,] CellVisualBlendMasks { get; private set; } = null!;
         public byte[,] CellSolidBoundaryMasks { get; private set; } = null!;
+        public bool EnableDistortion { get; set; } = true;
 
         public void EnsureCapacity(int meshWidth, int meshHeight)
         {
@@ -230,6 +231,12 @@ namespace Fodinae.World.Terrain
 
         private void CalculateVertexNode(TerrainCellCache cellCache, int x, int y, int worldWidth = int.MaxValue, int worldHeight = int.MaxValue)
         {
+            if (!EnableDistortion)
+            {
+                GridVertexOffsets[x, y] = Vector3.zero;
+                return;
+            }
+
             int cx = x + 1;
             int cy = y + 1;
             var tl = cellCache.GetCellData(x, cy);

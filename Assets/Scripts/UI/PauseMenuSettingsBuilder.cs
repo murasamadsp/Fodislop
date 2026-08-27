@@ -351,6 +351,14 @@ namespace Fodinae.UI
             UpdatePostProcessTierButton();
             graphicsSection.Add(postProcessTierButton);
 
+            Toggle distortionToggle = PauseMenuUIFactory.CreateBoundToggle(
+                "Дисторсия граней блоков",
+                () => _clientConfig.Config.EnableTerrainDistortion,
+                value => _graphicsSettings.UpdateCustomWorldMaterialSettings(
+                    config => config.EnableTerrainDistortion = value),
+                _refreshers);
+            graphicsSection.Add(distortionToggle);
+
             var customGraphicsSection = new Foldout
             {
                 text = "Пользовательский профиль",

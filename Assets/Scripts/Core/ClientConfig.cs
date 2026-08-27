@@ -60,6 +60,7 @@ namespace Fodinae.Core
         public Color TerrainShimmerColor;
         public Color TerrainDebugColor;
         public bool TerrainDebugMode;
+        public bool EnableTerrainDistortion = true;
         public float BloomThreshold;
         public float BloomSoftKnee;
         public float BloomRadius;
