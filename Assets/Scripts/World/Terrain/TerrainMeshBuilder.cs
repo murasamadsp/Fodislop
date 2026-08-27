@@ -593,7 +593,7 @@ namespace Fodinae.World.Terrain
                 packedLightingColor,
                 packedLightingFlags,
                 glowFlags + (solidDiagonalMask * 4f),
-                visualBlendMask);
+                solidBoundaryMask);
             _vertexBuffer[vIdx + 0].UV6 = glowVec;
             _vertexBuffer[vIdx + 1].UV6 = glowVec;
             _vertexBuffer[vIdx + 2].UV6 = glowVec;
