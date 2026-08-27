@@ -422,17 +422,17 @@ namespace Fodinae.World.Terrain
             float lx = x * _cellSize;
             float ly = y * _cellSize;
 
-            Vector3 off00 = precalc.GridVertexOffsets[x, y];
-            Vector3 off10 = precalc.GridVertexOffsets[x + 1, y];
-            Vector3 off01 = precalc.GridVertexOffsets[x, y + 1];
-            Vector3 off11 = precalc.GridVertexOffsets[x + 1, y + 1];
+            Vector3 off00 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y];
+            Vector3 off10 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y];
+            Vector3 off01 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x, y + 1];
+            Vector3 off11 = isBackground ? Vector3.zero : precalc.GridVertexOffsets[x + 1, y + 1];
 
-            bool isAnchored = off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero;
+            bool isAnchored = !isBackground && (off00 != Vector3.zero || off10 != Vector3.zero || off01 != Vector3.zero || off11 != Vector3.zero);
             float anchorFlag = isAnchored ? 1f : 0f;
-            Vector2 anchor0 = new Vector2(off00.x, off00.y);
-            Vector2 anchor1 = new Vector2(1f + off10.x, off10.y);
-            Vector2 anchor2 = new Vector2(1f + off11.x, 1f + off11.y);
-            Vector2 anchor3 = new Vector2(off01.x, 1f + off01.y);
+            Vector2 anchor0 = isAnchored ? new Vector2(off00.x, off00.y) : new Vector2(0f, 0f);
+            Vector2 anchor1 = isAnchored ? new Vector2(1f + off10.x, off10.y) : new Vector2(1f, 0f);
+            Vector2 anchor2 = isAnchored ? new Vector2(1f + off11.x, 1f + off11.y) : new Vector2(1f, 1f);
+            Vector2 anchor3 = isAnchored ? new Vector2(off01.x, 1f + off01.y) : new Vector2(0f, 1f);
 
             _vertexBuffer[vIdx + 0].Position = new Vector3(lx, ly, zOffset) + off00;
             _vertexBuffer[vIdx + 1].Position = new Vector3(lx + _cellSize, ly, zOffset) + off10;
@@ -507,7 +507,7 @@ namespace Fodinae.World.Terrain
             Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
             Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
-            bool isRelief = isSameCell && precalc.CellIsRelief[x, y];
+            bool isRelief = !isBackground && isSameCell && precalc.CellIsRelief[x, y];
             float reliefValue = isRelief ? precalc.CellReliefMasks[x, y] : 0f;
 
             _vertexBuffer[vIdx].Color = color;
@@ -573,8 +573,8 @@ namespace Fodinae.World.Terrain
                 glowFlags += 2f;
             }
 
-            float visualBlendMask = isSameCell ? precalc.CellVisualBlendMasks[x, y] : 0f;
-            byte solidConnectivityMask = isSameCell
+            float visualBlendMask = !isBackground && isSameCell ? precalc.CellVisualBlendMasks[x, y] : 0f;
+            byte solidConnectivityMask = !isBackground && isSameCell
                 ? precalc.CellSolidBoundaryMasks[x, y]
                 : (byte)0;
             float solidBoundaryMask = solidConnectivityMask & 15;
