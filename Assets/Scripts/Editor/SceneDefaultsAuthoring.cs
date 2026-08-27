@@ -97,9 +97,15 @@ namespace Fodinae.Editor
                 // 2. Remove legacy Unity AudioListener components (FMOD Studio is the sole audio engine)
                 foreach (AudioListener listener in root.GetComponentsInChildren<AudioListener>(true))
                 {
+                    if (listener == null)
+                    {
+                        continue;
+                    }
+
+                    string objectName = listener.gameObject.name;
                     Undo.DestroyObjectImmediate(listener);
                     changed = true;
-                    Debug.Log($"[SceneDefaultsAuthoring] Removed legacy AudioListener from '{listener.gameObject.name}' in '{scene.path}'.");
+                    Debug.Log($"[SceneDefaultsAuthoring] Removed legacy AudioListener from '{objectName}' in '{scene.path}'.");
                 }
 
                 // 3. Normalize Camera clear color (replace default Unity cornflower blue)

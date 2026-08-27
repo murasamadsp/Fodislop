@@ -578,7 +578,7 @@ namespace Fodinae.World.Lighting
 
         private void OnApplicationQuit()
         {
-            _configHolder.ForceSave();
+            _configHolder?.ForceSave();
         }
 
         public void SetDynamicLight(
