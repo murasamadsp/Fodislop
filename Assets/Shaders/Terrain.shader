@@ -238,9 +238,52 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     isTiling ? 1.0 : 0.0);
                 float2 tileOffsetUV = wrapped * tileSizeUV;
                 float2 availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
-                float2 quadUV = clamp(input.uv, EPS, 1.0 - EPS);
+                float2 quadUV = input.uv;
                 int animTypeEarly = (int)(input.animData.x + 0.5);
                 bool isScrollAnimated = animTypeEarly == 4;
+
+                if (input.packedData.x > 0.5)
+                {
+                    float2 anchoredUV = input.packedData.zw;
+                    float2 stepUV = float2(0.0, 0.0);
+                    stepUV.x = anchoredUV.x >= 1.0 ? 1.0 : (anchoredUV.x <= 0.0 ? -1.0 : 0.0);
+                    stepUV.y = anchoredUV.y >= 1.0 ? -1.0 : (anchoredUV.y <= 0.0 ? 1.0 : 0.0);
+                    bool outsideX = stepUV.x != 0.0;
+                    bool outsideY = stepUV.y != 0.0;
+                    if (isScrollAnimated)
+                    {
+                        quadUV.x = outsideX ? frac(anchoredUV.x) : anchoredUV.x;
+                        quadUV.y = anchoredUV.y;
+                    }
+                    else
+                    {
+                        quadUV = (outsideX || outsideY) ? frac(anchoredUV) : anchoredUV;
+                    }
+
+                    if (outsideX || outsideY)
+                    {
+                        float2 stepPos = input.worldPos.xy + stepUV;
+                        float2 wrappedStep = FodinaeResolveTerrainTileIndex(
+                            stepPos,
+                            tilesCount,
+                            input.worldPos.z,
+                            isTiling ? 1.0 : 0.0);
+
+                        if (isScrollAnimated)
+                        {
+                            wrappedStep.y = wrapped.y;
+                        }
+
+                        tileOffsetUV = wrappedStep * tileSizeUV;
+                        availableTileSize = min(tileSizeUV, subAtlasSizeUV - tileOffsetUV);
+                    }
+                }
+
+                quadUV.x = clamp(quadUV.x, EPS, 1.0 - EPS);
+                if (!isScrollAnimated || input.packedData.x <= 0.5)
+                {
+                    quadUV.y = clamp(quadUV.y, EPS, 1.0 - EPS);
+                }
 
                 float2 finalUV = baseUV + tileOffsetUV + quadUV * availableTileSize;
                 finalUV.y += animOffsetUV;
@@ -479,7 +522,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
                 float occupancy = isPhysicalMass ? 1.0 : 0.0;
-                float2 contourUV = input.uv;
+                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.zw : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
                         contourUV,
