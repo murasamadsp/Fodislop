@@ -178,6 +178,17 @@
     padding-bottom: 2px;
 }
 
+.pause-subsection {
+    flex-direction: column;
+}
+
+.pause-subsection-title {
+    color: var(--color-accent);
+    font-size: var(--font-size-md);
+    -unity-font-style: bold;
+    margin: 12px 0 6px 0;
+}
+
 .settings-section .unity-label,
 .settings-section .unity-base-field__label,
 .settings-section .unity-toggle__label,

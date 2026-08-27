@@ -1,0 +1,10 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <!-- Оверлеи переподключения и разрыва соединения.
+         Видимость и enabled — рантайм-состояние (переключается кодом). -->
+    <ui:VisualElement name="ReconnectOverlay" class="ui-overlay ui-overlay--blocking ui-overlay-message" picking-mode="Ignore" style="display: none;">
+        <ui:Label name="ReconnectLabel" class="ui-overlay-label" text="Переподключение к серверу..." />
+    </ui:VisualElement>
+    <ui:VisualElement name="DisconnectOverlay" class="ui-overlay ui-overlay--blocking ui-overlay-message" picking-mode="Ignore" style="display: none;">
+        <ui:Label name="DisconnectLabel" class="ui-overlay-label" />
+    </ui:VisualElement>
+</ui:UXML>

@@ -46,10 +46,10 @@ namespace Fodinae.UI
         private float _maxCellsPerPixel = 10f;
 
         [Inject]
-        private IWorldDataStorage? _storage;
+        private IWorldDataStorage _storage = null!;
 
         [Inject]
-        private MapManager? _manager;
+        private MapManager _manager = null!;
         [Inject]
         private UIDocument? _injectedDocument;
         private PlayerMovementController? _player;
@@ -95,8 +95,7 @@ namespace Fodinae.UI
 
             if (_storage == null || _manager == null)
             {
-                throw new InvalidOperationException(
-                    "WorldMapRenderer requires injected IWorldDataStorage and MapManager dependencies.");
+                return;
             }
             if (!_manager.IsWorldInitialized || !_storage.IsReady)
             {
@@ -105,7 +104,7 @@ namespace Fodinae.UI
 
             EnsurePlayerBinding();
 
-            if (!BindUi())
+            if (!BindUI())
             {
                 // PlayerHUDView attaches PlayerHUD.uxml after the shared
                 // UIDocument has been injected. Keep this renderer idle until
@@ -414,7 +413,7 @@ namespace Fodinae.UI
             ClampViewCenter();
         }
 
-        private bool BindUi()
+        private bool BindUI()
         {
             _document = _injectedDocument ??
                 throw new InvalidOperationException(
@@ -428,7 +427,8 @@ namespace Fodinae.UI
 
             _mapOverlay = overlay;
             _mapImage = image;
-            _mapOverlay.style.display = DisplayStyle.Flex;
+            // Видимостью оверлея управляет только Show()/Hide() (WorldMapController):
+            // здесь только биндинг, иначе тёмный оверлей закрывает экран со старта.
             _mapImage.image = null;
             return true;
         }

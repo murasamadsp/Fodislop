@@ -74,7 +74,6 @@ namespace Fodinae.UI
                 stats.OnMissionArrowChanged += OnArrowChanged;
                 if (stats.MissionArrowX.HasValue && stats.MissionArrowY.HasValue)
                 {
-                    Debug.Log($"[MissionArrowUI] Initial arrow target: ({stats.MissionArrowX}, {stats.MissionArrowY})");
                     _targetX = stats.MissionArrowX;
                     _targetY = stats.MissionArrowY;
                     _arrow.style.display = DisplayStyle.Flex;
@@ -111,9 +110,9 @@ namespace Fodinae.UI
                     return;
                 }
 
-                Debug.Log("[MissionArrowUI] Arrow cleared (null target)");
                 _targetX = null;
                 _targetY = null;
+
                 if (_arrow != null)
                 {
                     _arrow.style.display = DisplayStyle.None;
@@ -130,7 +129,6 @@ namespace Fodinae.UI
 
             _targetX = stats.MissionArrowX;
             _targetY = stats.MissionArrowY;
-            Debug.Log($"[MissionArrowUI] Arrow target set: ({_targetX}, {_targetY}), showing element");
             if (_arrow != null)
             {
                 _arrow.style.display = DisplayStyle.Flex;

@@ -20,11 +20,11 @@
                     <ui:Label name="HPPercentLabel" class="hud-stat-percent" text="100%" />
                 </ui:VisualElement>
                 <ui:VisualElement class="sci-fi-bar-track hud-bar-track">
-                    <ui:VisualElement name="HPBarFill" class="sci-fi-bar-fill-hp" style="width: 100%;" />
+                    <ui:VisualElement name="HPBarFill" class="sci-fi-bar-fill-hp" />
                 </ui:VisualElement>
             </ui:VisualElement>
 
-            <!-- Валюта и Баланс -->
+            <!-- Валюта -->
             <ui:VisualElement class="hud-currency-row">
                 <ui:VisualElement class="hud-currency-item">
                     <ui:Label class="hud-currency-icon" text="⛃" />
@@ -55,7 +55,7 @@
             </ui:VisualElement>
             <ui:Label name="MissionDescLabel" class="hud-mission-desc" text="---" />
             <ui:VisualElement class="sci-fi-bar-track hud-mission-track">
-                <ui:VisualElement name="MissionProgressFill" class="sci-fi-bar-fill-cyan" style="width: 0%;" />
+                <ui:VisualElement name="MissionProgressFill" class="sci-fi-bar-fill-cyan" />
             </ui:VisualElement>
             <ui:Label name="MissionProgressLabel" class="hud-mission-progress-text" text="0 / 0" />
         </ui:VisualElement>
@@ -79,10 +79,40 @@
                 <ui:Label text="ЧАТ [ENTER]" />
             </ui:Button>
 
-            <!-- Бонус -->
+            <!-- Бонус (показывается, когда доступен ежедневный бонус) -->
             <ui:Button name="BonusButton" class="sci-fi-btn-gold hud-action-btn" style="display: none;">
                 <ui:Label text="БОНУС!" />
             </ui:Button>
+
+            <!-- Респавн -->
+            <ui:Button name="RespawnButton" class="sci-fi-btn-dark hud-action-btn">
+                <ui:Label text="РЕСПАВН" />
+            </ui:Button>
+
+            <!-- Мои здания -->
+            <ui:Button name="BuildingsButton" class="sci-fi-btn-dark hud-action-btn">
+                <ui:Label text="МОИ ЗДАНИЯ" />
+            </ui:Button>
+
+            <!-- FAQ -->
+            <ui:Button name="FaqButton" class="sci-fi-btn-dark hud-action-btn">
+                <ui:Label text="FAQ" />
+            </ui:Button>
+
+            <!-- Программатор -->
+            <ui:Button name="ProgrammatorButton" class="sci-fi-btn-dark hud-action-btn">
+                <ui:Label text="ПРОГРАММАТОР" />
+            </ui:Button>
+        </ui:VisualElement>
+
+        <!-- ════════════ ПАНЕЛЬ БОНУСОВ (открывается кнопкой «БОНУС!») ════════════ -->
+        <ui:VisualElement name="BonusPanel" class="hud-bonus-panel" style="display: none;">
+            <ui:VisualElement class="hud-title-row">
+                <ui:Label class="hud-stat" text="Бонусы" />
+                <ui:Button name="BonusCloseButton" class="hud-button-close" text="×" />
+            </ui:VisualElement>
+            <ui:Label name="BonusStatusLabel" class="hud-stat hud-stat-wrap" text="Ежедневный бонус: ..." />
+            <ui:Button name="BonusClaimButton" class="hud-button-claim" text="Забрать" style="display: none;" />
         </ui:VisualElement>
 
         <!-- ════════════ СТАТУСНЫЕ ЛИНИИ И ЭФФЕКТЫ ════════════ -->
@@ -91,8 +121,40 @@
         <!-- ════════════ НАВЫКИ И ПРОГРЕСС ════════════ -->
         <ui:VisualElement name="SkillContainer" class="hud-skill-container" />
 
-        <ui:VisualElement name="WorldMapOverlay" class="world-map-overlay" picking-mode="Ignore">
+        <!-- ════════════ КАРТА МИРА (WorldMapRenderer) ════════════ -->
+        <ui:VisualElement name="WorldMapOverlay" class="world-map-overlay" picking-mode="Ignore" style="display: none;">
             <ui:Image name="WorldMapImage" class="world-map-image" picking-mode="Ignore" />
+        </ui:VisualElement>
+
+        <!-- ════════════ ПОПАПЫ ════════════ -->
+        <!-- Респавн -->
+        <ui:VisualElement name="RespawnPopup" class="popup-overlay">
+            <ui:VisualElement class="popup-dimmer" picking-mode="Ignore" />
+            <ui:VisualElement class="popup-panel">
+                <ui:Label class="popup-title" text="Респавн" />
+                <ui:VisualElement class="popup-btn-row">
+                    <ui:Button name="RespawnConfirmButton" class="popup-btn" text="ОК" />
+                    <ui:Button name="RespawnCancelButton" class="popup-btn" text="Назад" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Мои здания -->
+        <ui:VisualElement name="BuildingsPopup" class="popup-overlay">
+            <ui:VisualElement class="popup-dimmer" picking-mode="Ignore" />
+            <ui:VisualElement class="popup-panel">
+                <ui:Label class="popup-title" text="Мои здания" />
+                <ui:Button name="BuildingsCloseButton" class="popup-close-btn" text="Закрыть" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- FAQ -->
+        <ui:VisualElement name="FaqPopup" class="popup-overlay">
+            <ui:VisualElement class="popup-dimmer" picking-mode="Ignore" />
+            <ui:VisualElement class="popup-panel">
+                <ui:Label class="popup-title" text="FAQ" />
+                <ui:Button name="FaqCloseButton" class="popup-close-btn" text="Закрыть" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
     </ui:VisualElement>

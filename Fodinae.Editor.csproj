@@ -53,8 +53,11 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/Scripts/Editor/SceneManagerAuthoring.cs" />
+    <Compile Include="Assets/Scripts/Editor/SceneDefaultsAuthoring.cs" />
+    <Compile Include="Assets/Scripts/Editor/LightingEngineEditor.cs" />
     <Compile Include="Assets/Scripts/Editor/LightingEditModeTestRunner.cs" />
-    <Compile Include="Assets/Scripts/Editor/TerrariaLightingEngineEditor.cs" />
+    <Compile Include="Assets/Scripts/Editor/BootstrapSceneAuthoring.cs" />
     <Compile Include="Assets/Scripts/Editor/InjectValidator.cs" />
   </ItemGroup>
   <ItemGroup>

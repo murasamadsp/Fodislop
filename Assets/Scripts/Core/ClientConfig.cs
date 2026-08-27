@@ -20,8 +20,8 @@ namespace Fodinae.Core
         public float MusicVolume;
         public float AmbienceVolume;
         public float VoiceVolume;
-        public float UiVolume;
-        public float UiScale;
+        public float UIVolume;
+        public float UIScale;
         public string Language = "ru";
         public int ResolutionWidth;
         public int ResolutionHeight;

@@ -56,7 +56,7 @@
                     <ui:Label name="LoaderPhaseCount" class="mm-loader-phase-count" text="1 / 5" />
                 </ui:VisualElement>
                 <ui:VisualElement name="LoaderPhaseList" class="mm-loader-phases" />
-                <ui:Button name="CancelDescentButton" class="mm-btn-outline" text="ОТМЕНИТЬ СПУСК" style="margin-top: 16px; width: 180px;" />
+                <ui:Button name="CancelDescentButton" class="mm-btn-outline" text="ОТМЕНИТЬ СПУСК" />
             </ui:VisualElement>
         </ui:VisualElement>
 
@@ -413,7 +413,7 @@
                     </ui:VisualElement>
                 </ui:VisualElement>
                 <ui:VisualElement class="mm-modal-footer">
-                    <ui:Button name="RunFullRepairButton" class="mm-btn-outline" text="ПЕРЕПРОВЕРИТЬ КЭШ" style="margin-right: 12px;" />
+                    <ui:Button name="RunFullRepairButton" class="mm-btn-outline" text="ПЕРЕПРОВЕРИТЬ КЭШ" />
                     <ui:Button name="ConfirmRepairButton" class="mm-btn-gold" text="ЗАКРЫТЬ" />
                 </ui:VisualElement>
             </ui:VisualElement>
@@ -435,7 +435,7 @@
                             <ui:Label class="mm-profile-uid" text="UID: 4195-F765-6275-458C" />
                         </ui:VisualElement>
                     </ui:VisualElement>
-                    <ui:VisualElement class="mm-card-box" style="margin-top: 16px;">
+                    <ui:VisualElement class="mm-card-box mm-card-box--gap-top">
                         <ui:Label class="mm-card-tag" text="СТАТИСТИКА РАСКОПОК" />
                         <ui:VisualElement class="mm-row-item">
                             <ui:Label class="mm-item-title" text="Глубина максимального спуска" />

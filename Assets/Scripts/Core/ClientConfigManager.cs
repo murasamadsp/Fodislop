@@ -80,12 +80,12 @@ namespace Fodinae.Core
 
         /// <summary>
         /// Forces config load synchronously, without waiting for the next
-        /// Start/Update cycle. This manager is a lazy Bootstrap-tier singleton
-        /// (RegisterComponentOnNewGameObject): it only exists after the first
-        /// Resolve, and its Start() runs a frame later — too late for
-        /// GameBootstrap.PostStart, which reads Config in the same frame the
-        /// manager is created. Injection has already happened by the time
-        /// Resolve returns, so this is safe to call immediately after it.
+        /// Start/Update cycle. This manager is an authored Bootstrap-tier
+        /// singleton (created by BootstrapSceneAuthoring under BootstrapLifetimeScope):
+        /// its Start() runs a frame later — too late for GameBootstrap.PostStart,
+        /// which reads Config in the same frame the manager is created.
+        /// EnsureInitialized is called at Bootstrap startup (BootstrapLifetimeScope.Awake)
+        /// before any game scope is built.
         /// </summary>
         public void EnsureInitialized()
         {
@@ -119,6 +119,8 @@ namespace Fodinae.Core
                     ex);
             }
 
+            json = RenameLegacyKeys(json);
+
             ClientConfig loaded = JsonUtility.FromJson<ClientConfig>(json) ??
                 throw new InvalidDataException($"Client config '{configPath}' is empty or invalid.");
             bool migrated = Migrate(loaded);
@@ -150,8 +152,8 @@ namespace Fodinae.Core
                 MusicVolume = defaults.MusicVolume,
                 AmbienceVolume = defaults.AmbienceVolume,
                 VoiceVolume = defaults.VoiceVolume,
-                UiVolume = defaults.UiVolume,
-                UiScale = defaults.UiScale,
+                UIVolume = defaults.UIVolume,
+                UIScale = defaults.UIScale,
                 GraphicsPreset = graphicsPreset,
                 GraphicsQualitySettings = _graphicsQualityProfile.Get(graphicsPreset),
                 AmbientOcclusionEnabled = lighting.AmbientOcclusionEnabled,
@@ -356,8 +358,8 @@ namespace Fodinae.Core
             ValidateFloat(config.MusicVolume, 0f, 1f, nameof(config.MusicVolume));
             ValidateFloat(config.AmbienceVolume, 0f, 1f, nameof(config.AmbienceVolume));
             ValidateFloat(config.VoiceVolume, 0f, 1f, nameof(config.VoiceVolume));
-            ValidateFloat(config.UiVolume, 0f, 1f, nameof(config.UiVolume));
-            ValidateFloat(config.UiScale, 0.5f, 2f, nameof(config.UiScale));
+            ValidateFloat(config.UIVolume, 0f, 1f, nameof(config.UIVolume));
+            ValidateFloat(config.UIScale, 0.5f, 2f, nameof(config.UIScale));
             if (!Enum.IsDefined(typeof(GraphicsPreset), config.GraphicsPreset))
             {
                 throw new InvalidDataException(
@@ -478,6 +480,23 @@ namespace Fodinae.Core
                 throw new InvalidDataException(
                     $"Client config value 'FullScreenMode' must be a valid FullScreenMode value, got {config.FullScreenMode}.");
             }
+        }
+
+        /// <summary>
+        /// Переименовывает ключи, оставшиеся от старых версий конфига.
+        ///
+        /// JsonUtility сопоставляет JSON с полями ПО ИМЕНИ и молча подставляет
+        /// значение по умолчанию для всего, чего не нашёл. Поэтому переименование
+        /// поля `UiScale` -> `UIScale` без этого шага не выдало бы ошибки — оно
+        /// просто сбросило бы пользователю масштаб интерфейса и громкость UI при
+        /// первом же запуске. Правка идёт по сырому тексту, до десериализации,
+        /// потому что после неё старого ключа уже не существует.
+        /// </summary>
+        private static string RenameLegacyKeys(string json)
+        {
+            return json
+                .Replace("\"UiScale\"", "\"UIScale\"")
+                .Replace("\"UiVolume\"", "\"UIVolume\"");
         }
 
         private bool Migrate(ClientConfig config)

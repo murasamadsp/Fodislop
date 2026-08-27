@@ -49,7 +49,7 @@
 
 ### 4. GPU Radiance Cascades (Global Illumination)
 
-- **Файлы:** `TerrariaLightingEngine.cs`, `WorldLighting.compute`
+- **Файлы:** `LightingEngine.cs`, `WorldLighting.compute`
 - **Задача:** Расчет 2D глобального освещения чистым физическим пайплайном:
   1. `SolveAutomaticNormals` — вектор нормалей по градиенту плотности (с Y-flip на Metal).
   2. `SolveCascade` — иерархический лучевой марш (каскады 0..3) со слиянием радиальных интервалов и естественным физическим затенением.

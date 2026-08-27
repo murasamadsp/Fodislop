@@ -21,17 +21,17 @@ namespace Fodinae.Game.Managers
     {
         private Camera? _mainCamera;
         private IWorldDataStorage _worldStorage = null!;
-        private PackManager _packManager = null!;
+        private BuildingManager _buildingManager = null!;
         private IRobotService _robotService = null!;
         private ISessionContainer _session = null!;
         private bool _hasWorldStorage;
 
         [Inject]
-        public void Construct(IWorldDataStorage worldStorage, PackManager packManager, IRobotService robotService, ISessionContainer session)
+        public void Construct(IWorldDataStorage worldStorage, BuildingManager packManager, IRobotService robotService, ISessionContainer session)
         {
             _worldStorage = worldStorage;
             _hasWorldStorage = true;
-            _packManager = packManager;
+            _buildingManager = packManager;
             _robotService = robotService;
             _session = session;
         }
@@ -90,7 +90,7 @@ namespace Fodinae.Game.Managers
 
             _worldStorage = storage ?? throw new ArgumentNullException(nameof(storage));
             _hasWorldStorage = true;
-            _packManager = null!;
+            _buildingManager = null!;
             _robotService = null!;
             _session = null!;
             IsStandaloneMode = true;
@@ -154,7 +154,7 @@ namespace Fodinae.Game.Managers
         {
             UnityEngine.Debug.Log($"[Probe] WorldInit {UnityEngine.Time.realtimeSinceStartup:F3}");
             IsWorldInitialized = false;
-            _packManager?.ClearAllPacks();
+            _buildingManager?.ClearAllBuildings();
             _robotService?.ClearAllRobots();
             _session?.TryResolve<IServerAudioService>()?.ClearAllEffects();
 

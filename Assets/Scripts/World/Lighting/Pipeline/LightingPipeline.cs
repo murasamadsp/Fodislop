@@ -9,7 +9,7 @@ namespace Fodinae.World.Lighting.Pipeline
     /// command buffer. Not a multi-stage sequencer: the engine's own
     /// dirty-flag orchestration decides which stage runs when and in what
     /// order (that control flow is load-bearing and stays in
-    /// <c>TerrariaLightingEngine.UpdateLighting</c>) - this type exists so a
+    /// <c>LightingEngine.UpdateLighting</c>) - this type exists so a
     /// stage is invoked the same way regardless of which one it is, which is
     /// what makes swapping a stage's implementation a one-line change at the
     /// call site instead of an edit to the orchestration itself.

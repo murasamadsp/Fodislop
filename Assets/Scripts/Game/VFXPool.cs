@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
@@ -44,10 +45,24 @@ namespace Fodinae.Game
 
         [Inject]
         private WorldEntityBatchRenderer _entityBatchRenderer = null!;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         protected void Awake()
         {
-            InitializePools();
+        }
+
+        protected void Start()
+        {
+            EnsureInitialized();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_pools.Count == 0 && _sceneObjects != null && _entityBatchRenderer != null)
+            {
+                InitializePools();
+            }
         }
 
         protected void OnDestroy()
@@ -58,6 +73,17 @@ namespace Fodinae.Game
             }
 
             _pools.Clear();
+        }
+
+        public void ResetForNewGeneration()
+        {
+            foreach (SubPool pool in _pools.Values)
+            {
+                TeardownSubPool(pool);
+            }
+
+            _pools.Clear();
+            InitializePools();
         }
 
         protected void Update()
@@ -249,7 +275,11 @@ namespace Fodinae.Game
 
         private void DestroyPooledSlot(PooledSlot slot)
         {
-            _entityBatchRenderer.UnregisterSprite(slot.BatchHandle);
+            if (_entityBatchRenderer != null && slot.BatchHandle != null)
+            {
+                _entityBatchRenderer.UnregisterSprite(slot.BatchHandle);
+            }
+
             if (slot.GameObject != null)
             {
                 Destroy(slot.GameObject);
@@ -258,23 +288,18 @@ namespace Fodinae.Game
 
         private PooledSlot CreatePooledSlot(SubPool pool)
         {
-            var go = new GameObject($"PooledVFX_{pool.VfxType}");
+            GameObject go = _sceneObjects.Create($"PooledVFX_{pool.VfxType}", RuntimeOwner.Vfx);
             go.SetActive(false);
 
-            if (Application.isPlaying)
-            {
-                DontDestroyOnLoad(go);
-            }
-
-            WorldEntityBatchRenderer.SpriteHandle handle =
-                _entityBatchRenderer.RegisterSprite(go.transform, -500);
+            WorldEntityBatchRenderer.SpriteHandle? handle =
+                _entityBatchRenderer?.RegisterSprite(go.transform, -500);
 
             return new PooledSlot
             {
                 VfxType = pool.VfxType,
                 GameObject = go,
-                EntityBatchRenderer = _entityBatchRenderer,
-                BatchHandle = handle,
+                EntityBatchRenderer = _entityBatchRenderer!,
+                BatchHandle = handle!,
                 PlayStartTime = 0f,
                 IsInPool = true,
             };
@@ -282,6 +307,11 @@ namespace Fodinae.Game
 
         private void SpawnToTargetSize(SubPool pool)
         {
+            if (_sceneObjects == null || _entityBatchRenderer == null)
+            {
+                return;
+            }
+
             var total = pool.Available.Count + pool.Active.Count;
             var needed = pool.TargetSize - total;
 

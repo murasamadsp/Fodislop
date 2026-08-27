@@ -4,7 +4,10 @@
 
 .hud-root {
     position: absolute;
-    flex-grow: 1;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
 }
 
 .world-map-overlay {
@@ -726,6 +729,10 @@
     margin-bottom: 4px;
 }
 
+#MissionProgressFill {
+    width: 0%;
+}
+
 .hud-mission-progress-text {
     -unity-font-definition: var(--font-mono);
     color: var(--scifi-cyan);
@@ -756,6 +763,27 @@
 
 .hud-mode-led--active {
     background-color: var(--scifi-cyan-bright);
+}
+
+/* Статусные линии (справа от панели игрока) */
+.hud-status-container {
+    position: absolute;
+    top: 16px;
+    left: 308px;
+    width: 240px;
+    flex-direction: column;
+}
+
+/* Панель бонусов (слева от колонки действий). left: auto обязателен:
+   базовый .hud-bonus-panel из старой секции ставит left: 256px, и при
+   заданных left+width+right переопределяется только один из трёх. */
+.hud-bonus-panel {
+    position: absolute;
+    top: 16px;
+    left: auto;
+    right: 192px;
+    width: 240px;
+    padding: 12px;
 }
 
 /* ─── Системная миникарта (UI Toolkit) ─── */

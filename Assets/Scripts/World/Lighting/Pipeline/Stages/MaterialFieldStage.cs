@@ -11,7 +11,7 @@ namespace Fodinae.World.Lighting.Pipeline.Stages
     /// verbatim from the "rebuildFields" block inside the engine's former
     /// inline <c>UpdateLighting</c>. The decision of whether a rebuild is
     /// needed this frame (field/region/geometry dirty) stays in
-    /// <c>TerrariaLightingEngine.UpdateLighting</c>, same as every other
+    /// <c>LightingEngine.UpdateLighting</c>, same as every other
     /// extracted stage's dispatch condition.
     /// </summary>
     public sealed class MaterialFieldStage : ILightingStage

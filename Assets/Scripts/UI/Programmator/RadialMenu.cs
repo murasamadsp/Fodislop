@@ -43,77 +43,26 @@ namespace Fodinae.UI.Programmator
 
         public RadialMenu()
         {
-            _root = new VisualElement();
-            _root.AddToClassList("prog-radial-root");
-            _root.pickingMode = PickingMode.Ignore;
+            // Static skeleton (rings, containers, back button) lives in
+            // RadialMenu.uxml; items of both rings are positioned dynamically
+            // in code, so only the skeleton is cloned here.
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/RadialMenu") ??
+                throw new InvalidOperationException(
+                    "[RadialMenu] Resources/UI/RadialMenu.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+            tree.AddToClassList("prog-radial-root");
+            tree.pickingMode = PickingMode.Ignore;
+            _root = tree;
 
-            // Outer ring background — hidden until SetOuterItems()
-            _outerRingBg = AddRing(_outerRadius, _itemSize, new Color(0.08f, 0.08f, 0.08f, 0.45f));
-            _outerRingBg.style.display = DisplayStyle.None;
-
-            // Outer container for outer ring items
-            _outerContainer = new VisualElement();
-            _outerContainer.AddToClassList("prog-radial-fill");
-            _outerContainer.pickingMode = PickingMode.Ignore;
-            _root.Add(_outerContainer);
-
-            // Inner ring background (rendered on top of outer items)
-            AddRing(_innerRadius, _itemSize, new Color(0.12f, 0.12f, 0.12f, 0.5f));
-
-            // Inner container for inner ring items
-            _innerContainer = new VisualElement();
-            _innerContainer.AddToClassList("prog-radial-fill");
-            _innerContainer.pickingMode = PickingMode.Ignore;
-            _root.Add(_innerContainer);
-
-            // Back button — centered, hidden by default
-            _backButton = new VisualElement();
-            _backButton.AddToClassList("prog-radial-back");
-            float bbPos = _center - (_itemSize / 2f);
-            _backButton.style.left = bbPos;
-            _backButton.style.top = bbPos;
-            _backButton.pickingMode = PickingMode.Position;
-            _backButton.style.display = DisplayStyle.None;
-
-            var backLabel = new Label("\u2190");
-            backLabel.AddToClassList("prog-radial-back-label");
-            backLabel.pickingMode = PickingMode.Ignore;
-            _backButton.Add(backLabel);
-
+            _outerRingBg = _root.Q<VisualElement>("OuterRingBg") ??
+                throw new InvalidOperationException("[RadialMenu] OuterRingBg is missing from RadialMenu.uxml.");
+            _outerContainer = _root.Q<VisualElement>("OuterContainer") ??
+                throw new InvalidOperationException("[RadialMenu] OuterContainer is missing from RadialMenu.uxml.");
+            _innerContainer = _root.Q<VisualElement>("InnerContainer") ??
+                throw new InvalidOperationException("[RadialMenu] InnerContainer is missing from RadialMenu.uxml.");
+            _backButton = _root.Q<VisualElement>("RadialBackButton") ??
+                throw new InvalidOperationException("[RadialMenu] RadialBackButton is missing from RadialMenu.uxml.");
             _backButton.RegisterCallback<PointerDownEvent>(_ => OnBackClicked?.Invoke());
-
-            _root.Add(_backButton);
-        }
-
-        /// <summary>
-        /// Adds a donut-shaped background ring at the given radius with given thickness.
-        /// Uses border-radius/border-width trick to render a ring.
-        /// </summary>
-        private VisualElement AddRing(float ringRadius, float thickness, Color color)
-        {
-            float ringSize = (ringRadius + (thickness / 2f)) * 2f;
-            var ring = new VisualElement();
-            ring.style.position = Position.Absolute;
-            ring.style.left = _center - (ringSize / 2f);
-            ring.style.top = _center - (ringSize / 2f);
-            ring.style.width = ringSize;
-            ring.style.height = ringSize;
-            ring.style.borderTopLeftRadius = ringSize / 2f;
-            ring.style.borderTopRightRadius = ringSize / 2f;
-            ring.style.borderBottomLeftRadius = ringSize / 2f;
-            ring.style.borderBottomRightRadius = ringSize / 2f;
-            ring.style.borderTopWidth = thickness;
-            ring.style.borderBottomWidth = thickness;
-            ring.style.borderLeftWidth = thickness;
-            ring.style.borderRightWidth = thickness;
-            ring.style.borderTopColor = color;
-            ring.style.borderBottomColor = color;
-            ring.style.borderLeftColor = color;
-            ring.style.borderRightColor = color;
-            ring.pickingMode = PickingMode.Ignore;
-            ring.name = $"radial_ring_{ringRadius}";
-            _root.Add(ring);
-            return ring;
         }
 
         public void SetInnerItems(int[] ids, Color[]? colors = null)

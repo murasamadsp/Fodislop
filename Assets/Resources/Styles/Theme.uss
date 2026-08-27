@@ -1048,6 +1048,15 @@ Button.mm-btn-outline:hover {
     color: white;
 }
 
+#CancelDescentButton {
+    margin-top: 16px;
+    width: 180px;
+}
+
+#RunFullRepairButton {
+    margin-right: 12px;
+}
+
 /* ── Список серверов ── */
 .mm-server-list {
     flex-direction: column;
@@ -1177,6 +1186,10 @@ Button.mm-btn-outline:hover {
     border-radius: 4px;
     padding: 14px;
     margin-bottom: 12px;
+}
+
+.mm-card-box--gap-top {
+    margin-top: 16px;
 }
 
 .mm-card-tag {

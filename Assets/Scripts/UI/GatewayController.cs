@@ -3,8 +3,8 @@
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 using VContainer;
 
@@ -26,7 +26,6 @@ namespace Fodinae.UI
     public sealed class GatewayController : MonoBehaviour
     {
         private const string MainMenuSceneName = "MainMenu";
-        private const string GatewaySceneName = "Gateway";
         private const string OnboardingDonePrefsKey = "OnboardingCompleted1";
 
         // Состояние ворот. Ровно один класс на корне за раз: раньше видимость
@@ -66,7 +65,7 @@ namespace Fodinae.UI
         /// всего на телевизорах и консолях, где Screen.dpi обычно 0 и в дело
         /// идёт fallbackDpi. Зум здесь и есть ручная поправка на такой случай.
         /// </summary>
-        private static readonly (string Label, float Value)[] UiScales =
+        private static readonly (string Label, float Value)[] UIScales =
         {
             ("100% (Штатный)", 1.00f),
             ("115% (Увеличенный)", 1.15f),
@@ -80,16 +79,59 @@ namespace Fodinae.UI
         private AuthGate? _authGate;
         private int _step;
         private bool _leaving;
+        private bool _initialized;
 
         [Inject]
         private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private ISceneCoordinator _sceneCoordinator = null!;
 
-        // Start, а не OnEnable: дерево строится здесь же, и порядок OnEnable
-        // между UIDocument и этим компонентом зависел бы от порядка компонентов
-        // в сцене. Start гарантированно идёт после всех OnEnable.
+        [Inject]
+        public void Construct(IClientConfigManager clientConfig, ISceneCoordinator sceneCoordinator)
+        {
+            _clientConfig = clientConfig;
+            _sceneCoordinator = sceneCoordinator;
+            EnsureInitialized();
+        }
+
+        private void OnEnable()
+        {
+            if (_clientConfig == null || _sceneCoordinator == null)
+            {
+                return;
+            }
+
+            _document = GetComponent<UIDocument>();
+            if (_document != null && _document.rootVisualElement != null && _document.rootVisualElement.childCount == 0)
+            {
+                _initialized = false;
+            }
+
+            EnsureInitialized();
+        }
+
         private void Start()
         {
+            EnsureInitialized();
+        }
+
+        private void EnsureInitialized()
+        {
+            if (_clientConfig == null || _sceneCoordinator == null)
+            {
+                return;
+            }
+
             _document = GetComponent<UIDocument>();
+            if (_document == null || _document.rootVisualElement == null)
+            {
+                return;
+            }
+
+            if (_initialized && _document.rootVisualElement.childCount > 0)
+            {
+                return;
+            }
 
             var asset = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.GatewayUxml);
             if (asset == null)
@@ -100,6 +142,12 @@ namespace Fodinae.UI
             }
 
             _root = _document.rootVisualElement;
+            if (_root == null)
+            {
+                return;
+            }
+
+            _initialized = true;
             _root.Clear();
 
             VisualElement tree = asset.CloneTree();
@@ -107,7 +155,7 @@ namespace Fodinae.UI
             _root.Add(tree);
 
             // Тир раскладки вместо @media — как и в остальных экранах.
-            UiLayoutTier.Attach(tree);
+            UILayoutTier.Attach(tree);
             _root = tree;
 
             // Состояние ставится на тот же элемент, на котором оно задано в
@@ -125,11 +173,12 @@ namespace Fodinae.UI
 
             _authGate.Passed += OnAuthPassed;
 
-            ApplySavedUiScale();
+            ApplySavedUIScale();
             BindOnboarding();
 
             SetState(StateAuthClass);
             _authGate.Show();
+            Debug.Log("[Gateway] Gateway UI initialized and displayed.");
         }
 
         private void OnAuthPassed()
@@ -165,6 +214,11 @@ namespace Fodinae.UI
 
         private void BindOnboarding()
         {
+            if (_clientConfig == null)
+            {
+                return;
+            }
+
             _onboardingOverlay = _root.Q<VisualElement>("OnboardingOverlay");
             if (_onboardingOverlay == null)
             {
@@ -173,21 +227,21 @@ namespace Fodinae.UI
 
             ClientConfig config = _clientConfig.Config;
 
-            var uiScale = _root.Q<DropdownField>("OnbUiScale");
+            var uiScale = _root.Q<DropdownField>("OnbUIScale");
             if (uiScale != null)
             {
                 var labels = new System.Collections.Generic.List<string>();
-                foreach ((string label, float _) in UiScales)
+                foreach ((string label, float _) in UIScales)
                 {
                     labels.Add(label);
                 }
 
                 uiScale.choices = labels;
-                uiScale.index = IndexOfUiScale(config.UiScale);
+                uiScale.index = IndexOfUIScale(config.UIScale);
 
                 // Применяем сразу при выборе, а не по кнопке «Далее»: смысл
                 // этой настройки в том, чтобы увидеть результат на себе.
-                uiScale.RegisterValueChangedCallback(_ => ApplyUiScale(ValueOfUiScale(uiScale.index)));
+                uiScale.RegisterValueChangedCallback(_ => ApplyUIScale(ValueOfUIScale(uiScale.index)));
             }
 
             var frameRate = _root.Q<DropdownField>("OnbFrameRate");
@@ -303,10 +357,10 @@ namespace Fodinae.UI
         {
             _clientConfig.UpdateAndSave(config =>
             {
-                var uiScale = _root.Q<DropdownField>("OnbUiScale");
+                var uiScale = _root.Q<DropdownField>("OnbUIScale");
                 if (uiScale != null)
                 {
-                    config.UiScale = ValueOfUiScale(uiScale.index);
+                    config.UIScale = ValueOfUIScale(uiScale.index);
                 }
 
                 var frameRate = _root.Q<DropdownField>("OnbFrameRate");
@@ -335,16 +389,21 @@ namespace Fodinae.UI
         /// силу лишь после того, как игрок хоть раз открыл паузу уже в игре,
         /// а ворота и меню всегда рисовались со стопроцентным масштабом.
         /// </summary>
-        private void ApplySavedUiScale()
+        private void ApplySavedUIScale()
         {
-            float saved = _clientConfig.Config.UiScale;
+            if (_clientConfig == null)
+            {
+                return;
+            }
+
+            float saved = _clientConfig.Config.UIScale;
 
             // Ноль означает «в конфиге ничего нет» — множитель ноль погасил бы
             // весь интерфейс, поэтому такое значение трактуем как штатное.
-            ApplyUiScale(saved <= 0f ? 1f : saved);
+            ApplyUIScale(saved <= 0f ? 1f : saved);
         }
 
-        private void ApplyUiScale(float scale)
+        private void ApplyUIScale(float scale)
         {
             PanelSettings? panel = _document.panelSettings;
             if (panel == null)
@@ -356,16 +415,16 @@ namespace Fodinae.UI
             panel.scale = Mathf.Clamp(scale, 0.5f, 2f);
         }
 
-        private static float ValueOfUiScale(int index)
+        private static float ValueOfUIScale(int index)
         {
-            return index >= 0 && index < UiScales.Length ? UiScales[index].Value : 1f;
+            return index >= 0 && index < UIScales.Length ? UIScales[index].Value : 1f;
         }
 
-        private static int IndexOfUiScale(float value)
+        private static int IndexOfUIScale(float value)
         {
-            for (int i = 0; i < UiScales.Length; i++)
+            for (int i = 0; i < UIScales.Length; i++)
             {
-                if (Mathf.Abs(UiScales[i].Value - value) < 0.001f)
+                if (Mathf.Abs(UIScales[i].Value - value) < 0.001f)
                 {
                     return i;
                 }
@@ -404,25 +463,14 @@ namespace Fodinae.UI
 
         private async UniTaskVoid LoadMainMenuAsync()
         {
-            Scene menu = SceneManager.GetSceneByName(MainMenuSceneName);
-            if (!menu.isLoaded)
+            if (_sceneCoordinator == null)
             {
-                await SceneManager.LoadSceneAsync(MainMenuSceneName, LoadSceneMode.Additive).ToUniTask();
-                menu = SceneManager.GetSceneByName(MainMenuSceneName);
+                return;
             }
 
-            if (menu.IsValid() && menu.isLoaded)
-            {
-                SceneManager.SetActiveScene(menu);
-            }
-
-            // Выгружаемся последними: пока сцена ворот жива, её камера держит
-            // экран и игрок не видит чёрного кадра между сценами.
-            Scene gateway = SceneManager.GetSceneByName(GatewaySceneName);
-            if (gateway.IsValid() && gateway.isLoaded)
-            {
-                await SceneManager.UnloadSceneAsync(gateway).ToUniTask();
-            }
+            await _sceneCoordinator.TransitionAsync(
+                MainMenuSceneName,
+                destroyCancellationToken);
         }
     }
 }

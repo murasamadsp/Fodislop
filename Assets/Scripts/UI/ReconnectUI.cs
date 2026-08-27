@@ -63,31 +63,27 @@ namespace Fodinae.UI
 
         private void CreateUI()
         {
-            _reconnectOverlay = new VisualElement();
-            ApplyOverlayState(_reconnectOverlay);
+            // Статическая структура (два оверлея с лейблами) живёт в Reconnect.uxml;
+            // здесь только клон и биндинги. Видимость и enabled — рантайм-состояние.
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/Reconnect") ??
+                throw new InvalidOperationException(
+                    "[ReconnectUI] Resources/UI/Reconnect.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+
+            _reconnectOverlay = tree.Q<VisualElement>("ReconnectOverlay") ??
+                throw new InvalidOperationException("[ReconnectUI] ReconnectOverlay is missing from Reconnect.uxml.");
+            _disconnectOverlay = tree.Q<VisualElement>("DisconnectOverlay") ??
+                throw new InvalidOperationException("[ReconnectUI] DisconnectOverlay is missing from Reconnect.uxml.");
+            _reconnectLabel = tree.Q<Label>("ReconnectLabel") ??
+                throw new InvalidOperationException("[ReconnectUI] ReconnectLabel is missing from Reconnect.uxml.");
+            _disconnectLabel = tree.Q<Label>("DisconnectLabel") ??
+                throw new InvalidOperationException("[ReconnectUI] DisconnectLabel is missing from Reconnect.uxml.");
+
+            _reconnectOverlay.SetEnabled(false);
+            _disconnectOverlay.SetEnabled(false);
+
             _doc.rootVisualElement.Add(_reconnectOverlay);
-
-            _reconnectLabel = new Label("Переподключение к серверу...");
-            _reconnectLabel.AddToClassList("ui-overlay-label");
-            _reconnectOverlay.Add(_reconnectLabel);
-
-            _disconnectOverlay = new VisualElement();
-            ApplyOverlayState(_disconnectOverlay);
             _doc.rootVisualElement.Add(_disconnectOverlay);
-
-            _disconnectLabel = new Label();
-            _disconnectLabel.AddToClassList("ui-overlay-label");
-            _disconnectOverlay.Add(_disconnectLabel);
-        }
-
-        private static void ApplyOverlayState(VisualElement overlay)
-        {
-            overlay.AddToClassList("ui-overlay");
-            overlay.AddToClassList("ui-overlay--blocking");
-            overlay.AddToClassList("ui-overlay-message");
-            overlay.SetEnabled(false);
-            overlay.style.display = DisplayStyle.None;
-            overlay.pickingMode = PickingMode.Ignore;
         }
 
         public void ShowReconnecting(string status)

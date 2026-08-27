@@ -229,6 +229,7 @@ namespace Fodinae.Rendering.PostProcessing
             public Vector4 Temporal;
             public bool HistoryValid;
             public bool TemporalActive;
+            public float TimeSeconds;
         }
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -304,7 +305,9 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
+            var activeColorDesc = resourceData.activeColorTexture.GetDescriptor(renderGraph);
             var desc = cameraData.cameraTargetDescriptor;
+            desc.graphicsFormat = activeColorDesc.colorFormat;
             desc.depthBufferBits = 0;
             desc.msaaSamples = 1;
             desc.bindMS = false;
@@ -452,24 +455,25 @@ namespace Fodinae.Rendering.PostProcessing
                         mbActive ? mb.intensity.value : 0f)
                     : Vector4.zero;
                 passData.TemporalActive = temporalActive;
+                passData.TimeSeconds = Time.time;
 
                 builder.UseTexture(passData.ColorTexture, AccessFlags.ReadWrite);
-                builder.UseTexture(passData.IntermediateTexture, AccessFlags.Write);
+                builder.UseTexture(passData.IntermediateTexture, AccessFlags.ReadWrite);
                 if (passData.TemporalActive)
                 {
                     builder.UseTexture(passData.HistoryTexture, AccessFlags.ReadWrite);
                 }
                 if (passData.BloomActive)
                 {
-                    builder.UseTexture(passData.BloomPrefilterTexture, AccessFlags.Write);
+                    builder.UseTexture(passData.BloomPrefilterTexture, AccessFlags.ReadWrite);
                     for (int i = 0; i < passData.BloomDownTextures.Length; i++)
                     {
-                        builder.UseTexture(passData.BloomDownTextures[i], AccessFlags.Write);
+                        builder.UseTexture(passData.BloomDownTextures[i], AccessFlags.ReadWrite);
                     }
 
                     for (int i = 0; i < passData.BloomUpTextures.Length; i++)
                     {
-                        builder.UseTexture(passData.BloomUpTextures[i], AccessFlags.Write);
+                        builder.UseTexture(passData.BloomUpTextures[i], AccessFlags.ReadWrite);
                     }
                 }
 
@@ -625,14 +629,14 @@ namespace Fodinae.Rendering.PostProcessing
                         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauDarknessThresholdID, data.EigengrauDarknessThreshold);
                         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauNoiseScaleID, data.EigengrauNoiseScale);
                         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauAnimationSpeedID, data.EigengrauAnimationSpeed);
-                        cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, Time.time);
+                        cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
                     }
 
                     cmd.SetComputeVectorParam(data.PostProcessCS, Advanced0ID, data.Advanced0);
                     cmd.SetComputeVectorParam(data.PostProcessCS, Advanced1ID, data.Advanced1);
                     cmd.SetComputeVectorParam(data.PostProcessCS, Advanced2ID, data.Advanced2);
                     cmd.SetComputeVectorParam(data.PostProcessCS, Advanced3ID, data.Advanced3);
-                    cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, Time.time);
+                    cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
                     cmd.SetComputeVectorParam(data.PostProcessCS, TemporalID, data.Temporal);
                     if (data.TemporalActive && data.HistoryValid)
                     {

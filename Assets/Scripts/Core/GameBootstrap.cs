@@ -4,6 +4,7 @@ using System;
 using Fodinae.Audio.Backend;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
@@ -31,11 +32,14 @@ namespace Fodinae.Core
     /// Выполняет инициализацию после полной сборки DI-графа, включая инжект
     /// [Inject]-полей существующих scene-компонентов (InjectSceneBehaviours).
     ///
-    /// Причина существования: резолвить менеджеры и собирать UI прямо в build-callback'е
-    /// (внутри Build()) опасно — лениво создаваемые через RegisterComponentOnNewGameObject
-    /// singletons строятся с побочным эффектом Awake, и резолв на ещё не построенный
-    /// Lazy даёт reentrancy ("ValueFactory attempted to access Value property").
-    /// После завершения Build() любой резолв безопасен — весь граф уже всев.
+    /// All managers are authored as scene objects under ServicesRoot and registered
+    /// via RegisterComponent during GameLifetimeScope.Configure. PostStart merely
+    /// resolves them in the deterministic order that preserves construction
+    /// contracts. Running resolves in the build callback would be dangerous
+    /// because the container graph isn't fully wired yet — any Resolve there
+    /// could trigger reentrancy before all registrations are visible.
+    /// After Build() completes, every Resolve is safe since the entire
+    /// graph is already assembled.
     /// </summary>
     public sealed class GameBootstrap : IPostStartable
     {
@@ -54,20 +58,25 @@ namespace Fodinae.Core
         {
             _session.Set(_resolver);
 
-            // ClientConfigManager is a lazy Bootstrap-tier singleton: the first Resolve
-            // creates it, and its Start() only runs on the NEXT frame. Everything below
-            // (ConnectionManager, PostProcessController, TerrariaLightingEngine, ...)
-            // reads ClientConfig.Config this frame, so force it to exist and load now.
-            // Without this, PostStart throws "ClientConfig is not initialized" and the
-            // world starts without lighting config and post-processing.
+            // ClientConfigManager is an authored Bootstrap-tier singleton: it exists
+            // after BootstrapLifetimeScope.Awake calls EnsureInitialized, but its
+            // Start() runs a frame later. Everything below (ConnectionManager,
+            // PostProcessController, LightingEngine, ...) reads ClientConfig.Config
+            // this frame, so force it to exist and load now. Without this, PostStart
+            // throws "ClientConfig is not initialized" and the world starts without
+            // lighting config and post-processing.
             _resolver.Resolve<IClientConfigManager>().EnsureInitialized();
 
-            // Managers not already present in the scene get created lazily on first
-            // Resolve() below via RegisterComponentOnNewGameObject, and Unity places new
-            // GameObjects into whatever scene is active. Additive loads don't switch the
-            // active scene on their own, so without this, managers created here would land
-            // in whatever scene loaded us (e.g. a menu) and get destroyed when it unloads.
+            // All managers are authored under ServicesRoot and resolved here in a
+            // deterministic order that preserves construction contracts.
+            // Managers resolve to existing scene objects — no lazy creation happens.
+            // SetActiveScene is still needed so that SceneObjectFactory.Create calls
+            // during construction (e.g. Robot nicknames, VFX pools) land in _ownScene,
+            // not whatever scene is currently active from an additive load.
             SceneManager.SetActiveScene(_ownScene);
+
+            ContentSceneRoot? sceneRoot = FindInScene<ContentSceneRoot>();
+            sceneRoot?.BindResolver(_resolver);
 
 
             // Injects [Inject] fields on pre-existing scene MonoBehaviours (e.g. CameraFollow)
@@ -99,6 +108,31 @@ namespace Fodinae.Core
                 }
             }
 
+            ResolvePlayerAndWorldServices();
+            ResolveUIServices();
+            GameManager gameManager = ResolveGameplayServices();
+
+            // UI создаётся ПОСЛЕ того как все менеджеры-синглтоны уже построены и контейнер
+            // полностью собран. Повторная инъекция не пере-резолвит
+            // ничего, что находится в процессе построения.
+            gameManager.EnsureUISetup();
+
+            if (_resolver.TryResolve<TerrainRenderer>(out TerrainRenderer? terrainRenderer))
+            {
+                terrainRenderer.EnsureSubscriptions();
+            }
+
+            ValidateStartup(_resolver);
+        }
+
+        /// <summary>
+        /// The order of calls in this and the neighboring Resolve phases is
+        /// significant: it preserves construction dependencies between managers.
+        /// Phases exist only for readability — reordering within them or
+        /// swapping phase order is not permitted.
+        /// </summary>
+        private void ResolvePlayerAndWorldServices()
+        {
             var audioSystem = _resolver.Resolve<AudioSystem>();
             audioSystem.ApplySavedBusVolumes();
             _resolver.Resolve<IPlayerStats>();
@@ -107,7 +141,10 @@ namespace Fodinae.Core
             _resolver.Resolve<TerrainRenderer>();
             _resolver.Resolve<WorldBackgroundSetup>();
             _resolver.Resolve<WorldEntityBatchRenderer>();
+        }
 
+        private void ResolveUIServices()
+        {
             // UI-сервисы создаём до GameManager: SetupUI только активирует уже
             // зарегистрированные компоненты и не создаёт дубликаты.
             _resolver.Resolve<GlobalChatUI>();
@@ -130,37 +167,33 @@ namespace Fodinae.Core
             PostProcessController postProcessController =
                 _resolver.Resolve<PostProcessController>();
             postProcessController.EnsureVolumeSetup();
+        }
 
+        private GameManager ResolveGameplayServices()
+        {
             var gameManager = _resolver.Resolve<GameManager>();
             _resolver.Resolve<ServerConfig>();
-            var lightingEngine = _resolver.Resolve<TerrariaLightingEngine>();
+            var lightingEngine = _resolver.Resolve<LightingEngine>();
             lightingEngine.EnsureInitialized();
             _resolver.Resolve<SurfaceRenderer>();
             _resolver.Resolve<TextureStorageManager>();
             _resolver.Resolve<WorldTextureManager>();
             _resolver.Resolve<ServerAudioEventManager>();
             _resolver.Resolve<VFXPool>();
-            _resolver.Resolve<PackManager>();
+            _resolver.Resolve<BuildingManager>();
             _resolver.Resolve<RobotManager>();
-
-            // UI создаётся ПОСЛЕ того как все менеджеры-синглтоны уже построены и контейнер
-            // полностью собран. Повторная инъекция не пере-резолвит
-            // ничего, что находится в процессе построения.
-            gameManager.EnsureUISetup();
-
-            if (_resolver.TryResolve<TerrainRenderer>(out TerrainRenderer? terrainRenderer))
-            {
-                terrainRenderer.EnsureSubscriptions();
-            }
-
-            ValidateStartup(_resolver);
+            return gameManager;
         }
 
         private void InjectSceneBehaviours()
         {
+            // Reused across roots: the array-returning overload allocates a fresh
+            // MonoBehaviour[] per root, and a loaded scene has many.
+            var behaviours = new System.Collections.Generic.List<MonoBehaviour>();
             foreach (GameObject root in _ownScene.GetRootGameObjects())
             {
-                foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+                root.GetComponentsInChildren(true, behaviours);
+                foreach (MonoBehaviour behaviour in behaviours)
                 {
                     if (behaviour == null || behaviour is LifetimeScope)
                     {
@@ -170,6 +203,21 @@ namespace Fodinae.Core
                     _resolver.Inject(behaviour);
                 }
             }
+        }
+
+        private T? FindInScene<T>()
+            where T : Component
+        {
+            foreach (GameObject root in _ownScene.GetRootGameObjects())
+            {
+                T? component = root.GetComponentInChildren<T>(true);
+                if (component != null)
+                {
+                    return component;
+                }
+            }
+
+            return null;
         }
 
         private void ValidateStartup(IObjectResolver resolver)
@@ -250,9 +298,9 @@ namespace Fodinae.Core
                 errors.Add("PostProcessController not found — screen post-processing will NOT run");
             }
 
-            if (!resolver.TryResolve<TerrariaLightingEngine>(out _))
+            if (!resolver.TryResolve<LightingEngine>(out _))
             {
-                errors.Add("TerrariaLightingEngine not found — world lighting will NOT run");
+                errors.Add("LightingEngine not found — world lighting will NOT run");
             }
 
             ValidateRenderAssets(errors);

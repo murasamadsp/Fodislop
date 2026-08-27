@@ -21,6 +21,7 @@ namespace Fodinae.World
         [Inject]
         private SurfaceRenderer? _surfaceRenderer;
         private bool _surfaceRendererSetupStarted;
+        private bool _surfaceRendererSetupSucceeded;
         private bool _surfaceSetupFailureLogged;
 
         protected void Start()
@@ -30,6 +31,8 @@ namespace Fodinae.World
 
         protected void Update()
         {
+            // The success latch keeps _surfaceRendererSetupStarted set, so the
+            // started guard alone already covers the completed case.
             if (!_surfaceRendererSetupStarted)
             {
                 TryInitialize();
@@ -104,6 +107,7 @@ namespace Fodinae.World
                     perspectiveTexture,
                     redRockTexture);
                 _surfaceSetupFailureLogged = false;
+                _surfaceRendererSetupSucceeded = true;
                 Debug.Log("[SceneSetup] SurfaceRenderer setup completed successfully.");
             }
             catch (OperationCanceledException)
@@ -120,9 +124,13 @@ namespace Fodinae.World
             }
             finally
             {
-                // Domain reload cancels the task while preserving this component.
-                // Never leave the guard latched, otherwise the surface is lost forever.
-                _surfaceRendererSetupStarted = false;
+                // Retry only while the surface has not been applied. Plain fields
+                // reset to defaults on domain reload (scene serialization round
+                // trip), so the success latch clears itself when re-setup is needed.
+                if (!_surfaceRendererSetupSucceeded)
+                {
+                    _surfaceRendererSetupStarted = false;
+                }
             }
         }
 

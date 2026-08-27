@@ -3,9 +3,11 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.Lifecycle;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
+using VContainer;
 
 namespace Fodinae.Game
 {
@@ -42,6 +44,8 @@ namespace Fodinae.Game
         private int _uploadedTentacleCount = -1;
         private int _uploadedSpriteCount = -1;
         private bool _geometryDirty = true;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         public sealed class SpriteHandle
         {
@@ -213,8 +217,7 @@ namespace Fodinae.Game
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
 
-            var renderObject = new GameObject("WorldEntityBatch");
-            renderObject.transform.SetParent(transform, false);
+            GameObject renderObject = _sceneObjects.Create("WorldEntityBatch");
 
             _mesh = new Mesh
             {

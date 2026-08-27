@@ -19,6 +19,11 @@ namespace Fodinae.UI.Builders
             var label = new Label(textPkt.Text);
             label.AddToClassList("sci-fi-text-body");
             label.style.whiteSpace = WhiteSpace.Normal;
+            if (!string.IsNullOrEmpty(textPkt.OnClickContext))
+            {
+                label.pickingMode = PickingMode.Position;
+            }
+
             return label;
         }
     }

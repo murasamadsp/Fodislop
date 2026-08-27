@@ -1,13 +1,18 @@
 #nullable enable
 
 using Fodinae.Core;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Rendering.PostProcessing;
 using UnityEngine;
+using VContainer;
 
 namespace Fodinae.UI
 {
     public class FloatingChatBubble : MonoBehaviour
     {
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
+
         private TextMesh? _textMesh;
         private MeshRenderer? _meshRenderer;
         private MeshRenderer? _bgRenderer;
@@ -35,7 +40,7 @@ namespace Fodinae.UI
                 _meshRenderer = GetComponent<MeshRenderer>();
                 UnityRenderLayerContracts.ApplyWorldUI(_meshRenderer, 300);
 
-                var bgGo = new GameObject("ChatBubbleBG");
+                GameObject bgGo = _sceneObjects.Create("ChatBubbleBG", RuntimeOwner.FloatingUI);
                 bgGo.transform.SetParent(transform, false);
                 bgGo.transform.localPosition = new Vector3(0, 0, 0.01f);
                 _bgFilter = bgGo.AddComponent<MeshFilter>();

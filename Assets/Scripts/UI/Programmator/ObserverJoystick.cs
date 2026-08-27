@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -22,9 +23,8 @@ namespace Fodinae.UI.Programmator
         private Vector2 _pointerStart;
         private const float DragThresh = 15f;
         private const float NearFarThresh = 40f;
-        private const float ItemSize = 36f;
-        private const float Radius = 70f;
-        private const float Center = 100f;
+        // Размер рута продублирован в .prog-joy-root (200px); константа нужна
+        // для центрирования рута в ShowAt до первого лайаута.
         private const float RootSize = 200f;
 
         private readonly VisualElement?[] _dirItems = new VisualElement?[8];
@@ -108,23 +108,29 @@ namespace Fodinae.UI.Programmator
 
             _centerTex = ProgrammatorTextureRegistry.GetTexture(CenterClickOp);
 
-            _root = new VisualElement();
-            _root.AddToClassList("prog-joy-root");
-            _root.pickingMode = PickingMode.Ignore;
+            // Статический скелет (рут, 8 кнопок направлений, центральная кнопка)
+            // живёт в ObserverJoystick.uxml, геометрия — в .prog-joy-item--* / .prog-joy-center
+            // (Programmator.uss). Здесь только клон и биндинги; иконки и ховер — динамика.
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/ObserverJoystick") ??
+                throw new InvalidOperationException(
+                    "[ObserverJoystick] Resources/UI/ObserverJoystick.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+            tree.AddToClassList("prog-joy-root");
+            tree.pickingMode = PickingMode.Ignore;
+            _root = tree;
 
             // Direction buttons
             for (int i = 0; i < 8; i++)
             {
-                float angle = (i * Mathf.PI * 2f / 8f) - (Mathf.PI / 2f);
-                float x = Center + (Radius * Mathf.Cos(angle)) - (ItemSize / 2f);
-                float y = Center + (Radius * Mathf.Sin(angle)) - (ItemSize / 2f);
-
                 int idx = i;
-                var (item, label) = MakeItem(x, y, ItemSize, DirLabels[i]);
+                VisualElement item = _root.Q<VisualElement>($"JoyDir{i}") ??
+                    throw new InvalidOperationException(
+                        $"[ObserverJoystick] JoyDir{i} is missing from ObserverJoystick.uxml.");
+                Label label = item.Q<Label>() ??
+                    throw new InvalidOperationException(
+                        $"[ObserverJoystick] JoyDir{i} label is missing from ObserverJoystick.uxml.");
                 _dirItems[idx] = item;
                 _dirLabels[idx] = label;
-                item.name = $"joy_dir_{i}";
-                WireHover(item);
 
                 // Set initial icon (click operator)
                 SetItemIcon(item, label, _dirClickTex[idx], DirLabels[idx]);
@@ -136,32 +142,24 @@ namespace Fodinae.UI.Programmator
 
                     // Icon stays as Cell* until actual drag movement
                 });
-
-                _root.Add(item);
             }
 
             // Center button
-            const float cSize = ItemSize * 1.2f;
-            const float cx = Center - (cSize / 2f);
-            const float cy = Center - (cSize / 2f);
-
-            var (centerItem, centerLabel) = MakeItem(cx, cy, cSize, "\u25CB");
-            _centerItem = centerItem;
-            _centerLabel = centerLabel;
-            centerItem.AddToClassList("prog-joy-center");
-            centerItem.name = "joy_center";
-            WireHover(centerItem);
+            _centerItem = _root.Q<VisualElement>("JoyCenter") ??
+                throw new InvalidOperationException(
+                    "[ObserverJoystick] JoyCenter is missing from ObserverJoystick.uxml.");
+            _centerLabel = _centerItem.Q<Label>() ??
+                throw new InvalidOperationException(
+                    "[ObserverJoystick] JoyCenter label is missing from ObserverJoystick.uxml.");
 
             // Set initial center icon
-            SetItemIcon(centerItem, centerLabel, _centerTex, "\u25CB");
+            SetItemIcon(_centerItem, _centerLabel, _centerTex, "\u25CB");
 
-            centerItem.RegisterCallback<PointerDownEvent>(evt =>
+            _centerItem.RegisterCallback<PointerDownEvent>(evt =>
             {
                 evt.StopPropagation();
                 BeginDrag(evt.position, 8);
             });
-
-            _root.Add(centerItem);
 
             // Root-level move: threshold + angle + icon preview
             _root.RegisterCallback<PointerMoveEvent>(evt =>
@@ -342,58 +340,6 @@ namespace Fodinae.UI.Programmator
             }
         }
 
-        private static (VisualElement item, Label label) MakeItem(float x, float y, float size, string fallback)
-        {
-            var item = new VisualElement();
-            item.style.position = Position.Absolute;
-            item.style.left = x;
-            item.style.top = y;
-            item.style.width = size;
-            item.style.height = size;
-            item.style.borderTopLeftRadius = 18;
-            item.style.borderTopRightRadius = 18;
-            item.style.borderBottomLeftRadius = 18;
-            item.style.borderBottomRightRadius = 18;
-            item.style.backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.95f);
-            item.style.borderTopWidth = 2;
-            item.style.borderBottomWidth = 2;
-            item.style.borderLeftWidth = 2;
-            item.style.borderRightWidth = 2;
-            item.style.borderTopColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-            item.style.borderBottomColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-            item.style.borderLeftColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-            item.style.borderRightColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-            item.pickingMode = PickingMode.Position;
-
-            var label = new Label(fallback);
-            label.style.color = Color.white;
-            label.style.fontSize = size <= ItemSize ? 14 : 16;
-            label.style.unityTextAlign = TextAnchor.MiddleCenter;
-            label.pickingMode = PickingMode.Ignore;
-            item.Add(label);
-
-            return (item, label);
-        }
-
-        private static void WireHover(VisualElement item)
-        {
-            item.RegisterCallback<PointerEnterEvent>(_ =>
-            {
-                item.style.backgroundColor = new Color(0.35f, 0.35f, 0.35f, 0.95f);
-                item.style.borderTopColor = new Color(1f, 0.84f, 0f, 1f);
-                item.style.borderBottomColor = new Color(1f, 0.84f, 0f, 1f);
-                item.style.borderLeftColor = new Color(1f, 0.84f, 0f, 1f);
-                item.style.borderRightColor = new Color(1f, 0.84f, 0f, 1f);
-            });
-            item.RegisterCallback<PointerLeaveEvent>(_ =>
-            {
-                item.style.backgroundColor = new Color(0.2f, 0.2f, 0.2f, 0.95f);
-                item.style.borderTopColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-                item.style.borderBottomColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-                item.style.borderLeftColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-                item.style.borderRightColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-            });
-        }
 
         public void ShowAt(VisualElement parent, Vector2 screenPos)
         {

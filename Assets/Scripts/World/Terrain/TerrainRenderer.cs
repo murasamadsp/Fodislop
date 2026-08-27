@@ -98,7 +98,7 @@ namespace Fodinae.World.Terrain
         private WorldTextureManager? _subscribedTextureManager;
         private MapManager? _subscribedMapManager;
         private IWorldDataStorage? _subscribedStorage;
-        private TerrariaLightingEngine? _cachedLightingEngine;
+        private LightingEngine? _cachedLightingEngine;
 
         private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
         {
@@ -401,6 +401,7 @@ namespace Fodinae.World.Terrain
         }
 
         private int _diagLogged;
+        private bool _invalidGridPositionLogged;
 
         private void LogDiag(int bit, string message)
         {
@@ -491,6 +492,57 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
             }
 
+            EnsureMeshAndFilter();
+
+            if (!TryResolveCamera())
+            {
+                return;
+            }
+
+            LightingEngine? lightingEngine = ResolveLightingEngine();
+            if (lightingEngine == null)
+            {
+                return;
+            }
+
+            UpdateViewportDimensions(
+                lightingEngine,
+                out int requestedWidth,
+                out int requestedHeight,
+                out int effectiveViewportPadding,
+                out bool dimensionsChanged);
+
+            ResolveGridPosition(
+                requestedWidth,
+                requestedHeight,
+                effectiveViewportPadding,
+                dimensionsChanged,
+                out Vector2Int currentGridPos,
+                out int viewportMinX,
+                out int viewportMinY,
+                out int viewportWidth,
+                out int viewportHeight);
+
+            if (_meshRenderer != null)
+            {
+                _meshRenderer.enabled = !BypassTerrainDraw;
+            }
+
+            if (_pendingTextureCellTypes.Count > 0 && !BypassCpuMeshRebuild)
+            {
+                UpdateTextureCells(currentGridPos.x, currentGridPos.y);
+                _pendingTextureCellTypes.Clear();
+            }
+
+            CoalesceOversizedDirtyRects();
+
+            RebuildOrPatchTerrain(currentGridPos, dimensionsChanged);
+
+            PublishLightingUpdate(lightingEngine, viewportMinX, viewportMinY, viewportWidth, viewportHeight);
+        }
+
+        private void EnsureMeshAndFilter()
+        {
             InitializeShader();
             _meshFilter ??= GetComponent<MeshFilter>();
             _meshRenderer ??= GetComponent<MeshRenderer>();
@@ -507,7 +559,10 @@ namespace Fodinae.World.Terrain
             {
                 _meshFilter.sharedMesh = _mesh;
             }
+        }
 
+        private bool TryResolveCamera()
+        {
             Camera? resolvedCam = GameplayCamera.Resolve();
             if (resolvedCam != null)
             {
@@ -517,7 +572,7 @@ namespace Fodinae.World.Terrain
             if (_mainCamera == null)
             {
                 LogDiag(1 << 2, "[TerrainDiag] camera NULL");
-                return;
+                return false;
             }
 
             if ((_diagLogged & (1 << 3)) == 0)
@@ -525,37 +580,53 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 3, $"[TerrainDiag] camera ok: {_mainCamera.name} at {_mainCamera.transform.position}");
             }
 
+            return true;
+        }
+
+        private LightingEngine? ResolveLightingEngine()
+        {
             if (_cachedLightingEngine == null)
             {
-                _cachedLightingEngine = _session?.TryResolve<TerrariaLightingEngine>();
+                _cachedLightingEngine = _session?.TryResolve<LightingEngine>();
             }
 
-            TerrariaLightingEngine? lightingEngine = _cachedLightingEngine;
+            LightingEngine? lightingEngine = _cachedLightingEngine;
             if (lightingEngine == null)
             {
                 if (!Application.isPlaying)
                 {
-                    return;
+                    return null;
                 }
 
                 throw new InvalidOperationException(
-                    "TerrariaLightingEngine was not initialized by GameLifetimeScope.");
+                    "LightingEngine was not initialized by GameLifetimeScope.");
             }
 
-            int effectiveViewportPadding = _viewportPadding;
+            return lightingEngine;
+        }
+
+        private void UpdateViewportDimensions(
+            LightingEngine lightingEngine,
+            out int requestedWidth,
+            out int requestedHeight,
+            out int effectiveViewportPadding,
+            out bool dimensionsChanged)
+        {
+            Camera camera = _mainCamera!;
+            effectiveViewportPadding = _viewportPadding;
             int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
                 TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
             effectiveViewportPadding = Mathf.Max(
                 effectiveViewportPadding,
                 requiredLightingPadding);
 
-            int requestedWidth = Mathf.Clamp(
-                Mathf.CeilToInt((_mainCamera.orthographicSize * 2 * _mainCamera.aspect) / _cellSize) +
+            requestedWidth = Mathf.Clamp(
+                Mathf.CeilToInt((camera.orthographicSize * 2 * camera.aspect) / _cellSize) +
                     (effectiveViewportPadding * 2),
                 2,
                 MaximumTerrainDimension);
-            int requestedHeight = Mathf.Clamp(
-                Mathf.CeilToInt((_mainCamera.orthographicSize * 2) / _cellSize) +
+            requestedHeight = Mathf.Clamp(
+                Mathf.CeilToInt((camera.orthographicSize * 2) / _cellSize) +
                     (effectiveViewportPadding * 2),
                 2,
                 MaximumTerrainDimension);
@@ -580,7 +651,7 @@ namespace Fodinae.World.Terrain
                 _isInitialized,
                 viewportSizeSettled);
 
-            bool dimensionsChanged = targetWidth != _meshWidth || targetHeight != _meshHeight;
+            dimensionsChanged = targetWidth != _meshWidth || targetHeight != _meshHeight;
             if (dimensionsChanged || !_isInitialized)
             {
                 _meshWidth = targetWidth;
@@ -594,8 +665,21 @@ namespace Fodinae.World.Terrain
 
                 _needsRefresh = true;
             }
+        }
 
-            Vector3 camPos = _mainCamera.transform.position;
+        private void ResolveGridPosition(
+            int requestedWidth,
+            int requestedHeight,
+            int effectiveViewportPadding,
+            bool dimensionsChanged,
+            out Vector2Int currentGridPos,
+            out int viewportMinX,
+            out int viewportMinY,
+            out int viewportWidth,
+            out int viewportHeight)
+        {
+            Camera camera = _mainCamera!;
+            Vector3 camPos = camera.transform.position;
             Vector2Int desiredGridPos = new Vector2Int(
                 Mathf.FloorToInt(camPos.x / _cellSize) - (_meshWidth / 2),
                 Mathf.FloorToInt(camPos.y / _cellSize) - (_meshHeight / 2));
@@ -609,10 +693,10 @@ namespace Fodinae.World.Terrain
             // eight cells, which rebuilt the whole mesh/cache/SDF on a fixed
             // cadence even though the existing mesh still covered the camera.
             // Recenter only when the actual visible viewport reaches an edge.
-            int viewportWidth = Mathf.Max(2, requestedWidth - (effectiveViewportPadding * 2));
-            int viewportHeight = Mathf.Max(2, requestedHeight - (effectiveViewportPadding * 2));
-            int viewportMinX = Mathf.FloorToInt(camPos.x / _cellSize) - (viewportWidth / 2);
-            int viewportMinY = Mathf.FloorToInt(camPos.y / _cellSize) - (viewportHeight / 2);
+            viewportWidth = Mathf.Max(2, requestedWidth - (effectiveViewportPadding * 2));
+            viewportHeight = Mathf.Max(2, requestedHeight - (effectiveViewportPadding * 2));
+            viewportMinX = Mathf.FloorToInt(camPos.x / _cellSize) - (viewportWidth / 2);
+            viewportMinY = Mathf.FloorToInt(camPos.y / _cellSize) - (viewportHeight / 2);
             const int viewportMargin = 4;
             bool regionOutsideViewport =
                 _lastGridPos.x == int.MinValue ||
@@ -621,7 +705,7 @@ namespace Fodinae.World.Terrain
                 viewportMinX + viewportWidth + viewportMargin > _lastGridPos.x + _meshWidth ||
                 viewportMinY + viewportHeight + viewportMargin > _lastGridPos.y + _meshHeight;
 
-            Vector2Int currentGridPos = regionOutsideViewport || dimensionsChanged
+            currentGridPos = regionOutsideViewport || dimensionsChanged
                 ? new Vector2Int(
                     SnapRegionCoordinate(desiredGridPos.x, regionAnchor),
                     SnapRegionCoordinate(desiredGridPos.y, regionAnchor))
@@ -629,26 +713,25 @@ namespace Fodinae.World.Terrain
 
             if (currentGridPos.x == int.MinValue || currentGridPos.y == int.MinValue)
             {
-                Debug.LogWarning(
-                    $"[TerrainRenderer] Invalid terrain grid position {currentGridPos}. " +
-                    $"Camera position={camPos}; desired grid={desiredGridPos}; " +
-                    $"last grid={_lastGridPos}; dimensions={_meshWidth}x{_meshHeight}.");
+                // Mesh rebuilds run every frame while the camera moves; a
+                // persistent NaN camera must not repeat this warning per frame.
+                if (!_invalidGridPositionLogged)
+                {
+                    _invalidGridPositionLogged = true;
+                    Debug.LogWarning(
+                        $"[TerrainRenderer] Invalid terrain grid position {currentGridPos}. " +
+                        $"Camera position={camPos}; desired grid={desiredGridPos}; " +
+                        $"last grid={_lastGridPos}; dimensions={_meshWidth}x{_meshHeight}.");
+                }
+
                 currentGridPos = new Vector2Int(
                     SnapRegionCoordinate(desiredGridPos.x, regionAnchor),
                     SnapRegionCoordinate(desiredGridPos.y, regionAnchor));
             }
+        }
 
-            if (_meshRenderer != null)
-            {
-                _meshRenderer.enabled = !BypassTerrainDraw;
-            }
-
-            if (_pendingTextureCellTypes.Count > 0 && !BypassCpuMeshRebuild)
-            {
-                UpdateTextureCells(currentGridPos.x, currentGridPos.y);
-                _pendingTextureCellTypes.Clear();
-            }
-
+        private void CoalesceOversizedDirtyRects()
+        {
             // Past a certain size the rect-based patch stops being a saving:
             // it visits the same cells the full path would, without the full
             // path's parallelism. Scattered chunks arriving across the viewport
@@ -664,10 +747,16 @@ namespace Fodinae.World.Terrain
                     _dirtyRects.Clear();
                 }
             }
+        }
 
+        private void RebuildOrPatchTerrain(Vector2Int currentGridPos, bool dimensionsChanged)
+        {
             bool terrainWasRebuilt = (currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged) && !BypassCpuMeshRebuild;
             if (terrainWasRebuilt)
             {
+                transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
+                _lastGridPos = currentGridPos;
+
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
 
                 // The lighting material field is rasterized from this mesh. A streamed
@@ -677,8 +766,6 @@ namespace Fodinae.World.Terrain
                 // revision for normal/AO caches as well.
                 _lightingGeometryRevision++;
 
-                transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
-                _lastGridPos = currentGridPos;
                 _dirtyRects.Clear();
             }
             else if (!_dirtyRects.IsEmpty && !BypassCpuMeshRebuild)
@@ -692,7 +779,15 @@ namespace Fodinae.World.Terrain
                 _lightingGeometryRevision++;
                 _dirtyRects.Clear();
             }
+        }
 
+        private void PublishLightingUpdate(
+            LightingEngine lightingEngine,
+            int viewportMinX,
+            int viewportMinY,
+            int viewportWidth,
+            int viewportHeight)
+        {
             // The lighting engine adds its own stable-region padding around
             // this visible rectangle. The terrain mesh was already enlarged
             // above by RequiredTerrainPadding + anchor + that same stable
@@ -718,8 +813,6 @@ namespace Fodinae.World.Terrain
                 ValidateLightingBinding();
             }
         }
-
-
 
         private void ValidateLightingBinding()
         {
@@ -1164,6 +1257,8 @@ namespace Fodinae.World.Terrain
             {
                 return;
             }
+
+            FrameProfiler.TerrainDirtyPatchCount++;
 
             // Every pending rectangle is patched into the CPU buffers first,
             // and the buffers are uploaded once at the end. Uploading inside

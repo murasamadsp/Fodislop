@@ -35,6 +35,13 @@ namespace Fodinae
         private readonly object _loadingLock = new object();
         private bool _disposed;
 
+        // A failing disk would otherwise warn once per chunk per streaming
+        // pass and flood the console within seconds.
+        private const int MAX_LOGGED_CHUNK_DISK_FAILURES = 8;
+        private readonly HashSet<int> _loggedChunkLoadFailures = [];
+        private readonly HashSet<int> _loggedChunkSaveFailures = [];
+        private bool _chunkDiskFailureCapLogged;
+
         private FileStream? _fileStream;
 
         public WorldLayer(string filePath, int WIDTH_CHUNKS, int HEIGHT_CHUNKS, int CHUNK_SIZE = 32, int maxRamChunks = 1000)
@@ -245,7 +252,7 @@ namespace Fodinae
         /// (a 32x32 region previously issued ~2048 LRU/Dictionary operations per
         /// region through <see cref="GetCellSync"/> + <see cref="SetCell"/>), which
         /// made every region cost several milliseconds and stretched the initial
-        /// world burst across dozens of frames under the packet-drain budget.
+        /// world burst across dozens of frames under the packet-drain budget).
         /// </summary>
         /// <param name="startX">Region origin X in world cells.</param>
         /// <param name="startY">Region origin Y in world cells.</param>
@@ -260,6 +267,22 @@ namespace Fodinae
             int width,
             int height,
             T[] cells,
+            int cellsOffset = 0)
+        {
+            if (cells == null)
+            {
+                throw new ArgumentNullException(nameof(cells));
+            }
+
+            return SetRegion(startX, startY, width, height, cells.AsSpan(), cellsOffset);
+        }
+
+        public int SetRegion(
+            int startX,
+            int startY,
+            int width,
+            int height,
+            ReadOnlySpan<T> cells,
             int cellsOffset = 0)
         {
             int worldWidth = _widthChunks * _chunkSize;
@@ -638,25 +661,37 @@ namespace Fodinae
             }
             catch (IOException ioEx)
             {
-                Debug.LogWarning($"[WorldLayer] Disk I/O error loading chunk {chunkIndex}: {ioEx.Message}");
+                LogChunkDiskFailure(
+                    _loggedChunkLoadFailures,
+                    chunkIndex,
+                    $"[WorldLayer] Disk I/O error loading chunk {chunkIndex}: {ioEx.Message}");
                 ClearLoadingChunk(chunkIndex);
                 return;
             }
             catch (ObjectDisposedException disposedEx)
             {
-                Debug.LogWarning($"[WorldLayer] Stream disposed while loading chunk {chunkIndex}: {disposedEx.Message}");
+                LogChunkDiskFailure(
+                    _loggedChunkLoadFailures,
+                    chunkIndex,
+                    $"[WorldLayer] Stream disposed while loading chunk {chunkIndex}: {disposedEx.Message}");
                 ClearLoadingChunk(chunkIndex);
                 return;
             }
             catch (UnauthorizedAccessException authEx)
             {
-                Debug.LogWarning($"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
+                LogChunkDiskFailure(
+                    _loggedChunkLoadFailures,
+                    chunkIndex,
+                    $"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
                 ClearLoadingChunk(chunkIndex);
                 return;
             }
             catch (OutOfMemoryException)
             {
-                Debug.LogError($"[WorldLayer] Out of memory while loading chunk {chunkIndex}.");
+                LogChunkDiskFailure(
+                    _loggedChunkLoadFailures,
+                    chunkIndex,
+                    $"[WorldLayer] Out of memory while loading chunk {chunkIndex}.");
                 ClearLoadingChunk(chunkIndex);
                 return;
             }
@@ -769,7 +804,26 @@ namespace Fodinae
             }
             catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException || ex is UnauthorizedAccessException)
             {
-                Debug.LogWarning($"[WorldLayer] Background disk save failed for chunk {chunkIndex}: {ex.Message}");
+                LogChunkDiskFailure(
+                    _loggedChunkSaveFailures,
+                    chunkIndex,
+                    $"[WorldLayer] Background disk save failed for chunk {chunkIndex}: {ex.Message}");
+            }
+        }
+
+        private void LogChunkDiskFailure(HashSet<int> reported, int chunkIndex, string message)
+        {
+            if (!reported.Add(chunkIndex))
+            {
+                return;
+            }
+
+            Debug.LogWarning(message);
+            if (!_chunkDiskFailureCapLogged && reported.Count >= MAX_LOGGED_CHUNK_DISK_FAILURES)
+            {
+                _chunkDiskFailureCapLogged = true;
+                Debug.LogWarning(
+                    "[WorldLayer] Further per-chunk disk failure warnings are suppressed for this session.");
             }
         }
 

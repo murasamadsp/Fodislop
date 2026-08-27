@@ -52,7 +52,7 @@ namespace Fodinae.Networking.Processors
                 packet.Y,
                 width,
                 height,
-                packet.Payload);
+                packet.Payload.AsSpan());
         }
     }
 }

@@ -365,6 +365,7 @@
 
 .sci-fi-bar-fill-hp {
     height: 100%;
+    width: 100%;
     background-color: var(--scifi-green);
     border-radius: 1px;
 }
@@ -491,7 +492,7 @@
    ТИРЫ РАСКЛАДКИ
 
    Замена @media, которых в USS нет. Класс проставляется на корневой
-   элемент из UiLayoutTier по фактической ширине панели. Границы и
+   элемент из UILayoutTier по фактической ширине панели. Границы и
    значения совпадают с visual/main-menu-mirror/css/tokens.css §3.
 
    Переопределяются ТОЛЬКО токены, но не правила компонентов — поэтому

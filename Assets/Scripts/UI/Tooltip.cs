@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -13,17 +14,17 @@ namespace Fodinae.UI
 
         public void Initialize(UIDocument doc)
         {
-            _tooltipElement = new VisualElement();
-            _tooltipElement.name = "Tooltip";
-            _tooltipElement.AddToClassList("tooltip-panel");
+            // Статическая структура (панель + лейбл) живёт в Tooltip.uxml;
+            // здесь только клон и биндинг. Позиция и видимость — рантайм-состояние.
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/Tooltip") ??
+                throw new InvalidOperationException(
+                    "[Tooltip] Resources/UI/Tooltip.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+            _tooltipElement = tree;
 
-            // Видимость — рантайм-состояние
-            _tooltipElement.style.display = DisplayStyle.None;
-            _tooltipElement.pickingMode = PickingMode.Ignore;
-
-            _tooltipLabel = new Label();
-            _tooltipLabel.AddToClassList("tooltip-label");
-            _tooltipElement.Add(_tooltipLabel);
+            _tooltipLabel = tree.Q<Label>("TooltipLabel") ??
+                throw new InvalidOperationException(
+                    "[Tooltip] TooltipLabel is missing from Tooltip.uxml.");
 
             doc.rootVisualElement.Add(_tooltipElement);
         }

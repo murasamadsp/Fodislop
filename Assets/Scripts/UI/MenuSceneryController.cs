@@ -230,6 +230,8 @@ namespace Fodinae.UI
             if (_cameraTarget != null)
             {
                 _sceneryCamera.targetTexture = _cameraTarget;
+                _sceneryCamera.Render();
+                ResolveOutput();
             }
         }
 
@@ -260,6 +262,14 @@ namespace Fodinae.UI
             // менялись. Она здесь, а не только в OnEnable, ради инспектора:
             // иначе правка ползунка рельефа тихо не доезжала бы до картинки.
             _fieldBaker.EnsureBaked(_surfaceMaterial, _atmosphereMaterial);
+
+            // The scene camera is permanently disabled by the application camera
+            // authority. Render the menu target explicitly so it never joins URP's
+            // screen camera loop or survives into gameplay as a second active camera.
+            if (_sceneryCamera != null && _cameraTarget != null)
+            {
+                _sceneryCamera.Render();
+            }
 
             ResolveOutput();
         }

@@ -156,7 +156,7 @@ namespace Fodinae.Tests.World
         public void DynamicLightChangesDoNotRequestContactOcclusionSolve()
         {
             Assert.That(
-                TerrariaLightingEngine.ShouldDispatchContactOcclusion(
+                LightingEngine.ShouldDispatchContactOcclusion(
                     ambientOcclusionEnabled: true,
                     geometryOrRegionChanged: false,
                     ambientOcclusionSettingsChanged: false),
@@ -167,7 +167,7 @@ namespace Fodinae.Tests.World
         public void GeometryChangesRequestContactOcclusionSolve()
         {
             Assert.That(
-                TerrariaLightingEngine.ShouldDispatchContactOcclusion(
+                LightingEngine.ShouldDispatchContactOcclusion(
                     ambientOcclusionEnabled: true,
                     geometryOrRegionChanged: true,
                     ambientOcclusionSettingsChanged: false),
@@ -178,7 +178,7 @@ namespace Fodinae.Tests.World
         public void DisabledContactOcclusionDoesNotRequestSolve()
         {
             Assert.That(
-                TerrariaLightingEngine.ShouldDispatchContactOcclusion(
+                LightingEngine.ShouldDispatchContactOcclusion(
                     ambientOcclusionEnabled: false,
                     geometryOrRegionChanged: true,
                     ambientOcclusionSettingsChanged: true),

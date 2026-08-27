@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Networking;
 using Fodinae.Player.Logic;
@@ -55,7 +56,7 @@ namespace Fodinae.Player
 
         protected void Awake()
         {
-            _camera = GetComponent<Camera>();
+            _camera = GameplayCamera.Resolve();
         }
 
         protected void Start()
@@ -65,8 +66,7 @@ namespace Fodinae.Player
 
         private void InitializeRuntime()
         {
-            _originalZ = transform.position.z;
-            _camera = GetComponent<Camera>();
+            _camera = GameplayCamera.Resolve();
             if (_camera == null)
             {
                 Debug.LogError("[CameraFollow] Camera component not found on this GameObject!");
@@ -74,15 +74,11 @@ namespace Fodinae.Player
                 return;
             }
 
-            if (GetComponent<FMODUnity.StudioListener>() == null)
-            {
-                gameObject.AddComponent<FMODUnity.StudioListener>();
-            }
-
+            _originalZ = _camera.transform.position.z;
             _targetZoom = _camera.orthographicSize;
             _currentZoom = _targetZoom;
             _lastZoom = _currentZoom;
-            if (_target == null || _target == transform)
+            if (_target == null || _target == _camera.transform)
             {
                 var player = PlayerMovementController.LocalPlayer;
                 if (player != null)
@@ -204,9 +200,9 @@ namespace Fodinae.Player
                 }
 
                 var player = PlayerMovementController.LocalPlayer;
-                if (player != null)
+                if (player != null && _camera != null)
                 {
-                    transform.position = new Vector3(player.transform.position.x, player.transform.position.y, DefaultCameraDepthZ);
+                    _camera.transform.position = new Vector3(player.transform.position.x, player.transform.position.y, DefaultCameraDepthZ);
                 }
 
                 return;
@@ -287,7 +283,8 @@ namespace Fodinae.Player
                 return;
             }
 
-            if (_target == null || _target == transform)
+            Transform cameraTransform = _camera != null ? _camera.transform : transform;
+            if (_target == null || _target == cameraTransform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
                 {
@@ -307,20 +304,20 @@ namespace Fodinae.Player
             // smoothTime ≈ 1 / _smoothSpeed gives equivalent response to the old Lerp, but we
             // tune it a touch snappier to reduce swimmy lag at high movement speeds.
             float smoothTime = 1f / Mathf.Max(_smoothSpeed, 0.001f);
-            if ((transform.position - desiredPosition).sqrMagnitude <= FollowSettleEpsilonSquared &&
+            if ((cameraTransform.position - desiredPosition).sqrMagnitude <= FollowSettleEpsilonSquared &&
                 _followVelocity.sqrMagnitude <= FollowSettleEpsilonSquared)
             {
-                if (transform.position != desiredPosition)
+                if (cameraTransform.position != desiredPosition)
                 {
-                    transform.position = desiredPosition;
+                    cameraTransform.position = desiredPosition;
                 }
 
                 _followVelocity = Vector3.zero;
                 return;
             }
 
-            transform.position = Vector3.SmoothDamp(
-                transform.position,
+            cameraTransform.position = Vector3.SmoothDamp(
+                cameraTransform.position,
                 desiredPosition,
                 ref _followVelocity,
                 smoothTime,
@@ -335,7 +332,8 @@ namespace Fodinae.Player
                 return;
             }
 
-            if (_target == null || _target == transform)
+            Transform cameraTransform = _camera != null ? _camera.transform : transform;
+            if (_target == null || _target == cameraTransform)
             {
                 if (PlayerMovementController.LocalPlayer != null)
                 {
@@ -343,10 +341,10 @@ namespace Fodinae.Player
                 }
             }
 
-            if (_target != null && _target != transform)
+            if (_target != null && _target != cameraTransform)
             {
                 Vector3 targetPosition = _target.position + new Vector3(_offset.x, _offset.y, 0f);
-                transform.position = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
+                cameraTransform.position = new Vector3(targetPosition.x, targetPosition.y, _originalZ);
                 _followVelocity = Vector3.zero;
             }
         }

@@ -38,8 +38,8 @@ public readonly record struct ClientDefaultsSnapshot(
     float MusicVolume,
     float AmbienceVolume,
     float VoiceVolume,
-    float UiVolume,
-    float UiScale,
+    float UIVolume,
+    float UIScale,
     int GraphicsQuality);
 
 public readonly record struct LightingDefaultsSnapshot(

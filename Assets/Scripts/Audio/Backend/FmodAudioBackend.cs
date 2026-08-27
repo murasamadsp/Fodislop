@@ -35,6 +35,7 @@ namespace Fodinae.Audio.Backend
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
         private readonly ConcurrentDictionary<string, FMOD.Studio.Bank> _loadedBanks = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _unavailableBanks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _reportedInstanceFailures = new(StringComparer.OrdinalIgnoreCase);
         private bool _paused;
 
         private const string BANK_PATH = "banks";
@@ -286,7 +287,13 @@ namespace Fodinae.Audio.Backend
             FMOD.RESULT instResult = eventDescription.createInstance(out var instance);
             if (instResult != FMOD.RESULT.OK || !instance.isValid())
             {
-                Debug.LogWarning($"[FmodAudioBackend] Не удалось создать экземпляр события '{fmodPath}': {instResult}");
+                // A broken event referenced by a frequently played SFX would
+                // otherwise warn on every playback attempt.
+                if (_reportedInstanceFailures.Add(fmodPath))
+                {
+                    Debug.LogWarning($"[FmodAudioBackend] Не удалось создать экземпляр события '{fmodPath}': {instResult}");
+                }
+
                 return null;
             }
 

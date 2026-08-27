@@ -1,9 +1,11 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Fodinae.Audio.Backend;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Game;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
@@ -37,28 +39,27 @@ namespace Fodinae.Core
     public class GameLifetimeScope : LifetimeScope
     {
         private Scene _ownScene;
+        private List<MonoBehaviour>? _ownSceneBehaviours;
+        private ContentSceneRoot _sceneRoot = null!;
 
-        // Repoints ambient resolution back at the Bootstrap scope BEFORE this
-        // scope's container is disposed.
-        //
-        // VContainer's Container.Dispose() clears sharedInstances but sets no
-        // disposed flag and leaves the registry alone, so resolving a disposed
-        // container silently re-runs the provider instead of failing. Everything
-        // here registered with RegisterComponentOnNewGameObject has
-        // `new GameObject(typeof(T).Name)` as its provider - which is exactly
-        // how PackManager, RobotManager and ServerAudioEventManager came back to
-        // life inside a closing scene and produced Unity's warning.
-        //
-        // The resolves that do it are not exotic: ConnectionManager (Bootstrap
-        // tier, still running) calls TryResolve<MapManager>() from Disconnect
-        // and OnDisconnected, and MapManager's [Inject] Construct takes
-        // PackManager, IRobotService and IServerAudioService - so one resolve
-        // spawns all three. The packet processors do the same on any late
-        // packet, since the connection outlives the scene by design.
-        //
-        // ReturnToMainMenu repoints explicitly before its unload; this covers
-        // every other way the scene can go away, including play-mode exit.
-        protected override void OnDestroy()
+         // Repoints ambient resolution back at the Bootstrap scope BEFORE this
+         // scope's container is disposed.
+         //
+         // VContainer's Container.Dispose() clears sharedInstances but sets no
+         // disposed flag and leaves the registry intact, so resolving a disposed
+         // scope silently re-runs the provider instead of failing. Managers here
+         // are registered with RegisterComponent (not RegisterComponentOnNewGameObject),
+         // so the provider resolves the existing authored component reference rather
+         // than spinning up a new GameObject. Once SceneCoordinator unloads the scene,
+         // those component references point at destroyed objects, and the session
+         // container has already been repointed to Bootstrap via ReturnToMainMenu
+         // or GameLifetimeScope.OnDestroy itself, so late resolves hit the Bootstrap
+         // container — where Game-scoped types are not registered — and TryResolve
+         // simply returns null.
+         //
+         // ReturnToMainMenu repoints explicitly before its unload; this covers
+         // every other way the scene can go away, including play-mode exit.
+         protected override void OnDestroy()
         {
             if (Parent != null && Parent.Container != null)
             {
@@ -74,29 +75,24 @@ namespace Fodinae.Core
         protected override void Configure(IContainerBuilder builder)
         {
             _ownScene = gameObject.scene;
+            _sceneRoot = FindInOwnScene<ContentSceneRoot>() ?? throw new InvalidOperationException(
+                $"Scene '{_ownScene.name}' must contain one authored ContentSceneRoot.");
 
-            // Additive scene loads don't switch the active scene, and managers not already
-            // present in _ownScene get created via RegisterComponentOnNewGameObject — Unity
-            // places new GameObjects into whatever scene is active. _ownScene isn't fully
-            // loaded yet at this point (Configure runs as part of the load itself, so
-            // SceneManager.SetActiveScene would throw here); GameBootstrap.PostStart applies
-            // it once the scene is actually loaded and managers start getting resolved.
+            // Additive scene loads don't switch the active scene, and all managers
+            // must already be authored under ServicesRoot in _ownScene — RegisterManager
+            // fails fast if any are missing. _ownScene isn't fully loaded at this
+            // point (Configure runs as part of the load itself), so scene-relative
+            // operations are limited here; GameBootstrap.PostStart applies
+            // SetActiveScene and resolves managers once the scene is actually loaded.
             builder.RegisterInstance(_ownScene);
+            builder.RegisterComponent(_sceneRoot);
+            builder.Register<SceneObjectFactory>(Lifetime.Singleton).AsImplementedInterfaces();
 
             // IProjectDefaults/GraphicsQualityProfile are registered by BootstrapLifetimeScope
             // (parent scope) — ClientConfigManager, now Bootstrap-tier, injects them, and child
             // scopes resolve unregistered types from the parent automatically.
 
-            UIDocument? uiDocument = null;
-            foreach (UIDocument candidate in FindObjectsByType<UIDocument>(
-                FindObjectsInactive.Include))
-            {
-                if (candidate.gameObject.scene == _ownScene)
-                {
-                    uiDocument = candidate;
-                    break;
-                }
-            }
+            UIDocument? uiDocument = FindInOwnScene<UIDocument>();
 
             if (uiDocument == null || uiDocument.panelSettings == null)
             {
@@ -137,13 +133,13 @@ namespace Fodinae.Core
             builder.Register<RobotPositionProcessor>(Lifetime.Singleton);
             builder.Register<ChatProcessor>(Lifetime.Singleton);
             builder.Register<MissionProcessor>(Lifetime.Singleton);
-            builder.Register<PackProcessor>(Lifetime.Singleton);
+            builder.Register<BuildingProcessor>(Lifetime.Singleton);
             builder.Register<ConnectionProcessor>(Lifetime.Singleton);
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
             RegisterManager<GameManager>(builder);
             RegisterManager<VFXPool>(builder).AsImplementedInterfaces().AsSelf();
-            RegisterManager<PackManager>(builder).AsImplementedInterfaces().AsSelf();
+            RegisterManager<BuildingManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<RobotManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldEntityBatchRenderer>(builder);
 
@@ -153,17 +149,7 @@ namespace Fodinae.Core
             // Поэтому регистрируем явно через тег. Scoped to _ownScene: FindGameObjectWithTag
             // searches every loaded scene, and during an additive load MainMenu/Bootstrap are
             // also loaded, so an unscoped lookup could bind the wrong scene's Player object.
-            GameObject? playerGo = null;
-            foreach (GameObject candidate in GameObject.FindGameObjectsWithTag("Player"))
-            {
-                if (candidate.scene == _ownScene)
-                {
-                    playerGo = candidate;
-                    break;
-                }
-            }
-
-            var existingPmc = playerGo != null ? playerGo.GetComponent<PlayerMovementController>() : null;
+            var existingPmc = FindInOwnScene<PlayerMovementController>();
             if (existingPmc != null)
             {
                 builder.RegisterComponent(existingPmc);
@@ -184,15 +170,7 @@ namespace Fodinae.Core
             RegisterManager<AssetLoadingIndicator>(builder);
             RegisterManager<MissionArrowUI>(builder);
             RegisterManager<DiagnosticRunner>(builder);
-            Volume? postProcessVolume = null;
-            foreach (Volume candidate in FindObjectsByType<Volume>(FindObjectsInactive.Include))
-            {
-                if (candidate.gameObject.scene == _ownScene)
-                {
-                    postProcessVolume = candidate;
-                    break;
-                }
-            }
+            Volume? postProcessVolume = FindInOwnScene<Volume>();
 
             if (postProcessVolume == null)
             {
@@ -202,7 +180,7 @@ namespace Fodinae.Core
 
             builder.RegisterComponent(postProcessVolume);
             RegisterManager<PostProcessController>(builder);
-            RegisterManager<TerrariaLightingEngine>(builder);
+            RegisterManager<LightingEngine>(builder);
             RegisterManager<SurfaceRenderer>(builder);
             RegisterManager<CameraFollow>(builder);
             RegisterManager<PlayerHUDView>(builder);
@@ -223,39 +201,80 @@ namespace Fodinae.Core
             // когда весь DI-граф уже построен — любой резолв в этот момент безопасен и
             // не вызывает reentrancy Lazy-фабрик (в отличие от build-callback'а внутри Build()).
             builder.RegisterEntryPoint<GameBootstrap>();
+
+            // The scan is only valid for this pass: a later Configure (domain
+            // reload, scope rebuild) must see the scene as it is then.
+            _ownSceneBehaviours = null;
+        }
+
+        /// <summary>
+        /// Own-scene MonoBehaviours, scanned once per Configure. RegisterManager
+        /// is called for every manager type (35 of them), and a per-type
+        /// FindObjectsByType meant 35 full scene sweeps for one container build.
+        /// Scanning MonoBehaviour once and filtering with `is T` yields the same
+        /// candidates, since FindObjectsByType already matches by assignability.
+        /// </summary>
+        private List<MonoBehaviour> OwnSceneBehaviours()
+        {
+            if (_ownSceneBehaviours != null)
+            {
+                return _ownSceneBehaviours;
+            }
+
+            MonoBehaviour[] all = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include);
+            var owned = new List<MonoBehaviour>(all.Length);
+            foreach (MonoBehaviour behaviour in all)
+            {
+                // Unity keeps missing-script slots as null entries.
+                if (behaviour != null && behaviour.gameObject.scene == _ownScene)
+                {
+                    owned.Add(behaviour);
+                }
+            }
+
+            _ownSceneBehaviours = owned;
+            return owned;
+        }
+
+        private T? FindInOwnScene<T>()
+            where T : MonoBehaviour
+        {
+            foreach (MonoBehaviour candidate in OwnSceneBehaviours())
+            {
+                if (candidate is T typed)
+                {
+                    return typed;
+                }
+            }
+
+            return null;
         }
 
         private RegistrationBuilder RegisterManager<T>(IContainerBuilder builder)
             where T : MonoBehaviour
         {
-            T? existing = null;
-            foreach (T candidate in FindObjectsByType<T>(FindObjectsInactive.Include))
+            T? existing = FindInOwnScene<T>();
+
+            if (existing == null)
             {
-                if (candidate.gameObject.scene == _ownScene)
-                {
-                    existing = candidate;
-                    break;
-                }
+                Debug.LogWarning(
+                    $"[GameLifetimeScope] Manager '{typeof(T).Name}' not authored in scene '{_ownScene.name}'; " +
+                    $"creating it on a new GameObject under ServicesRoot. " +
+                    $"Run 'Fodinae/Architecture/Materialize MainGame Managers' to persist it into the scene.");
+
+                return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)
+                    .UnderTransform(_sceneRoot.ServicesRoot);
             }
 
-            if (existing != null)
+            if (!existing.transform.IsChildOf(_sceneRoot.ServicesRoot))
             {
-                return builder.RegisterComponent(existing);
+                existing.transform.SetParent(_sceneRoot.ServicesRoot, worldPositionStays: true);
+                Debug.LogWarning(
+                    $"[GameLifetimeScope] Manager '{typeof(T).Name}' in scene '{_ownScene.name}' was not parented under ServicesRoot; " +
+                    $"reparented automatically. Run 'Fodinae/Architecture/Materialize MainGame Managers' to save this in the scene asset.");
             }
 
-            // Не создаём менеджер вручную через AddComponent прямо здесь: Configure
-            // выполняется ДО сборки контейнера, а AddComponent мгновенно дёргает
-            // Awake/OnEnable менеджера — в этот момент текущий контейнер ещё указывает
-            // на Bootstrap-скоуп, сцена не активна, а [Inject]-поля не заполнены. Отсюда
-            // весь класс багов "резолв из Awake во время Configure" (FPSCounter,
-            // TerrainRenderer-камера, PauseMenu и т.п.).
-            //
-            // RegisterComponentOnNewGameObject делегирует создание NewGameObjectProvider:
-            // неактивный GO -> AddComponent (Awake не вызывается) -> инъекция -> активация.
-            // Происходит это при первом резолве — в GameBootstrap.PostStart, когда граф
-            // построен, текущий контейнер указывает на игровой скоуп, а сцена уже активна.
-            return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)
-                .UnderTransform(transform);
+            return builder.RegisterComponent(existing);
         }
     }
 }

@@ -31,6 +31,7 @@ namespace Fodinae.UI
         private VisualElement? _colorGrid;
         private System.Drawing.Color _currentColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private bool _isOpen = false;
+        private static bool _invalidMuteExpiryLogged;
         private long _mutedUntilUnixMilliseconds = -1;
         private const int MAX_MESSAGES = 20;
         private Controls.ChatInputBlinker? _blinker;
@@ -465,6 +466,12 @@ namespace Fodinae.UI
             {
                 // Серверный ввод не должен ронять клиент: битый timestamp в пакете
                 // мута — это данные, а не контрактная ошибка. Отображаем как есть.
+                if (_invalidMuteExpiryLogged)
+                {
+                    return unixMilliseconds.ToString();
+                }
+
+                _invalidMuteExpiryLogged = true;
                 Debug.LogWarning(
                     $"[GlobalChat] Mute packet contains invalid expiry timestamp: {unixMilliseconds}");
                 return unixMilliseconds.ToString();

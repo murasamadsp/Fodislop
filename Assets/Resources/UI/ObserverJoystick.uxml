@@ -1,0 +1,32 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="JoyRoot" class="prog-joy-root" picking-mode="Ignore">
+        <!-- Позиции кнопок — кольцо радиусом 70px вокруг центра 100px, см. модификаторы .prog-joy-item в Programmator.uss -->
+        <ui:VisualElement name="JoyDir0" class="prog-joy-item prog-joy-item--0" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="↑" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir1" class="prog-joy-item prog-joy-item--1" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="↗" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir2" class="prog-joy-item prog-joy-item--2" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="→" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir3" class="prog-joy-item prog-joy-item--3" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="↘" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir4" class="prog-joy-item prog-joy-item--4" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="↓" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir5" class="prog-joy-item prog-joy-item--5" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="↙" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir6" class="prog-joy-item prog-joy-item--6" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="←" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyDir7" class="prog-joy-item prog-joy-item--7" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="↖" picking-mode="Ignore" />
+        </ui:VisualElement>
+        <ui:VisualElement name="JoyCenter" class="prog-joy-item prog-joy-center" picking-mode="Position">
+            <ui:Label class="prog-joy-item-label" text="◯" picking-mode="Ignore" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

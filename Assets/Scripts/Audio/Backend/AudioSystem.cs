@@ -394,7 +394,7 @@ namespace Fodinae.Audio.Backend
             SetBusVolume(AudioBusType.Music, config.MusicVolume);
             SetBusVolume(AudioBusType.Voice, config.VoiceVolume);
             SetBusVolume(AudioBusType.Ambience, config.AmbienceVolume);
-            SetBusVolume(AudioBusType.UI, config.UiVolume);
+            SetBusVolume(AudioBusType.UI, config.UIVolume);
             _configApplied = true;
         }
     }

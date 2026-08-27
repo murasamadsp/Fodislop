@@ -3,10 +3,13 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
 using Fodinae.UI;
 using Fodinae.UI.HUD.Player.Model;
+using Fodinae.World;
+using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
@@ -52,6 +55,12 @@ namespace Fodinae.Game.Managers
         private IObjectResolver _resolver = null!;
         [Inject]
         private TerrainRenderer _terrainRenderer = null!;
+        [Inject]
+        private SurfaceRenderer? _surfaceRenderer;
+        [Inject]
+        private LightingEngine? _lightingEngine;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         private GameObject? _uiRoot;
         private bool _worldLoadPending;
@@ -97,10 +106,9 @@ namespace Fodinae.Game.Managers
 
         private void SetupUI()
         {
-            _uiRoot = new GameObject("UIRoot");
+            _uiRoot = _sceneObjects.Create("UIRoot", RuntimeOwner.FloatingUI);
             _uiRoot.SetActive(false);
             _uiRoot.transform.SetParent(transform);
-
         }
 
         public void SetState(GameState newState)
@@ -148,7 +156,7 @@ namespace Fodinae.Game.Managers
             }
 
             Robot? robot = player.GetComponent<Robot>();
-            if (robot == null || !robot.IsMetadataLoaded)
+            if (robot == null || !robot.IsMetadataLoaded || !robot.IsVisualsLoaded)
             {
                 return;
             }
@@ -160,6 +168,16 @@ namespace Fodinae.Game.Managers
 
             TerrainRenderer? terrain = _terrainRenderer;
             if (terrain == null || !terrain.IsReadyForGameplay)
+            {
+                return;
+            }
+
+            if (_surfaceRenderer != null && !_surfaceRenderer.IsInitialized)
+            {
+                return;
+            }
+
+            if (_lightingEngine != null && !_lightingEngine.IsInitialized)
             {
                 return;
             }
@@ -193,7 +211,7 @@ namespace Fodinae.Game.Managers
             AuthorizeUI();
             int robotCount = _robotService?.RobotCount ?? -1;
             Debug.Log(
-                $"[GameManager] World load completed: server position and terrain are ready. " +
+                $"[GameManager] World load completed: server position, terrain, shaders and textures are ready. " +
                 $"robots={robotCount}, pendingAssets={(_assetLoader is ClientAssetLoader c ? c.PendingAssetCount : -1)}, " +
                 $"queuedAssets={(_assetLoader is ClientAssetLoader c2 ? c2.QueuedAssetCount : -1)}, " +
                 $"pendingCellTextures={_textureService.PendingCellTextureRequests}");

@@ -13,7 +13,9 @@ namespace Fodinae.Core
         public static float TerrainCacheTimeMs { get; set; }
         public static float TerrainFloodFillTimeMs { get; set; }
         public static float TerrainGpuUploadTimeMs { get; set; }
-        public static float LightingSolveTimeMs { get; set; }
+        public static float LightingBuildCommandsTimeMs { get; set; }
+        public static float LightingExecuteCommandsTimeMs { get; set; }
+        public static int LightingCommandBufferBytes { get; set; }
         public static int ActiveDynamicLights { get; set; }
         public static long GcAllocPerFrameBytes { get; set; }
 
@@ -32,6 +34,12 @@ namespace Fodinae.Core
         // Rebuilds that had to drop and reallocate the mesh, which shows as a
         // frame with no terrain at all.
         public static int TerrainMeshClearCount { get; set; }
+
+        public static int TerrainDirtyPatchCount { get; set; }
+
+        public static int LightingRegionInvalidationCount { get; set; }
+        public static int LightingStaticSolveCount { get; set; }
+        public static int LightingDynamicSolveCount { get; set; }
 
         // Allocation rate for the whole process, sampled over a one second
         // window, from the "GC Allocated In Frame" profiler counter - the same
@@ -164,7 +172,8 @@ namespace Fodinae.Core
             TerrainCacheTimeMs = 0f;
             TerrainFloodFillTimeMs = 0f;
             TerrainGpuUploadTimeMs = 0f;
-            LightingSolveTimeMs = 0f;
+            LightingBuildCommandsTimeMs = 0f;
+            LightingExecuteCommandsTimeMs = 0f;
         }
     }
 }

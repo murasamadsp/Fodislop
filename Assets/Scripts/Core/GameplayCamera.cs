@@ -1,7 +1,6 @@
 #nullable enable
 
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace Fodinae.Core;
@@ -42,25 +41,21 @@ public static class GameplayCamera
     // subscriptions below) turns every one of those call sites back into an
     // O(1) field read for the overwhelming majority of frames.
     private static Camera? _cachedCamera;
-    private static bool _subscribed;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetForDomainReload()
     {
         _cachedCamera = null;
-        _subscribed = false;
     }
 
-    private static void EnsureSubscribed()
+    public static void BindPersistent(Camera camera)
     {
-        if (_subscribed)
+        if (camera == null)
         {
-            return;
+            throw new System.ArgumentNullException(nameof(camera));
         }
 
-        _subscribed = true;
-        SceneManager.sceneLoaded += (_, _) => _cachedCamera = null;
-        SceneManager.sceneUnloaded += _ => _cachedCamera = null;
+        _cachedCamera = camera;
     }
 
     // Returns null rather than guessing when no gameplay camera exists yet -
@@ -68,41 +63,9 @@ public static class GameplayCamera
     // expected to retry.
     public static Camera? Resolve()
     {
-        EnsureSubscribed();
-
-        Scene activeScene = SceneManager.GetActiveScene();
-        if (_cachedCamera != null && IsUsable(_cachedCamera, activeScene))
+        if (_cachedCamera != null && _cachedCamera.isActiveAndEnabled)
         {
             return _cachedCamera;
-        }
-
-        Camera? resolved = ResolveUncached(activeScene);
-        _cachedCamera = resolved;
-        return resolved;
-    }
-
-    private static Camera? ResolveUncached(Scene activeScene)
-    {
-        if (!string.Equals(activeScene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase))
-        {
-            Camera? activeCamera = ResolveIn(activeScene);
-            if (activeCamera != null)
-            {
-                return activeCamera;
-            }
-        }
-
-        for (int i = 0; i < SceneManager.sceneCount; i++)
-        {
-            Scene scene = SceneManager.GetSceneAt(i);
-            if (scene.isLoaded && !string.Equals(scene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase))
-            {
-                Camera? cam = ResolveIn(scene);
-                if (cam != null)
-                {
-                    return cam;
-                }
-            }
         }
 
         return null;
@@ -110,48 +73,7 @@ public static class GameplayCamera
 
     public static Camera? ResolveIn(Scene scene)
     {
-        if (string.Equals(scene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        Camera? tagged = Camera.main;
-        if (tagged != null && IsUsable(tagged, scene))
-        {
-            return tagged;
-        }
-
-        foreach (Camera candidate in Object.FindObjectsByType<Camera>())
-        {
-            if (IsUsable(candidate, scene))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsUsable(Camera camera, Scene activeScene)
-    {
-        if (!camera.isActiveAndEnabled || camera.gameObject.scene != activeScene)
-        {
-            return false;
-        }
-
-        if (string.Equals(camera.gameObject.scene.name, "MainMenu", System.StringComparison.OrdinalIgnoreCase) ||
-            camera.name.Contains("Menu", System.StringComparison.OrdinalIgnoreCase) ||
-            camera.name.Contains("Backdrop", System.StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (camera.targetTexture != null)
-        {
-            return false;
-        }
-
-        var cameraData = camera.GetComponent<UniversalAdditionalCameraData>();
-        return cameraData == null || cameraData.renderType == CameraRenderType.Base;
+        _ = scene;
+        return Resolve();
     }
 }

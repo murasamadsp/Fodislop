@@ -180,7 +180,6 @@ namespace Fodinae.UI.HUD.Inventory.View
             CreateTooltip(_doc.rootVisualElement);
             BuildUI();
             _initialized = true;
-            Debug.Log("[InventoryView] Initialized successfully.");
         }
 
         private void OnModelSlotSelected(int slotIndex)

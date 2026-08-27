@@ -1,10 +1,12 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Backend;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Rendering;
@@ -16,6 +18,7 @@ using VContainer.Unity;
 namespace Fodinae.Core
 {
     [DefaultExecutionOrder(-30000)]
+    [RequireComponent(typeof(Camera))]
     public class BootstrapLifetimeScope : LifetimeScope, IMainMenuNavigation
     {
         private const string MainMenuSceneName = "MainMenu";
@@ -23,7 +26,6 @@ namespace Fodinae.Core
         // Первой после Bootstrap грузится не меню, а Gateway: вход и онбординг.
         // Он сам загрузит MainMenu и выгрузится, когда игрок пройдёт ворота.
         private const string GatewaySceneName = "Gateway";
-        private const string MainGameSceneName = "MainGame";
         private readonly HashSet<ulong> _injectedSceneHandles = [];
 
         /// <summary>
@@ -57,6 +59,7 @@ namespace Fodinae.Core
             FailFastLogHandler.EnsureRegistered();
 
             DontDestroyOnLoad(gameObject);
+            BindApplicationCamera();
             base.Awake();
             if (Container != null)
             {
@@ -64,15 +67,17 @@ namespace Fodinae.Core
                 SceneManager.sceneUnloaded += OnSceneUnloaded;
                 Container.Resolve<ISessionContainer>().Set(Container);
 
-                // ClientConfigManager is a lazy Bootstrap-tier singleton — it only
-                // exists after the first Resolve, and its Start() runs a frame later.
+                // ClientConfigManager is an authored Bootstrap-tier singleton — it
+                // exists in the scene after BootstrapSceneAuthoring materializes it
+                // under BootstrapLifetimeScope, and its Start() runs a frame later.
                 // Everything that reads ClientConfig.Config (ConnectionManager,
-                // PostProcessController, TerrariaLightingEngine — including scene
+                // PostProcessController, LightingEngine — including scene
                 // components whose Start() fires BEFORE GameBootstrap.PostStart)
-                // needs it loaded by the time MainGame loads. Create and initialize
-                // it here, at Bootstrap startup, so the config is ready before
-                // MainMenu even loads.
+                // needs it loaded by the time MainGame loads. Initialize it here,
+                // at Bootstrap startup, so the config is ready before MainMenu
+                // even loads.
                 Container.Resolve<IClientConfigManager>().EnsureInitialized();
+                EnsureGatewayLoadedAsync().Forget();
             }
         }
 
@@ -90,58 +95,74 @@ namespace Fodinae.Core
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            EnforceSingleCamera(scene);
             if (scene.name == GatewaySceneName || scene.name == MainMenuSceneName)
             {
                 InjectSceneBehaviours(scene);
             }
         }
 
-
-        protected void Start()
+        private void BindApplicationCamera()
         {
-            EnsureGatewayLoadedAsync().Forget();
+            Camera camera = GetComponent<Camera>();
+            camera.enabled = true;
+            camera.tag = "MainCamera";
+            camera.backgroundColor = new Color(0.012f, 0.018f, 0.032f, 1f);
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            if (!TryGetComponent<FMODUnity.StudioListener>(out _))
+            {
+                gameObject.AddComponent<FMODUnity.StudioListener>();
+            }
+
+            GameplayCamera.BindPersistent(camera);
+            EnforceSingleCamera(gameObject.scene);
+        }
+
+        private void EnforceSingleCamera(Scene scene)
+        {
+            Camera applicationCamera = GetComponent<Camera>();
+            applicationCamera.backgroundColor = new Color(0.012f, 0.018f, 0.032f, 1f);
+            applicationCamera.clearFlags = CameraClearFlags.SolidColor;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (Camera camera in root.GetComponentsInChildren<Camera>(true))
+                {
+                    if (camera == applicationCamera || camera.targetTexture != null)
+                    {
+                        continue;
+                    }
+
+                    camera.enabled = false;
+                    camera.tag = "Untagged";
+                }
+            }
         }
 
         private async UniTask EnsureGatewayLoadedAsync()
         {
-            await RuntimeAssetPaths.EnsureReadyAsync();
-
-            // Если меню уже в сцене (запуск прямо из MainMenu в редакторе),
-            // ворота пропускаем — иначе они перекроют уже готовый экран.
-            if (SceneManager.GetSceneByName(MainMenuSceneName).isLoaded)
+            try
             {
-                await EnsureMainMenuLoadedAsync();
-                return;
+                await RuntimeAssetPaths.EnsureReadyAsync();
+                string initialScene = SceneManager.GetSceneByName(MainMenuSceneName).isLoaded
+                    ? MainMenuSceneName
+                    : GatewaySceneName;
+                Debug.Log($"[Bootstrap] Transitioning to initial scene '{initialScene}'...");
+                await Container.Resolve<ISceneCoordinator>().TransitionAsync(
+                    initialScene,
+                    destroyCancellationToken);
+                Debug.Log($"[Bootstrap] Transition to '{initialScene}' completed successfully.");
             }
-
-            Scene gateway = SceneManager.GetSceneByName(GatewaySceneName);
-            if (!gateway.isLoaded)
+            catch (Exception ex)
             {
-                await SceneManager.LoadSceneAsync(GatewaySceneName, LoadSceneMode.Additive).ToUniTask();
-                gateway = SceneManager.GetSceneByName(GatewaySceneName);
-            }
-
-            if (gateway.IsValid() && gateway.isLoaded)
-            {
-                SceneManager.SetActiveScene(gateway);
-                InjectSceneBehaviours(gateway);
+                Debug.LogException(ex);
             }
         }
 
         private async UniTask EnsureMainMenuLoadedAsync()
         {
-            Scene menuScene = SceneManager.GetSceneByName(MainMenuSceneName);
-            if (!menuScene.isLoaded)
-            {
-                await SceneManager.LoadSceneAsync(MainMenuSceneName, LoadSceneMode.Additive).ToUniTask();
-                menuScene = SceneManager.GetSceneByName(MainMenuSceneName);
-            }
-
-            if (menuScene.IsValid() && menuScene.isLoaded)
-            {
-                SceneManager.SetActiveScene(menuScene);
-                InjectSceneBehaviours(menuScene);
-            }
+            await Container.Resolve<ISceneCoordinator>().TransitionAsync(
+                MainMenuSceneName,
+                destroyCancellationToken);
         }
 
         private void InjectSceneBehaviours(Scene scene)
@@ -151,9 +172,13 @@ namespace Fodinae.Core
                 return;
             }
 
+            // Reused across roots: the array-returning overload allocates a fresh
+            // MonoBehaviour[] per root, and a loaded scene has many.
+            var behaviours = new System.Collections.Generic.List<MonoBehaviour>();
             foreach (GameObject root in scene.GetRootGameObjects())
             {
-                foreach (MonoBehaviour behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+                root.GetComponentsInChildren(true, behaviours);
+                foreach (MonoBehaviour behaviour in behaviours)
                 {
                     // Unity preserves missing-script slots as null entries in
                     // the component array. They are not injectable behaviours;
@@ -192,28 +217,14 @@ namespace Fodinae.Core
             // Ambient resolution is pointed back at Bootstrap BEFORE the unload,
             // not after it.
             //
-            // VContainer's Container.Dispose() empties sharedInstances but sets
-            // no disposed flag and leaves the registry intact, so a Resolve on a
-            // disposed scope silently re-runs the provider. For everything
-            // registered with RegisterComponentOnNewGameObject that provider is
-            // `new GameObject(typeof(T).Name)` - which is where the
-            // "PackManager / RobotManager / ServerAudioEventManager created
-            // while closing the scene" warning comes from. The unload spans at
-            // least a frame, ConnectionManager and its packet loop are
-            // Bootstrap-tier and keep running through it, and MapManager's
-            // [Inject] Construct pulls all three of those at once, so a single
-            // late packet was enough to resurrect the lot into a dying scene.
-            //
-            // Repointing first means those late resolves hit the Bootstrap
-            // container, where none of them are registered, and TryResolve
-            // simply returns null.
+            // When the Game scope disposes, VContainer clears sharedInstances but
+            // leaves the registry intact, so a Resolve on a disposed scope silently
+            // re-runs the provider. For RegisterComponent registrations the provider
+            // resolves the existing authored component reference — once SceneCoordinator
+            // unloads the scene, those references point at destroyed objects.
+            // Repointing first means late resolves hit the Bootstrap container, where
+            // Game-scoped types are not registered, and TryResolve returns null.
             session.Set(Container);
-
-            Scene mainGameScene = SceneManager.GetSceneByName(MainGameSceneName);
-            if (mainGameScene.isLoaded)
-            {
-                await SceneManager.UnloadSceneAsync(mainGameScene)!.ToUniTask();
-            }
 
             await EnsureMainMenuLoadedAsync();
         }
@@ -227,6 +238,7 @@ namespace Fodinae.Core
             builder.RegisterInstance(GraphicsQualityProfileLoader.LoadRequired());
 
             builder.Register<SessionContainer>(Lifetime.Singleton).AsImplementedInterfaces();
+            builder.Register<SceneCoordinator>(Lifetime.Singleton).AsImplementedInterfaces();
 
             RegisterManager<ConnectionManager>(builder).AsImplementedInterfaces().AsSelf();
             RegisterManager<NetworkService>(builder).AsImplementedInterfaces().AsSelf();
@@ -249,13 +261,30 @@ namespace Fodinae.Core
                 }
             }
 
-            if (existing != null)
+            // Строгий контракт: сцена — единственный источник истины для
+            // Bootstrap-менеджеров. Отсутствие менеджера — ошибка конфигурации,
+            // а не повод создавать его в рантайме (ленивое создание прятало бы
+            // дрейф сцены и плодило два источника истины). Сцена не рассинхронизируется:
+            if (existing == null)
             {
-                return builder.RegisterComponent(existing);
+                Debug.LogWarning(
+                    $"[BootstrapLifetimeScope] Manager '{typeof(T).Name}' not authored in scene '{ownScene.name}'; " +
+                    $"creating it on a new GameObject under BootstrapLifetimeScope. " +
+                    $"Run 'Fodinae/Architecture/Materialize Bootstrap Managers' to persist it into the scene.");
+
+                return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)
+                    .UnderTransform(transform);
             }
 
-            return builder.RegisterComponentOnNewGameObject<T>(Lifetime.Singleton)
-                .UnderTransform(transform);
+            if (!existing.transform.IsChildOf(transform))
+            {
+                existing.transform.SetParent(transform, worldPositionStays: true);
+                Debug.LogWarning(
+                    $"[BootstrapLifetimeScope] Manager '{typeof(T).Name}' in scene '{ownScene.name}' was not parented under BootstrapLifetimeScope; " +
+                    $"reparented automatically. Run 'Fodinae/Architecture/Materialize Bootstrap Managers' to save this in the scene asset.");
+            }
+
+            return builder.RegisterComponent(existing);
         }
     }
 }

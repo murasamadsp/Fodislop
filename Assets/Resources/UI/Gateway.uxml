@@ -122,7 +122,7 @@
                             <ui:Label class="onb-label" text="Масштаб интерфейса" />
                             <ui:Label class="onb-hint" text="Калибровка размера панелей UI Toolkit под монитор" />
                         </ui:VisualElement>
-                        <ui:DropdownField name="OnbUiScale" class="onb-select" />
+                        <ui:DropdownField name="OnbUIScale" class="onb-select" />
                     </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">

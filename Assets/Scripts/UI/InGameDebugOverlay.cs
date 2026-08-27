@@ -49,12 +49,12 @@ namespace Fodinae.UI
 
         private ulong _lastSolveCount;
         private float _solvesPerSecond;
-        private readonly System.Collections.Generic.List<Fodinae.World.Lighting.TerrariaLightingEngine.CascadeCostSample> _cascadeCosts = new(4);
+        private readonly System.Collections.Generic.List<Fodinae.World.Lighting.LightingEngine.CascadeCostSample> _cascadeCosts = new(4);
 
         private MapManager? _mapManager;
         private IWorldDataStorage? _storage;
         private RobotManager? _robotManager;
-        private PackManager? _packManager;
+        private BuildingManager? _buildingManager;
 
         public bool IsEnabled
         {
@@ -100,7 +100,7 @@ namespace Fodinae.UI
 
                 if (kb.digit4Key.wasPressedThisFrame || kb.numpad4Key.wasPressedThisFrame || kb.f4Key.wasPressedThisFrame)
                 {
-                    Fodinae.World.Lighting.TerrariaLightingEngine.BypassLightingCompute = !Fodinae.World.Lighting.TerrariaLightingEngine.BypassLightingCompute;
+                    Fodinae.World.Lighting.LightingEngine.BypassLightingCompute = !Fodinae.World.Lighting.LightingEngine.BypassLightingCompute;
                 }
 
                 if (kb.digit5Key.wasPressedThisFrame || kb.numpad5Key.wasPressedThisFrame || kb.f5Key.wasPressedThisFrame)
@@ -120,7 +120,7 @@ namespace Fodinae.UI
 
                 if (kb.digit8Key.wasPressedThisFrame || kb.numpad8Key.wasPressedThisFrame || kb.f8Key.wasPressedThisFrame)
                 {
-                    var le = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>();
+                    var le = _session?.TryResolve<Fodinae.World.Lighting.LightingEngine>();
                     if (le != null)
                     {
                         float current = le.DynamicLightIntensity;
@@ -165,7 +165,7 @@ namespace Fodinae.UI
                 // Solves per second, not per frame: the engine skips solves on
                 // its own cadence, so "how expensive is one solve" only means
                 // something next to "how often does one happen".
-                var lighting = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>();
+                var lighting = _session?.TryResolve<Fodinae.World.Lighting.LightingEngine>();
                 if (lighting != null)
                 {
                     ulong solveCount = lighting.SolveCount;
@@ -185,7 +185,7 @@ namespace Fodinae.UI
                 _mapManager ??= _session?.TryResolve<MapManager>();
                 _storage ??= _session?.TryResolve<IWorldDataStorage>();
                 _robotManager ??= _session?.TryResolve<RobotManager>();
-                _packManager ??= _session?.TryResolve<PackManager>();
+                _buildingManager ??= _session?.TryResolve<BuildingManager>();
             }
         }
 
@@ -312,11 +312,11 @@ namespace Fodinae.UI
                 }
             }
 
-            var lighting = _session?.TryResolve<Fodinae.World.Lighting.TerrariaLightingEngine>();
+            var lighting = _session?.TryResolve<Fodinae.World.Lighting.LightingEngine>();
             var ppController = _session?.TryResolve<Fodinae.Rendering.PostProcessing.PostProcessController>();
 
             _sb.AppendLine("---");
-            string lightPassState = !Fodinae.World.Lighting.TerrariaLightingEngine.BypassLightingCompute ? "<color=#00FF00>ON</color>" : "<color=#FF4444>MUTE</color>";
+            string lightPassState = !Fodinae.World.Lighting.LightingEngine.BypassLightingCompute ? "<color=#00FF00>ON</color>" : "<color=#FF4444>MUTE</color>";
             string ppPassState = !Fodinae.Rendering.PostProcessing.PostProcessRendererFeature.BypassPostProcessPass ? "<color=#00FF00>ON</color>" : "<color=#FF4444>MUTE</color>";
             string terrainDrawState = !Fodinae.World.Terrain.TerrainRenderer.BypassTerrainDraw ? "<color=#00FF00>ON</color>" : "<color=#FF4444>MUTE</color>";
             string cpuMeshState = !Fodinae.World.Terrain.TerrainRenderer.BypassCpuMeshRebuild ? "<color=#00FF00>ON</color>" : "<color=#FF4444>MUTE</color>";
@@ -339,7 +339,11 @@ namespace Fodinae.UI
             // - three Parallel.For passes instead of the cheap scroll/incremental
             // ones.
             _sb.AppendLine(
-                $"Terrain Rebuilds: {FrameProfiler.TerrainRebuildCount} | Full Populate: {FrameProfiler.TerrainFullPopulateCount}");
+                $"Terrain Rebuilds: {FrameProfiler.TerrainRebuildCount} | Full Populate: {FrameProfiler.TerrainFullPopulateCount} | Dirty Patches: {FrameProfiler.TerrainDirtyPatchCount}");
+            _sb.AppendLine(
+                $"Lighting CPU: Build {FrameProfiler.LightingBuildCommandsTimeMs:F2}ms | Execute {FrameProfiler.LightingExecuteCommandsTimeMs:F2}ms | Cmd {FrameProfiler.LightingCommandBufferBytes / 1024f:F1}KB");
+            _sb.AppendLine(
+                $"Lighting counts: Static {FrameProfiler.LightingStaticSolveCount} | Dynamic {FrameProfiler.LightingDynamicSolveCount} | Invalidations {FrameProfiler.LightingRegionInvalidationCount}");
             AppendLightingCost(lighting);
 
             const float boxWidth = 560f;
@@ -354,7 +358,7 @@ namespace Fodinae.UI
         /// Prints what one radiance-cascade solve actually costs, so the price of
         /// a graphics setting can be read off the screen instead of inferred.
         /// </summary>
-        private void AppendLightingCost(Fodinae.World.Lighting.TerrariaLightingEngine? lighting)
+        private void AppendLightingCost(Fodinae.World.Lighting.LightingEngine? lighting)
         {
             if (lighting == null || !lighting.IsInitialized || lighting.CascadeCount == 0)
             {

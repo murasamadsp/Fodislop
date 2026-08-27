@@ -15,14 +15,14 @@ namespace Fodinae.Rendering;
 public sealed class GraphicsSettingsController
 {
     private readonly IClientConfigManager _clientConfig;
-    private readonly TerrariaLightingEngine _lightingEngine;
+    private readonly LightingEngine _lightingEngine;
     private readonly PostProcessController _postProcessController;
     private readonly TerrainRenderer _terrainRenderer;
     private readonly SurfaceRenderer _surfaceRenderer;
 
     public GraphicsSettingsController(
         IClientConfigManager clientConfig,
-        TerrariaLightingEngine lightingEngine,
+        LightingEngine lightingEngine,
         PostProcessController postProcessController,
         TerrainRenderer terrainRenderer,
         SurfaceRenderer surfaceRenderer)

@@ -20,7 +20,7 @@ namespace Fodinae.Player
         private Camera? _mainCamera;
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
-        private UIDocument? _injectedUiDoc;
+        private UIDocument? _injectedUIDoc;
         [Inject]
         private IMapDataProvider _mapManager = null!;
         [Inject]
@@ -111,7 +111,7 @@ namespace Fodinae.Player
         // При этом TemplateContainer/корень документа — «пустой фон»: клик должен проходить.
         private bool IsPointerOverUI(Vector2 mousePos)
         {
-            var doc = _injectedUiDoc;
+            var doc = _injectedUIDoc;
             if (doc != null && doc.isActiveAndEnabled)
             {
                 var root = doc.rootVisualElement;

@@ -28,18 +28,18 @@ namespace Fodinae.Rendering.PostProcessing
 
         private Camera? _configuredMainCamera;
         private UniversalAdditionalCameraData? _configuredMainCameraData;
-        private Camera? _worldUiCamera;
-        private UniversalAdditionalCameraData? _worldUiCameraData;
+        private Camera? _worldUICamera;
+        private UniversalAdditionalCameraData? _worldUICameraData;
         private Camera? _mainCamera;
         private UniversalAdditionalCameraData? _cachedMainCameraData;
-        private int _worldUiLayerMask;
-        private float _lastWorldUiOrthographicSize = float.NaN;
-        private float _lastWorldUiFieldOfView = float.NaN;
-        private float _lastWorldUiNearClipPlane = float.NaN;
-        private float _lastWorldUiFarClipPlane = float.NaN;
-        private Matrix4x4 _lastWorldUiProjection;
-        private bool _hasWorldUiProjection;
-        private bool _worldUiSeparationRequired = true;
+        private int _worldUILayerMask;
+        private float _lastWorldUIOrthographicSize = float.NaN;
+        private float _lastWorldUIFieldOfView = float.NaN;
+        private float _lastWorldUINearClipPlane = float.NaN;
+        private float _lastWorldUIFarClipPlane = float.NaN;
+        private Matrix4x4 _lastWorldUIProjection;
+        private bool _hasWorldUIProjection;
+        private bool _worldUISeparationRequired = true;
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -298,15 +298,10 @@ namespace Fodinae.Rendering.PostProcessing
             PostProcessRenderPass.SetQuality(
                 config.GraphicsQualitySettings.PostProcessQuality);
 
-            _worldUiSeparationRequired =
-                config.GraphicsQualitySettings.PostProcessQuality != PostProcessQualityMode.Off &&
-                (bloom.active || vignette.active ||
-                    GetRequired(_chromaticAberration, nameof(_chromaticAberration)).active ||
-                    colorGrading.active || eigengrau.active || motionBlur.active ||
-                    config.AdvancedPostProcess.HasAnyEffects());
+            _worldUISeparationRequired = false;
             if (_configuredMainCamera != null && _configuredMainCameraData != null)
             {
-                ConfigureWorldUiRendering(_configuredMainCamera, _configuredMainCameraData);
+                ConfigureWorldUIRendering(_configuredMainCamera, _configuredMainCameraData);
             }
         }
 
@@ -358,60 +353,50 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            bool cameraSeparationIsBroken = _worldUiSeparationRequired
-                ? _configuredMainCamera != mainCamera ||
-                    _configuredMainCameraData == null ||
-                    _worldUiCamera == null ||
-                    _worldUiCameraData == null ||
-                    (mainCamera.cullingMask & _worldUiLayerMask) != 0 ||
-                    !_worldUiCamera.enabled ||
-                    _worldUiCamera.cullingMask != _worldUiLayerMask ||
-                    _worldUiCameraData.renderType != CameraRenderType.Overlay ||
-                    _worldUiCameraData.renderPostProcessing ||
-                    !_configuredMainCameraData.cameraStack.Contains(_worldUiCamera)
-                : _configuredMainCamera != mainCamera ||
-                    _configuredMainCameraData == null ||
-                    (mainCamera.cullingMask & _worldUiLayerMask) == 0 ||
-                    (_worldUiCamera != null && _worldUiCamera.enabled) ||
-                    (_worldUiCamera != null &&
-                        _configuredMainCameraData.cameraStack.Contains(_worldUiCamera));
+            bool cameraSeparationIsBroken =
+                _configuredMainCamera != mainCamera ||
+                _configuredMainCameraData == null ||
+                (mainCamera.cullingMask & _worldUILayerMask) == 0 ||
+                (_worldUICamera != null && _worldUICamera.enabled) ||
+                (_worldUICamera != null &&
+                    _configuredMainCameraData.cameraStack.Contains(_worldUICamera));
 
             if (cameraSeparationIsBroken)
             {
                 EnsureCameraSetup(mainCamera);
             }
 
-            if (!_worldUiSeparationRequired || _worldUiCamera == null)
+            if (!_worldUISeparationRequired || _worldUICamera == null)
             {
                 return;
             }
 
             Matrix4x4 projection = mainCamera.projectionMatrix;
             bool projectionChanged =
-                !_hasWorldUiProjection ||
-                _worldUiCamera.orthographic != mainCamera.orthographic ||
-                !Mathf.Approximately(_lastWorldUiOrthographicSize, mainCamera.orthographicSize) ||
-                !Mathf.Approximately(_lastWorldUiFieldOfView, mainCamera.fieldOfView) ||
-                !Mathf.Approximately(_lastWorldUiNearClipPlane, mainCamera.nearClipPlane) ||
-                !Mathf.Approximately(_lastWorldUiFarClipPlane, mainCamera.farClipPlane) ||
-                _lastWorldUiProjection != projection;
+                !_hasWorldUIProjection ||
+                _worldUICamera.orthographic != mainCamera.orthographic ||
+                !Mathf.Approximately(_lastWorldUIOrthographicSize, mainCamera.orthographicSize) ||
+                !Mathf.Approximately(_lastWorldUIFieldOfView, mainCamera.fieldOfView) ||
+                !Mathf.Approximately(_lastWorldUINearClipPlane, mainCamera.nearClipPlane) ||
+                !Mathf.Approximately(_lastWorldUIFarClipPlane, mainCamera.farClipPlane) ||
+                _lastWorldUIProjection != projection;
             if (!projectionChanged)
             {
                 return;
             }
 
-            _worldUiCamera.orthographic = mainCamera.orthographic;
-            _worldUiCamera.orthographicSize = mainCamera.orthographicSize;
-            _worldUiCamera.fieldOfView = mainCamera.fieldOfView;
-            _worldUiCamera.nearClipPlane = mainCamera.nearClipPlane;
-            _worldUiCamera.farClipPlane = mainCamera.farClipPlane;
-            _worldUiCamera.projectionMatrix = projection;
-            _lastWorldUiOrthographicSize = mainCamera.orthographicSize;
-            _lastWorldUiFieldOfView = mainCamera.fieldOfView;
-            _lastWorldUiNearClipPlane = mainCamera.nearClipPlane;
-            _lastWorldUiFarClipPlane = mainCamera.farClipPlane;
-            _lastWorldUiProjection = projection;
-            _hasWorldUiProjection = true;
+            _worldUICamera.orthographic = mainCamera.orthographic;
+            _worldUICamera.orthographicSize = mainCamera.orthographicSize;
+            _worldUICamera.fieldOfView = mainCamera.fieldOfView;
+            _worldUICamera.nearClipPlane = mainCamera.nearClipPlane;
+            _worldUICamera.farClipPlane = mainCamera.farClipPlane;
+            _worldUICamera.projectionMatrix = projection;
+            _lastWorldUIOrthographicSize = mainCamera.orthographicSize;
+            _lastWorldUIFieldOfView = mainCamera.fieldOfView;
+            _lastWorldUINearClipPlane = mainCamera.nearClipPlane;
+            _lastWorldUIFarClipPlane = mainCamera.farClipPlane;
+            _lastWorldUIProjection = projection;
+            _hasWorldUIProjection = true;
         }
 
         private void EnsureCameraSetup(Camera mainCamera)
@@ -440,73 +425,30 @@ namespace Fodinae.Rendering.PostProcessing
 
             _configuredMainCamera = mainCamera;
             _configuredMainCameraData = cameraData;
-            ConfigureWorldUiRendering(mainCamera, cameraData);
+            ConfigureWorldUIRendering(mainCamera, cameraData);
         }
 
-        private void ConfigureWorldUiRendering(
+        private void ConfigureWorldUIRendering(
             Camera mainCamera,
             UniversalAdditionalCameraData mainCameraData)
         {
             int uiLayer = UnityRenderLayerContracts.RequireWorldUIGameObjectLayer();
             UnityRenderLayerContracts.RequireWorldUISortingLayer();
-            _worldUiLayerMask = 1 << uiLayer;
+            _worldUILayerMask = 1 << uiLayer;
 
-            if (_worldUiSeparationRequired)
-            {
-                EnsureWorldUiCamera(mainCamera, mainCameraData);
-                return;
-            }
-
-            mainCamera.cullingMask |= _worldUiLayerMask;
-            if (_worldUiCamera == null)
+            mainCamera.cullingMask |= _worldUILayerMask;
+            if (_worldUICamera == null)
             {
                 Transform? existingTransform = mainCamera.transform.Find("WorldUICamera");
-                _worldUiCamera = existingTransform != null
+                _worldUICamera = existingTransform != null
                     ? existingTransform.GetComponent<Camera>()
                     : null;
             }
 
-            if (_worldUiCamera != null)
+            if (_worldUICamera != null)
             {
-                mainCameraData.cameraStack.Remove(_worldUiCamera);
-                _worldUiCamera.enabled = false;
-            }
-        }
-
-        private void EnsureWorldUiCamera(Camera mainCamera, UniversalAdditionalCameraData mainCameraData)
-        {
-            int uiLayer = UnityRenderLayerContracts.RequireWorldUIGameObjectLayer();
-            UnityRenderLayerContracts.RequireWorldUISortingLayer();
-
-            _worldUiLayerMask = 1 << uiLayer;
-            mainCamera.cullingMask &= ~_worldUiLayerMask;
-
-            var existingTransform = mainCamera.transform.Find("WorldUICamera");
-            _worldUiCamera = existingTransform != null ? existingTransform.GetComponent<Camera>() : null;
-            if (_worldUiCamera == null)
-            {
-                var cameraObject = new GameObject("WorldUICamera");
-                cameraObject.transform.SetParent(mainCamera.transform, false);
-                _worldUiCamera = cameraObject.AddComponent<Camera>();
-                _worldUiCamera.CopyFrom(mainCamera);
-            }
-
-            _worldUiCamera.cullingMask = _worldUiLayerMask;
-            _worldUiCamera.clearFlags = CameraClearFlags.Nothing;
-            _worldUiCamera.depth = mainCamera.depth + 1f;
-            _worldUiCamera.enabled = true;
-
-            _worldUiCameraData = _worldUiCamera.GetComponent<UniversalAdditionalCameraData>();
-            if (_worldUiCameraData == null)
-            {
-                _worldUiCameraData = _worldUiCamera.gameObject.AddComponent<UniversalAdditionalCameraData>();
-            }
-
-            _worldUiCameraData.renderType = CameraRenderType.Overlay;
-            _worldUiCameraData.renderPostProcessing = false;
-            if (!mainCameraData.cameraStack.Contains(_worldUiCamera))
-            {
-                mainCameraData.cameraStack.Add(_worldUiCamera);
+                mainCameraData.cameraStack.Remove(_worldUICamera);
+                _worldUICamera.enabled = false;
             }
         }
 

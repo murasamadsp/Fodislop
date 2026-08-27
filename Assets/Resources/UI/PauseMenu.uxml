@@ -4,7 +4,12 @@
 
         <ui:VisualElement name="MainPage" class="pause-panel pause-page">
             <ui:Label text="Меню" class="pause-title" />
-            <ui:ScrollView name="MainPageScroll" class="pause-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+            <ui:ScrollView name="MainPageScroll" class="pause-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                <ui:Button name="ResumeButton" text="Продолжить" class="pause-btn" />
+                <ui:Button name="SettingsButton" text="Настройки" class="pause-btn" />
+                <ui:Button name="MainMenuButton" text="В главное меню" class="pause-btn" />
+                <ui:Button name="QuitButton" text="Выйти" class="pause-btn" />
+            </ui:ScrollView>
         </ui:VisualElement>
 
         <ui:VisualElement name="SettingsPage" class="pause-panel pause-page pause-settings">
@@ -19,12 +24,83 @@
                     <ui:Button name="AdvancedTab" text="Расширенные" class="settings-tab settings-tab--advanced" />
                 </ui:VisualElement>
                 <ui:VisualElement name="SettingsContent" class="settings-content">
-                    <ui:ScrollView name="GraphicsScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
-                    <ui:ScrollView name="DisplayScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
-                    <ui:ScrollView name="EffectsScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
-                    <ui:ScrollView name="AudioScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
-                    <ui:ScrollView name="InterfaceScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
-                    <ui:ScrollView name="AdvancedScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+                    <ui:ScrollView name="GraphicsScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                        <ui:VisualElement name="GraphicsSection" class="settings-section">
+                            <ui:Label class="settings-section__title" text="Графика" />
+                            <ui:Label class="settings-section__description" text="Готовые профили качества. Изменение параметров переводит профиль в «Пользовательский»." />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                    <ui:ScrollView name="DisplayScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                        <ui:VisualElement name="DisplaySection" class="settings-section">
+                            <ui:Label class="settings-section__title" text="Экран" />
+                            <ui:Label class="settings-section__description" text="Разрешение, режим окна и частота кадров." />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                    <ui:ScrollView name="EffectsScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                        <ui:VisualElement name="EffectsSection" class="settings-section settings-section--effects">
+                            <ui:Label class="settings-section__title" text="Постобработка" />
+                            <ui:Label class="settings-section__description" text="Эффекты изображения: свечение, цвет, зернистость и размытие движения." />
+                            <ui:VisualElement name="EffectsGroupBloom" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Свечение" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="EffectsGroupCamera" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Камера и цвет" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="EffectsGroupDetail" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Детализация" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="EffectsGroupOptics" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Оптические эффекты" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="EffectsGroupAtmosphere" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Атмосфера" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="EffectsGroupDisplay" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Физика дисплея" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="EffectsGroupTemporal" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Temporal" />
+                            </ui:VisualElement>
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                    <ui:ScrollView name="AudioScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                        <ui:VisualElement name="AudioSection" class="settings-section">
+                            <ui:Label class="settings-section__title" text="Звук" />
+                            <ui:Label class="settings-section__description" text="Громкость отдельных звуковых шин. Отсутствующий аудиоконтент не блокирует игру." />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                    <ui:ScrollView name="InterfaceScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                        <ui:VisualElement name="InterfaceSection" class="settings-section">
+                            <ui:Label class="settings-section__title" text="Интерфейс" />
+                            <ui:Label class="settings-section__description" text="Масштаб и отображение элементов игрового интерфейса." />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                    <ui:ScrollView name="AdvancedScroll" class="pause-scroll settings-page" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">
+                        <ui:Foldout name="AdvancedLightingSection" text="Освещение" value="true" class="settings-section settings-section--advanced">
+                            <ui:VisualElement name="AdvancedGroupAmbient" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Окружение и излучение" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="AdvancedGroupDynamic" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Динамические источники" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="AdvancedGroupExtinction" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Физическое поглощение" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="AdvancedGroupBounce" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Непрямой диффузный свет" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="AdvancedGroupAO" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Контактное затенение" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="AdvancedGroupBounds" class="pause-subsection">
+                                <ui:Label class="pause-subsection-title" text="Границы расчёта" />
+                            </ui:VisualElement>
+                        </ui:Foldout>
+                        <ui:VisualElement name="WorldMaterialsSection" class="settings-section settings-section--advanced">
+                            <ui:Label class="settings-section__title" text="Материалы мира" />
+                            <ui:Label class="settings-section__description" text="Визуальные параметры поверхности мира и дальних областей." />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:Button name="SettingsBack" text="Назад" class="pause-btn" />

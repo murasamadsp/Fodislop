@@ -5,7 +5,9 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Fodinae.Editor
 {
@@ -110,6 +112,46 @@ namespace Fodinae.Editor
             {
                 Debug.Log($"[InjectValidator] All {totalInjectFields} [Inject] fields OK. Report: {path}");
             }
+        }
+
+        [MenuItem("Fodinae/Diagnostics/Clean Missing Scripts In All Scenes")]
+        public static void CleanMissingScriptsInAllScenes()
+        {
+            string[] sceneGuids = AssetDatabase.FindAssets("t:Scene", new[] { "Assets/Scenes" });
+            int totalCleaned = 0;
+            foreach (string guid in sceneGuids)
+            {
+                string scenePath = AssetDatabase.GUIDToAssetPath(guid);
+                Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+                bool sceneChanged = false;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+                    {
+                        int count = GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+                        if (count > 0)
+                        {
+                            totalCleaned += count;
+                            sceneChanged = true;
+                            Debug.LogWarning($"[InjectValidator] Removed {count} missing scripts from '{t.name}' in '{scenePath}'");
+                        }
+                    }
+                }
+
+                if (sceneChanged)
+                {
+                    EditorSceneManager.MarkSceneDirty(scene);
+                    EditorSceneManager.SaveScene(scene);
+                }
+
+                if (scene != SceneManager.GetActiveScene())
+                {
+                    EditorSceneManager.CloseScene(scene, true);
+                }
+            }
+
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[InjectValidator] Missing scripts cleanup completed. Total removed: {totalCleaned}");
         }
 
         private static string GetHierarchyPath(GameObject gameObject)

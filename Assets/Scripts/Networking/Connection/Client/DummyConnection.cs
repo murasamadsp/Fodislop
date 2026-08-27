@@ -55,6 +55,12 @@ namespace MinesServer.Networking.Connection.Client
         {
             _session = session;
             _validTokens = _tokenStore.Load();
+            _missionRunner = new DummyMissionRunner(SendPacket);
+            _buffManager = new DummyBuffManager(SendPacket, _lifecycleVersion);
+            _teleportManager = new DummyTeleportManager(SendPacket, _teleportPositions);
+            _chatSimulator = new DummyChatSimulator(SendPacket, _lifecycleVersion);
+            _clanManager = new DummyClanManager(SendPacket);
+            _pathFinder = new DummyPathFinder(SendPacket, _session);
         }
 
         public ConnectionStatus ConnectionStatus => _status;
@@ -70,6 +76,12 @@ namespace MinesServer.Networking.Connection.Client
         private readonly DummyTokenStore _tokenStore = new();
         private readonly HashSet<string> _validTokens;
         private bool _awaitingAuth;
+        private readonly DummyMissionRunner _missionRunner;
+        private readonly DummyBuffManager _buffManager;
+        private readonly DummyTeleportManager _teleportManager;
+        private readonly DummyChatSimulator _chatSimulator;
+        private readonly DummyClanManager _clanManager;
+        private readonly DummyPathFinder _pathFinder;
 
         private const ushort _mockBotId = 456;
         private ushort _x = 0;
@@ -80,21 +92,8 @@ namespace MinesServer.Networking.Connection.Client
         private System.Drawing.Color _chatColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
         private ItemType? _selectedItemType;
         private readonly Dictionary<ItemType, long> _inventory = new();
-        private int _bonusCountdown;
-        private volatile bool _bonusClaimed;
-        private ItemType _pendingBonusItem;
-        private int _pendingBonusAmount;
         private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
-        private List<(ushort X, ushort Y)> _teleportDestinations = new();
-        private bool _teleportWindowOpen;
-        private readonly Dictionary<string, long> _activeBuffs = new();
-        private bool _buffLoopStarted;
         private CancellationTokenSource? _pathCts;
-        private ushort _clanId;
-        private static readonly (ushort Id, string Name, string Desc)[] _mockClans =
-        {
-            (1, "Альфа", "Старейший клан на сервере"),
-        };
         private static readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages();
 
         private static ChatMessagePacket[] CreateSeedMessages()
@@ -146,27 +145,6 @@ namespace MinesServer.Networking.Connection.Client
 
         private int _health = 500;
 
-        private struct MissionDef
-        {
-            public int Id;
-            public string Title;
-            public string Description;
-            public long Target;
-            public ItemType RewardItem;
-            public long RewardAmount;
-        }
-
-        private static readonly MissionDef[] _missions = new[]
-        {
-            new MissionDef { Id = 0, Title = "Копатель-ученик", Description = "Сломайте 50 блоков", Target = 50, RewardItem = ItemType.Cred, RewardAmount = 25 },
-            new MissionDef { Id = 1, Title = "Опытный копатель", Description = "Сломайте 200 блоков", Target = 200, RewardItem = ItemType.Cred, RewardAmount = 100 },
-            new MissionDef { Id = 2, Title = "Мастер-копатель", Description = "Сломайте 500 блоков", Target = 500, RewardItem = ItemType.Cred, RewardAmount = 300 },
-        };
-
-        private int _activeMissionId = -1;
-        private long _missionProgress;
-        private readonly bool[] _missionCompleted = new bool[_missions.Length];
-
         public void Connect()
         {
             if (_status != ConnectionStatus.Disconnected)
@@ -211,7 +189,7 @@ namespace MinesServer.Networking.Connection.Client
             // It was never reset, so after one disconnect StartBuffLoop's guard
             // stayed latched and the loop never came back - the mirror image of
             // the other four loops, which had no guard at all and duplicated.
-            _buffLoopStarted = false;
+            _buffManager.ResetLoopGuard();
 
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
@@ -234,7 +212,7 @@ namespace MinesServer.Networking.Connection.Client
         private async UniTaskVoid UpdatePosition()
         {
             await UniTask.Delay(IgnoreCollision ? 20 : 200);
-            SendMapChunksAround(_x, _y);
+            DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
         }
 
@@ -269,7 +247,7 @@ namespace MinesServer.Networking.Connection.Client
             // this the loops outlive the object that owns them.
             _lifecycleVersion++;
             _status = ConnectionStatus.Disconnected;
-            _buffLoopStarted = false;
+            _buffManager.ResetLoopGuard();
 
             _worldLayer?.Dispose();
             _worldLayer = null;
@@ -285,13 +263,18 @@ namespace MinesServer.Networking.Connection.Client
             OnReceived?.Invoke(new ServerPacket(new MinesServer.Networking.Server.Packets.Connection.ReconnectPacket(reason)));
         }
 
+        private void SendPacket(ServerPacket packet)
+        {
+            OnReceived?.Invoke(packet);
+        }
+
         public void SendAsync(ClientPacket packet)
         {
             if (packet.Data is ActionClientPacket actionPacket)
             {
                 if (actionPacket.Payload is MovePacket move)
                 {
-                    if (_teleportWindowOpen)
+                    if (_teleportManager.WindowOpen)
                     {
                         return;
                     }
@@ -331,7 +314,7 @@ namespace MinesServer.Networking.Connection.Client
                     _y = move.Y;
                     _pathCts?.Cancel();
                     UpdatePosition().Forget();
-                    CheckTeleportEntry();
+                    _teleportManager.CheckTeleportEntry(_x, _y);
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
@@ -405,15 +388,7 @@ namespace MinesServer.Networking.Connection.Client
                         })));
                     }
 
-                    if (_activeMissionId >= 0)
-                    {
-                        _missionProgress++;
-                        OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(_missionProgress, _missions[_activeMissionId].Target)));
-                        if (_missionProgress >= _missions[_activeMissionId].Target)
-                        {
-                            CompleteMission();
-                        }
-                    }
+                    _missionRunner.OnBlockMined(_inventory);
                 }
                 else if (actionPacket.Payload is SuicidePacket)
                 {
@@ -427,7 +402,7 @@ namespace MinesServer.Networking.Connection.Client
                     _health = 500;
                     _pathCts?.Cancel();
 
-                    SendMapChunksAround(_x, _y);
+                    DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
                     OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
                     OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
@@ -488,7 +463,7 @@ namespace MinesServer.Networking.Connection.Client
                 else if (actionPacket.Payload is BuildCyanPacket)
                 {
                     var front = GetFrontCell();
-                    TryBuild(front.X, front.Y, CellType.MilitaryBlock);
+                    DummyBuildHandler.TryBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y, CellType.MilitaryBlock);
                 }
                 else if (actionPacket.Payload is BuildGrayPacket)
                 {
@@ -501,30 +476,27 @@ namespace MinesServer.Networking.Connection.Client
                     }
                     else
                     {
-                        TryBuild(front.X, front.Y, CellType.Road);
+                        DummyBuildHandler.TryBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y, CellType.Road);
                     }
                 }
                 else if (actionPacket.Payload is BuildGreenPacket)
                 {
                     var front = GetFrontCell();
-                    TryUpgradeBuild(front.X, front.Y,
-                        (CellType.Empty, CellType.GreenBlock),
-                        (CellType.GreenBlock, CellType.YellowBlock),
-                        (CellType.YellowBlock, CellType.RedBlock));
+                    DummyBuildHandler.TryUpgradeBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y,
+                        new (CellType From, CellType To)[] { (CellType.Empty, CellType.GreenBlock), (CellType.GreenBlock, CellType.YellowBlock), (CellType.YellowBlock, CellType.RedBlock) });
                 }
                 else if (actionPacket.Payload is BuildWhitePacket)
                 {
                     var front = GetFrontCell();
-                    TryUpgradeBuild(front.X, front.Y,
-                        (CellType.Empty, CellType.Support),
-                        (CellType.Support, CellType.QuadBlock));
+                    DummyBuildHandler.TryUpgradeBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y,
+                        new (CellType From, CellType To)[] { (CellType.Empty, CellType.Support), (CellType.Support, CellType.QuadBlock) });
                 }
                 else if (actionPacket.Payload is ClickCellPacket click)
                 {
                     _pathCts?.Cancel();
                     _pathCts?.Dispose();
                     _pathCts = null;
-                    var path = FindPath(_x, _y, click.X, click.Y);
+                    var path = _pathFinder.FindPath(_x, _y, click.X, click.Y, GetServerCell);
                     if (path.Count > 0)
                     {
                         _pathCts = new CancellationTokenSource();
@@ -543,7 +515,8 @@ namespace MinesServer.Networking.Connection.Client
 
                     if (!isTokenValid)
                     {
-                        SendAuthWindow();
+                        _awaitingAuth = true;
+                        OnReceived?.Invoke(DummyWindowBuilder.BuildAuthWindow());
                         return;
                     }
 
@@ -562,7 +535,7 @@ namespace MinesServer.Networking.Connection.Client
                     InitWorld();
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
-                    HandleAssetRequest(runtimeAssets).Forget();
+                    DummyAssetHandler.HandleAssetRequest(runtimeAssets, _session, SendPacket).Forget();
                     break;
                 case OpenHelpClickPacket:
                     break;
@@ -572,15 +545,7 @@ namespace MinesServer.Networking.Connection.Client
                     _chatColor = colorChange.Color;
                     break;
                 case OpenClanClickPacket:
-                    if (_clanId == 0)
-                    {
-                        SendClanListWindow();
-                    }
-                    else
-                    {
-                        SendClanInfoWindow();
-                    }
-
+                    _clanManager.HandleOpenClanClick();
                     break;
                 case QueryChatHistoryPacket qh:
                     long startFrom = (long)qh.StartFrom;
@@ -623,66 +588,10 @@ namespace MinesServer.Networking.Connection.Client
 
         private static MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket GetItemInfoPacket(ItemType item)
         {
-            var (name, desc) = GetItemInfo(item);
+            var (name, desc) = DummyItemInfo.GetItemInfo(item);
             return new MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket(
                 item, name, desc, 1, 1, 3, false, new BitArray(0));
         }
-
-        private static (string name, string desc) GetItemInfo(ItemType i) => i switch
-        {
-            ItemType.Teleport => ("Телепорт", "Строительный пак, который позволяет игрокам телепортироваться на другой телепорт"),
-            ItemType.Resp => ("Респаун", "Строительный пак, который позволяет возрождаться и ремонтировать робота"),
-            ItemType.Up => ("UP", "Строительный пак, который позволяет игрокам устанавливать и прокачивать умения"),
-            ItemType.Market => ("Маркет", "Строительный пак, который позволяет игрокам покупать и продавать кристаллы, а также обмениваться друг с другом"),
-            ItemType.Clans => ("Кланс", "Строительный пак, который позволяет просмотреть список кланов и вступить в один из кланов"),
-            ItemType.PlasmBomb => ("Плазменная бомба", "Предмет, который позволяет взорвать блоки в радиусе 3 клеток(Красноскал с 1% шансом)"),
-            ItemType.ProtonBomb => ("Протонная бомба", "Предмет, который позволяет взорвать блоки 3х3 от центра(Красноскал с 100% шансом)"),
-            ItemType.RazBomb => ("Бомба-разряд", "Предмет, который позволяет нанести урон игрокам (500 HP) и Строительным пакам(10 HP)"),
-            ItemType.Cred => ("Кредиты", "Валюта, которая позволяет увеличивать слоты роботов, создавать кланы и покупать скины для роботов"),
-            ItemType.Rem => ("Ремонтный бот", "Предмет, который позволяет полностью восстановить здоровье робота"),
-            ItemType.Geopack => ("Геопак", "Предмет, который позволяет упаковать живой кристалл в инвентарь"),
-            ItemType.GeoCyan => ("Голубая жива", "Живка, которая даёт плод голубыми кристаллами"),
-            ItemType.GeoRed => ("Красная жива", "Живка, которая даёт плод красными кристаллами, если поблизости есть черноскал"),
-            ItemType.GeoViolet => ("Фиолетовая жива", "Живка, которая даёт плод фиолетовыми кристаллами, если поблизости есть черноскал"),
-            ItemType.GeoBlack => ("Чёрная жива", "Живка, которая даёт плод голубыми и красными кристаллами, если стоит вплотную к такой же живке"),
-            ItemType.GeoWhite => ("Белая жива", "Живка, которая даёт плод белыми кристаллами, если сверху стоит магма"),
-            ItemType.GeoBlue => ("Синяя жива", "Живка, которая даёт плод синими кристаллами, если есть место для передвижения живки"),
-            ItemType.VulkanRadar => ("Радар вулканов", "Предмет, который позволяет обнаружить вулканы"),
-            ItemType.AliveRadar => ("Радар живок", "Предмет, который позволяет обнаружить живые кристаллы в радиусе 200 блоков"),
-            ItemType.RobotRadar => ("Радар роботов", "Предмет, который позволяет обнаружить роботов в радиусе 300 блоков"),
-            ItemType.PortableTeleporter => ("ТПР", "Предмет, который позволяет игроку телепортироваться на Респаун без потери кристаллов"),
-            ItemType.ConstructionBot => ("Конструкционный бот", "Предмет, увеличивающий вместимость кристаллов в строительных паках"),
-            ItemType.Generator => ("Боевой Генератор", "Предмет, увеличивающий урон пушки"),
-            ItemType.Charge => ("Заряд защиты", "Предмет, увеличивающий здоровье строительных паков"),
-            ItemType.Craft => ("Крафт", "Строительный пак, в котором можно создать паки и предметы"),
-            ItemType.BombShop => ("Магазин бомб", "Строительный пак, в котором продаются бомбы за кредиты"),
-            ItemType.Gun => ("Клановая Пушка", "Строительный клановый пак, позволяющий защитить территорию клана"),
-            ItemType.Gate => ("Ворота", "Строительный клановый пак, через который могут пройти только участники клана"),
-            ItemType.Disassembler => ("Диззассемблер", "Предмет, позволяющий собрать строительный пак в инвентарь"),
-            ItemType.Storage => ("Склад", "Строительный пак, в котором можно хранить кристаллы"),
-            ItemType.Scanner => ("Сканер паков", "Предмет, при использовании которого показываются характеристики строительного пака"),
-            ItemType.UpgradeBooster => ("Прокачка x3", "Предмет, который ускоряет прокачку в 3 раза (24ч)"),
-            ItemType.FreeUp => ("Freeup", "Предмет, который увеличивает оптимизацию до 75% на прокачку (12ч)"),
-            ItemType.MineBooster => ("Добыча x4", "Предмет, который увеличивает добычу кристалла в 4 раза (12ч)"),
-            ItemType.GeoHypno => ("Гипноскал", "Блок, который защищает вместе с пушкой территорию клана"),
-            ItemType.Poly => ("Полимер", "Компонент/Предмет используемый в крафтинге и при помощи которого можно строить полимерную дорогу"),
-            ItemType.Nano => ("Нано бот", "Компонент/Предмет используемый в крафтинге и при помощи которого можно восстановить здоровье робота на 50 HP"),
-            ItemType.Battery => ("Аккумулятор", "Компонент/Предмет используемый в крафтинге и при помощи которого можно увеличить скорость робота"),
-            ItemType.Trans => ("Транслятор", "Компонент/Предмет используемый в крафтинге и при помощи которого можно между своими роботами переключаться и передавать кристаллы"),
-            ItemType.Compressor => ("Компрессор", "Компонент/Предмет используемый в крафтинге"),
-            ItemType.C190 => ("С-190", "Компонент/Предмет используемый в крафтинге и при помощи которого можно наносить урон другим игрокам"),
-            ItemType.FED => ("Fed база", "Предмет, который позволяет ставить золотую дорогу"),
-            ItemType.GeoBlackRock => ("Чёрная скала", "Предмет, который мгновенно ставит черноскал на пустоте"),
-            ItemType.GeoRedRock => ("Красная скала", "Предмет, который мгновенно ставит красноскал на пустоте"),
-            ItemType.Auto => ("Автоматизатор", "Предмет, который пополняет кристаллами из ближайшего кланового/личного склада"),
-            ItemType.EMI => ("ЭМИ", "Предмет, который запрещает игрокам в радиусе 20 блоков использовать инвентарь/копать"),
-            ItemType.GeoRainbow => ("Радужная жива", "Живка, которая даёт плод любым блоком, если с одной из сторон по горизонтали или вертикали не пусто"),
-            ItemType.BotSpot => ("Спот", "Предмет, который создаёт робота-клона"),
-            ItemType.ScienceCentre => ("Научный центр", "Строительный пак, в котором можно изучить мир, и ознакомиться со списком лучших игроков/кланов"),
-            ItemType.Currency => ("Валюта", "Валюта, которая является основной для торговли и прокачки умений."),
-            ItemType.OPP => ("ОПП", "Очки, которые дают возможность купить другие умения, которые лучше чем начальные"),
-            _ => (i.ToString(), string.Empty),
-        };
 
         private void HandleUseItem()
         {
@@ -692,9 +601,9 @@ namespace MinesServer.Networking.Connection.Client
             }
 
             var selectedType = _selectedItemType.Value;
-            if (IsBuildingPack(selectedType))
+            if (DummyItemInfo.IsBuildingPack(selectedType))
             {
-                var packType = ItemTypeToPackType(selectedType);
+                var packType = DummyItemInfo.ItemTypeToPackType(selectedType);
                 if (packType == PackType.None)
                 {
                     return;
@@ -719,170 +628,74 @@ namespace MinesServer.Networking.Connection.Client
                     _teleportPositions.Add((frontX, frontY));
                 }
 
-                ConsumeItem(selectedType, 1);
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
             else if (selectedType == ItemType.Rem)
             {
                 _health = 500;
                 OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                ConsumeItem(selectedType, 1);
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
             else if (selectedType == ItemType.UpgradeBooster)
             {
-                StartBuffLoop();
-                const string tag = "xp3";
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 86400;
-                _activeBuffs[tag] = expiry;
-                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(0, 200, 0), tag, new[] { "Прокачка x3", expiry.ToString() })));
-                ConsumeItem(selectedType, 1);
+                _buffManager.ActivateBuff("xp3", 86400, System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3");
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
             else if (selectedType == ItemType.FreeUp)
             {
-                StartBuffLoop();
-                const string tag = "freeup";
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
-                _activeBuffs[tag] = expiry;
-                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.Cyan, tag, new[] { "Freeup", expiry.ToString() })));
-                ConsumeItem(selectedType, 1);
+                _buffManager.ActivateBuff("freeup", 43200, System.Drawing.Color.Cyan, "Freeup");
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
             else if (selectedType == ItemType.MineBooster)
             {
-                StartBuffLoop();
-                const string tag = "x4";
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 43200;
-                _activeBuffs[tag] = expiry;
-                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(255, 165, 0), tag, new[] { "Добыча x4", expiry.ToString() })));
-                ConsumeItem(selectedType, 1);
+                _buffManager.ActivateBuff("x4", 43200, System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4");
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
             else if (selectedType == ItemType.Battery)
             {
-                StartBuffLoop();
-                const string tag = "battery";
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var expiry = Math.Max(_activeBuffs.GetValueOrDefault(tag), now) + 3600;
-                _activeBuffs[tag] = expiry;
-                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, System.Drawing.Color.FromArgb(65, 105, 225), tag, new[] { "Аккумулятор", expiry.ToString() })));
-                ConsumeItem(selectedType, 1);
+                _buffManager.ActivateBuff("battery", 3600, System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор");
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
             else
             {
-                ConsumeItem(selectedType, 1);
+                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
             }
         }
-
-        private void ConsumeItem(ItemType type, long count)
-        {
-            if (!_inventory.TryGetValue(type, out long current) || current <= 0)
-            {
-                return;
-            }
-
-            long remaining = Math.Max(0, current - count);
-            _inventory[type] = remaining;
-            OnReceived?.Invoke(new ServerPacket(new InventoryPacket(
-                new Dictionary<ItemType, long> { { type, remaining } })));
-        }
-
-        private static bool IsBuildingPack(ItemType type) => type switch
-        {
-            ItemType.Teleport or ItemType.Resp or ItemType.Up or ItemType.Market or
-            ItemType.Clans or ItemType.Craft or ItemType.BombShop or ItemType.Gun or
-            ItemType.Storage or ItemType.ScienceCentre => true,
-            _ => false,
-        };
-
-        private static PackType ItemTypeToPackType(ItemType type) => type switch
-        {
-            ItemType.Teleport => PackType.Teleport,
-            ItemType.Resp => PackType.Resp,
-            ItemType.Up => PackType.Up,
-            ItemType.Market => PackType.Market,
-            ItemType.Clans => PackType.Clans,
-            ItemType.Craft => PackType.Craft,
-            ItemType.BombShop => PackType.BombShop,
-            ItemType.Gun => PackType.Gun,
-            ItemType.Storage => PackType.Storage,
-            ItemType.ScienceCentre => PackType.Science,
-            _ => PackType.None,
-        };
 
         private void HandleElementClick(ElementClickPacket packet)
         {
             if (packet.WindowTag == "daily_bonus")
             {
-                HandleDailyBonusClaim();
+                _buffManager.HandleDailyBonusClaim(_inventory);
             }
             else if (packet.WindowTag == "teleport")
             {
-                if (!_teleportWindowOpen)
+                if (!_teleportManager.WindowOpen)
                 {
                     return;
                 }
 
                 if (packet.ElementIndex == 0)
                 {
-                    _teleportWindowOpen = false;
+                    _teleportManager.WindowOpen = false;
                     OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
                 }
                 else
                 {
-                    HandleTeleportClick(packet.ElementIndex - 1);
+                    _teleportManager.HandleTeleportClick(packet.ElementIndex - 1);
                 }
             }
             else if (packet.WindowTag == "test_modal")
             {
-                OnReceived?.Invoke(new ServerPacket(new ModalWindowPacket(
-                    "Тестовое окно",
-                    "Это модальное окно вызывается из HUD.\n\nНажмите OK чтобы продолжить.",
-                    "OK",
-                    string.Empty)));
+                OnReceived?.Invoke(DummyWindowBuilder.BuildTestModalWindow());
             }
-            else if (packet.WindowTag == "join_clan")
+            else if (packet.WindowTag is "join_clan" or "leave_clan" or "clan_list" or "clan_info")
             {
-                _clanId = 1;
-                OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(1)));
-            }
-            else if (packet.WindowTag == "leave_clan")
-            {
-                _clanId = 0;
-                OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
-            }
-            else if (packet.WindowTag == "clan_list")
-            {
-                if (packet.ElementIndex == 0)
-                {
-                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                }
-                else
-                {
-                    int idx = packet.ElementIndex - 1;
-                    if (idx >= 0 && idx < _mockClans.Length)
-                    {
-                        _clanId = _mockClans[idx].Id;
-                        OnReceived?.Invoke(new ServerPacket(new ShowClanPacket(_clanId)));
-                        OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                    }
-                }
-            }
-            else if (packet.WindowTag == "clan_info")
-            {
-                if (packet.ElementIndex == 0)
-                {
-                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                }
-                else
-                {
-                    _clanId = 0;
-                    OnReceived?.Invoke(new ServerPacket(new HideClanPacket()));
-                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                }
+                _clanManager.HandleElementClick(packet);
             }
             else if (packet.WindowTag == "open_missions")
             {
-                SendMissionWindow();
+                _missionRunner.SendMissionWindow(_x, _y);
             }
             else if (packet.WindowTag == "missions")
             {
@@ -890,22 +703,22 @@ namespace MinesServer.Networking.Connection.Client
                 {
                     OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
                 }
-                else if (packet.ElementIndex <= _missions.Length)
+                else if (packet.ElementIndex <= _missionRunner.MissionCount)
                 {
-                    StartMission(packet.ElementIndex - 1);
+                    _missionRunner.StartMission(packet.ElementIndex - 1, _x, _y);
                 }
                 else
                 {
-                    CancelMission();
+                    _missionRunner.CancelMission();
                 }
             }
             else if (packet.WindowTag == "open_url_test")
             {
-                OnReceived?.Invoke(new ServerPacket(new OpenURLPacket("https://vk.ru/mines4reborn")));
+                OnReceived?.Invoke(DummyWindowBuilder.BuildOpenUrlPacket("https://vk.ru/mines4reborn"));
             }
             else if (packet.WindowTag == "test_mission_arrow")
             {
-                OnReceived?.Invoke(new ServerPacket(new MissionArrowPacket((ushort)_x, (ushort)_y)));
+                OnReceived?.Invoke(DummyWindowBuilder.BuildTestMissionArrowPacket(_x, _y));
             }
             else if (packet.WindowTag == "auth")
             {
@@ -924,73 +737,6 @@ namespace MinesServer.Networking.Connection.Client
 
                 InitWorld();
             }
-        }
-
-        private void SendAuthWindow()
-        {
-            _awaitingAuth = true;
-
-            var titleText = new TextPacket
-            {
-                Text = "<color=#B2A680>Авторизация</color>",
-                AttachedProperties = new StringPairPacket[]
-                {
-                    new("DockPanel.Dock", "Top"),
-                },
-            };
-
-            var descriptionText = new TextPacket
-            {
-                Text = "<color=white>Нажмите «Авторизоваться» чтобы начать игру</color>",
-                Style = new GUIStylePacket
-                {
-                    Margin = new Margins(0, 0, 20, 0),
-                },
-
-                // Кнопка и текст теперь жестко привязаны к сетке сверху вниз
-                AttachedProperties = new StringPairPacket[]
-                 {
-            new("DockPanel.Dock", "Top"),
-                 },
-            };
-
-            var authButton = new TextPacket
-            {
-                Text = "<color=white>Авторизоваться</color>",
-                OnClickContext = ".",
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 40, 167, 69),
-                    Border = System.Drawing.Color.FromArgb(255, 60, 200, 100),
-                    BorderWidth = 2,
-                    Padding = new Margins(10, 10, 6, 6),
-                    Margin = new Margins(0, 0, 0, 0),
-                },
-
-                // Кнопка встанет строго под описанием внутри темного окна
-                AttachedProperties = new StringPairPacket[]
-                {
-            new("DockPanel.Dock", "Top"),
-                },
-            };
-            var root = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
-                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                    BorderWidth = 2,
-                    Padding = new Margins(10, 10, 10, 10),
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    titleText,
-                    descriptionText,
-                    authButton,
-                },
-            };
-
-            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("auth", 300, 160, root)));
         }
 
         private void InitWorld()
@@ -1039,15 +785,14 @@ namespace MinesServer.Networking.Connection.Client
                 string.Empty)));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-            RunCircularBots(6, _lifecycleVersion).Forget();
+            DummyBotRunner.RunCircularBots(6, _lifecycleVersion, SendPacket, () => LoopAlive(_lifecycleVersion)).Forget();
             _x = 25;
             _y = 50;
-            SendMapChunksAround(_x, _y);
+            DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
             OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
             OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
             OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
-            _bonusCountdown = 10;
-            _bonusClaimed = false;
+            _buffManager.ResetDailyBonus();
             OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
             _health = 250;
             OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
@@ -1057,26 +802,15 @@ namespace MinesServer.Networking.Connection.Client
             OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
 
             SendSkillProgressMock();
-            SendChatMock(_lifecycleVersion).Forget();
+            _chatSimulator.SendChatMock(_lifecycleVersion);
 
             OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
             OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
-            foreach (var kvp in _activeBuffs)
-            {
-                var (color, name) = kvp.Key switch
-                {
-                    "xp3" => (System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3"),
-                    "freeup" => (System.Drawing.Color.Cyan, "Freeup"),
-                    "x4" => (System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4"),
-                    "battery" => (System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор"),
-                    _ => (System.Drawing.Color.White, kvp.Key),
-                };
-                OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(0, color, kvp.Key, new[] { name, kvp.Value.ToString() })));
-            }
+            _buffManager.SendStatusPackets();
 
-            StartBuffLoop();
+            _buffManager.StartBuffLoop(_lifecycleVersion);
             SendPingMock(_lifecycleVersion).Forget();
-            SendDailyBonusMock(_lifecycleVersion).Forget();
+            _buffManager.SendDailyBonusMock(_lifecycleVersion).Forget();
 
             OnReceived?.Invoke(new ServerPacket(
                 new MovementSpeedPacket(
@@ -1119,695 +853,11 @@ namespace MinesServer.Networking.Connection.Client
             serverConfig?.ApplyValues(_digCooldown, _maxGlobalChatLength, _maxLocalChatLength);
         }
 
-        private void SendMissionWindow()
-        {
-            var rows = new List<IGUIComponentPacket>();
-            for (int i = 0; i < _missions.Length; i++)
-            {
-                var m = _missions[i];
-                string status = _activeMissionId == m.Id
-                    ? $"<color=yellow>Активно: {_missionProgress}/{m.Target}</color>"
-                    : _missionCompleted[m.Id]
-                        ? "<color=lime>✓ Выполнено</color>"
-                        : "<color=#B2A680>Выбрать</color>";
-                rows.Add(new TextPacket
-                {
-                    Text = $"<color=white>{m.Title}</color>\n<color=#B2A680>{m.Description}</color>  {status}",
-                    OnClickContext = ".",
-                    Style = new GUIStylePacket
-                    {
-                        Background = System.Drawing.Color.FromArgb(242, 26, 26, 26),
-                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                        BorderWidth = 2,
-                        Padding = new Margins(8, 12, 8, 12),
-                        Margin = new Margins(0, 0, 4, 0),
-                    },
-                });
-            }
 
-            var scrollViewer = new ScrollViewerPacket
-            {
-                VerticalScrollBar = ScrollbarVisibility.Auto,
-                HorizontalScrollBar = ScrollbarVisibility.Auto,
-                Children = rows.ToArray(),
-            };
 
-            var rootChildren = new List<IGUIComponentPacket>
-            {
-                new DockPanelPacket
-                {
-                    AttachedProperties = new StringPairPacket[]
-                    {
-                        new("DockPanel.Dock", "Top"),
-                    },
-                    Style = new GUIStylePacket
-                    {
-                        Margin = new Margins(0, 0, 10, 0),
-                        Padding = new Margins(0, 0, 0, 0),
-                    },
-                    Children = new List<IGUIComponentPacket>
-                    {
-                        new TextPacket
-                        {
-                            Text = "<color=#B2A680>Миссии</color>",
-                            AttachedProperties = new StringPairPacket[]
-                            {
-                                new("DockPanel.Dock", "Left"),
-                            },
-                        },
-                        new TextPacket
-                        {
-                            Text = "<color=#B3B3B3>×</color>",
-                            OnClickContext = "missions_close",
-                            AttachedProperties = new StringPairPacket[]
-                            {
-                                new("DockPanel.Dock", "Right"),
-                            },
-                        },
-                    },
-                },
-                scrollViewer,
-            };
 
-            if (_activeMissionId >= 0)
-            {
-                rootChildren.Add(new TextPacket
-                {
-                    Text = "<color=#B08050>Отменить миссию</color>",
-                    OnClickContext = "mission_cancel",
-                    AttachedProperties = new StringPairPacket[]
-                    {
-                        new("DockPanel.Dock", "Bottom"),
-                    },
-                    Style = new GUIStylePacket
-                    {
-                        Margin = new Margins(0, 0, 10, 0),
-                        Padding = new Margins(6, 6, 6, 6),
-                        Background = System.Drawing.Color.FromArgb(242, 30, 20, 20),
-                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                        BorderWidth = 2,
-                    },
-                });
-            }
 
-            var root = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
-                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                    BorderWidth = 2,
-                    Padding = new Margins(2, 8, 2, 8),
-                },
-                Children = rootChildren,
-            };
 
-            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
-        }
-
-        private void StartMission(int missionId)
-        {
-            if (missionId < 0 || missionId >= _missions.Length)
-            {
-                return;
-            }
-
-            if (_missionCompleted[missionId])
-            {
-                return;
-            }
-
-            var m = _missions[missionId];
-            _activeMissionId = missionId;
-            _missionProgress = 0;
-            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, m.Title, m.Description)));
-            OnReceived?.Invoke(new ServerPacket(new MissionProgressPacket(0, m.Target)));
-            OnReceived?.Invoke(new ServerPacket(new MissionArrowPacket((ushort)(_x + 2), (ushort)(_y + 2))));
-        }
-
-        private void CancelMission()
-        {
-            if (_activeMissionId < 0)
-            {
-                OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                return;
-            }
-
-            _activeMissionId = -1;
-            _missionProgress = 0;
-            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
-        }
-
-        private void CompleteMission()
-        {
-            if (_activeMissionId < 0)
-            {
-                return;
-            }
-
-            var m = _missions[_activeMissionId];
-
-            _inventory.TryGetValue(m.RewardItem, out long current);
-            _inventory[m.RewardItem] = current + m.RewardAmount;
-            OnReceived?.Invoke(new ServerPacket(new InventoryPacket(
-                new Dictionary<ItemType, long> { { m.RewardItem, current + m.RewardAmount } })));
-
-            _missionCompleted[_activeMissionId] = true;
-            _activeMissionId = -1;
-            _missionProgress = 0;
-
-            OnReceived?.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
-            OnReceived?.Invoke(new ServerPacket(new ModalWindowPacket(
-                "Миссия выполнена!",
-                $"Вы завершили миссию \"{m.Title}\"!\n\nНаграда: {m.RewardAmount} кредитов.",
-                "OK",
-                string.Empty)));
-        }
-
-        private void HandleDailyBonusClaim()
-        {
-            var rewardItem = _pendingBonusItem;
-            var rewardAmount = _pendingBonusAmount;
-
-            _inventory.TryGetValue(rewardItem, out long current);
-            long newQty = current + rewardAmount;
-            _inventory[rewardItem] = newQty;
-
-            OnReceived?.Invoke(new ServerPacket(new InventoryPacket(
-                new Dictionary<ItemType, long> { { rewardItem, newQty } })));
-
-            _bonusClaimed = true;
-        }
-
-        private void StartBuffLoop()
-        {
-            if (_buffLoopStarted)
-            {
-                return;
-            }
-
-            _buffLoopStarted = true;
-            CheckBuffsLoop(_lifecycleVersion).Forget();
-        }
-
-        private async UniTaskVoid CheckBuffsLoop(int lifecycleVersion)
-        {
-            while (LoopAlive(lifecycleVersion))
-            {
-                await UniTask.Delay(1000);
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var expired = _activeBuffs.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList();
-                foreach (var tag in expired)
-                {
-                    _activeBuffs.Remove(tag);
-                    OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket(tag)));
-                }
-
-                // Depth warning check disabled
-                // if (_y > _maxDepth)
-                // {
-                //     if (!_depthWarningActive)
-                //     {
-                //         _depthWarningActive = true;
-                //         OnReceived?.Invoke(new ServerPacket(new AddStatusLinePacket(
-                //             0, System.Drawing.Color.Red, "depth_warning", new[] { "⚠ Критическая глубина!" })));
-                //     }
-                // }
-                // else
-                // {
-                //     if (_depthWarningActive)
-                //     {
-                //         _depthWarningActive = false;
-                //         OnReceived?.Invoke(new ServerPacket(new ClearStatusLinePacket("depth_warning")));
-                //     }
-                // }
-
-                // Depth damage disabled
-                // if (_y > _maxDepth)
-                // {
-                //     int blocksBelow = _y - _maxDepth;
-                //     int damage = (((blocksBelow - 1) / 10) + 1) * 10;
-                //     _health = Math.Max(0, _health - damage);
-                //     OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
-                //     if (_health <= 0)
-                //     {
-                //         const ushort SPAWN_X = 25;
-                //         const ushort SPAWN_Y = 50;
-                //         var deathX = _x;
-                //         var deathY = _y;
-                //         _x = SPAWN_X;
-                //         _y = SPAWN_Y;
-                //         _rot = Direction.Up;
-                //         _health = 500;
-                //         OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                //         OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
-                //         OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                //         {
-                //             new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
-                //             new AudioPacket(SFX.Death, _mockBotId, deathX, deathY, Array.Empty<StringPairPacket>()),
-                //         })));
-                //     }
-                // }
-            }
-        }
-
-        private void CheckTeleportEntry()
-        {
-            if (!_teleportPositions.Contains((_x, _y)))
-            {
-                return;
-            }
-
-            SendTeleportWindow();
-        }
-
-        private void SendTeleportWindow()
-        {
-            _teleportDestinations = _teleportPositions
-                .Where(tp => tp.X != _x || tp.Y != _y)
-                .ToList();
-
-            if (_teleportDestinations.Count == 0)
-            {
-                SendTeleportWindowNoDestinations();
-                return;
-            }
-
-            var rows = new IGUIComponentPacket[_teleportDestinations.Count];
-            for (int i = 0; i < _teleportDestinations.Count; i++)
-            {
-                var (destX, destY) = _teleportDestinations[i];
-                rows[i] = new TextPacket
-                {
-                    Text = $"<color=white>Телепорт на ({destX,5}, {destY,5})</color>   <color=#B2A680>[ТП]</color>",
-                    OnClickContext = ".",
-                    Style = new GUIStylePacket
-                    {
-                        Background = System.Drawing.Color.FromArgb(242, 26, 26, 26),
-                        Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                        BorderWidth = 2,
-                        Padding = new Margins(8, 12, 8, 12),
-                        Margin = new Margins(0, 0, 4, 0),
-                    },
-                };
-            }
-
-            var scrollViewer = new ScrollViewerPacket
-            {
-                VerticalScrollBar = ScrollbarVisibility.Auto,
-                HorizontalScrollBar = ScrollbarVisibility.Auto,
-                Children = rows,
-            };
-
-            var root = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
-                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                    BorderWidth = 2,
-                    Padding = new Margins(2, 8, 2, 8),
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    new DockPanelPacket
-                    {
-                        AttachedProperties = new StringPairPacket[]
-                        {
-                            new("DockPanel.Dock", "Top"),
-                        },
-                        Style = new GUIStylePacket
-                        {
-                            Margin = new Margins(0, 0, 10, 0),
-                            Padding = new Margins(0, 0, 0, 0),
-                        },
-                        Children = new List<IGUIComponentPacket>
-                        {
-                    new TextPacket
-                    {
-                        Text = "<color=#B2A680>Телепорты</color>",
-                        AttachedProperties = new StringPairPacket[]
-                        {
-                            new("DockPanel.Dock", "Left"),
-                        },
-                    },
-                    new TextPacket
-                            {
-                    Text = "<color=#B3B3B3>×</color>",
-                    OnClickContext = "teleport_close",
-                    AttachedProperties = new StringPairPacket[]
-                    {
-                        new("DockPanel.Dock", "Right"),
-                    },
-                            },
-                        },
-                    },
-                    scrollViewer,
-                },
-            };
-
-            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
-            _teleportWindowOpen = true;
-        }
-
-        private void SendTeleportWindowNoDestinations()
-        {
-            var text = new TextPacket
-            {
-                Text = "<color=gray>Нет доступных телепортов</color>",
-            };
-
-            var root = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
-                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                    BorderWidth = 2,
-                    Padding = new Margins(0, 0, 0, 0),
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    new DockPanelPacket
-                    {
-                        AttachedProperties = new StringPairPacket[]
-                        {
-                            new("DockPanel.Dock", "Top"),
-                        },
-                        Style = new GUIStylePacket
-                        {
-                            Margin = new Margins(0, 0, 0, 0),
-                            Padding = new Margins(0, 0, 0, 0),
-                        },
-                        Children = new List<IGUIComponentPacket>
-                        {
-                    new TextPacket
-                    {
-                        Text = "<color=#B2A680>Телепорты</color>",
-                        AttachedProperties = new StringPairPacket[]
-                        {
-                            new("DockPanel.Dock", "Left"),
-                        },
-                    },
-                    new TextPacket
-                            {
-                    Text = "<color=#B3B3B3>×</color>",
-                    OnClickContext = "teleport_close",
-                    AttachedProperties = new StringPairPacket[]
-                    {
-                        new("DockPanel.Dock", "Right"),
-                    },
-                            },
-                        },
-                    },
-                    text,
-                },
-            };
-
-            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
-            _teleportWindowOpen = true;
-        }
-
-        private void SendClanListWindow()
-        {
-            var items = new List<IGUIComponentPacket>();
-            foreach (var clan in _mockClans)
-            {
-                items.Add(new DockPanelPacket
-                {
-                    Style = new GUIStylePacket
-                    {
-                        Margin = new Margins(0, 0, 4, 0),
-                        Padding = new Margins(4, 6, 4, 4),
-                        Background = System.Drawing.Color.FromArgb(30, 60, 60, 60),
-                        Border = System.Drawing.Color.FromArgb(60, 80, 80, 80),
-                        BorderWidth = 1,
-                    },
-                    Children = new List<IGUIComponentPacket>
-                    {
-                        new ImagePacket
-                        {
-                            URI = $"clan/{clan.Id}.png",
-                            Width = 16,
-                            Height = 16,
-                            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
-                        },
-                        new TextPacket
-                        {
-                            Text = $"<color=white><b>Клан «{clan.Name}»</b>  <color=#888888>(ID: {clan.Id})</color></color>",
-                            OnClickContext = ".",
-                            AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
-                        },
-                    },
-                });
-                items.Add(new TextPacket
-                {
-                    Text = $"<color=#999999>{clan.Desc}</color>",
-                    Style = new GUIStylePacket
-                    {
-                        Margin = new Margins(0, 0, 8, 0),
-                        Padding = new Margins(0, 10, 0, 0),
-                    },
-                });
-            }
-
-            var root = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
-                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                    BorderWidth = 2,
-                    Padding = new Margins(8, 8, 8, 8),
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    new DockPanelPacket
-                    {
-                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
-                        Children = new List<IGUIComponentPacket>
-                        {
-                            new TextPacket
-                            {
-                                Text = "<color=#B2A680><b>Доступные кланы</b></color>",
-                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
-                            },
-                            new TextPacket
-                            {
-                                Text = "<color=#B3B3B3>×</color>",
-                                OnClickContext = "clan_close",
-                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Right") },
-                            },
-                        },
-                    },
-                    new ScrollViewerPacket
-                    {
-                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
-                        Style = new GUIStylePacket
-                        {
-                            Margin = new Margins(6, 0, 0, 0),
-                        },
-                        Children = items,
-                    },
-                },
-            };
-
-            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("clan_list", 320, 260, root)));
-        }
-
-        private void SendClanInfoWindow()
-        {
-            string clanName = _clanId.ToString();
-            string clanDesc = string.Empty;
-            foreach (var c in _mockClans)
-            {
-                if (c.Id == _clanId)
-                {
-                    clanName = c.Name;
-                    clanDesc = c.Desc;
-                    break;
-                }
-            }
-
-            var root = new DockPanelPacket
-            {
-                Style = new GUIStylePacket
-                {
-                    Background = System.Drawing.Color.FromArgb(242, 20, 20, 20),
-                    Border = System.Drawing.Color.FromArgb(255, 89, 89, 89),
-                    BorderWidth = 2,
-                    Padding = new Margins(8, 8, 8, 8),
-                },
-                Children = new List<IGUIComponentPacket>
-                {
-                    new DockPanelPacket
-                    {
-                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
-                        Children = new List<IGUIComponentPacket>
-                        {
-                            new TextPacket
-                            {
-                                Text = "<color=#B2A680><b>Мой клан</b></color>",
-                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
-                            },
-                            new TextPacket
-                            {
-                                Text = "<color=#B3B3B3>×</color>",
-                                OnClickContext = "clan_close",
-                                AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Right") },
-                            },
-                        },
-                    },
-                    new TextPacket
-                    {
-                        Text = $"<color=white><b>Клан «{clanName}»</b></color>\n<color=#888888>ID: {_clanId}</color>\n<color=#999999>{clanDesc}</color>",
-                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
-                        Style = new GUIStylePacket
-                        {
-                            Margin = new Margins(8, 0, 8, 0),
-                        },
-                    },
-                    new TextPacket
-                    {
-                        Text = "<color=#FF6666>Покинуть клан</color>",
-                        OnClickContext = ".",
-                        AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
-                        Style = new GUIStylePacket
-                        {
-                            Padding = new Margins(6, 10, 6, 6),
-                            Background = System.Drawing.Color.FromArgb(40, 80, 40, 40),
-                            Border = System.Drawing.Color.FromArgb(60, 120, 60, 60),
-                            BorderWidth = 1,
-                            Margin = new Margins(0, 0, 0, 0),
-                        },
-                    },
-                },
-            };
-
-            OnReceived?.Invoke(new ServerPacket(new OpenWindowPacket("clan_info", 300, 200, root)));
-        }
-
-        private void HandleTeleportClick(int index)
-        {
-            if (index < 0 || index >= _teleportDestinations.Count)
-            {
-                return;
-            }
-
-            var (destX, destY) = _teleportDestinations[index];
-
-            _x = destX;
-            _y = destY;
-
-            _teleportWindowOpen = false;
-            OnReceived?.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
-            OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-            UpdatePosition().Forget();
-        }
-
-        private async UniTaskVoid SendDailyBonusMock(int lifecycleVersion)
-        {
-            while (LoopAlive(lifecycleVersion))
-            {
-                _bonusClaimed = false;
-                _bonusCountdown = Math.Max(_bonusCountdown, 10);
-
-                while (_bonusCountdown > 0 && !_bonusClaimed && LoopAlive(lifecycleVersion))
-                {
-                    await UniTask.Delay(1000);
-                    _bonusCountdown--;
-                }
-
-                if (!LoopAlive(lifecycleVersion))
-                {
-                    break;
-                }
-
-                _pendingBonusItem = DummyCellConfigurationUtilities.PickRandomBonusItem(_rng);
-                _pendingBonusAmount = (int)DummyCellConfigurationUtilities.PickRandomAmount(
-                    _pendingBonusItem,
-                    _rng);
-                OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(true)));
-
-                while (!_bonusClaimed && LoopAlive(lifecycleVersion))
-                {
-                    await UniTask.Delay(500);
-                }
-
-                if (!LoopAlive(lifecycleVersion))
-                {
-                    break;
-                }
-
-                _bonusCountdown = 10;
-                OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
-            }
-        }
-
-        private void SendMapChunksAround(ushort serverX, ushort serverY)
-        {
-            const int ChunkSize = 32;
-            const int StreamingRadiusChunks = 4;
-            if (_worldLayer == null)
-            {
-                throw new InvalidOperationException(
-                    "Cannot stream map chunks before the DummyConnection world layer is initialized.");
-            }
-
-            int centerChunkX = serverX / ChunkSize;
-            int centerChunkY = serverY / ChunkSize;
-            int minimumChunkX = Math.Max(0, centerChunkX - StreamingRadiusChunks);
-            int maximumChunkX = Math.Min(
-                _worldLayer.WidthChunks - 1,
-                centerChunkX + StreamingRadiusChunks);
-            int minimumChunkY = Math.Max(0, centerChunkY - StreamingRadiusChunks);
-            int maximumChunkY = Math.Min(
-                _worldLayer.HeightChunks - 1,
-                centerChunkY + StreamingRadiusChunks);
-            for (int chunkX = minimumChunkX; chunkX <= maximumChunkX; chunkX++)
-            {
-                for (int chunkY = minimumChunkY; chunkY <= maximumChunkY; chunkY++)
-                {
-                    int chunkIndex = chunkY + (chunkX * _worldLayer.HeightChunks);
-                    if (_sentMapChunks.Contains(chunkIndex))
-                    {
-                        continue;
-                    }
-
-                    CellType[]? source = _worldLayer.GetChunk(
-                        chunkIndex,
-                        createIfMissing: true,
-                        touchLru: true);
-                    if (source == null)
-                    {
-                        continue;
-                    }
-
-                    var payload = new CellType[ChunkSize * ChunkSize];
-                    for (int localY = 0; localY < ChunkSize; localY++)
-                    {
-                        for (int localX = 0; localX < ChunkSize; localX++)
-                        {
-                            payload[(localY * ChunkSize) + localX] =
-                                source[localY + (localX * ChunkSize)];
-                        }
-                    }
-
-                    _sentMapChunks.Add(chunkIndex);
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                    {
-                        new MapRegionPacket(
-                            (ushort)(chunkX * ChunkSize),
-                            (ushort)(chunkY * ChunkSize),
-                            ChunkSize - 1,
-                            ChunkSize - 1,
-                            payload),
-                    })));
-                }
-            }
-        }
 
         private CellType GetServerCell(ushort serverX, ushort serverY)
         {
@@ -1819,80 +869,6 @@ namespace MinesServer.Networking.Connection.Client
             if (_worldLayer != null)
             {
                 _worldLayer[serverX, serverY] = type;
-            }
-        }
-
-        private async UniTaskVoid RunCircularBots(int count, int lifecycleVersion)
-        {
-            const int BASE_ID = 1000;
-            const float CENTER_X = 30f;
-            const float CENTER_Y = 50f;
-            string[] names =
-            [
-                "Mira",
-                "Kite",
-                "Rook",
-                "Nova",
-                "Iris",
-                "Vex",
-            ];
-
-            var bots = new List<(ushort id, string name, float cx, float cy, float r, float a, float speed)>();
-            for (int i = 0; i < count; i++)
-            {
-                ushort botId = (ushort)(BASE_ID + i);
-                OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(botId, 1000, 0,
-                    "Skin/bee.png", "Tail/default.png", names[i % names.Length])));
-
-                float radius = 2.5f + (i % 3);
-                float angle = (float)(i * (Math.PI * 2d / count));
-                float speed = 0.45f + ((i % 2) * 0.1f);
-                bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
-            }
-
-            while (LoopAlive(lifecycleVersion))
-            {
-                var positions = new List<IHBPacket>(bots.Count);
-                for (int i = 0; i < bots.Count; i++)
-                {
-                    var b = bots[i];
-                    int x = (int)Math.Round(b.cx + (Math.Cos(b.a) * b.r), MidpointRounding.AwayFromZero);
-                    int y = (int)Math.Round(b.cy + (Math.Sin(b.a) * b.r), MidpointRounding.AwayFromZero);
-                    double deg = ((Math.Atan2(Math.Sin(b.a), Math.Cos(b.a)) * (180.0 / Math.PI)) + 360) % 360;
-                    byte rot = deg switch
-                    {
-                        > 225 and <= 315 => 0,
-                        > 135 and <= 225 => 1,
-                        > 45 and <= 135 => 2,
-                        _ => 3,
-                    };
-                    positions.Add(new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot));
-                    bots[i] = (b.id, b.name, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
-                }
-
-                OnReceived?.Invoke(new ServerPacket(new HBPacket(positions.ToArray())));
-                await UniTask.Delay(100);
-            }
-        }
-
-        private async UniTaskVoid HandleAssetRequest(RuntimeAssetRequestPacket runtimeAssets)
-        {
-            foreach (var assetEntry in runtimeAssets.Assets)
-            {
-                var tsm = _session.TryResolve<ITextureStorageService>();
-                var data = tsm != null ? await tsm.GetTextureData(assetEntry.Filename.TrimStart('/')) : null;
-
-                RuntimeAssetPacket response;
-                if (data != null)
-                {
-                    response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), data);
-                }
-                else
-                {
-                    response = new RuntimeAssetPacket(assetEntry.Filename, string.Empty, System.Array.Empty<byte>());
-                }
-
-                OnReceived?.Invoke(new ServerPacket(response));
             }
         }
 
@@ -1912,35 +888,6 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid SendChatMock(int lifecycleVersion)
-        {
-            var names = new[] { "Alice", "Bob", "Charlie", "Darkar25", "Eve" };
-            var messages = new[]
-            {
-                "gg", "welcome!", "как дела?", "lol", "nice",
-                "gl hf", "куда бежать?", "фармим)", "👋", "подскажите кто знает",
-            };
-            var rng = new System.Random();
-
-            while (LoopAlive(lifecycleVersion))
-            {
-                await UniTask.Delay(8000 + rng.Next(4000));
-
-                string name = names[rng.Next(names.Length)];
-                string msg = messages[rng.Next(messages.Length)];
-                System.Drawing.Color nickColor = System.Drawing.Color.FromArgb(
-                    255, rng.Next(100, 256), rng.Next(100, 256), rng.Next(100, 256));
-
-                var chatMsg = new ChatMessagePacket(
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    rng.Next(100, 999), (byte)rng.Next(0, 3),
-                    nickColor, name,
-                    System.Drawing.Color.White, msg);
-                OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
-            }
-        }
-
         private async UniTaskVoid SendPingMock(int lifecycleVersion)
         {
             await UniTask.Delay(2000);
@@ -1950,6 +897,7 @@ namespace MinesServer.Networking.Connection.Client
                 await UniTask.Delay(5000);
             }
         }
+
 
         private (ushort X, ushort Y) GetFrontCell()
         {
@@ -1962,138 +910,6 @@ namespace MinesServer.Networking.Connection.Client
                 _ => Vector2Int.zero,
             };
             return ((ushort)(_x + offset.x), (ushort)(_y + offset.y));
-        }
-
-        private void TryBuild(ushort x, ushort y, CellType placeType)
-        {
-            if (_worldLayer == null)
-            {
-                return;
-            }
-
-            CellType current = GetServerCell(x, y);
-            if (current != CellType.Empty && current != CellType.Road)
-            {
-                return;
-            }
-
-            SetServerCell(x, y, placeType);
-            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { placeType }) })));
-        }
-
-        private void TryUpgradeBuild(ushort x, ushort y, params (CellType From, CellType To)[] upgrades)
-        {
-            if (_worldLayer == null)
-            {
-                return;
-            }
-
-            CellType current = GetServerCell(x, y);
-
-            for (int i = 0; i < upgrades.Length; i++)
-            {
-                if (current == upgrades[i].From || (current == CellType.Road && i == 0 && upgrades[i].From == CellType.Empty))
-                {
-                    SetServerCell(x, y, upgrades[i].To);
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(x, y, 0, 0, new[] { upgrades[i].To }) })));
-                    return;
-                }
-            }
-        }
-
-        private List<(ushort X, ushort Y)> FindPath(ushort startX, ushort startY, ushort targetX, ushort targetY)
-        {
-            if (_worldLayer == null)
-            {
-                return new List<(ushort, ushort)>();
-            }
-
-            // The flood fill has no natural stopping point: an unreachable
-            // target (a click into solid rock, or across a wall) drains the
-            // queue only after every passable cell in the world has been
-            // visited. Each of those visits is a GetServerCell, which pulls a
-            // chunk in from disk through the LRU, so the walk is not just long
-            // - it thrashes chunk IO on the main thread while the frame is
-            // blocked. cellsChecked below was already counted for exactly this
-            // reason and then never read; this is the cap it was counted for.
-            // The bound is generous next to any real click (a screen is ~100x60
-            // cells) and still turns the unreachable case into a dropped frame
-            // instead of a freeze.
-            const int MaximumCellsChecked = 20000;
-
-            MapManager? mapManager = _session.TryResolve<MapManager>();
-            var dirs = new (int dx, int dy)[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
-            var visited = new HashSet<(ushort, ushort)>();
-            var cameFrom = new Dictionary<(ushort, ushort), (ushort, ushort)>();
-            var queue = new Queue<(ushort X, ushort Y)>();
-            queue.Enqueue((startX, startY));
-            visited.Add((startX, startY));
-            int cellsChecked = 0;
-            bool found = false;
-
-            while (queue.Count > 0)
-            {
-                var cur = queue.Dequeue();
-                cellsChecked++;
-                if (cellsChecked > MaximumCellsChecked)
-                {
-                    break;
-                }
-
-                if (cur.X == targetX && cur.Y == targetY)
-                {
-                    found = true;
-                    break;
-                }
-
-                foreach (var (dx, dy) in dirs)
-                {
-                    int nx = cur.X + dx;
-                    int ny = cur.Y + dy;
-                    if (nx < 0 || ny < 0 || nx > ushort.MaxValue || ny > ushort.MaxValue)
-                    {
-                        continue;
-                    }
-
-                    var next = ((ushort)nx, (ushort)ny);
-                    if (visited.Contains(next))
-                    {
-                        continue;
-                    }
-
-                    CellType cellType = GetServerCell((ushort)nx, (ushort)ny);
-
-                    // Resolved once above, not once per neighbour: this is the
-                    // innermost statement of the search, and a container lookup
-                    // here costs more than the cell test it feeds.
-                    var cellConfig = mapManager?.GetCellConfig(cellType);
-                    bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
-                    if (!isPassable)
-                    {
-                        continue;
-                    }
-
-                    visited.Add(next);
-                    cameFrom[next] = cur;
-                    queue.Enqueue(next);
-                }
-            }
-
-            if (!found)
-            {
-                return new List<(ushort, ushort)>();
-            }
-
-            var path = new List<(ushort, ushort)>();
-            var current = (targetX, targetY);
-            while (current != (startX, startY))
-            {
-                path.Add(current);
-                current = cameFrom[current];
-            }
-
-            path.Reverse();
-            return path;
         }
 
         private async UniTaskVoid WalkPathAsync(List<(ushort X, ushort Y)> path, CancellationToken ct)
@@ -2117,7 +933,7 @@ namespace MinesServer.Networking.Connection.Client
                     prevX = nextX;
                     prevY = nextY;
 
-                    SendMapChunksAround(_x, _y);
+                    DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
                     OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
                     {
                         new RobotPositionPacket(_mockBotId, _x, _y, (byte)dir),

@@ -12,7 +12,7 @@ namespace MinesServer.Networking.Connection.Client
     /// Owns offline dummy-transport token persistence independently from the
     /// connection lifecycle and packet simulation.
     /// </summary>
-    internal sealed class DummyTokenStore
+    public sealed class DummyTokenStore
     {
         private readonly string _path = Path.Combine(
             Application.temporaryCachePath,

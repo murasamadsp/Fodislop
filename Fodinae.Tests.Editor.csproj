@@ -54,6 +54,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets/Scripts/Tests/Editor/World/DirtyRectSetFuzzTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Core/LifecycleGraphTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ClanProcessorTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalizationServiceTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/TileBitmaskConverterTests.cs" />
@@ -1319,6 +1320,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Fodinae.Runtime.csproj" />
+    <ProjectReference Include="UniTask.csproj" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
   <ItemGroup>

@@ -71,7 +71,7 @@ namespace Fodinae
             }
 
             MapStorage? ms = _session.TryResolve<MapStorage>();
-            TerrariaLightingEngine? lighting = _session.TryResolve<TerrariaLightingEngine>();
+            LightingEngine? lighting = _session.TryResolve<LightingEngine>();
             string line =
                 $"t={Time.unscaledTime:F1}s frame={Time.frameCount} " +
                 $"allocated={Profiler.GetTotalAllocatedMemoryLong() / (1024f * 1024f):F1}MB " +
@@ -142,7 +142,7 @@ namespace Fodinae
             W(sb, "MapManager", _session.TryResolve<MapManager>());
             W(sb, "GameManager", _session.TryResolve<GameManager>());
             W(sb, "RobotManager", _session.TryResolve<RobotManager>());
-            W(sb, "PackManager", _session.TryResolve<PackManager>());
+            W(sb, "BuildingManager", _session.TryResolve<BuildingManager>());
             W(sb, "PacketHandler", _session.TryResolve<PacketHandler>());
 
             sb.AppendLine("\n[MAP]");
@@ -224,9 +224,9 @@ namespace Fodinae
                 sb.AppendLine($"  #{r.BotId} local={r.IsLocalPlayer} GO={rgo.name} active={rgo.activeInHierarchy} pos={r.transform.position}");
             }
 
-            foreach (var pk in FindObjectsByType<Fodinae.Game.Pack>(FindObjectsInactive.Exclude))
+            foreach (var pk in FindObjectsByType<Fodinae.Game.Building>(FindObjectsInactive.Exclude))
             {
-                sb.AppendLine($"  Pack {pk.name} pos={pk.transform.position}");
+                sb.AppendLine($"  Building {pk.name} pos={pk.transform.position}");
             }
 
             sb.AppendLine("\n[TIME]");

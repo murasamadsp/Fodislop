@@ -63,9 +63,9 @@ namespace Fodinae.UI
             }
 
             _gameManager = _session.TryResolve<GameManager>();
-            if (_gameManager == null || _assetLoader == null || _fpsCounter == null || _document == null)
+            if (_gameManager == null || _assetLoader == null || _fpsCounter == null || _document == null || _terrainRenderer == null)
             {
-                throw new InvalidOperationException("[AssetLoadingIndicator] Required [Inject] dependencies were not resolved — DI initialization failed.");
+                return;
             }
 
             _initialized = true;
@@ -157,7 +157,7 @@ namespace Fodinae.UI
                 return "Инициализация подключения...";
             }
 
-            bool terrainReady = _terrainRenderer.IsReadyForGameplay;
+            bool terrainReady = _terrainRenderer?.IsReadyForGameplay ?? false;
 
             if (!terrainReady)
             {

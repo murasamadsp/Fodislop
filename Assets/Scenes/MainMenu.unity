@@ -273,6 +273,7 @@ GameObject:
   - component: {fileID: 439439807}
   - component: {fileID: 439439806}
   - component: {fileID: 439439803}
+  - component: {fileID: 439439808}
   m_Layer: 5
   m_Name: UIDocument
   m_TagString: Untagged
@@ -303,6 +304,26 @@ MonoBehaviour:
   m_PivotReferenceSize: 0
   m_Pivot: 0
   m_WorldSpaceCollider: {fileID: 0}
+--- !u!114 &439439808
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 439439804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c43e0ddc7d14765b14c21b9d9ed41c2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Core.Lifecycle.ContentSceneRoot
+  _contentRoot: {fileID: 439439804}
+  _servicesRoot: {fileID: 439439807}
+  _runtimeRoot: {fileID: 439439807}
+  _robotsRoot: {fileID: 439439807}
+  _buildingsRoot: {fileID: 439439807}
+  _vfxRoot: {fileID: 439439807}
+  _floatingUIRoot: {fileID: 439439807}
+  _audioEventsRoot: {fileID: 439439807}
 --- !u!4 &439439807
 Transform:
   m_ObjectHideFlags: 0

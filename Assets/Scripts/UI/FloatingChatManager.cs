@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
@@ -18,6 +19,8 @@ namespace Fodinae.UI
         private FloatingChatBubble? _bubblePrefab;
         private readonly List<FloatingChatBubble> _activeBubbles = new();
         private readonly Queue<FloatingChatBubble> _pool = new();
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         protected void Start()
         {
@@ -31,15 +34,12 @@ namespace Fodinae.UI
                 _camera = GameplayCamera.Resolve();
             }
 
-            if (_bubblePrefab != null)
+            if (_bubblePrefab != null || _sceneObjects == null)
             {
                 return;
             }
 
-            var prefabGo = new GameObject("ChatBubblePrefab");
-            prefabGo.transform.SetParent(transform);
-            _bubblePrefab = prefabGo.AddComponent<FloatingChatBubble>();
-            prefabGo.SetActive(false);
+            _bubblePrefab = _sceneObjects.Create<FloatingChatBubble>("ChatBubblePrefab", RuntimeOwner.FloatingUI);
         }
 
         protected void Update()

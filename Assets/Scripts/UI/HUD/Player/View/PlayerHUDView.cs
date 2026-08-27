@@ -24,14 +24,10 @@ namespace Fodinae.UI.HUD.Player.View
 {
     public class PlayerHUDView : MonoBehaviour
     {
-        private const int BTN_SIZE = 50;
-        private const int GAP = 6;
         private const int SKILL_GRID_COLS = 4;
 
         private Color _hpBarFillColor = new Color(0.2f, 0.8f, 0.2f, 1f);
         private Color _hpBarLowColor = new Color(0.9f, 0.2f, 0.2f, 1f);
-        private Color _accentColor = new Color(0.7f, 0.65f, 0.5f, 1f);
-        private Color _accentHoverColor = new Color(0.8f, 0.75f, 0.6f, 1f);
 
         private readonly List<Texture2D> _crystalTextures = new();
         private readonly List<Label> _basketCrystalLabels = new();
@@ -48,7 +44,7 @@ namespace Fodinae.UI.HUD.Player.View
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         private IVisualElementScheduledItem? _skeletonPulse;
-        private VisualElement? _panel;
+        private TemplateContainer? _hudRoot;
         private Button? _bonusButton;
         private VisualElement? _bonusPanel;
         private Label? _bonusStatusLabel;
@@ -58,6 +54,7 @@ namespace Fodinae.UI.HUD.Player.View
         private Label? _nicknameLabel;
         private Label? _levelLabel;
         private Label? _hpLabel;
+        private Label? _hpPercentLabel;
         private VisualElement? _hpBarFill;
         private Label? _moneyLabel;
         private Label? _credsLabel;
@@ -66,13 +63,12 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _basketContainer;
         private VisualElement? _skillContainer;
         private Button? _autoDigButton;
-        private Label? _autoDigLabel;
+        private VisualElement? _autoDigIndicator;
         private Button? _aggressionButton;
-        private Label? _aggressionLabel;
+        private VisualElement? _aggressionIndicator;
 
         private VisualElement? _currentSkillRow;
         private int _skillCountInRow = 0;
-        private Button? _chatButton;
         private VisualElement? _statusPanel;
         private VisualElement? _respawnPopup;
         private VisualElement? _buildingsPopup;
@@ -132,7 +128,16 @@ namespace Fodinae.UI.HUD.Player.View
 
         private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
         {
-            InitializeHUD();
+            try
+            {
+                InitializeHUD();
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning($"[PlayerHUD] HUD unavailable: {exception.Message}");
+                return;
+            }
+
             try
             {
                 await LoadCrystalTextures(cancellationToken);
@@ -254,18 +259,10 @@ namespace Fodinae.UI.HUD.Player.View
             _tooltip.Initialize(_doc);
 
             // Тир раскладки вместо @media: класс на корне панели.
-            UiLayoutTier.Attach(_doc.rootVisualElement);
+            UILayoutTier.Attach(_doc.rootVisualElement);
 
-            CreatePanel(_doc.rootVisualElement);
-            CreateBonusButton(_doc.rootVisualElement);
-            CreateBonusPanel(_doc.rootVisualElement);
-            CreateAggressionToggle(_doc.rootVisualElement);
-            CreateAutoDigToggle(_doc.rootVisualElement);
-            CreateChatButton(_doc.rootVisualElement);
-            CreateButtonsAndPopups(_doc.rootVisualElement);
-            CreateStatusPanel(_doc.rootVisualElement);
-            CreateSkillContainer(_doc.rootVisualElement);
-            CreateMissionPanel(_doc.rootVisualElement);
+            LoadTemplate(_doc.rootVisualElement);
+
             if (_model != null)
             {
                 _model.OnSkillProgress += OnSkillProgress;
@@ -288,6 +285,11 @@ namespace Fodinae.UI.HUD.Player.View
                 _model.OnDailyBonusChanged += UpdateDailyBonusPanel;
             }
 
+            // Кнопка-уведомление и панель бонусов синхронизируются с текущим
+            // состоянием сразу: модель может уже знать о доступном бонусе до
+            // первого события изменения.
+            UpdateDailyBonusPanel();
+
             RebuildCrystalRows();
             if (_model != null)
             {
@@ -303,7 +305,6 @@ namespace Fodinae.UI.HUD.Player.View
             RefreshAll();
 
             var root = _doc.rootVisualElement;
-            Debug.Log("[PlayerHUD] InitializeHUD complete, skills container created=" + (_skillContainer != null));
 
             // Клавиатурная навигация по интерфейсу вырезана насовсем: стрелки/WASD не
             // должны двигать фокус по кнопкам, а Enter — активировать их. Подавляем
@@ -325,161 +326,149 @@ namespace Fodinae.UI.HUD.Player.View
             }, TrickleDown.TrickleDown);
         }
 
-        private void CreatePanel(VisualElement root)
+        private void LoadTemplate(VisualElement root)
         {
-            _panel = new VisualElement();
-            _panel.name = "PlayerHUD";
-            _panel.AddToClassList("hud-panel");
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/PlayerHUD") ??
+                throw new InvalidOperationException(
+                    "[PlayerHUD] Resources/UI/PlayerHUD.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+            tree.AddToClassList("ui-fullscreen");
+            tree.pickingMode = PickingMode.Ignore;
+            _hudRoot = tree;
+            root.Add(tree);
 
-            var topRow = new VisualElement();
-            topRow.AddToClassList("hud-title-row");
+            _nicknameLabel = tree.Q<Label>("NicknameLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] NicknameLabel is missing from PlayerHUD.uxml.");
+            _levelLabel = tree.Q<Label>("LevelLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] LevelLabel is missing from PlayerHUD.uxml.");
+            Button clanButton = tree.Q<Button>("ClanButton") ??
+                throw new InvalidOperationException("[PlayerHUD] ClanButton is missing from PlayerHUD.uxml.");
+            clanButton.clicked += () => _networkService?.Send(new OpenClanClickPacket());
 
-            _nicknameLabel = new Label("---");
-            _nicknameLabel.AddToClassList("hud-nickname");
-            topRow.Add(_nicknameLabel);
+            _hpLabel = tree.Q<Label>("HPLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] HPLabel is missing from PlayerHUD.uxml.");
+            _hpPercentLabel = tree.Q<Label>("HPPercentLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] HPPercentLabel is missing from PlayerHUD.uxml.");
+            _hpBarFill = tree.Q<VisualElement>("HPBarFill") ??
+                throw new InvalidOperationException("[PlayerHUD] HPBarFill is missing from PlayerHUD.uxml.");
 
-            _levelLabel = new Label("Ур: ---");
-            _levelLabel.AddToClassList("hud-level");
-            topRow.Add(_levelLabel);
+            _moneyLabel = tree.Q<Label>("MoneyLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] MoneyLabel is missing from PlayerHUD.uxml.");
+            _credsLabel = tree.Q<Label>("CredsLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] CredsLabel is missing from PlayerHUD.uxml.");
+            _basketPercentLabel = tree.Q<Label>("BasketPercentLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] BasketPercentLabel is missing from PlayerHUD.uxml.");
+            _geologyLabel = tree.Q<Label>("GeologyLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] GeologyLabel is missing from PlayerHUD.uxml.");
 
-            var clanButton = new Button(() => _networkService?.Send(new OpenClanClickPacket()));
-            clanButton.AddToClassList("hud-clan-button");
-            clanButton.tooltip = "Клан";
-            topRow.Add(clanButton);
+            _basketContainer = tree.Q<VisualElement>("BasketContainer") ??
+                throw new InvalidOperationException("[PlayerHUD] BasketContainer is missing from PlayerHUD.uxml.");
+            _skillContainer = tree.Q<VisualElement>("SkillContainer") ??
+                throw new InvalidOperationException("[PlayerHUD] SkillContainer is missing from PlayerHUD.uxml.");
+            _statusPanel = tree.Q<VisualElement>("StatusPanel") ??
+                throw new InvalidOperationException("[PlayerHUD] StatusPanel is missing from PlayerHUD.uxml.");
 
-            _panel.Add(topRow);
+            // Авто-копка и агрессия: индикатор — LED, текст кнопки статичен.
+            _autoDigButton = tree.Q<Button>("AutoDigButton") ??
+                throw new InvalidOperationException("[PlayerHUD] AutoDigButton is missing from PlayerHUD.uxml.");
+            _autoDigButton.clicked += ToggleAutoDig;
+            _autoDigIndicator = tree.Q<VisualElement>("AutoDigIndicator") ??
+                throw new InvalidOperationException("[PlayerHUD] AutoDigIndicator is missing from PlayerHUD.uxml.");
+            Tooltip.AttachTo(_autoDigButton, "Автоматическое копание блоков", _tooltip!);
 
-            var separator = new VisualElement();
-            separator.AddToClassList("hud-separator");
-            _panel.Add(separator);
+            _aggressionButton = tree.Q<Button>("AggressionButton") ??
+                throw new InvalidOperationException("[PlayerHUD] AggressionButton is missing from PlayerHUD.uxml.");
+            _aggressionButton.clicked += ToggleAggression;
+            _aggressionIndicator = tree.Q<VisualElement>("AggressionIndicator") ??
+                throw new InvalidOperationException("[PlayerHUD] AggressionIndicator is missing from PlayerHUD.uxml.");
+            Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip!);
 
-            _hpLabel = new Label("Прочность: --/--");
-            _hpLabel.AddToClassList("hud-stat");
-            _panel.Add(_hpLabel);
+            Button chatButton = tree.Q<Button>("ChatButton") ??
+                throw new InvalidOperationException("[PlayerHUD] ChatButton is missing from PlayerHUD.uxml.");
+            chatButton.clicked += () => _globalChatUI.Toggle();
+            Tooltip.AttachTo(chatButton, "Открыть чат", _tooltip!);
 
-            var hpContainer = new VisualElement();
-            hpContainer.AddToClassList("hud-hp-bar");
+            _bonusButton = tree.Q<Button>("BonusButton") ??
+                throw new InvalidOperationException("[PlayerHUD] BonusButton is missing from PlayerHUD.uxml.");
+            _bonusButton.clicked += ToggleBonusPanel;
+            Tooltip.AttachTo(_bonusButton, "Открыть панель бонусов", _tooltip!);
 
-            _hpBarFill = new VisualElement();
-            _hpBarFill.AddToClassList("hud-hp-fill");
-            hpContainer.Add(_hpBarFill);
+            _bonusPanel = tree.Q<VisualElement>("BonusPanel") ??
+                throw new InvalidOperationException("[PlayerHUD] BonusPanel is missing from PlayerHUD.uxml.");
+            Button bonusClose = tree.Q<Button>("BonusCloseButton") ??
+                throw new InvalidOperationException("[PlayerHUD] BonusCloseButton is missing from PlayerHUD.uxml.");
+            bonusClose.clicked += ToggleBonusPanel;
+            _bonusStatusLabel = tree.Q<Label>("BonusStatusLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] BonusStatusLabel is missing from PlayerHUD.uxml.");
+            _bonusClaimButton = tree.Q<Button>("BonusClaimButton") ??
+                throw new InvalidOperationException("[PlayerHUD] BonusClaimButton is missing from PlayerHUD.uxml.");
+            _bonusClaimButton.clicked += ClaimDailyBonus;
 
-            _panel.Add(hpContainer);
+            // Попапы: респавн, здания, FAQ.
+            _respawnPopup = tree.Q<VisualElement>("RespawnPopup") ??
+                throw new InvalidOperationException("[PlayerHUD] RespawnPopup is missing from PlayerHUD.uxml.");
+            Button respawnConfirm = tree.Q<Button>("RespawnConfirmButton") ??
+                throw new InvalidOperationException("[PlayerHUD] RespawnConfirmButton is missing from PlayerHUD.uxml.");
+            respawnConfirm.clicked += () =>
+            {
+                var ns = _networkService;
+                ns?.SendAction(new SuicidePacket());
+                _respawnPopup.style.display = DisplayStyle.None;
+            };
+            Button respawnCancel = tree.Q<Button>("RespawnCancelButton") ??
+                throw new InvalidOperationException("[PlayerHUD] RespawnCancelButton is missing from PlayerHUD.uxml.");
+            respawnCancel.clicked += () => _respawnPopup.style.display = DisplayStyle.None;
+            Button respawnButton = tree.Q<Button>("RespawnButton") ??
+                throw new InvalidOperationException("[PlayerHUD] RespawnButton is missing from PlayerHUD.uxml.");
+            respawnButton.clicked += () => _respawnPopup.style.display = DisplayStyle.Flex;
 
-            _moneyLabel = new Label("$ ---");
-            _moneyLabel.AddToClassList("hud-money");
-            _panel.Add(_moneyLabel);
+            _buildingsPopup = tree.Q<VisualElement>("BuildingsPopup") ??
+                throw new InvalidOperationException("[PlayerHUD] BuildingsPopup is missing from PlayerHUD.uxml.");
+            Button buildingsClose = tree.Q<Button>("BuildingsCloseButton") ??
+                throw new InvalidOperationException("[PlayerHUD] BuildingsCloseButton is missing from PlayerHUD.uxml.");
+            buildingsClose.clicked += () => _buildingsPopup.style.display = DisplayStyle.None;
+            Button buildingsButton = tree.Q<Button>("BuildingsButton") ??
+                throw new InvalidOperationException("[PlayerHUD] BuildingsButton is missing from PlayerHUD.uxml.");
+            buildingsButton.clicked += () => _buildingsPopup.style.display = DisplayStyle.Flex;
 
-            _credsLabel = new Label("C ---");
-            _credsLabel.AddToClassList("hud-creds");
-            _panel.Add(_credsLabel);
+            _faqPopup = tree.Q<VisualElement>("FaqPopup") ??
+                throw new InvalidOperationException("[PlayerHUD] FaqPopup is missing from PlayerHUD.uxml.");
+            Button faqClose = tree.Q<Button>("FaqCloseButton") ??
+                throw new InvalidOperationException("[PlayerHUD] FaqCloseButton is missing from PlayerHUD.uxml.");
+            faqClose.clicked += () => _faqPopup.style.display = DisplayStyle.None;
+            Button faqButton = tree.Q<Button>("FaqButton") ??
+                throw new InvalidOperationException("[PlayerHUD] FaqButton is missing from PlayerHUD.uxml.");
+            faqButton.clicked += () => _faqPopup.style.display = DisplayStyle.Flex;
 
-            _geologyLabel = new Label("Геология: --/--");
-            _geologyLabel.AddToClassList("hud-stat");
-            _panel.Add(_geologyLabel);
+            Button programmatorButton = tree.Q<Button>("ProgrammatorButton") ??
+                throw new InvalidOperationException("[PlayerHUD] ProgrammatorButton is missing from PlayerHUD.uxml.");
+            programmatorButton.clicked += () => _programmatorGrid?.Show();
 
-            var basketSep = new VisualElement();
-            basketSep.AddToClassList("hud-separator");
-            _panel.Add(basketSep);
-
-            _basketPercentLabel = new Label("Груз: --%");
-            _basketPercentLabel.AddToClassList("hud-basket");
-            _panel.Add(_basketPercentLabel);
-
-            _basketContainer = new VisualElement();
-            _basketContainer.name = "BasketCrystals";
-            _basketContainer.AddToClassList("hud-basket-container");
-            _panel.Add(_basketContainer);
-
-            root.Add(_panel);
-        }
-
-        private void CreateBonusButton(VisualElement root)
-        {
-            _bonusButton = new Button(ToggleBonusPanel);
-            _bonusButton.text = "Бонусы";
-            _bonusButton.AddToClassList("hud-button-accent");
-            _bonusButton.AddToClassList("hud-bonus-button");
-            Tooltip.AttachTo(_bonusButton, "Открыть панель бонусов", _tooltip);
-
-            root.Add(_bonusButton);
-        }
-
-        private void CreateBonusPanel(VisualElement root)
-        {
-            _bonusPanel = new VisualElement();
-            _bonusPanel.AddToClassList("hud-bonus-panel");
-
-            var titleRow = new VisualElement();
-            titleRow.AddToClassList("hud-title-row");
-
-            var title = new Label("Бонусы");
-            title.AddToClassList("hud-stat");
-            titleRow.Add(title);
-
-            var closeBtn = new Button(ToggleBonusPanel);
-            closeBtn.text = "×";
-            closeBtn.AddToClassList("hud-button-close");
-            titleRow.Add(closeBtn);
-
-            _bonusPanel.Add(titleRow);
-
-            _bonusStatusLabel = new Label("Ежедневный бонус: ...");
-            _bonusStatusLabel.AddToClassList("hud-stat");
-            _bonusStatusLabel.AddToClassList("hud-stat-wrap");
-            _bonusPanel.Add(_bonusStatusLabel);
-
-            _bonusClaimButton = new Button(ClaimDailyBonus);
-            _bonusClaimButton.text = "Забрать";
-            _bonusClaimButton.AddToClassList("hud-button-claim");
-            _bonusClaimButton.style.display = DisplayStyle.None;
-            _bonusPanel.Add(_bonusClaimButton);
-
-            _bonusPanel.style.display = DisplayStyle.None;
-            root.Add(_bonusPanel);
+            _missionPanel = tree.Q<VisualElement>("MissionPanel") ??
+                throw new InvalidOperationException("[PlayerHUD] MissionPanel is missing from PlayerHUD.uxml.");
+            _missionTitleLabel = tree.Q<Label>("MissionTitleLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] MissionTitleLabel is missing from PlayerHUD.uxml.");
+            _missionDescLabel = tree.Q<Label>("MissionDescLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] MissionDescLabel is missing from PlayerHUD.uxml.");
+            _missionProgressFill = tree.Q<VisualElement>("MissionProgressFill") ??
+                throw new InvalidOperationException("[PlayerHUD] MissionProgressFill is missing from PlayerHUD.uxml.");
+            _missionProgressLabel = tree.Q<Label>("MissionProgressLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] MissionProgressLabel is missing from PlayerHUD.uxml.");
         }
 
         private void ToggleBonusPanel()
         {
             _isBonusOpen = !_isBonusOpen;
             _bonusPanel!.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            _bonusButton!.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
             if (_isBonusOpen)
             {
                 UpdateDailyBonusPanel();
-            }
-
-            UpdateStatusPanelPosition();
-        }
-
-        private void UpdateStatusPanelPosition()
-        {
-            if (_statusPanel == null)
-            {
-                return;
-            }
-
-            if (_isBonusOpen && _bonusPanel != null)
-            {
-                _bonusPanel.schedule.Execute(() =>
-                {
-                    if (!_isBonusOpen)
-                    {
-                        return;
-                    }
-
-                    _statusPanel.style.top = 10 + GAP + _bonusPanel.resolvedStyle.height;
-                }).StartingIn(16);
-            }
-            else
-            {
-                _statusPanel.style.top = 10 + BTN_SIZE + GAP;
             }
         }
 
         private void UpdateDailyBonusPanel()
         {
-            if (_bonusStatusLabel == null)
+            if (_bonusStatusLabel == null || _bonusButton == null)
             {
                 return;
             }
@@ -492,27 +481,19 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (stats.DailyBonusAvailable)
             {
+                // Кнопка-уведомление показывается только когда есть что забирать.
+                _bonusButton.style.display = DisplayStyle.Flex;
                 _bonusStatusLabel!.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
                 _bonusStatusLabel!.style.color = Color.green;
                 _bonusClaimButton!.style.display = DisplayStyle.Flex;
             }
             else
             {
+                _bonusButton.style.display = DisplayStyle.None;
                 _bonusStatusLabel!.text = "Ежедневный бонус: Нет активных бонусов";
                 _bonusStatusLabel!.style.color = Color.gray;
                 _bonusClaimButton!.style.display = DisplayStyle.None;
             }
-
-            UpdateStatusPanelPosition();
-        }
-
-        private void CreateStatusPanel(VisualElement root)
-        {
-            _statusPanel = new VisualElement();
-            _statusPanel.name = "StatusPanel";
-            _statusPanel.AddToClassList("hud-status-panel");
-            _statusPanel.style.display = DisplayStyle.None;
-            root.Add(_statusPanel);
         }
 
         private void RebuildStatusPanel()
@@ -647,111 +628,8 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void ClaimDailyBonus()
         {
-            Debug.Log("[PlayerHUD] ClaimDailyBonus: sending claim request");
             var ns = _networkService;
             ns?.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
-        }
-
-        private void CreateAutoDigToggle(VisualElement root)
-        {
-            _autoDigButton = new Button(ToggleAutoDig);
-            _autoDigButton.text = string.Empty;
-            _autoDigButton.AddToClassList("hud-button");
-            _autoDigButton.AddToClassList("hud-toggle-btn");
-            _autoDigButton.AddToClassList("hud-toggle-auto-dig");
-
-            _autoDigLabel = new Label("Копать ✗");
-            _autoDigLabel.AddToClassList("hud-toggle-btn-label");
-            _autoDigButton.Add(_autoDigLabel);
-
-
-            Tooltip.AttachTo(_autoDigButton, "Автоматическое копание блоков", _tooltip);
-
-            root.Add(_autoDigButton);
-        }
-
-        private void CreateAggressionToggle(VisualElement root)
-        {
-            _aggressionButton = new Button(ToggleAggression);
-            _aggressionButton.text = string.Empty;
-            _aggressionButton.AddToClassList("hud-button");
-            _aggressionButton.AddToClassList("hud-toggle-btn");
-            _aggressionButton.AddToClassList("hud-toggle-aggression");
-
-            _aggressionLabel = new Label("Агрессия ✗");
-            _aggressionLabel.AddToClassList("hud-toggle-btn-label");
-            _aggressionButton.Add(_aggressionLabel);
-            Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
-
-            root.Add(_aggressionButton);
-        }
-
-        private void CreateSkillContainer(VisualElement root)
-        {
-            _skillContainer = new VisualElement();
-            _skillContainer.name = "MiniSkills";
-            _skillContainer.AddToClassList("hud-skill-container");
-            root.Add(_skillContainer);
-            Debug.Log("[PlayerHUD] Skill container created");
-        }
-
-        private void EnsureSkillRow()
-        {
-            if (_currentSkillRow != null && _skillCountInRow < SKILL_GRID_COLS)
-            {
-                return;
-            }
-
-            _currentSkillRow = new VisualElement();
-            _currentSkillRow!.AddToClassList("hud-skill-row");
-            _skillContainer!.Add(_currentSkillRow!);
-            _skillCountInRow = 0;
-        }
-
-        private (Label arrow, VisualElement barFill) CreateSkillIcon(SkillType skill)
-        {
-            EnsureSkillRow();
-
-            var cell = new VisualElement();
-            cell.AddToClassList("hud-skill-icon");
-
-            var iconColumn = new VisualElement();
-            iconColumn.AddToClassList("hud-skill-icon-column");
-
-            var arrow = new Label("up");
-            arrow.AddToClassList("hud-skill-arrow");
-            iconColumn.Add(arrow);
-
-            var iconImage = new Image();
-            iconImage.AddToClassList("hud-skill-icon-image");
-
-            var tex = Resources.Load<Texture2D>($"Skills/{skill}");
-            if (tex != null)
-            {
-                RuntimeTextureFactory.ApplySampling(
-                    tex,
-                    FilterMode.Point,
-                    TextureWrapMode.Clamp);
-                iconImage.image = tex;
-            }
-
-            iconColumn.Add(iconImage);
-            cell.Add(iconColumn);
-
-            var barContainer = new VisualElement();
-            barContainer.AddToClassList("hud-skill-bar-container");
-
-            var barFill = new VisualElement();
-            barFill.AddToClassList("hud-skill-bar-fill");
-            barFill.AddToClassList("hud-skill-bar-segment");
-            barContainer.Add(barFill);
-            cell.Add(barContainer);
-
-            _currentSkillRow!.Add(cell);
-            _skillCountInRow++;
-
-            _skillIcons[skill] = (arrow, barFill);
-            return (arrow, barFill);
         }
 
         private void ToggleAutoDig()
@@ -765,20 +643,12 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void UpdateAutoDigButton(bool enabled)
         {
-            if (_autoDigLabel == null)
+            if (_autoDigIndicator == null)
             {
                 return;
             }
 
-            _autoDigLabel.text = enabled ? "Копать ✓" : "Копать ✗";
-            _autoDigLabel.EnableInClassList("hud-toggle-btn-label", true);
-            if (_autoDigButton != null)
-            {
-                _autoDigButton.EnableInClassList("hud-toggle-btn", true);
-                _autoDigButton.EnableInClassList("enabled", enabled);
-            }
-
-            _autoDigLabel.EnableInClassList("enabled", enabled);
+            _autoDigIndicator.EnableInClassList("hud-mode-led--active", enabled);
         }
 
         private void ToggleAggression()
@@ -792,14 +662,12 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void UpdateAggressionButton(bool enabled)
         {
-            if (_aggressionLabel == null)
+            if (_aggressionIndicator == null)
             {
                 return;
             }
 
-            _aggressionLabel.text = enabled ? "Агрессия ✓" : "Агрессия ✗";
-            _aggressionLabel.EnableInClassList("enabled", enabled);
-            _aggressionButton?.EnableInClassList("enabled", enabled);
+            _aggressionIndicator.EnableInClassList("hud-mode-led--active", enabled);
         }
 
         private void StartSkeletonPulse()
@@ -810,9 +678,9 @@ namespace Fodinae.UI.HUD.Player.View
             float t = 0f;
             bool rising = true;
 
-            _skeletonPulse = _panel!.schedule.Execute(() =>
+            _skeletonPulse = _hudRoot!.schedule.Execute(() =>
             {
-                if (_panel == null)
+                if (_hudRoot == null)
                 {
                     return;
                 }
@@ -844,6 +712,11 @@ namespace Fodinae.UI.HUD.Player.View
                 if (_hpLabel != null)
                 {
                     _hpLabel.style.opacity = alpha;
+                }
+
+                if (_hpPercentLabel != null)
+                {
+                    _hpPercentLabel.style.opacity = alpha;
                 }
 
                 if (_hpBarFill != null)
@@ -894,6 +767,11 @@ namespace Fodinae.UI.HUD.Player.View
             if (_hpLabel != null)
             {
                 _hpLabel.style.opacity = 1;
+            }
+
+            if (_hpPercentLabel != null)
+            {
+                _hpPercentLabel.style.opacity = 1;
             }
 
             if (_hpBarFill != null)
@@ -948,16 +826,21 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_levelLabel != null)
             {
-                _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
+                _levelLabel.text = _isLoaded ? $"УР. {stats.Level:N0}" : "УР. ---";
             }
 
             if (_hpLabel != null)
             {
-                _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
+                _hpLabel.text = _isLoaded ? $"ПРОЧНОСТЬ: {stats.Health:N0} / {stats.MaxHealth:N0}" : "ПРОЧНОСТЬ: -- / --";
                 _hpLabel.style.opacity = 1;
             }
 
             float pct = stats.HealthPercent;
+            if (_hpPercentLabel != null)
+            {
+                _hpPercentLabel.text = $"{pct * 100f:F0}%";
+            }
+
             if (_hpBarFill != null)
             {
                 _hpBarFill!.style.width = new Length(pct * 100, LengthUnit.Percent);
@@ -966,24 +849,24 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_moneyLabel != null)
             {
-                _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
+                _moneyLabel.text = _isLoaded ? $"{stats.Money:N0}" : "---";
             }
 
             if (_credsLabel != null)
             {
-                _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+                _credsLabel.text = _isLoaded ? $"{stats.Creds:N0}" : "---";
             }
 
             if (_geologyLabel != null)
             {
                 _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
-                    ? "Геология: 0/0"
+                    ? "Геология: 0"
                     : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
             }
 
             if (_basketPercentLabel != null)
             {
-                _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+                _basketPercentLabel.text = _isLoaded ? $"{stats.BasketMaxPercent}%" : "--%";
             }
 
             for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
@@ -1126,168 +1009,63 @@ namespace Fodinae.UI.HUD.Player.View
             }
         }
 
-        private void CreateChatButton(VisualElement root)
+        private void EnsureSkillRow()
         {
-            _chatButton = new Button(() => _globalChatUI.Toggle());
-            _chatButton.text = "Чат";
-            _chatButton.AddToClassList("hud-btn-action");
-            _chatButton.AddToClassList("hud-chat-button");
-            Tooltip.AttachTo(_chatButton, "Открыть чат", _tooltip);
-
-            root.Add(_chatButton);
-        }
-
-        private void CreateButtonsAndPopups(VisualElement root)
-        {
-            _respawnPopup = CreateRespawnPopup();
-            _buildingsPopup = CreatePopup("Мои здания");
-            _faqPopup = CreatePopup("FAQ");
-
-            root.Add(_respawnPopup);
-            root.Add(_buildingsPopup);
-            root.Add(_faqPopup);
-
-            CreateRespawnButton(root, () => _respawnPopup.style.display = DisplayStyle.Flex);
-            CreateMyBuildingsButton(root, () => _buildingsPopup.style.display = DisplayStyle.Flex);
-            CreateFaqButton(root, () => _faqPopup.style.display = DisplayStyle.Flex);
-            CreateProgrammatorButton(root, () => _programmatorGrid?.Show());
-        }
-
-        private VisualElement CreatePopup(string title)
-        {
-            var popup = new VisualElement();
-            popup.AddToClassList("popup-overlay");
-            popup.style.display = DisplayStyle.None;
-
-            var dimmer = new VisualElement();
-            dimmer.pickingMode = PickingMode.Ignore;
-            dimmer.AddToClassList("popup-dimmer");
-            popup.Add(dimmer);
-
-            var panel = new VisualElement();
-            panel.AddToClassList("popup-panel");
-
-            var titleLabel = new Label(title);
-            titleLabel.AddToClassList("popup-title");
-            panel.Add(titleLabel);
-
-            var closeBtn = new Button(() => popup.style.display = DisplayStyle.None);
-            closeBtn.text = "Закрыть";
-            closeBtn.AddToClassList("popup-close-btn");
-
-            panel.Add(closeBtn);
-            popup.Add(panel);
-            return popup;
-        }
-
-        private VisualElement CreateRespawnPopup()
-        {
-            var popup = new VisualElement();
-            popup.AddToClassList("popup-overlay");
-            popup.style.display = DisplayStyle.None;
-
-            var dimmer = new VisualElement();
-            dimmer.pickingMode = PickingMode.Ignore;
-            dimmer.AddToClassList("popup-dimmer");
-            popup.Add(dimmer);
-
-            var panel = new VisualElement();
-            panel.AddToClassList("popup-panel");
-
-            var titleLabel = new Label("Респавн");
-            titleLabel.AddToClassList("popup-title");
-            panel.Add(titleLabel);
-
-            var btnRow = new VisualElement();
-            btnRow.AddToClassList("popup-btn-row");
-
-            var okBtn = new Button(() =>
+            if (_currentSkillRow != null && _skillCountInRow < SKILL_GRID_COLS)
             {
-                var ns = _networkService;
-                ns?.SendAction(new SuicidePacket());
-                popup.style.display = DisplayStyle.None;
-            });
-            okBtn.text = "ОК";
-            okBtn.AddToClassList("popup-btn");
-            btnRow.Add(okBtn);
+                return;
+            }
 
-            var backBtn = new Button(() => popup.style.display = DisplayStyle.None);
-            backBtn.text = "Назад";
-            backBtn.AddToClassList("popup-btn");
-            btnRow.Add(backBtn);
-
-            panel.Add(btnRow);
-            popup.Add(panel);
-            return popup;
+            _currentSkillRow = new VisualElement();
+            _currentSkillRow!.AddToClassList("hud-skill-row");
+            _skillContainer!.Add(_currentSkillRow!);
+            _skillCountInRow = 0;
         }
 
-        private void CreateRespawnButton(VisualElement root, System.Action onClick)
+        private (Label arrow, VisualElement barFill) CreateSkillIcon(SkillType skill)
         {
-            var btn = new Button(onClick);
-            btn.text = "Респавн";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.right = 10 + ((100 + 6) * 2);
-            root.Add(btn);
-        }
+            EnsureSkillRow();
 
-        private void CreateMyBuildingsButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "Мои здания";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.right = 10 + (100 + 6);
-            root.Add(btn);
-        }
+            var cell = new VisualElement();
+            cell.AddToClassList("hud-skill-icon");
 
-        private void CreateFaqButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "FAQ";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.right = 10;
-            root.Add(btn);
-        }
+            var iconColumn = new VisualElement();
+            iconColumn.AddToClassList("hud-skill-icon-column");
 
-        private void CreateMissionPanel(VisualElement root)
-        {
-            _missionPanel = new VisualElement();
-            _missionPanel.name = "MissionPanel";
-            _missionPanel.AddToClassList("hud-mission-panel");
-            _missionPanel.style.display = DisplayStyle.None;
+            var arrow = new Label("up");
+            arrow.AddToClassList("hud-skill-arrow");
+            iconColumn.Add(arrow);
 
-            _missionTitleLabel = new Label("---");
-            _missionTitleLabel.AddToClassList("hud-stat");
-            _missionTitleLabel.AddToClassList("hud-mission-title");
-            _missionPanel.Add(_missionTitleLabel);
+            var iconImage = new Image();
+            iconImage.AddToClassList("hud-skill-icon-image");
 
-            _missionDescLabel = new Label(string.Empty);
-            _missionDescLabel.AddToClassList("hud-stat");
-            _missionDescLabel.AddToClassList("hud-stat-wrap");
-            _missionDescLabel.AddToClassList("hud-mission-desc");
-            _missionPanel.Add(_missionDescLabel);
+            var tex = Resources.Load<Texture2D>($"Skills/{skill}");
+            if (tex != null)
+            {
+                RuntimeTextureFactory.ApplySampling(
+                    tex,
+                    FilterMode.Point,
+                    TextureWrapMode.Clamp);
+                iconImage.image = tex;
+            }
 
-            var progressRow = new VisualElement();
-            progressRow.AddToClassList("hud-mission-progress-row");
+            iconColumn.Add(iconImage);
+            cell.Add(iconColumn);
 
-            _missionProgressLabel = new Label("0/0");
-            _missionProgressLabel.AddToClassList("hud-stat");
-            _missionProgressLabel.AddToClassList("hud-mission-progress-label");
-            progressRow.Add(_missionProgressLabel);
+            var barContainer = new VisualElement();
+            barContainer.AddToClassList("hud-skill-bar-container");
 
-            var barBg = new VisualElement();
-            barBg.AddToClassList("hud-mission-progress-bar");
+            var barFill = new VisualElement();
+            barFill.AddToClassList("hud-skill-bar-fill");
+            barFill.AddToClassList("hud-skill-bar-segment");
+            barContainer.Add(barFill);
+            cell.Add(barContainer);
 
-            _missionProgressFill = new VisualElement();
-            _missionProgressFill.AddToClassList("hud-mission-progress-fill");
-            barBg.Add(_missionProgressFill);
+            _currentSkillRow!.Add(cell);
+            _skillCountInRow++;
 
-            progressRow.Add(barBg);
-            _missionPanel.Add(progressRow);
-
-            root.Add(_missionPanel);
+            _skillIcons[skill] = (arrow, barFill);
+            return (arrow, barFill);
         }
 
         private void UpdateMissionPanel()
@@ -1314,15 +1092,6 @@ namespace Fodinae.UI.HUD.Player.View
             float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
             _missionProgressFill!.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
             _missionProgressLabel!.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
-        }
-
-        private void CreateProgrammatorButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "Программатор";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-programmator-button");
-            root.Add(btn);
         }
     }
 }

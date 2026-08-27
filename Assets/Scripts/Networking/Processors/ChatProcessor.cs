@@ -50,8 +50,8 @@ namespace Fodinae.Networking.Processors
 
         public void Process(ChatListPacket packet)
         {
-            var chatUi = _session.TryResolve<GlobalChatUI>();
-            if (chatUi == null)
+            var chatUI = _session.TryResolve<GlobalChatUI>();
+            if (chatUI == null)
             {
                 return;
             }

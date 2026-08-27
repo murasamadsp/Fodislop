@@ -29,6 +29,7 @@ namespace Fodinae.UI
         private UIDocument? _doc;
         [Inject]
         private IObjectResolver _resolver = null!;
+        private TemplateContainer? _minimapTree;
         private VisualElement? _minimapRoot;
         private Image? _minimapImageElement;
         private Label? _coordinatesLabel;
@@ -316,32 +317,28 @@ namespace Fodinae.UI
             }
 
 
-            var root = _doc.rootVisualElement;
-            _minimapRoot = new VisualElement();
-            _minimapRoot.name = "MinimapPanel";
-            _minimapRoot.AddToClassList("hud-minimap-panel");
-            _minimapRoot.AddToClassList("sci-fi-panel");
-
-            _coordinatesLabel = new Label(string.Empty);
-            _coordinatesLabel.AddToClassList("hud-minimap-coords");
-            _minimapRoot.Add(_coordinatesLabel);
-
-            var imageContainer = new VisualElement();
-            imageContainer.AddToClassList("hud-minimap-container");
-
-            _minimapImageElement = new Image();
+            // Static structure (panel, coordinates, image container) lives in
+            // Minimap.uxml; only the texture and the map-toggle click are bound here.
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/Minimap") ??
+                throw new InvalidOperationException("[Minimap] Resources/UI/Minimap.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+            tree.AddToClassList("ui-fullscreen");
+            _minimapTree = tree;
+            _minimapRoot = tree.Q<VisualElement>("MinimapPanel") ??
+                throw new InvalidOperationException("[Minimap] MinimapPanel is missing from Minimap.uxml.");
+            _coordinatesLabel = tree.Q<Label>("MinimapCoordinates") ??
+                throw new InvalidOperationException("[Minimap] MinimapCoordinates is missing from Minimap.uxml.");
+            _minimapImageElement = tree.Q<Image>("MinimapImage") ??
+                throw new InvalidOperationException("[Minimap] MinimapImage is missing from Minimap.uxml.");
             _minimapImageElement.image = _minimapTexture;
-            _minimapImageElement.AddToClassList("hud-minimap-image");
-            imageContainer.Add(_minimapImageElement);
 
-            _minimapRoot.Add(imageContainer);
             _minimapRoot.RegisterCallback<ClickEvent>(evt =>
             {
                 WorldMapController? mapController = _resolver?.ResolveOrDefault<WorldMapController>();
                 mapController?.ToggleMapMode();
                 evt.StopPropagation();
             });
-            root.Add(_minimapRoot);
+            _doc.rootVisualElement.Add(tree);
 
             _isVisible = true;
             SetVisible(false);
@@ -583,11 +580,13 @@ namespace Fodinae.UI
                 _subscribedCellLayer = null;
             }
 
-            if (_minimapRoot != null && _minimapRoot.parent != null)
+            if (_minimapTree != null && _minimapTree.parent != null)
             {
-                _minimapRoot.parent.Remove(_minimapRoot);
-                _minimapRoot = null;
+                _minimapTree.parent.Remove(_minimapTree);
+                _minimapTree = null;
             }
+
+            _minimapRoot = null;
 
             if (_minimapTexture != null)
             {

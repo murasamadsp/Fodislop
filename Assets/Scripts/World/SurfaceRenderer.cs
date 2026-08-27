@@ -3,6 +3,7 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Game.Managers;
 using Fodinae.World.Lighting;
 using UnityEngine;
@@ -64,6 +65,8 @@ namespace Fodinae.World
         private LightingGeometryRegistry _lightingGeometryRegistry = null!;
         [Inject]
         private IClientConfigManager _clientConfigManager = null!;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         private readonly Vector3[] _boundaryVertices = new Vector3[12];
         private readonly Vector2[] _boundaryUv = new Vector2[12];
@@ -99,6 +102,7 @@ namespace Fodinae.World
         }
 
         public ulong LightingGeometryRevision => _lightingGeometryRevision;
+        public bool IsInitialized => _initialized;
 
         public void ApplyClientConfig()
         {
@@ -210,7 +214,7 @@ namespace Fodinae.World
         protected void LateUpdate()
         {
             using var marker = SurfaceLateUpdateMarker.Auto();
-            if (!_mapManager.IsWorldInitialized)
+            if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
                 return;
             }
@@ -293,14 +297,10 @@ namespace Fodinae.World
             Texture2D transitTexture = _transitTexture;
             Texture2D perspectiveTexture = _perspectiveTexture;
             Texture2D redRockTexture = _redRockTexture;
-            ClientConfig clientConfig = _clientConfigManager.Config ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer requires an initialized ClientConfig.");
-            if (_mapManager.WorldWidth <= 0 || _mapManager.WorldHeight <= 0)
+            ClientConfig? clientConfig = _clientConfigManager?.Config;
+            if (clientConfig == null || _mapManager == null || _mapManager.WorldWidth <= 0 || _mapManager.WorldHeight <= 0)
             {
-                throw new InvalidOperationException(
-                    $"SurfaceRenderer requires valid world dimensions, received " +
-                    $"{_mapManager.WorldWidth}x{_mapManager.WorldHeight}.");
+                return false;
             }
 
             Shader surfaceShader = Shader.Find(SurfaceShaderName);
@@ -597,7 +597,7 @@ namespace Fodinae.World
             GameObject bandObject;
             if (existingTransform == null)
             {
-                bandObject = new GameObject(objectName);
+                bandObject = _sceneObjects.Create(objectName, RuntimeOwner.General);
                 bandObject.transform.SetParent(transform, worldPositionStays: false);
             }
             else

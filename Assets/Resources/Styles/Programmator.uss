@@ -83,14 +83,42 @@
     white-space: normal;
 }
 
+/* Кольца радиального меню. Геометрия: центр 130, радиусы 100/55, толщина 36. */
+.prog-radial-ring {
+    position: absolute;
+    border-width: 36px;
+}
+
+.prog-radial-ring--outer {
+    width: 236px;
+    height: 236px;
+    left: 12px;
+    top: 12px;
+    border-radius: 118px;
+    border-color: rgba(20, 20, 20, 0.45);
+    display: none;
+}
+
+.prog-radial-ring--inner {
+    width: 146px;
+    height: 146px;
+    left: 57px;
+    top: 57px;
+    border-radius: 73px;
+    border-color: rgba(31, 31, 31, 0.5);
+}
+
 .prog-radial-back {
     position: absolute;
+    left: 112px;
+    top: 112px;
     width: 36px;
     height: 36px;
     border-radius: 18px;
     background-color: rgba(38, 38, 38, 0.95);
     border-width: 2px;
     border-color: rgb(128, 128, 128);
+    display: none;
 }
 
 .prog-radial-back:hover {
@@ -140,6 +168,7 @@
 
 .prog-top {
     flex-direction: column;
+    flex-grow: 1;
     margin-bottom: 10px;
 }
 
@@ -181,6 +210,10 @@
     -unity-text-align: middle-center;
     border-width: 0;
     padding: 0 2px;
+}
+
+.prog-ctrl-btn--gap {
+    margin-right: 8px;
 }
 
 .prog-close-btn {
@@ -280,9 +313,16 @@
 
 /* ─── Сетка ─── */
 
+/* Ширина контейнера: 16 колонок × 38 px = 608 px (38 = 32 ячейка + 2×2 отступ + 2 border). */
 .prog-grid-container {
     flex-direction: row;
     flex-wrap: wrap;
+    width: 608px;
+}
+
+/* Высота сетки: 12 рядов × 38 px = 456 px (все ряды фиксированного размера). */
+.prog-grid-scroll {
+    max-height: 456px;
 }
 
 .prog-cell {
@@ -465,9 +505,49 @@
     height: 200px;
 }
 
+.prog-joy-item {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    background-color: rgba(51, 51, 51, 0.95);
+    border-width: 2px;
+    border-color: rgb(128, 128, 128);
+    border-radius: 18px;
+}
+
+.prog-joy-item:hover {
+    background-color: rgba(89, 89, 89, 0.95);
+    border-color: rgb(255, 214, 0);
+}
+
+/* Позиции 8 кнопок направлений — кольцо радиусом 70px вокруг центра 100px
+   (формула из исходного кода: Center + Radius*cos/sin(angle) − ItemSize/2). */
+.prog-joy-item--0 { left: 82px;    top: 12px; }
+.prog-joy-item--1 { left: 131.5px; top: 32.5px; }
+.prog-joy-item--2 { left: 152px;   top: 82px; }
+.prog-joy-item--3 { left: 131.5px; top: 131.5px; }
+.prog-joy-item--4 { left: 82px;    top: 152px; }
+.prog-joy-item--5 { left: 32.5px;  top: 131.5px; }
+.prog-joy-item--6 { left: 12px;    top: 82px; }
+.prog-joy-item--7 { left: 32.5px;  top: 32.5px; }
+
+.prog-joy-item-label {
+    color: white;
+    font-size: 14px;
+    -unity-text-align: middle-center;
+}
+
 .prog-joy-center {
+    left: 78.4px;
+    top: 78.4px;
+    width: 43.2px;
+    height: 43.2px;
     border-top-left-radius: 20px;
     border-top-right-radius: 20px;
     border-bottom-left-radius: 20px;
     border-bottom-right-radius: 20px;
+}
+
+.prog-joy-center .prog-joy-item-label {
+    font-size: 16px;
 }

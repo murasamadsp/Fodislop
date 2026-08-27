@@ -100,6 +100,11 @@ namespace Fodinae.World.Terrain
                 }
             });
 
+            for (int i = 0; i < subMeshIndices.Length; i++)
+            {
+                subMeshIndices[i].Clear();
+            }
+
             // Ultra-fast flat index collection without dictionary or cache lookups
             int totalQuads = meshWidth * meshHeight;
             for (int i = 0; i < totalQuads; i++)

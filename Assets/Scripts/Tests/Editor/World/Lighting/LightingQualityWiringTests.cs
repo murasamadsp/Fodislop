@@ -12,7 +12,7 @@ namespace Fodinae.Tests.World.Lighting
 {
     // Guardrail for the "many layers, any one can silently drop the value"
     // failure mode: GUI -> ClientConfig -> GraphicsQualityProfile ->
-    // TerrariaLightingEngine -> WorldLighting.compute. Each test below
+    // LightingEngine -> WorldLighting.compute. Each test below
     // targets one hop that a manual audit already caught breaking once
     // (Ultra profile drifting from PerPixel, standard presets not actually
     // differing) so a future edit that reintroduces the same class of bug

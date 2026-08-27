@@ -3,9 +3,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Net;
+using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Game.Managers;
 using Fodinae.Networking.Auth;
 using Fodinae.UI;
@@ -59,11 +61,14 @@ namespace Fodinae.Networking.Connection
         private IClientConfigManager _clientConfigManager = null!;
         [Inject]
         private ISessionContainer _session = null!;
+        [Inject]
+        private ISceneCoordinator _sceneCoordinator = null!;
 
         private bool _shouldAutoReconnect;
         private float _reconnectCountdown;
         private string _reconnectStatus = string.Empty;
         private bool _tearingDown;
+        private bool _restartWorldOnConnect;
 
         // НУЖЕН: сохраняет причину серверного дисконнекта — используется при реконнекте
         // и для диагностики в ReconnectUI. НЕ УДАЛЯТЬ (см. HandleServerDisconnect).
@@ -283,6 +288,7 @@ namespace Fodinae.Networking.Connection
 
         public void HandleServerReconnect()
         {
+            _restartWorldOnConnect = true;
             _shouldAutoReconnect = true;
             _reconnectBackoff.Reset();
             _reconnectCountdown = _reconnectBackoff.CurrentDelay;
@@ -294,6 +300,7 @@ namespace Fodinae.Networking.Connection
 
         public void StartManualReconnect()
         {
+            _restartWorldOnConnect = true;
             _shouldAutoReconnect = true;
             _reconnectBackoff.Reset();
             _reconnectCountdown = _reconnectBackoff.CurrentDelay;
@@ -302,6 +309,18 @@ namespace Fodinae.Networking.Connection
 
         private void OnConnected()
         {
+            CompleteConnectionAsync().Forget();
+        }
+
+        private async UniTaskVoid CompleteConnectionAsync()
+        {
+            if (_restartWorldOnConnect &&
+                string.Equals(_sceneCoordinator.CurrentSceneName, "MainGame", StringComparison.Ordinal))
+            {
+                await _sceneCoordinator.RestartCurrentAsync(destroyCancellationToken);
+            }
+
+            _restartWorldOnConnect = false;
             _shouldAutoReconnect = false;
             _reconnectBackoff.Reset();
             _reconnectStatus = string.Empty;

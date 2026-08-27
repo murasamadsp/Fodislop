@@ -206,6 +206,21 @@ namespace Fodinae.Game.Managers
             int height,
             CellType[] cells)
         {
+            if (cells == null)
+            {
+                throw new ArgumentNullException(nameof(cells));
+            }
+
+            SetRegion(startX, startY, width, height, cells.AsSpan());
+        }
+
+        public void SetRegion(
+            int startX,
+            int startY,
+            int width,
+            int height,
+            ReadOnlySpan<CellType> cells)
+        {
             if (!_isInitialized || _cellLayer == null)
             {
                 throw new InvalidOperationException(
