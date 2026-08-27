@@ -285,10 +285,20 @@ namespace Fodinae.Game
                 _nicknameText.overflowMode = TextOverflowModes.Overflow;
                 _nicknameText.color = Color.white;
 
-                // The serialized prefab name is not authoritative. Hide it until
-                // the server sends current robot metadata, otherwise an old name
-                // is visible for one or more frames during connection/reload.
-                _nicknameText.text = string.Empty;
+                if (_nicknameText.font == null)
+                {
+                    var font = Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_SDF") ??
+                               Resources.Load<TMP_FontAsset>("Fonts/Exo2_SDF") ??
+                               TMP_Settings.defaultFontAsset;
+                    if (font != null)
+                    {
+                        _nicknameText.font = font;
+                    }
+                }
+
+                _nicknameText.text = !string.IsNullOrEmpty(_nickname) && !IsLocalPlayer
+                    ? _nickname
+                    : string.Empty;
 
                 MeshRenderer textRenderer = _nicknameText.GetComponent<MeshRenderer>() ??
                     throw new InvalidOperationException(
@@ -856,10 +866,18 @@ namespace Fodinae.Game
 
             _bodyBatchHandle?.SetColor(Color.white);
 
+            if (_nicknameText == null && !IsLocalPlayer)
+            {
+                InitializeVisualElements();
+            }
+
             if (_nicknameText != null)
             {
                 _nicknameText.text = IsLocalPlayer ? string.Empty : nickname;
             }
+
+            _hasUpdatedLabels = false;
+            UpdateLabelsPosition();
 
             LoadMetadataAssets();
         }
@@ -1020,6 +1038,9 @@ namespace Fodinae.Game
             {
                 _bodyBatchHandle!.SetEnabled(true);
             }
+
+            _hasUpdatedLabels = false;
+            UpdateLabelsPosition();
         }
 
         public void EnsureEditorPreviewVisual()
