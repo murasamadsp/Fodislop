@@ -8,10 +8,12 @@ namespace Fodinae.UI;
 public sealed class InputBlockState : IInputBlocker
 {
     private readonly ServerWindowPresenter _windows;
+    private readonly MapModeState _mapMode;
 
-    public InputBlockState(ServerWindowPresenter windows)
+    public InputBlockState(ServerWindowPresenter windows, MapModeState mapMode)
     {
         _windows = windows;
+        _mapMode = mapMode;
     }
 
     public bool IsInputBlocked =>
@@ -19,7 +21,8 @@ public sealed class InputBlockState : IInputBlocker
         _windows.HasOpenWindows ||
         _windows.IsModalShowing ||
         PauseMenu.IsMenuOpen ||
-        ProgrammatorGrid.IsOpen;
+        ProgrammatorGrid.IsOpen ||
+        _mapMode.IsOpen;
 
     public string? TopWindowTag => _windows.TopWindowTag;
 }
