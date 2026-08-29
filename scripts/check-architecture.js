@@ -151,16 +151,16 @@ const RULES = [
     { pattern: /LightingCascadeAtlasLimit\s*<=\s*256\s*\?/, name: "duplicated radiance-cascade count policy", allow: null, allowContent: /return atlasDimension <= 256 \? 3 : 4;/ },
     { pattern: /(FindAnyObjectByType|FindFirstObjectByType)<Camera>/, name: "ad-hoc gameplay camera lookup", allow: /^Assets\/Scripts\/Core\/(?:Rendering\/)?GameplayCamera\.cs$/, allowContent: null },
     { pattern: /AddComponent<[A-Za-z0-9_]*(Manager|Service)>/, name: "manual manager/service construction", allow: null, allowContent: null },
-    { pattern: /(Config|config)\.GraphicsPreset\s*=/, name: "graphics preset mutation outside ClientConfigManager", allow: /^(Assets\/Scripts\/Core\/(?:Configuration\/)?ClientConfigManager\.cs|Assets\/Scripts\/World\/Lighting\/Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
+    { pattern: /(Config|config)\.GraphicsPreset\s*=/, name: "graphics preset mutation outside ClientConfigManager", allow: /^(Assets\/Scripts\/Core\/(?:Configuration\/)?ClientConfigManager\.cs|Assets\/Scripts\/World\/Lighting\/(?:(?:Config|Core)\/)?Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
     { pattern: /(Config|config)\.GraphicsQualitySettings\s*=/, name: "graphics quality snapshot mutation outside ClientConfigManager", allow: /^Assets\/Scripts\/Core\/(?:Configuration\/)?ClientConfigManager\.cs$/, allowContent: null },
-    { pattern: /QualitySettings\.antiAliasing\s*=/, name: "MSAA ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/LightingEngine\.cs$/, allowContent: null },
-    { pattern: /QualitySettings\.SetQualityLevel\s*\(/, name: "Unity quality-level ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/LightingEngine\.cs$/, allowContent: null },
-    { pattern: /\.renderScale\s*=/, name: "URP render-scale ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/LightingEngine\.cs$/, allowContent: null },
+    { pattern: /QualitySettings\.antiAliasing\s*=/, name: "MSAA ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
+    { pattern: /QualitySettings\.SetQualityLevel\s*\(/, name: "Unity quality-level ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
+    { pattern: /\.renderScale\s*=/, name: "URP render-scale ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
     { pattern: /PlayerPrefs\.(Set|Delete|Save)/, name: "settings persistence in PlayerPrefs", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Networking\/Auth\/AuthTokenManager\.cs|Assets\/Scripts\/UI\/(AuthGate\.cs|GatewayController\.cs|Gateway\/AuthGate\.cs|Gateway\/GatewayController\.cs))$/, allowContent: null },
     { pattern: /(slider|toggle|dropdown|quality|preset)\.value\s*=/, name: "notifying UI settings refresh", allow: null, allowContent: null },
     { pattern: /ServerConfig[^;]*(Master|Sfx|Music|Ambience|Voice|Ui)Volume/, name: "audio volume in ServerConfig", allow: null, allowContent: null },
     { pattern: /_clientConfig\.Config\.[A-Za-z0-9_]+\s*=/, name: "direct ClientConfig field mutation", allow: null, allowContent: null },
-    { pattern: /_clientConfig\.Save\s*\(/, name: "unowned ClientConfig persistence", allow: /^(Assets\/Scripts\/Rendering\/(?:Settings\/)?GraphicsSettingsController\.cs|Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs|Assets\/Scripts\/World\/Lighting\/Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
+    { pattern: /_clientConfig\.Save\s*\(/, name: "unowned ClientConfig persistence", allow: /^(Assets\/Scripts\/Rendering\/(?:Settings\/)?GraphicsSettingsController\.cs|Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs|Assets\/Scripts\/World\/Lighting\/(?:(?:Config|Core)\/)?Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
     { pattern: /(FindAnyObjectByType|FindFirstObjectByType|FindObjectsByType)<Canvas>/, name: "screen-space uGUI Canvas lookup", allow: null, allowContent: null },
     { pattern: /using\s+UnityEngine\.UI;/, name: "screen-space uGUI namespace", allow: null, allowContent: null },
     { pattern: /new\s+GameObject\(/, name: "runtime GameObject construction outside SceneObjectFactory", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Editor\/.*|Assets\/Scripts\/Tests\/.*|Assets\/Scripts\/Core\/Lifecycle\/SceneObjectFactory\.cs|Assets\/Scripts\/Game\/.*)$/, allowContent: null },
@@ -414,8 +414,8 @@ function checkTransitionStateContracts() {
 }
 
 function checkUiTransitionGuards() {
-    const mainMenuPath = "Assets/Scripts/UI/MainMenu.cs";
-    const gatewayPath = "Assets/Scripts/UI/GatewayController.cs";
+    const mainMenuPath = fs.existsSync("Assets/Scripts/UI/Menu/Core/MainMenu.cs") ? "Assets/Scripts/UI/Menu/Core/MainMenu.cs" : "Assets/Scripts/UI/Menu/MainMenu.cs";
+    const gatewayPath = fs.existsSync("Assets/Scripts/UI/Gateway/GatewayController.cs") ? "Assets/Scripts/UI/Gateway/GatewayController.cs" : "Assets/Scripts/UI/GatewayController.cs";
     const mainMenu = readFile(mainMenuPath);
     const gateway = readFile(gatewayPath);
     if (mainMenu !== null && !/private void OnPlayButtonClicked\(\)\s*\{\s*if \(_loadingActive \|\| _teardownStarted\)/s.test(mainMenu)) {
