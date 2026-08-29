@@ -404,6 +404,8 @@ namespace Fodinae.UI
             }
         }
 
+        private readonly System.Text.StringBuilder _msgBuilder = new(128);
+
         public void AddMessage(ChatMessagePacket msg)
         {
             if (_scrollView == null)
@@ -411,11 +413,27 @@ namespace Fodinae.UI
                 return;
             }
 
-            var time = DateTime.Now.ToString("HH:mm");
-            var nickHex = $"#{msg.NicknameColor.R:X2}{msg.NicknameColor.G:X2}{msg.NicknameColor.B:X2}";
-            var msgHex = $"#{msg.MessageColor.R:X2}{msg.MessageColor.G:X2}{msg.MessageColor.B:X2}";
+            DateTime now = DateTime.Now;
+            _msgBuilder.Clear();
+            _msgBuilder.Append("<color=#888888>[");
+            _msgBuilder.Append(now.Hour.ToString("D2"));
+            _msgBuilder.Append(':');
+            _msgBuilder.Append(now.Minute.ToString("D2"));
+            _msgBuilder.Append("]</color> <color=#");
+            _msgBuilder.Append(msg.NicknameColor.R.ToString("X2"));
+            _msgBuilder.Append(msg.NicknameColor.G.ToString("X2"));
+            _msgBuilder.Append(msg.NicknameColor.B.ToString("X2"));
+            _msgBuilder.Append('>');
+            _msgBuilder.Append(msg.PlayerName);
+            _msgBuilder.Append("</color>: <color=#");
+            _msgBuilder.Append(msg.MessageColor.R.ToString("X2"));
+            _msgBuilder.Append(msg.MessageColor.G.ToString("X2"));
+            _msgBuilder.Append(msg.MessageColor.B.ToString("X2"));
+            _msgBuilder.Append('>');
+            _msgBuilder.Append(msg.Message);
+            _msgBuilder.Append("</color>");
 
-            var label = new Label($"<color=#888888>[{time}]</color> <color={nickHex}>{msg.PlayerName}</color>: <color={msgHex}>{msg.Message}</color>");
+            var label = new Label(_msgBuilder.ToString());
             label.AddToClassList("gchat-message");
 
             _scrollView.Add(label);
