@@ -1,6 +1,7 @@
 #nullable enable
 
 using Fodinae.Core;
+using Fodinae.World;
 using UnityEngine;
 
 namespace Fodinae.Game;
