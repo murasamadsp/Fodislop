@@ -2,7 +2,12 @@
     "name": "Fodinae.Editor",
     "rootNamespace": "Fodinae.Editor",
     "references": [
-        "Fodinae.Runtime"
+        "Fodinae.Runtime",
+        "Fodinae.Bootstrap",
+        "Fodinae.UI",
+        "Fodinae.World",
+        "Fodinae.AssetPipeline",
+        "VContainer"
     ],
     "includePlatforms": [
         "Editor"

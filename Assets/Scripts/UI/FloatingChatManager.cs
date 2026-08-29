@@ -2,8 +2,11 @@
 
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Fodinae.Game.Managers;
+using Fodinae.Networking;
+using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
 using VContainer;
@@ -21,9 +24,14 @@ namespace Fodinae.UI
         private readonly Queue<FloatingChatBubble> _pool = new();
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
+        [Inject]
+        private ChatEventGateway _chatEvents = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
 
         protected void Start()
         {
+            _chatEvents.LocalMessageReceived += ShowLocalChat;
             TryInitialize();
         }
 
@@ -31,7 +39,7 @@ namespace Fodinae.UI
         {
             if (_camera == null)
             {
-                _camera = GameplayCamera.Resolve();
+                _camera = _gameplayCamera?.Camera;
             }
 
             if (_bubblePrefab != null || _sceneObjects == null)
@@ -56,6 +64,11 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
+            if (_chatEvents != null)
+            {
+                _chatEvents.LocalMessageReceived -= ShowLocalChat;
+            }
+
             _activeBubbles.Clear();
             while (_pool.Count > 0)
             {
@@ -72,7 +85,7 @@ namespace Fodinae.UI
             TryInitialize();
             if (_camera == null)
             {
-                _camera = GameplayCamera.Resolve();
+                _camera = _gameplayCamera?.Camera;
             }
 
             var robot = _robotManager?.GetOrCreateRobot(packet.BotId);

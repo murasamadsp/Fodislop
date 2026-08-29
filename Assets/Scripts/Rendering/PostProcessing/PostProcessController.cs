@@ -49,7 +49,9 @@ namespace Fodinae.Rendering.PostProcessing
         private MotionBlurComponent? _motionBlur;
 
         [Inject]
-        private IClientConfigManager? _clientConfigManager;
+        private IClientConfigManager _clientConfigManager = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
 
         [Inject]
         private void Construct(Volume volume)
@@ -150,7 +152,7 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void Awake()
         {
-            _mainCamera = GameplayCamera.Resolve();
+            _mainCamera = _gameplayCamera?.Camera;
         }
 
         private void OnDestroy()
@@ -188,7 +190,7 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_mainCamera == null)
             {
-                _mainCamera = GameplayCamera.Resolve();
+                _mainCamera = _gameplayCamera?.Camera;
             }
 
             var mainCam = _mainCamera;
@@ -339,7 +341,7 @@ namespace Fodinae.Rendering.PostProcessing
             using var marker = PostProcessLateUpdateMarker.Auto();
             if (_mainCamera == null)
             {
-                _mainCamera = GameplayCamera.Resolve();
+                _mainCamera = _gameplayCamera?.Camera;
             }
 
             Camera? mainCamera = _configuredMainCamera;

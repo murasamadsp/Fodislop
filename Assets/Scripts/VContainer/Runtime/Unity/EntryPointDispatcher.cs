@@ -9,8 +9,8 @@ namespace VContainer.Unity
 {
     public sealed class EntryPointDispatcher : IDisposable
     {
-        private readonly IObjectResolver container;
-        private readonly CompositeDisposable disposable = new CompositeDisposable();
+        readonly IObjectResolver container;
+        readonly CompositeDisposable disposable = new CompositeDisposable();
 
         [Inject]
         public EntryPointDispatcher(IObjectResolver container)
@@ -34,13 +34,9 @@ namespace VContainer.Unity
                 catch (Exception ex)
                 {
                     if (exceptionHandler != null)
-                    {
                         exceptionHandler.Publish(ex);
-                    }
                     else
-                    {
                         UnityEngine.Debug.LogException(ex);
-                    }
                 }
             }
 
@@ -54,13 +50,9 @@ namespace VContainer.Unity
                 catch (Exception ex)
                 {
                     if (exceptionHandler != null)
-                    {
                         exceptionHandler.Publish(ex);
-                    }
                     else
-                    {
                         UnityEngine.Debug.LogException(ex);
-                    }
                 }
             }
 

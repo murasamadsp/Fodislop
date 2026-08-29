@@ -15,7 +15,7 @@
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
-    <LangVersion>9.0</LangVersion>
+    <LangVersion>12.0</LangVersion>
     <RootNamespace></RootNamespace>
     <OutputType>Library</OutputType>
     <AssemblyName>UniTask.DOTween</AssemblyName>
@@ -639,6 +639,10 @@
       <HintPath>Assets/Plugins/ExtendedNumerics.BigDecimal.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>Library/PackageCache/com.unity.pipeline@24975d51528a/Runtime/Plugins/CodeAnalysis/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="nunit.framework">
       <HintPath>Library/PackageCache/com.unity.ext.nunit@44f7d31723bd/net472/unity-custom/nunit.framework.dll</HintPath>
       <Private>False</Private>
@@ -673,6 +677,10 @@
     </Reference>
     <Reference Include="ZString">
       <HintPath>Assets/Plugins/ZString.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>Library/PackageCache/com.unity.pipeline@24975d51528a/Runtime/Plugins/CodeAnalysis/Microsoft.CodeAnalysis.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.iOS.Extensions.Xcode">

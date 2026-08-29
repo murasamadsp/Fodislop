@@ -3,10 +3,10 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class InstanceProvider : IInstanceProvider
+    sealed class InstanceProvider : IInstanceProvider
     {
-        private readonly IInjector injector;
-        private readonly IReadOnlyList<IInjectParameter> customParameters;
+        readonly IInjector injector;
+        readonly IReadOnlyList<IInjectParameter> customParameters;
 
         public InstanceProvider(
             IInjector injector,

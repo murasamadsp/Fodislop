@@ -12,7 +12,7 @@ namespace Fodinae.UI
     // scale, because a body this size cannot visibly turn in seconds.
     //
     // Play-mode only, and pointedly NOT [ExecuteAlways]: rotating in the editor
-    // would drift the pose BuildMenuSceneryRig sets and leave the scene
+    // would drift the authored pose and leave the scene
     // permanently dirty, so the rig would stop being reproducible.
     public sealed class MenuPlanetSpin : MonoBehaviour
     {

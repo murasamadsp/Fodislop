@@ -11,6 +11,14 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.Builders
 {
+    public enum Dock
+    {
+        Left,
+        Top,
+        Right,
+        Bottom,
+    }
+
     public class DockPanelPacketBuilder : PacketUIBuilderBase
     {
         public override VisualElement? Build(IGUIComponentPacket packet, PacketUIBuilder builder)

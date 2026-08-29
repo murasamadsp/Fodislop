@@ -6,8 +6,6 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
-using Fodinae.UI;
-using Fodinae.UI.HUD.Player.Model;
 using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
@@ -34,7 +32,7 @@ namespace Fodinae.Game.Managers
     ///
     /// Управляет высокими состояниями сессии и связывает событийно геймплейные подсистемы.
     /// </summary>
-    public sealed class GameManager : MonoBehaviour
+    public sealed class GameManager : MonoBehaviour, IWorldReadiness
     {
         public GameState CurrentState { get; private set; } = GameState.Offline;
         public bool IsUIAuthorized { get; private set; }
@@ -50,15 +48,17 @@ namespace Fodinae.Game.Managers
         [Inject]
         private IRobotService _robotService = null!;
         [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+        [Inject]
         private IPlayerStats _playerStats = null!;
         [Inject]
-        private IObjectResolver _resolver = null!;
+        private IWorldLoadProgress _loadProgress = null!;
         [Inject]
         private TerrainRenderer _terrainRenderer = null!;
         [Inject]
-        private SurfaceRenderer? _surfaceRenderer;
+        private SurfaceRenderer _surfaceRenderer = null!;
         [Inject]
-        private LightingEngine? _lightingEngine;
+        private LightingEngine _lightingEngine = null!;
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
 
@@ -131,6 +131,8 @@ namespace Fodinae.Game.Managers
             IsWorldLoaded = false;
             _worldLoadPublished = false;
             _worldLoadPending = true;
+            _readinessDiagLogged = false;
+            _loadProgress.Report(WorldLoadPhase.WorldManifest);
             TryPublishWorldLoaded();
         }
 
@@ -142,6 +144,8 @@ namespace Fodinae.Game.Managers
             }
         }
 
+        private bool _readinessDiagLogged;
+
         private void TryPublishWorldLoaded()
         {
             if (_worldLoadPublished)
@@ -149,57 +153,64 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
-            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
-            if (player == null || !player.HasServerPosition)
-            {
-                return;
-            }
-
-            Robot? robot = player.GetComponent<Robot>();
-            if (robot == null || !robot.IsMetadataLoaded || !robot.IsVisualsLoaded)
-            {
-                return;
-            }
-
-            if (_playerStats == null || !_playerStats.IsReady)
-            {
-                return;
-            }
-
+            ILocalPlayer? player = _localPlayer.Current;
+            Robot? robot = player != null ? player.GetComponent<Robot>() : null;
             TerrainRenderer? terrain = _terrainRenderer;
-            if (terrain == null || !terrain.IsReadyForGameplay)
+            int pendingAssets = _assetLoader is ClientAssetLoader ca ? ca.PendingAssetCount : -1;
+            int queuedAssets = _assetLoader is ClientAssetLoader cb ? cb.QueuedAssetCount : -1;
+
+            if (!_readinessDiagLogged)
+            {
+                _readinessDiagLogged = true;
+                UnityEngine.Debug.Log(
+                    $"[GameManager] World readiness gate: " +
+                    $"player={player != null && player.HasServerPosition}," +
+                    $"robotMeta={(robot != null && robot.IsMetadataLoaded)}," +
+                    $"robotVisuals={(robot != null && robot.IsVisualsLoaded)}," +
+                    $"statsReady={(_playerStats != null && _playerStats.IsReady)}," +
+                    $"statsDetail=hp={_playerStats?.MaxHealth}/basket={_playerStats?.BasketCapacity}/nick=({_playerStats?.Nickname})/lvl={_playerStats?.Level}," +
+                    $"terrain={(terrain != null && terrain.IsReadyForGameplay)}," +
+                    $"surface={(_surfaceRenderer == null || _surfaceRenderer.IsInitialized)}," +
+                    $"lighting={(_lightingEngine == null || _lightingEngine.IsInitialized)}," +
+                    $"assetPending={pendingAssets}," +
+                    $"assetQueued={queuedAssets}," +
+                    $"cellTexPending={_textureService.PendingCellTextureRequests}");
+            }
+
+            // Publish monotonic loader phases from the gate itself: the same
+            // conditions that block WorldReady drive the descent loader, so the
+            // MainMenu progress bar reflects real readiness rather than a timer.
+            if (player != null && player.HasServerPosition)
+            {
+                _loadProgress.Report(WorldLoadPhase.SpawnSync);
+            }
+
+            if (terrain != null && terrain.IsReadyForGameplay)
+            {
+                _loadProgress.Report(WorldLoadPhase.TerrainMesh);
+            }
+
+            if ((_surfaceRenderer == null || _surfaceRenderer.IsInitialized) &&
+                (_lightingEngine == null || _lightingEngine.IsInitialized) &&
+                pendingAssets == 0 && queuedAssets == 0 &&
+                _textureService.PendingCellTextureRequests == 0)
+            {
+                _loadProgress.Report(WorldLoadPhase.SurfaceAssets);
+            }
+
+            if (player == null || !player.HasServerPosition ||
+                robot == null || !robot.IsMetadataLoaded || !robot.IsVisualsLoaded ||
+                _playerStats == null || !_playerStats.IsReady ||
+                terrain == null || !terrain.IsReadyForGameplay ||
+                (_surfaceRenderer != null && !_surfaceRenderer.IsInitialized) ||
+                (_lightingEngine != null && !_lightingEngine.IsInitialized) ||
+                pendingAssets > 0 || queuedAssets > 0 ||
+                _textureService.PendingCellTextureRequests > 0)
             {
                 return;
             }
 
-            if (_surfaceRenderer != null && !_surfaceRenderer.IsInitialized)
-            {
-                return;
-            }
-
-            if (_lightingEngine != null && !_lightingEngine.IsInitialized)
-            {
-                return;
-            }
-
-            // Terrain geometry being ready doesn't mean its textures (or robot sprites,
-            // loaded through the same pipeline) have actually arrived yet — without this,
-            // the loading screen hides while assets are still visibly popping in.
-            if (_assetLoader is ClientAssetLoader clientAssetLoader &&
-                (clientAssetLoader.PendingAssetCount > 0 || clientAssetLoader.QueuedAssetCount > 0))
-            {
-                return;
-            }
-
-            // ClientAssetLoader only tracks requests that have reached it — a cell texture
-            // RequestTexture() just fired this frame hasn't reached ClientAssetLoader yet
-            // (WorldTextureManager's own async chain yields once before enqueueing there).
-            // PendingCellTextureRequests is set synchronously at the RequestTexture call
-            // site, so it catches that gap.
-            if (_textureService.PendingCellTextureRequests > 0)
-            {
-                return;
-            }
+            _loadProgress.Report(WorldLoadPhase.Done);
 
             _worldLoadPending = false;
             _worldLoadPublished = true;
@@ -207,7 +218,6 @@ namespace Fodinae.Game.Managers
             Debug.Log($"[Probe] WorldLoaded {UnityEngine.Time.realtimeSinceStartup:F3}");
             SetState(GameState.InGame);
             player.SetGameplayVisible();
-            _resolver.Resolve<CameraFollow>().SnapToTarget();
             AuthorizeUI();
             int robotCount = _robotService?.RobotCount ?? -1;
             Debug.Log(

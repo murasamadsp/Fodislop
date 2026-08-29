@@ -3,11 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
-using Fodinae.Player.Logic;
-using Fodinae.UI;
 using Fodinae.World.Lighting;
 using Fodinae.World.Lighting.Quality;
 using MinesServer.Data;
@@ -44,18 +40,22 @@ namespace Fodinae.World.Terrain
         private MeshRenderer? _meshRenderer;
 
         [Inject]
-        private IWorldDataStorage? _storage;
+        private IWorldDataStorage _storage = null!;
 
         [Inject]
-        private MapManager? _mapManager;
+        private MapManager _mapManager = null!;
 
         [Inject]
-        private ITextureService? _textureService;
+        private ITextureService _textureService = null!;
 
         [Inject]
-        private IClientConfigManager? _clientConfigManager;
+        private IClientConfigManager _clientConfigManager = null!;
         [Inject]
-        private ISessionContainer? _session;
+        private LightingEngine _lightingEngine = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
 
         private Mesh? _mesh;
         private Camera? _mainCamera;
@@ -98,20 +98,19 @@ namespace Fodinae.World.Terrain
         private WorldTextureManager? _subscribedTextureManager;
         private MapManager? _subscribedMapManager;
         private IWorldDataStorage? _subscribedStorage;
-        private LightingEngine? _cachedLightingEngine;
 
-        private static readonly VertexAttributeDescriptor[] VertexLayout = new VertexAttributeDescriptor[]
-        {
-            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord3, VertexAttributeFormat.Float32, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord4, VertexAttributeFormat.Float32, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord5, VertexAttributeFormat.Float32, 4),
-            new VertexAttributeDescriptor(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4),
-        };
+        private static readonly VertexAttributeDescriptor[] VertexLayout =
+        [
+            new(VertexAttribute.Position,  VertexAttributeFormat.Float32, 3),
+            new(VertexAttribute.Color,     VertexAttributeFormat.UNorm8,  4),
+            new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 2), // quad UV          16 → 4 bytes
+            new(VertexAttribute.TexCoord1, VertexAttributeFormat.Float16, 4), // atlasRect        16 → 8 bytes
+            new(VertexAttribute.TexCoord2, VertexAttributeFormat.Float16, 4), // tileSizeVec      16 → 8 bytes
+            new(VertexAttribute.TexCoord3, VertexAttributeFormat.Float32, 4), // worldPos: stays float32 (coords > 2048)
+            new(VertexAttribute.TexCoord4, VertexAttributeFormat.Float16, 4), // animData         16 → 8 bytes
+            new(VertexAttribute.TexCoord5, VertexAttributeFormat.Float16, 4), // anchorData       16 → 8 bytes
+            new(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4), // glowVec: stays float32 (packed RGB > 65504)
+        ];
         private const MeshUpdateFlags UPLOAD_FLAGS =
             MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds;
         private static readonly ProfilerMarker CacheMarker = new("Fodinae.Terrain.Cache");
@@ -210,7 +209,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            _cachedLightingEngine?.InvalidateRegion(
+            _lightingEngine?.InvalidateRegion(
                 serverX,
                 minimumUnityY,
                 width,
@@ -259,7 +258,7 @@ namespace Fodinae.World.Terrain
 
             _meshFilter = GetComponent<MeshFilter>();
             _meshRenderer = GetComponent<MeshRenderer>();
-            _mainCamera = GameplayCamera.Resolve();
+            _mainCamera = _gameplayCamera?.Camera;
 
             if (_mesh == null)
             {
@@ -281,7 +280,7 @@ namespace Fodinae.World.Terrain
 
         protected void Start()
         {
-            _mainCamera = GameplayCamera.Resolve();
+            _mainCamera = _gameplayCamera?.Camera;
         }
 
         public void InitializeEditorPreview(IWorldDataStorage storage, MapManager mapManager, ITextureService textureService)
@@ -293,7 +292,7 @@ namespace Fodinae.World.Terrain
             _meshRenderer ??= GetComponent<MeshRenderer>();
             if (_mainCamera == null)
             {
-                _mainCamera = GameplayCamera.Resolve();
+                _mainCamera = _gameplayCamera?.Camera;
             }
 
             InitializeShader();
@@ -449,7 +448,7 @@ namespace Fodinae.World.Terrain
             SubscribeToCellLayer();
             _needsRefresh = true;
             _lightingGeometryRevision++;
-            _cachedLightingEngine?.InvalidateStaticCache();
+            _lightingEngine?.InvalidateStaticCache();
         }
 
         private void SubscribeToCellLayer()
@@ -490,7 +489,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            if (_localPlayer is not { Current: { HasServerPosition: true } })
             {
                 return;
             }
@@ -571,7 +570,7 @@ namespace Fodinae.World.Terrain
 
         private bool TryResolveCamera()
         {
-            Camera? resolvedCam = GameplayCamera.Resolve();
+            Camera? resolvedCam = _gameplayCamera?.Camera;
             if (resolvedCam != null)
             {
                 _mainCamera = resolvedCam;
@@ -593,12 +592,7 @@ namespace Fodinae.World.Terrain
 
         private LightingEngine? ResolveLightingEngine()
         {
-            if (_cachedLightingEngine == null)
-            {
-                _cachedLightingEngine = _session?.TryResolve<LightingEngine>();
-            }
-
-            LightingEngine? lightingEngine = _cachedLightingEngine;
+            LightingEngine? lightingEngine = _lightingEngine;
             if (lightingEngine == null)
             {
                 if (!Application.isPlaying)
@@ -1331,7 +1325,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            List<TextureAtlas> atlases = _textureService.GetAllAtlases();
+            IReadOnlyList<IAtlasDescriptor> atlases = _textureService.GetAllAtlases();
             if (atlases.Count == 0 || _subMeshIndices.Length == 0)
             {
                 return;

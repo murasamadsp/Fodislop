@@ -10,3 +10,24 @@ approval_mode = "approve"
 
 [mcp_servers.mcp-unity.tools.run_tests]
 approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.recompile_scripts]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.get_console_logs]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.load_scene]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.get_scene_info]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.update_component]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.save_scene]
+approval_mode = "approve"
+
+[mcp_servers.mcp-unity.tools.update_gameobject]
+approval_mode = "approve"

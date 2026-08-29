@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core.Localization;
 using UnityEngine;
 using UnityEngine.UIElements;
 using MinesServer.Data;
@@ -27,12 +28,12 @@ internal sealed class ProgrammatorRadialController
     // page, so the owner can add a new page and refresh the page label.
     public Action? OnLastCellPlaced { get; set; }
 
-    public ProgrammatorRadialController(UIDocument doc, Action<int, int> updateCell)
+    public ProgrammatorRadialController(UIDocument doc, Action<int, int> updateCell, ILocalizationService loc)
     {
         _doc = doc ?? throw new ArgumentNullException(nameof(doc));
         _updateCell = updateCell ?? throw new ArgumentNullException(nameof(updateCell));
 
-        _radial = new RadialMenu();
+        _radial = new RadialMenu(loc);
         _radial.OnCategoryClicked += OnRadialCategoryClicked;
         _radial.OnItemClicked += OnRadialItemClicked;
         _radial.OnBackClicked += OnRadialBackClicked;

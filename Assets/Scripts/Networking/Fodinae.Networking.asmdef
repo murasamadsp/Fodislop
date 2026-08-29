@@ -1,0 +1,22 @@
+{
+    "name": "Fodinae.Networking",
+    "rootNamespace": "Fodinae.Networking",
+    "references": [
+        "UniTask",
+        "Fodinae.Contracts",
+        "MinesServer.Data",
+        "MinesServer.Networking",
+        "MinesServer.Networking.Connection",
+        "MinesServer.Networking.Connection.Client",
+        "VContainer"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

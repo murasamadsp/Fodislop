@@ -3,7 +3,7 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
+using Fodinae.World;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
 using MinesServer.Data;
@@ -51,8 +51,10 @@ namespace Fodinae.UI
         [Inject]
         private MapManager _manager = null!;
         [Inject]
-        private UIDocument? _injectedDocument;
-        private PlayerMovementController? _player;
+        private UIDocument _injectedDocument = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+        private ILocalPlayer? _player;
 
         private bool _isDragging;
         private Vector2 _lastMousePos;
@@ -75,6 +77,36 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            // Школа (одна дорога): к Start зависимости инжектятся (сборка scope,
+            // фаза Awake) и панель создана — строим здесь. Мир инициализируется
+            // позже (данные по сети) — переход по событию OnWorldInitialized,
+            // без ретраев из Update.
+            TryInitialize();
+            if (!_initialized)
+            {
+                _manager.OnWorldInitialized += OnWorldReady;
+                _manager.OnWorldDataLoaded += OnWorldReady;
+            }
+
+            if (IsWorldReady())
+            {
+                OnWorldReady();
+            }
+        }
+
+        private bool IsWorldReady() =>
+            _manager.IsWorldInitialized && _storage.IsReady;
+
+        private void OnWorldReady()
+        {
+            if (!IsWorldReady())
+            {
+                return;
+            }
+
+            _manager.OnWorldInitialized -= OnWorldReady;
+            _manager.OnWorldDataLoaded -= OnWorldReady;
+
             TryInitialize();
         }
 
@@ -93,10 +125,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_storage == null || _manager == null)
-            {
-                return;
-            }
             if (!_manager.IsWorldInitialized || !_storage.IsReady)
             {
                 return;
@@ -104,14 +132,7 @@ namespace Fodinae.UI
 
             EnsurePlayerBinding();
 
-            if (!BindUI())
-            {
-                // PlayerHUDView attaches PlayerHUD.uxml after the shared
-                // UIDocument has been injected. Keep this renderer idle until
-                // that one-time UI build completes instead of treating the
-                // transient empty root as a broken scene contract.
-                return;
-            }
+            BindUI();
             InitColorTable();
             InitTexture();
 
@@ -155,7 +176,10 @@ namespace Fodinae.UI
                 Destroy(_mapTexture);
             }
 
-            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _manager.OnWorldInitialized -= OnWorldReady;
+            _manager.OnWorldDataLoaded -= OnWorldReady;
+
+            _localPlayer.Changed -= OnLocalPlayerChanged;
             if (_player != null)
             {
                 UnsubscribeFromPlayer(_player);
@@ -170,7 +194,7 @@ namespace Fodinae.UI
 
 
 
-        private void SubscribeToPlayer(PlayerMovementController player)
+        private void SubscribeToPlayer(ILocalPlayer player)
         {
             if (_playerMoveSubscription && ReferenceEquals(_player, player))
             {
@@ -189,20 +213,25 @@ namespace Fodinae.UI
 
         private void EnsurePlayerBinding()
         {
+            if (_localPlayer == null)
+            {
+                return;
+            }
+
             if (_playerSpawnSubscription)
             {
-                PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+                _localPlayer.Changed -= OnLocalPlayerChanged;
                 _playerSpawnSubscription = false;
             }
 
-            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
+            ILocalPlayer? player = _localPlayer.Current;
             if (player != null)
             {
                 SubscribeToPlayer(player);
                 return;
             }
 
-            PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
+            _localPlayer.Changed += OnLocalPlayerChanged;
             _playerSpawnSubscription = true;
         }
 
@@ -231,7 +260,7 @@ namespace Fodinae.UI
             _cellSampler.Invalidate();
         }
 
-        private void UnsubscribeFromPlayer(PlayerMovementController player)
+        private void UnsubscribeFromPlayer(ILocalPlayer player)
         {
             if (!_playerMoveSubscription)
             {
@@ -242,10 +271,15 @@ namespace Fodinae.UI
             _playerMoveSubscription = false;
         }
 
-        private void OnLocalPlayerSpawned(PlayerMovementController player)
+        private void OnLocalPlayerChanged(ILocalPlayer? player)
         {
-            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _localPlayer.Changed -= OnLocalPlayerChanged;
             _playerSpawnSubscription = false;
+            if (player == null)
+            {
+                return;
+            }
+
             SubscribeToPlayer(player);
             _lastPlayerPos = new Vector2Int(int.MinValue, int.MinValue);
             _renderRequested = true;
@@ -327,11 +361,7 @@ namespace Fodinae.UI
 
             if (!_initialized)
             {
-                TryInitialize();
-                if (!_initialized)
-                {
-                    return;
-                }
+                return;
             }
 
             if (_manager == null || _storage == null ||
@@ -413,24 +443,21 @@ namespace Fodinae.UI
             ClampViewCenter();
         }
 
-        private bool BindUI()
+        private void BindUI()
         {
-            _document = _injectedDocument ??
+            _document = _injectedDocument;
+            VisualElement overlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay") ??
                 throw new InvalidOperationException(
-                    "WorldMapRenderer requires an injected UIDocument.");
-            VisualElement? overlay = _document.rootVisualElement.Q<VisualElement>("WorldMapOverlay");
-            Image? image = overlay?.Q<Image>("WorldMapImage");
-            if (overlay == null || image == null)
-            {
-                return false;
-            }
+                    "[WorldMapRenderer] WorldMapOverlay is missing from the gameplay UIDocument.");
+            Image image = overlay.Q<Image>("WorldMapImage") ??
+                throw new InvalidOperationException(
+                    "[WorldMapRenderer] WorldMapImage is missing from the gameplay UIDocument.");
 
             _mapOverlay = overlay;
             _mapImage = image;
             // Видимостью оверлея управляет только Show()/Hide() (WorldMapController):
             // здесь только биндинг, иначе тёмный оверлей закрывает экран со старта.
             _mapImage.image = null;
-            return true;
         }
 
         private void InitColorTable()

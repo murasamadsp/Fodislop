@@ -5,14 +5,9 @@ using System.Collections.Concurrent;
 using System.Net;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Game.Managers;
+using Fodinae.Core.Localization;
 using Fodinae.Networking.Auth;
-using Fodinae.UI;
-using Fodinae.World;
-using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Connection;
@@ -45,24 +40,22 @@ namespace Fodinae.Networking.Connection
         public bool IsOffline => Connection is IOfflineConnection;
         private bool _useOldClient;
         public event Action<ServerPacket>? OnPacketReceived;
+        public event Action<string>? OnReconnectStatusChanged;
+        public event Action<string>? OnDisconnectReason;
+        public event Action? OnReconnectHidden;
 
         private readonly ConcurrentQueue<ServerPacket> _packetQueue = new();
         private readonly ReconnectBackoff _reconnectBackoff = new();
 
-        // Bootstrap-уровневые зависимости инжектятся VContainer напрямую. World-уровневые
-        // (GameManager, MapManager, IWorldDataStorage) живут в дочернем scope сессии и
-        // пересоздаются при каждом входе в мир — ConnectionManager переживает их, поэтому
-        // обращение к ним идёт через ISessionContainer (текущий контейнер сессии).
-        //
-        // INetworkService НЕ инжектится: NetworkService сам инжектит IConnectionService,
-        // и статическая связь дала бы VContainer циклическую зависимость (TypeAnalyzer
-        // падает при сборке графа). Ленивый резолв в OnConnected разрывает цикл.
         [Inject]
         private IClientConfigManager _clientConfigManager = null!;
         [Inject]
-        private ISessionContainer _session = null!;
+        private ISceneNavigator _sceneNavigator = null!;
         [Inject]
-        private ISceneCoordinator _sceneCoordinator = null!;
+        private ILocalizationService _loc = null!;
+
+        [Inject]
+        private DummyConnection _dummyConnection = null!;
 
         private bool _shouldAutoReconnect;
         private float _reconnectCountdown;
@@ -141,12 +134,12 @@ namespace Fodinae.Networking.Connection
             _reconnectCountdown -= Time.deltaTime;
             int secsRemaining = Mathf.CeilToInt(_reconnectCountdown);
             string status = secsRemaining > 0
-                ? $"Попробуем ещё раз через {secsRemaining}с..."
-                : "Подключение...";
+                ? _loc.Get("network.reconnect.retry", secsRemaining)
+                : _loc.Get("network.connecting");
             if (status != _reconnectStatus)
             {
                 _reconnectStatus = status;
-                _session.TryResolve<ReconnectUI>()?.SetStatus(status);
+                OnReconnectStatusChanged?.Invoke(status);
             }
 
             if (_reconnectCountdown <= 0f)
@@ -173,16 +166,14 @@ namespace Fodinae.Networking.Connection
             }
 
             _useOldClient = oldClient;
-            _session.TryResolve<GameManager>()?.SetState(Game.Managers.GameState.Connecting);
-
             Connection = CreateConnection();
             Connection.OnReceived += OnReceived;
             Connection.OnConnected += OnConnected;
             Connection.OnDisconnected += OnDisconnected;
             Connection.Connect();
 
-            _reconnectStatus = "Подключение...";
-            _session.TryResolve<ReconnectUI>()?.SetStatus(_reconnectStatus);
+            _reconnectStatus = _loc.Get("network.connecting");
+            OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
 
         /// <summary>
@@ -197,15 +188,15 @@ namespace Fodinae.Networking.Connection
             if (config == null)
             {
                 Debug.LogWarning(
-                    "[Connection] Client config is not initialized yet; using DummyConnection (offline stub).");
-                return new DummyConnection(_session);
+                    "[Connection] Client config is not initialized yet; using the Bootstrap-registered DummyConnection.");
+                return _dummyConnection;
             }
 
             if (ConnectionTransportConfig.SelectTransport(config.UseDummyConnection) == ConnectionTransportKind.Dummy)
             {
                 Debug.Log(
                     "[Connection] Transport: DummyConnection (offline stub). Set UseDummyConnection=false in client config for the real server.");
-                return new DummyConnection(_session);
+                return _dummyConnection;
             }
 
             if (!ConnectionTransportConfig.TryResolveEndpoint(
@@ -241,8 +232,6 @@ namespace Fodinae.Networking.Connection
 
                 ClearPendingPackets();
 
-                _session.TryResolve<MapManager>()?.ResetWorldState();
-                _session.TryResolve<IWorldDataStorage>()?.Dispose();
             }
             finally
             {
@@ -282,8 +271,7 @@ namespace Fodinae.Networking.Connection
             _shouldAutoReconnect = false;
             _disconnectReason = reason;
             Disconnect();
-            _session.TryResolve<GameManager>()?.DeauthorizeUI();
-            _session.TryResolve<ReconnectUI>()?.ShowDisconnectReason(reason);
+            OnDisconnectReason?.Invoke(reason);
         }
 
         public void HandleServerReconnect()
@@ -292,10 +280,9 @@ namespace Fodinae.Networking.Connection
             _shouldAutoReconnect = true;
             _reconnectBackoff.Reset();
             _reconnectCountdown = _reconnectBackoff.CurrentDelay;
-            _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
+            _reconnectStatus = _loc.Get("network.reconnect.retry", Mathf.CeilToInt(_reconnectCountdown));
             Disconnect();
-            _session.TryResolve<GameManager>()?.SetState(Game.Managers.GameState.Disconnected);
-            _session.TryResolve<ReconnectUI>()?.ShowReconnecting(_reconnectStatus);
+            OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
 
         public void StartManualReconnect()
@@ -304,7 +291,7 @@ namespace Fodinae.Networking.Connection
             _shouldAutoReconnect = true;
             _reconnectBackoff.Reset();
             _reconnectCountdown = _reconnectBackoff.CurrentDelay;
-            _session.TryResolve<ReconnectUI>()?.ShowReconnecting(_reconnectStatus);
+            OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
 
         private void OnConnected()
@@ -314,25 +301,26 @@ namespace Fodinae.Networking.Connection
 
         private async UniTaskVoid CompleteConnectionAsync()
         {
-            if (_restartWorldOnConnect &&
-                string.Equals(_sceneCoordinator.CurrentSceneName, "MainGame", StringComparison.Ordinal))
-            {
-                await _sceneCoordinator.RestartCurrentAsync(destroyCancellationToken);
+            if (_restartWorldOnConnect &&                string.Equals(_sceneNavigator.CurrentSceneName, "MainGame", StringComparison.Ordinal))
+                {
+                    await _sceneNavigator.TransitionAsync("MainGame", destroyCancellationToken);
             }
 
             _restartWorldOnConnect = false;
             _shouldAutoReconnect = false;
             _reconnectBackoff.Reset();
             _reconnectStatus = string.Empty;
-            _session.TryResolve<ReconnectUI>()?.Hide();
+            OnReconnectHidden?.Invoke();
 
             int version = _useOldClient ? 0 : 1;
             string token = AuthTokenManager.LoadToken();
             Debug.Log($"[Auth] Sending ClientHello with token: {(string.IsNullOrEmpty(token) ? "EMPTY" : "PRESENT")}");
-            INetworkService networkService = _session.Resolve<INetworkService>();
-            networkService.Send(new ClientHelloPacket(version, "Windows", 10, "fingerprint", token));
-
-            networkService.Send(new OpenHelpClickPacket());
+            Connection?.SendAsync(new ClientPacket(
+                (uint)DateTimeOffset.UtcNow.Ticks,
+                new ClientHelloPacket(version, "Windows", 10, "fingerprint", token)));
+            Connection?.SendAsync(new ClientPacket(
+                (uint)DateTimeOffset.UtcNow.Ticks,
+                new OpenHelpClickPacket()));
         }
 
         private void OnDisconnected()
@@ -345,11 +333,6 @@ namespace Fodinae.Networking.Connection
 
             ClearPendingPackets();
 
-            _session.TryResolve<MapManager>()?.ResetWorldState();
-            _session.TryResolve<IWorldDataStorage>()?.Dispose();
-            GameManager? gameManager = _session.TryResolve<GameManager>();
-            gameManager?.DeauthorizeUI();
-
             if (_shouldAutoReconnect)
             {
                 // Сокетный транспорт может оборваться в любой момент. Забываем
@@ -357,9 +340,8 @@ namespace Fodinae.Networking.Connection
                 Connection = null;
                 _reconnectBackoff.RecordFailure();
                 _reconnectCountdown = _reconnectBackoff.CurrentDelay;
-                _reconnectStatus = $"Попробуем ещё раз через {Mathf.CeilToInt(_reconnectCountdown)}с...";
-                gameManager?.SetState(Game.Managers.GameState.Disconnected);
-                _session.TryResolve<ReconnectUI>()?.ShowReconnecting(_reconnectStatus);
+                _reconnectStatus = _loc.Get("network.reconnect.retry", Mathf.CeilToInt(_reconnectCountdown));
+                OnReconnectStatusChanged?.Invoke(_reconnectStatus);
             }
         }
 
@@ -388,6 +370,31 @@ namespace Fodinae.Networking.Connection
             if (obj != null)
             {
                 _packetQueue.Enqueue(obj);
+            }
+        }
+
+        /// <summary>
+        /// Экспоненциальный backoff реконнекта с капом:
+        /// 1s → 2s → 4s → 8s → 16s → 30s → 30s ...
+        /// </summary>
+        private sealed class ReconnectBackoff
+        {
+            private static readonly float[] Steps = [1f, 2f, 4f, 8f, 16f, 30f];
+
+            private int _attempt;
+
+            public int AttemptCount => _attempt;
+
+            public float CurrentDelay => Steps[Math.Min(_attempt, Steps.Length - 1)];
+
+            public void RecordFailure()
+            {
+                _attempt++;
+            }
+
+            public void Reset()
+            {
+                _attempt = 0;
             }
         }
     }

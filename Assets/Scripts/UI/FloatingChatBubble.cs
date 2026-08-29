@@ -1,6 +1,7 @@
 #nullable enable
 
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Fodinae.Rendering.PostProcessing;
 using UnityEngine;
@@ -12,6 +13,8 @@ namespace Fodinae.UI
     {
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
 
         private TextMesh? _textMesh;
         private MeshRenderer? _meshRenderer;
@@ -32,7 +35,7 @@ namespace Fodinae.UI
 
         public void Init(string text)
         {
-            _cam = GameplayCamera.Resolve();
+            _cam = _gameplayCamera?.Camera;
             _elapsed = 0f;
             if (_textMesh == null)
             {

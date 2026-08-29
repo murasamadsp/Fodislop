@@ -59,7 +59,8 @@ namespace Fodinae.Game
                 ? existingClan.gameObject
                 : (_sceneObjects != null
                     ? _sceneObjects.Create("ClanIcon", RuntimeOwner.Buildings)
-                    : new GameObject("ClanIcon"));
+                    : throw new InvalidOperationException(
+                        "Building requires injected ISceneObjectFactory before creating ClanIcon."));
             clanGo.transform.SetParent(transform, worldPositionStays: false);
             clanGo.transform.localPosition = new Vector3(0.6f, -0.5f, 0);
             _clanTransform = clanGo.transform;

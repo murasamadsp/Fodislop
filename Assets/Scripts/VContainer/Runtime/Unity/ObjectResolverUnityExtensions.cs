@@ -8,8 +8,8 @@ namespace VContainer.Unity
     {
         public readonly struct PrefabDirtyScope : IDisposable
         {
-            private readonly GameObject _prefab;
-            private readonly bool _madeDirty;
+            readonly GameObject _prefab;
+            readonly bool _madeDirty;
 
             public PrefabDirtyScope(GameObject prefab)
             {
@@ -37,10 +37,7 @@ namespace VContainer.Unity
         {
             void InjectGameObjectRecursive(GameObject current)
             {
-                if (current == null)
-                {
-                    return;
-                }
+                if (current == null) return;
 
                 using (ListPool<MonoBehaviour>.Get(out var buffer))
                 {
@@ -139,12 +136,11 @@ namespace VContainer.Unity
                     prefab.gameObject.SetActive(wasActive);
                     instance.gameObject.SetActive(wasActive);
                 }
-
                 return instance;
             }
         }
 
-        private static T Instantiate<T>(this LifetimeScope scope, T prefab, Vector3 position, Quaternion rotation)
+        static T Instantiate<T>(this LifetimeScope scope, T prefab, Vector3 position, Quaternion rotation)
             where T : Component
         {
             var wasActive = prefab.gameObject.activeSelf;
@@ -176,12 +172,11 @@ namespace VContainer.Unity
                     prefab.gameObject.SetActive(wasActive);
                     instance.gameObject.SetActive(wasActive);
                 }
-
                 return instance;
             }
         }
 
-        private static GameObject Instantiate(this LifetimeScope scope, GameObject prefab, Vector3 position, Quaternion rotation)
+        static GameObject Instantiate(this LifetimeScope scope, GameObject prefab, Vector3 position, Quaternion rotation)
         {
             var wasActive = prefab.activeSelf;
             using (new PrefabDirtyScope(prefab))
@@ -212,7 +207,6 @@ namespace VContainer.Unity
                     prefab.SetActive(wasActive);
                     instance.SetActive(wasActive);
                 }
-
                 return instance;
             }
         }
@@ -241,7 +235,6 @@ namespace VContainer.Unity
                     prefab.SetActive(wasActive);
                     instance?.SetActive(wasActive);
                 }
-
                 return instance;
             }
         }
@@ -290,12 +283,10 @@ namespace VContainer.Unity
             }
         }
 
-        private static void SetName(UnityEngine.Object instance, UnityEngine.Object prefab)
+        static void SetName(UnityEngine.Object instance, UnityEngine.Object prefab)
         {
             if (VContainerSettings.Instance != null && VContainerSettings.Instance.RemoveClonePostfix)
-            {
                 instance.name = prefab.name;
-            }
         }
     }
 }

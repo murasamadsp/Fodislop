@@ -3,8 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Fodinae.Game.Managers;
-using Fodinae.UI.HUD.Player.Model;
+using Fodinae.Core.Interfaces;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.GUI;

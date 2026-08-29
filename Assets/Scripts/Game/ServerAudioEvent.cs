@@ -37,9 +37,9 @@ namespace Fodinae.Game
         private readonly IAudioSystem _audioSystem;
         private readonly IAssetLoader _assetLoader;
         private readonly MapManager _mapManager;
-        private readonly VFXPool _vfxPool;
+        private readonly IVFXService _vfxPool;
 
-        private VFXPool.PooledSlot? _slot;
+        private IVFXSlot? _slot;
         private GameObject? _gameObject;
 
         private Color _primaryColor = Color.white;
@@ -75,16 +75,16 @@ namespace Fodinae.Game
         private EffekseerEffectAsset? _effekseerAsset;
         private bool _hasEffekseerEffect;
 
-        private readonly CancellationTokenSource _cts = new();
+        private CancellationTokenSource? _cts;
 
         public ServerAudioEvent(
             AudioPacket packet,
-            VFXPool.PooledSlot? slot,
+            IVFXSlot? slot,
             IRobotService robotService,
             IAudioSystem audioSystem,
             IAssetLoader assetLoader,
             MapManager mapManager,
-            VFXPool vfxPool)
+            IVFXService vfxPool)
         {
             _effectType = packet.EffectType;
             _sourceX = packet.X;
@@ -109,6 +109,7 @@ namespace Fodinae.Game
 
             if (slot != null)
             {
+                _cts = new CancellationTokenSource();
                 LoadVisualAsync(_cts.Token).Forget();
             }
             else
@@ -199,8 +200,8 @@ namespace Fodinae.Game
             }
 
             _isDisposed = true;
-            _cts.Cancel();
-            _cts.Dispose();
+            _cts?.Cancel();
+            _cts?.Dispose();
 
             MarkVisualCompleted();
             ReleaseSlot();
@@ -352,7 +353,10 @@ namespace Fodinae.Game
                 var targetBot = (_robotService as RobotManager)?.GetOrCreateRobot(_targetBotId);
                 if (targetBot != null)
                 {
-                    _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle + 180f);
+                    // The dig effect must point the way the bot faces, toward
+                    // the cell being dug. The previous +180 offset rendered it
+                    // pointing back at the bot's tail.
+                    _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle);
                 }
             }
 

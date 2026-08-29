@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -15,6 +16,7 @@ namespace Fodinae.UI.Programmator;
 public sealed class ProgrammatorGrid : IDisposable
     {
         private readonly UIDocument _doc;
+        private readonly ILocalizationService _loc;
 
         private ProgrammatorGridUIFactory? _view;
         private ProgrammatorSelectionModel? _selection;
@@ -28,14 +30,21 @@ public sealed class ProgrammatorGrid : IDisposable
 
         private bool _uiBuilt;
 
-        public ProgrammatorGrid(UIDocument doc)
+        public ProgrammatorGrid(UIDocument doc, ILocalizationService loc)
         {
             _doc = doc ?? throw new ArgumentNullException(nameof(doc));
+            _loc = loc ?? throw new ArgumentNullException(nameof(loc));
         }
 
         public void Initialize()
         {
             TryBuildUI();
+        }
+
+        /// <summary>Переприменяет локализованный текст после смены языка.</summary>
+        public void RefreshLocalization()
+        {
+            _view?.ApplyLocalizedText();
         }
 
         private void TryBuildUI()
@@ -52,13 +61,16 @@ public sealed class ProgrammatorGrid : IDisposable
 
             if (_doc == null || _doc.rootVisualElement == null)
             {
+                // Тихий возврат ожидаем: TryBuildUI вызывается из Start, когда
+                // панель уже создана; гард защищает от вызова до активации
+                // документа.
                 return;
             }
 
-            var view = new ProgrammatorGridUIFactory(_doc);
+            var view = new ProgrammatorGridUIFactory(_doc, _loc);
             var selection = new ProgrammatorSelectionModel(view.SetSelectionBorder);
-            var radial = new ProgrammatorRadialController(_doc, view.UpdateCell);
-            var programs = new ProgrammatorProgramStore(view, selection, radial);
+            var radial = new ProgrammatorRadialController(_doc, view.UpdateCell, _loc);
+            var programs = new ProgrammatorProgramStore(view, selection, radial, _loc);
             radial.OnLastCellPlaced = programs.AdvancePageIfAtEnd;
             var clipboard = new ProgrammatorClipboardController(selection, view.UpdateCell);
 
@@ -285,5 +297,10 @@ public sealed class ProgrammatorGrid : IDisposable
             }
 
             IsOpen = false;
+
+            // Фабрика зарегистрирована в реестре локализации — снимаем её,
+            // чтобы смена языка не долетала до мёртвого попапа.
+            _view?.Dispose();
+            _view = null;
         }
 }

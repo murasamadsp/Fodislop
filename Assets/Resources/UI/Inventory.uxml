@@ -6,8 +6,8 @@
             <!-- 9 слотов генерируются динамически или через цикл -->
             <ui:VisualElement name="HotbarSlots" class="inv-hotbar-slots" />
 
-            <ui:Button name="InventoryToggleBtn" class="sci-fi-btn-cyan inv-toggle-btn" tooltip="Открыть инвентарь [TAB]">
-                <ui:Label text="ИНВЕНТАРЬ [TAB]" />
+            <ui:Button name="InventoryToggleBtn" class="sci-fi-btn-cyan inv-toggle-btn" tooltip="inventory.hotbar">
+                <ui:Label text="" />
             </ui:Button>
         </ui:VisualElement>
 
@@ -16,8 +16,8 @@
             <!-- Хэдер -->
             <ui:VisualElement class="sci-fi-header">
                 <ui:VisualElement class="inv-header-left">
-                    <ui:Label class="sci-fi-header-title" text="ГРУЗОВОЙ ОТСЕК" />
-                    <ui:Label name="CapacityLabel" class="sci-fi-badge-mono" text="54 СЛОТА" />
+                    <ui:Label name="InventoryTitle" class="sci-fi-header-title"  text="" />
+                    <ui:Label name="CapacityLabel" class="sci-fi-badge-mono"  text="" />
                 </ui:VisualElement>
                 <ui:Button name="CloseInventoryBtn" class="sci-fi-btn-dark inv-close-btn" text="✕" />
             </ui:VisualElement>
@@ -32,7 +32,7 @@
                 <ui:Image name="TooltipIcon" class="inv-tooltip-icon" />
                 <ui:VisualElement class="inv-tooltip-meta">
                     <ui:Label name="TooltipName" class="inv-tooltip-title" text="---" />
-                    <ui:Label name="TooltipType" class="sci-fi-badge-gold" text="МАТЕРИАЛ" />
+                    <ui:Label name="TooltipType" class="sci-fi-badge-gold" text="inventory.material" />
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:Label name="TooltipDesc" class="inv-tooltip-desc" text="---" />

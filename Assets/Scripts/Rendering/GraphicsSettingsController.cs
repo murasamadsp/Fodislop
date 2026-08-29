@@ -19,19 +19,22 @@ public sealed class GraphicsSettingsController
     private readonly PostProcessController _postProcessController;
     private readonly TerrainRenderer _terrainRenderer;
     private readonly SurfaceRenderer _surfaceRenderer;
+    private readonly ILocalPlayerState _localPlayer;
 
     public GraphicsSettingsController(
         IClientConfigManager clientConfig,
         LightingEngine lightingEngine,
         PostProcessController postProcessController,
         TerrainRenderer terrainRenderer,
-        SurfaceRenderer surfaceRenderer)
+        SurfaceRenderer surfaceRenderer,
+        ILocalPlayerState localPlayer)
     {
         _clientConfig = clientConfig;
         _lightingEngine = lightingEngine;
         _postProcessController = postProcessController;
         _terrainRenderer = terrainRenderer;
         _surfaceRenderer = surfaceRenderer;
+        _localPlayer = localPlayer;
     }
 
     public GraphicsPreset SelectedPreset => _clientConfig.SelectedGraphicsPreset;
@@ -84,7 +87,7 @@ public sealed class GraphicsSettingsController
         _postProcessController.ApplyClientConfig();
         _terrainRenderer.ApplyClientConfig();
         _surfaceRenderer.ApplyClientConfig();
-        PlayerMovementController.LocalPlayer?
+        _localPlayer.Current?
             .GetComponent<Robot>()?
             .ResetDynamicLightPreferences();
     }

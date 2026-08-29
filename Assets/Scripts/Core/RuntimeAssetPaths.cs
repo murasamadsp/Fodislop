@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,46 +90,39 @@ namespace Fodinae.Core
 #endif
         }
 
-        /// <summary>
-        /// Каталог с текстурами, либо null, если его нет ни по одному пути.
-        /// Null здесь — не ошибка: часть текстур приходит с сервера, и
-        /// вызывающий код обязан уметь работать без локальных файлов.
-        /// </summary>
-        public static string? TexturesRoot
+        /// <summary>Required local texture directory.</summary>
+        public static string TexturesRoot
         {
             get
             {
                 if (_resolved)
                 {
-                    return _texturesRoot;
+                    return _texturesRoot ?? throw new InvalidOperationException("Texture root was not initialized.");
                 }
 
                 _texturesRoot = Resolve();
                 _resolved = true;
 
-                if (_texturesRoot == null)
-                {
-                    Debug.LogWarning(
-                        "[RuntimeAssetPaths] Каталог Textures не найден ни по одному пути. " +
-                        "В собранном плеере это означает, что сборка не скопировала его в " +
-                        "StreamingAssets — проверь BuildScript.CopyRuntimeTextures.");
-                }
-
-                return _texturesRoot;
+                return _texturesRoot ?? throw new DirectoryNotFoundException(
+                    "Required Textures directory is missing. Ensure the build copied it to StreamingAssets.");
             }
         }
 
-        /// <summary>Путь к подкаталогу внутри корня текстур, либо null.</summary>
-        public static string? TexturesSubfolder(string name)
+        /// <summary>Required path to a subdirectory inside the texture root.</summary>
+        public static string TexturesSubfolder(string name)
         {
-            string? root = TexturesRoot;
-            if (root == null)
+            if (string.IsNullOrWhiteSpace(name))
             {
-                return null;
+                throw new System.ArgumentException("Texture subfolder name is required.", nameof(name));
             }
 
-            string path = Path.Combine(root, name);
-            return Directory.Exists(path) ? path : null;
+            string path = Path.Combine(TexturesRoot, name);
+            if (!Directory.Exists(path))
+            {
+                throw new DirectoryNotFoundException($"Required texture subdirectory is missing: {path}");
+            }
+
+            return path;
         }
 
         private static string? Resolve()
@@ -145,22 +139,15 @@ namespace Fodinae.Core
                 Path.Combine(Application.dataPath, "..", TexturesFolderName),
             };
 
-            foreach (string candidate in candidates)
+            string candidate = Application.isEditor
+                ? Path.Combine(Application.dataPath, TexturesFolderName)
+                : Path.Combine(Application.streamingAssetsPath, TexturesFolderName);
+            if (!Directory.Exists(candidate))
             {
-                try
-                {
-                    if (Directory.Exists(candidate))
-                    {
-                        return Path.GetFullPath(candidate);
-                    }
-                }
-                catch
-                {
-                    // Невалидный относительный путь — просто следующий кандидат.
-                }
+                throw new DirectoryNotFoundException($"Required texture directory is missing: {candidate}");
             }
 
-            return null;
+            return Path.GetFullPath(candidate);
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR

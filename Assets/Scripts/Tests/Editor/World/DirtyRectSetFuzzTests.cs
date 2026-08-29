@@ -258,6 +258,14 @@ namespace Fodinae.Tests.World
             RectInt bounds,
             HashSet<(int x, int y)> into)
         {
+            long rawMaxX = (long)candidate.x + candidate.width;
+            long rawMaxY = (long)candidate.y + candidate.height;
+            if (rawMaxX > int.MaxValue || rawMaxX < int.MinValue ||
+                rawMaxY > int.MaxValue || rawMaxY < int.MinValue)
+            {
+                return;
+            }
+
             long minX = Math.Max((long)candidate.xMin, bounds.xMin);
             long minY = Math.Max((long)candidate.yMin, bounds.yMin);
             long maxX = Math.Min((long)candidate.xMin + candidate.width, bounds.xMax);

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Fodinae.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -27,6 +28,7 @@ internal sealed class ProgrammatorProgramStore
     private readonly ProgrammatorGridUIFactory _view;
     private readonly ProgrammatorSelectionModel _selection;
     private readonly ProgrammatorRadialController _radial;
+    private readonly ILocalizationService _loc;
 
     private readonly List<ProgramItem> _programItems = new();
     private int _activeIndex = -1;
@@ -35,11 +37,13 @@ internal sealed class ProgrammatorProgramStore
     public ProgrammatorProgramStore(
         ProgrammatorGridUIFactory view,
         ProgrammatorSelectionModel selection,
-        ProgrammatorRadialController radial)
+        ProgrammatorRadialController radial,
+        ILocalizationService loc)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _selection = selection ?? throw new ArgumentNullException(nameof(selection));
         _radial = radial ?? throw new ArgumentNullException(nameof(radial));
+        _loc = loc ?? throw new ArgumentNullException(nameof(loc));
     }
 
     public bool IsRunning => _isRunning;
@@ -126,7 +130,7 @@ internal sealed class ProgrammatorProgramStore
                 StopProgram();
             }
 
-            _view.ProgramTitle.text = "Программатор";
+            _view.ProgramTitle.text = _loc.Get("programmator.title");
             RefreshProgramList();
             _view.Panel.style.display = DisplayStyle.None;
             _view.ProgramListPanel.style.display = DisplayStyle.Flex;
@@ -174,7 +178,7 @@ internal sealed class ProgrammatorProgramStore
         {
             if (string.IsNullOrWhiteSpace(name))
             {
-                name = $"Программа {_programItems.Count + 1}";
+                name = _loc.Get("programmator.program", _programItems.Count + 1);
             }
 
             var item = new ProgramItem
@@ -191,7 +195,7 @@ internal sealed class ProgrammatorProgramStore
 
         public void ShowCreateInput()
         {
-            _view.CreateInput.value = $"Программа {_programItems.Count + 1}";
+            _view.CreateInput.value = _loc.Get("programmator.program", _programItems.Count + 1);
             _view.CreateDialog.style.display = DisplayStyle.Flex;
             _view.CreateInput.Focus();
         }

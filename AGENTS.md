@@ -46,13 +46,15 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 3. **`MainMenu.unity`** (Build Index 2) — только UI главного меню, без DI-графа.
 4. **`MainGame.unity`** (Build Index 3) — весь `GameLifetimeScope`, DI-граф и геймплей. Offline-режим обеспечивает `DummyConnection`.
 
-### Флоу загрузки и выгрузки сцен
+### Флоу загрузки и выгрузки сцен (SceneTransitionTicket)
 
-* **Старт игры:** По клику «Играть» `MainMenu` грузит `MainGame` аддитивно (`SceneManager.LoadSceneAsync`), ждёт `GameManager.OnWorldLoaded`, затем выгружает себя.
-* **Изоляция скоупа:** `GameLifetimeScope.Configure` ищет свой `UIDocument` и инжектит MonoBehaviour строго в пределах своей сцены (`gameObject.scene`), чтобы не задевать объекты параллельно загруженной `MainMenu`.
-* **Выход в меню (Game → Menu):** Реализован через `BootstrapLifetimeScope.ReturnToMainMenu()`: disconnect → выгрузка `MainGame` → `session.Set(Bootstrap.Container)` → повторная загрузка `MainMenu`.
-* **Смена активной сцены:** При аддитивной загрузке выполняется в `GameBootstrap.PostStart` (`SetActiveScene(_ownScene)`), а не в `Configure` (до сборки контейнера сцена ещё не готова).
-* Переносить объекты и менять Build Settings разрешено только через Unity MCP/Editor API, не текстовой правкой YAML.
+* **Единственный путь перехода:** `BootstrapLifetimeScope.TransitionAsync(sceneName)`. На каждый переход создаётся `SceneTransitionTicket`, передаётся в дочерний скоуп через `LifetimeScope.EnqueueParent` + `Enqueue(builder => builder.RegisterInstance(ticket))`. Сериализованные `ParentReference` в сценах запрещены; поиск скоупа по загруженным сценам запрещён.
+* **Handshake тикета:** дочерний composition root обязан вызвать `ticket.Attach(scene)` ровно один раз (второй attach — исключение) → `RequestActivation` → `MarkStartupReady` → `MarkPresentationReady`. Bootstrap выгружает предыдущую сцену ТОЛЬКО после `WaitForPresentationAsync`.
+* **Провал:** любое исключение старта закрывает тикет через `Fail(ex)` — Bootstrap отменяет переход, выгружает кандидат-сцену и публикует `TransitionFailed`; UI возвращается в рабочее состояние с одной диагностической ошибкой.
+* **Роли скоупов:** `BootstrapLifetimeScope` — application-сервисы + `ApplicationBootstrap`; `GatewayLifetimeScope`/`MainMenuLifetimeScope` — только typed references, контроллер и свой bootstrap; `GameLifetimeScope` — models, processors, factories, typed scene contract и `GameBootstrap`.
+* **Выход в меню (Game → Menu):** Реализован через `BootstrapLifetimeScope.ReturnToMainMenu()`: disconnect → teardown (`GameLifetimeScope.PrepareForUnload`) → повторная загрузка `MainMenu`.
+* **MainMenu живёт до готовности мира:** при входе в игру `MainMenu` остаётся загруженной и показывает loader, пока `GameManager.WorldReady` не опубликует готовность; только после этого тикет получает `MarkPresentationReady` и меню выгружается.
+* **Контракт сцены:** типизированные serialized-ссылки (roots, `UIDocument`, `Services`, камера, робот игрока) на скоупе; `Services` авторствуется НЕактивным и активируется только после DI (`ActivateSceneServices`). Проверка — read-only `Fodinae/Architecture/Validate Production Scene Contracts` (`ProductionSceneContractValidator`), а также перед билдом. Никаких авто-починок сцены: сцена — данные автора, валидатор только сообщает о нарушениях. Переносить объекты и менять Build Settings разрешено только через Unity MCP/Editor API, не текстовой правкой YAML.
 
 ---
 
@@ -60,45 +62,43 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 
 ### Контейнеры и скоупы (VContainer)
 
-`CompositionRoot` и `SingletonMonoBehaviour` удалены. Используется VContainer; для синглтонов допустим только паттерн `Instance + Awake` (без `SingletonMonoBehaviour`). Асинхронность — UniTask, межсистемная связь — `Action`.
+`CompositionRoot` и `SingletonMonoBehaviour` удалены. Используется штатный VContainer (vendor-код не модифицируется). Асинхронность — UniTask, межсистемная связь — через модели/event gateways и `Action`.
 
 Регистрация двухуровневая:
 
-* **`BootstrapLifetimeScope`** (`DontDestroyOnLoad`, `DefaultExecutionOrder -30000`): держит менеджеры, переживающие переходы сцен (`ConnectionManager`, `NetworkService`, `AudioSystem`, `ClientConfigManager`, `ClientAssetLoader`).
-* **`GameLifetimeScope`** (в сцене `MainGame`, `DefaultExecutionOrder -20000`): регистрирует игровые сервисы.
-* **Регистрация компонентов:** `RegisterManager<T>` ищет объект строго в своей сцене (`gameObject.scene == _ownScene`) и регистрирует найденный экземпляр через `RegisterComponent(existing)`. Сцена — единственный источник истины для менеджеров: отсутствие менеджера — ошибка контракта (fail-fast с инструкцией), ленивое создание в рантайме не используется (оно прячет дрейф сцены). Чтобы сцена не рассинхронизировалась, `BootstrapSceneAuthoring` авто-материализует недостающих менеджеров при открытии `Bootstrap` и перед Play Mode; вручную — `Fodinae/Architecture/Materialize Bootstrap Managers`.
+* **`BootstrapLifetimeScope`** (`DontDestroyOnLoad`, `DefaultExecutionOrder -30000`): менеджеры, переживающие переходы сцен (`ConnectionManager`, `NetworkService`, `AudioSystem`, `ClientConfigManager`, `ClientAssetLoader`), плюс application-tier состояние (`LocalPlayerState`/`ILocalPlayerState` — публикуется игроком, читается сетевым слоем и UI).
+* **`GameLifetimeScope`** (в сцене `MainGame`, `DefaultExecutionOrder -20000`): игровые сервисы; зарегистрирован как entry point `GameBootstrap`.
+* **Регистрация компонентов:** `RegisterManager<T>` отдаёт предпочтение сериализованному типизированному контракту (`Core/Lifecycle/ManagerBinding`, список `_managerBindings` на скоупе): concrete reference без опоры на имена объектов. Пока биндинги не заполнены (сцена ещё не смигрирована), `RegisterManager<T>` откатывается на строгий поиск строго в своей сцене (`gameObject.scene == _ownScene`) по `Services/{group}/{T.Name}` и регистрирует экземпляр через `RegisterComponent(existing)`. Сцена — единственный источник истины для менеджеров: отсутствие менеджера — ошибка контракта (`SceneContractException`, fail-fast), ленивое создание в рантайме не используется.
+* **Заполнение контракта:** one-way editor-инструмент `Fodinae/Architecture/Populate Manager Contract` (`Editor/ManagerContractMigrator.cs`) читает вызовы `RegisterManager<T>(builder, "group")` прямо из `GameLifetimeScope.cs`, находит каждый менеджер в сцене и пишет `ManagerBinding`. Он ничего не чинит и не перемещает — только привязывает ссылки. Проверка охвата — `ProductionSceneContractValidator` (полностью пустой контракт даёт warning, частичный — ошибку перед build).
 
 ### Запрет на ручной `AddComponent` в `Configure`
 
 **Запрещено создавать менеджеров вручную через `AddComponent` внутри `Configure`.**
 
-`Configure` выполняется до сборки контейнера: прямой `AddComponent` мгновенно вызывает `Awake`/`OnEnable`, когда `ISessionContainer` ещё указывает на Bootstrap-скоуп, сцена не активна, а `[Inject]`-поля не заполнены — это порождает критические гонки (резолв `UIDocument` из Bootstrap, захват меню-камеры в `Awake`, NRE в `Start`).
+`Configure` выполняется до сборки контейнера: прямой `AddComponent` мгновенно вызывает `Awake`/`OnEnable`, пока `[Inject]`-поля не заполнены. Это порождает критические гонки (резолв `UIDocument` из Bootstrap, захват меню-камеры в `Awake`, NRE в `Start`).
 
-`RegisterComponentOnNewGameObject` делегирует создание `NewGameObjectProvider`:
+Порядок инициализации графа — в `GameBootstrap.PostStart` (IPostStartable), порядок читается в коде и охраняется линтером и тестами:
 
-`неактивный GO` → `AddComponent` (Awake не вызывается) → `инъекция зависимостей` → `активация`. Создание происходит при первом резолве — в `GameBootstrap.PostStart`.
+1. ожидание `ticket.WaitForActivationAsync()` (Bootstrap активирует сцену после attach);
+2. `scope.ActivateSceneServices()` — активация авторственного неактивного `Services` root (Awake/OnEnable менеджеров выполняются только после DI);
+3. `InitializeRequiredServices()`: config/сеть/процессоры/ассеты/terrain-подписки (fail-fast на недоступных подписках);
+4. применение настроек: `TerrainRenderer.ApplyClientConfig` → `PostProcessController.EnsureVolumeSetup` → `LightingEngine.EnsureInitialized` → `SurfaceRenderer.ApplyClientConfig` (линтер охраняет применение каждой настройки на старте);
+5. UI-сервисы: `GameManager.EnsureUISetup` → `PlayerHUDView.EnsureInitialized` → `InventoryView.EnsureInitialized`;
+6. `_connection.Connect()` — старт соединения ПОСЛЕ инициализации диспетчера;
+7. `ValidateStartup()` — шейдеры, compute-шейдеры, ProjectDefaults;
+8. `scope.MarkReady()` + `ticket.MarkStartupReady()`;
+9. ожидание полной готовности мира (`GameManager.IsWorldLoaded` — серверная позиция, terrain, surface, lighting, ассеты);
+10. `ticket.MarkPresentationReady()` — только теперь Bootstrap выгружает предыдущую сцену.
 
-### Порядок инициализации графа в `GameBootstrap.PostStart`
+> **Контракт:** добавление подсистемы = одна регистрация в `GameLifetimeScope.Configure` + при необходимости один вызов в `PostStart`. Порядок инициализации живёт в типизированном коде `GameBootstrap`, а не в markdown: этот список — описание, а не источник истины.
 
-Инициализация графа выполняется НЕ в build-callback, а в `GameBootstrap` (`IPostStartable.PostStart`):
-
-1. `_session.Set(resolver)`;
-2. `SceneManager.SetActiveScene(_ownScene)` — иначе лениво создаваемые менеджеры попадут в сцену, загрузившую нас (например, меню);
-3. Инъекция scene-MonoBehaviours с `[Inject]` (`InjectSceneBehaviours`);
-4. **Явный резолв ВСЕХ менеджеров в детерминированном порядке:**
-`ConnectionManager` → `NetworkService` → `MapManager` → `PacketHandler` → `IAssetLoader` → `AudioSystem` → `IPlayerStats` → `PlayerMovementController` → `CameraFollow` → `TerrainRenderer` → `WorldEntityBatchRenderer` → UI-сервисы (`GlobalChatUI`, `FloatingChatManager`, `FPSCounter`, `DiagnosticRunner`, `IInputBlocker`, `MinimapController`, `WorldMapController`, `WorldMapRenderer`, `DisplayManager`, `UIInputManager`, `PlayerHUDView`, `InventoryView`, `PauseMenu`, `InGameDebugOverlay`, `ReconnectUI`, `AssetLoadingIndicator`, `MissionArrowUI`) → `PostProcessController.EnsureVolumeSetup` → `GameManager` → `ServerConfig` → `LightingEngine.EnsureInitialized` → `SurfaceRenderer` → `TextureStorageManager` → `WorldTextureManager` → `ServerAudioEventManager` → `VFXPool` → `BuildingManager` → `RobotManager`;
-5. `gameManager.EnsureUISetup()` — строго ПОСЛЕ резолвов всех UI-сервисов, иначе `SetupUI` не найдёт их через `FindAnyObjectByType` и создаст дубликаты без регистрации в контейнере;
-6. `TerrainRenderer.EnsureSubscriptions()`;
-7. `ValidateStartup()` (критические поля: `PacketHandler`, `PauseMenu`, `PlayerHUDView`, `InventoryView`, `PlayerMovementController`, `MapManager`, `WorldTextureManager`, `ClientAssetLoader`, `AudioSystem`, `TerrainRenderer`, `SurfaceRenderer`, `MinimapController`).
-
-> **Контракт резолвов:** Порядок в `PostStart` — обязательный контракт, а не деталь реализации. Ленивые синглтоны создаются в порядке первого резолва: добавление `RegisterManager<T>` без явного резолва в `PostStart` приведёт к тому, что менеджер не создастся вовсе либо создастся недетерминированно.
-
-### Регистрация зависимостей и ISessionContainer
+### Регистрация зависимостей
 
 * **Инстансы:** `MapStorage`, `InventoryModel`, `PlayerStatsModel`.
-* **Менеджеры:** `MapManager`, `TerrainRenderer`, `ClientAssetLoader`, `AudioSystem`, `WorldTextureManager`, `ServerAudioEventManager`, `ConnectionManager`, `PacketHandler`, `NetworkService`, `GameManager`, `VFXPool`, `BuildingManager`, `RobotManager`, `WorldEntityBatchRenderer`, `ServerConfig`, `TextureStorageManager`, `GlobalChatUI`, `UIInputManager`, `FPSCounter`, `FloatingChatManager`, `PlayerHUDView`, `InventoryView`, `PauseMenu`, `MinimapController`, `WorldMapController`, `WorldMapRenderer`, `DisplayManager`, `CameraFollow`, `PostProcessController`, `LightingEngine`, `SurfaceRenderer`, `InGameDebugOverlay`, `ReconnectUI`, `AssetLoadingIndicator`, `MissionArrowUI` — с соответствующими интерфейсами из `Core/Interfaces`.
-* `ISessionContainer` (`SessionContainer`) держит активный `IObjectResolver` для разрешения зависимостей вне direct-injection скоупов. Весь новый код использует `[Inject]`.
-* `RegisterInstance` не инжектит зависимости в созданные вручную объекты; для них использовать регистрацию через VContainer или вызывать `resolver.Inject()`.
+* **Менеджеры:** полный список живёт в `GameLifetimeScope.Configure` (`RegisterManager<T>(builder, group)`) и в `BootstrapLifetimeScope.Configure` — код есть источник истины. Каждый менеджер обязан лежать в своей группе `Services/<Group>/<Name>` в сцене.
+* **Модели и gateways (DI-синглтоны):** `NetworkStatusModel` (ping/online из `StatusProcessor`, читается UI), `ChatEventGateway`, `WindowCommandStream` (пакеты → презентация окон через `ServerWindowPresenter`), `MapModeState`, `InputBlockState` (композиция `IInputBlocker`).
+* Ambient session resolver отсутствует. Игровые зависимости получают через прямой `[Inject]`; `IObjectResolver` разрешён только в composition root и фабриках.
+* `RegisterInstance` не инжектит зависимости в созданные вручную объекты; для scene-компонентов использовать `RegisterComponent`, для prefab/entity — `ISceneObjectFactory`.
 
 ---
 
@@ -108,7 +108,7 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 
 * Клиент получает от сервера лёгкое состояние (координаты и идентификаторы), а тяжёлые текстуры, спрайты и FMOD-банки загружает on-demand один раз.
 * **Иерархия кэширования:** RAM (`AssetCache`, `CellTextureCache`) → диск (`PersistentAssetCache`, ETag/MD5) → CDN/сервер. Рендеринг после загрузки выполняется локально.
-* `NetworkService` / `PacketHandler` / `ConnectionManager` — сервисы подписок, диспетчеризации пакетов, авторизации и реконнекта.
+* `NetworkService` / `ConnectionManager` — подписки, транспорт, авторизация и реконнект. `PacketHandler` — чистый диспетчер: связывает тип пакета с процессором и владеет временем жизни подписок; он не содержит UI, менеджеров сцены и состояния игрока. Логика пакетов — в `Networking/Processors/*` (обновляют модели, gateways и доменные сервисы: `WorldInitProcessor`, `AuthTokenProcessor`, `PlayerInfoProcessor`, `StatusProcessor` и т.д.).
 * `DummyConnection` — оффлайн-транспорт. При невалидном токене шлёт `OpenWindowPacket('auth')` (штатный флоу первого входа; токены лежат в `temporaryCachePath/server_tokens.json`, клиентский — в PlayerPrefs `AuthToken6`).
 * Процессоры пакетов обрабатывают: `world`, `map`, `chat`, `clan`, `audio`, `windows`, `inventory`, `stats`, `player`, `robots`, `packs`, `missions`, `config`.
 
@@ -172,10 +172,10 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 * **Управление (`PlayerInputHandler`):** WASD/стрелки — передвижение, Space — копка, E — авто-копка, L — агрессия, Shift — бег. Валидация: локально по `Passable`, на сервере через `MovePacket`.
 * **Обработка кликов:** `PlayerInteractionController.HandleMouseClick` отправляет `ClickCellPacket` только если `IsPointerOverUI` вернул `false` (с обязательным использованием `RuntimePanelUtils.ScreenToPanel`).
 * **Тайминги и механики:** `DigCooldown = 0.3f` блокирует повторную копку и движение. Направление задаётся `_lastSentDirection` (по умолчанию `Direction.Down`). В Dummy SFX пустой клетки отправляется до проверки на `Empty`.
-* **Блокировка ввода (`PacketHandler.IsInputBlocked`):**
-* Вычисляется по формуле: `ChatInput.IsFocused || HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen`.
-* Фокус чата входит в блокировку: пока открыт ввод текста, движение, копка, геймплейные клавиши и камера заблокированы. Это единственный источник блокировки ввода для `PlayerMovementController`, `PlayerInteractionController` и `CameraFollow`.
-* `PlayerInputHandler` считывает `Keyboard.current` глобально и не знает о UI напрямую: блокировка обеспечивается только через `IsInputBlocked`.
+* **Блокировка ввода (`IInputBlocker`):**
+* Единственная реализация — `UI/InputBlockState` (UI-слой): композиция `ChatInput.IsFocused || ServerWindowPresenter.HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen`. `PacketHandler` и сетевой слой не реализуют блокировку ввода.
+* Фокус чата входит в блокировку: пока открыт ввод текста, движение, копка, геймплейные клавиши и камера заблокированы. Потребители (`PlayerMovementController`, `PlayerInteractionController`, `CameraFollow`, HUD) инжектят `IInputBlocker` — статический доступ к UI-синглтонам извне `Assets/Scripts/UI` запрещён линтером.
+* **Локальный игрок:** единственный типизированный источник — `ILocalPlayerState` (application-tier, `LocalPlayerState`, публикуется `PlayerMovementController`). Статические `PlayerMovementController.LocalPlayer`/`OnLocalPlayerSpawned` удалены; использование запрещено линтером.
 * Клавиша Enter отправляет сообщение чата даже при `IsInputBlocked` (условие в `GlobalChatUI.Update` проверяет `ChatInput.IsFocused`).
 * Клавиша ESC в `PauseMenu` сначала передаёт управление в Программатор, затем шлёт серверный запрос на закрытие верхнего окна.
 
@@ -211,10 +211,9 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 ### Рендер-архитектура, камеры и пост-процессинг
 
 * **Разрешение игровой камеры:**
-* Игровую камеру разрешено получать **только** через `GameplayCamera.Resolve()` (`Assets/Scripts/Core/GameplayCamera.cs`), вызов `Camera.main` напрямую **запрещён** (так как `Camera.main` ищет по тегу во всех сценах, а `MainMenu` живёт параллельно до завершения загрузки).
-* Хелпер отсекает камеры чужих сцен, Overlay-камеры и камеры с назначенным `targetTexture` (офскрин-риги).
-* Все потребители используют `GameplayCamera`: `PostProcessController`, `PostProcessRendererFeature` (проверяет `cameraData.camera == resolved`), `TerrainRenderer`, `SurfaceRenderer`, `FloatingChatManager/Bubble`, `MissionArrowUI`, `MapManager`, `DiagnosticRunner`, `PlayerInteractionController`, `UIGizmosController`.
-* Для получения камеры своей сцены до вызова `SetActiveScene` используется `GameplayCamera.ResolveIn(scene)` (например, в `TerrainRenderer.Start`).
+* Игровую камеру DI-компоненты получают через **инъекцию `IGameplayCamera`** (`Core/Interfaces/IGameplayCamera.cs`, регистрируется в `BootstrapLifetimeScope` поверх persistent application-камеры), вызов `Camera.main` напрямую **запрещён** (ищет по тегу во всех сценах, а `MainMenu` живёт параллельно до завершения загрузки). Переиспользование `IGameplayCamera` запрещено из Render Feature: единственное оставшееся статическое место — `PostProcessRendererFeature`, которому нельзя сделать field-инъекцию (ScriptableRendererFeature), он определяет игровую камеру через `cameraData.camera == _mainCamera`.
+* Потребители `IGameplayCamera`: `PostProcessController`, `TerrainRenderer`, `SurfaceRenderer`, `FloatingChatManager`, `FloatingChatBubble`, `MissionArrowUI`, `InGameDebugOverlay`, `MapManager`, `DiagnosticRunner`, `Robot`, `PlayerInteractionController`.
+* Статический хелпер `GameplayCamera.Resolve()`/`ResolveIn(scene)` — только для независимых от VContainer мест (Render Feature); в новых DI-компонентах использовать `IGameplayCamera`.
 
 * **Камеры Главного Меню:**
 * Все камеры меню обязаны иметь тег `Untagged` (выставляется в `BuildMenuSceneryRig`); тег `MainCamera` запрещён.
@@ -267,11 +266,11 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 3. **Ориентация осей:** Постоянно контролировать Top-Left серверные координаты и инверсию Y относительно `WorldHeight`.
 4. **Хранение ассетов:** Текстуры не хранятся в `Resources`; при сборке билда папка `Textures/` копируется во внешнюю директорию.
 5. **Инъекция в существующие объекты:** `RegisterInstance` не выполняет инъекцию зависимостей автоматически — для ручных объектов вызывать `resolver.Inject()`.
-6. **Резолв зависимостей в Lifecycle-методах:** Никогда не обращаться к `ISessionContainer` из `Awake`/`OnEnable`/`Start` до момента внедрения `[Inject]`-полей (в синглтонах `NewGameObjectProvider` гарантирует инъекцию до активации). Если системе требуется готовность стороннего сервиса — использовать retry в `Update` или флаги готовности (`IsInitialized`/`EnsureInitialized`), но не бросать `throw`.
+6. **Резолв зависимостей в Lifecycle-методах:** Не обращаться к контейнеру из `Awake`/`OnEnable`/`Start`. Scene-компоненты получают зависимости через `[Inject]`, а запуск выполняется явным entrypoint после сборки scope.
 7. **Безопасный Teardown окон:** При закрытии/уничтожении серверных окон (`Dispose`/`OnDestroy`) возможна гонка с выгрузкой сцены (когда `UIDocument` уже уничтожен). Операции очистки (`rootVisualElement.Remove`) оборачивать в null-check и блок `try/catch` — ошибки очистки UI не должны прерывать `OnDestroy`.
 8. **Ограничения CSS/USS:** UI Toolkit не поддерживает функцию `calc()`: расчетные значения вычисляются заранее или задаются inline-стилем из C#.
 9. **Свойства террейн-анимаций:** Шейдерная анимация и покадровый атлас не связаны: `AnimationSpeed` работает и для одиночного кадра; значение `FrameOffset = 0` является валидным и не должно трактоваться как ошибка.
-10. **Инварианты системы ввода:** EventSystem отсутствует, навигация с клавиатуры в UI отключена, `IsInputBlocked` перехватывает фокус ввода чата, перевод координат мыши — только через `ScreenToPanel`. Нарушение ведёт к багам спонтанного движения/копки персонажа.
+10. **Инварианты системы ввода:** EventSystem отсутствует, навигация с клавиатуры в UI отключена, блокировка ввода — только через `IInputBlocker` (`InputBlockState`), перевод координат мыши — только через `ScreenToPanel`. Нарушение ведёт к багам спонтанного движения/копки персонажа.
 
 ---
 

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -9,6 +10,7 @@ namespace Fodinae.UI.Programmator
 {
     public class RadialMenu
     {
+        private readonly ILocalizationService _loc;
         private readonly VisualElement _root;
         private readonly VisualElement _innerContainer;
         private readonly VisualElement _outerContainer;
@@ -41,8 +43,10 @@ namespace Fodinae.UI.Programmator
         private static readonly Color DefaultBorder = new Color(0.5f, 0.5f, 0.5f, 1f);
         private static readonly Color HoverBorder = new Color(1f, 0.84f, 0f, 1f);
 
-        public RadialMenu()
+        public RadialMenu(ILocalizationService loc)
         {
+            _loc = loc ?? throw new ArgumentNullException(nameof(loc));
+
             // Static skeleton (rings, containers, back button) lives in
             // RadialMenu.uxml; items of both rings are positioned dynamically
             // in code, so only the skeleton is cloned here.
@@ -53,6 +57,10 @@ namespace Fodinae.UI.Programmator
             tree.AddToClassList("prog-radial-root");
             tree.pickingMode = PickingMode.Ignore;
             _root = tree;
+
+            // Статические ключи UXML резолвятся сразу при сборке (контракт
+            // един для всех экранов; у радиального меню их почти нет).
+            UILocalizer.Apply(tree, _loc);
 
             _outerRingBg = _root.Q<VisualElement>("OuterRingBg") ??
                 throw new InvalidOperationException("[RadialMenu] OuterRingBg is missing from RadialMenu.uxml.");
@@ -107,7 +115,7 @@ namespace Fodinae.UI.Programmator
                 item.name = $"radial_inner_{i}";
 
                 // Categories use negative IDs — show name label
-                string catName = ProgrammatorData.CATEGORY_NAMES.TryGetValue(_innerIds[i], out var cn) ? cn : _innerIds[i].ToString();
+                string catName = ProgrammatorData.CATEGORY_NAMES.TryGetValue(_innerIds[i], out var cn) ? _loc.Get(cn) : _innerIds[i].ToString();
                 var label = new Label(catName);
                 label.AddToClassList("prog-radial-item-label");
                 label.pickingMode = PickingMode.Ignore;
@@ -165,7 +173,7 @@ namespace Fodinae.UI.Programmator
                 }
                 else
                 {
-                    string labelText = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? n : id.ToString();
+                    string labelText = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : id.ToString();
                     var label = new Label(labelText);
                     label.AddToClassList("prog-radial-item-label");
                     label.pickingMode = PickingMode.Ignore;

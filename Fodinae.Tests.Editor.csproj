@@ -54,13 +54,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets/Scripts/Tests/Editor/World/DirtyRectSetFuzzTests.cs" />
-    <Compile Include="Assets/Scripts/Tests/Editor/Core/LifecycleGraphTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ClanProcessorTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalizationServiceTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/TileBitmaskConverterTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerDigCooldownTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/PlayerStatsProcessorTests.cs" />
-    <Compile Include="Assets/Scripts/Tests/Editor/Networking/ReconnectBackoffTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/ContactOcclusionE2ETests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/CoordinateUtilsTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/StatusProcessorTests.cs" />
@@ -70,6 +68,10 @@
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementBoundaryTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/WorldLayerRleTests.cs" />
     <Compile Include="Assets/Scripts/Tests/ProjectDefaultsTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Core/SceneTransitionTicketTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalPlayerStateTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/WindowCommandStreamTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Networking/ChatEventGatewayTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/PlayerStatsModelTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/InventoryProcessorTests.cs" />
   </ItemGroup>
@@ -709,6 +711,10 @@
       <HintPath>Assets/Plugins/ExtendedNumerics.BigDecimal.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>Library/PackageCache/com.unity.pipeline@24975d51528a/Runtime/Plugins/CodeAnalysis/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="nunit.framework">
       <HintPath>Library/PackageCache/com.unity.ext.nunit@44f7d31723bd/net472/unity-custom/nunit.framework.dll</HintPath>
       <Private>False</Private>
@@ -743,6 +749,10 @@
     </Reference>
     <Reference Include="ZString">
       <HintPath>Assets/Plugins/ZString.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>Library/PackageCache/com.unity.pipeline@24975d51528a/Runtime/Plugins/CodeAnalysis/Microsoft.CodeAnalysis.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.iOS.Extensions.Xcode">

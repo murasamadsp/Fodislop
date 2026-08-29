@@ -4,19 +4,19 @@ using UnityEngine;
 
 namespace VContainer.Unity
 {
-    internal sealed class NewGameObjectProvider : IInstanceProvider
+    sealed class NewGameObjectProvider : IInstanceProvider
     {
-        private readonly Type componentType;
-        private readonly IInjector injector;
-        private readonly IReadOnlyList<IInjectParameter> customParameters;
-        private readonly string newGameObjectName;
-        private ComponentDestination destination;
+        readonly Type componentType;
+        readonly IInjector injector;
+        readonly IReadOnlyList<IInjectParameter> customParameters;
+        readonly string newGameObjectName;
+        ComponentDestination destination;
 
         public NewGameObjectProvider(
             Type componentType,
             IInjector injector,
             IReadOnlyList<IInjectParameter> customParameters,
-            ComponentDestination destination,
+            in ComponentDestination destination,
             string newGameObjectName = null)
         {
             this.componentType = componentType;
@@ -39,7 +39,6 @@ namespace VContainer.Unity
             {
                 gameObject.transform.SetParent(parent);
             }
-
             var component = gameObject.AddComponent(componentType);
 
             injector.Inject(component, resolver, customParameters);

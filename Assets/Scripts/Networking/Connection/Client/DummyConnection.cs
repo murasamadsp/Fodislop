@@ -11,11 +11,7 @@ using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae;
 using Fodinae.Audio;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
-using Fodinae.UI;
-using Fodinae.UI.HUD.Player.Model;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -47,20 +43,22 @@ namespace MinesServer.Networking.Connection.Client
 {
     public class DummyConnection : IServerConnection, IOfflineConnection
     {
-        private readonly ISessionContainer _session;
+        private readonly ITextureStorageService _textureStorage;
+        private readonly IItemCatalog _itemCatalog;
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
         private int _lifecycleVersion;
 
-        public DummyConnection(ISessionContainer session)
+        public DummyConnection(ITextureStorageService textureStorage, IItemCatalog itemCatalog)
         {
-            _session = session;
+            _textureStorage = textureStorage;
+            _itemCatalog = itemCatalog;
             _validTokens = _tokenStore.Load();
             _missionRunner = new DummyMissionRunner(SendPacket);
             _buffManager = new DummyBuffManager(SendPacket, _lifecycleVersion);
             _teleportManager = new DummyTeleportManager(SendPacket, _teleportPositions);
             _chatSimulator = new DummyChatSimulator(SendPacket, _lifecycleVersion);
             _clanManager = new DummyClanManager(SendPacket);
-            _pathFinder = new DummyPathFinder(SendPacket, _session);
+            _pathFinder = new DummyPathFinder(SendPacket, GetCellConfig);
         }
 
         public ConnectionStatus ConnectionStatus => _status;
@@ -127,10 +125,6 @@ namespace MinesServer.Networking.Connection.Client
         // Depth warning/damage feature disabled in DummyConnection
         // private const int _maxDepth = 200;
         // private bool _depthWarningActive;
-
-        private float _digCooldown = 0.3f;
-        private int _maxGlobalChatLength = 50;
-        private int _maxLocalChatLength = 20;
 
         private static readonly System.Random _rng = new();
 
@@ -295,7 +289,7 @@ namespace MinesServer.Networking.Connection.Client
                     if (_worldLayer != null)
                     {
                         CellType cellType = GetServerCell(move.X, move.Y);
-                        var cellConfig = _session.TryResolve<MapManager>()?.GetCellConfig(cellType);
+                        CellConfigurationPacket? cellConfig = GetCellConfig(cellType);
                         if (cellConfig.HasValue)
                         {
                             bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
@@ -358,8 +352,7 @@ namespace MinesServer.Networking.Connection.Client
                     {
                         CellType cellType = GetServerCell(cellX, cellY);
                         int crystalIdx = DummyCellConfigurationUtilities.GetCrystalBasketIndex(cellType);
-                        var mm = _session.TryResolve<MapManager>();
-                        var cellConfig = mm?.GetCellConfig(cellType);
+                        CellConfigurationPacket? cellConfig = GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
                         if (!isBreakable && cellType != CellType.Empty)
@@ -371,13 +364,13 @@ namespace MinesServer.Networking.Connection.Client
 
                         if (crystalIdx >= 0)
                         {
-                            var stats = _session.TryResolve<IPlayerStats>();
-                            if (stats != null && stats.BasketContents != null && stats.BasketContents.Length > crystalIdx)
+                            if (_basketContents.Length > crystalIdx)
                             {
-                                var newContents = new long[stats.BasketContents.Length];
-                                Array.Copy(stats.BasketContents, newContents, newContents.Length);
+                                var newContents = new long[_basketContents.Length];
+                                Array.Copy(_basketContents, newContents, newContents.Length);
                                 newContents[crystalIdx] += UnityEngine.Random.Range(1, 101);
-                                OnReceived?.Invoke(new ServerPacket(new BasketPacket(stats.BasketCapacity, newContents)));
+                                _basketContents = newContents;
+                                OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, newContents)));
                             }
                         }
 
@@ -427,8 +420,7 @@ namespace MinesServer.Networking.Connection.Client
                     if (_worldLayer != null)
                     {
                         CellType cellType = GetServerCell(fx, fy);
-                        var mm = _session.TryResolve<MapManager>();
-                        var cellConfig = mm?.GetCellConfig(cellType);
+                        CellConfigurationPacket? cellConfig = GetCellConfig(cellType);
                         bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
 
                         if (cellType != CellType.Empty && isBreakable)
@@ -524,18 +516,21 @@ namespace MinesServer.Networking.Connection.Client
 
                     if (clientHello.ClientVersion < 1)
                     {
+                        // Причина передаётся ключом словаря: StatusProcessor и
+                        // ReconnectUI резолвят его через HasKey, если он попадёт
+                        // на экран.
                         OnReceived?.Invoke(new ServerPacket(new OutdatedClientPacket(
-                            2, "Mines 3", "Ваша версия устарела. Скачайте новую!",
+                            2, "Mines 3", "network.error.old_client",
                             "https://minesgame.ru/download", string.Empty)));
                         return;
                     }
 
                     OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(receivedToken)));
 
-                    InitWorld();
+                    InitWorldAsync().Forget();
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
-                    DummyAssetHandler.HandleAssetRequest(runtimeAssets, _session, SendPacket).Forget();
+                    DummyAssetHandler.HandleAssetRequest(runtimeAssets, _textureStorage, SendPacket).Forget();
                     break;
                 case OpenHelpClickPacket:
                     break;
@@ -735,17 +730,17 @@ namespace MinesServer.Networking.Connection.Client
                 _tokenStore.Save(_validTokens);
                 OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(newToken)));
 
-                InitWorld();
+                InitWorldAsync().Forget();
             }
         }
 
-        private void InitWorld()
+        private async UniTask InitWorldAsync()
         {
             _cellConfigs = DummyCellConfigurationUtilities.CreateCellConfigurations();
             _worldLayer?.Dispose();
             _worldLayer = null;
 
-            string mapbPath = DummyWorldMapArchive.ResolveMapFile(PrebakedWorldCodeName);
+            string mapbPath = await DummyWorldMapArchive.ResolveMapFileAsync(PrebakedWorldCodeName);
 
             (int worldWidth, int worldHeight) = DummyWorldMapArchive.ReadDimensions(mapbPath);
             if (worldWidth <= 0 || worldHeight <= 0)
@@ -820,7 +815,7 @@ namespace MinesServer.Networking.Connection.Client
             // OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
 
             var inventoryData = new Dictionary<ItemType, long>();
-            foreach (var type in ItemRegistry.AllTypes)
+            foreach (var type in _itemCatalog.AllTypes)
             {
                 inventoryData[type] = 1;
             }
@@ -849,8 +844,6 @@ namespace MinesServer.Networking.Connection.Client
                 new PackPacket(25, 48, PackType.Market, 0, 0),
             })));
 
-            var serverConfig = _session.TryResolve<ServerConfig>();
-            serverConfig?.ApplyValues(_digCooldown, _maxGlobalChatLength, _maxLocalChatLength);
         }
 
 
@@ -862,6 +855,17 @@ namespace MinesServer.Networking.Connection.Client
         private CellType GetServerCell(ushort serverX, ushort serverY)
         {
             return _worldLayer?.GetCellSync(serverX, serverY) ?? CellType.Unloaded;
+        }
+
+        private CellConfigurationPacket? GetCellConfig(CellType type)
+        {
+            int index = (int)type;
+            if (_cellConfigs == null || index < 0 || index >= _cellConfigs.Length)
+            {
+                return null;
+            }
+
+            return _cellConfigs[index];
         }
 
         private void SetServerCell(ushort serverX, ushort serverY, CellType type)
@@ -945,6 +949,32 @@ namespace MinesServer.Networking.Connection.Client
             catch (OperationCanceledException)
             {
                 // path walk cancelled — expected when a new click or move cancels the walk
+            }
+        }
+
+        private static class DummyAssetHandler
+        {
+            public static async UniTaskVoid HandleAssetRequest(
+                RuntimeAssetRequestPacket runtimeAssets,
+                ITextureStorageService textureStorage,
+                Action<ServerPacket> sendPacket)
+            {
+                foreach (var assetEntry in runtimeAssets.Assets)
+                {
+                    byte[]? data = await textureStorage.GetTextureData(assetEntry.Filename.TrimStart('/'));
+
+                    RuntimeAssetPacket response;
+                    if (data != null)
+                    {
+                        response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), data);
+                    }
+                    else
+                    {
+                        response = new RuntimeAssetPacket(assetEntry.Filename, string.Empty, Array.Empty<byte>());
+                    }
+
+                    sendPacket(new ServerPacket(response));
+                }
             }
         }
     }

@@ -17,9 +17,9 @@ namespace Fodinae.World
     public class SceneSetup : MonoBehaviour
     {
         [Inject]
-        private ITextureStorageService? _textureStorage;
+        private ITextureStorageService _textureStorage = null!;
         [Inject]
-        private SurfaceRenderer? _surfaceRenderer;
+        private SurfaceRenderer _surfaceRenderer = null!;
         private bool _surfaceRendererSetupStarted;
         private bool _surfaceRendererSetupSucceeded;
         private bool _surfaceSetupFailureLogged;

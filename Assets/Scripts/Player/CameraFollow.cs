@@ -38,8 +38,8 @@ namespace Fodinae.Player
         private const float FollowSettleEpsilonSquared = 0.000001f;
 
         private float _originalZ;
-        private Camera? _camera;
-        private PlayerMovementController? _subscribedPlayer;
+        private Camera _camera = null!;
+        private ILocalPlayer? _subscribedPlayer;
         private float _targetZoom;
         private float _currentZoom;
         private float _lastZoom;
@@ -52,27 +52,25 @@ namespace Fodinae.Player
         private bool _localPlayerSpawnSubscription;
         private Vector3 _followVelocity;
         [Inject]
+        private Camera _injectedCamera = null!;
+        [Inject]
         private IInputBlocker _inputBlocker = null!;
-
-        protected void Awake()
-        {
-            _camera = GameplayCamera.Resolve();
-        }
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
 
         protected void Start()
         {
+            if (!Application.isPlaying)
+            {
+                return;
+            }
+
             InitializeRuntime();
         }
 
         private void InitializeRuntime()
         {
-            _camera = GameplayCamera.Resolve();
-            if (_camera == null)
-            {
-                Debug.LogError("[CameraFollow] Camera component not found on this GameObject!");
-                enabled = false;
-                return;
-            }
+            _camera = _injectedCamera;
 
             _originalZ = _camera.transform.position.z;
             _targetZoom = _camera.orthographicSize;
@@ -80,18 +78,18 @@ namespace Fodinae.Player
             _lastZoom = _currentZoom;
             if (_target == null || _target == _camera.transform)
             {
-                var player = PlayerMovementController.LocalPlayer;
+                var player = _localPlayer?.Current;
                 if (player != null)
                 {
                     _target = player.transform;
                 }
                 else
                 {
-                    Debug.LogWarning("[CameraFollow] No target assigned and no PlayerMovementController found!");
+                    Debug.LogWarning("[CameraFollow] No target assigned and no ILocalPlayer found!");
                 }
             }
 
-            PlayerMovementController? localPlayer = PlayerMovementController.LocalPlayer;
+            ILocalPlayer? localPlayer = _localPlayer?.Current;
             if (localPlayer != null)
             {
                 SubscribeToPlayer(localPlayer);
@@ -99,7 +97,10 @@ namespace Fodinae.Player
 
             if (!_localPlayerSpawnSubscription)
             {
-                PlayerMovementController.OnLocalPlayerSpawned += HandleLocalPlayerSpawned;
+                if (_localPlayer != null)
+                {
+                    _localPlayer.Changed += HandleLocalPlayerChanged;
+                }
                 _localPlayerSpawnSubscription = true;
             }
 
@@ -109,7 +110,7 @@ namespace Fodinae.Player
 
         protected void OnEnable()
         {
-            if (_camera != null && _scrollAction == null)
+            if (_scrollAction == null)
             {
                 InitializeInput();
             }
@@ -132,7 +133,11 @@ namespace Fodinae.Player
 
             if (_localPlayerSpawnSubscription)
             {
-                PlayerMovementController.OnLocalPlayerSpawned -= HandleLocalPlayerSpawned;
+                if (_localPlayer != null)
+                {
+                    _localPlayer.Changed -= HandleLocalPlayerChanged;
+                }
+
                 _localPlayerSpawnSubscription = false;
             }
 
@@ -160,8 +165,13 @@ namespace Fodinae.Player
             SnapToTarget();
         }
 
-        private void HandleLocalPlayerSpawned(PlayerMovementController player)
+        private void HandleLocalPlayerChanged(ILocalPlayer? player)
         {
+            if (player == null)
+            {
+                return;
+            }
+
             if (_target == null || _target == transform)
             {
                 _target = player.transform;
@@ -172,7 +182,7 @@ namespace Fodinae.Player
             SnapToTarget();
         }
 
-        private void SubscribeToPlayer(PlayerMovementController player)
+        private void SubscribeToPlayer(ILocalPlayer player)
         {
             if (ReferenceEquals(_subscribedPlayer, player))
             {
@@ -193,14 +203,10 @@ namespace Fodinae.Player
         {
             if (!Application.isPlaying)
             {
-                _camera ??= GetComponent<Camera>();
-                if (_camera != null)
-                {
-                    _camera.orthographicSize = DefaultOrthographicSize;
-                }
+                _camera.orthographicSize = DefaultOrthographicSize;
 
-                var player = PlayerMovementController.LocalPlayer;
-                if (player != null && _camera != null)
+                var player = _localPlayer?.Current;
+                if (player != null)
                 {
                     _camera.transform.position = new Vector3(player.transform.position.x, player.transform.position.y, DefaultCameraDepthZ);
                 }
@@ -221,17 +227,6 @@ namespace Fodinae.Player
 
             if (!_scrollEnabled)
             {
-                return;
-            }
-
-            if (_camera == null)
-            {
-                if (!_cameraNullLogged)
-                {
-                    _cameraNullLogged = true;
-                    Debug.LogWarning("[CameraFollow] Camera is null in HandleZoom; zoom is waiting for camera setup.");
-                }
-
                 return;
             }
 
@@ -278,17 +273,17 @@ namespace Fodinae.Player
 
         private void HandleFollow()
         {
-            if (PlayerMovementController.LocalPlayer is { HasServerPosition: false })
+            if (_localPlayer?.Current is { HasServerPosition: false })
             {
                 return;
             }
 
-            Transform cameraTransform = _camera != null ? _camera.transform : transform;
+            Transform cameraTransform = _camera.transform;
             if (_target == null || _target == cameraTransform)
             {
-                if (PlayerMovementController.LocalPlayer != null)
+                if (_localPlayer?.Current != null)
                 {
-                    _target = PlayerMovementController.LocalPlayer.transform;
+                    _target = _localPlayer.Current.transform;
                 }
                 else
                 {
@@ -327,17 +322,17 @@ namespace Fodinae.Player
 
         public void SnapToTarget()
         {
-            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            if (_localPlayer?.Current is not { HasServerPosition: true })
             {
                 return;
             }
 
-            Transform cameraTransform = _camera != null ? _camera.transform : transform;
+            Transform cameraTransform = _camera.transform;
             if (_target == null || _target == cameraTransform)
             {
-                if (PlayerMovementController.LocalPlayer != null)
+                if (_localPlayer?.Current != null)
                 {
-                    _target = PlayerMovementController.LocalPlayer.transform;
+                    _target = _localPlayer.Current.transform;
                 }
             }
 
@@ -351,7 +346,7 @@ namespace Fodinae.Player
 
         public void SetGameplayReady()
         {
-            if (PlayerMovementController.LocalPlayer is not { HasServerPosition: true })
+            if (_localPlayer?.Current is not { HasServerPosition: true })
             {
                 throw new InvalidOperationException(
                     "[CameraFollow] Cannot enable camera before the local server position is synchronized.");

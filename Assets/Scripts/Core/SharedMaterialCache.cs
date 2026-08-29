@@ -17,9 +17,9 @@ namespace Fodinae.Core
             {
                 if (_shader == null)
                 {
-                    _shader = Shader.Find("Sprites/Default") ??
+                    _shader = Shader.Find("Fodinae/World Entity") ??
                         throw new InvalidOperationException(
-                            "SharedMaterialCache requires the supported 'Sprites/Default' shader.");
+                            "SharedMaterialCache requires the supported 'Fodinae/World Entity' shader.");
                 }
 
                 return _shader;
@@ -36,11 +36,11 @@ namespace Fodinae.Core
             _shader = null;
         }
 
-        public static Material? GetForTexture(Texture2D texture)
+        public static Material GetForTexture(Texture2D texture)
         {
             if (texture == null)
             {
-                return null;
+                throw new ArgumentNullException(nameof(texture));
             }
 
             if (_materials.TryGetValue(texture, out var mat))

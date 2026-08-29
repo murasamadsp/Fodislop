@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using Fodinae.Rendering;
 using Fodinae.World.Lighting.Pipeline;
 using Fodinae.World.Lighting.Pipeline.Stages;
@@ -239,6 +238,13 @@ namespace Fodinae.World.Lighting
         /// only created during initialization.
         /// </summary>
         public bool IsInitialized => _initialized;
+
+        /// <summary>
+        /// Одна детерминированная точка готовности освещения: срабатывает один раз
+        /// после завершения <see cref="EnsureInitialized"/>. Вьюхи, которым нужен
+        /// runtime-конфиг (PauseMenu), строятся по этому событию, а не ретраем из Update.
+        /// </summary>
+        public event Action? OnInitialized;
         private bool _hasStaticRadianceState;
         private bool _hasDynamicRadianceState;
         private uint _dynamicLightGeneration;
@@ -533,6 +539,7 @@ namespace Fodinae.World.Lighting
                 _clientConfig.Config.GraphicsQualitySettings);
 
             _initialized = true;
+            OnInitialized?.Invoke();
 
             if (_lightingQualityMode == LightingQualityMode.Off)
             {

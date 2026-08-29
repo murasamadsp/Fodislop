@@ -4,7 +4,6 @@ using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
-using Fodinae.Game.Managers;
 using Fodinae.World.Lighting;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -67,6 +66,8 @@ namespace Fodinae.World
         private IClientConfigManager _clientConfigManager = null!;
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
 
         private readonly Vector3[] _boundaryVertices = new Vector3[12];
         private readonly Vector2[] _boundaryUv = new Vector2[12];
@@ -224,7 +225,7 @@ namespace Fodinae.World
                 return;
             }
 
-            Camera? resolvedCam = GameplayCamera.Resolve();
+            Camera? resolvedCam = _gameplayCamera?.Camera;
             if (resolvedCam != null)
             {
                 _mainCamera = resolvedCam;

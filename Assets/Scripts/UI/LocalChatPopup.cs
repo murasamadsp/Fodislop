@@ -36,6 +36,11 @@ namespace Fodinae.UI
 
         protected void Start()
         {
+            // Школа (одна дорога): зарегистрированные вьюхи инжектятся при
+            // сборке scope (фаза Awake), панель UIDocument создаётся в OnEnable —
+            // к Start и зависимости, и панель гарантированы. Один вызов, без
+            // ретраев из Update. Серверный конфиг приходит по сети — событие
+            // OnInitialized ниже.
             TryInitialize();
         }
 
@@ -43,11 +48,7 @@ namespace Fodinae.UI
         {
             if (!_initialized)
             {
-                TryInitialize();
-                if (!_initialized)
-                {
-                    return;
-                }
+                return;
             }
 
             if (Keyboard.current == null)
@@ -89,9 +90,9 @@ namespace Fodinae.UI
             if (_doc == null || _doc.rootVisualElement == null ||
                 _networkService == null || _serverConfig == null)
             {
-                // Не бросаем: DI-инъекция может прийти позже (PostStart). Update
-                // ретраит TryInitialize — ждём готовности молча, иначе каждый кадр
-                // до инжекта будет сыпать исключениями.
+                // Защитный гард: к моменту [Inject]-метода зависимости и панель
+                // UIDocument гарантированы — пропуск здесь означает дефект
+                // проводки, а не гонку (ретраев больше нет).
                 return;
             }
 

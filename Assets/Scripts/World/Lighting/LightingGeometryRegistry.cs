@@ -82,13 +82,20 @@ public sealed class LightingGeometryRegistry
                 "World lighting has no registered geometry contributors.");
         }
 
-        _fieldTargets[0] = new RenderTargetIdentifier(materialField);
-        _fieldTargets[1] = new RenderTargetIdentifier(emissionField);
-        commandBuffer.SetRenderTarget(
-            _fieldTargets,
-            new RenderTargetIdentifier(BuiltinRenderTextureType.None));
+        // clearFields == false means the caller (MaterialFieldStage) already
+        // bound these targets for the terrain draw right before this call.
+        // Re-issuing SetRenderTarget would end that render pass and force a
+        // tile-memory flush + store/load on TBDR GPUs (Apple Metal) for no
+        // reason — one SetRenderTarget keeps terrain and contributors in a
+        // single pass over the tiles. Only rebind when we must start a pass
+        // with a clear.
         if (clearFields)
         {
+            _fieldTargets[0] = new RenderTargetIdentifier(materialField);
+            _fieldTargets[1] = new RenderTargetIdentifier(emissionField);
+            commandBuffer.SetRenderTarget(
+                _fieldTargets,
+                new RenderTargetIdentifier(BuiltinRenderTextureType.None));
             commandBuffer.ClearRenderTarget(
                 clearDepth: false,
                 clearColor: true,

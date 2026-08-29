@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
+using Fodinae.Core.Models;
 using Fodinae.Networking;
 using Fodinae.UI.HUD.Inventory.Interfaces;
 using Fodinae.UI.HUD.Inventory.Model;
@@ -17,7 +19,7 @@ using VContainer;
 
 namespace Fodinae.UI.HUD.Inventory.View
 {
-    public class InventoryView : MonoBehaviour
+    public class InventoryView : MonoBehaviour, ILocalizableUI
     {
         private const int HOTBAR_COLS = 9;
         private const int INVENTORY_COLS = 9;
@@ -28,9 +30,11 @@ namespace Fodinae.UI.HUD.Inventory.View
         [Inject]
         private UIDocument _doc = null!;
         [Inject]
-        private IInventoryModel? _model;
+        private IInventoryModel _model = null!;
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        [Inject]
+        private ILocalizationService _loc = null!;
         private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
@@ -44,6 +48,7 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         // Context menu
         private VisualElement _contextMenu = null!;
+        private Label? _capacityLabel;
 
         // Selection
         private int _lastSelectedSlot = -1;
@@ -58,8 +63,18 @@ namespace Fodinae.UI.HUD.Inventory.View
             TryInitialize();
         }
 
+        public void EnsureInitialized()
+        {
+            TryInitialize();
+        }
+
         protected void OnDestroy()
         {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
             if (_model != null)
             {
                 _model.OnSlotChanged -= RefreshSlot;
@@ -85,11 +100,7 @@ namespace Fodinae.UI.HUD.Inventory.View
         {
             if (!_initialized)
             {
-                TryInitialize();
-                if (!_initialized)
-                {
-                    return;
-                }
+                return;
             }
 
             if (Keyboard.current == null)
@@ -157,21 +168,26 @@ namespace Fodinae.UI.HUD.Inventory.View
                 return;
             }
 
-            if (_doc == null || _doc.rootVisualElement == null)
+            if (_doc.rootVisualElement == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "[InventoryView] Injected UIDocument has no root visual element.");
             }
 
-            if (_model == null)
+            IInventoryModel model = _model ?? throw new InvalidOperationException(
+                "[InventoryView] IInventoryModel injection is required before initialization.");
+            _model = model;
+
+            if (_inputBlocker == null)
             {
-                if (!Application.isPlaying)
-                {
-                    _model = new InventoryModel();
-                }
-                else
-                {
-                    return;
-                }
+                throw new InvalidOperationException(
+                    "[InventoryView] IInputBlocker injection is required before initialization.");
+            }
+
+            if (_loc == null)
+            {
+                throw new InvalidOperationException(
+                    "[InventoryView] ILocalizationService injection is required before initialization.");
             }
 
             _model.OnSlotChanged += RefreshSlot;
@@ -180,6 +196,26 @@ namespace Fodinae.UI.HUD.Inventory.View
             CreateTooltip(_doc.rootVisualElement);
             BuildUI();
             _initialized = true;
+
+            // Реестр применяет текст сразу и на каждой смене языка — подписка
+            // вручную не нужна и запрещена линтером.
+            _loc.RegisterLocalizable(this);
+        }
+
+        /// <summary>
+        /// Переприменяет локализованный текст после смены языка: статические ключи
+        /// UXML через UILocalizer, ёмкость отсека — напрямую.
+        /// </summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(InventoryView));
+            UILocalizer.Apply(_doc.rootVisualElement, _loc);
+            if (_capacityLabel != null)
+            {
+                _capacityLabel.text = _loc.Get("inventory.capacity", InventoryModel.TOTALSLOTS);
+            }
+
+            UILocalizer.AssertLocalized(_doc.rootVisualElement, _loc);
         }
 
         private void OnModelSlotSelected(int slotIndex)
@@ -250,6 +286,15 @@ namespace Fodinae.UI.HUD.Inventory.View
                 var tree = uxml.CloneTree();
                 root.Add(tree);
 
+                // Статические ключи UXML (inventory.*, тултипы) резолвятся сразу
+                // при сборке, а не только по событию смены языка. Если инжекция
+                // ещё не пришла — словарь придёт вместе с регистрацией реестра
+                // (RegisterLocalizable применяет текст сразу).
+                if (_loc != null)
+                {
+                    UILocalizer.Apply(tree, _loc);
+                }
+
                 _hotbarContainer = tree.Q<VisualElement>("HotbarContainer");
                 var hotbarSlots = tree.Q<VisualElement>("HotbarSlots") ?? _hotbarContainer;
                 for (int i = 0; i < HOTBAR_COLS; i++)
@@ -262,6 +307,21 @@ namespace Fodinae.UI.HUD.Inventory.View
                 if (_inventoryButton != null)
                 {
                     _inventoryButton.clicked += ToggleInventory;
+                    if (_loc != null)
+                    {
+                        _inventoryButton.tooltip = _loc.Get("inventory.hotbar");
+                        Label? toggleLabel = _inventoryButton.Q<Label>();
+                        if (toggleLabel != null)
+                        {
+                            toggleLabel.text = _loc.Get("inventory.hotbar");
+                        }
+                    }
+                }
+
+                Label? inventoryTitle = tree.Q<Label>("InventoryTitle");
+                if (inventoryTitle != null && _loc != null)
+                {
+                    inventoryTitle.text = _loc.Get("inventory.title");
                 }
 
                 _fullInventoryPanel = tree.Q<VisualElement>("FullInventoryPanel");
@@ -277,6 +337,15 @@ namespace Fodinae.UI.HUD.Inventory.View
                     var grid = CreateGrid(0, InventoryModel.TOTALSLOTS - 1, "Inv");
                     inventoryGrid.Add(grid);
                 }
+
+                _capacityLabel = tree.Q<Label>("CapacityLabel");
+                if (_capacityLabel != null && _loc != null)
+                {
+                    _capacityLabel.text = _loc.Get("inventory.capacity", InventoryModel.TOTALSLOTS);
+                }
+
+                Debug.Log($"[InventoryView] UI built: hotbar={(object?)_hotbarContainer ?? "NULL"}, " +
+                    $"button={(object?)_inventoryButton ?? "NULL"}, treeChildren={tree.childCount}");
             }
             else
             {
@@ -541,7 +610,10 @@ namespace Fodinae.UI.HUD.Inventory.View
             var btn = new Button();
             btn.name = "InventoryButton";
             btn.AddToClassList("inv-button");
-            btn.tooltip = "Открыть инвентарь (Tab)";
+            if (_loc != null)
+            {
+                btn.tooltip = _loc.Get("inventory.open");
+            }
 
             var label = new Label("☰");
             label.AddToClassList("inv-button-label");
@@ -581,14 +653,14 @@ namespace Fodinae.UI.HUD.Inventory.View
             _contextMenu.style.top = mousePos.y;
             _contextMenu.pickingMode = PickingMode.Position;
 
-            AddContextMenuItem("Использовать", () =>
+            AddContextMenuItem(_loc!.Get("inventory.context_use"), () =>
             {
                 _model.SelectSlot(slotIndex);
                 _model!.UseSelectedItem();
                 HideContextMenu();
             });
 
-            AddContextMenuItem("Информация", () =>
+            AddContextMenuItem(_loc!.Get("inventory.context_info"), () =>
             {
                 ShowItemInfo(item);
                 HideContextMenu();
@@ -639,8 +711,8 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void ShowItemInfo(ItemData item)
         {
-            _tooltipName.text = $"Предмет: {item.Name ?? item.ItemType.ToString()} ({item.ItemType}) x{item.Quantity}";
-            _tooltipDesc.text = $"Тип: {item.ItemType}\n{item.Description ?? "Нет описания"}";
+            _tooltipName.text = _loc!.Get("inventory.tooltip_item", item.Name ?? item.ItemType.ToString(), item.ItemType, item.Quantity);
+            _tooltipDesc.text = _loc!.Get("inventory.tooltip_type", item.ItemType) + "\n" + (item.Description ?? _loc.Get("inventory.no_description"));
             _tooltipWrapper.style.display = DisplayStyle.Flex;
         }
     }

@@ -4,12 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using Fodinae.Networking.Connection;
-using Fodinae.Player;
-using Fodinae.Player.Logic;
-using Fodinae.World;
-using Fodinae.World.Terrain;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -25,6 +20,8 @@ namespace Fodinae.Networking
     {
         [Inject]
         private IConnectionService _connectionService = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
         private IConnectionService? _subscribedConnection;
 
         private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
@@ -107,7 +104,7 @@ namespace Fodinae.Networking
             }
         }
 
-        private PlayerMovementController? _cachedPlayerController;
+        private ILocalPlayer? _cachedPlayerController;
         private bool _missingPlayerActionWarningLogged;
 
         public void SendAction(IActionClientPacket action)
@@ -119,14 +116,14 @@ namespace Fodinae.Networking
 
             if (_cachedPlayerController == null)
             {
-                _cachedPlayerController = PlayerMovementController.LocalPlayer;
+                _cachedPlayerController = _localPlayer.Current;
             }
 
             if (_cachedPlayerController == null)
             {
                 if (!_missingPlayerActionWarningLogged)
                 {
-                    Debug.LogWarning("[NetworkService] Action dropped: PlayerMovementController is not ready.");
+                    Debug.LogWarning("[NetworkService] Action dropped: local player is not ready.");
                     _missingPlayerActionWarningLogged = true;
                 }
 

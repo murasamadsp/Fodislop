@@ -2,8 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using Fodinae.Core.DI;
-using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Connection;
@@ -15,23 +13,30 @@ namespace MinesServer.Networking.Connection.Client;
 internal sealed class DummyPathFinder
 {
     private readonly Action<ServerPacket> _onReceived;
-    private readonly ISessionContainer _session;
+    private readonly Func<CellType, CellConfigurationPacket?> _getCellConfig;
+    private static readonly (int dx, int dy)[] s_dirs = new[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
 
-    public DummyPathFinder(Action<ServerPacket> onReceived, ISessionContainer session)
+    public DummyPathFinder(
+        Action<ServerPacket> onReceived,
+        Func<CellType, CellConfigurationPacket?> getCellConfig)
     {
         _onReceived = onReceived;
-        _session = session;
+        _getCellConfig = getCellConfig;
     }
 
     public List<(ushort X, ushort Y)> FindPath(ushort startX, ushort startY, ushort targetX, ushort targetY, Func<ushort, ushort, CellType> getCell)
     {
         const int MaximumCellsChecked = 20000;
 
-        MapManager? mapManager = _session.TryResolve<MapManager>();
-        var dirs = new (int dx, int dy)[] { (0, -1), (0, 1), (-1, 0), (1, 0) };
-        var visited = new HashSet<(ushort, ushort)>();
-        var cameFrom = new Dictionary<(ushort, ushort), (ushort, ushort)>();
-        var queue = new Queue<(ushort X, ushort Y)>();
+        var visited = _pooledVisited;
+        var cameFrom = _pooledCameFrom;
+        var queue = _pooledQueue;
+        var path = _pooledPath;
+        visited.Clear();
+        cameFrom.Clear();
+        queue.Clear();
+        path.Clear();
+
         queue.Enqueue((startX, startY));
         visited.Add((startX, startY));
         int cellsChecked = 0;
@@ -52,8 +57,9 @@ internal sealed class DummyPathFinder
                 break;
             }
 
-            foreach (var (dx, dy) in dirs)
+            for (int d = 0; d < s_dirs.Length; d++)
             {
+                var (dx, dy) = s_dirs[d];
                 int nx = cur.X + dx;
                 int ny = cur.Y + dy;
                 if (nx < 0 || ny < 0 || nx > ushort.MaxValue || ny > ushort.MaxValue)
@@ -69,7 +75,7 @@ internal sealed class DummyPathFinder
 
                 CellType cellType = getCell((ushort)nx, (ushort)ny);
 
-                var cellConfig = mapManager?.GetCellConfig(cellType);
+                CellConfigurationPacket? cellConfig = _getCellConfig(cellType);
                 bool isPassable = cellType == CellType.Empty || (cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable));
                 if (!isPassable)
                 {
@@ -87,7 +93,6 @@ internal sealed class DummyPathFinder
             return new List<(ushort, ushort)>();
         }
 
-        var path = new List<(ushort, ushort)>();
         var current = (targetX, targetY);
         while (current != (startX, startY))
         {
@@ -96,6 +101,11 @@ internal sealed class DummyPathFinder
         }
 
         path.Reverse();
-        return path;
+        return new List<(ushort, ushort)>(path);
     }
+
+    private readonly HashSet<(ushort, ushort)> _pooledVisited = new();
+    private readonly Dictionary<(ushort, ushort), (ushort, ushort)> _pooledCameFrom = new();
+    private readonly Queue<(ushort X, ushort Y)> _pooledQueue = new();
+    private readonly List<(ushort, ushort)> _pooledPath = new();
 }

@@ -16,16 +16,15 @@ namespace VContainer
         int Count { get; }
         RegistrationBuilder this[int index] { get; set; }
 
-        T Register<T>(T registrationBuilder)
-            where T : RegistrationBuilder;
+        T Register<T>(T registrationBuilder) where T : RegistrationBuilder;
         void RegisterBuildCallback(Action<IObjectResolver> container);
         bool Exists(Type type, bool includeInterfaceTypes = false, bool findParentScopes = false);
     }
 
     public sealed class ScopedContainerBuilder : ContainerBuilder
     {
-        private readonly IObjectResolver root;
-        private readonly IScopedObjectResolver parent;
+        readonly IObjectResolver root;
+        readonly IScopedObjectResolver parent;
 
         internal ScopedContainerBuilder(IObjectResolver root, IScopedObjectResolver parent)
         {
@@ -65,11 +64,9 @@ namespace VContainer
                             return true;
                         }
                     }
-
                     next = next.Parent;
                 }
             }
-
             return false;
         }
     }
@@ -96,13 +93,12 @@ namespace VContainer
             }
         }
 
-        private readonly List<RegistrationBuilder> registrationBuilders = new List<RegistrationBuilder>();
-        private Action<IObjectResolver> buildCallback;
-        private DiagnosticsCollector diagnostics;
+        readonly List<RegistrationBuilder> registrationBuilders = new List<RegistrationBuilder>();
+        Action<IObjectResolver> buildCallback;
+        DiagnosticsCollector diagnostics;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T Register<T>(T registrationBuilder)
-            where T : RegistrationBuilder
+        public T Register<T>(T registrationBuilder) where T : RegistrationBuilder
         {
             registrationBuilders.Add(registrationBuilder);
             Diagnostics?.TraceRegister(new RegisterInfo(registrationBuilder));
@@ -121,12 +117,11 @@ namespace VContainer
             foreach (var registrationBuilder in registrationBuilders)
             {
                 if (registrationBuilder.ImplementationType == type ||
-                    (includeInterfaceTypes && registrationBuilder.InterfaceTypes?.Contains(type) == true))
+                    includeInterfaceTypes && registrationBuilder.InterfaceTypes?.Contains(type) == true)
                 {
                     return true;
                 }
             }
-
             return false;
         }
 

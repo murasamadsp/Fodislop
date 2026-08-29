@@ -2,7 +2,7 @@
 
 using System;
 using Fodinae.Core;
-using Fodinae.Core.DI;
+using Fodinae.Core.Localization;
 using Fodinae.Game.Managers;
 using Fodinae.World.Terrain;
 using UnityEngine;
@@ -16,7 +16,7 @@ namespace Fodinae.UI
     /// события <see cref="GameManager.OnWorldLoaded"/>. После загрузки мира скрывается,
     /// оставляя маленькую «пимпочку» в правом нижнем углу — статус ассетов, FPS, пинг, версия.
     /// </summary>
-    public sealed class AssetLoadingIndicator : MonoBehaviour
+    public sealed class AssetLoadingIndicator : MonoBehaviour, ILocalizableUI
     {
         [Inject]
         private ClientAssetLoader _assetLoader = null!;
@@ -31,9 +31,10 @@ namespace Fodinae.UI
         private TerrainRenderer _terrainRenderer = null!;
 
         [Inject]
-        private ISessionContainer _session = null!;
+        private ILocalizationService _loc = null!;
 
-        private GameManager? _gameManager;
+        [Inject]
+        private GameManager _gameManager = null!;
         private VisualElement? _root;
         private VisualElement? _loadingOverlay;
         private Label? _loadingSpinnerLabel;
@@ -46,31 +47,48 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
-            if (_initialized)
-            {
-                RebindGameManager();
-                return;
-            }
+            // The scene scope owns this view and its GameManager. Re-activation
+            // must not perform a late container lookup or create a second binding.
+        }
 
+        private void Start()
+        {
             TryInitialize();
         }
 
         private void TryInitialize()
         {
-            if (_initialized || _session == null || _session.Current == null)
+            if (_initialized)
             {
                 return;
             }
 
-            _gameManager = _session.TryResolve<GameManager>();
-            if (_gameManager == null || _assetLoader == null || _fpsCounter == null || _document == null || _terrainRenderer == null)
+            // All six dependencies are required [Inject] registrations populated
+            // during scope build, before Start. A null here is a wiring defect,
+            // not a transient race: silently skipping would leave the loading
+            // indicator permanently dead with no error to diagnose.
+            string? missing =
+                _gameManager == null ? nameof(GameManager) :
+                _assetLoader == null ? nameof(ClientAssetLoader) :
+                _fpsCounter == null ? nameof(FPSCounter) :
+                _document == null ? nameof(UIDocument) :
+                _terrainRenderer == null ? nameof(TerrainRenderer) :
+                _loc == null ? nameof(ILocalizationService) :
+                null;
+            if (missing != null)
             {
-                return;
+                throw new InvalidOperationException(
+                    $"[AssetLoadingIndicator] Required injection '{missing}' is missing. " +
+                    "The Game scope must register it before AssetLoadingIndicator.Start runs.");
             }
 
             _initialized = true;
             _gameManager.OnWorldLoaded += OnWorldLoaded;
             CreateUI();
+
+            // Реестр применяет текст сразу и на каждой смене языка — подписка
+            // вручную не нужна и запрещена линтером.
+            _loc.RegisterLocalizable(this);
 
             if (!_gameManager.IsWorldLoaded && _gameManager.IsUIAuthorized)
             {
@@ -80,37 +98,13 @@ namespace Fodinae.UI
             Refresh();
         }
 
-        private void RebindGameManager()
-        {
-            if (_session == null || _session.Current == null)
-            {
-                if (_gameManager != null)
-                {
-                    _gameManager.OnWorldLoaded -= OnWorldLoaded;
-                    _gameManager = null;
-                }
-
-                return;
-            }
-
-            GameManager? current = _session.TryResolve<GameManager>();
-            if (current == null)
-            {
-                return;
-            }
-
-            if (_gameManager != null && !ReferenceEquals(_gameManager, current))
-            {
-                _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            }
-
-            _gameManager = current;
-            _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            _gameManager.OnWorldLoaded += OnWorldLoaded;
-        }
-
         private void OnDestroy()
         {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
             _spinnerSchedule?.Pause();
             if (_gameManager != null)
             {
@@ -122,17 +116,6 @@ namespace Fodinae.UI
 
         private void Update()
         {
-            if (_initialized && _gameManager == null)
-            {
-                RebindGameManager();
-            }
-
-            if (!_initialized)
-            {
-                TryInitialize();
-                return;
-            }
-
             if (_root == null)
             {
                 return;
@@ -152,29 +135,34 @@ namespace Fodinae.UI
 
         private string GetLoadingStatusText()
         {
+            if (_loc == null)
+            {
+                return string.Empty;
+            }
+
             if (_gameManager == null || !_gameManager.IsUIAuthorized)
             {
-                return "Инициализация подключения...";
+                return _loc.Get("assetload.init");
             }
 
             bool terrainReady = _terrainRenderer?.IsReadyForGameplay ?? false;
 
             if (!terrainReady)
             {
-                return "Загрузка ландшафта...";
+                return _loc.Get("assetload.terrain");
             }
 
             if (_assetLoader == null)
             {
-                return "Загрузка ресурсов...";
+                return _loc.Get("assetload.resources");
             }
 
             int pending = _assetLoader.PendingAssetCount;
             int queued = _assetLoader.QueuedAssetCount;
 
             return pending > 0 || queued > 0
-                ? $"Загрузка ассетов: {pending} активных, {queued} в очереди"
-                : "Готово к игре";
+                ? _loc.Get("assetload.assets", pending, queued)
+                : _loc.Get("assetload.ready");
         }
 
         private void OnWorldLoaded()
@@ -210,6 +198,8 @@ namespace Fodinae.UI
         {
             if (_document?.rootVisualElement == null)
             {
+                // Тихий возврат ожидаем: CreateUI вызывается из TryInitialize,
+                // который ретраится из Update, пока панель не будет готова.
                 return;
             }
 
@@ -229,6 +219,8 @@ namespace Fodinae.UI
             _loadingStatusLabel = tree.Q<Label>("StatusLabel");
             _loadingProgressLabel = tree.Q<Label>("ProgressLabel");
 
+            UILocalizer.Apply(tree, _loc);
+
             // This root is always present in the shared UIDocument. It must not
             // become a transparent fullscreen input shield while hidden.
             _root.pickingMode = PickingMode.Ignore;
@@ -239,6 +231,20 @@ namespace Fodinae.UI
 
             StartSpinner();
             Refresh();
+        }
+
+        /// <summary>Переприменяет статические ключи UXML после смены языка.</summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(AssetLoadingIndicator));
+            if (_root == null || _loc == null)
+            {
+                return;
+            }
+
+            UILocalizer.Apply(_root, _loc);
+            Refresh();
+            UILocalizer.AssertLocalized(_root, _loc);
         }
 
         private void StartSpinner()
@@ -274,7 +280,7 @@ namespace Fodinae.UI
 
         private void UpdateProgressText()
         {
-            if (_loadingProgressLabel == null || _assetLoader == null)
+            if (_loadingProgressLabel == null || _assetLoader == null || _loc == null)
             {
                 return;
             }
@@ -282,7 +288,7 @@ namespace Fodinae.UI
             int pending = _assetLoader.PendingAssetCount;
             int queued = _assetLoader.QueuedAssetCount;
             _loadingProgressLabel.text = pending > 0 || queued > 0
-                ? $"Активно: {pending}, В очереди: {queued}"
+                ? _loc.Get("assetload.active", pending, queued)
                 : string.Empty;
         }
     }

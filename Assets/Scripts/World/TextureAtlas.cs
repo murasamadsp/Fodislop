@@ -5,12 +5,20 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.World
 {
-    public class TextureAtlas : IDisposable
+    internal struct AtlasCell
+    {
+        public CellType CellType;
+        public Rectangle Rectangle;
+        public AtlasCoordinate BaseCoordinate;
+    }
+
+    public class TextureAtlas : IDisposable, IAtlasDescriptor
     {
         public int Size { get; }
         public int CELL_SIZE { get; }

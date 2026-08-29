@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Fodinae.Audio.Core;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -34,6 +36,9 @@ namespace Fodinae.Audio.Backend
         private bool _pausedInBackground;
 
         public bool IsInitialized => _backend != null;
+
+        public UniTask WaitUntilBanksReadyAsync(CancellationToken cancellationToken = default)
+            => _backend.WaitUntilBanksReadyAsync(cancellationToken);
 
         private void Awake()
         {

@@ -2,8 +2,8 @@
 
 using System;
 using Fodinae.Core.Interfaces;
+using Fodinae.Networking;
 using Fodinae.Networking.Processors;
-using Fodinae.UI;
 using Fodinae.UI.HUD.Player.Model;
 using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
@@ -22,28 +22,17 @@ namespace Fodinae.Tests.Networking
     {
         private PlayerStatsModel _stats = null!;
         private StatusProcessor _processor = null!;
-        private GameObject _fpsGo = null!;
-        private FPSCounter _fpsCounter = null!;
+        private NetworkStatusModel _statusModel = null!;
         private StubNetworkService _networkService = null!;
 
         [SetUp]
         public void SetUp()
         {
             _stats = new PlayerStatsModel();
-            _fpsGo = new GameObject("TestFPSCounter");
-            _fpsCounter = _fpsGo.AddComponent<FPSCounter>();
+            _statusModel = new NetworkStatusModel();
             _networkService = new StubNetworkService();
 
-            _processor = new StatusProcessor(_stats, _fpsCounter, _networkService);
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            if (_fpsGo != null)
-            {
-                UnityEngine.Object.DestroyImmediate(_fpsGo);
-            }
+            _processor = new StatusProcessor(_stats, _statusModel, _networkService);
         }
 
         [Test]
@@ -52,8 +41,8 @@ namespace Fodinae.Tests.Networking
             var packet = new OnlinePacket(120, 15);
             _processor.Process(packet);
 
-            Assert.AreEqual(120, _fpsCounter.OnlinePlayers);
-            Assert.AreEqual(15, _fpsCounter.OnlineProgrammator);
+            Assert.AreEqual(120, _statusModel.OnlinePlayers);
+            Assert.AreEqual(15, _statusModel.OnlineProgrammator);
         }
 
         [Test]
@@ -62,7 +51,7 @@ namespace Fodinae.Tests.Networking
             var packet = new PingPacket(45, 123456789);
             _processor.Process(packet);
 
-            Assert.AreEqual(45, _fpsCounter.PingMs);
+            Assert.AreEqual(123456789, _statusModel.PingMs);
             Assert.IsTrue(_networkService.SentPong, "PingPacket must be answered with a PongPacket.");
         }
 

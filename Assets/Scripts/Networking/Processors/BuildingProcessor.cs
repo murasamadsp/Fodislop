@@ -1,28 +1,27 @@
 #nullable enable
 
-using Fodinae.Core.DI;
-using Fodinae.Game.Managers;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.World;
 
 namespace Fodinae.Networking.Processors
 {
     public class BuildingProcessor : IPacketProcessor<PackPacket>, IPacketProcessor<RemovePackPacket>
     {
-        private readonly ISessionContainer _session;
+        private readonly IBuildingService _buildingManager;
 
-        public BuildingProcessor(ISessionContainer session)
+        public BuildingProcessor(IBuildingService buildingManager)
         {
-            _session = session;
+            _buildingManager = buildingManager;
         }
 
         public void Process(PackPacket packet)
         {
-            _session.TryResolve<BuildingManager>()?.AddOrUpdateBuilding(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
+            _buildingManager.AddOrUpdateBuilding(packet.X, packet.Y, packet.PackCode, packet.Variant, packet.LinkedClan);
         }
 
         public void Process(RemovePackPacket packet)
         {
-            _session.TryResolve<BuildingManager>()?.RemoveBuilding(packet.X, packet.Y);
+            _buildingManager.RemoveBuilding(packet.X, packet.Y);
         }
     }
 }

@@ -3,9 +3,9 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class FuncInstanceProvider : IInstanceProvider
+    sealed class FuncInstanceProvider : IInstanceProvider
     {
-        private readonly Func<IObjectResolver, object> implementationProvider;
+        readonly Func<IObjectResolver, object> implementationProvider;
 
         public FuncInstanceProvider(Func<IObjectResolver, object> implementationProvider)
         {

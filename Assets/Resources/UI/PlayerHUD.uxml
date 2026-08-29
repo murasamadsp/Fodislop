@@ -1,56 +1,81 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="PlayerHUDRoot" class="hud-root" picking-mode="Ignore">
 
-        <!-- ════════════ ВЕРХНЯЯ ЛЕВАЯ ПАНЕЛЬ: СТАТУС ИГРОКА ════════════ -->
-        <ui:VisualElement name="PlayerStatusPanel" class="sci-fi-panel sci-fi-panel--tech hud-top-left">
+        <!-- ════════════ ЕДИНАЯ ПАНЕЛЬ ИГРОКА (hud-panel): статус, валюта, корзина ════════════ -->
+        <ui:VisualElement name="PlayerStatusPanel" class="hud-panel">
             <!-- Верхняя строка: Никнейм, Уровень, Клан -->
             <ui:VisualElement class="hud-title-row">
                 <ui:Label name="NicknameLabel" class="hud-nickname" text="---" />
-                <ui:Label name="LevelLabel" class="sci-fi-badge-mono" text="УР. 0" />
-                <ui:Button name="ClanButton" class="sci-fi-btn-cyan hud-clan-btn" text="КЛАН" tooltip="Клан" />
+                <ui:Label name="LevelLabel" class="hud-level"  text="" />
+                <ui:Button name="ClanButton" class="hud-clan-button" tooltip="hud.tooltip.clan" />
             </ui:VisualElement>
 
-            <!-- Разделитель -->
             <ui:VisualElement class="hud-separator" />
 
             <!-- Прочность (HP) -->
-            <ui:VisualElement class="hud-stat-group">
-                <ui:VisualElement class="hud-stat-header">
-                    <ui:Label name="HPLabel" class="hud-stat-title" text="ПРОЧНОСТЬ: 0 / 0" />
-                    <ui:Label name="HPPercentLabel" class="hud-stat-percent" text="100%" />
-                </ui:VisualElement>
-                <ui:VisualElement class="sci-fi-bar-track hud-bar-track">
-                    <ui:VisualElement name="HPBarFill" class="sci-fi-bar-fill-hp" />
-                </ui:VisualElement>
+            <ui:VisualElement class="hud-hp-header">
+                <ui:Label name="HPLabel" class="hud-stat"  text="" />
+                <ui:Label name="HPPercentLabel" class="hud-stat-percent" text="100%" />
+            </ui:VisualElement>
+            <ui:VisualElement class="hud-hp-bar">
+                <ui:VisualElement name="HPBarFill" class="hud-hp-fill" />
             </ui:VisualElement>
 
             <!-- Валюта -->
-            <ui:VisualElement class="hud-currency-row">
-                <ui:VisualElement class="hud-currency-item">
-                    <ui:Label class="hud-currency-icon" text="⛃" />
-                    <ui:Label name="MoneyLabel" class="hud-currency-value" text="0" />
-                </ui:VisualElement>
-                <ui:VisualElement class="hud-currency-item">
-                    <ui:Label class="hud-currency-icon hud-currency-icon--gold" text="★" />
-                    <ui:Label name="CredsLabel" class="hud-currency-value hud-currency-value--gold" text="0" />
-                </ui:VisualElement>
-            </ui:VisualElement>
+            <ui:Label name="MoneyLabel" class="hud-money" text="---" />
+            <ui:Label name="CredsLabel" class="hud-creds" text="---" />
+            <ui:Label name="GeologyLabel" class="hud-stat"  text="" />
+
+            <ui:VisualElement class="hud-separator" />
+
+            <!-- Корзина -->
+            <ui:Label name="BasketPercentLabel" class="hud-basket"  text="" />
+            <ui:VisualElement name="BasketContainer" class="hud-basket-container" />
         </ui:VisualElement>
 
-        <!-- ════════════ ЛЕВАЯ КОЛОНКА: КОРЗИНА И КРИСТАЛЛЫ ════════════ -->
-        <ui:VisualElement name="BasketPanel" class="sci-fi-panel hud-basket-panel">
-            <ui:VisualElement class="hud-stat-header">
-                <ui:Label class="hud-stat-title" text="КОРЗИНА" />
-                <ui:Label name="BasketPercentLabel" class="sci-fi-badge-gold" text="0%" />
+        <!-- ════════════ СТАТУСНЫЕ ЛИНИИ (справа от панели игрока, под кнопкой бонуса) ════════════ -->
+        <ui:VisualElement name="StatusPanel" class="hud-status-panel" style="display: none;" />
+
+        <!-- ════════════ КНОПКА БОНУСА ════════════ -->
+        <ui:Button name="BonusButton" class="hud-button-accent hud-bonus-button" text="hud.bonus" tooltip="hud.tooltip.bonus" />
+
+        <!-- ════════════ ПАНЕЛЬ БОНУСОВ ════════════ -->
+        <ui:VisualElement name="BonusPanel" class="hud-bonus-panel" style="display: none;">
+            <ui:VisualElement class="hud-title-row">
+                <ui:Label class="hud-stat" text="hud.bonus" />
+                <ui:Button name="BonusCloseButton" class="hud-button-close" text="×" />
             </ui:VisualElement>
-            <ui:VisualElement name="BasketContainer" class="hud-basket-grid" />
-            <ui:Label name="GeologyLabel" class="hud-geology-text" text="Геология: 0" />
+            <ui:Label name="BonusStatusLabel" class="hud-stat hud-stat-wrap"  text="" />
+            <ui:Button name="BonusClaimButton" class="hud-button-claim" text="hud.bonus.claim" style="display: none;" />
         </ui:VisualElement>
 
-        <!-- ════════════ ВЕРХНЯЯ ПАНЕЛЬ: ТЕКУЩАЯ МИССИЯ ════════════ -->
+        <!-- ════════════ ТУМБЛЕРЫ (снизу слева) ════════════ -->
+        <ui:Button name="AutoDigButton" class="hud-button hud-toggle-btn hud-toggle-auto-dig" tooltip="hud.tooltip.autodig">
+            <ui:VisualElement name="AutoDigIndicator" class="hud-mode-led" picking-mode="Ignore" />
+            <ui:Label name="AutoDigLabel" class="hud-toggle-btn-label"  text="" picking-mode="Ignore" />
+        </ui:Button>
+
+        <ui:Button name="AggressionButton" class="hud-button hud-toggle-btn hud-toggle-aggression" tooltip="hud.tooltip.aggression">
+            <ui:VisualElement name="AggressionIndicator" class="hud-mode-led" picking-mode="Ignore" />
+            <ui:Label name="AggressionLabel" class="hud-toggle-btn-label"  text="" picking-mode="Ignore" />
+        </ui:Button>
+
+        <!-- ════════════ ЧАТ И ПРОГРАММАТОР (снизу слева) ════════════ -->
+        <ui:Button name="ChatButton" class="hud-btn-action hud-chat-button" text="hud.chat" tooltip="hud.tooltip.chat" />
+        <ui:Button name="ProgrammatorButton" class="hud-btn-action hud-programmator-button"  text="" />
+
+        <!-- ════════════ КНОПКИ ВЕРХНЕГО РЯДА: РЕСПАВН / ЗДАНИЯ / FAQ ════════════ -->
+        <ui:Button name="RespawnButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--respawn" text="hud.respawn" />
+        <ui:Button name="BuildingsButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--buildings" text="hud.buildings" />
+        <ui:Button name="FaqButton" class="hud-btn-action hud-btn-top-row hud-btn-top-row--faq" text="FAQ" />
+
+        <!-- ════════════ НАВЫКИ И ПРОГРЕСС (справа снизу) ════════════ -->
+        <ui:VisualElement name="SkillContainer" class="hud-skill-container" />
+
+        <!-- ════════════ ТЕКУЩАЯ МИССИЯ (сверху по центру) ════════════ -->
         <ui:VisualElement name="MissionPanel" class="sci-fi-panel sci-fi-panel--tech hud-mission-panel" style="display: none;">
             <ui:VisualElement class="hud-mission-header">
-                <ui:Label class="sci-fi-badge-gold" text="ЗАДАНИЕ" />
+                <ui:Label class="sci-fi-badge-gold" text="hud.mission_badge" />
                 <ui:Label name="MissionTitleLabel" class="hud-mission-title" text="---" />
             </ui:VisualElement>
             <ui:Label name="MissionDescLabel" class="hud-mission-desc" text="---" />
@@ -59,67 +84,6 @@
             </ui:VisualElement>
             <ui:Label name="MissionProgressLabel" class="hud-mission-progress-text" text="0 / 0" />
         </ui:VisualElement>
-
-        <!-- ════════════ ПРАВАЯ ПАНЕЛЬ КНОПОК И РЕЖИМОВ ════════════ -->
-        <ui:VisualElement name="RightActionPanel" class="hud-actions-column">
-            <!-- Авто-копка -->
-            <ui:Button name="AutoDigButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:VisualElement name="AutoDigIndicator" class="hud-mode-led" />
-                <ui:Label name="AutoDigLabel" text="АВТО-КОПКА [E]" />
-            </ui:Button>
-
-            <!-- Агрессия -->
-            <ui:Button name="AggressionButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:VisualElement name="AggressionIndicator" class="hud-mode-led" />
-                <ui:Label name="AggressionLabel" text="РЕЖИМ БОЯ [L]" />
-            </ui:Button>
-
-            <!-- Чат -->
-            <ui:Button name="ChatButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:Label text="ЧАТ [ENTER]" />
-            </ui:Button>
-
-            <!-- Бонус (показывается, когда доступен ежедневный бонус) -->
-            <ui:Button name="BonusButton" class="sci-fi-btn-gold hud-action-btn" style="display: none;">
-                <ui:Label text="БОНУС!" />
-            </ui:Button>
-
-            <!-- Респавн -->
-            <ui:Button name="RespawnButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:Label text="РЕСПАВН" />
-            </ui:Button>
-
-            <!-- Мои здания -->
-            <ui:Button name="BuildingsButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:Label text="МОИ ЗДАНИЯ" />
-            </ui:Button>
-
-            <!-- FAQ -->
-            <ui:Button name="FaqButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:Label text="FAQ" />
-            </ui:Button>
-
-            <!-- Программатор -->
-            <ui:Button name="ProgrammatorButton" class="sci-fi-btn-dark hud-action-btn">
-                <ui:Label text="ПРОГРАММАТОР" />
-            </ui:Button>
-        </ui:VisualElement>
-
-        <!-- ════════════ ПАНЕЛЬ БОНУСОВ (открывается кнопкой «БОНУС!») ════════════ -->
-        <ui:VisualElement name="BonusPanel" class="hud-bonus-panel" style="display: none;">
-            <ui:VisualElement class="hud-title-row">
-                <ui:Label class="hud-stat" text="Бонусы" />
-                <ui:Button name="BonusCloseButton" class="hud-button-close" text="×" />
-            </ui:VisualElement>
-            <ui:Label name="BonusStatusLabel" class="hud-stat hud-stat-wrap" text="Ежедневный бонус: ..." />
-            <ui:Button name="BonusClaimButton" class="hud-button-claim" text="Забрать" style="display: none;" />
-        </ui:VisualElement>
-
-        <!-- ════════════ СТАТУСНЫЕ ЛИНИИ И ЭФФЕКТЫ ════════════ -->
-        <ui:VisualElement name="StatusPanel" class="hud-status-container" />
-
-        <!-- ════════════ НАВЫКИ И ПРОГРЕСС ════════════ -->
-        <ui:VisualElement name="SkillContainer" class="hud-skill-container" />
 
         <!-- ════════════ КАРТА МИРА (WorldMapRenderer) ════════════ -->
         <ui:VisualElement name="WorldMapOverlay" class="world-map-overlay" picking-mode="Ignore" style="display: none;">
@@ -131,10 +95,10 @@
         <ui:VisualElement name="RespawnPopup" class="popup-overlay">
             <ui:VisualElement class="popup-dimmer" picking-mode="Ignore" />
             <ui:VisualElement class="popup-panel">
-                <ui:Label class="popup-title" text="Респавн" />
+                <ui:Label class="popup-title" text="hud.respawn" />
                 <ui:VisualElement class="popup-btn-row">
-                    <ui:Button name="RespawnConfirmButton" class="popup-btn" text="ОК" />
-                    <ui:Button name="RespawnCancelButton" class="popup-btn" text="Назад" />
+                    <ui:Button name="RespawnConfirmButton" class="popup-btn" text="hud.ok" />
+                    <ui:Button name="RespawnCancelButton" class="popup-btn" text="hud.back" />
                 </ui:VisualElement>
             </ui:VisualElement>
         </ui:VisualElement>
@@ -143,8 +107,8 @@
         <ui:VisualElement name="BuildingsPopup" class="popup-overlay">
             <ui:VisualElement class="popup-dimmer" picking-mode="Ignore" />
             <ui:VisualElement class="popup-panel">
-                <ui:Label class="popup-title" text="Мои здания" />
-                <ui:Button name="BuildingsCloseButton" class="popup-close-btn" text="Закрыть" />
+                <ui:Label class="popup-title" text="hud.buildings" />
+                <ui:Button name="BuildingsCloseButton" class="popup-close-btn" text="hud.close" />
             </ui:VisualElement>
         </ui:VisualElement>
 
@@ -153,7 +117,7 @@
             <ui:VisualElement class="popup-dimmer" picking-mode="Ignore" />
             <ui:VisualElement class="popup-panel">
                 <ui:Label class="popup-title" text="FAQ" />
-                <ui:Button name="FaqCloseButton" class="popup-close-btn" text="Закрыть" />
+                <ui:Button name="FaqCloseButton" class="popup-close-btn" text="hud.close" />
             </ui:VisualElement>
         </ui:VisualElement>
 

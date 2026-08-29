@@ -1,7 +1,7 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="LoadingRoot" class="loadind-root">
         <ui:VisualElement name="LoadingOverlay" class="loadind-overlay" style="display: none;">
-            <ui:Label name="TitleLabel" class="loadind-title" text="Загрузка мира" />
+            <ui:Label name="TitleLabel" class="loadind-title" text="assetload.title" />
             <ui:Label name="SpinnerLabel" class="loadind-spinner" text="&#9680;" />
             <ui:Label name="StatusLabel" class="loadind-status" />
             <ui:Label name="ProgressLabel" class="loadind-progress" />

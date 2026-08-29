@@ -2,9 +2,9 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class ExistingInstanceProvider : IInstanceProvider
+    sealed class ExistingInstanceProvider : IInstanceProvider
     {
-        private readonly object implementationInstance;
+        readonly object implementationInstance;
 
         public ExistingInstanceProvider(object implementationInstance)
         {

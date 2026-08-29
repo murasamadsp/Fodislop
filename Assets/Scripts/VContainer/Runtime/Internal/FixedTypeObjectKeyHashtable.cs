@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class FixedTypeObjectKeyHashtable<TValue>
+    sealed class FixedTypeObjectKeyHashtable<TValue>
     {
-        private readonly struct HashEntry
+        readonly struct HashEntry
         {
             public readonly Type Type;
             public readonly object Key;
@@ -20,8 +20,8 @@ namespace VContainer.Internal
             }
         }
 
-        private readonly HashEntry[][] table;
-        private readonly int indexFor;
+        readonly HashEntry[][] table;
+        readonly int indexFor;
 
         public FixedTypeObjectKeyHashtable(KeyValuePair<(Type, object), TValue>[] values, float loadFactor = 0.75f)
         {
@@ -62,10 +62,8 @@ namespace VContainer.Internal
         {
             var typeHash = RuntimeHelpers.GetHashCode(type);
 
-            if (key == null)
-            {
+            if(key == null)
                 return typeHash;
-            }
 
             // Combine the hash codes of Type and Key
             var keyHash = key.GetHashCode();
@@ -77,10 +75,7 @@ namespace VContainer.Internal
             var hashCode = GetHashCode(type, key);
             var buckets = table[hashCode & indexFor];
 
-            if (buckets == null)
-            {
-                goto END;
-            }
+            if (buckets == null) goto END;
 
             if (buckets[0].Type == type)
             {
@@ -105,7 +100,7 @@ namespace VContainer.Internal
                 }
             }
 
-        END:
+            END:
             value = default;
             return false;
         }

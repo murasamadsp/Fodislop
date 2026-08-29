@@ -10,7 +10,7 @@ namespace Fodinae.Core;
 //
 // Camera.main is a tag lookup across every loaded scene, and this project keeps
 // two scenes loaded at once by design: MainMenu is not unloaded when the game
-// starts - it stays alive until MainMenu.OnWorldLoaded fires, so the whole
+// starts - it stays alive only for the menu scene, so the whole
 // descent runs with both scenes present. For as long as any camera in the menu
 // scene is also tagged MainCamera, Camera.main is a coin flip, and it is queried
 // at exactly the wrong moment: GameBootstrap.PostStart resolves every manager

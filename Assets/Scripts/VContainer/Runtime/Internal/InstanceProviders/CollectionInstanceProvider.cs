@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal struct RegistrationElement
+    struct RegistrationElement
     {
         public Registration Registration;
         public IObjectResolver RegisteredContainer;
@@ -17,7 +17,7 @@ namespace VContainer.Internal
         }
     }
 
-    internal sealed class CollectionInstanceProvider : IInstanceProvider, IEnumerable<Registration>
+    sealed class CollectionInstanceProvider : IInstanceProvider, IEnumerable<Registration>
     {
         public static bool Match(Type openGenericType) => openGenericType == typeof(IEnumerable<>) ||
                                                           openGenericType == typeof(IReadOnlyList<>);
@@ -32,8 +32,8 @@ namespace VContainer.Internal
 
         public Type ElementType { get; }
 
-        private readonly List<Type> interfaceTypes;
-        private readonly List<Registration> registrations = new List<Registration>();
+        readonly List<Type> interfaceTypes;
+        readonly List<Registration> registrations = new List<Registration>();
 
         public CollectionInstanceProvider(Type elementType)
         {
@@ -48,7 +48,7 @@ namespace VContainer.Internal
 
         public override string ToString()
         {
-            var contractTypes = InterfaceTypes != null ? string.Join(", ", InterfaceTypes) : string.Empty;
+            var contractTypes = InterfaceTypes != null ? string.Join(", ", InterfaceTypes) : "";
             return $"CollectionRegistration {ImplementationType} ContractTypes=[{contractTypes}] {Lifetime}";
         }
 
@@ -61,7 +61,6 @@ namespace VContainer.Internal
                     throw new VContainerException(registration.ImplementationType, $"Conflict implementation type : {registration}");
                 }
             }
-
             registrations.Add(registration);
         }
 
@@ -82,7 +81,6 @@ namespace VContainer.Internal
             {
                 array.SetValue(resolver.Resolve(registrations[i]), i);
             }
-
             return array;
         }
 
@@ -97,7 +95,6 @@ namespace VContainer.Internal
                     : currentScope;
                 array.SetValue(resolver.Resolve(x.Registration), i);
             }
-
             return array;
         }
 
@@ -127,7 +124,6 @@ namespace VContainer.Internal
                         }
                     }
                 }
-
                 scope = scope.Parent;
             }
         }

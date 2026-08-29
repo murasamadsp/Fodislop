@@ -2,28 +2,80 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 namespace Fodinae.Core
 {
     /// <summary>
-    /// Fail-fast сторож: первая же ошибка (LogType.Error / Exception / Assert)
-    /// останавливает приложение вместо того, чтобы дать битому состоянию жить
-    /// дальше.
+    /// Legacy diagnostic hook retained for compatibility. Startup fail-fast is
+    /// explicit at the transition boundary; ordinary log errors must never
+    /// pause the editor or stop the game globally.
     ///
-    /// Работает ТОЛЬКО в редакторе (пауза + Debug.Break). В билде — никогда:
-    /// игрок не должен терять сессию из-за ошибки, а диагностика идёт через
-    /// логи. Убирать UNITY_EDITOR из условия нельзя.
-    ///
-    /// Регистрируется один раз в BootstrapLifetimeScope.Awake — раньше любых
-    /// других систем, чтобы поймать и ошибки старта тоже.
+    /// Важно: НЕ fail-fast'им по внутренним ошибкам самого редактора.
+    /// Unity 6000 с com.unity.ide.visualstudio 2.0.28 кидает шум при каждом
+    /// domain reload (Cannot exit scope 'TScope', TypeInitializationException
+    /// VisualStudioEditor и т.п.) — это не наш код, и из-за него приложение
+    /// падать не должно. Фильтруем по содержимому и стеку.
     /// </summary>
     public static class FailFastLogHandler
     {
         private static bool _registered;
         private static bool _failing;
         private static readonly HashSet<string> ReportedFailures = new(StringComparer.Ordinal);
+
+        // Маркеры внутренностей редактора: lifecycle-скоупы, domain reload,
+        // IDE-пакеты, test-runner. Ошибки из этих мест — не нашего кода.
+        private static readonly string[] UnityEditorNoiseMarkers =
+        {
+            "Unity.Scripting.LifecycleManagement",
+            "UnityEngine.DomainReloadLifecycleController",
+            "UnityEngine.UnityLifecycleInternal",
+            "Microsoft.Unity.VisualStudio",
+            "UnityEditor.EditorAssemblies",
+            "UnityEditor.TestTools",
+            "UnityEngine.TestRunner",
+            "UnityEngine.TestTools",
+        };
+
+        // Типовые тексты ошибок lifecycle-менеджмента при code reload.
+        private static readonly string[] UnityEditorNoiseMessages =
+        {
+            "Cannot exit scope of type 'TScope'",
+            "could not enter scope",
+            "Lifecycle ERROR",
+            "are restricted during",
+        };
+
+        private static bool IsUnityEditorNoise(string message, string stackTrace)
+        {
+            foreach (string marker in UnityEditorNoiseMessages)
+            {
+                if (message.Contains(marker, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            // В стеке есть код проекта (Assets/ или Fodinae) — это наша
+            // ошибка, fail-fast по ней положен.
+            if (!string.IsNullOrEmpty(stackTrace) &&
+                (stackTrace.Contains("Assets/", StringComparison.Ordinal) ||
+                 stackTrace.Contains("Fodinae", StringComparison.Ordinal)))
+            {
+                return false;
+            }
+
+            foreach (string marker in UnityEditorNoiseMarkers)
+            {
+                if (!string.IsNullOrEmpty(stackTrace) &&
+                    stackTrace.Contains(marker, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForSubsystemReload()
@@ -59,6 +111,11 @@ namespace Fodinae.Core
                 return;
             }
 
+            if (IsUnityEditorNoise(message, stackTrace))
+            {
+                return;
+            }
+
             // Unity can invoke logMessageReceived once per frame when a scene
             // MonoBehaviour retries initialization from Update. Fail-fast is a
             // diagnostic breakpoint, not a second error pipeline: report each
@@ -69,29 +126,8 @@ namespace Fodinae.Core
                 return;
             }
 
-            _failing = true;
-            Application.logMessageReceived -= OnLogMessage;
-
-            Debug.LogError($"[FailFast] {BuildReport(message, stackTrace, type)}");
-
-            // В редакторе пауза нагляднее выхода: видно сцену и стек.
-            Debug.Break();
-            _failing = false;
-            Application.logMessageReceived += OnLogMessage;
-        }
-
-        private static string BuildReport(string message, string stackTrace, LogType type)
-        {
-            var sb = new StringBuilder();
-            sb.Append("Fail-fast остановил приложение: ");
-            sb.AppendLine(type.ToString());
-            sb.AppendLine(message);
-            if (!string.IsNullOrEmpty(stackTrace))
-            {
-                sb.AppendLine(stackTrace);
-            }
-
-            return sb.ToString();
+            // Do not intercept or re-emit the error. Startup code reports
+            // failures through SceneTransitionTicket and TransitionFailed.
         }
     }
 }

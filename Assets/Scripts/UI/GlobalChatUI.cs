@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using MinesServer.Networking.Client.Packets.Chat;
@@ -16,7 +17,7 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    public class GlobalChatUI : MonoBehaviour
+    public class GlobalChatUI : MonoBehaviour, ILocalizableUI
     {
         [Inject]
         private UIDocument _doc = null!;
@@ -59,9 +60,27 @@ namespace Fodinae.UI
         [Inject]
         private IInputBlocker _inputBlocker = null!;
 
+        [Inject]
+        private ILocalizationService _loc = null!;
+        [Inject]
+        private ChatEventGateway _chatEvents = null!;
+
         protected void Start()
         {
+            // Школа (одна дорога): зарегистрированные вьюхи инжектятся при
+            // сборке scope (фаза Awake), панель UIDocument создаётся в OnEnable —
+            // к Start и зависимости, и панель гарантированы. Один вызов, без
+            // ретраев из Update. Серверный конфиг приходит по сети — событие
+            // OnInitialized ниже.
             TryInitialize();
+        }
+
+        [Inject]
+        private void Construct(ChatEventGateway chatEvents)
+        {
+            _chatEvents = chatEvents;
+            _chatEvents.MessageReceived += AddMessage;
+            _chatEvents.MuteReceived += ApplyMute;
         }
 
         private void TryInitialize()
@@ -74,14 +93,17 @@ namespace Fodinae.UI
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
                 _serverConfig == null || _inputBlocker == null)
             {
-                // Не бросаем: DI-инъекция может прийти позже (PostStart/сборка scope после
-                // этого Start). Update ретраит TryInitialize — ждём готовности молча,
-                // иначе каждый кадр до инжекта будет сыпать исключениями.
+                // Защитный гард: к моменту [Inject]-метода зависимости и панель
+                // UIDocument гарантированы — пропуск здесь означает дефект
+                // проводки, а не гонку (ретраев больше нет).
                 return;
             }
 
             _initialized = true;
             _serverConfig.OnInitialized += ApplyServerConfig;
+            // Реестр применяет текст сразу и на каждой смене языка — подписка
+            // вручную не нужна и запрещена линтером.
+            _loc.RegisterLocalizable(this);
             CreateUI();
             if (_panel != null)
             {
@@ -106,11 +128,35 @@ namespace Fodinae.UI
             }
         }
 
+        /// <summary>Переприменяет статические ключи UXML после смены языка.</summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(GlobalChatUI));
+            if (_tree == null || _loc == null)
+            {
+                return;
+            }
+
+            UILocalizer.Apply(_tree, _loc);
+            UILocalizer.AssertLocalized(_tree, _loc);
+        }
+
         protected void OnDestroy()
         {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
             if (_serverConfig != null)
             {
                 _serverConfig.OnInitialized -= ApplyServerConfig;
+            }
+
+            if (_chatEvents != null)
+            {
+                _chatEvents.MessageReceived -= AddMessage;
+                _chatEvents.MuteReceived -= ApplyMute;
             }
 
             _idleCts?.Cancel();
@@ -132,11 +178,7 @@ namespace Fodinae.UI
         {
             if (!_initialized)
             {
-                TryInitialize();
-                if (!_initialized)
-                {
-                    return;
-                }
+                return;
             }
 
             if (Keyboard.current == null)
@@ -183,11 +225,16 @@ namespace Fodinae.UI
             var uiUxml = Resources.Load<VisualTreeAsset>("UI/GlobalChat");
             if (uiUxml != null)
             {
-                VisualElement tree = uiUxml.CloneTree();
-                tree.AddToClassList("ui-fullscreen");
-                tree.pickingMode = PickingMode.Ignore;
-                _tree = tree;
-                _panel = tree.Q<VisualElement>("ChatPanel");
+            VisualElement tree = uiUxml.CloneTree();
+            tree.AddToClassList("ui-fullscreen");
+            tree.pickingMode = PickingMode.Ignore;
+            _tree = tree;
+
+            // Статические ключи UXML резолвятся сразу при сборке (у чата их
+            // почти нет, но контракт един для всех экранов).
+            UILocalizer.Apply(tree, _loc);
+
+            _panel = tree.Q<VisualElement>("ChatPanel");
                 if (_panel != null)
                 {
                     _panel.style.display = DisplayStyle.None;
@@ -196,6 +243,12 @@ namespace Fodinae.UI
                 _muteStatus = tree.Q<Label>("ChatMuteStatus");
                 _scrollView = tree.Q<ScrollView>("ChatScroll");
                 _inputField = tree.Q<TextField>("ChatInput");
+                Label? chatHeader = tree.Q<Label>("ChatHeader");
+                if (chatHeader != null && _loc != null)
+                {
+                    chatHeader.text = _loc.Get("chat.channel.global");
+                }
+
                 _sendButton = tree.Q<Button>("SendButton");
                 _colorButton = tree.Q<Button>("ColorButton");
                 _colorGrid = tree.Q<VisualElement>("ColorGrid");
@@ -390,17 +443,17 @@ namespace Fodinae.UI
         {
             _mutedUntilUnixMilliseconds = packet.EndsAt;
             string reason = string.IsNullOrWhiteSpace(packet.Reason)
-                ? "Причина не указана"
+                ? _loc.Get("chat.mute.no_reason")
                 : packet.Reason.Trim();
             string moderator = string.IsNullOrWhiteSpace(packet.ModeratorName)
-                ? "сервером"
+                ? _loc.Get("chat.mute.by_server")
                 : packet.ModeratorName.Trim();
             string duration = packet.EndsAt <= 0
-                ? "навсегда"
-                : $"до {FormatMuteEnd(packet.EndsAt)}";
-            SetMuteStatus($"Чат заблокирован {moderator}: {reason} ({duration})");
+                ? _loc.Get("chat.mute.forever")
+                : _loc.Get("chat.mute.until", FormatMuteEnd(packet.EndsAt));
+            SetMuteStatus(_loc.Get("chat.mute.blocked", moderator, reason, duration));
             RefreshMuteState();
-            AddSystemMessage("Вы получили блокировку чата.");
+            AddSystemMessage(_loc.Get("chat.mute.received"));
         }
 
         private bool IsMuted()

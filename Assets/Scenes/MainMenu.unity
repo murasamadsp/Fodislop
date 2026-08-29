@@ -144,7 +144,7 @@ Camera:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 13368439}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_ClearFlags: 2
   m_BackGroundColor: {r: 0.012, g: 0.018, b: 0.032, a: 1}
@@ -259,7 +259,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e7ee9e8630524226aecbf115a9824cba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _loaderTexture: {fileID: 2800000, guid: bb2d88d590a7c9241a54276262f96c47, type: 3}
   _shadeTexture: {fileID: 0}
   _spaceBgTexture: {fileID: 0}
 --- !u!1 &439439804
@@ -273,7 +272,6 @@ GameObject:
   - component: {fileID: 439439807}
   - component: {fileID: 439439806}
   - component: {fileID: 439439803}
-  - component: {fileID: 439439808}
   m_Layer: 5
   m_Name: UIDocument
   m_TagString: Untagged
@@ -304,26 +302,6 @@ MonoBehaviour:
   m_PivotReferenceSize: 0
   m_Pivot: 0
   m_WorldSpaceCollider: {fileID: 0}
---- !u!114 &439439808
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 439439804}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4c43e0ddc7d14765b14c21b9d9ed41c2, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Core.Lifecycle.ContentSceneRoot
-  _contentRoot: {fileID: 439439804}
-  _servicesRoot: {fileID: 439439807}
-  _runtimeRoot: {fileID: 439439807}
-  _robotsRoot: {fileID: 439439807}
-  _buildingsRoot: {fileID: 439439807}
-  _vfxRoot: {fileID: 439439807}
-  _floatingUIRoot: {fileID: 439439807}
-  _audioEventsRoot: {fileID: 439439807}
 --- !u!4 &439439807
 Transform:
   m_ObjectHideFlags: 0
@@ -349,7 +327,6 @@ GameObject:
   m_Component:
   - component: {fileID: 497866169}
   - component: {fileID: 497866168}
-  - component: {fileID: 497866167}
   - component: {fileID: 497866170}
   m_Layer: 9
   m_Name: MenuSceneryCamera
@@ -358,14 +335,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!81 &497866167
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 497866166}
-  m_Enabled: 1
 --- !u!20 &497866168
 Camera:
   m_ObjectHideFlags: 0
@@ -399,7 +368,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 60
-  field of view: 34
+  field of view: 36
   orthographic: 0
   orthographic size: 5
   m_Depth: -101
@@ -407,7 +376,7 @@ Camera:
     serializedVersion: 2
     m_Bits: 512
   m_RenderingPath: -1
-  m_TargetTexture: {fileID: 0}
+  m_TargetTexture: {fileID: 1078198890}
   m_TargetDisplay: 0
   m_TargetEye: 3
   m_HDR: 1
@@ -425,8 +394,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 497866166}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -7.2}
+  m_LocalRotation: {x: 0, y: -0.12075243, z: 0, w: 0.9926827}
+  m_LocalPosition: {x: 0, y: 0, z: -6.9}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -903,6 +872,43 @@ LineRenderer:
   m_UseWorldSpace: 1
   m_Loop: 1
   m_ApplyActiveColorSpace: 1
+--- !u!84 &1078198890
+RenderTexture:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MenuSceneryRT_Premultiplied
+  m_ImageContentsHash:
+    serializedVersion: 2
+    Hash: 00000000000000000000000000000000
+  m_IsAlphaChannelOptional: 0
+  serializedVersion: 6
+  m_Width: 512
+  m_Height: 512
+  m_AntiAliasing: 1
+  m_MipCount: -1
+  m_DepthStencilFormat: 90
+  m_ColorFormat: 48
+  m_MipMap: 0
+  m_GenerateMips: 1
+  m_SRGB: 0
+  m_UseDynamicScale: 0
+  m_UseDynamicScaleExplicit: 0
+  m_BindMS: 0
+  m_EnableCompatibleFormat: 1
+  m_EnableRandomWrite: 0
+  m_TextureSettings:
+    serializedVersion: 2
+    m_FilterMode: 1
+    m_Aniso: 1
+    m_MipBias: 0
+    m_WrapU: 1
+    m_WrapV: 1
+    m_WrapW: 1
+  m_Dimension: 2
+  m_VolumeDepth: 1
+  m_ShadowSamplingMode: 2
 --- !u!1 &1241582247
 GameObject:
   m_ObjectHideFlags: 0
@@ -1023,8 +1029,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e373d156baf4b497488fad39b0798639, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuSceneryController
-  _renderTextureWidth: 1800
-  _renderTextureHeight: 1800
   _resolveMaterialAsset: {fileID: 2100000, guid: 9ca5fb8d939d345338f61c342bfc32cf, type: 2}
 --- !u!4 &1441824740
 Transform:
@@ -1060,7 +1064,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuStarfield
   _starfieldMaterial: {fileID: 2100000, guid: 748abc2cff5ea428e9296393edb5872b, type: 2}
-  _height: 900
 --- !u!1 &1464838116
 GameObject:
   m_ObjectHideFlags: 0
@@ -1319,10 +1322,63 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuPlanetSpin
   _degreesPerSecond: 0.03
+--- !u!1 &2035828728
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2035828730}
+  - component: {fileID: 2035828729}
+  m_Layer: 0
+  m_Name: MainMenuLifetimeScope
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2035828729
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2035828728}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5a91e3d7c2f84610b8d4e6a0f3c7295b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Core.MainMenuLifetimeScope
+  parentReference:
+    TypeName: 
+  autoRun: 1
+  autoInjectGameObjects: []
+  _document: {fileID: 439439806}
+  _controller: {fileID: 439439803}
+  _starfield: {fileID: 1441824741}
+  _scenery: {fileID: 1441824739}
+--- !u!4 &2035828730
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2035828728}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 439439807}
-  - {fileID: 1441824740}
   - {fileID: 13368441}
+  - {fileID: 2035828730}
+  - {fileID: 1441824740}

@@ -2,9 +2,9 @@ using System;
 
 namespace VContainer.Unity
 {
-    internal sealed class AsyncLoopItem : IPlayerLoopItem
+    sealed class AsyncLoopItem : IPlayerLoopItem
     {
-        private readonly Action action;
+        readonly Action action;
 
         public AsyncLoopItem(Action action)
         {

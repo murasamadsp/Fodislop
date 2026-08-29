@@ -11,14 +11,14 @@ namespace Fodinae.Game;
 /// </summary>
 public class Tentacle
 {
-    private const float SMOOTH_TIME = 0.08f;
-    private const float MAX_SEGMENT_DIST = 0.21f;
-    private const float START_WIDTH = 0.15f;
+    private const float MAX_SEGMENT_DIST = 0.24f;
+    private const float START_WIDTH = 0.17f;
     private const float END_WIDTH = 0.02f;
 
     private readonly WorldEntityBatchRenderer _renderer;
     private readonly Texture2D _texture;
     private readonly float _wiggleOffset;
+    private readonly float _lengthScale;
     private readonly float _sliceOffsetV;
     private readonly float _sliceScaleV;
     private readonly Vector3[] _positions;
@@ -27,11 +27,19 @@ public class Tentacle
     private readonly float[] _segmentLengths;
     private bool _isActive = true;
 
-    public Tentacle(WorldEntityBatchRenderer renderer, Texture2D texture, Vector3 startPosition, float wiggleOffset, int sliceIndex, int totalSlices)
+    public Tentacle(
+        WorldEntityBatchRenderer renderer,
+        Texture2D texture,
+        Vector3 startPosition,
+        float wiggleOffset,
+        int sliceIndex,
+        int totalSlices,
+        float lengthScale = 1f)
     {
         _renderer = renderer;
         _texture = texture;
         _wiggleOffset = wiggleOffset;
+        _lengthScale = lengthScale;
 
         const int count = WorldEntityBatchRenderer.POINT_COUNT;
         _positions = new Vector3[count];
@@ -111,7 +119,16 @@ public class Tentacle
         Vector3 backwardDir = new Vector3(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0f);
         float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
         Vector3 spreadDir = new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0f);
-        Vector3 driftBias = (backwardDir * (0.35f * movementFactor)) + (spreadDir * (0.15f * movementFactor));
+
+        // Curl: each strand bends toward its own spread side, so the fan
+        // curves open instead of trailing as four straight spikes. The sign of
+        // the offset picks the side; the force is constant, which gives the
+        // tail a characterful resting pose even when the robot stands still.
+        float curlSign = _wiggleOffset >= 0f ? 1f : -1f;
+        Vector3 curlDir = new Vector3(-spreadDir.y, spreadDir.x, 0f) * curlSign;
+        Vector3 driftBias = (backwardDir * (0.40f * movementFactor))
+                          + (spreadDir * (0.08f * movementFactor))
+                          + (curlDir * 0.055f);
 
         // 1. Pin root
         _positions[0] = rootPosition;
@@ -129,7 +146,7 @@ public class Tentacle
         }
 
         // 3. PBD Distance Constraints (Relaxation iterations)
-        float targetSegmentDist = MAX_SEGMENT_DIST * Mathf.Max(0.5f, movementFactor);
+        float targetSegmentDist = MAX_SEGMENT_DIST * _lengthScale * Mathf.Max(0.5f, movementFactor);
         for (int iter = 0; iter < 3; iter++)
         {
             _positions[0] = rootPosition;
@@ -149,11 +166,19 @@ public class Tentacle
             }
         }
 
-        // 4. Subtle procedural micro-wiggle for secondary motion
+        // 4. Procedural traveling wave for secondary motion. The phase sweeps
+        // from root to tip (a wave that runs along the tail), amplitude grows
+        // toward the tip so the end whips while the base stays attached, and a
+        // slow idle sway keeps the tail alive when the robot stands still.
+        int lastIndex = _positions.Length - 1;
         for (int i = 1; i < _positions.Length; i++)
         {
-            float wiggleAmplitude = 0.02f + (0.10f * movementFactor);
-            float wiggle = Mathf.Sin((Time.time * 14f) + (i * 1.3f) + _wiggleOffset) * wiggleAmplitude;
+            float t = (float)i / lastIndex;
+            float phase = (Time.time * 8f) - (t * 4.6f) + _wiggleOffset;
+            float amplitude = (0.035f + (0.16f * movementFactor))
+                * (0.35f + (0.65f * t))
+                + (t * t * 0.05f);
+            float wiggle = Mathf.Sin(phase) * amplitude;
             Vector3 direction = _positions[i] - _positions[i - 1];
             if (direction.sqrMagnitude < 1e-6f)
             {

@@ -3,11 +3,9 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
+using Fodinae.World;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
-using Fodinae.World;
-using Fodinae.World.Terrain;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using VContainer;
@@ -17,54 +15,46 @@ namespace Fodinae.UI
     public class WorldMapController : MonoBehaviour
     {
         [Inject]
-        private IObjectResolver _resolver = null!;
+        private CameraFollow _cameraFollow = null!;
         [Inject]
-        private CameraFollow? _injectedCameraFollow;
+        private Fodinae.UI.HUD.Player.View.PlayerHUDView _playerHud = null!;
         [Inject]
-        private TerrainRenderer? _injectedTerrain;
+        private Fodinae.UI.HUD.Inventory.View.InventoryView _inventory = null!;
         [Inject]
-        private Fodinae.UI.HUD.Player.View.PlayerHUDView? _injectedPlayerHud;
+        private FPSCounter _fps = null!;
         [Inject]
-        private Fodinae.UI.HUD.Inventory.View.InventoryView? _injectedInventory;
+        private WorldMapRenderer _mapRenderer = null!;
         [Inject]
-        private FPSCounter? _injectedFps;
-        [Inject]
-        private MinimapController? _injectedMinimap;
-        [Inject]
-        private WorldMapRenderer? _injectedMapRenderer;
+        private MapStorage _mapStorage = null!;
 
-        private CameraFollow? _cameraFollow;
-        private PlayerMovementController? _player;
-        private TerrainRenderer? _terrain;
-        private WorldMapRenderer? _mapRenderer;
+        private ILocalPlayer? _player;
 
         private bool _isInMapMode;
-        private bool _initialized;
         private bool _playerSpawnSubscription;
-
-        // HUD elements
-        private Fodinae.UI.HUD.Player.View.PlayerHUDView? _playerHud;
-        private Fodinae.UI.HUD.Inventory.View.InventoryView? _inventory;
-        private FPSCounter? _fps;
-        private MinimapController? _minimap;
 
         public bool IsInMapMode => _isInMapMode;
 
+        [Inject]
+        private MapModeState _mapModeState = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+
         protected void Start()
         {
-            TryInitialize();
+            _mapModeState.Changed += OnMapModeChanged;
+            _player = _localPlayer.Current;
+            if (_player == null)
+            {
+                _localPlayer.Changed += OnLocalPlayerChanged;
+                _playerSpawnSubscription = true;
+            }
         }
 
         protected void Update()
         {
-            if (!_initialized)
-            {
-                TryInitialize();
-            }
-
             if (_isInMapMode && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
-                ExitMapMode();
+                _mapModeState.SetOpen(false);
                 return;
             }
 
@@ -76,51 +66,26 @@ namespace Fodinae.UI
             }
         }
 
-        private void TryInitialize()
-        {
-            if (_initialized)
-            {
-                return;
-            }
-
-            if (_resolver == null)
-            {
-                // [Inject]-поля приходят в PostStart; Update ретраит TryInitialize.
-                return;
-            }
-
-            _cameraFollow = _injectedCameraFollow ?? _resolver.Resolve<CameraFollow>();
-            _terrain = _injectedTerrain ?? _resolver.Resolve<TerrainRenderer>();
-            _playerHud = _injectedPlayerHud ?? _resolver.Resolve<Fodinae.UI.HUD.Player.View.PlayerHUDView>();
-            _inventory = _injectedInventory ?? _resolver.Resolve<Fodinae.UI.HUD.Inventory.View.InventoryView>();
-            _fps = _injectedFps ?? _resolver.Resolve<FPSCounter>();
-            _minimap = _injectedMinimap ?? _resolver.Resolve<MinimapController>();
-            _mapRenderer = _injectedMapRenderer ?? _resolver.Resolve<WorldMapRenderer>();
-
-            _player = PlayerMovementController.LocalPlayer;
-            if (_player == null && !_playerSpawnSubscription)
-            {
-                PlayerMovementController.OnLocalPlayerSpawned += OnLocalPlayerSpawned;
-                _playerSpawnSubscription = true;
-            }
-
-            _initialized = true;
-        }
-
         protected void OnDestroy()
         {
+            _mapModeState.Changed -= OnMapModeChanged;
+
             UnsubscribeFromPlayerSpawn();
         }
 
         protected void OnDisable()
         {
             UnsubscribeFromPlayerSpawn();
-            _initialized = false;
         }
 
-        private void OnLocalPlayerSpawned(PlayerMovementController player)
+        private void OnLocalPlayerChanged(ILocalPlayer? player)
         {
             UnsubscribeFromPlayerSpawn();
+            if (player == null)
+            {
+                return;
+            }
+
             _player = player;
         }
 
@@ -131,7 +96,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            PlayerMovementController.OnLocalPlayerSpawned -= OnLocalPlayerSpawned;
+            _localPlayer.Changed -= OnLocalPlayerChanged;
             _playerSpawnSubscription = false;
         }
 
@@ -144,11 +109,11 @@ namespace Fodinae.UI
 
             if (_isInMapMode)
             {
-                ExitMapMode();
+                _mapModeState.SetOpen(false);
             }
             else
             {
-                EnterMapMode();
+                _mapModeState.SetOpen(true);
             }
         }
 
@@ -156,13 +121,25 @@ namespace Fodinae.UI
         {
             if (!_isInMapMode)
             {
-                EnterMapMode();
+                _mapModeState.SetOpen(true);
             }
         }
 
         public void CloseMap()
         {
             if (_isInMapMode)
+            {
+                _mapModeState.SetOpen(false);
+            }
+        }
+
+        private void OnMapModeChanged(bool open)
+        {
+            if (open && !_isInMapMode)
+            {
+                EnterMapMode();
+            }
+            else if (!open && _isInMapMode)
             {
                 ExitMapMode();
             }
@@ -175,12 +152,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_resolver == null)
-            {
-                return;
-            }
-
-            PlayerMovementController? player = _player ?? PlayerMovementController.LocalPlayer;
+            ILocalPlayer? player = _player ?? _localPlayer.Current;
             if (player == null || !player.HasServerPosition)
             {
                 return;
@@ -188,26 +160,19 @@ namespace Fodinae.UI
 
             _player = player;
 
-            MapStorage? mapStorage = _resolver.Resolve<MapStorage>();
-            if (mapStorage == null || !mapStorage.IsReady)
+            if (!_mapStorage.IsReady)
             {
                 return;
             }
 
             _isInMapMode = true;
-            if (_cameraFollow != null)
-            {
-                _cameraFollow.SetScrollEnabled(false);
-            }
+            _cameraFollow.SetScrollEnabled(false);
 
-            WorldMapRenderer mapRenderer = _mapRenderer ??
-                throw new InvalidOperationException(
-                    "WorldMapController requires the registered WorldMapRenderer.");
-            mapRenderer.Show();
+            _mapRenderer.Show();
 
             SetHudVisible(false);
 
-            mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
+            _mapRenderer.SetViewCenter(player.Position.x, player.Position.y);
         }
 
         private void ExitMapMode()
@@ -218,40 +183,18 @@ namespace Fodinae.UI
             }
 
             _isInMapMode = false;
-            if (_cameraFollow != null)
-            {
-                _cameraFollow.SetScrollEnabled(true);
-            }
-
-            if (_mapRenderer != null)
-            {
-                _mapRenderer.Hide();
-            }
+            _cameraFollow.SetScrollEnabled(true);
+            _mapRenderer.Hide();
 
             SetHudVisible(true);
         }
 
         private void SetHudVisible(bool visible)
         {
-            if (_playerHud != null)
-            {
-                _playerHud.enabled = visible;
-            }
+            _playerHud.enabled = visible;
+            _inventory.enabled = visible;
+            _fps.enabled = visible;
 
-            if (_inventory != null)
-            {
-                _inventory.enabled = visible;
-            }
-
-            if (_fps != null)
-            {
-                _fps.enabled = visible;
-            }
-
-            if (_minimap != null)
-            {
-                _minimap.enabled = visible;
-            }
         }
     }
 }

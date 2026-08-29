@@ -89,8 +89,6 @@ namespace Fodinae.UI
         /// ровно на длину интервала опроса. Риг заявляет о себе сам, и ждать
         /// больше нечего.
         /// </summary>
-        public static MenuSceneryController? Current { get; private set; }
-
         public RenderTexture? OutputTexture => _outputTexture;
 
         public void SetDisplaySize(int width, int height)
@@ -172,8 +170,6 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
-            Current = this;
-
             _sceneryCamera = GetComponentInChildren<Camera>(includeInactive: true);
             _station = GetComponentInChildren<OrbitalStationMotion>(includeInactive: true);
             _planet = transform.Find("PlanetSurface");
@@ -276,13 +272,6 @@ namespace Fodinae.UI
 
         private void OnDisable()
         {
-            // Только если действующий — это мы: в редакторе сцены открываются
-            // и закрываются как попало, и чужую ссылку затирать нельзя.
-            if (ReferenceEquals(Current, this))
-            {
-                Current = null;
-            }
-
             if (_sceneryCamera != null)
             {
                 _sceneryCamera.targetTexture = null;

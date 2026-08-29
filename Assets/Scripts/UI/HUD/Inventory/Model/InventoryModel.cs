@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Models;
 using Fodinae.Networking;
 using MinesServer.Networking.Client.Packets.Inventory;
 using UnityEngine;
@@ -10,7 +11,7 @@ using VContainer;
 
 namespace Fodinae.UI.HUD.Inventory.Model
 {
-    public class InventoryModel : Fodinae.UI.HUD.Inventory.Interfaces.IInventoryModel
+    public class InventoryModel : Fodinae.UI.HUD.Inventory.Interfaces.IInventoryModel, IInventoryState
     {
         public const int HOTBAR_SIZE = 9;
         public const int INVENTORY_SIZE = 6 * 9;
@@ -127,7 +128,7 @@ namespace Fodinae.UI.HUD.Inventory.Model
                 return;
             }
 
-            var item = _slots[index];
+            ItemData? item = _slots[index];
             if (item != null)
             {
                 _networkService.Send(new SelectItemPacket(item.ItemType));
@@ -185,11 +186,9 @@ namespace Fodinae.UI.HUD.Inventory.Model
             }
 
             return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
-                left.IconColor == right.IconColor &&
                 left.Quantity == right.Quantity &&
                 string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
-                left.ItemType == right.ItemType &&
-                left.Icon == right.Icon;
+                left.ItemType == right.ItemType;
         }
 
         private static bool IsValidSlot(int index)

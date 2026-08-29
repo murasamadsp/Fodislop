@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Models;
 using MinesServer.Data;
 using UnityEngine;
 

@@ -2,7 +2,6 @@
 
 using System.Collections.Generic;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Fodinae.Game;
@@ -23,23 +22,12 @@ namespace Fodinae.Game.Managers
         private const string TAG = "[BuildingManager]";
         private readonly Dictionary<Vector2Int, Building> _buildings = new();
 
-        // Resolved on use, not injected as a field.
-        //
-        // MapManager.Construct takes BuildingManager, so a BuildingManager --> IMapDataProvider
-        // field injection closes a construction-time cycle and VContainer refuses to build
-        // the whole game scope: MapManager needs BuildingManager to be constructed, BuildingManager
-        // needs MapManager. That is not a false positive — both really would have to exist
-        // before the other. Nothing here needs the map at construction time; the only use is
-        // one WorldHeight read while spawning a building, long after both are alive.
         [Inject]
-        private ISessionContainer _session = null!;
+        private IMapDataProvider _mapDataProvider = null!;
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
 
-        private IMapDataProvider MapData =>
-            _session.TryResolve<IMapDataProvider>() ??
-            throw new System.InvalidOperationException(
-                $"{TAG} IMapDataProvider is required for building placement.");
+        private IMapDataProvider MapData => _mapDataProvider;
 
         public void AddOrUpdateBuilding(ushort x, ushort y, BuildingType buildingType, byte variant, byte linkedClan)
         {

@@ -2,9 +2,9 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class InstanceRegistrationBuilder : RegistrationBuilder
+    sealed class InstanceRegistrationBuilder : RegistrationBuilder
     {
-        private readonly object implementationInstance;
+        readonly object implementationInstance;
 
         public InstanceRegistrationBuilder(object implementationInstance)
             : base(implementationInstance.GetType(), Lifetime.Singleton)

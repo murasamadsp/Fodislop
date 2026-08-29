@@ -2,8 +2,9 @@
 
 using System;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
+using Fodinae.Game.Managers;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
@@ -15,7 +16,19 @@ namespace Fodinae.UI
         [Inject]
         private UIDocument _doc = null!;
         [Inject]
-        private ISessionContainer _session = null!;
+        private ILocalizationService _loc = null!;
+        [Inject]
+        private IConnectionService _connection = null!;
+
+        // Reconnect overlays must never float over the game scene before the
+        // world is presented. ConnectionManager fires "connecting" status the
+        // moment Connect() runs (GameBootstrap step before MarkPresentationReady);
+        // without this gate that transient event would light up the overlay over
+        // the scrub before the game is shown. IsUIAuthorized is set to true only
+        // after the world is loaded (AuthorizeUI), so it is the exact
+        // presentation-readiness signal for this Game-tier overlay.
+        [Inject]
+        private GameManager _gameManager = null!;
 
         private VisualElement? _reconnectOverlay;
         private VisualElement? _disconnectOverlay;
@@ -24,36 +37,47 @@ namespace Fodinae.UI
         private bool _reconnectStatusSet;
         private bool _initialized;
 
-        private void Update()
-        {
-            if (!_initialized)
-            {
-                TryInitialize();
-            }
-        }
-
         private void OnDestroy()
         {
+            if (_connection != null)
+            {
+                _connection.OnReconnectStatusChanged -= ShowReconnecting;
+                _connection.OnDisconnectReason -= ShowDisconnectReason;
+                _connection.OnReconnectHidden -= Hide;
+            }
+
             _reconnectOverlay?.RemoveFromHierarchy();
             _disconnectOverlay?.RemoveFromHierarchy();
             _reconnectOverlay = null;
             _disconnectOverlay = null;
         }
 
-        private void Start()
+        protected void Start()
         {
             TryInitialize();
         }
 
+        [Inject]
+        private void Construct(IConnectionService connection)
+        {
+            _connection = connection;
+            _connection.OnReconnectStatusChanged += ShowReconnecting;
+            _connection.OnDisconnectReason += ShowDisconnectReason;
+            _connection.OnReconnectHidden += Hide;
+        }
+
         private void TryInitialize()
         {
-            if (_initialized || _session?.Current == null)
+            if (_initialized)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null)
             {
+                // Защитный гард: к моменту [Inject]-метода панель UIDocument
+                // гарантирована — пропуск здесь означает дефект проводки,
+                // а не гонку (ретраев больше нет).
                 return;
             }
 
@@ -69,6 +93,10 @@ namespace Fodinae.UI
                 throw new InvalidOperationException(
                     "[ReconnectUI] Resources/UI/Reconnect.uxml is required.");
             TemplateContainer tree = template.Instantiate();
+
+            // Статические ключи UXML резолвятся сразу при сборке (контракт
+            // един для всех экранов; здесь их нет — тексты ставит код).
+            UILocalizer.Apply(tree, _loc);
 
             _reconnectOverlay = tree.Q<VisualElement>("ReconnectOverlay") ??
                 throw new InvalidOperationException("[ReconnectUI] ReconnectOverlay is missing from Reconnect.uxml.");
@@ -86,8 +114,24 @@ namespace Fodinae.UI
             _doc.rootVisualElement.Add(_disconnectOverlay);
         }
 
+        /// <summary>
+        /// Причины дисконнекта приходят от сервера как свободный текст — его
+        /// клиент переводить не может. Известные клиентские причины передаются
+        /// ключами словаря: если строка совпадает с ключом, резолвим перевод,
+        /// иначе показываем как есть.
+        /// </summary>
+        private string Resolve(string text)
+        {
+            return _loc != null && _loc.HasKey(text) ? _loc.Get(text) : text;
+        }
+
         public void ShowReconnecting(string status)
         {
+            if (!_gameManager.IsUIAuthorized)
+            {
+                return;
+            }
+
             if (_doc == null || _reconnectOverlay == null || _reconnectLabel == null)
             {
                 return;
@@ -95,7 +139,7 @@ namespace Fodinae.UI
 
             HideOverlay(_disconnectOverlay);
 
-            _reconnectLabel.text = status;
+            _reconnectLabel.text = Resolve(status);
 
             _reconnectStatusSet = true;
             _reconnectOverlay.style.display = DisplayStyle.Flex;
@@ -105,6 +149,11 @@ namespace Fodinae.UI
 
         public void ShowDisconnectReason(string reason)
         {
+            if (!_gameManager.IsUIAuthorized)
+            {
+                return;
+            }
+
             if (_doc == null || _disconnectOverlay == null || _disconnectLabel == null)
             {
                 return;
@@ -112,7 +161,7 @@ namespace Fodinae.UI
 
             HideOverlay(_reconnectOverlay);
 
-            _disconnectLabel.text = reason;
+            _disconnectLabel.text = Resolve(reason);
 
             _disconnectOverlay.style.display = DisplayStyle.Flex;
             _disconnectOverlay.SetEnabled(true);
@@ -121,6 +170,11 @@ namespace Fodinae.UI
 
         public void SetStatus(string status)
         {
+            if (!_gameManager.IsUIAuthorized)
+            {
+                return;
+            }
+
             if (_disconnectOverlay?.style.display == DisplayStyle.Flex)
             {
                 return;
@@ -128,7 +182,7 @@ namespace Fodinae.UI
 
             if (_reconnectLabel != null)
             {
-                _reconnectLabel.text = status;
+                _reconnectLabel.text = Resolve(status);
             }
 
             if (!_reconnectStatusSet && _doc != null && _reconnectOverlay != null)

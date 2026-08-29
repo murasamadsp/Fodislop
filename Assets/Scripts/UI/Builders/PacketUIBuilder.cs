@@ -9,7 +9,7 @@ using MinesServer.Networking.Server.Packets.GUI.Components.Containers;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae
+namespace Fodinae.UI
 {
     public class PacketUIBuilder
     {

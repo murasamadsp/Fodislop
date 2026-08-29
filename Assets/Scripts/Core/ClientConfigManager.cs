@@ -81,7 +81,7 @@ namespace Fodinae.Core
         /// <summary>
         /// Forces config load synchronously, without waiting for the next
         /// Start/Update cycle. This manager is an authored Bootstrap-tier
-        /// singleton (created by BootstrapSceneAuthoring under BootstrapLifetimeScope):
+        /// singleton authored under BootstrapLifetimeScope:
         /// its Start() runs a frame later — too late for GameBootstrap.PostStart,
         /// which reads Config in the same frame the manager is created.
         /// EnsureInitialized is called at Bootstrap startup (BootstrapLifetimeScope.Awake)

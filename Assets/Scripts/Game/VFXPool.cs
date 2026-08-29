@@ -158,7 +158,7 @@ namespace Fodinae.Game
             SpawnToTargetSize(pool);
         }
 
-        public PooledSlot? Acquire(VFXType vfxType)
+        public IVFXSlot? Acquire(VFXType vfxType)
         {
             var pool = GetOrCreateSubPool(vfxType);
             var slot = AcquireInternal(pool);
@@ -179,25 +179,25 @@ namespace Fodinae.Game
             return slot;
         }
 
-        public void Release(PooledSlot slot)
+        public void Release(IVFXSlot slot)
         {
-            if (slot == null || slot.IsInPool)
+            if (slot is not PooledSlot pooled || pooled.IsInPool)
             {
                 return;
             }
 
-            if (!_pools.TryGetValue(slot.VfxType, out var pool))
+            if (!_pools.TryGetValue(pooled.VfxType, out var pool))
             {
                 return;
             }
 
-            int idx = pool.Active.IndexOf(slot);
+            int idx = pool.Active.IndexOf(pooled);
             if (idx < 0)
             {
                 return;
             }
 
-            ReleaseInternal(pool, slot, idx);
+            ReleaseInternal(pool, pooled, idx);
         }
 
         private PooledSlot AcquireInternal(SubPool pool)
@@ -349,10 +349,10 @@ namespace Fodinae.Game
             }
         }
 
-        public sealed class PooledSlot
+        public sealed class PooledSlot : IVFXSlot
         {
             public VFXType VfxType;
-            public GameObject? GameObject;
+            public GameObject? GameObject { get; set; }
             public WorldEntityBatchRenderer EntityBatchRenderer = null!;
             public WorldEntityBatchRenderer.SpriteHandle BatchHandle = null!;
             public float PlayStartTime;

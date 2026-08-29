@@ -6,7 +6,7 @@ using Fodinae.UI;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae
+namespace Fodinae.UI
 {
     /// <summary>
     /// Owns the main menu's ambient scene: the starfield backdrop, the planet
@@ -84,15 +84,26 @@ namespace Fodinae
             Animate();
         }
 
+        /// <summary>
+        /// Привязывает компоненты сцены меню. Ссылки приходят из serialized
+        /// контракта MainMenuLifetimeScope, а не из статической регистрации:
+        /// состояние сцены не должно жить в глобальных одиночках.
+        /// </summary>
+        public void BindScene(MenuStarfield? starfield, MenuSceneryController? scenery)
+        {
+            _starfield = starfield;
+            _scenery = scenery;
+        }
+
         /// <summary>Резолвит собственные элементы из уже собранного дерева UXML.</summary>
         public void Bind(VisualElement tree)
         {
             _tree = tree;
             _spaceBgImage = tree.Q<Image>("SpaceBgImage");
             _planetBodyImage = tree.Q<Image>("MainMenuPlanetImage");
-            if (_planetBodyImage != null && MenuSceneryController.Current?.OutputTexture != null)
+            if (_planetBodyImage != null && _scenery?.OutputTexture != null)
             {
-                _planetBodyImage.image = MenuSceneryController.Current.OutputTexture;
+                _planetBodyImage.image = _scenery.OutputTexture;
             }
 
             _loaderShade = tree.Q<Image>("LoaderShade");
@@ -251,8 +262,6 @@ namespace Fodinae
                 return;
             }
 
-            _starfield = MenuStarfield.Current;
-
             if (_starfield != null)
             {
                 float resolvedWidth = _spaceBgImage.resolvedStyle.width;
@@ -297,12 +306,6 @@ namespace Fodinae
 
                 return;
             }
-
-            // Ссылка берётся напрямую, без поиска по сцене: риг проставляет её
-            // в OnEnable. Опрос раз в секунду означал, что промах первой
-            // попытки стоил секунды задержки — планета появлялась заметно позже
-            // остального меню.
-            _scenery = MenuSceneryController.Current;
 
             if (_scenery == null)
             {

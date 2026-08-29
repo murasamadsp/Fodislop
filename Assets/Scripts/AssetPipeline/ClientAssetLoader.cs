@@ -8,11 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Networking.Connection;
-using Fodinae.World;
-using Fodinae.World.Terrain;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Utilities;
 using MinesServer.Networking.Server.Packets;
@@ -54,23 +50,14 @@ namespace Fodinae
         [Inject]
         private IConnectionService _connectionService = null!;
         [Inject]
-        private ISessionContainer _session = null!;
+        private ITextureStorageService _textureStorage = null!;
 
-        /// <summary>
-        /// Injected connection, with a session-container fallback for the brief
-        /// window where Unity runs OnEnable before VContainer populates fields.
-        /// </summary>
         private IConnectionService ConnectionService =>
-            _connectionService ?? _session?.TryResolve<IConnectionService>() ??
+            _connectionService ??
             throw new InvalidOperationException(
                 "ClientAssetLoader requires IConnectionService before loading assets.");
 
-        /// <summary>
-        /// Texture storage lives in the session (game) scope while this loader is
-        /// bootstrap-tier, so it is resolved from the current session container.
-        /// </summary>
-        private ITextureStorageService? TextureStorage =>
-            _session?.TryResolve<ITextureStorageService>();
+        private ITextureStorageService TextureStorage => _textureStorage;
 
         private bool _assetSubscriptionEstablished;
         private IConnectionService? _subscribedConnection;
@@ -120,13 +107,6 @@ namespace Fodinae
         /// </summary>
         public void EnsureAssetSubscription()
         {
-            if (_connectionService == null && _session != null)
-            {
-                _connectionService = _session.TryResolve<IConnectionService>() ??
-                    throw new InvalidOperationException(
-                        "ClientAssetLoader requires IConnectionService in the active resolver.");
-            }
-
             if (_subscribedConnection != null)
             {
                 _subscribedConnection.OnPacketReceived -= OnPacketReceived;
@@ -150,12 +130,9 @@ namespace Fodinae
 
         private void UnsubscribeFromConnection()
         {
-            // Keep the legacy direct ConnectionManager path teardown-safe as
-            // well. It can be used before the injected subscription is bound.
-            if (_connectionService is ConnectionManager connectionManager)
-            {
-                connectionManager.OnPacketReceived -= OnPacketReceived;
-            }
+            // Teardown-safe: unsubscribe even if the injected subscription was
+            // never bound, so a stale delegate cannot leak across reconnects.
+            _connectionService.OnPacketReceived -= OnPacketReceived;
 
             _packetSubscribed = false;
 
@@ -275,12 +252,9 @@ namespace Fodinae
                 return;
             }
 
-            if (_connectionService is ConnectionManager cm)
-            {
-                cm.OnPacketReceived -= OnPacketReceived;
-                cm.OnPacketReceived += OnPacketReceived;
-                _packetSubscribed = true;
-            }
+            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _connectionService.OnPacketReceived += OnPacketReceived;
+            _packetSubscribed = true;
         }
 
         private async UniTask<byte[]?> LoadBytesFromServer(string filename, CancellationToken ct, int timeoutSeconds)

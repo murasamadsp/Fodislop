@@ -1,8 +1,8 @@
 #nullable enable
 
+using System;
 using System.Text;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Player;
@@ -27,7 +27,9 @@ namespace Fodinae.UI
     public sealed class InGameDebugOverlay : MonoBehaviour
     {
         [Inject]
-        private ISessionContainer _session = null!;
+        private Fodinae.World.Lighting.LightingEngine _lighting = null!;
+        [Inject]
+        private Fodinae.Rendering.PostProcessing.PostProcessController _postProcess = null!;
 
         [Header("Visualization Channels")]
         [SerializeField]
@@ -51,10 +53,18 @@ namespace Fodinae.UI
         private float _solvesPerSecond;
         private readonly System.Collections.Generic.List<Fodinae.World.Lighting.LightingEngine.CascadeCostSample> _cascadeCosts = new(4);
 
-        private MapManager? _mapManager;
-        private IWorldDataStorage? _storage;
-        private RobotManager? _robotManager;
-        private BuildingManager? _buildingManager;
+        [Inject]
+        private MapManager _mapManager = null!;
+        [Inject]
+        private IWorldDataStorage _storage = null!;
+        [Inject]
+        private RobotManager _robotManager = null!;
+        [Inject]
+        private BuildingManager _buildingManager = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
 
         public bool IsEnabled
         {
@@ -120,11 +130,10 @@ namespace Fodinae.UI
 
                 if (kb.digit8Key.wasPressedThisFrame || kb.numpad8Key.wasPressedThisFrame || kb.f8Key.wasPressedThisFrame)
                 {
-                    var le = _session?.TryResolve<Fodinae.World.Lighting.LightingEngine>();
-                    if (le != null)
+                    if (_lighting != null)
                     {
-                        float current = le.DynamicLightIntensity;
-                        le.SetDynamicLightSettings(current > 0.01f ? 0f : 1.25f, le.DynamicLightColor);
+                        float current = _lighting.DynamicLightIntensity;
+                        _lighting.SetDynamicLightSettings(current > 0.01f ? 0f : 1.25f, _lighting.DynamicLightColor);
                     }
                 }
             }
@@ -165,13 +174,9 @@ namespace Fodinae.UI
                 // Solves per second, not per frame: the engine skips solves on
                 // its own cadence, so "how expensive is one solve" only means
                 // something next to "how often does one happen".
-                var lighting = _session?.TryResolve<Fodinae.World.Lighting.LightingEngine>();
-                if (lighting != null)
-                {
-                    ulong solveCount = lighting.SolveCount;
-                    _solvesPerSecond = (solveCount - _lastSolveCount) / _fpsTimer;
-                    _lastSolveCount = solveCount;
-                }
+                ulong solveCount = _lighting?.SolveCount ?? _lastSolveCount;
+                _solvesPerSecond = (solveCount - _lastSolveCount) / _fpsTimer;
+                _lastSolveCount = solveCount;
 
                 _fpsFrames = 0;
                 _fpsTimer = 0f;
@@ -180,19 +185,17 @@ namespace Fodinae.UI
 
         private void EnsureDependencies()
         {
-            if (_mapManager == null || _storage == null)
+            if (_mapManager == null || _storage == null || _robotManager == null || _buildingManager == null)
             {
-                _mapManager ??= _session?.TryResolve<MapManager>();
-                _storage ??= _session?.TryResolve<IWorldDataStorage>();
-                _robotManager ??= _session?.TryResolve<RobotManager>();
-                _buildingManager ??= _session?.TryResolve<BuildingManager>();
+                throw new InvalidOperationException(
+                    "[InGameDebugOverlay] MainGame dependencies were not injected.");
             }
         }
 
         private void DrawWorldDebugGizmos()
         {
             EnsureDependencies();
-            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
+            ILocalPlayer? player = _localPlayer.Current;
 
             if (_showGrid && _mapManager != null && _mapManager.IsWorldInitialized && player != null)
             {
@@ -233,7 +236,7 @@ namespace Fodinae.UI
 
         private void DrawCursorHighlight(int worldHeight)
         {
-            Camera? cam = GameplayCamera.Resolve();
+            Camera? cam = _gameplayCamera?.Camera;
             if (cam == null || Mouse.current == null)
             {
                 return;
@@ -271,7 +274,7 @@ namespace Fodinae.UI
             EnsureDependencies();
             InitStyles();
 
-            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
+            ILocalPlayer? player = _localPlayer.Current;
 
             _sb.Clear();
             _sb.AppendLine("<b>[F3] FODINAE IN-GAME DEBUG</b>");
@@ -293,7 +296,7 @@ namespace Fodinae.UI
             }
 
             // Hovered cell info
-            Camera? cam = GameplayCamera.Resolve();
+            Camera? cam = _gameplayCamera?.Camera;
             if (cam != null && Mouse.current != null && _mapManager != null && _mapManager.IsWorldInitialized)
             {
                 Vector2 mouseScreen = Mouse.current.position.ReadValue();
@@ -312,8 +315,8 @@ namespace Fodinae.UI
                 }
             }
 
-            var lighting = _session?.TryResolve<Fodinae.World.Lighting.LightingEngine>();
-            var ppController = _session?.TryResolve<Fodinae.Rendering.PostProcessing.PostProcessController>();
+            var lighting = _lighting;
+            var ppController = _postProcess;
 
             _sb.AppendLine("---");
             string lightPassState = !Fodinae.World.Lighting.LightingEngine.BypassLightingCompute ? "<color=#00FF00>ON</color>" : "<color=#FF4444>MUTE</color>";

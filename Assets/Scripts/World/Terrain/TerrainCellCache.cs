@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using Fodinae.World;
 using MinesServer.Data;
 using UnityEngine;
@@ -19,8 +18,8 @@ namespace Fodinae.World.Terrain
         private int _cacheWidth;
         private int _cacheHeight;
 
+        // IsPopulated flag lives inside CellMetadata itself — one array instead of two
         private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
-        private readonly bool[] _metadataReady = new bool[65536];
 
         private static CachedCellData UnloadedCellData => new()
         {
@@ -46,21 +45,23 @@ namespace Fodinae.World.Terrain
 
         public void ClearCaches()
         {
-            Array.Clear(_metadataReady, 0, _metadataReady.Length);
+            // Array.Clear zeros all bytes → IsPopulated = false for every entry (bool default = false).
+            // Faster than a manual loop: runtime uses SIMD memset internally.
+            Array.Clear(_metadataLookup, 0, _metadataLookup.Length);
         }
 
         public void RefreshTextureMetadata(
             HashSet<CellType> cellTypes,
             MapManager mapManager,
             ITextureService textureService,
-            List<TextureAtlas> atlases)
+            IReadOnlyList<IAtlasDescriptor> atlases)
         {
             foreach (CellType cellType in cellTypes)
             {
                 int index = (int)cellType;
-                if ((uint)index < (uint)_metadataReady.Length)
+                if ((uint)index < (uint)_metadataLookup.Length)
                 {
-                    _metadataReady[index] = false;
+                    _metadataLookup[index].IsPopulated = false;
                 }
             }
 
@@ -93,7 +94,7 @@ namespace Fodinae.World.Terrain
             return _cellCache[x, y];
         }
 
-        public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
+        public void PopulateFull(int minX, int minY, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
         {
             if (wtm == null)
             {
@@ -146,7 +147,7 @@ namespace Fodinae.World.Terrain
             wtm.RequestTexture(CellType.Empty);
         }
 
-        public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
+        public void UpdateRegion(int gridMinX, int unityMinY, int width, int height, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
         {
             if (wtm == null || atlases == null || mm == null || mapStorage == null || !mapStorage.IsReady)
             {
@@ -189,7 +190,7 @@ namespace Fodinae.World.Terrain
             }
         }
 
-        public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
+        public void ScrollAndFill(int dx, int dy, IWorldDataStorage mapStorage, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
         {
             if (wtm == null)
             {
@@ -316,10 +317,10 @@ namespace Fodinae.World.Terrain
             return currentChunk != null ? currentChunk[localIndex] : CellType.Unloaded;
         }
 
-        public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, List<TextureAtlas> atlases)
+        public CellMetadata GetMetadata(CellType type, MapManager mm, ITextureService wtm, IReadOnlyList<IAtlasDescriptor> atlases)
         {
             int idx = (int)type;
-            if ((uint)idx < (uint)_metadataReady.Length && _metadataReady[idx])
+            if ((uint)idx < (uint)_metadataLookup.Length && _metadataLookup[idx].IsPopulated)
             {
                 return _metadataLookup[idx];
             }
@@ -347,7 +348,7 @@ namespace Fodinae.World.Terrain
                 Distortion = config.Distortion,
                 HasTileGroup = mm.TryGetTileGroup(type, out int gid),
                 TileGroupId = gid,
-                MinimapColor = mm.GetCellMinimapColor(type),
+                MinimapColor = (Color32)mm.GetCellMinimapColor(type),
                 Animation = config.Animation,
                 AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
                 AtlasRect = atlasRect,
@@ -358,12 +359,12 @@ namespace Fodinae.World.Terrain
                 AnimationFrameCount = frameCount,
                 FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
                 IsTextureReady = atlasRect.z > 0.0001f,
+                IsPopulated = true,
             };
 
-            if ((uint)idx < (uint)_metadataReady.Length)
+            if ((uint)idx < (uint)_metadataLookup.Length)
             {
                 _metadataLookup[idx] = meta;
-                _metadataReady[idx] = true;
             }
 
             if (!meta.IsTextureReady)
@@ -385,7 +386,7 @@ namespace Fodinae.World.Terrain
                 Distortion = meta.Distortion,
                 HasTileGroup = meta.HasTileGroup,
                 TileGroupId = meta.TileGroupId,
-                MinimapColor = meta.MinimapColor,
+                MinimapColor = meta.MinimapColor, // Color32 = Color32, no conversion
                 Animation = meta.Animation,
                 AnimationSpeed = meta.AnimationSpeed,
                 AtlasRect = meta.AtlasRect,
@@ -402,7 +403,7 @@ namespace Fodinae.World.Terrain
             int cy,
             MapManager mm,
             ITextureService wtm,
-            List<TextureAtlas> atlases)
+            IReadOnlyList<IAtlasDescriptor> atlases)
         {
             for (int dy = -1; dy <= 1; dy++)
             {

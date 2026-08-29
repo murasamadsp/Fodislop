@@ -246,6 +246,12 @@
     white-space: normal;
 }
 
+.hud-hp-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
 .hud-hp-bar {
     height: 14px;
     background-color: rgba(40, 40, 40, 1);
@@ -335,7 +341,8 @@
 
 .hud-status-panel {
     position: absolute;
-    top: 10px;
+    /* Ниже кнопки бонуса (top:10 + высота 50 + зазор 6) — как было в C#-версии */
+    top: 66px;
     left: 256px;
     width: 220px;
     padding: 12px;
@@ -549,6 +556,11 @@
     width: 100px;
     height: 28px;
 }
+
+/* Смещения кнопок верхнего ряда (были inline right в C#-версии) */
+.hud-btn-top-row--respawn { right: 222px; }
+.hud-btn-top-row--buildings { right: 116px; }
+.hud-btn-top-row--faq { right: 10px; }
 
 .hud-bonus-button {
     position: absolute;
@@ -765,26 +777,6 @@
     background-color: var(--scifi-cyan-bright);
 }
 
-/* Статусные линии (справа от панели игрока) */
-.hud-status-container {
-    position: absolute;
-    top: 16px;
-    left: 308px;
-    width: 240px;
-    flex-direction: column;
-}
-
-/* Панель бонусов (слева от колонки действий). left: auto обязателен:
-   базовый .hud-bonus-panel из старой секции ставит left: 256px, и при
-   заданных left+width+right переопределяется только один из трёх. */
-.hud-bonus-panel {
-    position: absolute;
-    top: 16px;
-    left: auto;
-    right: 192px;
-    width: 240px;
-    padding: 12px;
-}
 
 /* ─── Системная миникарта (UI Toolkit) ─── */
 

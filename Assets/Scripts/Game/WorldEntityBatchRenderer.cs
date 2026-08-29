@@ -17,7 +17,9 @@ namespace Fodinae.Game
     /// </summary>
     public class WorldEntityBatchRenderer : MonoBehaviour
     {
-        public const int POINT_COUNT = 5;
+        // Enough points to give the tail real length (≈2.6 cells at
+        // MAX_SEGMENT_DIST) and enough resolution for a smooth traveling wave.
+        public const int POINT_COUNT = 12;
         private const int VERTS_PER_TENTACLE = POINT_COUNT * 2;
         private const int TRIS_PER_TENTACLE = (POINT_COUNT - 1) * 6;
         private const int INITIAL_CAPACITY = 64;

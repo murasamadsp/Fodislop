@@ -292,6 +292,12 @@ MonoBehaviour:
   threshold:
     m_OverrideState: 1
     m_Value: 0.9
+  softKnee:
+    m_OverrideState: 1
+    m_Value: 0.5
+  radius:
+    m_OverrideState: 1
+    m_Value: 3
   scatter:
     m_OverrideState: 1
     m_Value: 0.7
@@ -314,9 +320,6 @@ MonoBehaviour:
   intensity:
     m_OverrideState: 1
     m_Value: 0
-  maxSamples:
-    m_OverrideState: 1
-    m_Value: 8
 --- !u!114 &-4210620904635426390
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -448,6 +451,12 @@ MonoBehaviour:
   threshold:
     m_OverrideState: 1
     m_Value: 0.9
+  softKnee:
+    m_OverrideState: 0
+    m_Value: 0.5
+  radius:
+    m_OverrideState: 0
+    m_Value: 3
   scatter:
     m_OverrideState: 1
     m_Value: 0.7
@@ -937,9 +946,6 @@ MonoBehaviour:
   intensity:
     m_OverrideState: 1
     m_Value: 0
-  maxSamples:
-    m_OverrideState: 1
-    m_Value: 8
 --- !u!114 &7933203426823181213
 MonoBehaviour:
   m_ObjectHideFlags: 3

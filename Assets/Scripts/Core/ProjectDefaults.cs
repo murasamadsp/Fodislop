@@ -10,7 +10,7 @@ namespace Fodinae.Core
     public sealed class ProjectDefaults : ScriptableObject
     {
         public const int CurrentSchemaVersion = 1;
-        public const string ResourceName = "ProjectDefaults";
+        public const string ResourceName = ProjectRuntimeContracts.ResourcePaths.ProjectDefaultsResourceName;
 
         [SerializeField]
         private int _schemaVersion;

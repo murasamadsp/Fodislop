@@ -1,24 +1,22 @@
 #nullable enable
 
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.UI.HUD.Player.Model;
 using MinesServer.Networking.Server.Packets.Mission;
 
 namespace Fodinae.Networking.Processors
 {
     public class MissionArrowProcessor : IPacketProcessor<MissionArrowPacket>
     {
-        private readonly ISessionContainer _session;
+        private readonly IPlayerStats _playerStats;
 
-        public MissionArrowProcessor(ISessionContainer session)
+        public MissionArrowProcessor(IPlayerStats playerStats)
         {
-            _session = session;
+            _playerStats = playerStats;
         }
 
         public void Process(MissionArrowPacket packet)
         {
-            (_session.TryResolve<IPlayerStats>() as PlayerStatsModel)?.SetMissionArrow(packet.X, packet.Y);
+            _playerStats.SetMissionArrow(packet.X, packet.Y);
         }
     }
 }

@@ -152,6 +152,17 @@ namespace Fodinae.World.Terrain
             long aMinY = a.yMin;
             long aMaxX = aMinX + a.width;
             long aMaxY = aMinY + a.height;
+            long rawMaxX = (long)a.x + a.width;
+            long rawMaxY = (long)a.y + a.height;
+
+            // Reject malformed protocol rectangles before clipping. Otherwise
+            // an overflowing endpoint can wrap around and appear to overlap
+            // the cached region.
+            if (rawMaxX > int.MaxValue || rawMaxX < int.MinValue ||
+                rawMaxY > int.MaxValue || rawMaxY < int.MinValue)
+            {
+                return new RectInt(0, 0, 0, 0);
+            }
 
             long minX = System.Math.Max(aMinX, b.xMin);
             long minY = System.Math.Max(aMinY, b.yMin);

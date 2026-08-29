@@ -154,7 +154,6 @@ namespace VContainer
             {
                 builder.Register<BuilderCallbackDisposable>(Lifetime.Singleton);
             }
-
             builder.RegisterBuildCallback(container =>
             {
                 var disposable = container.Resolve<BuilderCallbackDisposable>();

@@ -22,7 +22,8 @@ using VContainer;
 namespace Fodinae.Player.Logic
 {
     [ExecuteAlways]
-    public class PlayerMovementController : MonoBehaviour
+    [RequireComponent(typeof(Robot))]
+    public class PlayerMovementController : MonoBehaviour, ILocalPlayer
     {
         [Header("Movement Settings")]
         [SerializeField]
@@ -47,36 +48,31 @@ namespace Fodinae.Player.Logic
         private Direction? _lastSentDirection;
         private bool _movementValidationFailed;
         [Inject]
-        private IWorldDataStorage? _storage;
+        private IWorldDataStorage _storage = null!;
 
         [Inject]
-        private IServerConfig? _serverConfig;
+        private IServerConfig _serverConfig = null!;
 
         [Inject]
-        private INetworkService? _networkService;
+        private INetworkService _networkService = null!;
 
         [Inject]
-        private IMapDataProvider? _mapDataProvider;
+        private IMapDataProvider _mapDataProvider = null!;
 
         [Inject]
-        private IConnectionService? _connectionService;
+        private IConnectionService _connectionService = null!;
 
         [Inject]
-        private Fodinae.Core.Interfaces.IInputBlocker? _inputBlocker;
+        private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
 
-        public static PlayerMovementController? LocalPlayer { get; private set; }
-        public static event Action<PlayerMovementController>? OnLocalPlayerSpawned;
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            LocalPlayer = null;
-            OnLocalPlayerSpawned = null;
-        }
+        [Inject]
+        private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayerState = null!;
 
         public void InitializeEditorPreview(IWorldDataStorage storage, IMapDataProvider mapDataProvider)
         {
-            LocalPlayer = this;
+            // Editor preview has no DI graph: publish only when a state service
+            // was assigned explicitly by the preview harness.
+            _localPlayerState?.Publish(this);
             _storage = storage;
             _mapDataProvider = mapDataProvider;
             _robot = GetComponent<Robot>();
@@ -93,9 +89,6 @@ namespace Fodinae.Player.Logic
 
         protected void Awake()
         {
-            LocalPlayer = this;
-            OnLocalPlayerSpawned?.Invoke(this);
-
             if (TryGetComponent<Rigidbody2D>(out var rb))
             {
                 rb.freezeRotation = true;
@@ -124,15 +117,20 @@ namespace Fodinae.Player.Logic
 
         protected void OnDestroy()
         {
-            if (LocalPlayer == this)
+            if (_localPlayerState != null)
             {
-                LocalPlayer = null;
+                _localPlayerState.Clear(this);
             }
         }
 
         protected void Start()
         {
             _lastSentDirection = null;
+
+            // Field injection completes during scope build, before Start runs:
+            // this is the first point where publishing is guaranteed to reach
+            // the application-tier state service.
+            _localPlayerState?.Publish(this);
         }
 
         protected void Update()

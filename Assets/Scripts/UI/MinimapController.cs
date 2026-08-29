@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
+using Fodinae.World;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
 using MinesServer.Data;
@@ -26,9 +26,11 @@ namespace Fodinae.UI
 
         // UI Toolkit
         [Inject]
-        private UIDocument? _doc;
+        private UIDocument _doc = null!;
         [Inject]
-        private IObjectResolver _resolver = null!;
+        private MapModeState _mapModeState = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
         private TemplateContainer? _minimapTree;
         private VisualElement? _minimapRoot;
         private Image? _minimapImageElement;
@@ -37,12 +39,12 @@ namespace Fodinae.UI
 
 
         // World state
-        private PlayerMovementController? _player;
+        private ILocalPlayer? _player;
         [Inject]
-        private MapStorage? _mapStorage = null!;
+        private MapStorage _mapStorage = null!;
 
         [Inject]
-        private MapManager? _mapManager = null!;
+        private MapManager _mapManager = null!;
         private WorldLayer<CellType>? _cellLayer;
         private int _worldWidth;
         private int _worldHeight;
@@ -84,16 +86,12 @@ namespace Fodinae.UI
                     $"Minimap size must be at least 3 pixels for the player marker; got {_uiSize}.");
             }
 
-            // GameBootstrap (IPostStartable.PostStart) injects [Inject] fields only after
-            // MonoBehaviour.Start, so _mapManager/_mapStorage are null here. Never disable
-            // the component based on that: Update() -> TryInitialize() resolves them via
-            // the injected resolver and waits for the world to become ready. World
-            // dimensions are computed there too (InitializeWorldState), so they are not
-            // duplicated here.
-
-            // Every texel is a discrete world-cell sample. Bilinear filtering
-            // invents colors between adjacent cells and blurs unloaded chunk
-            // boundaries, so the display must preserve nearest-neighbour data.
+            // Текстура и пиксельный буфер не зависят от DI — создаются при рождении.
+            // UI-скелет и подписки на мир строятся в Start (см. ниже). Каждый texel
+            // — дискретный сэмпл клетки мира. Билинейная фильтрация
+            // выдумывает цвета между соседними клетками и размывает границы
+            // незагруженных чанков — поэтому дисплей обязан сохранять
+            // nearest-neighbour данные.
             _minimapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
                 _uiSize,
                 _uiSize,
@@ -104,27 +102,63 @@ namespace Fodinae.UI
 
             _pixelColors = new Color32[_uiSize * _uiSize];
 
+            // Школа (одна дорога): к Start зависимости инжектятся (сборка scope,
+            // фаза Awake) и панель создана (OnEnable документа) — скелет строится
+            // здесь. Мир инициализируется позже (данные по сети) — переход по
+            // событию OnWorldInitialized, без ретраев из Update.
             CreateUI();
-            if (!_uiCreated)
+            _mapModeState.Changed += OnMapModeChanged;
+
+            if (_mapManager != null)
             {
-                // UIDocument не готов в Start (PostStart-инъекция позже) — ретраим
-                // создание UI из Update, мир и плеер привязываем без падений.
+                _mapManager.OnWorldInitialized += OnWorldReady;
+                _mapManager.OnWorldDataLoaded += OnWorldReady;
             }
 
-            _player = PlayerMovementController.LocalPlayer;
+            if (IsWorldReady())
+            {
+                OnWorldReady();
+            }
+
+            _player = _localPlayer.Current;
             if (_player != null)
             {
                 BindPlayer(_player);
             }
             else
             {
-                PlayerMovementController.OnLocalPlayerSpawned += OnPlayerSpawned;
+                _localPlayer.Changed += OnPlayerChanged;
             }
         }
 
-        private void OnPlayerSpawned(PlayerMovementController player)
+        private bool IsWorldReady() =>
+            _mapManager != null && _mapManager.IsWorldInitialized &&
+            _mapStorage != null && _mapStorage.IsReady;
+
+        private void OnWorldReady()
         {
-            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+            if (!IsWorldReady())
+            {
+                return;
+            }
+
+            if (_mapManager != null)
+            {
+                _mapManager.OnWorldInitialized -= OnWorldReady;
+                _mapManager.OnWorldDataLoaded -= OnWorldReady;
+            }
+
+            TryInitialize();
+        }
+
+        private void OnPlayerChanged(ILocalPlayer? player)
+        {
+            _localPlayer.Changed -= OnPlayerChanged;
+            if (player == null)
+            {
+                return;
+            }
+
             _player = player;
             BindPlayer(player);
             if (_ready)
@@ -138,26 +172,17 @@ namespace Fodinae.UI
         }
 
         /// <summary>
-        /// One-time initialization check (replaces coroutine).
-        /// Runs every frame until the world is ready, then becomes a no-op.
+        /// Рабочая фаза (одна дорога): троттлинг-рендер, перехват смены cell-layer
+        /// и переключение видимости. Инициализация — событийная: [Inject]-метод
+        /// строит скелет, OnWorldInitialized переводит в _ready.
         /// </summary>
         protected void Update()
         {
-            if (!_uiCreated)
-            {
-                CreateUI();
-            }
-
-            if (!_ready || _player == null || !_player.HasServerPosition || !_initialRefreshDone)
-            {
-                TryInitialize();
-            }
-
             if (_ready && _mapStorage != null &&
                 !ReferenceEquals(_cellLayer, _mapStorage.CellLayer))
             {
                 _ready = false;
-                TryInitialize();
+                InitializeWorldState();
             }
 
             if (_ready && _initialRefreshDone && _isVisible &&
@@ -191,14 +216,6 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_resolver == null)
-            {
-                return;
-            }
-
-            _mapManager = _resolver.ResolveOrDefault<MapManager>();
-            _mapStorage = _resolver.ResolveOrDefault<MapStorage>();
-
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
                 return;
@@ -209,7 +226,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            PlayerMovementController? localPlayer = PlayerMovementController.LocalPlayer;
+            ILocalPlayer? localPlayer = _localPlayer.Current;
             if (localPlayer != null)
             {
                 BindPlayer(localPlayer);
@@ -307,7 +324,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            _doc ??= _resolver?.Resolve<UIDocument>();
             if (_doc == null || _doc.rootVisualElement == null)
             {
                 // Не бросаем: UIDocument может появиться после этого Start (PostStart-
@@ -334,8 +350,7 @@ namespace Fodinae.UI
 
             _minimapRoot.RegisterCallback<ClickEvent>(evt =>
             {
-                WorldMapController? mapController = _resolver?.ResolveOrDefault<WorldMapController>();
-                mapController?.ToggleMapMode();
+                    _mapModeState.SetOpen(true);
                 evt.StopPropagation();
             });
             _doc.rootVisualElement.Add(tree);
@@ -360,7 +375,7 @@ namespace Fodinae.UI
             SetVisible(false);
         }
 
-        private void BindPlayer(PlayerMovementController player)
+        private void BindPlayer(ILocalPlayer player)
         {
             if (ReferenceEquals(_player, player) && _playerMoveSubscribed)
             {
@@ -380,35 +395,33 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            if (_resolver == null)
-            {
-                _ready = false;
-                return;
-            }
-
-            _mapManager = _resolver.ResolveOrDefault<MapManager>();
-            _mapStorage = _resolver.ResolveOrDefault<MapStorage>();
             if (_mapManager == null || _mapStorage == null)
             {
                 _ready = false;
                 return;
             }
 
-            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+            if (_localPlayer == null)
+            {
+                _ready = false;
+                return;
+            }
+
+            _localPlayer.Changed -= OnPlayerChanged;
             if (_playerMoveSubscribed && _player != null)
             {
                 _player.OnPlayerMoved -= OnPlayerMoved;
                 _playerMoveSubscribed = false;
             }
 
-            _player = PlayerMovementController.LocalPlayer;
+            _player = _localPlayer.Current;
             if (_player != null)
             {
                 BindPlayer(_player);
             }
             else
             {
-                PlayerMovementController.OnLocalPlayerSpawned += OnPlayerSpawned;
+                _localPlayer.Changed += OnPlayerChanged;
             }
 
             if (_subscribedCellLayer != null)
@@ -433,11 +446,7 @@ namespace Fodinae.UI
 
             if (!_ready)
             {
-                TryInitialize();
-                if (!_ready)
-                {
-                    return;
-                }
+                return;
             }
 
             if (_player != null)
@@ -566,7 +575,18 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            PlayerMovementController.OnLocalPlayerSpawned -= OnPlayerSpawned;
+            if (_mapModeState != null)
+            {
+                _mapModeState.Changed -= OnMapModeChanged;
+            }
+
+            _localPlayer.Changed -= OnPlayerChanged;
+
+            if (_mapManager != null)
+            {
+                _mapManager.OnWorldInitialized -= OnWorldReady;
+                _mapManager.OnWorldDataLoaded -= OnWorldReady;
+            }
 
             if (_player != null)
             {
@@ -615,6 +635,11 @@ namespace Fodinae.UI
             {
                 _minimapRoot.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
             }
+        }
+
+        private void OnMapModeChanged(bool mapModeEnabled)
+        {
+            SetVisible(!mapModeEnabled && _isVisible);
         }
     }
 }

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
 using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Player;
@@ -23,7 +24,7 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    public class PauseMenu : MonoBehaviour
+    public class PauseMenu : MonoBehaviour, ILocalizableUI
     {
         public static bool IsMenuOpen { get; private set; }
 
@@ -42,9 +43,11 @@ namespace Fodinae.UI
         [Inject]
         private DisplayManager _displayManager = null!;
         [Inject]
-        private IObjectResolver _resolver = null!;
+        private ILocalPlayerState _localPlayer = null!;
         [Inject]
         private IMainMenuNavigation _mainMenuNavigation = null!;
+        [Inject]
+        private ILocalizationService _loc = null!;
 
         private VisualElement? _menuPanel;
         private TemplateContainer? _menuTree;
@@ -67,19 +70,20 @@ namespace Fodinae.UI
         private IInputBlocker _inputBlocker = null!;
 
         private PauseMenuSettingsBuilder? _settingsBuilder;
+        private VisualElement[] _settingsPages = System.Array.Empty<VisualElement>();
+        private Button[] _settingsTabs = System.Array.Empty<Button>();
+        private int _activeSettingsTab;
 
-        private void Start()
+        protected void Start()
         {
+            // Школа (одна дорога): зависимости и панель к Start гарантированы.
+            // Освещение инициализируется в PostStart — один переход по событию
+            // OnInitialized, без ретраев из Update.
             TryInitialize();
         }
 
         private void Update()
         {
-            if (!_initialized && !_initializationFailed)
-            {
-                TryInitialize();
-            }
-
             if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 ToggleMenu();
@@ -88,39 +92,47 @@ namespace Fodinae.UI
 
         private void TryInitialize()
         {
-            if (_initialized || _initializationFailed || _resolver == null)
+            if (_initialized || _initializationFailed)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null)
             {
+                // Защитный гард: к Start панель гарантирована (создаётся в OnEnable
+                // документа) — пропуск здесь означает дефект проводки, а не гонку
+                // (ретраев больше нет).
                 return;
-            }
-
-            if (_resolver != null)
-            {
-                if (_clientConfig == null && _resolver.TryResolve(out IClientConfigManager clientConfig)) _clientConfig = clientConfig;
-                if (_networkService == null && _resolver.TryResolve(out INetworkService networkService)) _networkService = networkService;
-                if (_audioSystem == null && _resolver.TryResolve(out IAudioSystem audioSystem)) _audioSystem = audioSystem;
-                if (_connectionService == null && _resolver.TryResolve(out IConnectionService connectionService)) _connectionService = connectionService;
-                if (_inputBlocker == null && _resolver.TryResolve(out IInputBlocker inputBlocker)) _inputBlocker = inputBlocker;
-                if (_lightingEngine == null && _resolver.TryResolve(out LightingEngine lightingEngine)) _lightingEngine = lightingEngine;
-                if (_postProcessController == null && _resolver.TryResolve(out PostProcessController postProcessController)) _postProcessController = postProcessController;
-                if (_terrainRenderer == null && _resolver.TryResolve(out TerrainRenderer terrainRenderer)) _terrainRenderer = terrainRenderer;
-                if (_graphicsSettings == null && _resolver.TryResolve(out GraphicsSettingsController graphicsSettings)) _graphicsSettings = graphicsSettings;
-                if (_displayManager == null && _resolver.TryResolve(out DisplayManager displayManager)) _displayManager = displayManager;
             }
 
             if (_clientConfig == null || _clientConfig.Config == null || _networkService == null ||
                 _audioSystem == null || _connectionService == null || _inputBlocker == null ||
                 _lightingEngine == null || _postProcessController == null || _terrainRenderer == null ||
-                _graphicsSettings == null || _displayManager == null)
+                _graphicsSettings == null || _displayManager == null || _loc == null)
             {
                 return;
             }
 
             if (!_lightingEngine.IsInitialized)
+            {
+                // Единственный детерминированный переход: событие готовности
+                // освещения (EnsureInitialized в PostStart), без ретраев из Update.
+                _lightingEngine.OnInitialized += OnLightingReady;
+                return;
+            }
+
+            CompleteInitialize();
+        }
+
+        private void OnLightingReady()
+        {
+            _lightingEngine.OnInitialized -= OnLightingReady;
+            CompleteInitialize();
+        }
+
+        private void CompleteInitialize()
+        {
+            if (_initialized || _initializationFailed)
             {
                 return;
             }
@@ -147,11 +159,25 @@ namespace Fodinae.UI
                 _doc.panelSettings.scale = savedScale;
             }
 
+            // Реестр применяет текст сразу и на каждой смене языка — подписка
+            // вручную не нужна и запрещена линтером.
+            _loc.RegisterLocalizable(this);
+
             _initialized = true;
         }
 
         private void OnDestroy()
         {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
+            if (_lightingEngine != null)
+            {
+                _lightingEngine.OnInitialized -= OnLightingReady;
+            }
+
             IsMenuOpen = false;
 
             if (_menuTree != null && _menuTree.parent != null)
@@ -193,6 +219,10 @@ namespace Fodinae.UI
             menuTree.AddToClassList("ui-fullscreen");
             menuTree.pickingMode = PickingMode.Ignore;
             menuTree.style.display = DisplayStyle.None;
+
+            // Статические ключи UXML (settings.*, pause.*) резолвятся сразу при
+            // сборке, а не только по событию смены языка.
+            UILocalizer.Apply(menuTree, _loc);
             _menuPanel = menuTree.Q<VisualElement>("PauseOverlay") ??
                 throw new InvalidOperationException("[PauseMenu] PauseOverlay is missing from PauseMenu.uxml.");
             _mainPage = menuTree.Q<VisualElement>("MainPage") ??
@@ -205,15 +235,25 @@ namespace Fodinae.UI
             Button resumeButton = menuTree.Q<Button>("ResumeButton") ??
                 throw new InvalidOperationException("[PauseMenu] ResumeButton is missing from PauseMenu.uxml.");
             resumeButton.clicked += CloseMenu;
+            resumeButton.text = _loc.Get("pause.resume");
             Button settingsButton = menuTree.Q<Button>("SettingsButton") ??
                 throw new InvalidOperationException("[PauseMenu] SettingsButton is missing from PauseMenu.uxml.");
             settingsButton.clicked += OpenSettings;
+            settingsButton.text = _loc.Get("pause.settings");
             Button mainMenuButton = menuTree.Q<Button>("MainMenuButton") ??
                 throw new InvalidOperationException("[PauseMenu] MainMenuButton is missing from PauseMenu.uxml.");
             mainMenuButton.clicked += ExitToMainMenu;
+            mainMenuButton.text = _loc.Get("pause.quit");
             Button quitButton = menuTree.Q<Button>("QuitButton") ??
                 throw new InvalidOperationException("[PauseMenu] QuitButton is missing from PauseMenu.uxml.");
             quitButton.clicked += QuitGame;
+            quitButton.text = _loc.Get("pause.quit_game");
+            Label pauseTitle = menuTree.Q<Label>("PauseTitle") ??
+                throw new InvalidOperationException("[PauseMenu] PauseTitle is missing from PauseMenu.uxml.");
+            pauseTitle.text = _loc.Get("pause.title");
+            Label settingsTitle = menuTree.Q<Label>("SettingsTitle") ??
+                throw new InvalidOperationException("[PauseMenu] SettingsTitle is missing from PauseMenu.uxml.");
+            settingsTitle.text = _loc.Get("pause.settings");
             _settingsPage = menuTree.Q<VisualElement>("SettingsPage") ??
                 throw new InvalidOperationException("[PauseMenu] SettingsPage is missing from PauseMenu.uxml.");
             ScrollView graphicsScroll = menuTree.Q<ScrollView>("GraphicsScroll") ??
@@ -231,19 +271,26 @@ namespace Fodinae.UI
             Button settingsBack = menuTree.Q<Button>("SettingsBack") ??
                 throw new InvalidOperationException("[PauseMenu] SettingsBack is missing from PauseMenu.uxml.");
             settingsBack.clicked += CloseSettings;
+            settingsBack.text = _loc.Get("common.back");
 
             Button graphicsTab = menuTree.Q<Button>("GraphicsTab") ??
                 throw new InvalidOperationException("[PauseMenu] GraphicsTab is missing from PauseMenu.uxml.");
+            graphicsTab.text = _loc.Get("menu.settings.graphics");
             Button displayTab = menuTree.Q<Button>("DisplayTab") ??
                 throw new InvalidOperationException("[PauseMenu] DisplayTab is missing from PauseMenu.uxml.");
+            displayTab.text = _loc.Get("menu.settings.display");
             Button effectsTab = menuTree.Q<Button>("EffectsTab") ??
                 throw new InvalidOperationException("[PauseMenu] EffectsTab is missing from PauseMenu.uxml.");
+            effectsTab.text = _loc.Get("pause.tab.effects");
             Button audioTab = menuTree.Q<Button>("AudioTab") ??
                 throw new InvalidOperationException("[PauseMenu] AudioTab is missing from PauseMenu.uxml.");
+            audioTab.text = _loc.Get("menu.settings.audio");
             Button interfaceTab = menuTree.Q<Button>("InterfaceTab") ??
                 throw new InvalidOperationException("[PauseMenu] InterfaceTab is missing from PauseMenu.uxml.");
+            interfaceTab.text = _loc.Get("pause.tab.interface");
             Button advancedTab = menuTree.Q<Button>("AdvancedTab") ??
                 throw new InvalidOperationException("[PauseMenu] AdvancedTab is missing from PauseMenu.uxml.");
+            advancedTab.text = _loc.Get("pause.tab.advanced");
 
             VisualElement[] settingsPages =
             [
@@ -263,8 +310,11 @@ namespace Fodinae.UI
                 interfaceTab,
                 advancedTab,
             ];
+            _settingsPages = settingsPages;
+            _settingsTabs = settingsTabs;
             void ShowSettingsPage(int index)
             {
+                _activeSettingsTab = index;
                 for (int i = 0; i < settingsPages.Length; i++)
                 {
                     settingsPages[i].style.display = i == index
@@ -293,8 +343,10 @@ namespace Fodinae.UI
                 _postProcessController,
                 _networkService,
                 _connectionService,
+                _localPlayer,
                 _settingsRefreshers,
-                CloseMenu);
+                CloseMenu,
+                _loc);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             // Built first: BuildAdvancedPage appends the lighting debug view
@@ -424,6 +476,58 @@ namespace Fodinae.UI
             }
         }
 
+        /// <summary>
+        /// Переприменяет локализованный текст после смены языка. Меню паузы
+        /// строится один раз (CreateMenu идемпотентен), поэтому при смене языка
+        /// пересобираем всё дерево и восстанавливаем состояние: было ли меню
+        /// открыто и какая страница настроек была активна.
+        /// </summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(PauseMenu));
+            if (_menuTree == null || _loc == null)
+            {
+                return;
+            }
+
+            bool wasOpen = _isOpen;
+            bool wasSettings = _settingsPage != null && _settingsPage.style.display == DisplayStyle.Flex;
+            int activeTab = _activeSettingsTab;
+
+            CreateMenu(_doc.rootVisualElement);
+
+            if (wasOpen && _menuTree != null)
+            {
+                _menuTree.style.display = DisplayStyle.Flex;
+                _menuTree.BringToFront();
+                if (_menuPanel != null)
+                {
+                    _menuPanel.style.display = DisplayStyle.Flex;
+                }
+
+                if (wasSettings)
+                {
+                    OpenSettings();
+                    for (int i = 0; i < _settingsPages.Length; i++)
+                    {
+                        _settingsPages[i].style.display = i == activeTab
+                            ? DisplayStyle.Flex
+                            : DisplayStyle.None;
+                        _settingsTabs[i].EnableInClassList("settings-tab--active", i == activeTab);
+                    }
+                }
+                else if (_mainPage != null)
+                {
+                    _mainPage.style.display = DisplayStyle.Flex;
+                }
+            }
+
+            if (_menuTree != null)
+            {
+                UILocalizer.AssertLocalized(_menuTree, _loc);
+            }
+        }
+
         private void CloseSettings()
         {
             if (_settingsPage != null)
@@ -441,9 +545,9 @@ namespace Fodinae.UI
         {
             PauseMenuUIFactory.ShowConfirmation(
                 _doc,
-                "Выход из игры",
-                "Вы уверены, что хотите выйти?",
-                "Выйти",
+                _loc.Get("pause.quit_confirm_title"),
+                _loc.Get("pause.quit_confirm_msg"),
+                _loc.Get("pause.quit_confirm_btn"),
                 () =>
                 {
 #if UNITY_EDITOR
@@ -451,21 +555,23 @@ namespace Fodinae.UI
 #else
                     Application.Quit();
 #endif
-                });
+                },
+                _loc);
         }
 
         private void ExitToMainMenu()
         {
             PauseMenuUIFactory.ShowConfirmation(
                 _doc,
-                "Выйти в главное меню",
-                "Вы уверены? Текущая сессия будет закрыта.",
-                "В меню",
+                _loc.Get("pause.quit"),
+                _loc.Get("pause.exit_menu_confirm_msg"),
+                _loc.Get("pause.exit_menu_btn"),
                 () =>
                 {
                     CloseMenu();
                     _mainMenuNavigation.ReturnToMainMenu();
-                });
+                },
+                _loc);
         }
     }
 }

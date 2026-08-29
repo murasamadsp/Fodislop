@@ -2,24 +2,11 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game;
-using Fodinae.Game.Managers;
 using Fodinae.Networking.Processors;
-using Fodinae.Player;
-using Fodinae.UI;
-using Fodinae.UI.Binding;
-using Fodinae.UI.Programmator;
-using MinesServer.Data;
-using MinesServer.Networking.Client.Packets.Connection;
-using MinesServer.Networking.Client.Packets.GUI;
-using MinesServer.Networking.Server;
-using MinesServer.Networking.Server.Packets;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.GUI;
-using MinesServer.Networking.Server.Packets.GUI.Components;
 using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Server.Packets.Information.StatusPanel;
 using MinesServer.Networking.Server.Packets.Inventory;
@@ -28,37 +15,30 @@ using MinesServer.Networking.Server.Packets.Movement;
 using MinesServer.Networking.Server.Packets.Utilities;
 using MinesServer.Networking.Server.Packets.World;
 using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.UIElements;
 using VContainer;
 
 namespace Fodinae.Networking
 {
-    public partial class PacketHandler : MonoBehaviour, IInputBlocker
+    /// <summary>
+    /// Pure packet dispatcher: binds packet types to processors and owns the
+    /// subscription lifetime against <see cref="INetworkService"/>. It holds no
+    /// UI, no scene managers and no player state — every packet is routed to a
+    /// processor that updates a model, an event gateway or a domain service.
+    /// </summary>
+    public partial class PacketHandler : MonoBehaviour
     {
-        public bool IsInputBlocked => ChatInput.IsFocused || (_windowProcessor != null && (_windowProcessor.HasOpenWindows || _windowProcessor.IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen));
-        public string? TopWindowTag => _windowProcessor != null ? _windowProcessor.TopWindowTag : null;
-
-        private static readonly PlayerStateProcessor PlayerState = new();
-        private static readonly OpenURLProcessor OpenURL = new();
         private bool _isInitialized;
         private bool _isSubscribed;
-        private bool _emptyAuthTokenWarningLogged;
+        private INetworkService? _subscribedNetworkService;
 
         [Inject]
-        private WorldInitProcessor _worldInit = null!;
-        [Inject]
-        private RobotInfoProcessor _robotInfo = null!;
-        [Inject]
-        private MapRegionProcessor _mapRegion = null!;
+        private ChatProcessor _chat = null!;
         [Inject]
         private AudioPacketProcessor _audio = null!;
         [Inject]
         private PlayerInfoProcessor _playerInfo = null!;
         [Inject]
-        private RobotPositionProcessor _robotPosition = null!;
-        [Inject]
-        private ChatProcessor _chat = null!;
+        private MapRegionProcessor _mapRegion = null!;
         [Inject]
         private MissionProcessor _mission = null!;
         [Inject]
@@ -69,17 +49,6 @@ namespace Fodinae.Networking
         private MissionArrowProcessor _missionArrow = null!;
         [Inject]
         private WindowPacketProcessor _windowProcessor = null!;
-
-        [Inject]
-        private INetworkService _networkService = null!;
-        [Inject]
-        private IWorldDataStorage _mapStorageInterface = null!;
-        [Inject]
-        private GameManager _gameManager = null!;
-        [Inject]
-        private IMapDataProvider _mapDataProvider = null!;
-        [Inject]
-        private UIDocument _uiDocument = null!;
         [Inject]
         private PlayerStatsProcessor _playerStats = null!;
         [Inject]
@@ -88,6 +57,13 @@ namespace Fodinae.Networking
         private InventoryProcessor _inventory = null!;
         [Inject]
         private ClanProcessor _clan = null!;
+        [Inject]
+        private WorldInitProcessor _worldInit = null!;
+        [Inject]
+        private AuthTokenProcessor _authToken = null!;
+        [Inject]
+        private INetworkService _networkService = null!;
+
         protected virtual void Awake()
         {
             TryInitialize();
@@ -109,48 +85,17 @@ namespace Fodinae.Networking
 
         private bool TryInitialize()
         {
-            if (_isInitialized)
-            {
-                TrySubscribeToNetworkService();
-                return true;
-            }
-
-            if (_worldInit == null ||
-                _robotInfo == null ||
-                _mapRegion == null ||
-                _audio == null ||
-                _playerInfo == null ||
-                _robotPosition == null ||
-                _chat == null ||
-                _mission == null ||
-                _building == null ||
-                _connection == null ||
-                _missionArrow == null ||
-                _windowProcessor == null ||
-                _networkService == null ||
-                _mapStorageInterface == null ||
-                _gameManager == null ||
-                _mapDataProvider == null ||
-                _uiDocument == null ||
-                _playerStats == null ||
-                _status == null ||
-                _inventory == null ||
-                _clan == null)
+            if (_networkService == null)
             {
                 return false;
             }
 
-            var modalWindowHandler = new ModalWindowHandler(_uiDocument);
-            _windowProcessor.Initialize(_uiDocument, modalWindowHandler);
-
-            TrySubscribeToNetworkService();
-
-            if (_mapDataProvider is MapManager concreteMM)
+            if (!_isInitialized)
             {
-                concreteMM.OnWorldInitialized += OnWorldInitialized;
+                _isInitialized = true;
             }
 
-            _isInitialized = true;
+            TrySubscribeToNetworkService();
             return true;
         }
 
@@ -159,8 +104,9 @@ namespace Fodinae.Networking
         // Protocol packets may be value types, so this helper must remain unconstrained.
         private void Subscribe<T>(Action<T> handler)
         {
-            _networkService.Subscribe(handler);
-            _unsubscribers.Add(() => _networkService.Unsubscribe(handler));
+            INetworkService networkService = _networkService;
+            networkService.Subscribe(handler);
+            _unsubscribers.Add(() => networkService.Unsubscribe(handler));
         }
 
         private void TrySubscribeToNetworkService()
@@ -170,24 +116,27 @@ namespace Fodinae.Networking
                 return;
             }
 
-            // NetworkService deduplicates handlers. Re-registering here is
-            // intentional: after a domain reload the injected service can be a
-            // new instance while PacketHandler's _isSubscribed flag survives.
-            // The old guard would then leave the new dispatcher empty.
-            //
-            // The undo list gets no such deduplication, and this method runs
-            // again on every TryInitialize call. Rebuilding it in step with the
-            // registrations below keeps it at one entry per subscription instead
-            // of growing by the full set each time.
-            _unsubscribers.Clear();
+            // Repeated initialization of the same scene must be a no-op. If the
+            // dispatcher instance changed (domain reload or scope rebuild), detach
+            // from the old dispatcher before binding the new one; otherwise the old
+            // graph keeps receiving packets after the scene has been replaced.
+            if (_isSubscribed && ReferenceEquals(_subscribedNetworkService, _networkService))
+            {
+                return;
+            }
+
+            if (_isSubscribed)
+            {
+                UnsubscribePacketSubscriptions();
+            }
 
             Subscribe<WorldInitPacket>(_worldInit.Process);
-            Subscribe<RobotInfoPacket>(_robotInfo.Process);
+            Subscribe<RobotInfoPacket>(_playerInfo.Process);
             Subscribe<PlayerInfoPacket>(_playerInfo.Process);
             Subscribe<MovementSpeedPacket>(_playerInfo.Process);
             Subscribe<OpenWindowPacket>(_windowProcessor.Process);
             Subscribe<CloseWindowPacket>(_windowProcessor.Process);
-            Subscribe<RobotPositionPacket>(_robotPosition.Process);
+            Subscribe<RobotPositionPacket>(_playerInfo.Process);
             Subscribe<MapRegionPacket>(_mapRegion.Process);
             Subscribe<PackPacket>(_building.Process);
             Subscribe<RemovePackPacket>(_building.Process);
@@ -199,8 +148,8 @@ namespace Fodinae.Networking
             Subscribe<BasketPacket>(_playerStats.Process);
             Subscribe<MaxDepthPacket>(_playerStats.Process);
 
-            Subscribe<AutoMineStatePacket>(PlayerState.Process);
-            Subscribe<AggressionStatePacket>(PlayerState.Process);
+            Subscribe<AutoMineStatePacket>(_playerInfo.Process);
+            Subscribe<AggressionStatePacket>(_playerInfo.Process);
             Subscribe<SkillProgressPacket>(_playerStats.Process);
             Subscribe<DailyBonusStatePacket>(_playerStats.Process);
             Subscribe<TeleportPacket>(_playerInfo.Process);
@@ -219,17 +168,18 @@ namespace Fodinae.Networking
             Subscribe<AddStatusLinePacket>(_status.Process);
             Subscribe<ClearStatusLinePacket>(_status.Process);
             Subscribe<ClearStatusPacket>(_status.Process);
-            Subscribe<ModalWindowPacket>(_windowProcessor.HandleModalWindow);
+            Subscribe<ModalWindowPacket>(_windowProcessor.Process);
             Subscribe<ShowClanPacket>(_clan.Process);
             Subscribe<HideClanPacket>(_clan.Process);
             Subscribe<MissionInitPacket>(_mission.Process);
             Subscribe<MissionProgressPacket>(_mission.Process);
             Subscribe<DisconnectPacket>(_connection.Process);
             Subscribe<ReconnectPacket>(_connection.Process);
-            Subscribe<AuthTokenPacket>(HandleAuthTokenPacket);
-            Subscribe<OpenURLPacket>(OpenURL.Process);
+            Subscribe<AuthTokenPacket>(_authToken.Process);
+            Subscribe<OpenURLPacket>(packet => Application.OpenURL(packet.URL));
             Subscribe<MissionArrowPacket>(_missionArrow.Process);
 
+            _subscribedNetworkService = _networkService;
             _isSubscribed = true;
         }
 
@@ -242,11 +192,6 @@ namespace Fodinae.Networking
         /// prevents anything. The connection lives in the Bootstrap scope and
         /// keeps draining packets across the transition by design, while
         /// OnDestroy runs *inside* the unload in an order Unity does not define.
-        /// Any packet that lands in that window reaches a processor, which
-        /// resolves a lazily-registered manager from an already-disposed
-        /// container - and VContainer answers that by re-running the provider,
-        /// i.e. by spawning a fresh BuildingManager / RobotManager /
-        /// ServerAudioEventManager GameObject into the closing scene.
         /// OnDestroy still calls this as a backstop.
         /// </remarks>
         public void Shutdown()
@@ -266,6 +211,11 @@ namespace Fodinae.Networking
                 return;
             }
 
+            UnsubscribePacketSubscriptions();
+        }
+
+        private void UnsubscribePacketSubscriptions()
+        {
             if (_networkService != null)
             {
                 foreach (Action unsubscribe in _unsubscribers)
@@ -276,52 +226,7 @@ namespace Fodinae.Networking
 
             _unsubscribers.Clear();
             _isSubscribed = false;
-
-            if (_windowProcessor != null)
-            {
-                _windowProcessor.Dispose();
-            }
-
-            if (_mapDataProvider is MapManager concreteMM)
-            {
-                concreteMM.OnWorldInitialized -= OnWorldInitialized;
-            }
-        }
-
-        private void OnWorldInitialized()
-        {
-            var gm = _gameManager;
-            if (gm != null)
-            {
-                gm.NotifyWorldLoaded();
-            }
-        }
-
-        private void HandleAuthTokenPacket(AuthTokenPacket packet)
-        {
-            string newToken = packet.Token;
-            if (string.IsNullOrEmpty(newToken))
-            {
-                // An empty token is a rejected authentication response, not a
-                // client invariant failure. Keep the auth window/reconnect flow
-                // alive without tripping the editor fail-fast logger.
-                if (!_emptyAuthTokenWarningLogged)
-                {
-                    Debug.LogWarning("[Auth] Server returned an empty authentication token.");
-                    _emptyAuthTokenWarningLogged = true;
-                }
-
-                return;
-            }
-
-            _emptyAuthTokenWarningLogged = false;
-            Auth.AuthTokenManager.SaveToken(newToken);
-
-            var gm = _gameManager;
-            if (gm != null)
-            {
-                gm.AuthorizeUI();
-            }
+            _subscribedNetworkService = null;
         }
     }
 }

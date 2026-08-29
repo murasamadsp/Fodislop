@@ -43,7 +43,7 @@ namespace Fodinae.Rendering.PostProcessing
             _mainCamera = null;
         }
 
-        private void EnsurePassCreated()
+        private void EnsurePassCreated(Camera gameplayCamera)
         {
             if (_pass != null)
             {
@@ -63,7 +63,7 @@ namespace Fodinae.Rendering.PostProcessing
 
             _pass = new PostProcessRenderPass(computeShader);
             _pass.ConfigureInput(ScriptableRenderPassInput.Color);
-            _mainCamera = GameplayCamera.Resolve();
+            _mainCamera = gameplayCamera;
             PostProcessRenderPass.SetMainCamera(_mainCamera);
         }
 
@@ -83,31 +83,26 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            EnsurePassCreated();
+            ref var cameraData = ref renderingData.cameraData;
+            if (cameraData.renderType != CameraRenderType.Base ||
+                cameraData.camera.cameraType != CameraType.Game)
+            {
+                return;
+            }
+
+            EnsurePassCreated(cameraData.camera);
             if (_pass == null)
             {
                 return;
             }
 
-            if (_mainCamera == null)
+            if (_mainCamera != cameraData.camera)
             {
-                _mainCamera = GameplayCamera.Resolve();
-            }
-
-            if (_mainCamera == null)
-            {
-                return;
+                _mainCamera = cameraData.camera;
+                PostProcessRenderPass.SetMainCamera(_mainCamera);
             }
 
             PostProcessRenderPass.SetMainCamera(_mainCamera);
-
-            ref var cameraData = ref renderingData.cameraData;
-            if (cameraData.renderType != CameraRenderType.Base ||
-                cameraData.camera.cameraType != CameraType.Game ||
-                cameraData.camera != _mainCamera)
-            {
-                return;
-            }
 
             if (!_settings.RunInSceneView && cameraData.isSceneViewCamera)
             {

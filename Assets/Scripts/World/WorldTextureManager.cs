@@ -8,9 +8,7 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
@@ -37,7 +35,7 @@ namespace Fodinae.World
         public TextureAtlas _currentAtlas = null!;
 
         [Inject]
-        private ISessionContainer _session = null!;
+        private MapManager _mapManager = null!;
         [Inject]
         private IAssetLoader _assetLoader = null!;
         private CellTextureCache _textureCache = null!;
@@ -279,10 +277,7 @@ namespace Fodinae.World
 
                 if (textureInfo.AnimationFrames > 1)
                 {
-                    MapManager mmForAnim = _session.TryResolve<MapManager>() ??
-                        throw new InvalidOperationException(
-                            "MapManager is required to resolve animation metadata for a terrain texture.");
-                    float speed = mmForAnim.GetAnimationSpeed(cellType);
+                    float speed = _mapManager.GetAnimationSpeed(cellType);
 
                     if (speed <= 0)
                     {
@@ -291,7 +286,7 @@ namespace Fodinae.World
                     }
 
                     frameIndex = (int)(Time.realtimeSinceStartup * speed) % textureInfo.AnimationFrames;
-                    frameHeight = mmForAnim.GetAnimationFrameHeight(cellType);
+                    frameHeight = _mapManager.GetAnimationFrameHeight(cellType);
                 }
 
                 foreach (var atlas in _atlases)
@@ -337,9 +332,7 @@ namespace Fodinae.World
         public float GetAnimationSpeedForCell(CellType cellType)
         {
             EnsureInitialized();
-            MapManager mapManager = _session.TryResolve<MapManager>() ??
-                throw new InvalidOperationException(
-                    "MapManager is required to resolve terrain animation metadata.");
+            MapManager mapManager = _mapManager;
             if (!mapManager.HasAnimation(cellType))
             {
                 return 0f;
@@ -540,13 +533,12 @@ namespace Fodinae.World
                 }
             }
 
-            MapManager? mmForFrame = _session.TryResolve<MapManager>();
-            if (mmForFrame == null || !mmForFrame.IsWorldInitialized)
+            if (!_mapManager.IsWorldInitialized)
             {
                 return;
             }
 
-            int frameHeight = mmForFrame.GetAnimationFrameHeight(cellType);
+            int frameHeight = _mapManager.GetAnimationFrameHeight(cellType);
 
             ValidateTerrainTextureDimensions(
                 cellType,
@@ -657,10 +649,16 @@ namespace Fodinae.World
             };
         }
 
-        public List<TextureAtlas> GetAllAtlases()
+        public IReadOnlyList<IAtlasDescriptor> GetAllAtlases()
         {
             EnsureInitialized();
-            return _atlases;
+            var result = new List<IAtlasDescriptor>(_atlases.Count);
+            foreach (var atlas in _atlases)
+            {
+                result.Add(atlas);
+            }
+
+            return result;
         }
 
         public void FlushDirtyAtlases()

@@ -8,16 +8,16 @@ namespace VContainer.Diagnostics
 {
     public sealed class RegisterInfo
     {
-        private static bool displayFileNames = true;
-        private static int idSeed;
+        static bool displayFileNames = true;
+        static int idSeed;
 
         public int Id { get; }
         public RegistrationBuilder RegistrationBuilder { get; }
         public StackTrace StackTrace { get; }
 
-        private StackFrame headLineStackFrame;
+        StackFrame headLineStackFrame;
 
-        internal string FormattedStackTrace = default; // cache field for internal use(Unity Editor, etc...)
+        internal string formattedStackTrace = default; // cache field for internal use(Unity Editor, etc...)
 
         public RegisterInfo(RegistrationBuilder registrationBuilder)
         {
@@ -44,7 +44,6 @@ namespace VContainer.Diagnostics
                     displayFileNames = false;
                 }
             }
-
             return null;
         }
 
@@ -65,7 +64,6 @@ namespace VContainer.Diagnostics
                     displayFileNames = false;
                 }
             }
-
             return -1;
         }
 
@@ -73,20 +71,15 @@ namespace VContainer.Diagnostics
         {
             var filename = GetFilename();
             if (filename == null)
-            {
-                return string.Empty;
-            }
-
+                return "";
             var prefixIndex = filename.LastIndexOf("Assets/");
-            return prefixIndex > 0 ? filename.Substring(prefixIndex) : string.Empty;
+            return prefixIndex > 0 ? filename.Substring(prefixIndex) : "";
         }
 
         public string GetHeadline()
         {
             if (headLineStackFrame == null)
-            {
-                return string.Empty;
-            }
+                return "";
 
             var method = headLineStackFrame.GetMethod();
             var filename = GetFilename();
@@ -101,37 +94,25 @@ namespace VContainer.Diagnostics
             {
                 return $"{method.DeclaringType?.FullName}.{method.Name}(offset: {ilOffset})";
             }
-
             return $"{method.DeclaringType?.FullName}.{method.Name}";
         }
 
-        private StackFrame GetHeadlineFrame(StackTrace stackTrace)
+        StackFrame GetHeadlineFrame(StackTrace stackTrace)
         {
             for (var i = 0; i < stackTrace.FrameCount; i++)
             {
                 var sf = stackTrace.GetFrame(i);
-                if (sf == null)
-                {
-                    continue;
-                }
+                if (sf == null) continue;
 
                 var m = sf.GetMethod();
-                if (m == null)
-                {
-                    continue;
-                }
+                if (m == null) continue;
 
-                if (m.DeclaringType == null)
-                {
-                    continue;
-                }
-
+                if (m.DeclaringType == null) continue;
                 if (m.DeclaringType.Namespace == null || !m.DeclaringType.Namespace.StartsWith("VContainer"))
                 {
                     return sf;
                 }
             }
-
             return stackTrace.FrameCount > 0 ? stackTrace.GetFrame(0) : null;
         }
     }

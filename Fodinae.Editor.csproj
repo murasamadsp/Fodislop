@@ -15,7 +15,7 @@
   <PropertyGroup>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <EnableDefaultItems>false</EnableDefaultItems>
-    <LangVersion>12.0</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <RootNamespace>Fodinae.Editor</RootNamespace>
     <OutputType>Library</OutputType>
     <AssemblyName>Fodinae.Editor</AssemblyName>
@@ -53,12 +53,9 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets/Scripts/Editor/SceneManagerAuthoring.cs" />
-    <Compile Include="Assets/Scripts/Editor/SceneDefaultsAuthoring.cs" />
     <Compile Include="Assets/Scripts/Editor/LightingEngineEditor.cs" />
-    <Compile Include="Assets/Scripts/Editor/LightingEditModeTestRunner.cs" />
-    <Compile Include="Assets/Scripts/Editor/BootstrapSceneAuthoring.cs" />
-    <Compile Include="Assets/Scripts/Editor/InjectValidator.cs" />
+    <Compile Include="Assets/Scripts/Editor/ProductionSceneContractValidator.cs" />
+    <Compile Include="Assets/Scripts/Editor/ManagerContractMigrator.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets/Scripts/Editor/Fodinae.Editor.asmdef" />
@@ -696,6 +693,10 @@
       <HintPath>Assets/Plugins/ExtendedNumerics.BigDecimal.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>Library/PackageCache/com.unity.pipeline@24975d51528a/Runtime/Plugins/CodeAnalysis/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="nunit.framework">
       <HintPath>Library/PackageCache/com.unity.ext.nunit@44f7d31723bd/net472/unity-custom/nunit.framework.dll</HintPath>
       <Private>False</Private>
@@ -730,6 +731,10 @@
     </Reference>
     <Reference Include="ZString">
       <HintPath>Assets/Plugins/ZString.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>Library/PackageCache/com.unity.pipeline@24975d51528a/Runtime/Plugins/CodeAnalysis/Microsoft.CodeAnalysis.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="UnityEditor.iOS.Extensions.Xcode">

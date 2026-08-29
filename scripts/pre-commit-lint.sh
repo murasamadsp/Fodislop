@@ -12,7 +12,7 @@ echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
-"$(dirname "$0")/check-forbidden-patterns.sh"
+node "$(dirname "$0")/check-architecture.js"
 
 PLATFORM="$(uname -s)"
 if [ "$PLATFORM" != "Windows_NT" ] && [ "$CI" != "true" ]; then
@@ -80,15 +80,14 @@ done
 # Assembly-CSharp.dll, so filesystem-dependent find order can otherwise validate
 # editor code against a stale runtime assembly and report false missing members.
 PROJECTS=()
-if [ -f "./Assembly-CSharp.csproj" ]; then
-    PROJECTS+=("./Assembly-CSharp.csproj")
-fi
-
-while IFS= read -r PROJECT_FILE; do
-    if [ "$PROJECT_FILE" != "./Assembly-CSharp.csproj" ]; then
+for PROJECT_FILE in \
+    "./Fodinae.Runtime.csproj" \
+    "./Fodinae.Editor.csproj" \
+    "./Fodinae.Tests.Editor.csproj"; do
+    if [ -f "$PROJECT_FILE" ]; then
         PROJECTS+=("$PROJECT_FILE")
     fi
-done < <(find . -maxdepth 1 -name "Assembly-CSharp*.csproj" | sort)
+done
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
     echo "Notice: No Assembly-CSharp*.csproj files found in repository root."

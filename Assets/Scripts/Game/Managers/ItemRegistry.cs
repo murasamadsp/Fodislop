@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MinesServer.Data;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Game.Managers

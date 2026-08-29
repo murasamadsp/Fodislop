@@ -13,7 +13,7 @@ namespace Fodinae.UI
     // coordinates from screen position, so ANY camera that renders it repaints
     // the entire frame before that camera draws anything else. MainGame's camera
     // has cullingMask Everything, and MainMenu is not unloaded when the game
-    // starts - it lives until MainMenu.OnWorldLoaded - so the overlap was
+    // starts - it lives only for the menu scene - so the overlap was
     // guaranteed, not accidental.
     //
     // Culling masks and layers were the wrong tool for that: a layer only helps
@@ -37,12 +37,6 @@ namespace Fodinae.UI
         private RenderTexture? _texture;
 
         /// <summary>
-        /// Действующее звёздное поле. Как и у рига планеты: регистрация вместо
-        /// опроса, иначе промах первой попытки поиска стоит секунды задержки и
-        /// фон появляется позже остального меню.
-        /// </summary>
-        public static MenuStarfield? Current { get; private set; }
-
         public RenderTexture? Texture => _texture;
 
         public void SetDisplaySize(int width, int height)
@@ -69,17 +63,11 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
-            Current = this;
             EnsureTexture();
         }
 
         private void OnDisable()
         {
-            if (ReferenceEquals(Current, this))
-            {
-                Current = null;
-            }
-
             ReleaseTexture();
         }
 

@@ -1,7 +1,7 @@
 #nullable enable
 
 using System;
-using Fodinae.UI.HUD.Inventory.Model;
+using Fodinae.Core.Models;
 
 namespace Fodinae.UI.HUD.Inventory.Interfaces
 {

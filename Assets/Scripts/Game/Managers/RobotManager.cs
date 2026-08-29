@@ -20,6 +20,8 @@ namespace Fodinae.Game.Managers
 
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
 
         public static bool ShowDebugVisuals { get; set; }
 
@@ -27,11 +29,11 @@ namespace Fodinae.Game.Managers
 
         public int RobotCount => _robots.Count;
 
-        public void RegisterRobot(Robot robot)
+        public void RegisterRobot(IRobotView robot)
         {
-            if (robot == null)
+            if (robot is not Robot concrete)
             {
-                Debug.LogWarning($"{TAG} RegisterRobot called with null robot");
+                Debug.LogWarning($"{TAG} RegisterRobot called with non-Robot view");
                 return;
             }
 
@@ -67,10 +69,10 @@ namespace Fodinae.Game.Managers
                 }
             }
 
-            _robots[robot.BotId] = robot;
+            _robots[robot.BotId] = concrete;
         }
 
-        public Robot GetOrCreateRobot(uint botId)
+        public IRobotView GetOrCreateRobot(uint botId)
         {
             if (_robots.TryGetValue(botId, out var robot))
             {
@@ -79,7 +81,7 @@ namespace Fodinae.Game.Managers
 
             if (botId != 0 && botId == LocalPlayerBotId)
             {
-                var pmc = Fodinae.Player.Logic.PlayerMovementController.LocalPlayer;
+                var pmc = _localPlayer.Current;
                 var playerObj = pmc != null ? pmc.gameObject : null;
                 if (playerObj != null)
                 {

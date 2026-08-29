@@ -259,7 +259,8 @@ namespace Fodinae.Tests.World
                     occlusion,
                     0,
                     TextureFormat.RFloat);
-                request.WaitForCompletion();
+                AsyncGPUReadback.WaitAllRequests();
+                Assert.That(request.done, Is.True, "Async GPU readback did not complete synchronously in the EditMode test.");
                 Assert.That(request.hasError, Is.False);
                 return request.GetData<float>().ToArray();
             }
@@ -326,7 +327,8 @@ namespace Fodinae.Tests.World
                     result,
                     0,
                     TextureFormat.RGBAFloat);
-                request.WaitForCompletion();
+                AsyncGPUReadback.WaitAllRequests();
+                Assert.That(request.done, Is.True, "Async GPU readback did not complete synchronously in the EditMode test.");
                 Assert.That(request.hasError, Is.False);
                 return request.GetData<Color>()[0];
             }

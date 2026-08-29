@@ -6,7 +6,7 @@ namespace VContainer.Internal
 {
     public class OpenGenericInstanceProvider : IInstanceProvider
     {
-        private class TypeParametersKey
+        class TypeParametersKey
         {
             public readonly Type[] TypeParameters;
             public readonly object Key;
@@ -22,26 +22,18 @@ namespace VContainer.Internal
                 if (obj is TypeParametersKey other)
                 {
                     if (Key != other.Key)
-                    {
                         return false;
-                    }
 
                     if (TypeParameters.Length != other.TypeParameters.Length)
-                    {
                         return false;
-                    }
 
                     for (var i = 0; i < TypeParameters.Length; i++)
                     {
                         if (TypeParameters[i] != other.TypeParameters[i])
-                        {
                             return false;
-                        }
                     }
-
                     return true;
                 }
-
                 return false;
             }
 
@@ -52,18 +44,17 @@ namespace VContainer.Internal
                 {
                     hash = ((hash << 5) + hash) ^ typeParameter.GetHashCode();
                 }
-
                 hash = ((hash << 5) + hash) ^ (Key?.GetHashCode() ?? 0);
                 return hash;
             }
         }
 
-        private readonly Lifetime lifetime;
-        private readonly Type implementationType;
-        private readonly IReadOnlyList<IInjectParameter> customParameters;
+        readonly Lifetime lifetime;
+        readonly Type implementationType;
+        readonly IReadOnlyList<IInjectParameter> customParameters;
 
-        private readonly ConcurrentDictionary<TypeParametersKey, Registration> constructedRegistrations = new ConcurrentDictionary<TypeParametersKey, Registration>();
-        private readonly Func<TypeParametersKey, Registration> createRegistrationFunc;
+        readonly ConcurrentDictionary<TypeParametersKey, Registration> constructedRegistrations = new ConcurrentDictionary<TypeParametersKey, Registration>();
+        readonly Func<TypeParametersKey, Registration> createRegistrationFunc;
 
         public OpenGenericInstanceProvider(Type implementationType, Lifetime lifetime, List<IInjectParameter> injectParameters)
         {
@@ -79,7 +70,7 @@ namespace VContainer.Internal
             return constructedRegistrations.GetOrAdd(typeParametersKey, createRegistrationFunc);
         }
 
-        private Registration CreateRegistration(TypeParametersKey key)
+        Registration CreateRegistration(TypeParametersKey key)
         {
             var newType = implementationType.MakeGenericType(key.TypeParameters);
             var injector = InjectorCache.GetOrBuild(newType);
@@ -91,5 +82,5 @@ namespace VContainer.Internal
         {
             throw new InvalidOperationException();
         }
-    }
+   }
 }

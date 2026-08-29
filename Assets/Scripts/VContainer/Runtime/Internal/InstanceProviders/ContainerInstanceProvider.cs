@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class ContainerInstanceProvider : IInstanceProvider
+    sealed class ContainerInstanceProvider : IInstanceProvider
     {
         public static readonly ContainerInstanceProvider Default = new ContainerInstanceProvider();
 

@@ -65,7 +65,7 @@ namespace Fodinae.UI
             _tooltipElement.style.top = screenPos.y + 12;
         }
 
-        public static void AttachTo(VisualElement element, string text, Tooltip? tooltip)
+        public static void AttachTo(VisualElement element, Func<string> textProvider, Tooltip? tooltip)
         {
             if (tooltip == null)
             {
@@ -75,7 +75,7 @@ namespace Fodinae.UI
             element.RegisterCallback<MouseEnterEvent>(evt =>
             {
                 var screenPos = evt.mousePosition;
-                tooltip.Show(text, screenPos);
+                tooltip.Show(textProvider(), screenPos);
             });
 
             element.RegisterCallback<MouseMoveEvent>(evt =>

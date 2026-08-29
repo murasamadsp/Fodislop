@@ -3,6 +3,7 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
 using Fodinae.Networking.Auth;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -49,6 +50,7 @@ namespace Fodinae.UI
         private readonly Toggle _autoLogin;
         private readonly Label _hint;
         private readonly IClientConfigManager _clientConfig;
+        private readonly ILocalizationService? _loc;
 
         /// <summary>Вызывается, когда игрок прошёл ворота и меню можно показывать.</summary>
         public event Action? Passed;
@@ -61,7 +63,8 @@ namespace Fodinae.UI
             TextField login,
             Toggle autoLogin,
             Label hint,
-            IClientConfigManager clientConfig)
+            IClientConfigManager clientConfig,
+            ILocalizationService? loc)
         {
             _loginForm = loginForm;
             _registerForm = registerForm;
@@ -71,6 +74,17 @@ namespace Fodinae.UI
             _autoLogin = autoLogin;
             _hint = hint;
             _clientConfig = clientConfig;
+            _loc = loc;
+        }
+
+        private string L(string key, string fallback)
+        {
+            return _loc != null ? _loc.Get(key) : fallback;
+        }
+
+        private string L(string key, string fallback, object arg0, object arg1)
+        {
+            return _loc != null ? _loc.Get(key, arg0, arg1) : fallback;
         }
 
         /// <summary>
@@ -79,7 +93,8 @@ namespace Fodinae.UI
         /// </summary>
         public static AuthGate? TryCreate(
             VisualElement tree,
-            IClientConfigManager clientConfig)
+            IClientConfigManager clientConfig,
+            ILocalizationService? loc)
         {
             var loginForm = tree.Q<VisualElement>("AuthLoginForm");
             var registerForm = tree.Q<VisualElement>("AuthRegisterForm");
@@ -105,7 +120,8 @@ namespace Fodinae.UI
                 login,
                 autoLogin,
                 hint,
-                clientConfig);
+                clientConfig,
+                loc);
             gate.Bind(tree);
             return gate;
         }
@@ -127,7 +143,7 @@ namespace Fodinae.UI
             if (recover != null)
             {
                 recover.clicked += () => ShowHint(
-                    "Восстановление доступа не предусмотрено протоколом: сессия привязана к токену устройства.",
+                    L("gateway.auth.recover_hint", "Восстановить"),
                     warn: true);
             }
 
@@ -164,21 +180,21 @@ namespace Fodinae.UI
 
             ShowHint(
                 register
-                    ? "Регистрация не предусмотрена протоколом: аккаунт заводится сервером автоматически при первом подключении."
-                    : "Пароль протоколом не используется — вход выполняется по токену устройства.",
+                    ? L("gateway.auth.register_hint", "Регистрация")
+                    : L("gateway.auth.login_hint", "Вход"),
                 warn: register);
         }
 
         private void Submit()
         {
-            ShowHint("Подключение…", warn: false);
+            ShowHint(L("gateway.auth.connecting", "Подключение..."), warn: false);
             Pass();
         }
 
         private void StartOffline()
         {
             _clientConfig.UpdateAndSave(config => config.UseDummyConnection = true);
-            ShowHint("Офлайн-режим: локальная песочница без сервера.", warn: false);
+            ShowHint(L("gateway.auth.offline_hint", "Офлайн-режим"), warn: false);
             Pass();
         }
 
@@ -203,14 +219,14 @@ namespace Fodinae.UI
         /// generateSeededCallsign() в макете, и он совпадает с реальной
         /// моделью: сервер и так опознаёт клиента по токену, а не по имени.
         /// </summary>
-        private static string GenerateCallsign()
+        private string GenerateCallsign()
         {
             string seed = SystemInfo.deviceUniqueIdentifier;
             int hash = seed.GetHashCode();
             string[] clans = { "DVM", "VOID", "NEO", "CORE", "ORE", "HDS" };
             int number = Math.Abs(hash % 900) + 100;
             string clan = clans[Math.Abs(hash / 900) % clans.Length];
-            return $"ШАХТЁР-{number} [{clan}]";
+            return L("gateway.auth.callsign", $"#{number} {clan}", number, clan);
         }
     }
 }

@@ -22,7 +22,7 @@ namespace Fodinae.World.Terrain
         public CellDistortionType Distortion;
         public bool HasTileGroup;
         public int TileGroupId;
-        public Color MinimapColor;
+        public Color32 MinimapColor; // was Color (16 bytes) — Color32 (4 bytes) sufficient for minimap
         public CellAnimationType Animation;
         public float AnimationSpeed;
         public Vector4 AtlasRect;
@@ -39,7 +39,7 @@ namespace Fodinae.World.Terrain
         public CellDistortionType Distortion;
         public bool HasTileGroup;
         public int TileGroupId;
-        public Color MinimapColor;
+        public Color32 MinimapColor; // was Color (16 bytes) — Color32 (4 bytes) sufficient for minimap
         public CellAnimationType Animation;
         public float AnimationSpeed;
         public Vector4 AtlasRect;
@@ -48,5 +48,7 @@ namespace Fodinae.World.Terrain
         public int AnimationFrameCount;
         public float FrameHeightTiles;
         public bool IsTextureReady;
+        /// <summary>True once fully populated; replaces the parallel _metadataReady bool[] in TerrainCellCache.</summary>
+        public bool IsPopulated;
     }
 }

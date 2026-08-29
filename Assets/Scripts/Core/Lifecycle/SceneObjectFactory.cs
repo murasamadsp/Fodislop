@@ -6,32 +6,24 @@ using VContainer;
 
 namespace Fodinae.Core.Lifecycle;
 
-public enum RuntimeOwner
-{
-    General,
-    Robots,
-    Buildings,
-    Vfx,
-    FloatingUI,
-    AudioEvents,
-}
-
-public interface ISceneObjectFactory
-{
-    Transform GetOwner(RuntimeOwner owner = RuntimeOwner.General);
-
-    GameObject Create(string name, RuntimeOwner owner = RuntimeOwner.General);
-
-    T Create<T>(string name, RuntimeOwner owner = RuntimeOwner.General)
-        where T : MonoBehaviour;
-}
-
 public sealed class SceneObjectFactory(
-    ContentSceneRoot sceneRoot,
+    Transform runtimeRoot,
+    Transform robotsRoot,
+    Transform buildingsRoot,
+    Transform vfxRoot,
+    Transform floatingUIRoot,
+    Transform audioEventsRoot,
     IObjectResolver resolver) : ISceneObjectFactory
 {
-    public Transform GetOwner(RuntimeOwner owner = RuntimeOwner.General) =>
-        sceneRoot.GetRuntimeOwner(owner);
+    public Transform GetOwner(RuntimeOwner owner = RuntimeOwner.General) => owner switch
+    {
+        RuntimeOwner.Robots => robotsRoot,
+        RuntimeOwner.Buildings => buildingsRoot,
+        RuntimeOwner.Vfx => vfxRoot,
+        RuntimeOwner.FloatingUI => floatingUIRoot,
+        RuntimeOwner.AudioEvents => audioEventsRoot,
+        _ => runtimeRoot,
+    };
 
     public GameObject Create(string name, RuntimeOwner owner = RuntimeOwner.General)
     {
@@ -41,7 +33,7 @@ public sealed class SceneObjectFactory(
         }
 
         var gameObject = new GameObject(name);
-        gameObject.transform.SetParent(sceneRoot.GetRuntimeOwner(owner), false);
+        gameObject.transform.SetParent(GetOwner(owner), false);
         return gameObject;
     }
 

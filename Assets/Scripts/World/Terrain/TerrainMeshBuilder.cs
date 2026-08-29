@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
@@ -71,7 +70,7 @@ namespace Fodinae.World.Terrain
 
         public void BuildFull(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int minX, int minY, int meshWidth, int meshHeight, int worldWidth, int worldHeight,
-            List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
+            IReadOnlyList<IAtlasDescriptor> atlases, List<int>[] subMeshIndices, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
         {
             if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
@@ -139,7 +138,7 @@ namespace Fodinae.World.Terrain
 
         public void BuildRegion(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int minX, int minY, int meshWidth, int meshHeight, int startX, int startY, int countX, int countY, int worldWidth, int worldHeight,
-            List<TextureAtlas> atlases, List<int>[] subMeshIndices, bool useColorLod,
+            IReadOnlyList<IAtlasDescriptor> atlases, List<int>[] subMeshIndices, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
         {
             if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
@@ -243,7 +242,7 @@ namespace Fodinae.World.Terrain
             int meshHeight,
             int worldWidth,
             int worldHeight,
-            List<TextureAtlas> atlases,
+            IReadOnlyList<IAtlasDescriptor> atlases,
             List<int>[] subMeshIndices,
             bool useColorLod,
             MapManager mapManager,
@@ -337,7 +336,7 @@ namespace Fodinae.World.Terrain
         }
 
         private int FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
-            int worldWidth, int worldHeight, bool isBackground, int vIdx, List<TextureAtlas> atlases, bool useColorLod,
+            int worldWidth, int worldHeight, bool isBackground, int vIdx, IReadOnlyList<IAtlasDescriptor> atlases, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
         {
             if (unityY < 0 || unityY >= worldHeight || gridX < 0 || gridX >= worldWidth)
@@ -371,7 +370,7 @@ namespace Fodinae.World.Terrain
             float frameHeight;
             bool hasTileGroup;
             CellConfigProperties props;
-            Color minimapColor;
+            Color32 minimapColor;
             int atlasIndex;
 
             if (isSameCell)
@@ -477,7 +476,7 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx + 3].UV0 = uv3;
 
             bool useFallback = useColorLod || atlasRect.z < 0.0001f;
-            Color color = useFallback ? minimapColor : Color.white;
+            Color color = useFallback ? (Color)minimapColor : Color.white;
             if (atlasRect.z < 0.0001f)
             {
                 color.a = 1f;
@@ -503,12 +502,11 @@ namespace Fodinae.World.Terrain
                 (float)animType,
                 animSpeed,
                 animOffset,
-                isPhysicalMass ? 1f : 0f);
+                0f); // reserved (was isPhysicalMass — dead; encoded in UV6.y bit 6)
             Vector4 tileSizeVec = new Vector4(uvTileSize, uvTileSize, (float)animFrames, frameHeight);
             Vector4 worldPosVec = new Vector4(gridX, serverY, descriptor & 0x1F, packedW);
 
-            bool isRelief = !isBackground && isSameCell && precalc.CellIsRelief[x, y];
-            float reliefValue = isRelief ? precalc.CellReliefMasks[x, y] : 0f;
+            // reliefValue removed: was written to UV5.y but never read by any shader pass.
 
             _vertexBuffer[vIdx].Color = color;
             _vertexBuffer[vIdx].UV1 = atlasRect;
@@ -517,50 +515,35 @@ namespace Fodinae.World.Terrain
             _vertexBuffer[vIdx].UV4 = animDataVec;
             bool isGlowing = (props & CellConfigProperties.Glowing) != 0;
 
-            Color materialColor = minimapColor;
-            Color32 materialColor32 = materialColor;
-            int packedLightingColor = materialColor32.r |
-                (materialColor32.g << 8) |
-                (materialColor32.b << 16);
+            // Read RGB directly from Color32 bytes — no intermediate Color allocation
+            int packedLightingColor = minimapColor.r |
+                (minimapColor.g << 8) |
+                (minimapColor.b << 16);
 
-            _vertexBuffer[vIdx].UV5 = new Vector4(
-                anchorFlag,
-                reliefValue,
-                anchor0.x,
-                anchor0.y);
+            // UV5 layout: (anchorFlag, anchor.x, anchor.y, 0)
+            // Shader reads: packedData.x = anchorFlag, packedData.yz = anchoredUV
+            _vertexBuffer[vIdx].UV5 = new Vector4(anchorFlag, anchor0.x, anchor0.y, 0f);
 
             _vertexBuffer[vIdx + 1].Color = color;
             _vertexBuffer[vIdx + 1].UV1 = atlasRect;
             _vertexBuffer[vIdx + 1].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 1].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 1].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 1].UV5 = new Vector4(
-                anchorFlag,
-                reliefValue,
-                anchor1.x,
-                anchor1.y);
+            _vertexBuffer[vIdx + 1].UV5 = new Vector4(anchorFlag, anchor1.x, anchor1.y, 0f);
 
             _vertexBuffer[vIdx + 2].Color = color;
             _vertexBuffer[vIdx + 2].UV1 = atlasRect;
             _vertexBuffer[vIdx + 2].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 2].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 2].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 2].UV5 = new Vector4(
-                anchorFlag,
-                reliefValue,
-                anchor2.x,
-                anchor2.y);
+            _vertexBuffer[vIdx + 2].UV5 = new Vector4(anchorFlag, anchor2.x, anchor2.y, 0f);
 
             _vertexBuffer[vIdx + 3].Color = color;
             _vertexBuffer[vIdx + 3].UV1 = atlasRect;
             _vertexBuffer[vIdx + 3].UV2 = tileSizeVec;
             _vertexBuffer[vIdx + 3].UV3 = worldPosVec;
             _vertexBuffer[vIdx + 3].UV4 = animDataVec;
-            _vertexBuffer[vIdx + 3].UV5 = new Vector4(
-                anchorFlag,
-                reliefValue,
-                anchor3.x,
-                anchor3.y);
+            _vertexBuffer[vIdx + 3].UV5 = new Vector4(anchorFlag, anchor3.x, anchor3.y, 0f);
 
             float glowFlags = 0f;
             if (isGlowing)
@@ -573,7 +556,6 @@ namespace Fodinae.World.Terrain
                 glowFlags += 2f;
             }
 
-            float visualBlendMask = !isBackground && isSameCell ? precalc.CellVisualBlendMasks[x, y] : 0f;
             byte solidConnectivityMask = !isBackground && isSameCell
                 ? precalc.CellSolidBoundaryMasks[x, y]
                 : (byte)0;
@@ -582,7 +564,7 @@ namespace Fodinae.World.Terrain
             bool hasRoundedPhysicalContour =
                 !isBackground && MapManager.IsRoundableLoose(cellFgType);
             float emissionPower = isGlowing
-                ? Mathf.Max(1f / byte.MaxValue, materialColor.a)
+                ? Mathf.Max(1f / byte.MaxValue, minimapColor.a / 255f)
                 : 0f;
             float packedLightingFlags = solidBoundaryMask +
                 (isGlowing ? 16f : 0f) +
@@ -593,7 +575,7 @@ namespace Fodinae.World.Terrain
                 packedLightingColor,
                 packedLightingFlags,
                 glowFlags + (solidDiagonalMask * 4f),
-                solidBoundaryMask);
+                0f); // was solidBoundaryMask — redundant; shader now derives it via int(glowData.y) & 15
             _vertexBuffer[vIdx + 0].UV6 = glowVec;
             _vertexBuffer[vIdx + 1].UV6 = glowVec;
             _vertexBuffer[vIdx + 2].UV6 = glowVec;

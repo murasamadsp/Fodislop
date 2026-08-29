@@ -28,9 +28,13 @@ namespace Fodinae.Rendering
             var config = _clientConfig.Config;
 
             // Display synchronization is independent from simulation/render throughput.
-            // The client never imposes an application-level FPS ceiling.
+            // Honor the frame-rate cap the gateway offers: with VSync off an
+            // uncapped frame rate only burns GPU/CPU and heats the machine, and
+            // the saved TargetFrameRate used to be written but never applied.
+            // -1 (the default) means no cap. Unity ignores targetFrameRate while
+            // vSyncCount is set, so the two settings compose safely.
             QualitySettings.vSyncCount = config.VSync ? 1 : 0;
-            Application.targetFrameRate = -1;
+            Application.targetFrameRate = config.TargetFrameRate;
 
             // Кап максимальной дельты кадра: долгий кадр на слабой машине не должен
             // превращаться в «спираль смерти» (гигантский скачок симуляции на
@@ -75,7 +79,7 @@ namespace Fodinae.Rendering
             _clientConfig.UpdateAndSave(config => config.VSync = enabled);
 
             QualitySettings.vSyncCount = enabled ? 1 : 0;
-            Application.targetFrameRate = -1;
+            Application.targetFrameRate = _clientConfig.Config.TargetFrameRate;
         }
 
         public void SetMuteInBackground(bool mute)

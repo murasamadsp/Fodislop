@@ -3,14 +3,27 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
 internal static class DummyWorldMapArchive
 {
-    public static string ResolveMapFile(string worldCodeName)
+    /// <summary>
+    /// Resolves the map file for a world, extracting it from the zip archive
+    /// off the main thread when a cache miss occurs.
+    ///
+    /// The bundled map archives are tens of megabytes (pallada_cells.zip is
+    /// ~78 MB); extracting one synchronously would stall the main thread for
+    /// seconds right after world startup. The fast path (a previously
+    /// extracted .mapb file) returns synchronously.
+    /// </summary>
+    public static async UniTask<string> ResolveMapFileAsync(string worldCodeName)
     {
+        // Application.* path properties are main-thread-only; capture them
+        // before the thread-pool hop so the extraction never touches Unity
+        // APIs off the main thread.
         string streamingDirectory = Path.Combine(Application.streamingAssetsPath, "WorldMaps");
         string projectMapPath = Path.Combine(streamingDirectory, $"{worldCodeName}_cells.mapb");
         if (File.Exists(projectMapPath))
@@ -26,9 +39,18 @@ internal static class DummyWorldMapArchive
                 projectMapPath);
         }
 
+        string cacheDirectory = Path.Combine(Application.temporaryCachePath, "DummyServerMaps");
+        return await UniTask.RunOnThreadPool(
+            () => ExtractFromArchive(projectArchivePath, cacheDirectory, worldCodeName));
+    }
+
+    private static string ExtractFromArchive(
+        string projectArchivePath,
+        string cacheDirectory,
+        string worldCodeName)
+    {
         try
         {
-            string cacheDirectory = Path.Combine(Application.temporaryCachePath, "DummyServerMaps");
             Directory.CreateDirectory(cacheDirectory);
             string cachedMapPath = Path.Combine(cacheDirectory, $"{worldCodeName}_cells.mapb");
             using ZipArchive archive = ZipFile.OpenRead(projectArchivePath);
@@ -71,12 +93,13 @@ internal static class DummyWorldMapArchive
             {
                 return (widthChunks * chunkSize, heightChunks * chunkSize);
             }
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidDataException($"Failed reading prebaked map dimensions from '{path}'.", ex);
-        }
 
-        throw new InvalidDataException($"Prebaked map '{path}' contains invalid dimensions.");
+            throw new InvalidDataException(
+                $"Dummy map '{path}' has invalid header ({widthChunks}x{heightChunks}, chunk {chunkSize}).");
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            throw new InvalidDataException($"Failed to read dummy map header '{path}'.", ex);
+        }
     }
 }

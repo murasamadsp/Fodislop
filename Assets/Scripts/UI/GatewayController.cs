@@ -1,9 +1,11 @@
 #nullable enable
 
+using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
+using Fodinae.Core.Localization;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
@@ -23,7 +25,7 @@ namespace Fodinae.UI
     /// приглушение звука в фоне.
     /// </summary>
     [RequireComponent(typeof(UIDocument))]
-    public sealed class GatewayController : MonoBehaviour
+    public sealed class GatewayController : MonoBehaviour, ILocalizableUI
     {
         private const string MainMenuSceneName = "MainMenu";
         private const string OnboardingDonePrefsKey = "OnboardingCompleted1";
@@ -41,16 +43,17 @@ namespace Fodinae.UI
         // Без префикса «Шаг N»: номер и тему шага уже несёт полоса пилюль
         // справа, и повтор только съедал ширину, из-за которой заголовок
         // наезжал на эту самую полосу.
+        // Значения — ключи словаря локализации.
         private static readonly string[] StepTitles =
         {
-            "Доступность и визуальный комфорт",
-            "Рендеринг и освещение",
-            "Управление и звук",
+            "gateway.onb.step1_title",
+            "gateway.onb.step2_title",
+            "gateway.onb.step3_title",
         };
 
         private static readonly (string Label, int Value)[] FrameRates =
         {
-            ("Без ограничений", -1),
+            ("gateway.onb.fps.unlimited", -1),
             ("144 FPS", 144),
             ("120 FPS", 120),
             ("60 FPS", 60),
@@ -67,9 +70,9 @@ namespace Fodinae.UI
         /// </summary>
         private static readonly (string Label, float Value)[] UIScales =
         {
-            ("100% (Штатный)", 1.00f),
-            ("115% (Увеличенный)", 1.15f),
-            ("130% (Крупный)", 1.30f),
+            ("gateway.onb.ui_scale.100", 1.00f),
+            ("gateway.onb.ui_scale.115", 1.15f),
+            ("gateway.onb.ui_scale.130", 1.30f),
         };
 
         private UIDocument _document = null!;
@@ -84,53 +87,45 @@ namespace Fodinae.UI
         [Inject]
         private IClientConfigManager _clientConfig = null!;
         [Inject]
-        private ISceneCoordinator _sceneCoordinator = null!;
-
+        private ISceneNavigator _sceneNavigator = null!;
         [Inject]
-        public void Construct(IClientConfigManager clientConfig, ISceneCoordinator sceneCoordinator)
-        {
-            _clientConfig = clientConfig;
-            _sceneCoordinator = sceneCoordinator;
-            EnsureInitialized();
-        }
+        private ILocalizationService _loc = null!;
 
         private void OnEnable()
         {
-            if (_clientConfig == null || _sceneCoordinator == null)
+            // Первичная сборка — в Start(): к нему гарантированы и инжекция
+            // (мост, фаза Awake), и панель UIDocument (создаётся в OnEnable
+            // документа). Здесь — только реактивация уже построенного UI:
+            // переприменяем текст, не перестраивая.
+            if (_initialized && _root != null && _loc != null)
+            {
+                _loc.RegisterLocalizable(this);
+                ApplyLocalizedText();
+            }
+        }
+
+        public void InitializeScene()
+        {
+            if (_initialized)
             {
                 return;
             }
 
-            _document = GetComponent<UIDocument>();
-            if (_document != null && _document.rootVisualElement != null && _document.rootVisualElement.childCount == 0)
+            if (_clientConfig == null || _loc == null)
             {
-                _initialized = false;
-            }
-
-            EnsureInitialized();
-        }
-
-        private void Start()
-        {
-            EnsureInitialized();
-        }
-
-        private void EnsureInitialized()
-        {
-            if (_clientConfig == null || _sceneCoordinator == null)
-            {
-                return;
+                // К Start инжекция гарантирована (мост, фаза Awake); отсутствие
+                // зависимостей здесь — дефект, а не гонка.
+                throw new InvalidOperationException(
+                    "[Gateway] DI-инжекция не произошла до scene entry — вьюха строила бы UI без зависимостей.");
             }
 
             _document = GetComponent<UIDocument>();
             if (_document == null || _document.rootVisualElement == null)
             {
-                return;
-            }
-
-            if (_initialized && _document.rootVisualElement.childCount > 0)
-            {
-                return;
+                // К Start панель гарантирована: UIDocument создаёт её в своём
+                // OnEnable, а Start выполняется после всех OnEnable сцены.
+                throw new InvalidOperationException(
+                    "[Gateway] UIDocument panel is not available at Start (панель создаётся в OnEnable документа и к Start обязана существовать).");
             }
 
             var asset = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.GatewayUxml);
@@ -142,17 +137,16 @@ namespace Fodinae.UI
             }
 
             _root = _document.rootVisualElement;
-            if (_root == null)
-            {
-                return;
-            }
-
             _initialized = true;
             _root.Clear();
 
             VisualElement tree = asset.CloneTree();
             tree.AddToClassList("ui-fullscreen");
             _root.Add(tree);
+
+            // Статические ключи UXML резолвятся сразу при сборке, а не только
+            // по событию смены языка — иначе ворота показали бы сырые ключи.
+            UILocalizer.Apply(tree, _loc);
 
             // Тир раскладки вместо @media — как и в остальных экранах.
             UILayoutTier.Attach(tree);
@@ -163,7 +157,7 @@ namespace Fodinae.UI
             // некому и форма входа осталась бы видимой поверх онбординга.
             _gatewayRoot = _root.Q<VisualElement>("GatewayRoot") ?? _root;
 
-            _authGate = AuthGate.TryCreate(_root, _clientConfig);
+            _authGate = AuthGate.TryCreate(_root, _clientConfig, _loc);
             if (_authGate == null)
             {
                 Debug.LogWarning("[Gateway] Ворота входа не собрались — сразу уходим в меню.");
@@ -178,7 +172,70 @@ namespace Fodinae.UI
 
             SetState(StateAuthClass);
             _authGate.Show();
+
+            // Реестр применяет текст сразу и на каждой смене языка — подписка
+            // вручную не нужна и запрещена линтером.
+            _loc.RegisterLocalizable(this);
             Debug.Log("[Gateway] Gateway UI initialized and displayed.");
+        }
+
+        /// <summary>
+        /// Переприменяет локализованный текст после смены языка: статические ключи
+        /// через UILocalizer, онбординг (заголовок шага, кнопка «Далее») и списки
+        /// выпадающих списков — напрямую.
+        /// </summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(GatewayController));
+            if (_root == null || _loc == null)
+            {
+                return;
+            }
+
+            UILocalizer.Apply(_root, _loc);
+            ApplyStep(_step);
+
+            var uiScale = _root.Q<DropdownField>("OnbUIScale");
+            if (uiScale != null)
+            {
+                uiScale.choices = new System.Collections.Generic.List<string>();
+                foreach ((string label, float _) in UIScales)
+                {
+                    uiScale.choices.Add(_loc.Get(label));
+                }
+            }
+
+            var frameRate = _root.Q<DropdownField>("OnbFrameRate");
+            if (frameRate != null)
+            {
+                frameRate.choices = new System.Collections.Generic.List<string>();
+                foreach ((string label, int _) in FrameRates)
+                {
+                    frameRate.choices.Add(label.StartsWith("gateway.") ? _loc.Get(label) : label);
+                }
+            }
+
+            var preset = _root.Q<DropdownField>("OnbGraphicsPreset");
+            if (preset != null)
+            {
+                preset.choices = new System.Collections.Generic.List<string>
+                {
+                    _loc.Get("gateway.onb.preset.ultra"),
+                    _loc.Get("gateway.onb.preset.high"),
+                    _loc.Get("gateway.onb.preset.medium"),
+                    _loc.Get("gateway.onb.preset.fast"),
+                };
+            }
+
+            UILocalizer.AssertLocalized(_root, _loc);
+        }
+
+        private void OnDestroy()
+        {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
         }
 
         private void OnAuthPassed()
@@ -214,7 +271,7 @@ namespace Fodinae.UI
 
         private void BindOnboarding()
         {
-            if (_clientConfig == null)
+            if (_clientConfig == null || _loc == null)
             {
                 return;
             }
@@ -233,7 +290,7 @@ namespace Fodinae.UI
                 var labels = new System.Collections.Generic.List<string>();
                 foreach ((string label, float _) in UIScales)
                 {
-                    labels.Add(label);
+                    labels.Add(_loc.Get(label));
                 }
 
                 uiScale.choices = labels;
@@ -250,7 +307,7 @@ namespace Fodinae.UI
                 var labels = new System.Collections.Generic.List<string>();
                 foreach ((string label, int _) in FrameRates)
                 {
-                    labels.Add(label);
+                    labels.Add(label.StartsWith("gateway.") ? _loc.Get(label) : label);
                 }
 
                 frameRate.choices = labels;
@@ -262,7 +319,10 @@ namespace Fodinae.UI
             {
                 preset.choices = new System.Collections.Generic.List<string>
                 {
-                    "Ультра", "Высокое", "Среднее", "Быстрое",
+                    _loc.Get("gateway.onb.preset.ultra"),
+                    _loc.Get("gateway.onb.preset.high"),
+                    _loc.Get("gateway.onb.preset.medium"),
+                    _loc.Get("gateway.onb.preset.fast"),
                 };
                 preset.index = 0;
             }
@@ -311,6 +371,14 @@ namespace Fodinae.UI
 
         private void ApplyStep(int step)
         {
+            if (_loc == null)
+            {
+                // Защитный гард: ApplyStep вызывается из ApplyLocalizedText (после
+                // проверки _loc) и из колбэков UI, построенных с гарантированным
+                // _loc — пропуск здесь означает дефект проводки, а не гонку.
+                return;
+            }
+
             _step = Mathf.Clamp(step, 0, StepTitles.Length - 1);
 
             for (int i = 0; i < StepTitles.Length; i++)
@@ -331,7 +399,7 @@ namespace Fodinae.UI
             var title = _root.Q<Label>("OnboardingTitle");
             if (title != null)
             {
-                title.text = StepTitles[_step];
+                title.text = _loc.Get(StepTitles[_step]);
             }
 
             // На первом шаге назад некуда — кнопка прячется, но место сохраняет,
@@ -341,7 +409,9 @@ namespace Fodinae.UI
             var next = _root.Q<Button>("OnbNextButton");
             if (next != null)
             {
-                next.text = _step >= StepTitles.Length - 1 ? "НАЧАТЬ ЭКСПЕДИЦИЮ →" : "ДАЛЕЕ →";
+                next.text = _step >= StepTitles.Length - 1
+                    ? _loc.Get("gateway.onb.start")
+                    : _loc.Get("gateway.onb.next");
             }
         }
 
@@ -463,14 +533,10 @@ namespace Fodinae.UI
 
         private async UniTaskVoid LoadMainMenuAsync()
         {
-            if (_sceneCoordinator == null)
-            {
-                return;
-            }
-
-            await _sceneCoordinator.TransitionAsync(
+            CancellationToken transitionToken = destroyCancellationToken;
+            await _sceneNavigator.TransitionAsync(
                 MainMenuSceneName,
-                destroyCancellationToken);
+                transitionToken);
         }
     }
 }

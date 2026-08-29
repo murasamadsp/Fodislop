@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Fodinae.Core.Localization;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -153,10 +154,12 @@ namespace Fodinae.UI
             return label;
         }
 
-        public static void ShowConfirmation(UIDocument doc, string title, string description, string confirmText, Action onConfirm)
+        public static void ShowConfirmation(UIDocument doc, string title, string description, string confirmText, Action onConfirm, ILocalizationService loc)
         {
             if (doc == null || doc.rootVisualElement == null)
             {
+                // Защитный гард: без готового документа показывать подтверждение
+                // негде; вызывающий сам решает, когда документ готов.
                 return;
             }
 
@@ -194,7 +197,7 @@ namespace Fodinae.UI
             confirmBtn.AddToClassList("pause-btn-confirm");
 
             var cancelBtn = new Button(() => root.Remove(overlay));
-            cancelBtn.text = "Отмена";
+            cancelBtn.text = loc.Get("common.cancel");
             cancelBtn.AddToClassList("pause-btn");
 
             buttonsRow.Add(confirmBtn);

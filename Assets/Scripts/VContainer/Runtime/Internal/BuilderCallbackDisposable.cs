@@ -2,10 +2,10 @@ using System;
 
 namespace VContainer.Internal
 {
-    internal class BuilderCallbackDisposable : IDisposable
+    class BuilderCallbackDisposable : IDisposable
     {
         public event Action<IObjectResolver> Disposing;
-        private readonly IObjectResolver container;
+        readonly IObjectResolver container;
 
         [Inject]
         public BuilderCallbackDisposable(IObjectResolver container)
@@ -15,10 +15,7 @@ namespace VContainer.Internal
 
         public void Dispose()
         {
-            if (Disposing != null)
-            {
-                Disposing.Invoke(container);
-            }
+            if (Disposing != null) Disposing.Invoke(container);
         }
     }
 }

@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core.Localization;
 using MinesServer.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -15,9 +16,10 @@ namespace Fodinae.UI.Programmator;
 // behavior — what happens when a cell is clicked, a button is pressed, etc. —
 // is supplied by the owner as concrete collaborator instances passed to
 // Build().
-internal sealed class ProgrammatorGridUIFactory
+internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
 {
     private readonly UIDocument _doc;
+    private readonly ILocalizationService _loc;
 
     private VisualElement? _popup;
     private VisualElement? _gridContainer;
@@ -38,9 +40,10 @@ internal sealed class ProgrammatorGridUIFactory
     private const float CELLSIZE = 32f;
     private const float CELL_GAP = 2f;
 
-    public ProgrammatorGridUIFactory(UIDocument doc)
+    public ProgrammatorGridUIFactory(UIDocument doc, ILocalizationService loc)
     {
         _doc = doc ?? throw new ArgumentNullException(nameof(doc));
+        _loc = loc ?? throw new ArgumentNullException(nameof(loc));
     }
 
     public VisualElement Popup => _popup!;
@@ -65,6 +68,11 @@ internal sealed class ProgrammatorGridUIFactory
                 "[Programmator] Resources/UI/Programmator.uxml is required.");
         TemplateContainer tree = template.Instantiate();
         _doc.rootVisualElement.Add(tree);
+
+        // Статические ключи UXML (programmator.*, common.*) резолвятся сразу при
+        // сборке, а не только при смене языка — иначе попап показывает сырые
+        // ключи до первого переключения языка.
+        UILocalizer.Apply(tree, _loc);
 
         _popup = tree.Q<VisualElement>("ProgrammatorPopup") ??
             throw new InvalidOperationException("[Programmator] ProgrammatorPopup is missing from Programmator.uxml.");
@@ -255,7 +263,7 @@ internal sealed class ProgrammatorGridUIFactory
             throw new InvalidOperationException("[Programmator] CreateDialog is missing from Programmator.uxml.");
         _createInput = tree.Q<TextField>("CreateInput") ??
             throw new InvalidOperationException("[Programmator] CreateInput is missing from Programmator.uxml.");
-        _createInput.value = $"Программа {programs.ProgramCount + 1}";
+        _createInput.value = _loc.Get("programmator.program", programs.ProgramCount + 1);
         _createInput.RegisterCallback<KeyDownEvent>(e =>
         {
             if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
@@ -273,6 +281,59 @@ internal sealed class ProgrammatorGridUIFactory
 
         _tooltip = new Tooltip();
         _tooltip.Initialize(_doc);
+
+        // Register only after every element used by ApplyLocalizedText has been
+        // resolved. LocalizationService applies the text immediately on
+        // registration, so registering earlier would call UpdatePageLabel
+        // while _pageLabel and the pagination buttons are still null.
+        _loc.RegisterLocalizable(this);
+    }
+
+    /// <summary>
+    /// Переприменяет локализованный текст после смены языка: статические ключи
+    /// UXML через UILocalizer, динамические (заголовок, страница, подписи ячеек) —
+    /// напрямую. Реестр LocalizationService вызывает этот метод при регистрации
+    /// и на каждой смене языка; PlayerHUDView тоже делегирует сюда из своего
+    /// ApplyLocalizedText (идемпотентно).
+    /// </summary>
+    public void ApplyLocalizedText()
+    {
+        if (_popup != null)
+        {
+            UILocalizer.Apply(_popup, _loc);
+        }
+
+        if (_programTitle != null)
+        {
+            _programTitle.text = _loc.Get("programmator.title");
+        }
+
+        UpdatePageLabel();
+
+        if (_cells != null)
+        {
+            for (int row = 0; row < ProgrammatorData.ROWS; row++)
+            {
+                for (int col = 0; col < ProgrammatorData.COLS; col++)
+                {
+                    if (_cells[row, col] != null)
+                    {
+                        UpdateCell(row, col);
+                    }
+                }
+            }
+        }
+
+        if (_popup != null)
+        {
+            UILocalizer.AssertLocalized(_popup, _loc);
+        }
+    }
+
+    /// <summary>Снимает фабрику с реестра локализации.</summary>
+    public void Dispose()
+    {
+        _loc.UnregisterLocalizable(this);
     }
 
     public void UpdateCell(int row, int col)
@@ -302,7 +363,7 @@ internal sealed class ProgrammatorGridUIFactory
         {
             cell.style.backgroundImage = null;
             cell.style.backgroundColor = new Color(0.3f, 0.1f, 0.1f, 1f);
-            string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? n : string.Empty;
+            string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : string.Empty;
             label.text = name;
         }
     }
@@ -319,7 +380,7 @@ internal sealed class ProgrammatorGridUIFactory
 
     public void UpdatePageLabel()
     {
-        _pageLabel!.text = $"Стр. {ProgrammatorData.CurrentPage + 1}/{ProgrammatorData.PageCount}";
+        _pageLabel!.text = _loc.Get("programmator.page", ProgrammatorData.CurrentPage + 1, ProgrammatorData.PageCount);
         _prevBtn!.SetEnabled(ProgrammatorData.CurrentPage > 0);
         _nextBtn!.SetEnabled(ProgrammatorData.CurrentPage < ProgrammatorData.PageCount - 1);
     }
@@ -330,11 +391,11 @@ internal sealed class ProgrammatorGridUIFactory
                   + (row * ProgrammatorData.COLS) + col;
         int opId = ProgrammatorData.Codes[idx];
         var action = (ProgAction)opId;
-        string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? n : $"Код {opId}";
-        string desc = ProgrammatorData.OPERATOR_DESCRIPTIONS.TryGetValue(action, out var d) ? d : string.Empty;
+        string name = ProgrammatorData.OPERATOR_NAMES.TryGetValue(action, out var n) ? _loc.Get(n) : _loc.Get("programmator.code", opId);
+        string desc = ProgrammatorData.OPERATOR_DESCRIPTIONS.TryGetValue(action, out var d) ? _loc.Get(d) : string.Empty;
         string text = string.IsNullOrEmpty(desc)
-            ? $"Ячейка [{col},{row}]: {name}"
-            : $"Ячейка [{col},{row}]: {name} — {desc}";
+            ? _loc.Get("programmator.cell", col, row, name)
+            : _loc.Get("programmator.cell_desc", col, row, name, desc);
         _tooltip?.Show(text, Vector2.zero);
     }
 

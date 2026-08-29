@@ -244,7 +244,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
                 if (input.packedData.x > 0.5)
                 {
-                    float2 anchoredUV = input.packedData.zw;
+                    float2 anchoredUV = input.packedData.yz;
                     float2 stepUV = float2(0.0, 0.0);
                     stepUV.x = anchoredUV.x >= 1.0 ? 1.0 : (anchoredUV.x <= 0.0 ? -1.0 : 0.0);
                     stepUV.y = anchoredUV.y >= 1.0 ? -1.0 : (anchoredUV.y <= 0.0 ? 1.0 : 0.0);
@@ -358,7 +358,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 bool isRoundable = (iflags & 2) != 0;
                 if (isRoundable)
                 {
-                    int sameMask = int(round(glowFlags.w));
+                    int sameMask = int(glowFlags.y) & 15; // bits 0-3 of packedLightingFlags = solidBoundaryMask
                     float4 bits = frac(sameMask * float4(0.5, 0.25, 0.125, 0.0625));
                     bool4 hasSame = bits >= 0.5;
                     float2 p = input.uv - 0.5;
@@ -522,7 +522,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // поэтому isForeground здесь избыточен и только добавлял хрупкую
                 // зависимость от точности positionOS.z.
                 float occupancy = isPhysicalMass ? 1.0 : 0.0;
-                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.zw : input.uv;
+                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.yz : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
                         contourUV,

@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Fodinae.Audio.Core;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Game;
@@ -38,8 +39,14 @@ namespace Fodinae.Game.Managers
 
         public void PlayEffect(AudioPacket packet)
         {
+            if (packet.EffectType == global::MinesServer.Data.SFX.Music)
+            {
+                _audioSystem.Play2D("music/evil_huge", AudioLayer.MusicDefault());
+                return;
+            }
+
             var vfxType = MapAudioToVFX(packet.EffectType);
-            VFXPool.PooledSlot? slot = _vfxService.Acquire(vfxType);
+            IVFXSlot? slot = _vfxService.Acquire(vfxType);
 
             var effect = new ServerAudioEvent(
                 packet,

@@ -4,8 +4,9 @@ using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
+using Fodinae.Core.Models;
 using Fodinae.Networking;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
@@ -22,7 +23,7 @@ using VContainer;
 
 namespace Fodinae.UI.HUD.Player.View
 {
-    public class PlayerHUDView : MonoBehaviour
+    public class PlayerHUDView : MonoBehaviour, ILocalizableUI
     {
         private const int SKILL_GRID_COLS = 4;
 
@@ -43,6 +44,8 @@ namespace Fodinae.UI.HUD.Player.View
         private bool _isLoaded;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        [Inject]
+        private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
         private IVisualElementScheduledItem? _skeletonPulse;
         private TemplateContainer? _hudRoot;
         private Button? _bonusButton;
@@ -64,8 +67,10 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _skillContainer;
         private Button? _autoDigButton;
         private VisualElement? _autoDigIndicator;
+        private Label? _autoDigLabel;
         private Button? _aggressionButton;
         private VisualElement? _aggressionIndicator;
+        private Label? _aggressionLabel;
 
         private VisualElement? _currentSkillRow;
         private int _skillCountInRow = 0;
@@ -85,7 +90,7 @@ namespace Fodinae.UI.HUD.Player.View
         [Inject]
         private INetworkService _networkService = null!;
         [Inject]
-        private ISessionContainer _session = null!;
+        private ILocalizationService _loc = null!;
         private VisualElement? _missionPanel;
         private Label? _missionTitleLabel;
         private Label? _missionDescLabel;
@@ -97,28 +102,26 @@ namespace Fodinae.UI.HUD.Player.View
             TryStartInitialization();
         }
 
+        public void EnsureInitialized()
+        {
+            TryStartInitialization();
+        }
+
         protected void Update()
         {
             _programmatorGrid?.Tick();
-            if (!_initializationStarted)
-            {
-                TryStartInitialization();
-            }
         }
 
         private void TryStartInitialization()
         {
-            if (_initializationStarted || _session?.Current == null)
+            if (_initializationStarted)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null || _model == null ||
-                _globalChatUI == null || _assetLoader == null || _networkService == null || _inputBlocker == null)
+                _globalChatUI == null || _assetLoader == null || _networkService == null || _inputBlocker == null || _loc == null)
             {
-                // Не бросаем: инъекция может завершиться после этого Start (PostStart).
-                // Update ретраит TryStartInitialization — ждём готовности молча, иначе
-                // каждый кадр до инжекта будет сыпать исключениями.
                 return;
             }
 
@@ -137,6 +140,10 @@ namespace Fodinae.UI.HUD.Player.View
                 Debug.LogWarning($"[PlayerHUD] HUD unavailable: {exception.Message}");
                 return;
             }
+
+            // Реестр применяет текст сразу и на каждой смене языка — подписка
+            // вручную не нужна и запрещена линтером.
+            _loc.RegisterLocalizable(this);
 
             try
             {
@@ -162,8 +169,36 @@ namespace Fodinae.UI.HUD.Player.View
             RebuildCrystalRows();
         }
 
+        /// <summary>
+        /// Переприменяет локализованный текст после смены языка: статические
+        /// ключи UXML через UILocalizer, динамические лейблы — RefreshAll()
+        /// (он перечитывает модель и ставит тексты заново), плюс программатор,
+        /// если его дерево уже построено.
+        /// </summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(PlayerHUDView));
+            if (_doc == null || _doc.rootVisualElement == null || _loc == null)
+            {
+                // Тихий возврат безопасен: ApplyLocalizedText идемпотентен и будет
+                // вызван снова (реестр / RegisterLocalizable), когда панель и
+                // сервис будут готовы.
+                return;
+            }
+
+            UILocalizer.Apply(_doc.rootVisualElement, _loc);
+            RefreshAll();
+            _programmatorGrid?.RefreshLocalization();
+            UILocalizer.AssertLocalized(_doc.rootVisualElement, _loc);
+        }
+
         protected void OnDestroy()
         {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
             _programmatorGrid?.Dispose();
             _programmatorGrid = null;
             StopSkeletonPulse();
@@ -189,7 +224,7 @@ namespace Fodinae.UI.HUD.Player.View
                 _model.OnMissionChanged -= UpdateMissionPanel;
             }
 
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.OnAutoDigChanged -= UpdateAutoDigButton;
@@ -253,7 +288,7 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void InitializeHUD()
         {
-            _programmatorGrid ??= new ProgrammatorGrid(_doc);
+            _programmatorGrid ??= new ProgrammatorGrid(_doc, _loc);
             _programmatorGrid?.Initialize();
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
@@ -270,7 +305,7 @@ namespace Fodinae.UI.HUD.Player.View
                 _model.OnMissionChanged += UpdateMissionPanel;
             }
 
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.OnAutoDigChanged += UpdateAutoDigButton;
@@ -337,6 +372,10 @@ namespace Fodinae.UI.HUD.Player.View
             _hudRoot = tree;
             root.Add(tree);
 
+            // Статические ключи UXML (hud.*, тултипы) резолвятся сразу при
+            // сборке, а не только по событию смены языка.
+            UILocalizer.Apply(tree, _loc);
+
             _nicknameLabel = tree.Q<Label>("NicknameLabel") ??
                 throw new InvalidOperationException("[PlayerHUD] NicknameLabel is missing from PlayerHUD.uxml.");
             _levelLabel = tree.Q<Label>("LevelLabel") ??
@@ -374,24 +413,28 @@ namespace Fodinae.UI.HUD.Player.View
             _autoDigButton.clicked += ToggleAutoDig;
             _autoDigIndicator = tree.Q<VisualElement>("AutoDigIndicator") ??
                 throw new InvalidOperationException("[PlayerHUD] AutoDigIndicator is missing from PlayerHUD.uxml.");
-            Tooltip.AttachTo(_autoDigButton, "Автоматическое копание блоков", _tooltip!);
+            _autoDigLabel = tree.Q<Label>("AutoDigLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] AutoDigLabel is missing from PlayerHUD.uxml.");
+            Tooltip.AttachTo(_autoDigButton, () => _loc.Get("hud.tooltip.autodig"), _tooltip!);
 
             _aggressionButton = tree.Q<Button>("AggressionButton") ??
                 throw new InvalidOperationException("[PlayerHUD] AggressionButton is missing from PlayerHUD.uxml.");
             _aggressionButton.clicked += ToggleAggression;
             _aggressionIndicator = tree.Q<VisualElement>("AggressionIndicator") ??
                 throw new InvalidOperationException("[PlayerHUD] AggressionIndicator is missing from PlayerHUD.uxml.");
-            Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip!);
+            _aggressionLabel = tree.Q<Label>("AggressionLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] AggressionLabel is missing from PlayerHUD.uxml.");
+            Tooltip.AttachTo(_aggressionButton, () => _loc.Get("hud.tooltip.aggression"), _tooltip!);
 
             Button chatButton = tree.Q<Button>("ChatButton") ??
                 throw new InvalidOperationException("[PlayerHUD] ChatButton is missing from PlayerHUD.uxml.");
             chatButton.clicked += () => _globalChatUI.Toggle();
-            Tooltip.AttachTo(chatButton, "Открыть чат", _tooltip!);
+            Tooltip.AttachTo(chatButton, () => _loc.Get("hud.tooltip.chat"), _tooltip!);
 
             _bonusButton = tree.Q<Button>("BonusButton") ??
                 throw new InvalidOperationException("[PlayerHUD] BonusButton is missing from PlayerHUD.uxml.");
             _bonusButton.clicked += ToggleBonusPanel;
-            Tooltip.AttachTo(_bonusButton, "Открыть панель бонусов", _tooltip!);
+            Tooltip.AttachTo(_bonusButton, () => _loc.Get("hud.tooltip.bonus"), _tooltip!);
 
             _bonusPanel = tree.Q<VisualElement>("BonusPanel") ??
                 throw new InvalidOperationException("[PlayerHUD] BonusPanel is missing from PlayerHUD.uxml.");
@@ -442,6 +485,7 @@ namespace Fodinae.UI.HUD.Player.View
 
             Button programmatorButton = tree.Q<Button>("ProgrammatorButton") ??
                 throw new InvalidOperationException("[PlayerHUD] ProgrammatorButton is missing from PlayerHUD.uxml.");
+            programmatorButton.text = _loc.Get("hud.programmator");
             programmatorButton.clicked += () => _programmatorGrid?.Show();
 
             _missionPanel = tree.Q<VisualElement>("MissionPanel") ??
@@ -483,14 +527,14 @@ namespace Fodinae.UI.HUD.Player.View
             {
                 // Кнопка-уведомление показывается только когда есть что забирать.
                 _bonusButton.style.display = DisplayStyle.Flex;
-                _bonusStatusLabel!.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
+                _bonusStatusLabel!.text = _loc.Get("hud.bonus.available");
                 _bonusStatusLabel!.style.color = Color.green;
                 _bonusClaimButton!.style.display = DisplayStyle.Flex;
             }
             else
             {
                 _bonusButton.style.display = DisplayStyle.None;
-                _bonusStatusLabel!.text = "Ежедневный бонус: Нет активных бонусов";
+                _bonusStatusLabel!.text = _loc.Get("hud.bonus.none");
                 _bonusStatusLabel!.style.color = Color.gray;
                 _bonusClaimButton!.style.display = DisplayStyle.None;
             }
@@ -634,7 +678,7 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void ToggleAutoDig()
         {
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.AutoDig = !player.AutoDig;
@@ -643,17 +687,18 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void UpdateAutoDigButton(bool enabled)
         {
-            if (_autoDigIndicator == null)
+            _autoDigButton?.EnableInClassList("enabled", enabled);
+            if (_autoDigLabel != null)
             {
-                return;
+                _autoDigLabel.text = enabled ? _loc.Get("hud.autodig.on") : _loc.Get("hud.autodig.off");
             }
 
-            _autoDigIndicator.EnableInClassList("hud-mode-led--active", enabled);
+            _autoDigIndicator?.EnableInClassList("hud-mode-led--active", enabled);
         }
 
         private void ToggleAggression()
         {
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.ToggleAggression();
@@ -662,12 +707,13 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void UpdateAggressionButton(bool enabled)
         {
-            if (_aggressionIndicator == null)
+            _aggressionButton?.EnableInClassList("enabled", enabled);
+            if (_aggressionLabel != null)
             {
-                return;
+                _aggressionLabel.text = enabled ? _loc.Get("hud.aggression.on") : _loc.Get("hud.aggression.off");
             }
 
-            _aggressionIndicator.EnableInClassList("hud-mode-led--active", enabled);
+            _aggressionIndicator?.EnableInClassList("hud-mode-led--active", enabled);
         }
 
         private void StartSkeletonPulse()
@@ -826,12 +872,13 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_levelLabel != null)
             {
-                _levelLabel.text = _isLoaded ? $"УР. {stats.Level:N0}" : "УР. ---";
+                _levelLabel.text = _isLoaded ? _loc.Get("hud.level", stats.Level) : _loc.Get("hud.level_unknown");
             }
 
             if (_hpLabel != null)
             {
-                _hpLabel.text = _isLoaded ? $"ПРОЧНОСТЬ: {stats.Health:N0} / {stats.MaxHealth:N0}" : "ПРОЧНОСТЬ: -- / --";
+                string hpPrefix = _loc.Get("hud.health");
+                _hpLabel.text = _isLoaded ? $"{hpPrefix}: {stats.Health:N0} / {stats.MaxHealth:N0}" : $"{hpPrefix}: -- / --";
                 _hpLabel.style.opacity = 1;
             }
 
@@ -860,8 +907,8 @@ namespace Fodinae.UI.HUD.Player.View
             if (_geologyLabel != null)
             {
                 _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
-                    ? "Геология: 0"
-                    : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+                    ? _loc.Get("hud.geology_zero")
+                    : _loc.Get("hud.geology", stats.GeologyCurrent, stats.GeologyMax, stats.GeologyText);
             }
 
             if (_basketPercentLabel != null)
@@ -1086,7 +1133,7 @@ namespace Fodinae.UI.HUD.Player.View
                 return;
             }
 
-            _missionTitleLabel!.text = stats.MissionTitle ?? "Миссия";
+            _missionTitleLabel!.text = stats.MissionTitle ?? _loc.Get("hud.mission");
             _missionDescLabel!.text = stats.MissionDescription ?? string.Empty;
 
             float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;

@@ -5,7 +5,6 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
 using Fodinae.Player.Logic;
-using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Actions;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,24 +16,22 @@ namespace Fodinae.Player
 {
     public class PlayerInteractionController : MonoBehaviour
     {
-        private Camera? _mainCamera;
+        [Inject]
+        private Camera _mainCamera = null!;
         private UnityEngine.InputSystem.Utilities.ReadOnlyArray<KeyControl> _cachedAllKeys;
         [Inject]
-        private UIDocument? _injectedUIDoc;
+        private UIDocument _injectedUIDoc = null!;
         [Inject]
         private IMapDataProvider _mapManager = null!;
         [Inject]
         private INetworkService _networkService = null!;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        [Inject]
+        private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
 
         protected void Awake()
         {
-            // GameplayCamera, not Camera.main: MainMenu stays loaded next to the
-            // game for the whole descent, and a bare tag lookup can resolve to
-            // the menu camera. Click-to-world through the wrong camera would
-            // send ClickCellPackets for the wrong cells.
-            _mainCamera = GameplayCamera.Resolve();
             if (Keyboard.current != null)
             {
                 _cachedAllKeys = Keyboard.current.allKeys;
@@ -43,17 +40,7 @@ namespace Fodinae.Player
 
         protected void Update()
         {
-            if (PlayerMovementController.LocalPlayer is not { IsGameplayVisible: true })
-            {
-                return;
-            }
-
-            if (_mainCamera == null)
-            {
-                _mainCamera = GameplayCamera.Resolve();
-            }
-
-            if (_mainCamera == null)
+            if (_localPlayer is not { Current: { IsGameplayVisible: true } })
             {
                 return;
             }
@@ -74,20 +61,10 @@ namespace Fodinae.Player
                 return;
             }
 
-            if (ChatInput.IsFocused)
-            {
-                return;
-            }
-
             if (Mouse.current.leftButton.wasPressedThisFrame)
             {
                 Vector2 mousePos = Mouse.current.position.ReadValue();
                 if (IsPointerOverUI(mousePos))
-                {
-                    return;
-                }
-
-                if (_mainCamera == null)
                 {
                     return;
                 }
@@ -97,13 +74,10 @@ namespace Fodinae.Player
                 int unityX = Mathf.FloorToInt(worldPos.x);
                 int unityY = Mathf.FloorToInt(worldPos.y);
 
-                if (_mapManager != null && _networkService != null)
-                {
-                    ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
-                    ushort serverY = (ushort)Mathf.Clamp(_mapManager.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
+                ushort serverX = (ushort)Mathf.Clamp(unityX, 0, ushort.MaxValue);
+                ushort serverY = (ushort)Mathf.Clamp(_mapManager.WorldHeight - 1 - unityY, 0, ushort.MaxValue);
 
-                    _networkService.SendAction(new ClickCellPacket(serverX, serverY));
-                }
+                _networkService.SendAction(new ClickCellPacket(serverX, serverY));
             }
         }
 
@@ -144,11 +118,6 @@ namespace Fodinae.Player
                 return;
             }
 
-            if (ChatInput.IsFocused)
-            {
-                return;
-            }
-
             if (!Keyboard.current.anyKey.wasPressedThisFrame)
             {
                 return;
@@ -173,10 +142,7 @@ namespace Fodinae.Player
                         bool alt = Keyboard.current.altKey.isPressed;
                         bool shift = Keyboard.current.shiftKey.isPressed;
 
-                        if (_networkService != null)
-                        {
-                            _networkService.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
-                        }
+                        _networkService.SendAction(new UnmappedKeyPacket(code, ctrl, alt, shift));
                     }
                 }
             }

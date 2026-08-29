@@ -3,6 +3,10 @@
     "rootNamespace": "Fodinae",
     "references": [
         "UniTask",
+        "Fodinae.Contracts",
+        "Fodinae.Networking",
+        "Fodinae.AssetPipeline",
+        "Fodinae.World",
         "MinesServer.Data",
         "MinesServer.Utils",
         "MinesServer.Networking",
@@ -16,7 +20,8 @@
         "FMODUnity",
         "Effekseer",
         "Effekseer.URP",
-        "unity.webp"
+        "unity.webp",
+        "VContainer"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

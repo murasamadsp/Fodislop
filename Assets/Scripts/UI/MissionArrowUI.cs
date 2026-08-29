@@ -2,11 +2,9 @@
 
 using System;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
-using Fodinae.UI.HUD.Player.Model;
 using Fodinae.World;
+using Fodinae.UI.HUD.Player.Model;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VContainer;
@@ -27,37 +25,33 @@ namespace Fodinae.UI
         [Inject]
         private MapManager _mapManager = null!;
         [Inject]
-        private ISessionContainer _session = null!;
+        private IGameplayCamera _gameplayCamera = null!;
 
         protected void Start()
         {
+            // Школа (одна дорога): зарегистрированные вьюхи инжектятся при
+            // сборке scope (фаза Awake), панель UIDocument создаётся в OnEnable —
+            // к Start и зависимости, и панель гарантированы. Один вызов, без
+            // ретраев из Update.
             TryInitialize();
-        }
-
-        protected void Update()
-        {
-            if (!_initialized)
-            {
-                TryInitialize();
-            }
         }
 
         private void TryInitialize()
         {
-            if (_initialized || _session?.Current == null)
+            if (_initialized)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
             {
-                // Не бросаем: инъекция может завершиться после этого Start (PostStart).
-                // Update ретраит TryInitialize — ждём готовности молча, иначе каждый
-                // кадр до инжекта будет сыпать исключениями.
+                // Защитный гард: к моменту [Inject]-метода зависимости и панель
+                // UIDocument гарантированы — пропуск здесь означает дефект
+                // проводки, а не гонку (ретраев больше нет).
                 return;
             }
 
-            _camera = GameplayCamera.Resolve();
+            _camera = _gameplayCamera?.Camera;
 
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
@@ -150,6 +144,8 @@ namespace Fodinae.UI
 
             if (_doc == null || _doc.rootVisualElement == null || _doc.rootVisualElement.panel == null || _arrow == null)
             {
+                // Per-frame: панель или стрелка могут отсутствовать в этом кадре —
+                // на следующем кадре обновление повторится.
                 return;
             }
 

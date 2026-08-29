@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using Fodinae.Game.Managers;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
@@ -13,8 +12,6 @@ namespace Fodinae.World.Terrain
         public Vector3[,] GridVertexOffsets { get; private set; } = null!;
         public int[,] CellTilingDescriptors { get; private set; } = null!;
         public byte[,] CellReliefMasks { get; private set; } = null!;
-        public bool[,] CellIsRelief { get; private set; } = null!;
-        public byte[,] CellVisualBlendMasks { get; private set; } = null!;
         public byte[,] CellSolidBoundaryMasks { get; private set; } = null!;
         public bool EnableDistortion { get; set; } = true;
 
@@ -25,8 +22,6 @@ namespace Fodinae.World.Terrain
                 GridVertexOffsets = new Vector3[meshWidth + 1, meshHeight + 1];
                 CellTilingDescriptors = new int[meshWidth, meshHeight];
                 CellReliefMasks = new byte[meshWidth, meshHeight];
-                CellIsRelief = new bool[meshWidth, meshHeight];
-                CellVisualBlendMasks = new byte[meshWidth, meshHeight];
                 CellSolidBoundaryMasks = new byte[meshWidth, meshHeight];
             }
         }
@@ -96,8 +91,6 @@ namespace Fodinae.World.Terrain
             TerrainCellCache.Scroll2DArray(GridVertexOffsets, gw, gh, dx, dy);
             TerrainCellCache.Scroll2DArray(CellTilingDescriptors, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellReliefMasks, meshWidth, meshHeight, dx, dy);
-            TerrainCellCache.Scroll2DArray(CellIsRelief, meshWidth, meshHeight, dx, dy);
-            TerrainCellCache.Scroll2DArray(CellVisualBlendMasks, meshWidth, meshHeight, dx, dy);
             TerrainCellCache.Scroll2DArray(CellSolidBoundaryMasks, meshWidth, meshHeight, dx, dy);
 
             int vxStart = 0, vxLen = 0, vyStart = 0, vyLen = 0;
@@ -394,69 +387,27 @@ namespace Fodinae.World.Terrain
             }
 
             byte rm = 0;
-            bool isR = false;
             if (top.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 1;
-            }
-            else
-            {
-                isR = true;
             }
 
             if (left.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 2;
             }
-            else
-            {
-                isR = true;
-            }
 
             if (bottom.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 4;
-            }
-            else
-            {
-                isR = true;
             }
 
             if (right.ReliefGroup >= data.ReliefGroup)
             {
                 rm |= 8;
             }
-            else
-            {
-                isR = true;
-            }
 
             CellReliefMasks[x, y] = rm;
-            CellIsRelief[x, y] = isR;
-
-            byte sm = 0;
-            if (MapManager.IsRoundableLoose(top.Type))
-            {
-                sm |= 1;
-            }
-
-            if (MapManager.IsRoundableLoose(left.Type))
-            {
-                sm |= 2;
-            }
-
-            int bt = (int)bottom.Type;
-            if (MapManager.IsRoundableLoose((CellType)bt) || (bt < 32 || bt > 35))
-            {
-                sm |= 4;
-            }
-
-            if (MapManager.IsRoundableLoose(right.Type))
-            {
-                sm |= 8;
-            }
-
-            CellVisualBlendMasks[x, y] = sm;
 
             byte solidMask = 0;
             if ((top.Properties & CellConfigProperties.DropsShadow) != 0)

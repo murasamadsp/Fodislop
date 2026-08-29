@@ -1,6 +1,7 @@
 #nullable enable
 
 using Fodinae.Core;
+using Fodinae.Networking;
 using Fodinae.World.Lighting;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -21,27 +22,26 @@ namespace Fodinae.UI
         private float _runningSum;
 
         [Inject]
-        private UIDocument? _injectedDoc;
+        private UIDocument _injectedDoc = null!;
         [Inject]
         private LightingEngine _lightingEngine = null!;
+        [Inject]
+        private NetworkStatusModel _networkStatus = null!;
 
         private UIDocument? _doc;
         private VisualElement? _rootElement;
         private Label? _fpsLabel;
-        private int _pingMs;
-        private int _onlinePlayers;
-        private int _onlineProgrammator;
         private float _nextDisplayUpdate;
         private bool _showDetailedProfiler;
         private int _currentDebugViewIndex;
 
         public float CurrentFps { get; private set; }
 
-        public int PingMs => _pingMs;
+        public int PingMs => _networkStatus.PingMs;
 
-        public int OnlinePlayers => _onlinePlayers;
+        public int OnlinePlayers => _networkStatus.OnlinePlayers;
 
-        public int OnlineProgrammator => _onlineProgrammator;
+        public int OnlineProgrammator => _networkStatus.OnlineProgrammator;
 
         protected void Start()
         {
@@ -174,7 +174,7 @@ namespace Fodinae.UI
                 float frameTimeMs = avg * 1000f;
                 if (!_showDetailedProfiler)
                 {
-                    _fpsLabel.text = $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_pingMs}ms  Online: {_onlinePlayers}  [F3 for details]";
+                    _fpsLabel.text = $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_networkStatus.PingMs}ms  Online: {_networkStatus.OnlinePlayers}  [F3 for details]";
                 }
                 else
                 {
@@ -183,7 +183,7 @@ namespace Fodinae.UI
                     float gcAllocKb = FrameProfiler.GcAllocPerFrameBytes / 1024f;
 
                     _fpsLabel.text =
-                        $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_pingMs}ms  Online: {_onlinePlayers}\n" +
+                        $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_networkStatus.PingMs}ms  Online: {_networkStatus.OnlinePlayers}\n" +
                         $"<color=#aaffaa>[Terrain CPU]</color> Mesh: {FrameProfiler.TerrainMeshTimeMs:F2}ms | Flood: {FrameProfiler.TerrainFloodFillTimeMs:F2}ms | Cache: {FrameProfiler.TerrainCacheTimeMs:F2}ms | Upload: {FrameProfiler.TerrainGpuUploadTimeMs:F2}ms\n" +
                         $"<color=#ffffaa>[Lighting CPU]</color> Build: {FrameProfiler.LightingBuildCommandsTimeMs:F2}ms | Execute: {FrameProfiler.LightingExecuteCommandsTimeMs:F2}ms | Cmd: {FrameProfiler.LightingCommandBufferBytes / 1024f:F1}KB | View: {debugViewStr} [F2]\n" +
                         $"<color=#ffffaa>[Lighting counts]</color> Static: {FrameProfiler.LightingStaticSolveCount} | Dynamic: {FrameProfiler.LightingDynamicSolveCount} | Invalidations: {FrameProfiler.LightingRegionInvalidationCount} | DynLights: {FrameProfiler.ActiveDynamicLights}\n" +
@@ -194,12 +194,5 @@ namespace Fodinae.UI
             }
         }
 
-        public void SetPing(int ms) => _pingMs = ms;
-
-        public void SetOnline(int players, int programmator)
-        {
-            _onlinePlayers = players;
-            _onlineProgrammator = programmator;
-        }
     }
 }

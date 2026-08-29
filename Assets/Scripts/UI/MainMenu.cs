@@ -5,26 +5,21 @@ using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Core.Lifecycle;
-using Fodinae.Game.Managers;
-using Fodinae.Networking;
-using Fodinae.Networking.Connection;
+using Fodinae.Core.Localization;
 using Fodinae.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
-namespace Fodinae
+namespace Fodinae.UI
 {
     [ExecuteAlways]
     [RequireComponent(typeof(UIDocument))]
-    public class MainMenu : MonoBehaviour
+    public class MainMenu : MonoBehaviour, ILocalizableUI
     {
         private const string GameSceneName = "MainGame";
-        private const float GameScopeReadyTimeoutSeconds = 10f;
 
         // USS modifiers toggled on the station badge so it flips to whichever
         // side of the marker has room instead of sliding off-screen.
@@ -93,19 +88,19 @@ namespace Fodinae
         private Button? _confirmServerButton;
 
         private bool _loadingActive;
-        private bool _dismissedForServerWindow;
-        private GameManager? _gameManager;
         private bool _built;
         private bool _subscribed;
         private bool _teardownStarted;
         private CancellationTokenSource? _descentCancellation;
 
         [Inject]
-        private ISessionContainer? _session;
+        private ILocalizationService _loc = null!;
         [Inject]
-        private ISceneCoordinator _sceneCoordinator = null!;
+        private ISceneNavigator _sceneNavigator = null!;
+        [Inject]
+        private IWorldLoadProgress _loadProgress = null!;
 
-        private ISessionContainer? Session => _session?.Current != null ? _session : null;
+        private bool _loaderHiddenAtDone;
 
         protected void OnValidate()
         {
@@ -122,24 +117,23 @@ namespace Fodinae
                 return;
             }
 
-            _doc = GetComponent<UIDocument>();
-            if (_doc == null || _doc.rootVisualElement == null)
-            {
-                return;
-            }
-
-            _root = _doc.rootVisualElement;
-
-            // _built alone is not proof the cached VisualElement bindings are
-            // still valid: a script hot-reload while already in Play Mode
-            // preserves this MonoBehaviour's fields (including _built) via
-            // Unity's backup/restore, but _tree and friends are plain C#
-            // objects, not UnityEngine.Object - they come back null. Trusting
-            // _built alone here left every binding null and every texture
-            // apply silently failing after any mid-session recompile.
+            // Первичная сборка — в Start(): к нему гарантированы и инжекция
+            // (мост, фаза Awake), и панель UIDocument (создаётся в OnEnable
+            // документа). Здесь только реактивация: если дерево пережило
+            // отключение (переактивация контента), переприменяем биндинги и
+            // текст, не перестраивая UI.
             if (_built && Application.isPlaying && _tree != null)
             {
-                RebindGameManager();
+                UIDocument doc = GetComponent<UIDocument>();
+                if (doc == null || doc.rootVisualElement == null)
+                {
+                    // Реактивация — best-effort: панель может пересоздаться позже
+                    // (повторный OnEnable документа); первичная сборка в Start
+                    // уже прошла, поэтому тихий выход не теряет экран.
+                    return;
+                }
+
+                _root = doc.rootVisualElement;
                 SubscribeEvents();
 
                 // The presenter is a plain field, so a domain reload hands us a
@@ -147,13 +141,50 @@ namespace Fodinae
                 // Rebinding is idempotent, so it is safe on the normal path too.
                 _sceneryPresenter.Bind(_tree);
                 _sceneryPresenter.ApplyTextures(ref _shadeTexture, ref _spaceBgTexture);
+
+                if (_loc != null)
+                {
+                    // Реестр применяет текст сразу и на каждой смене языка.
+                    _loc.RegisterLocalizable(this);
+                    ApplyLocalizedText();
+                }
+            }
+        }
+
+        private MenuStarfield? _sceneStarfield;
+        private MenuSceneryController? _sceneScenery;
+
+        public void InitializeScene(MenuStarfield? starfield, MenuSceneryController? scenery)
+        {
+            _sceneStarfield = starfield;
+            _sceneScenery = scenery;
+            _sceneryPresenter.BindScene(starfield, scenery);
+
+            if (_teardownStarted)
+            {
                 return;
             }
 
-            if (_built && _tree == null)
+            if (_built && _tree != null)
+            {
+                return;
+            }
+
+            if (_built)
             {
                 Debug.LogWarning("[MainMenu] _built was true but _tree is null (likely a hot-reload while in Play Mode) - rebuilding UI from scratch.");
                 _built = false;
+            }
+
+            _doc = GetComponent<UIDocument>();
+            _root = _doc != null ? _doc.rootVisualElement : null;
+            if (_doc == null || _root == null)
+            {
+                // К Start панель гарантирована: UIDocument создаёт её в своём
+                // OnEnable, а Start выполняется после всех OnEnable сцены.
+                // Недоступность здесь — дефект, а не гонка.
+                throw new InvalidOperationException(
+                    "[MainMenu] UIDocument panel is not available at Start (панель создаётся в OnEnable документа и к Start обязана существовать).");
             }
 
             var mainMenuUXML = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
@@ -183,6 +214,14 @@ namespace Fodinae
             SubscribeEvents();
             _sceneryPresenter.ApplyTextures(ref _shadeTexture, ref _spaceBgTexture);
 
+            if (_loc != null)
+            {
+                // Реестр применяет текст сразу и на каждой смене языка —
+                // стартовое применение не может быть забыто.
+                _loc.RegisterLocalizable(this);
+            }
+
+            ApplyLocalizedText();
             _built = true;
 
             _sceneryPresenter.MarkUIBuilt();
@@ -203,7 +242,8 @@ namespace Fodinae
                 tree.Q<VisualElement>("LoaderProgressFill"),
                 tree.Q<Label>("LoaderPhaseLabel"),
                 tree.Q<Label>("LoaderPhaseCount"),
-                tree.Q<VisualElement>("LoaderPhaseList"));
+                tree.Q<VisualElement>("LoaderPhaseList"),
+                _loc);
             _loaderContent = tree.Q<VisualElement>("LoaderContent");
             _routeOrbit = tree.Q<VisualElement>("MainMenuRouteOrbit");
             _routeDescent = tree.Q<VisualElement>("MainMenuRouteDescent");
@@ -225,6 +265,65 @@ namespace Fodinae
             _sideTelegramButton = tree.Q<Button>("SideTelegramButton");
             _sideVkButton = tree.Q<Button>("SideVkButton");
             _sideExitButton = tree.Q<Button>("SideExitButton");
+
+            // Локализованная копия кнопок главного меню: текст из словаря
+            // (ru/en), а не хардкод из MainMenu.uxml.
+            if (_loc != null)
+            {
+                Label? playLabel = _playButton?.Q<Label>(null, "mm-btn-primary-text");
+                if (playLabel != null)
+                {
+                    playLabel.text = _loc.Get("menu.play");
+                }
+
+                Label? serverLabel = _serverSelectButton?.Q<Label>();
+                if (serverLabel != null)
+                {
+                    serverLabel.text = _loc.Get("menu.server_select");
+                }
+
+                if (_cancelDescentButton != null)
+                {
+                    _cancelDescentButton.text = _loc.Get("menu.cancel_descent");
+                }
+
+                Label? orbitLabel = _routeOrbit?.Q<Label>(null, "mm-route-text");
+                if (orbitLabel != null)
+                {
+                    orbitLabel.text = _loc.Get("menu.orbit");
+                }
+
+                Label? descentLabel = _routeDescent?.Q<Label>(null, "mm-route-text");
+                if (descentLabel != null)
+                {
+                    descentLabel.text = _loc.Get("menu.descent");
+                }
+
+                if (_sideChronicleButton != null)
+                {
+                    _sideChronicleButton.tooltip = _loc.Get("menu.chronicle");
+                }
+
+                if (_sideSettingsButton != null)
+                {
+                    _sideSettingsButton.tooltip = _loc.Get("menu.settings");
+                }
+
+                if (_sideRepairButton != null)
+                {
+                    _sideRepairButton.tooltip = _loc.Get("menu.repair");
+                }
+
+                if (_sideUpdateButton != null)
+                {
+                    _sideUpdateButton.tooltip = _loc.Get("menu.update");
+                }
+
+                if (_sideExitButton != null)
+                {
+                    _sideExitButton.tooltip = _loc.Get("menu.exit");
+                }
+            }
 
             // Футер
             _newsTickerButton = tree.Q<Button>("NewsTickerButton");
@@ -290,7 +389,7 @@ namespace Fodinae
 
             if (Application.isPlaying && !_built)
             {
-                OnEnable();
+                InitializeScene(_sceneStarfield, _sceneScenery);
                 if (!_built)
                 {
                     return;
@@ -320,19 +419,14 @@ namespace Fodinae
                     // created on purpose one statement earlier.
                     _tree = null;
                     _built = false;
-                    OnEnable();
+                    InitializeScene(_sceneStarfield, _sceneScenery);
                     return;
                 }
             }
 
-            if (_loadingActive || _dismissedForServerWindow)
+            if (_loadingActive)
             {
-                if (_loadingActive)
-                {
-                    UpdateLoaderProgress();
-                }
-
-                DismissDescentIfServerWindowOpened();
+                UpdateLoaderProgress();
             }
 
             // Обе текстуры переприсваиваются каждый кадр, а не один раз при
@@ -348,72 +442,8 @@ namespace Fodinae
         /// renders BELOW this menu's fullscreen layer. If the descent layer stays visible,
         /// the window is invisible and unclickable — the game looks frozen on "connecting".
         /// The moment a window is open, yield the whole layer. When the window closes,
-        /// resume the descent loader until OnWorldLoaded.
+        /// resume the descent loader after a server window closes.
         /// </summary>
-        private void DismissDescentIfServerWindowOpened()
-        {
-            var handler = Session?.TryResolve<PacketHandler>();
-            bool hasServerWindow = handler != null && handler.TopWindowTag != null;
-
-            if (hasServerWindow)
-            {
-                if (!_dismissedForServerWindow)
-                {
-                    _dismissedForServerWindow = true;
-                    _loadingActive = false;
-                    HideLoader();
-
-                    if (_tree != null)
-                    {
-                        _tree.style.display = DisplayStyle.None;
-                        _tree.pickingMode = PickingMode.Ignore;
-                        Debug.Log("[MainMenu] Fullscreen layer hidden for server window");
-                    }
-
-                    if (_root != null)
-                    {
-                        _root.pickingMode = PickingMode.Ignore;
-                    }
-                }
-            }
-            else if (_dismissedForServerWindow)
-            {
-                if (_gameManager == null || !_gameManager.IsWorldLoaded)
-                {
-                    _dismissedForServerWindow = false;
-                    _loadingActive = true;
-                    if (_tree != null)
-                    {
-                        _tree.style.display = DisplayStyle.Flex;
-                        _tree.pickingMode = PickingMode.Position;
-                    }
-
-                    if (_root != null)
-                    {
-                        _root.pickingMode = PickingMode.Position;
-                    }
-
-                    if (_loaderContainer != null)
-                    {
-                        _loaderContainer.style.display = DisplayStyle.Flex;
-                    }
-
-                    if (_loaderContent != null)
-                    {
-                        _loaderContent.style.display = DisplayStyle.Flex;
-                    }
-
-                    UpdateLoaderProgress();
-                    Debug.Log("[MainMenu] Server window closed, resuming descent loader");
-                }
-            }
-        }
-
-
-
-
-
-
         private void HandleKeyboardInput()
         {
             if (!Application.isPlaying)
@@ -433,7 +463,7 @@ namespace Fodinae
                 {
                     CloseCurrentModal();
                 }
-                else if (_loadingActive && !_dismissedForServerWindow)
+                else if (_loadingActive)
                 {
                     CancelDescent();
                 }
@@ -449,7 +479,19 @@ namespace Fodinae
 
         private void UpdateLoaderProgress()
         {
-            _loaderProgress?.UpdateProgress(Session);
+            // Phase comes from the real world-readiness gate (GameManager), not
+            // a timer: the descent loader shows the actual startup stage and
+            // hides itself the moment the world is fully loaded.
+            WorldLoadPhase phase = _loadProgress != null
+                ? _loadProgress.CurrentPhase
+                : WorldLoadPhase.Handshake;
+            _loaderProgress?.UpdateProgress(phase);
+
+            if (phase == WorldLoadPhase.Done && !_loaderHiddenAtDone)
+            {
+                _loaderHiddenAtDone = true;
+                HideLoader();
+            }
         }
 
         private void SubscribeEvents()
@@ -537,11 +579,7 @@ namespace Fodinae
                 // Версия берётся из настроек плеера, а не из строки в разметке.
                 // Захардкоженная «ВЕРСИЯ 0.8.14» не менялась от сборки к сборке,
                 // то есть по экрану нельзя было понять, какой билд запущен.
-                _footerVersionButton.text = Application.isEditor
-                    ? $"ВЕРСИЯ {Application.version} (РЕДАКТОР)"
-                    : Debug.isDebugBuild
-                        ? $"ВЕРСИЯ {Application.version} (DEV)"
-                        : $"ВЕРСИЯ {Application.version}";
+                ApplyVersionLabel();
 
                 _footerVersionButton.clicked += () => OpenModal(_updateModal);
             }
@@ -773,45 +811,52 @@ namespace Fodinae
             Application.OpenURL("https://vk.com/fodinae");
         }
 
-        private void RebindGameManager()
+        private void ApplyVersionLabel()
         {
-            if (Session == null)
-            {
-                if (_gameManager != null)
-                {
-                    _gameManager.OnWorldLoaded -= OnWorldLoaded;
-                    _gameManager = null;
-                }
-
-                return;
-            }
-
-            GameManager? current = Session.TryResolve<GameManager>();
-            if (current == null)
+            if (_footerVersionButton == null || _loc == null)
             {
                 return;
             }
 
-            if (_gameManager != null && !ReferenceEquals(_gameManager, current))
+            _footerVersionButton.text = Application.isEditor
+                ? _loc.Get("mainmenu.version_editor", Application.version)
+                : Debug.isDebugBuild
+                    ? _loc.Get("mainmenu.version_dev", Application.version)
+                    : _loc.Get("mainmenu.version", Application.version);
+        }
+
+        /// <summary>
+        /// Переприменяет локализованный текст после смены языка: статические
+        /// ключи через UILocalizer, динамические (версия, список фаз загрузки) —
+        /// напрямую.
+        /// </summary>
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(MainMenu));
+            if (_tree == null || _loc == null)
             {
-                _gameManager.OnWorldLoaded -= OnWorldLoaded;
+                return;
             }
 
-            _gameManager = current;
-            _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            _gameManager.OnWorldLoaded += OnWorldLoaded;
+            UILocalizer.Apply(_tree, _loc);
+            ApplyVersionLabel();
+            _loaderProgress?.RefreshLocalization();
+            UILocalizer.AssertLocalized(_tree, _loc);
         }
 
         protected void OnDestroy()
         {
+            _teardownStarted = true;
+            // _loc can still be null if this view is torn down before
+            // Bootstrap-scope injection lands (async scene transitions).
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
             _descentCancellation?.Cancel();
             _descentCancellation?.Dispose();
             _descentCancellation = null;
-
-            if (_gameManager != null)
-            {
-                _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            }
 
             _tree?.RemoveFromHierarchy();
             _tree = null;
@@ -833,60 +878,22 @@ namespace Fodinae
             }
         }
 
-        private void OnWorldLoaded()
+        private void OnPlayButtonClicked()
         {
-            if (_teardownStarted)
+            if (_loadingActive || _teardownStarted)
             {
                 return;
             }
 
-            CommitLoadedWorldAsync().Forget();
-        }
-
-        private async UniTaskVoid CommitLoadedWorldAsync()
-        {
-            _teardownStarted = true;
-            _loadingActive = false;
-
-            // Scene unload completes asynchronously. Stop both off-screen HDR
-            // renderers now, before the first gameplay frame is presented.
-            // Otherwise the planet camera and starfield blit keep consuming a
-            // full render pass behind the game until unload finally completes.
-            _sceneryPresenter.ShutdownRenderers();
-
-            // Маршрут доводится до конца: раньше третий шаг не подсвечивался
-            // никогда, и полоса внизу навсегда застревала на «СПУСК».
-            _routeDescent?.RemoveFromClassList("mm-route-item--active");
-            _routeSurface?.AddToClassList("mm-route-item--active");
-
-            HideLoader();
-            HideMenu();
-
-            if (_gameManager != null)
-            {
-                _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            }
-
-            await _sceneCoordinator.CommitStagedAsync(destroyCancellationToken);
-        }
-
-        private void OnPlayButtonClicked()
-        {
             Debug.Log($"[Probe] T0 {UnityEngine.Time.realtimeSinceStartup:F3}");
             Debug.Log("[MainMenu] Play button clicked - initiating descent sequence");
 
             HideMenu();
             CloseCurrentModal();
-            _dismissedForServerWindow = false;
             _loadingActive = true;
             _descentCancellation?.Dispose();
             _descentCancellation = CancellationTokenSource.CreateLinkedTokenSource(
                 destroyCancellationToken);
-
-            // Freeze the already rendered menu backdrop before MainGame starts
-            // staging. No off-screen camera or starfield blit may compete with
-            // the gameplay RenderLoop during the overlap window.
-            _sceneryPresenter.ShutdownRenderers();
 
             if (_loaderContainer != null)
             {
@@ -907,91 +914,49 @@ namespace Fodinae
             _sceneryPresenter.DescentTarget = 1f;
             UpdateLoaderProgress();
 
-            LoadGameSceneAsync().Forget();
+            RunDescentAsync().Forget();
+        }
+
+        private async UniTaskVoid RunDescentAsync()
+        {
+            // Capture the token while this component is alive. Unity's
+            // destroyCancellationToken property is not safe to query from an
+            // async continuation after OnDestroy has started (Unity throws a
+            // MissingReferenceException from the property getter itself).
+            CancellationToken transitionToken = _descentCancellation?.Token ?? CancellationToken.None;
+            try
+            {
+                await _sceneNavigator.TransitionAsync(GameSceneName, transitionToken);
+            }
+            catch (OperationCanceledException) when (transitionToken.IsCancellationRequested)
+            {
+                // Scene teardown owns cancellation; there is no UI left to restore.
+            }
+            catch (Exception exception)
+            {
+                if (_teardownStarted)
+                {
+                    return;
+                }
+
+                _loadingActive = false;
+                _sceneryPresenter.ResumeRenderers();
+                HideLoader();
+                if (_mainMenuContainer != null)
+                {
+                    _mainMenuContainer.style.display = DisplayStyle.Flex;
+                }
+
+                Debug.LogError($"[MainMenu] MainGame transition failed: {exception.Message}");
+            }
         }
 
         private void CancelDescent()
         {
-            Debug.Log("[MainMenu] Descent sequence canceled by user");
-            _loadingActive = false;
-            _descentCancellation?.Cancel();
-            HideLoader();
-
-            if (_mainMenuContainer != null)
-            {
-                _mainMenuContainer.style.display = DisplayStyle.Flex;
-            }
-
-            _routeDescent?.RemoveFromClassList("mm-route-item--active");
-            _routeSurface?.RemoveFromClassList("mm-route-item--active");
-            _routeOrbit?.AddToClassList("mm-route-item--active");
-
-            // Отмена — не мгновенный возврат, а тот же полёт в обратную сторону.
-            _sceneryPresenter.ResumeRenderers();
-            _sceneryPresenter.DescentTarget = 0f;
-            _sceneCoordinator.DiscardStagedAsync(destroyCancellationToken).Forget();
+            // The scene route is linear. Once descent starts, the coordinator
+            // owns the transition and there is no staged scene to roll back.
+            Debug.Log("[MainMenu] Descent is already in progress; waiting for MainGame.");
         }
 
-        private async UniTaskVoid LoadGameSceneAsync()
-        {
-            CancellationToken cancellationToken = _descentCancellation?.Token ?? destroyCancellationToken;
-            await _sceneCoordinator.StageAsync(GameSceneName, cancellationToken);
-
-            _gameManager = await WaitForGameManagerAsync(cancellationToken);
-            _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            _gameManager.OnWorldLoaded += OnWorldLoaded;
-
-            var connectionService = Session?.TryResolve<IConnectionService>() ?? throw new InvalidOperationException(
-                "[MainMenu] Connection service is required after the game scene loads.");
-            if (!connectionService.IsConnected)
-            {
-                connectionService.Connect(oldClient: false);
-            }
-        }
-
-        /// <summary>
-        /// Waits for the game scope to finish building and hand over its <see cref="GameManager"/>.
-        /// </summary>
-        /// <remarks>
-        /// LoadSceneAsync completing does not mean the loaded scene's LifetimeScope
-        /// has built its container. VContainer defers Build through
-        /// LifetimeScope.AwakeScheduler, and it is a build callback that points
-        /// SessionContainer.Current at the game container — so resolving on the
-        /// very next line is a race.
-        ///
-        /// Losing that race used to throw, and the throw landed before the
-        /// OnWorldLoaded subscription below. Nothing then ever raised
-        /// OnWorldLoaded, so the world never finished loading AND the menu scene,
-        /// whose teardown hangs off that same event, stayed resident for the rest
-        /// of the session — with its planet rig still rendering behind the game.
-        /// One missed frame cost the whole frame budget.
-        ///
-        /// Still throws on timeout: a scope that has not appeared after several
-        /// seconds is a real failure, and swallowing it would leave the menu up
-        /// with no explanation.
-        /// </remarks>
-        private async UniTask<GameManager> WaitForGameManagerAsync(
-            System.Threading.CancellationToken cancellationToken)
-        {
-            float deadline = Time.realtimeSinceStartup + GameScopeReadyTimeoutSeconds;
-            while (true)
-            {
-                GameManager? candidate = Session?.TryResolve<GameManager>();
-                if (candidate != null)
-                {
-                    return candidate;
-                }
-
-                if (Time.realtimeSinceStartup >= deadline)
-                {
-                    throw new InvalidOperationException(
-                        "[MainMenu] GameManager did not become resolvable within " +
-                        $"{GameScopeReadyTimeoutSeconds:F0}s of '{GameSceneName}' loading. " +
-                        "The game LifetimeScope failed to build.");
-                }
-
-                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
-            }
-        }
     }
 }

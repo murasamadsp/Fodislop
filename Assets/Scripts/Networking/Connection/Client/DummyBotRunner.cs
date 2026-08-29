@@ -13,6 +13,8 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal static class DummyBotRunner
 {
+    private static IHBPacket[] s_positionsArray = new IHBPacket[6];
+
     public static async UniTaskVoid RunCircularBots(int count, int lifecycleVersion, Action<ServerPacket> sendPacket, Func<bool> loopAlive)
     {
         const int BASE_ID = 1000;
@@ -41,10 +43,8 @@ internal static class DummyBotRunner
             bots.Add((botId, names[i % names.Length], CENTER_X, CENTER_Y, radius, angle, speed));
         }
 
-        var positions = new List<IHBPacket>(bots.Count);
         while (loopAlive())
         {
-            positions.Clear();
             for (int i = 0; i < bots.Count; i++)
             {
                 var b = bots[i];
@@ -58,11 +58,11 @@ internal static class DummyBotRunner
                     > 45 and <= 135 => 2,
                     _ => 3,
                 };
-                positions.Add(new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot));
+                s_positionsArray[i] = new RobotPositionPacket(b.id, (ushort)x, (ushort)y, rot);
                 bots[i] = (b.id, b.name, b.cx, b.cy, b.r, b.a + (b.speed * 0.1f), b.speed);
             }
 
-            sendPacket(new ServerPacket(new HBPacket(positions.ToArray())));
+            sendPacket(new ServerPacket(new HBPacket(s_positionsArray)));
             await UniTask.Delay(100);
         }
     }

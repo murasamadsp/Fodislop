@@ -2,7 +2,7 @@ using System;
 
 namespace VContainer.Internal
 {
-    internal sealed class TypedParameter : IInjectParameter
+    sealed class TypedParameter : IInjectParameter
     {
         public readonly Type Type;
         public readonly object Value;
@@ -21,7 +21,7 @@ namespace VContainer.Internal
         }
     }
 
-    internal sealed class FuncTypedParameter : IInjectParameter
+    sealed class FuncTypedParameter : IInjectParameter
     {
         public readonly Type Type;
         public readonly Func<IObjectResolver, object> Func;
@@ -40,7 +40,7 @@ namespace VContainer.Internal
         }
     }
 
-    internal sealed class NamedParameter : IInjectParameter
+    sealed class NamedParameter : IInjectParameter
     {
         public readonly string Name;
         public readonly object Value;
@@ -59,7 +59,7 @@ namespace VContainer.Internal
         }
     }
 
-    internal sealed class FuncNamedParameter : IInjectParameter
+    sealed class FuncNamedParameter : IInjectParameter
     {
         public readonly string Name;
         public readonly Func<IObjectResolver, object> Func;
