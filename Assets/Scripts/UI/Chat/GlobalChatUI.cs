@@ -91,20 +91,16 @@ namespace Fodinae.UI
             // моменту вызова; null здесь — дефект проводки, а не гонка.
             // Молчаливый пропуск оставил бы чат вечно нерабочим без ошибки.
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
-                _serverConfig == null || _inputBlocker == null)
+                _inputBlocker == null)
             {
                 throw new InvalidOperationException(
                     "[GlobalChatUI] Required injection missing: " +
-                    $"{(_doc == null ? "UIDocument" : _networkService == null ? "INetworkService" : _serverConfig == null ? "IServerConfig" : _inputBlocker == null ? "IInputBlocker" : "UIDocument root")}. " +
+                    $"{(_doc == null ? "UIDocument" : _networkService == null ? "INetworkService" : _inputBlocker == null ? "IInputBlocker" : "UIDocument root")}. " +
                     "GlobalChatUI must be registered in the Game scope before Start.");
             }
 
             _initialized = true;
-            // The throw above guards these required injections; the compiler
-            // cannot narrow fields through the conditional 'missing' expression.
-            IServerConfig serverConfig = _serverConfig!;
             ILocalizationService loc = _loc!;
-            serverConfig.OnInitialized += ApplyServerConfig;
             // Реестр применяет текст сразу и на каждой смене языка — подписка
             // вручную не нужна и запрещена линтером.
             loc.RegisterLocalizable(this);
@@ -114,10 +110,7 @@ namespace Fodinae.UI
                 _panel.style.display = DisplayStyle.None;
             }
 
-            if (serverConfig.IsInitialized)
-            {
-                ApplyServerConfig();
-            }
+            ApplyChatConfig();
 
             if (Application.isPlaying)
             {
@@ -152,11 +145,6 @@ namespace Fodinae.UI
                 _loc.UnregisterLocalizable(this);
             }
 
-            if (_serverConfig != null)
-            {
-                _serverConfig.OnInitialized -= ApplyServerConfig;
-            }
-
             if (_chatEvents != null)
             {
                 _chatEvents.MessageReceived -= AddMessage;
@@ -170,11 +158,11 @@ namespace Fodinae.UI
             _tree = null;
         }
 
-        private void ApplyServerConfig()
+        private void ApplyChatConfig()
         {
-            if (_inputField != null && _serverConfig.IsInitialized)
+            if (_inputField != null)
             {
-                _inputField.maxLength = _serverConfig.MaxGlobalChatLength;
+                _inputField.maxLength = ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
             }
         }
 

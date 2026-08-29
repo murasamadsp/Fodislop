@@ -85,7 +85,7 @@ namespace Fodinae.UI
             }
 
             if (_doc == null || _doc.rootVisualElement == null ||
-                _networkService == null || _serverConfig == null)
+                _networkService == null)
             {
                 // Защитный гард: к моменту [Inject]-метода зависимости и панель
                 // UIDocument гарантированы — пропуск здесь означает дефект
@@ -94,26 +94,17 @@ namespace Fodinae.UI
             }
 
             _initialized = true;
-            _serverConfig.OnInitialized += ApplyServerConfig;
             CreateUI();
             if (_overlay != null)
             {
                 _overlay.style.display = DisplayStyle.None;
             }
 
-            if (_serverConfig.IsInitialized)
-            {
-                ApplyServerConfig();
-            }
+            ApplyChatConfig();
         }
 
         protected void OnDestroy()
         {
-            if (_serverConfig != null)
-            {
-                _serverConfig.OnInitialized -= ApplyServerConfig;
-            }
-
             _idleCts?.Cancel();
             _idleCts?.Dispose();
             _blinker?.StopBlink();
@@ -121,11 +112,11 @@ namespace Fodinae.UI
             _tree = null;
         }
 
-        private void ApplyServerConfig()
+        private void ApplyChatConfig()
         {
-            if (_inputField != null && _serverConfig.IsInitialized)
+            if (_inputField != null)
             {
-                _inputField.maxLength = _serverConfig.MaxLocalChatLength;
+                _inputField.maxLength = ProjectRuntimeContracts.Chat.MaximumLocalChatLength;
             }
         }
 
