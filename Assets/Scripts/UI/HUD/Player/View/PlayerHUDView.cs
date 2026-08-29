@@ -395,8 +395,6 @@ namespace Fodinae.UI.HUD.Player.View
                 throw new InvalidOperationException("[PlayerHUD] BasketContainer is missing from PlayerHUD.uxml.");
             _skillContainer = tree.Q<VisualElement>("SkillContainer") ??
                 throw new InvalidOperationException("[PlayerHUD] SkillContainer is missing from PlayerHUD.uxml.");
-            _statusPanel = tree.Q<VisualElement>("StatusPanel") ??
-                throw new InvalidOperationException("[PlayerHUD] StatusPanel is missing from PlayerHUD.uxml.");
 
             // Авто-копка и агрессия: индикатор — LED, текст кнопки статичен.
             _autoDigButton = tree.Q<Button>("AutoDigButton") ??
@@ -880,32 +878,6 @@ namespace Fodinae.UI.HUD.Player.View
 
             _skillIcons[skill] = (arrow, barFill);
             return (arrow, barFill);
-        }
-
-        private void UpdateMissionPanel()
-        {
-            var stats = _model;
-            if (stats == null)
-            {
-                return;
-            }
-
-            if (stats.IsMissionActive)
-            {
-                _missionPanel!.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                _missionPanel!.style.display = DisplayStyle.None;
-                return;
-            }
-
-            _missionTitleLabel!.text = stats.MissionTitle ?? _loc.Get("hud.mission");
-            _missionDescLabel!.text = stats.MissionDescription ?? string.Empty;
-
-            float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
-            _missionProgressFill!.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
-            _missionProgressLabel!.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
         }
     }
 }
