@@ -7,6 +7,7 @@
         "Fodinae.UI",
         "Fodinae.World",
         "Fodinae.AssetPipeline",
+        "Fodinae.Contracts",
         "VContainer"
     ],
     "includePlatforms": [
