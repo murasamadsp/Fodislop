@@ -1,11 +1,9 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
-using Fodinae.Player;
 using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
@@ -17,7 +15,6 @@ namespace Fodinae.UI
 {
     /// <summary>
     /// Chunk-batched minimap renderer with time-throttled updates and async GPU upload.
-    /// No coroutines, no per-cell WorldLayer.<T> indexer calls — reads whole chunks at once.
     /// </summary>
     public class MinimapController : MonoBehaviour
     {
@@ -37,7 +34,6 @@ namespace Fodinae.UI
         private Label? _coordinatesLabel;
         private Texture2D? _minimapTexture;
 
-
         // World state
         private ILocalPlayer? _player;
         [Inject]
@@ -49,15 +45,12 @@ namespace Fodinae.UI
         private int _worldWidth;
         private int _worldHeight;
 
-        // Pixel buffer and cell color cache
-        private Color32[]? _pixelColors;
-        private readonly Dictionary<CellType, Color32> _cellColors = new(256);
-
-        // Per-update chunk cache (reused, cleared each frame — allocation-free)
+        private MinimapTextureRenderer? _textureRenderer;
         private readonly MapCellSampler _cellSampler = new();
 
         // Throttle state
-        private Vector2Int _lastUpdatePos; public Vector2Int LastUpdatePos => _lastUpdatePos;
+        private Vector2Int _lastUpdatePos;
+        public Vector2Int LastUpdatePos => _lastUpdatePos;
         private float _lastUpdateTime;
         private bool _ready;
         private bool _initialRefreshDone;
@@ -71,12 +64,7 @@ namespace Fodinae.UI
         private bool _isVisible = true;
         private bool _uiCreated;
 
-        private const float UPDATE_DELAY = 0.1f; // 10 FPS — sufficient for minimap
-
-        private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
-        private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
-        private static readonly Color32 MarkerColor = Color.white;
-        private static readonly Color32 CenterColor = Color.red;
+        private const float UPDATE_DELAY = 0.1f;
 
         protected void Start()
         {
@@ -86,12 +74,8 @@ namespace Fodinae.UI
                     $"Minimap size must be at least 3 pixels for the player marker; got {_uiSize}.");
             }
 
-            // Текстура и пиксельный буфер не зависят от DI — создаются при рождении.
-            // UI-скелет и подписки на мир строятся в Start (см. ниже). Каждый texel
-            // — дискретный сэмпл клетки мира. Билинейная фильтрация
-            // выдумывает цвета между соседними клетками и размывает границы
-            // незагруженных чанков — поэтому дисплей обязан сохранять
-            // nearest-neighbour данные.
+            _textureRenderer = new MinimapTextureRenderer(_uiSize);
+
             _minimapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
                 _uiSize,
                 _uiSize,
@@ -100,12 +84,6 @@ namespace Fodinae.UI
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
 
-            _pixelColors = new Color32[_uiSize * _uiSize];
-
-            // Школа (одна дорога): к Start зависимости инжектятся (сборка scope,
-            // фаза Awake) и панель создана (OnEnable документа) — скелет строится
-            // здесь. Мир инициализируется позже (данные по сети) — переход по
-            // событию OnWorldInitialized, без ретраев из Update.
             CreateUI();
             _mapModeState.Changed += OnMapModeChanged;
 
@@ -171,11 +149,6 @@ namespace Fodinae.UI
             }
         }
 
-        /// <summary>
-        /// Рабочая фаза (одна дорога): троттлинг-рендер, перехват смены cell-layer
-        /// и переключение видимости. Инициализация — событийная: [Inject]-метод
-        /// строит скелет, OnWorldInitialized переводит в _ready.
-        /// </summary>
         protected void Update()
         {
             if (_ready && _mapStorage != null &&
@@ -255,32 +228,6 @@ namespace Fodinae.UI
             }
         }
 
-        private void CacheCellColors()
-        {
-            if (_mapManager == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i <= 255; i++)
-            {
-                CellType cellType = (CellType)i;
-                if (cellType == CellType.Unloaded)
-                {
-                    _cellColors[cellType] = UnloadedColor;
-                    continue;
-                }
-
-                Color color = _mapManager.GetCellMinimapColor(cellType);
-                if (color.a < 0.01f)
-                {
-                    color = new Color(0.3f, 0.3f, 0.3f, 1f);
-                }
-
-                _cellColors[cellType] = (Color32)color;
-            }
-        }
-
         private void InitializeWorldState()
         {
             if (_mapStorage == null || _mapManager == null)
@@ -312,7 +259,7 @@ namespace Fodinae.UI
 
             _worldWidth = _mapManager.WorldWidth;
             _worldHeight = _mapManager.WorldHeight;
-            CacheCellColors();
+            _textureRenderer?.CacheCellColors(_mapManager);
             _ready = true;
             SetVisible(_isVisible);
         }
@@ -327,14 +274,11 @@ namespace Fodinae.UI
             if (_doc == null || _doc.rootVisualElement == null)
             {
                 // Не бросаем: UIDocument может появиться после этого Start (PostStart-
-                // инъекция или аддитивная загрузка сцены). Update ретраит CreateUI —
+                // инъекция или аддитивная загрузка сцены); Update ретраит CreateUI —
                 // ждём молча, иначе первый кадр роняет клиент.
                 return;
             }
 
-
-            // Static structure (panel, coordinates, image container) lives in
-            // Minimap.uxml; only the texture and the map-toggle click are bound here.
             VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/Minimap") ??
                 throw new InvalidOperationException("[Minimap] Resources/UI/Minimap.uxml is required.");
             TemplateContainer tree = template.Instantiate();
@@ -350,7 +294,7 @@ namespace Fodinae.UI
 
             _minimapRoot.RegisterCallback<ClickEvent>(evt =>
             {
-                    _mapModeState.SetOpen(true);
+                _mapModeState.SetOpen(true);
                 evt.StopPropagation();
             });
             _doc.rootVisualElement.Add(tree);
@@ -359,7 +303,6 @@ namespace Fodinae.UI
             SetVisible(false);
             _uiCreated = true;
         }
-
 
         protected void OnEnable()
         {
@@ -439,12 +382,7 @@ namespace Fodinae.UI
 
         private void OnPlayerMoved(Vector2Int oldPos, Vector2Int newPos)
         {
-            if (!isActiveAndEnabled)
-            {
-                return;
-            }
-
-            if (!_ready)
+            if (!isActiveAndEnabled || !_ready)
             {
                 return;
             }
@@ -479,82 +417,18 @@ namespace Fodinae.UI
 
         private void RefreshTexture(int playerX, int playerY)
         {
-            int halfSize = _uiSize / 2;
-            int minX = playerX - halfSize;
-            int texSize = _uiSize;
-            Color32[]? colors = _pixelColors;
-            if (colors == null)
+            if (_textureRenderer == null)
             {
                 return;
             }
 
-            Dictionary<CellType, Color32> cellColors = _cellColors;
-
-            int index = 0;
-            bool hasLoadedCells = false;
-
-            for (int texY = 0; texY < texSize; texY++)
-            {
-                // texY = 0 is bottom of screen (deeper underground, larger Server Y)
-                // texY = texSize - 1 is top of screen (towards surface, smaller Server Y)
-                int serverY = playerY + halfSize - texY;
-
-                if (serverY < 0 || serverY >= _worldHeight)
-                {
-                    // Entire row is out of bounds
-                    int end = index + texSize;
-                    while (index < end)
-                    {
-                        colors[index++] = OutOfBoundsColor;
-                    }
-
-                    continue;
-                }
-
-                for (int texX = 0; texX < texSize; texX++)
-                {
-                    int serverX = minX + texX;
-
-                    if (serverX < 0 || serverX >= _worldWidth)
-                    {
-                        colors[index++] = OutOfBoundsColor;
-                        continue;
-                    }
-
-                    if (_cellSampler.TryGetCell(serverX, serverY, out CellType cellType))
-                    {
-                        hasLoadedCells = true;
-                        colors[index++] = cellType == CellType.Unloaded
-                            ? UnloadedColor
-                            : cellColors[cellType];
-                    }
-                    else
-                    {
-                        colors[index++] = UnloadedColor;
-                    }
-                }
-            }
-
-            // Draw player marker (plus sign)
-            int cx = halfSize;
-            colors[(cx * texSize) + cx - 1] = MarkerColor;
-            colors[(cx * texSize) + cx] = CenterColor;
-            colors[(cx * texSize) + cx + 1] = MarkerColor;
-            colors[((cx - 1) * texSize) + cx] = MarkerColor;
-            colors[((cx + 1) * texSize) + cx] = MarkerColor;
-
-            if (_minimapTexture != null)
-            {
-                _minimapTexture.SetPixels32(colors);
-
-                // Keep the texture readable: this texture is updated again on
-                // every throttled player movement. Passing true discards the
-                // CPU copy and makes the next SetPixels32 fail/force a costly
-                // reallocation.
-                _minimapTexture.Apply(false); // Async GPU upload — non-blocking
-            }
-
-            _lastRefreshHadLoadedCells = hasLoadedCells;
+            _lastRefreshHadLoadedCells = _textureRenderer.Render(
+                _minimapTexture,
+                playerX,
+                playerY,
+                _worldWidth,
+                _worldHeight,
+                _cellSampler);
         }
 
         private void UpdateCoordinatesText(int x, int y)
