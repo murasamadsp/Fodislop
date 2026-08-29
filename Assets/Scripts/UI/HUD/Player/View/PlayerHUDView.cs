@@ -35,8 +35,11 @@ namespace Fodinae.UI.HUD.Player.View
         private readonly Dictionary<SkillType, (Label arrow, VisualElement barFill)> _skillIcons = new();
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
         private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
-        private readonly Dictionary<string, VisualElement> _statusLineElements = new();
-        private readonly Dictionary<string, IVisualElementScheduledItem> _statusSchedules = new();
+
+        private readonly PlayerHUDStatusPanel _statusPanel = new();
+        private PlayerHUDMissionPanel _missionPanel = null!;
+        private PlayerHUDBonusController _bonusController = null!;
+        private PlayerHUDPopups _popups = null!;
 
         [Inject]
         private UIDocument _doc = null!;
@@ -48,11 +51,6 @@ namespace Fodinae.UI.HUD.Player.View
         private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
         private IVisualElementScheduledItem? _skeletonPulse;
         private TemplateContainer? _hudRoot;
-        private Button? _bonusButton;
-        private VisualElement? _bonusPanel;
-        private Label? _bonusStatusLabel;
-        private Button? _bonusClaimButton;
-        private bool _isBonusOpen;
 
         private Label? _nicknameLabel;
         private Label? _levelLabel;
@@ -74,10 +72,6 @@ namespace Fodinae.UI.HUD.Player.View
 
         private VisualElement? _currentSkillRow;
         private int _skillCountInRow = 0;
-        private VisualElement? _statusPanel;
-        private VisualElement? _respawnPopup;
-        private VisualElement? _buildingsPopup;
-        private VisualElement? _faqPopup;
         private ProgrammatorGrid? _programmatorGrid;
         private bool _initializationStarted;
 
@@ -91,11 +85,6 @@ namespace Fodinae.UI.HUD.Player.View
         private INetworkService _networkService = null!;
         [Inject]
         private ILocalizationService _loc = null!;
-        private VisualElement? _missionPanel;
-        private Label? _missionTitleLabel;
-        private Label? _missionDescLabel;
-        private VisualElement? _missionProgressFill;
-        private Label? _missionProgressLabel;
 
         protected void Start()
         {
@@ -214,14 +203,15 @@ namespace Fodinae.UI.HUD.Player.View
 
             _bounceSchedules.Clear();
             _pulseSchedules.Clear();
+            _statusPanel.ClearSchedules();
 
             if (_model != null)
             {
                 _model.OnStatsChanged -= RefreshAll;
                 _model.OnSkillProgress -= OnSkillProgress;
-                _model.OnDailyBonusChanged -= UpdateDailyBonusPanel;
-                _model.OnStatusLinesChanged -= RebuildStatusPanel;
-                _model.OnMissionChanged -= UpdateMissionPanel;
+                _model.OnDailyBonusChanged -= OnDailyBonusChanged;
+                _model.OnStatusLinesChanged -= OnStatusLinesChanged;
+                _model.OnMissionChanged -= OnMissionChanged;
             }
 
             var player = _localPlayer.Current;
@@ -236,6 +226,10 @@ namespace Fodinae.UI.HUD.Player.View
                 _globalChatUI.Hide();
             }
         }
+
+        private void OnDailyBonusChanged() => _bonusController.UpdateDailyBonusPanel(_model);
+        private void OnStatusLinesChanged() => _statusPanel.Rebuild(_model);
+        private void OnMissionChanged() => _missionPanel.Update(_model);
 
         private async UniTask LoadCrystalTextures(System.Threading.CancellationToken cancellationToken)
         {
@@ -301,8 +295,8 @@ namespace Fodinae.UI.HUD.Player.View
             if (_model != null)
             {
                 _model.OnSkillProgress += OnSkillProgress;
-                _model.OnStatusLinesChanged += RebuildStatusPanel;
-                _model.OnMissionChanged += UpdateMissionPanel;
+                _model.OnStatusLinesChanged += OnStatusLinesChanged;
+                _model.OnMissionChanged += OnMissionChanged;
             }
 
             var player = _localPlayer.Current;
@@ -317,13 +311,10 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_model != null)
             {
-                _model.OnDailyBonusChanged += UpdateDailyBonusPanel;
+                _model.OnDailyBonusChanged += OnDailyBonusChanged;
             }
 
-            // Кнопка-уведомление и панель бонусов синхронизируются с текущим
-            // состоянием сразу: модель может уже знать о доступном бонусе до
-            // первого события изменения.
-            UpdateDailyBonusPanel();
+            _bonusController.UpdateDailyBonusPanel(_model);
 
             RebuildCrystalRows();
             if (_model != null)
@@ -431,249 +422,25 @@ namespace Fodinae.UI.HUD.Player.View
             chatButton.clicked += () => _globalChatUI.Toggle();
             Tooltip.AttachTo(chatButton, () => _loc.Get("hud.tooltip.chat"), _tooltip!);
 
-            _bonusButton = tree.Q<Button>("BonusButton") ??
-                throw new InvalidOperationException("[PlayerHUD] BonusButton is missing from PlayerHUD.uxml.");
-            _bonusButton.clicked += ToggleBonusPanel;
-            Tooltip.AttachTo(_bonusButton, () => _loc.Get("hud.tooltip.bonus"), _tooltip!);
-
-            _bonusPanel = tree.Q<VisualElement>("BonusPanel") ??
-                throw new InvalidOperationException("[PlayerHUD] BonusPanel is missing from PlayerHUD.uxml.");
-            Button bonusClose = tree.Q<Button>("BonusCloseButton") ??
-                throw new InvalidOperationException("[PlayerHUD] BonusCloseButton is missing from PlayerHUD.uxml.");
-            bonusClose.clicked += ToggleBonusPanel;
-            _bonusStatusLabel = tree.Q<Label>("BonusStatusLabel") ??
-                throw new InvalidOperationException("[PlayerHUD] BonusStatusLabel is missing from PlayerHUD.uxml.");
-            _bonusClaimButton = tree.Q<Button>("BonusClaimButton") ??
-                throw new InvalidOperationException("[PlayerHUD] BonusClaimButton is missing from PlayerHUD.uxml.");
-            _bonusClaimButton.clicked += ClaimDailyBonus;
-
-            // Попапы: респавн, здания, FAQ.
-            _respawnPopup = tree.Q<VisualElement>("RespawnPopup") ??
-                throw new InvalidOperationException("[PlayerHUD] RespawnPopup is missing from PlayerHUD.uxml.");
-            Button respawnConfirm = tree.Q<Button>("RespawnConfirmButton") ??
-                throw new InvalidOperationException("[PlayerHUD] RespawnConfirmButton is missing from PlayerHUD.uxml.");
-            respawnConfirm.clicked += () =>
+            _bonusController = new PlayerHUDBonusController(packet => _networkService?.Send(packet), _loc);
+            _bonusController.Initialize(tree);
+            var bonusButton = tree.Q<Button>("BonusButton");
+            if (bonusButton != null)
             {
-                var ns = _networkService;
-                ns?.SendAction(new SuicidePacket());
-                _respawnPopup.style.display = DisplayStyle.None;
-            };
-            Button respawnCancel = tree.Q<Button>("RespawnCancelButton") ??
-                throw new InvalidOperationException("[PlayerHUD] RespawnCancelButton is missing from PlayerHUD.uxml.");
-            respawnCancel.clicked += () => _respawnPopup.style.display = DisplayStyle.None;
-            Button respawnButton = tree.Q<Button>("RespawnButton") ??
-                throw new InvalidOperationException("[PlayerHUD] RespawnButton is missing from PlayerHUD.uxml.");
-            respawnButton.clicked += () => _respawnPopup.style.display = DisplayStyle.Flex;
+                Tooltip.AttachTo(bonusButton, () => _loc.Get("hud.tooltip.bonus"), _tooltip!);
+            }
 
-            _buildingsPopup = tree.Q<VisualElement>("BuildingsPopup") ??
-                throw new InvalidOperationException("[PlayerHUD] BuildingsPopup is missing from PlayerHUD.uxml.");
-            Button buildingsClose = tree.Q<Button>("BuildingsCloseButton") ??
-                throw new InvalidOperationException("[PlayerHUD] BuildingsCloseButton is missing from PlayerHUD.uxml.");
-            buildingsClose.clicked += () => _buildingsPopup.style.display = DisplayStyle.None;
-            Button buildingsButton = tree.Q<Button>("BuildingsButton") ??
-                throw new InvalidOperationException("[PlayerHUD] BuildingsButton is missing from PlayerHUD.uxml.");
-            buildingsButton.clicked += () => _buildingsPopup.style.display = DisplayStyle.Flex;
+            _popups = new PlayerHUDPopups(packet => _networkService?.SendAction(packet));
+            _popups.Initialize(tree);
 
-            _faqPopup = tree.Q<VisualElement>("FaqPopup") ??
-                throw new InvalidOperationException("[PlayerHUD] FaqPopup is missing from PlayerHUD.uxml.");
-            Button faqClose = tree.Q<Button>("FaqCloseButton") ??
-                throw new InvalidOperationException("[PlayerHUD] FaqCloseButton is missing from PlayerHUD.uxml.");
-            faqClose.clicked += () => _faqPopup.style.display = DisplayStyle.None;
-            Button faqButton = tree.Q<Button>("FaqButton") ??
-                throw new InvalidOperationException("[PlayerHUD] FaqButton is missing from PlayerHUD.uxml.");
-            faqButton.clicked += () => _faqPopup.style.display = DisplayStyle.Flex;
+            _statusPanel.Initialize(tree);
+            _missionPanel = new PlayerHUDMissionPanel(_loc);
+            _missionPanel.Initialize(tree);
 
             Button programmatorButton = tree.Q<Button>("ProgrammatorButton") ??
                 throw new InvalidOperationException("[PlayerHUD] ProgrammatorButton is missing from PlayerHUD.uxml.");
             programmatorButton.text = _loc.Get("hud.programmator");
             programmatorButton.clicked += () => _programmatorGrid?.Show();
-
-            _missionPanel = tree.Q<VisualElement>("MissionPanel") ??
-                throw new InvalidOperationException("[PlayerHUD] MissionPanel is missing from PlayerHUD.uxml.");
-            _missionTitleLabel = tree.Q<Label>("MissionTitleLabel") ??
-                throw new InvalidOperationException("[PlayerHUD] MissionTitleLabel is missing from PlayerHUD.uxml.");
-            _missionDescLabel = tree.Q<Label>("MissionDescLabel") ??
-                throw new InvalidOperationException("[PlayerHUD] MissionDescLabel is missing from PlayerHUD.uxml.");
-            _missionProgressFill = tree.Q<VisualElement>("MissionProgressFill") ??
-                throw new InvalidOperationException("[PlayerHUD] MissionProgressFill is missing from PlayerHUD.uxml.");
-            _missionProgressLabel = tree.Q<Label>("MissionProgressLabel") ??
-                throw new InvalidOperationException("[PlayerHUD] MissionProgressLabel is missing from PlayerHUD.uxml.");
-        }
-
-        private void ToggleBonusPanel()
-        {
-            _isBonusOpen = !_isBonusOpen;
-            _bonusPanel!.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            if (_isBonusOpen)
-            {
-                UpdateDailyBonusPanel();
-            }
-        }
-
-        private void UpdateDailyBonusPanel()
-        {
-            if (_bonusStatusLabel == null || _bonusButton == null)
-            {
-                return;
-            }
-
-            var stats = _model;
-            if (stats == null)
-            {
-                return;
-            }
-
-            if (stats.DailyBonusAvailable)
-            {
-                // Кнопка-уведомление показывается только когда есть что забирать.
-                _bonusButton.style.display = DisplayStyle.Flex;
-                _bonusStatusLabel!.text = _loc.Get("hud.bonus.available");
-                _bonusStatusLabel!.style.color = Color.green;
-                _bonusClaimButton!.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                _bonusButton.style.display = DisplayStyle.None;
-                _bonusStatusLabel!.text = _loc.Get("hud.bonus.none");
-                _bonusStatusLabel!.style.color = Color.gray;
-                _bonusClaimButton!.style.display = DisplayStyle.None;
-            }
-        }
-
-        private void RebuildStatusPanel()
-        {
-            if (_statusPanel == null)
-            {
-                return;
-            }
-
-            var stats = _model;
-            if (stats == null)
-            {
-                return;
-            }
-
-            var currentLines = stats.StatusLines;
-            if (currentLines.Count == 0)
-            {
-                _statusPanel.style.display = DisplayStyle.None;
-                foreach (var schedule in _statusSchedules.Values)
-                {
-                    schedule.Pause();
-                }
-
-                _statusSchedules.Clear();
-                _statusLineElements.Clear();
-                _statusPanel.Clear();
-                return;
-            }
-
-            _statusPanel.style.display = DisplayStyle.Flex;
-            var toRemove = new List<string>();
-            foreach (var kvp in _statusLineElements)
-            {
-                if (!currentLines.ContainsKey(kvp.Key))
-                {
-                    toRemove.Add(kvp.Key);
-                }
-            }
-
-            foreach (var key in toRemove)
-            {
-                _statusPanel.Remove(_statusLineElements[key]);
-                if (_statusSchedules.TryGetValue(key, out var schedule))
-                {
-                    schedule.Pause();
-                    _statusSchedules.Remove(key);
-                }
-
-                _statusLineElements.Remove(key);
-            }
-
-            foreach (var kvp in currentLines)
-            {
-                if (_statusLineElements.TryGetValue(kvp.Key, out var existing))
-                {
-                    var label = existing as Label;
-                    if (label != null)
-                    {
-                        UpdateStatusLabel(label, kvp.Value);
-                    }
-
-                    label!.style.color = kvp.Value.Color;
-                }
-                else
-                {
-                    var row = new Label();
-                    row.AddToClassList("hud-status-line");
-                    row.style.color = kvp.Value.Color;
-                    UpdateStatusLabel(row, kvp.Value);
-                    _statusPanel.Add(row);
-
-                    if (kvp.Value.Expiry > 0)
-                    {
-                        var schedule = row.schedule.Execute(() =>
-                        {
-                            if (_statusPanel == null || !_statusLineElements.ContainsKey(kvp.Key))
-                            {
-                                return;
-                            }
-
-                            var entry = stats.StatusLines.GetValueOrDefault(kvp.Key);
-                            if (entry.Text == null)
-                            {
-                                return;
-                            }
-
-                            UpdateStatusLabel(row, entry);
-                        }).Every(1000);
-                        _statusSchedules[kvp.Key] = schedule;
-                    }
-
-                    _statusLineElements[kvp.Key] = row;
-                }
-            }
-        }
-
-        private static void UpdateStatusLabel(Label label, StatusLineEntry entry)
-        {
-            if (entry.Text == null || entry.Text.Length == 0)
-            {
-                label.text = string.Empty;
-                return;
-            }
-
-            var name = entry.Text[0];
-            if (entry.Expiry > 0)
-            {
-                var remaining = Math.Max(0, entry.Expiry - DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-                label.text = $"{name}: {FormatTime(remaining)}";
-            }
-            else if (entry.Text.Length > 1)
-            {
-                label.text = $"{name}: {entry.Text[1]}";
-            }
-            else
-            {
-                label.text = name;
-            }
-        }
-
-        private static string FormatTime(long seconds)
-        {
-            var ts = TimeSpan.FromSeconds(seconds);
-            if (ts.TotalHours >= 1)
-            {
-                return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
-            }
-
-            return $"{ts.Minutes:D2}:{ts.Seconds:D2}";
-        }
-
-        private void ClaimDailyBonus()
-        {
-            var ns = _networkService;
-            ns?.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
         }
 
         private void ToggleAutoDig()
