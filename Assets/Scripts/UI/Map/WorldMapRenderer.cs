@@ -4,11 +4,8 @@ using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
-using Fodinae.Player;
-using Fodinae.Player.Logic;
 using MinesServer.Data;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 using VContainer;
 
@@ -32,13 +29,11 @@ namespace Fodinae.UI
         private VisualElement? _mapOverlay;
         private Image? _mapImage;
         private Texture2D? _mapTexture;
-        private Color32[]? _pixelBuffer;
-        private Color32[] _cellColorTable = new Color32[256];
-        private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
-        private Color32 _defaultColor = UnloadedColor;
         private WorldLayer<CellType>? _cellLayer;
         private int _chunkSize = 32;
         private readonly MapCellSampler _cellSampler = new();
+        private readonly MapInteractionController _interaction = new();
+        private readonly MapViewportRenderer _viewportRenderer = new();
 
         private float _viewCenterX;
         private float _viewCenterY;
@@ -56,8 +51,6 @@ namespace Fodinae.UI
         private ILocalPlayerState _localPlayer = null!;
         private ILocalPlayer? _player;
 
-        private bool _isDragging;
-        private Vector2 _lastMousePos;
         private Vector2Int _lastPlayerPos;
         private float _lastRenderTime;
         private bool _initialRenderDone;
@@ -77,10 +70,6 @@ namespace Fodinae.UI
 
         protected void Start()
         {
-            // Школа (одна дорога): к Start зависимости инжектятся (сборка scope,
-            // фаза Awake) и панель создана — строим здесь. Мир инициализируется
-            // позже (данные по сети) — переход по событию OnWorldInitialized,
-            // без ретраев из Update.
             TryInitialize();
             if (!_initialized)
             {
@@ -133,7 +122,7 @@ namespace Fodinae.UI
             EnsurePlayerBinding();
 
             BindUI();
-            InitColorTable();
+            _viewportRenderer.InitColorTable(_manager);
             InitTexture();
 
             int w = _manager.WorldWidth;
@@ -144,9 +133,6 @@ namespace Fodinae.UI
                 BindCellLayer(mapStorage.CellLayer);
             }
 
-            // Start at a local view (1 world cell = 1 pixel) centered on the player,
-            // not at whole-world zoom. Whole-world zoom on a large map would force
-            // loading every chunk into the disk LRU at once (OOM / stall).
             _cellsPerPixel = 1f;
             _maxCellsPerPixel = ComputeMaxZoomOut(w, h);
             _cellsPerPixel = Mathf.Min(_cellsPerPixel, _maxCellsPerPixel);
@@ -192,8 +178,6 @@ namespace Fodinae.UI
             }
         }
 
-
-
         private void SubscribeToPlayer(ILocalPlayer player)
         {
             if (_playerMoveSubscription && ReferenceEquals(_player, player))
@@ -237,8 +221,6 @@ namespace Fodinae.UI
 
         private void RebindRuntimeSources()
         {
-            // Dependencies are injected once by the game resolver. Reinitialize
-            // only transient map bindings when the component is re-enabled.
             EnsurePlayerBinding();
 
             if (_storage is not MapStorage mapStorage || mapStorage.CellLayer == null)
@@ -354,12 +336,7 @@ namespace Fodinae.UI
 
         protected void Update()
         {
-            if (!enabled)
-            {
-                return;
-            }
-
-            if (!_initialized)
+            if (!enabled || !_initialized)
             {
                 return;
             }
@@ -385,11 +362,30 @@ namespace Fodinae.UI
                 }
             }
 
-            HandleMouseScroll();
-            HandleDrag();
+            _interaction.HandleMouseScroll(
+                _mapOverlay,
+                _mapImage,
+                _document,
+                _texWidth,
+                _texHeight,
+                _maxCellsPerPixel,
+                ref _cellsPerPixel,
+                ref _viewCenterX,
+                ref _viewCenterY,
+                ref _renderRequested,
+                ClampViewCenter);
+
+            _interaction.HandleDrag(
+                _cellsPerPixel,
+                _dragSpeed,
+                ref _viewCenterX,
+                ref _viewCenterY,
+                ref _followPlayer,
+                ref _renderRequested,
+                ClampViewCenter);
+
             HandleFollowPlayer();
             HandleQueuedRender();
-
 
             _playerBlinkTimer += Time.deltaTime;
             if (_playerBlinkTimer >= 0.5f)
@@ -455,24 +451,7 @@ namespace Fodinae.UI
 
             _mapOverlay = overlay;
             _mapImage = image;
-            // Видимостью оверлея управляет только Show()/Hide() (WorldMapController):
-            // здесь только биндинг, иначе тёмный оверлей закрывает экран со старта.
             _mapImage.image = null;
-        }
-
-        private void InitColorTable()
-        {
-            var manager = _manager;
-            if (manager == null)
-            {
-                throw new InvalidOperationException("[WorldMapRenderer] Cannot build color table: map manager is not initialized");
-            }
-
-            for (int i = 0; i < 256; i++)
-            {
-                CellType type = (CellType)i;
-                _cellColorTable[i] = (Color32)manager.GetCellMinimapColor(type);
-            }
         }
 
         private void InitTexture()
@@ -483,8 +462,6 @@ namespace Fodinae.UI
             int width = panelRect.width > 0f ? Mathf.RoundToInt(panelRect.width) : 1920;
             int height = panelRect.height > 0f ? Mathf.RoundToInt(panelRect.height) : 1080;
 
-            // Bound map texture resolution to prevent high-DPI Retina allocations (e.g. 7.3M texels).
-            // UI Toolkit scales this buffer through the WorldMapImage USS layout.
             const int MAX_MAP_WIDTH = 960;
             const int MAX_MAP_HEIGHT = 540;
 
@@ -507,9 +484,6 @@ namespace Fodinae.UI
                 Destroy(_mapTexture);
             }
 
-            // This texture is categorical map data: one texel represents one
-            // sampled world cell. Bilinear filtering fabricates blended terrain
-            // types and makes chunk availability boundaries look loaded.
             _mapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
                 _texWidth,
                 _texHeight,
@@ -518,49 +492,9 @@ namespace Fodinae.UI
                 FilterMode.Point,
                 TextureWrapMode.Clamp);
 
-            _pixelBuffer = new Color32[_texWidth * _texHeight];
-
             if (_mapImage != null)
             {
                 _mapImage.image = _mapTexture;
-            }
-        }
-
-
-
-        private void HandleDrag()
-        {
-            if (Mouse.current == null)
-            {
-                return;
-            }
-
-            if (Mouse.current.leftButton.wasPressedThisFrame)
-            {
-                _isDragging = true;
-                _followPlayer = false;
-                _lastMousePos = Mouse.current.position.ReadValue();
-            }
-            else if (Mouse.current.leftButton.wasReleasedThisFrame)
-            {
-                _isDragging = false;
-            }
-            else if (_isDragging && Mouse.current.leftButton.isPressed)
-            {
-                Vector2 currentPos = Mouse.current.position.ReadValue();
-                Vector2 delta = currentPos - _lastMousePos;
-                _lastMousePos = currentPos;
-
-                if (delta.sqrMagnitude > 1f)
-                {
-                    // Screen-space: +X right, +Y up. World: +X right, +Y down.
-                    // Dragging right moves view left (decrease centerX).
-                    // Dragging up moves view up towards surface (decrease centerY).
-                    _viewCenterX -= delta.x * _cellsPerPixel * _dragSpeed;
-                    _viewCenterY -= delta.y * _cellsPerPixel * _dragSpeed;
-                    ClampViewCenter();
-                    _renderRequested = true;
-                }
             }
         }
 
@@ -612,7 +546,7 @@ namespace Fodinae.UI
                  !string.Equals(_manager.WorldCodeName, _boundWorldCodeName, StringComparison.Ordinal)))
             {
                 BindWorldDimensions(_manager.WorldWidth, _manager.WorldHeight);
-                InitColorTable();
+                _viewportRenderer.InitColorTable(_manager);
                 BindCellLayer(storage.CellLayer);
                 _cellsPerPixel = 1f;
                 _maxCellsPerPixel = ComputeMaxZoomOut(_boundWorldWidth, _boundWorldHeight);
@@ -642,129 +576,27 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (!RenderViewport())
+            if (_manager == null || _storage == null)
             {
                 return;
             }
 
-            _lastRenderTime = Time.time;
-            _initialRenderDone = true;
-        }
-
-        private bool RenderViewport()
-        {
-            if (_manager == null || _storage == null)
-            {
-                return false;
-            }
-
-            int worldW = _manager.WorldWidth;
-            int worldH = _manager.WorldHeight;
-            float cp = _cellsPerPixel;
-            float cx = _viewCenterX;
-            float cy = _viewCenterY;
-            int texW = _texWidth;
-            int texH = _texHeight;
-
-            Color32 defaultCol = _defaultColor;
-            if (_pixelBuffer == null || _pixelBuffer.Length != texW * texH)
-            {
-                _pixelBuffer = new Color32[texW * texH];
-            }
-
-            for (int i = 0; i < _pixelBuffer.Length; i++)
-            {
-                _pixelBuffer[i] = defaultCol;
-            }
-
-            // Sample from screen pixels instead of iterating over every world
-            // cell. When zoomed out, the old implementation walked the entire
-            // world and then painted the same pixel many times. A 10k x 10k
-            // world could therefore trigger 100 million GetCell calls for a
-            // texture that contains only ~500k pixels. GetCell loads chunks
-            // lazily through a bounded cache, so memory stays flat at any zoom.
-            for (int py = 0; py < texH; py++)
-            {
-                int rowStart = py * texW;
-
-                // Texture2D row zero is the bottom of the displayed map image.
-                // Server coordinates use a top-left origin, so the bottom texture
-                // row must sample the largest server Y in the viewport.
-                float screenRowFromTop = (texH - 1 - py) + 0.5f;
-                float worldY = cy + ((screenRowFromTop - (texH * 0.5f)) * cp);
-                int serverY = Mathf.FloorToInt(worldY);
-
-                for (int px = 0; px < texW; px++)
-                {
-                    float worldX = cx + ((px + 0.5f - (texW * 0.5f)) * cp);
-                    int serverX = Mathf.FloorToInt(worldX);
-                    Color32 color = _defaultColor;
-
-                    if (serverX >= 0 && serverX < worldW && serverY >= 0 && serverY < worldH)
-                    {
-                        CellType type = GetCell(serverX, serverY);
-                        color = type == CellType.Unloaded
-                            ? UnloadedColor
-                            : _cellColorTable[(byte)type];
-                    }
-
-                    _pixelBuffer[rowStart + px] = color;
-                }
-            }
-
-            if (_player != null && _playerBlinkState)
-            {
-                Vector2Int playerPos = _player.Position;
-
-                float halfW = texW * 0.5f * cp;
-                float halfH = texH * 0.5f * cp;
-                float leftX = cx - halfW;
-                float rightX = cx + halfW;
-                float topServerY = cy - halfH;
-                float bottomServerY = cy + halfH;
-
-                if (playerPos.x + 1f >= leftX && playerPos.x <= rightX &&
-                    playerPos.y + 1f >= topServerY && playerPos.y <= bottomServerY)
-                {
-                    float pixelX = ((playerPos.x - cx) / cp) + (texW * 0.5f);
-                    float pixelY = (texH * 0.5f) - 1f - ((playerPos.y - cy) / cp);
-                    float markerSize = Mathf.Max(1f, 1f / cp);
-
-                    int pxStart = Mathf.Clamp(Mathf.RoundToInt(pixelX), 0, texW - 1);
-                    int pxEnd = Mathf.Clamp(Mathf.RoundToInt(pixelX + markerSize), 0, texW - 1);
-                    int pyStart = Mathf.Clamp(Mathf.RoundToInt(pixelY), 0, texH - 1);
-                    int pyEnd = Mathf.Clamp(Mathf.RoundToInt(pixelY + markerSize), 0, texH - 1);
-
-                    Color32 playerColor = new Color32(255, 0, 0, 255);
-                    for (int py = pyStart; py <= pyEnd; py++)
-                    {
-                        int rowStart = py * texW;
-                        for (int px = pxStart; px <= pxEnd; px++)
-                        {
-                            _pixelBuffer[rowStart + px] = playerColor;
-                        }
-                    }
-                }
-            }
-
-            if (_mapTexture != null)
-            {
-                _mapTexture.SetPixels32(_pixelBuffer);
-                _mapTexture.Apply(false);
-            }
+            _viewportRenderer.Render(
+                _mapTexture,
+                _manager,
+                _cellSampler,
+                _texWidth,
+                _texHeight,
+                _cellsPerPixel,
+                _viewCenterX,
+                _viewCenterY,
+                _player,
+                _playerBlinkState);
 
             _renderRequested = false;
-            _lastRenderedStorageRevision = _storage?.Revision ??
-                throw new InvalidOperationException(
-                    "WorldMapRenderer storage disappeared while rendering the map.");
-            return true;
-        }
-
-        private CellType GetCell(int serverX, int serverY)
-        {
-            return _cellSampler.TryGetCell(serverX, serverY, out CellType cellType)
-                ? cellType
-                : CellType.Unloaded;
+            _lastRenderedStorageRevision = _storage.Revision;
+            _lastRenderTime = Time.time;
+            _initialRenderDone = true;
         }
 
         private float ComputeMaxZoomOut(int worldW, int worldH)
@@ -774,108 +606,9 @@ namespace Fodinae.UI
                 return 10f;
             }
 
-            // Bound the number of chunks a single render pass may hold at once so
-            // that zooming out on a huge world can never pin the whole map into
-            // memory. Visible cells = texW * cp * texH * cp; each chunk holds
-            // _chunkSize * _chunkSize cells, so cap cp by the chunk-cache budget.
             int visibleCellBudget = MaxChunkCacheEntries * _chunkSize * _chunkSize;
             float maxCp = Mathf.Sqrt((float)visibleCellBudget / (_texWidth * _texHeight));
             return Mathf.Max(1f, maxCp);
-        }
-
-        private void HandleMouseScroll()
-        {
-            if (!enabled || _mapOverlay == null ||
-                _mapOverlay.resolvedStyle.display == DisplayStyle.None || Mouse.current == null)
-            {
-                return;
-            }
-
-            float delta = Mouse.current.scroll.ReadValue().y;
-            if (Mathf.Abs(delta) < 0.01f)
-            {
-                return;
-            }
-
-            float oldCellsPerPixel = _cellsPerPixel;
-            float cursorWorldX = 0f;
-            float cursorWorldY = 0f;
-            bool hasCursorAnchor = TryGetCursorWorldPosition(
-                out cursorWorldX,
-                out cursorWorldY);
-
-            // Mouse-wheel values differ by platform: some backends report one
-            // line per notch while others report 120. A bounded exponential
-            // step gives the same usable zoom response in both cases and never
-            // jumps directly to a clamp boundary.
-            float zoomSteps = Mathf.Clamp(delta, -4f, 4f);
-            _cellsPerPixel = Mathf.Clamp(
-                oldCellsPerPixel * Mathf.Pow(0.85f, zoomSteps),
-                0.25f,
-                _maxCellsPerPixel);
-
-            if (hasCursorAnchor && oldCellsPerPixel > 0f)
-            {
-                ApplyCursorAnchor(cursorWorldX, cursorWorldY);
-            }
-
-            ClampViewCenter();
-            _renderRequested = true;
-        }
-
-        private bool TryGetCursorWorldPosition(out float worldX, out float worldY)
-        {
-            worldX = 0f;
-            worldY = 0f;
-            if (Mouse.current == null || _mapImage == null || _document?.rootVisualElement.panel == null ||
-                _texWidth <= 0 || _texHeight <= 0)
-            {
-                return false;
-            }
-
-            Rect rect = _mapImage.worldBound;
-            if (rect.width <= 0f || rect.height <= 0f ||
-                float.IsNaN(rect.width) || float.IsNaN(rect.height) ||
-                float.IsInfinity(rect.width) || float.IsInfinity(rect.height))
-            {
-                return false;
-            }
-
-            Vector2 panelPoint = RuntimePanelUtils.ScreenToPanel(
-                _document.rootVisualElement.panel,
-                Mouse.current.position.ReadValue());
-            float pixelX = ((panelPoint.x - rect.xMin) / rect.width) * _texWidth;
-            float pixelY = ((panelPoint.y - rect.yMin) / rect.height) * _texHeight;
-            worldX = _viewCenterX +
-                ((pixelX - (_texWidth * 0.5f)) * _cellsPerPixel);
-            worldY = _viewCenterY +
-                (((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel);
-            return true;
-        }
-
-        private void ApplyCursorAnchor(float worldX, float worldY)
-        {
-            if (Mouse.current == null || _mapImage == null || _document?.rootVisualElement.panel == null ||
-                _texWidth <= 0 || _texHeight <= 0)
-            {
-                return;
-            }
-
-            Rect rect = _mapImage.worldBound;
-            if (rect.width <= 0f || rect.height <= 0f)
-            {
-                return;
-            }
-
-            Vector2 panelPoint = RuntimePanelUtils.ScreenToPanel(
-                _document.rootVisualElement.panel,
-                Mouse.current.position.ReadValue());
-            float pixelX = ((panelPoint.x - rect.xMin) / rect.width) * _texWidth;
-            float pixelY = ((panelPoint.y - rect.yMin) / rect.height) * _texHeight;
-            _viewCenterX = worldX -
-                ((pixelX - (_texWidth * 0.5f)) * _cellsPerPixel);
-            _viewCenterY = worldY -
-                (((_texHeight - pixelY) - (_texHeight * 0.5f)) * _cellsPerPixel);
         }
 
         private void ClampViewCenter()
