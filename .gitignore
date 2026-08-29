@@ -535,3 +535,7 @@ Thumbs.db
 
 # Art self-inspection captures (written outside the asset tree on purpose)
 ArtCaptures/
+
+# Temporary Unity test runner scenes
+/[Aa]ssets/InitTestScene*.unity
+/[Aa]ssets/InitTestScene*.unity.meta
