@@ -24,8 +24,6 @@ namespace Fodinae.UI.HUD.Inventory.View
         private const int HOTBAR_COLS = 9;
         private const int INVENTORY_COLS = 9;
         private const int CELLSIZE = 50;
-        private const int CELL_GAP = 10;
-        private const int ICON_SIZE = 36;
 
         [Inject]
         private UIDocument _doc = null!;
@@ -35,22 +33,16 @@ namespace Fodinae.UI.HUD.Inventory.View
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
         [Inject]
         private ILocalizationService _loc = null!;
-        private Dictionary<int, List<VisualElement>> _slotElements = new Dictionary<int, List<VisualElement>>();
+
+        private readonly Dictionary<int, List<VisualElement>> _slotElements = new();
+        private readonly InventoryDragAndContextMenu _dragAndContext = new();
+
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
         private VisualElement? _fullInventoryPanel;
-        private bool _isInventoryOpen = false;
-
-        // Drag-and-drop
-        private VisualElement? _floatingItem;
-        private int _dragFromSlot = -1;
-        private ItemData? _draggedItem;
-
-        // Context menu
-        private VisualElement _contextMenu = null!;
+        private bool _isInventoryOpen;
         private Label? _capacityLabel;
 
-        // Selection
         private int _lastSelectedSlot = -1;
         private VisualElement _tooltipWrapper = null!;
         private VisualElement _tooltipBg = null!;
@@ -81,19 +73,7 @@ namespace Fodinae.UI.HUD.Inventory.View
                 _model.OnSlotSelected -= OnModelSlotSelected;
             }
 
-            // Снимаем drag-колбэки, чтобы не остались висячими при уничтожении
-            // во время перетаскивания предмета.
-            if (_doc != null && _doc.rootVisualElement != null)
-            {
-                _doc.rootVisualElement.UnregisterCallback<MouseMoveEvent>(OnDragMove);
-                _doc.rootVisualElement.UnregisterCallback<MouseUpEvent>(OnDragDrop);
-            }
-
-            if (_floatingItem != null && _floatingItem.parent != null)
-            {
-                _floatingItem.RemoveFromHierarchy();
-                _floatingItem = null;
-            }
+            _dragAndContext.Cleanup(_doc?.rootVisualElement, OnDragMove, OnDragDrop);
         }
 
         protected void Update()
@@ -197,15 +177,9 @@ namespace Fodinae.UI.HUD.Inventory.View
             BuildUI();
             _initialized = true;
 
-            // Реестр применяет текст сразу и на каждой смене языка — подписка
-            // вручную не нужна и запрещена линтером.
             _loc.RegisterLocalizable(this);
         }
 
-        /// <summary>
-        /// Переприменяет локализованный текст после смены языка: статические ключи
-        /// UXML через UILocalizer, ёмкость отсека — напрямую.
-        /// </summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(InventoryView));
@@ -220,7 +194,6 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void OnModelSlotSelected(int slotIndex)
         {
-            // Сбросить рамку у старого слота
             if (_lastSelectedSlot >= 0 && _slotElements.ContainsKey(_lastSelectedSlot))
             {
                 foreach (var cell in _slotElements[_lastSelectedSlot])
@@ -231,7 +204,6 @@ namespace Fodinae.UI.HUD.Inventory.View
 
             _lastSelectedSlot = slotIndex;
 
-            // Поставить рамку новому слоту
             if (slotIndex >= 0 && _slotElements.ContainsKey(slotIndex))
             {
                 foreach (var cell in _slotElements[slotIndex])
@@ -286,10 +258,6 @@ namespace Fodinae.UI.HUD.Inventory.View
                 var tree = uxml.CloneTree();
                 root.Add(tree);
 
-                // Статические ключи UXML (inventory.*, тултипы) резолвятся сразу
-                // при сборке, а не только по событию смены языка. Если инжекция
-                // ещё не пришла — словарь придёт вместе с регистрацией реестра
-                // (RegisterLocalizable применяет текст сразу).
                 if (_loc != null)
                 {
                     UILocalizer.Apply(tree, _loc);
@@ -309,7 +277,7 @@ namespace Fodinae.UI.HUD.Inventory.View
                     _inventoryButton.clicked += ToggleInventory;
                     if (_loc != null)
                     {
-                        _inventoryButton.tooltip = _loc.Get("inventory.hotbar");
+                        _inventoryButton.tooltip = _loc.Get("inventory.open");
                         Label? toggleLabel = _inventoryButton.Q<Label>();
                         if (toggleLabel != null)
                         {
@@ -411,7 +379,6 @@ namespace Fodinae.UI.HUD.Inventory.View
             cell.style.justifyContent = Justify.Center;
             cell.style.alignItems = Align.Center;
 
-            // Иконка-кружок
             var icon = new VisualElement();
             icon.name = "Icon";
             icon.AddToClassList("inv-icon");
@@ -419,7 +386,6 @@ namespace Fodinae.UI.HUD.Inventory.View
             icon.pickingMode = PickingMode.Ignore;
             cell.Add(icon);
 
-            // Количество
             var qtyLabel = new Label();
             qtyLabel.name = "Quantity";
             qtyLabel.AddToClassList("inv-qty");
@@ -431,23 +397,21 @@ namespace Fodinae.UI.HUD.Inventory.View
             qtyLabel.pickingMode = PickingMode.Ignore;
             cell.Add(qtyLabel);
 
-            // Hover
             cell.RegisterCallback<MouseEnterEvent>(_ =>
             {
-                if (_dragFromSlot < 0)
+                if (!_dragAndContext.IsDragging)
                 {
                     cell.AddToClassList("inv-cell--highlight");
                 }
             });
             cell.RegisterCallback<MouseLeaveEvent>(_ =>
             {
-                if (_dragFromSlot < 0)
+                if (!_dragAndContext.IsDragging)
                 {
                     cell.RemoveFromClassList("inv-cell--highlight");
                 }
             });
 
-            // Выбор по клику
             cell.RegisterCallback<MouseDownEvent>(evt =>
             {
                 if (evt.button == 0)
@@ -460,38 +424,27 @@ namespace Fodinae.UI.HUD.Inventory.View
                         return;
                     }
 
-                    _dragFromSlot = slotIndex;
-                    _draggedItem = item;
-                    cell.RemoveFromClassList("inv-cell--highlight");
+                    _dragAndContext.StartDrag(
+                        slotIndex,
+                        item,
+                        evt.mousePosition,
+                        _doc.rootVisualElement,
+                        cell,
+                        OnDragMove,
+                        OnDragDrop);
 
-                    HideContextMenu();
-
-                    _floatingItem = new VisualElement();
-                    _floatingItem.AddToClassList("inv-floating");
-                    if (item.Icon != null)
-                    {
-                        _floatingItem.style.backgroundImage = new StyleBackground(item.Icon);
-                        _floatingItem.style.backgroundColor = Color.clear;
-                    }
-                    else
-                    {
-                        _floatingItem.style.backgroundColor = Color.gray;
-                    }
-
-                    _floatingItem.pickingMode = PickingMode.Ignore;
-
-                    var root = _doc.rootVisualElement;
-                    root.Add(_floatingItem);
-                    UpdateFloatingPosition(evt.mousePosition);
-
-                    root.RegisterCallback<MouseMoveEvent>(OnDragMove);
-                    root.RegisterCallback<MouseUpEvent>(OnDragDrop);
                     evt.StopPropagation();
                 }
                 else if (evt.button == 1)
                 {
-                    HideContextMenu();
-                    ShowContextMenu(evt.mousePosition, slotIndex);
+                    _dragAndContext.HideContextMenu(_doc.rootVisualElement);
+                    _dragAndContext.ShowContextMenu(
+                        evt.mousePosition,
+                        slotIndex,
+                        _doc.rootVisualElement,
+                        _model!,
+                        _loc!,
+                        ShowItemInfo);
                     evt.StopPropagation();
                 }
             });
@@ -509,62 +462,18 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void OnDragMove(MouseMoveEvent evt)
         {
-            if (_floatingItem != null)
-            {
-                UpdateFloatingPosition(evt.mousePosition);
-            }
+            _dragAndContext.UpdateFloatingPosition(evt.mousePosition);
         }
 
         private void OnDragDrop(MouseUpEvent evt)
         {
-            if (_dragFromSlot < 0 || _floatingItem == null)
-            {
-                return;
-            }
-
-            var root = _doc.rootVisualElement;
-            root.UnregisterCallback<MouseMoveEvent>(OnDragMove);
-            root.UnregisterCallback<MouseUpEvent>(OnDragDrop);
-
-            var target = FindSlotUnderMouse(evt.mousePosition);
-            if (target >= 0 && target != _dragFromSlot)
-            {
-                if (InventoryModel.CanStack(_draggedItem!, _model!.GetSlot(target)))
-                {
-                    _model.TryStackSlots(_dragFromSlot, target);
-                }
-                else
-                {
-                    _model.SwapSlots(_dragFromSlot, target);
-                }
-            }
-
-            root.Remove(_floatingItem);
-            _floatingItem = null;
-            _dragFromSlot = -1;
-            _draggedItem = null;
-        }
-
-        private int FindSlotUnderMouse(Vector2 mousePos)
-        {
-            foreach (var kvp in _slotElements)
-            {
-                foreach (var cell in kvp.Value)
-                {
-                    if (cell.worldBound.Contains(mousePos))
-                    {
-                        return kvp.Key;
-                    }
-                }
-            }
-
-            return -1;
-        }
-
-        private void UpdateFloatingPosition(Vector2 mousePos)
-        {
-            _floatingItem!.style.left = mousePos.x - (ICON_SIZE / 2);
-            _floatingItem!.style.top = mousePos.y - (ICON_SIZE / 2);
+            _dragAndContext.Drop(
+                evt.mousePosition,
+                _doc.rootVisualElement,
+                _model!,
+                _slotElements,
+                OnDragMove,
+                OnDragDrop);
         }
 
         private void RefreshSlot(int slotIndex)
@@ -605,28 +514,6 @@ namespace Fodinae.UI.HUD.Inventory.View
             }
         }
 
-        private Button CreateInventoryButton()
-        {
-            var btn = new Button();
-            btn.name = "InventoryButton";
-            btn.AddToClassList("inv-button");
-            if (_loc != null)
-            {
-                btn.tooltip = _loc.Get("inventory.open");
-            }
-
-            var label = new Label("☰");
-            label.AddToClassList("inv-button-label");
-            label.style.fontSize = 24;
-            label.style.color = Color.white;
-            label.style.unityTextAlign = TextAnchor.MiddleCenter;
-            label.pickingMode = PickingMode.Ignore;
-            btn.Add(label);
-
-            btn.clicked += ToggleInventory;
-            return btn;
-        }
-
         private void ToggleInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
@@ -637,77 +524,6 @@ namespace Fodinae.UI.HUD.Inventory.View
         }
 
         public IInventoryModel? GetModel() => _model;
-
-        private void ShowContextMenu(Vector2 mousePos, int slotIndex)
-        {
-            var item = _model!.GetSlot(slotIndex);
-            if (item == null)
-            {
-                return;
-            }
-
-            _contextMenu = new VisualElement();
-            _contextMenu.name = "ContextMenu";
-            _contextMenu.AddToClassList("inv-context-menu");
-            _contextMenu.style.left = mousePos.x;
-            _contextMenu.style.top = mousePos.y;
-            _contextMenu.pickingMode = PickingMode.Position;
-
-            AddContextMenuItem(_loc!.Get("inventory.context_use"), () =>
-            {
-                _model.SelectSlot(slotIndex);
-                _model!.UseSelectedItem();
-                HideContextMenu();
-            });
-
-            AddContextMenuItem(_loc!.Get("inventory.context_info"), () =>
-            {
-                ShowItemInfo(item);
-                HideContextMenu();
-            });
-
-            _doc.rootVisualElement.Add(_contextMenu);
-
-            _doc.rootVisualElement.RegisterCallback<MouseDownEvent>(OnContextMenuOutsideClick, TrickleDown.TrickleDown);
-            _doc.rootVisualElement.RegisterCallback<KeyDownEvent>(OnContextMenuEscape, TrickleDown.TrickleDown);
-        }
-
-        private void AddContextMenuItem(string labelText, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = labelText;
-            btn.AddToClassList("inv-context-btn");
-
-            _contextMenu.Add(btn);
-        }
-
-        private void HideContextMenu()
-        {
-            if (_contextMenu != null)
-            {
-                _contextMenu.RemoveFromHierarchy();
-                _contextMenu = null!;
-            }
-
-            _doc?.rootVisualElement.UnregisterCallback<MouseDownEvent>(OnContextMenuOutsideClick, TrickleDown.TrickleDown);
-            _doc?.rootVisualElement.UnregisterCallback<KeyDownEvent>(OnContextMenuEscape, TrickleDown.TrickleDown);
-        }
-
-        private void OnContextMenuOutsideClick(MouseDownEvent evt)
-        {
-            if (_contextMenu != null && !_contextMenu.worldBound.Contains(evt.mousePosition))
-            {
-                HideContextMenu();
-            }
-        }
-
-        private void OnContextMenuEscape(KeyDownEvent evt)
-        {
-            if (evt.keyCode == KeyCode.Escape)
-            {
-                HideContextMenu();
-            }
-        }
 
         private void ShowItemInfo(ItemData item)
         {
