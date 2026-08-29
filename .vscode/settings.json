@@ -51,8 +51,7 @@
     "**/Logs": true,
     "**/ProfilerCaptures": true,
     "**/.vs": true,
-    "**/UserSettings": true,
-    "**/FodinaeAudio/.cache": true
+    "**/UserSettings": true
   },
   "search.exclude": {
     "**/Library": true,
@@ -64,8 +63,7 @@
     "**/.vs": true,
     "**/*.meta": true,
     "**/*.mapb": true,
-    "**/UserSettings": true,
-    "**/FodinaeAudio/.cache": true
+    "**/UserSettings": true
   },
   "dotnet.defaultSolution": "Fodislop.slnx",
   "csharp.analyzerDiagnosticScope": "openFiles",
