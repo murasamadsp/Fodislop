@@ -29,9 +29,6 @@ namespace Fodinae.UI
         [Inject]
         private INetworkService _networkService = null!;
 
-        [Inject]
-        private IServerConfig _serverConfig = null!;
-
         private bool _initialized;
 
         protected void Start()
@@ -196,13 +193,10 @@ namespace Fodinae.UI
             string text = _inputField.value.Trim();
             if (!string.IsNullOrEmpty(text))
             {
-                if (_serverConfig.IsInitialized)
+                const int chatMaxLen = ProjectRuntimeContracts.Chat.MaximumLocalChatLength;
+                if (text.Length > chatMaxLen)
                 {
-                    var chatMaxLen = _serverConfig.MaxLocalChatLength;
-                    if (text.Length > chatMaxLen)
-                    {
-                        text = text.Substring(0, chatMaxLen);
-                    }
+                    text = text.Substring(0, chatMaxLen);
                 }
 
                 _networkService.Send(new SendLocalChatMessagePacket(text));

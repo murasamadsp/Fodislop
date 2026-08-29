@@ -55,9 +55,6 @@ namespace Fodinae.UI
         private INetworkService _networkService = null!;
 
         [Inject]
-        private IServerConfig _serverConfig = null!;
-
-        [Inject]
         private IInputBlocker _inputBlocker = null!;
 
         [Inject]
@@ -90,27 +87,34 @@ namespace Fodinae.UI
                 return;
             }
 
+            // [Inject]-метод гарантирует зависимости и панель UIDocument к
+            // моменту вызова; null здесь — дефект проводки, а не гонка.
+            // Молчаливый пропуск оставил бы чат вечно нерабочим без ошибки.
             if (_doc == null || _doc.rootVisualElement == null || _networkService == null ||
                 _serverConfig == null || _inputBlocker == null)
             {
-                // Защитный гард: к моменту [Inject]-метода зависимости и панель
-                // UIDocument гарантированы — пропуск здесь означает дефект
-                // проводки, а не гонку (ретраев больше нет).
-                return;
+                throw new InvalidOperationException(
+                    "[GlobalChatUI] Required injection missing: " +
+                    $"{(_doc == null ? "UIDocument" : _networkService == null ? "INetworkService" : _serverConfig == null ? "IServerConfig" : _inputBlocker == null ? "IInputBlocker" : "UIDocument root")}. " +
+                    "GlobalChatUI must be registered in the Game scope before Start.");
             }
 
             _initialized = true;
-            _serverConfig.OnInitialized += ApplyServerConfig;
+            // The throw above guards these required injections; the compiler
+            // cannot narrow fields through the conditional 'missing' expression.
+            IServerConfig serverConfig = _serverConfig!;
+            ILocalizationService loc = _loc!;
+            serverConfig.OnInitialized += ApplyServerConfig;
             // Реестр применяет текст сразу и на каждой смене языка — подписка
             // вручную не нужна и запрещена линтером.
-            _loc.RegisterLocalizable(this);
+            loc.RegisterLocalizable(this);
             CreateUI();
             if (_panel != null)
             {
                 _panel.style.display = DisplayStyle.None;
             }
 
-            if (_serverConfig.IsInitialized)
+            if (serverConfig.IsInitialized)
             {
                 ApplyServerConfig();
             }
@@ -325,13 +329,10 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_serverConfig.IsInitialized)
+            const int chatMaxLen = ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
+            if (text.Length > chatMaxLen)
             {
-                var chatMaxLen = _serverConfig.MaxGlobalChatLength;
-                if (text.Length > chatMaxLen)
-                {
-                    text = text.Substring(0, chatMaxLen);
-                }
+                text = text.Substring(0, chatMaxLen);
             }
 
             try

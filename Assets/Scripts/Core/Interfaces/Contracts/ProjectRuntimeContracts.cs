@@ -12,6 +12,17 @@ public static class ProjectRuntimeContracts
         public const int MaximumHeight = ushort.MaxValue;
     }
 
+    public static class Gameplay
+    {
+        public const float DefaultDigCooldown = 0.3f;
+    }
+
+    public static class Chat
+    {
+        public const int MaximumGlobalChatLength = 256;
+        public const int MaximumLocalChatLength = 256;
+    }
+
     public static class Movement
     {
         public const float RobotMoveSpeed = 15f;

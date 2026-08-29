@@ -43,15 +43,19 @@ namespace Fodinae.UI
                 return;
             }
 
+            // [Inject]-метод гарантирует зависимости и панель UIDocument к
+            // моменту вызова; null здесь — дефект проводки, а не гонка.
+            // Молчаливый пропуск оставил бы стрелку миссии вечно невидимой
+            // без ошибки.
             if (_doc == null || _doc.rootVisualElement == null || _playerStats == null || _mapManager == null)
             {
-                // Защитный гард: к моменту [Inject]-метода зависимости и панель
-                // UIDocument гарантированы — пропуск здесь означает дефект
-                // проводки, а не гонку (ретраев больше нет).
-                return;
+                throw new InvalidOperationException(
+                    "[MissionArrowUI] Required injection missing: " +
+                    $"{(_doc == null ? "UIDocument" : _playerStats == null ? "IPlayerStats" : _mapManager == null ? "IMapDataProvider" : "UIDocument root")}. " +
+                    "MissionArrowUI must be registered in the Game scope before Start.");
             }
 
-            _camera = _gameplayCamera?.Camera;
+            _camera = _gameplayCamera.Camera;
 
             _arrow = new VisualElement();
             _arrow.name = "MissionArrow";
@@ -60,7 +64,9 @@ namespace Fodinae.UI
             // Видимость — рантайм-состояние. Вставляем в индекс 0: метка не должна
             // перекрывать текст UI (раньше добавлялась последней — рисовалась поверх).
             _arrow.style.display = DisplayStyle.None;
-            _doc.rootVisualElement.Insert(0, _arrow);
+            // _doc is guarded by the throw above; the compiler cannot narrow it
+            // across the conditional 'missing' expression, so null-forgive here.
+            _doc!.rootVisualElement.Insert(0, _arrow);
 
             PlayerStatsModel stats = _playerStats;
             if (stats != null)

@@ -73,12 +73,15 @@ namespace Fodinae.UI
                 return;
             }
 
+            // [Inject]-метод гарантирует панель UIDocument к моменту вызова;
+            // null здесь — дефект проводки, а не гонка. Молчаливый пропуск
+            // оставил бы оверлей реконнекта вечно мёртвым без какой-либо
+            // ошибки.
             if (_doc == null || _doc.rootVisualElement == null)
             {
-                // Защитный гард: к моменту [Inject]-метода панель UIDocument
-                // гарантирована — пропуск здесь означает дефект проводки,
-                // а не гонку (ретраев больше нет).
-                return;
+                throw new InvalidOperationException(
+                    "[ReconnectUI] Required UIDocument injection is missing or has no root; " +
+                    "ReconnectUI must be registered in the Game scope before Start.");
             }
 
             CreateUI();

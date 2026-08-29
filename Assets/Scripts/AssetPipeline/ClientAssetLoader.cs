@@ -92,8 +92,7 @@ namespace Fodinae
             {
                 if (_pendingRequests.TryRemove(pending.Key, out TaskCompletionSource<byte[]>? request))
                 {
-                    request.TrySetException(
-                        new ObjectDisposedException(nameof(ClientAssetLoader)));
+                    request.TrySetCanceled();
                 }
             }
 

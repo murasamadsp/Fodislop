@@ -49,7 +49,7 @@ public sealed class SceneTransitionTicket : IDisposable
         }
 
         _timeoutCts = new CancellationTokenSource(_timeout);
-        _timeoutCts.Token.Register(OnTimeout, useSynchronizationContext: false);
+        _timeoutCts.Token.Register(OnTimeout, useSynchronizationContext: true);
     }
 
     public string TargetSceneName { get; }

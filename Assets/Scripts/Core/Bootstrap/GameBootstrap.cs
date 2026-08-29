@@ -44,7 +44,6 @@ namespace Fodinae.Core
         private readonly LightingEngine _lighting;
         private readonly SurfaceRenderer _surface;
         private readonly GameManager _gameManager;
-        private readonly ServerConfig _serverConfig;
         private readonly PlayerHUDView _playerHud;
         private readonly InventoryView _inventory;
         private readonly Scene _ownScene;
@@ -64,7 +63,6 @@ namespace Fodinae.Core
             LightingEngine lighting,
             SurfaceRenderer surface,
             GameManager gameManager,
-            ServerConfig serverConfig,
             PlayerHUDView playerHud,
             InventoryView inventory,
             Scene ownScene,
@@ -83,7 +81,6 @@ namespace Fodinae.Core
             _lighting = lighting;
             _surface = surface;
             _gameManager = gameManager;
-            _serverConfig = serverConfig;
             _playerHud = playerHud;
             _inventory = inventory;
             _ownScene = ownScene;
@@ -106,7 +103,6 @@ namespace Fodinae.Core
                     .AttachExternalCancellation(scopeToken);
                 _scope.ActivateSceneServices();
                 InitializeRequiredServices();
-                InitializeOfflineServerConfig();
                 _terrain.ApplyClientConfig();
                 _postProcess.EnsureVolumeSetup();
                 _lighting.EnsureInitialized();
@@ -122,12 +118,6 @@ namespace Fodinae.Core
                 // be resident: world audio must be live the moment the game
                 // scene is shown, not pop in when the background load lands.
                 await _audioSystem.WaitUntilBanksReadyAsync(scopeToken);
-                if (!_serverConfig.IsInitialized)
-                {
-                    throw new InvalidOperationException(
-                        "MainGame presentation contract: authored ServerConfig was not initialized by world startup.");
-                }
-
                 _scope.MarkReady();
                 _ticket.MarkPresentationReady();
             }
@@ -176,17 +166,6 @@ namespace Fodinae.Core
             finally
             {
                 _gameManager.OnWorldLoaded -= OnWorldLoaded;
-            }
-        }
-
-        private void InitializeOfflineServerConfig()
-        {
-            // DummyConnection has no server-config packet. Seed the runtime
-            // contract that a real server supplies before gameplay input can
-            // query cooldown and chat limits.
-            if (_connection is DummyConnection && !_serverConfig.IsInitialized)
-            {
-                _serverConfig.ApplyValues(0.3f, 256, 256);
             }
         }
 

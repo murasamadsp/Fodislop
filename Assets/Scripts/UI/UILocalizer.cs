@@ -40,7 +40,9 @@ namespace Fodinae.UI
                 {
                     button.text = loc.Get(button.text);
                 }
-            }            // Tooltip-атрибуты тоже могут нести ключи (tooltip="hud.tooltip.clan");
+            }
+
+            // Tooltip-атрибуты тоже могут нести ключи (tooltip="hud.tooltip.clan");
             // кнопки, у которых тултип вешается кодом через Tooltip.AttachTo(Func),
             // переживают это безвредно — их тултип уже переопределён.
             foreach (var element in root.Query<VisualElement>().Build())
@@ -50,6 +52,23 @@ namespace Fodinae.UI
                     element.tooltip = loc.Get(element.tooltip);
                 }
             }
+        }
+
+        /// <summary>
+        /// Удобный extension-метод для декларативной локализации любого VisualElement дерева.
+        /// </summary>
+        public static VisualElement Localize(this VisualElement root, ILocalizationService loc)
+        {
+            Apply(root, loc);
+            return root;
+        }
+
+        /// <summary>
+        /// Extension-метод для быстрого получения локализованной строки с форматированием.
+        /// </summary>
+        public static string Loc(this string key, ILocalizationService loc, params object[] args)
+        {
+            return loc != null ? loc.Get(key, args) : key;
         }
 
         /// <summary>
@@ -111,5 +130,5 @@ namespace Fodinae.UI
             }
 #endif
         }
-}
+    }
 }

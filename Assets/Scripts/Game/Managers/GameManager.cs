@@ -131,7 +131,7 @@ namespace Fodinae.Game.Managers
             IsWorldLoaded = false;
             _worldLoadPublished = false;
             _worldLoadPending = true;
-            _readinessDiagLogged = false;
+            _readinessDiagNextLog = -1f;
             _loadProgress.Report(WorldLoadPhase.WorldManifest);
             TryPublishWorldLoaded();
         }
@@ -144,7 +144,7 @@ namespace Fodinae.Game.Managers
             }
         }
 
-        private bool _readinessDiagLogged;
+        private float _readinessDiagNextLog = -1f;
 
         private void TryPublishWorldLoaded()
         {
@@ -159,11 +159,16 @@ namespace Fodinae.Game.Managers
             int pendingAssets = _assetLoader is ClientAssetLoader ca ? ca.PendingAssetCount : -1;
             int queuedAssets = _assetLoader is ClientAssetLoader cb ? cb.QueuedAssetCount : -1;
 
-            if (!_readinessDiagLogged)
+            // Re-log the readiness gate roughly every two seconds while the
+            // world is pending. The conditions converge at different times
+            // (player position, robot meta/visuals and stats latch on packets
+            // that arrive after WorldInit), so a one-shot snapshot at WorldInit
+            // cannot show what is actually stuck.
+            if (Time.unscaledTime >= _readinessDiagNextLog)
             {
-                _readinessDiagLogged = true;
+                _readinessDiagNextLog = Time.unscaledTime + 2f;
                 UnityEngine.Debug.Log(
-                    $"[GameManager] World readiness gate: " +
+                    $"[GameManager] World readiness gate (t={Time.unscaledTime:F1}s): " +
                     $"player={player != null && player.HasServerPosition}," +
                     $"robotMeta={(robot != null && robot.IsMetadataLoaded)}," +
                     $"robotVisuals={(robot != null && robot.IsVisualsLoaded)}," +
@@ -199,13 +204,12 @@ namespace Fodinae.Game.Managers
             }
 
             if (player == null || !player.HasServerPosition ||
-                robot == null || !robot.IsMetadataLoaded || !robot.IsVisualsLoaded ||
                 _playerStats == null || !_playerStats.IsReady ||
                 terrain == null || !terrain.IsReadyForGameplay ||
+                _lightingEngine == null || !_lightingEngine.IsInitialized ||
                 (_surfaceRenderer != null && !_surfaceRenderer.IsInitialized) ||
-                (_lightingEngine != null && !_lightingEngine.IsInitialized) ||
-                pendingAssets > 0 || queuedAssets > 0 ||
-                _textureService.PendingCellTextureRequests > 0)
+                (pendingAssets > 0) ||
+                _loadProgress == null)
             {
                 return;
             }

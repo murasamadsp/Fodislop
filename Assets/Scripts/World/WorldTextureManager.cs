@@ -477,6 +477,7 @@ namespace Fodinae.World
 
             Debug.LogWarning(
                 $"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
+            await UniTask.SwitchToMainThread();
             texture = CreateMissingTexture(cellType);
             AddTextureToAtlas(cellType, texture, ownsTexture: true);
         }

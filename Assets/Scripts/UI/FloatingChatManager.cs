@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -39,10 +40,29 @@ namespace Fodinae.UI
         {
             if (_camera == null)
             {
-                _camera = _gameplayCamera?.Camera;
+                // IGameplayCamera is a required [Inject] registration on the
+                // Bootstrap scope; a null camera is a wiring defect, not a
+                // transient.
+                if (_gameplayCamera == null)
+                {
+                    throw new InvalidOperationException(
+                        "[FloatingChatManager] Required IGameplayCamera injection is missing; " +
+                        "FloatingChatManager must be registered in the Game scope.");
+                }
+
+                // _gameplayCamera was null-compared above, so the compiler
+                // cannot narrow it here without the null-forgiving operator.
+                _camera = _gameplayCamera!.Camera;
             }
 
-            if (_bubblePrefab != null || _sceneObjects == null)
+            if (_sceneObjects == null)
+            {
+                throw new InvalidOperationException(
+                    "[FloatingChatManager] Required ISceneObjectFactory injection is missing; " +
+                    "FloatingChatManager must be registered in the Game scope.");
+            }
+
+            if (_bubblePrefab != null)
             {
                 return;
             }
@@ -85,7 +105,7 @@ namespace Fodinae.UI
             TryInitialize();
             if (_camera == null)
             {
-                _camera = _gameplayCamera?.Camera;
+                _camera = _gameplayCamera.Camera;
             }
 
             var robot = _robotManager?.GetOrCreateRobot(packet.BotId);

@@ -83,14 +83,19 @@ namespace Fodinae.UI
             }
 
             _initialized = true;
-            _gameManager.OnWorldLoaded += OnWorldLoaded;
+            // The throw above guards these required injections; the compiler
+            // cannot narrow fields through the string? 'missing' pattern, so the
+            // dereferences are null-forgiven here.
+            GameManager gameManager = _gameManager!;
+            ILocalizationService loc = _loc!;
+            gameManager.OnWorldLoaded += OnWorldLoaded;
             CreateUI();
 
             // Реестр применяет текст сразу и на каждой смене языка — подписка
             // вручную не нужна и запрещена линтером.
-            _loc.RegisterLocalizable(this);
+            loc.RegisterLocalizable(this);
 
-            if (!_gameManager.IsWorldLoaded && _gameManager.IsUIAuthorized)
+            if (!gameManager.IsWorldLoaded && gameManager.IsUIAuthorized)
             {
                 ShowLoadingOverlay();
             }

@@ -51,9 +51,6 @@ namespace Fodinae.Player.Logic
         private IWorldDataStorage _storage = null!;
 
         [Inject]
-        private IServerConfig _serverConfig = null!;
-
-        [Inject]
         private INetworkService _networkService = null!;
 
         [Inject]
@@ -533,17 +530,15 @@ namespace Fodinae.Player.Logic
 
         private bool IsDigCooldownActive()
         {
-            IServerConfig serverConfig = _serverConfig ?? throw new InvalidOperationException(
-                "[PlayerMovementController] IServerConfig is required for dig cooldown.");
-            return IsDigCooldownActive(Time.time, _lastDigTime, serverConfig.DigCooldown);
+            return IsDigCooldownActive(Time.time, _lastDigTime, ProjectRuntimeContracts.Gameplay.DefaultDigCooldown);
         }
 
         public static bool IsDigCooldownActive(
             float currentTime,
             float lastDigTime,
-            float serverCooldown)
+            float cooldown = ProjectRuntimeContracts.Gameplay.DefaultDigCooldown)
         {
-            return currentTime - lastDigTime < serverCooldown;
+            return currentTime - lastDigTime < cooldown;
         }
 
 #if UNITY_EDITOR

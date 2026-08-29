@@ -83,6 +83,31 @@ namespace Fodinae.Core
                     ILocalPlayerState localPlayer = Container.Resolve<ILocalPlayerState>();
                     localPlayer.Publish(_playerMovement);
                 }
+
+                // SceneSetup is an authored scene-root component (not part of the
+                // ManagerBinding contract), so the container never injects it
+                // automatically. Without this its [Inject] ITextureStorageService
+                // stays null and TryStartSurfaceRendererSetup silently no-ops:
+                // SetLocalAssets is never called, the surface textures never get
+                // assigned, and the world-readiness gate is stuck on
+                // surface=false forever. SceneSetup.Update retries until the
+                // injection lands, so injecting here (after base.Awake built the
+                // container) is safe regardless of Start/Update ordering.
+                SceneSetup? sceneSetup = null;
+                foreach (var candidate in UnityEngine.Object.FindObjectsByType<SceneSetup>(
+                             FindObjectsInactive.Include))
+                {
+                    if (candidate.gameObject.scene == _ownScene)
+                    {
+                        sceneSetup = candidate;
+                        break;
+                    }
+                }
+
+                if (Container != null && sceneSetup != null)
+                {
+                    Container.Inject(sceneSetup);
+                }
             }
             catch (Exception exception)
             {
@@ -93,8 +118,7 @@ namespace Fodinae.Core
 
         protected override void OnDestroy()
         {
-            _readiness.TrySetException(new InvalidOperationException(
-                $"Game scene '{_ownScene.name}' was destroyed before startup completed."));
+            _readiness.TrySetCanceled();
             base.OnDestroy();
         }
 

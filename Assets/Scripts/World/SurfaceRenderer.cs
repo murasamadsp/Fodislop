@@ -164,6 +164,11 @@ namespace Fodinae.World
             _transitTexture = transitTexture;
             _perspectiveTexture = perspectiveTexture;
             _redRockTexture = redRockTexture;
+
+            if (_mapManager != null && _mapManager.IsWorldInitialized)
+            {
+                EnsureInitialized();
+            }
         }
 
         public void RenderLightingFields(
@@ -205,10 +210,32 @@ namespace Fodinae.World
 
         protected void OnEnable()
         {
+            if (_mapManager != null)
+            {
+                _mapManager.OnWorldInitialized -= OnWorldInitialized;
+                _mapManager.OnWorldInitialized += OnWorldInitialized;
+            }
+
             if (_initialized && !_registered && _lightingGeometryRegistry != null)
             {
                 _lightingGeometryRegistry.Register(this);
                 _registered = true;
+            }
+        }
+
+        protected void Start()
+        {
+            if (!_initialized && _mapManager != null && _mapManager.IsWorldInitialized)
+            {
+                EnsureInitialized();
+            }
+        }
+
+        private void OnWorldInitialized()
+        {
+            if (!_initialized)
+            {
+                EnsureInitialized();
             }
         }
 
@@ -254,6 +281,11 @@ namespace Fodinae.World
 
         protected void OnDisable()
         {
+            if (_mapManager != null)
+            {
+                _mapManager.OnWorldInitialized -= OnWorldInitialized;
+            }
+
             UnregisterLightingContributor();
         }
 

@@ -99,25 +99,44 @@ namespace Fodinae.UI
 
             if (_doc == null || _doc.rootVisualElement == null || _doc.panelSettings == null)
             {
-                // Защитный гард: к Start панель гарантирована (создаётся в OnEnable
-                // документа) — пропуск здесь означает дефект проводки, а не гонку
-                // (ретраев больше нет).
-                return;
+                // К Start панель гарантирована (создаётся в OnEnable документа);
+                // null здесь — дефект проводки, а не гонка. Молчаливый пропуск
+                // оставил бы меню паузы вечно мёртвым без ошибки.
+                throw new InvalidOperationException(
+                    "[PauseMenu] Required UIDocument injection is missing or has no root/PanelSettings; " +
+                    "PauseMenu must be registered in the Game scope before Start.");
             }
 
-            if (_clientConfig == null || _clientConfig.Config == null || _networkService == null ||
-                _audioSystem == null || _connectionService == null || _inputBlocker == null ||
-                _lightingEngine == null || _postProcessController == null || _terrainRenderer == null ||
-                _graphicsSettings == null || _displayManager == null || _loc == null)
+            string? missing =
+                _clientConfig == null ? nameof(IClientConfigManager) :
+                _clientConfig.Config == null ? "ClientConfig" :
+                _networkService == null ? nameof(INetworkService) :
+                _audioSystem == null ? nameof(IAudioSystem) :
+                _connectionService == null ? nameof(IConnectionService) :
+                _inputBlocker == null ? nameof(IInputBlocker) :
+                _lightingEngine == null ? nameof(LightingEngine) :
+                _postProcessController == null ? nameof(PostProcessController) :
+                _terrainRenderer == null ? nameof(TerrainRenderer) :
+                _graphicsSettings == null ? nameof(GraphicsSettingsController) :
+                _displayManager == null ? nameof(DisplayManager) :
+                _loc == null ? nameof(ILocalizationService) :
+                null;
+            if (missing != null)
             {
-                return;
+                // ClientConfig is loaded by ApplicationBootstrap before any
+                // content scene; a null Config at MainGame Start is a defect.
+                throw new InvalidOperationException(
+                    $"[PauseMenu] Required injection '{missing}' is missing. " +
+                    "PauseMenu must be registered in the Game scope before Start.");
             }
 
-            if (!_lightingEngine.IsInitialized)
+            // The throw above guards these required injections; the compiler
+            // cannot narrow fields through the string? 'missing' pattern.
+            if (!_lightingEngine!.IsInitialized)
             {
                 // Единственный детерминированный переход: событие готовности
                 // освещения (EnsureInitialized в PostStart), без ретраев из Update.
-                _lightingEngine.OnInitialized += OnLightingReady;
+                _lightingEngine!.OnInitialized += OnLightingReady;
                 return;
             }
 

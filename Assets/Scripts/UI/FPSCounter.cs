@@ -43,6 +43,18 @@ namespace Fodinae.UI
 
         public int OnlineProgrammator => _networkStatus.OnlineProgrammator;
 
+        protected void Awake()
+        {
+            float initialDelta = Time.unscaledDeltaTime > 0f ? Time.unscaledDeltaTime : 1f / 60f;
+            for (int i = 0; i < SAMPLE_SIZE; i++)
+            {
+                _frameTimes[i] = initialDelta;
+            }
+
+            _runningSum = initialDelta * SAMPLE_SIZE;
+            CurrentFps = 1f / initialDelta;
+        }
+
         protected void Start()
         {
             EnsureUI();
@@ -172,9 +184,12 @@ namespace Fodinae.UI
             {
                 _nextDisplayUpdate = Time.unscaledTime + 0.1f;
                 float frameTimeMs = avg * 1000f;
+                int pingMs = _networkStatus.PingMs;
+                int online = _networkStatus.OnlinePlayers;
+
                 if (!_showDetailedProfiler)
                 {
-                    _fpsLabel.text = $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_networkStatus.PingMs}ms  Online: {_networkStatus.OnlinePlayers}  [F3 for details]";
+                    _fpsLabel.text = $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {pingMs}ms  Online: {online}  [F3 for details]";
                 }
                 else
                 {
@@ -183,7 +198,7 @@ namespace Fodinae.UI
                     float gcAllocKb = FrameProfiler.GcAllocPerFrameBytes / 1024f;
 
                     _fpsLabel.text =
-                        $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {_networkStatus.PingMs}ms  Online: {_networkStatus.OnlinePlayers}\n" +
+                        $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {pingMs}ms  Online: {online}\n" +
                         $"<color=#aaffaa>[Terrain CPU]</color> Mesh: {FrameProfiler.TerrainMeshTimeMs:F2}ms | Flood: {FrameProfiler.TerrainFloodFillTimeMs:F2}ms | Cache: {FrameProfiler.TerrainCacheTimeMs:F2}ms | Upload: {FrameProfiler.TerrainGpuUploadTimeMs:F2}ms\n" +
                         $"<color=#ffffaa>[Lighting CPU]</color> Build: {FrameProfiler.LightingBuildCommandsTimeMs:F2}ms | Execute: {FrameProfiler.LightingExecuteCommandsTimeMs:F2}ms | Cmd: {FrameProfiler.LightingCommandBufferBytes / 1024f:F1}KB | View: {debugViewStr} [F2]\n" +
                         $"<color=#ffffaa>[Lighting counts]</color> Static: {FrameProfiler.LightingStaticSolveCount} | Dynamic: {FrameProfiler.LightingDynamicSolveCount} | Invalidations: {FrameProfiler.LightingRegionInvalidationCount} | DynLights: {FrameProfiler.ActiveDynamicLights}\n" +
