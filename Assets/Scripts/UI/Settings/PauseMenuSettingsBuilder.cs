@@ -45,8 +45,6 @@ namespace Fodinae.UI
         private readonly Action _closeMenu;
         private readonly ILocalizationService _loc;
 
-        private Button? _fullscreenButton;
-
         // The custom-profile foldout is created on the graphics page but is
         // also opened from technical settings applied elsewhere, so it has to
         // outlive BuildGraphicsPage.
@@ -91,113 +89,14 @@ namespace Fodinae.UI
 
         public VisualElement BuildAudioPage(ScrollView audioScroll)
         {
-            VisualElement audioSection = audioScroll.Q<VisualElement>("AudioSection") ??
-                throw new InvalidOperationException("[PauseMenu] AudioSection is missing from PauseMenu.uxml.");
-
-            audioSection.Add(CreateAudioSlider(_loc.Get("menu.settings.master_volume"), AudioBusType.Master));
-            audioSection.Add(CreateAudioSlider(_loc.Get("menu.settings.sfx_volume"), AudioBusType.SFX));
-            audioSection.Add(CreateAudioSlider(_loc.Get("menu.settings.music_volume"), AudioBusType.Music));
-            audioSection.Add(CreateAudioSlider(_loc.Get("menu.settings.ambience_volume"), AudioBusType.Ambience));
-            audioSection.Add(CreateAudioSlider(_loc.Get("settings.audio.voice"), AudioBusType.Voice));
-            audioSection.Add(CreateAudioSlider(_loc.Get("menu.settings.ui_volume"), AudioBusType.UI));
-            Toggle muteInBackgroundToggle = PauseMenuUIFactory.CreateBoundToggle(
-                _loc.Get("menu.settings.mute_background"),
-                () => _clientConfig.Config.MuteAudioInBackground,
-                value => _clientConfig.UpdateAndSave(
-                    config => config.MuteAudioInBackground = value),
-                _refreshers);
-            audioSection.Add(muteInBackgroundToggle);
-
-            return audioScroll;
+            var builder = new PauseMenuAudioTabBuilder(_clientConfig, _audioSystem, _refreshers, _loc);
+            return builder.Build(audioScroll);
         }
 
         public VisualElement BuildDisplayPage(ScrollView displayScroll)
         {
-            VisualElement displaySection = displayScroll.Q<VisualElement>("DisplaySection") ??
-                throw new InvalidOperationException("[PauseMenu] DisplaySection is missing from PauseMenu.uxml.");
-
-            _fullscreenButton = new Button(ToggleFullscreen);
-            _fullscreenButton.text = Screen.fullScreen ? _loc.Get("menu.settings.fullscreen") : _loc.Get("settings.display.windowed");
-            _fullscreenButton.AddToClassList("pause-btn");
-            displaySection.Add(_fullscreenButton);
-
-            var resolutions = Screen.resolutions;
-            var uniqueResolutions = new List<Resolution>();
-            var seen = new HashSet<string>();
-            foreach (var res in resolutions)
-            {
-                var key = $"{res.width}x{res.height}";
-                if (seen.Add(key))
-                {
-                    uniqueResolutions.Add(res);
-                }
-            }
-
-            int currentResIndex = -1;
-            for (int i = 0; i < uniqueResolutions.Count; i++)
-            {
-                if (uniqueResolutions[i].width == Screen.width &&
-                    uniqueResolutions[i].height == Screen.height)
-                {
-                    currentResIndex = i;
-                    break;
-                }
-            }
-
-            var resolutionButton = new Button();
-            void UpdateResolutionButton()
-            {
-                string resolutionLabel = _loc.Get("menu.settings.resolution");
-                resolutionButton.text = uniqueResolutions.Count == 0
-                    ? _loc.Get("settings.display.no_resolutions")
-                    : currentResIndex >= 0
-                        ? $"{resolutionLabel}: {uniqueResolutions[currentResIndex].width} x " +
-                          uniqueResolutions[currentResIndex].height
-                        : $"{resolutionLabel}: {Screen.width} x {Screen.height}";
-            }
-
-            resolutionButton.clicked += () =>
-            {
-                if (uniqueResolutions.Count > 0)
-                {
-                    currentResIndex = (currentResIndex + 1) % uniqueResolutions.Count;
-                    var resolution = uniqueResolutions[currentResIndex];
-                    // Goes through DisplayManager, not Screen.SetResolution
-                    // directly - that's the only path that persists the
-                    // choice to ClientConfig and normalizes ExclusiveFullScreen
-                    // on macOS. A direct Screen.SetResolution call here would
-                    // silently revert to the last saved resolution on next
-                    // launch, same bug ToggleFullscreen had.
-                    _displayManager.SetResolution(
-                        resolution.width,
-                        resolution.height,
-                        Screen.fullScreenMode,
-                        (int)resolution.refreshRateRatio.value);
-                    UpdateResolutionButton();
-                }
-            };
-            resolutionButton.SetEnabled(uniqueResolutions.Count > 0);
-            resolutionButton.AddToClassList("pause-btn");
-            UpdateResolutionButton();
-            displaySection.Add(resolutionButton);
-
-            // Replaces a "VSync" button that used to live in the Custom
-            // graphics profile and edit GraphicsQualitySettings.VSyncCount -
-            // a field that is deliberately never applied anywhere (see the
-            // remark on LightingEngine.ApplyUnityRenderingSettings:
-            // VSync is DisplayManager's alone, to avoid two owners fighting
-            // over QualitySettings.vSyncCount). That button compiled, looked
-            // like a working control, and did nothing when clicked - this is
-            // the real one, wired to the config field DisplayManager actually
-            // reads.
-            Toggle vSyncToggle = PauseMenuUIFactory.CreateBoundToggle(
-                _loc.Get("menu.settings.vsync"),
-                () => _clientConfig.Config.VSync,
-                value => _displayManager.SetVSync(value),
-                _refreshers);
-            displaySection.Add(vSyncToggle);
-
-            return displayScroll;
+            var builder = new PauseMenuDisplayTabBuilder(_clientConfig, _displayManager, _refreshers, _loc);
+            return builder.Build(displayScroll);
         }
 
         public VisualElement BuildGraphicsPage(ScrollView graphicsScroll)
@@ -1462,93 +1361,6 @@ namespace Fodinae.UI
             }
         }
 
-        private void ToggleFullscreen()
-        {
-            // Goes through DisplayManager for the same reason the resolution
-            // button does: a bare `Screen.fullScreen = ...` assignment never
-            // reaches ClientConfig, so the choice silently reverts to
-            // whatever FullScreenMode was last saved the next time
-            // DisplayManager.ApplyDisplaySettings runs on launch.
-            FullScreenMode nextMode = Screen.fullScreenMode == FullScreenMode.Windowed
-                ? FullScreenMode.FullScreenWindow
-                : FullScreenMode.Windowed;
-            _displayManager.SetResolution(
-                Screen.width,
-                Screen.height,
-                nextMode,
-                (int)Screen.currentResolution.refreshRateRatio.value);
-            if (_fullscreenButton != null)
-            {
-                _fullscreenButton.text = nextMode == FullScreenMode.Windowed
-                    ? _loc.Get("settings.display.windowed")
-                    : _loc.Get("menu.settings.fullscreen");
-            }
-        }
-
-        private VisualElement CreateAudioSlider(string title, AudioBusType busType)
-        {
-            float currentVol = GetConfiguredBusVolume(busType);
-            return PauseMenuUIFactory.CreateSlider(
-                title,
-                currentVol,
-                v =>
-                {
-                    if (_audioSystem is AudioSystem audioSystem && audioSystem.IsInitialized)
-                    {
-                        audioSystem.SetBusVolume(busType, v);
-                    }
-
-                    SetBusVolumeInConfig(busType, v);
-                },
-                0f,
-                1f);
-        }
-
-        private float GetConfiguredBusVolume(AudioBusType busType)
-        {
-            if (_clientConfig == null || _clientConfig.Config == null)
-            {
-                return 1f;
-            }
-
-            return busType switch
-            {
-                AudioBusType.Master => _clientConfig.Config.MasterVolume,
-                AudioBusType.SFX => _clientConfig.Config.SfxVolume,
-                AudioBusType.Music => _clientConfig.Config.MusicVolume,
-                AudioBusType.Voice => _clientConfig.Config.VoiceVolume,
-                AudioBusType.Ambience => _clientConfig.Config.AmbienceVolume,
-                AudioBusType.UI => _clientConfig.Config.UIVolume,
-                _ => throw new ArgumentOutOfRangeException(nameof(busType), busType, "Unsupported audio bus."),
-            };
-        }
-
-        private void SetBusVolumeInConfig(AudioBusType busType, float volume)
-        {
-            _clientConfig.UpdateAndSave(config =>
-            {
-                switch (busType)
-                {
-                    case AudioBusType.Master:
-                        config.MasterVolume = volume;
-                        break;
-                    case AudioBusType.SFX:
-                        config.SfxVolume = volume;
-                        break;
-                    case AudioBusType.Music:
-                        config.MusicVolume = volume;
-                        break;
-                    case AudioBusType.Voice:
-                        config.VoiceVolume = volume;
-                        break;
-                    case AudioBusType.Ambience:
-                        config.AmbienceVolume = volume;
-                        break;
-                    case AudioBusType.UI:
-                        config.UIVolume = volume;
-                        break;
-                }
-            });
         }
     }
 }
