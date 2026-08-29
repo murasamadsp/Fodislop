@@ -328,19 +328,10 @@ namespace Fodinae.Game
                     if (!_isCulled)
                     {
                         _isCulled = true;
-                        _bodyBatchHandle?.SetEnabled(false);
-                        _clanBatchHandle?.SetEnabled(false);
-                        if (_nicknameText != null)
-                        {
-                            _nicknameText.enabled = false;
-                        }
-
-                        SetTentaclesActive(false);
-                        if (_hasSubmittedDynamicLight && _lightingEngine != null)
-                        {
-                            _lightingEngine.RemoveDynamicLight(_dynamicLightId);
-                            _hasSubmittedDynamicLight = false;
-                        }
+                        _visuals.SetBodyVisible(false);
+                        _nameplate.SetEnabled(false);
+                        _visuals.SetTentaclesActive(false);
+                        _lighting.Remove(_lightingEngine);
                     }
 
                     transform.position = _targetPosition;
