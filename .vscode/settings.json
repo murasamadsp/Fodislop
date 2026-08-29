@@ -8,7 +8,7 @@
     "*.prefab": "$(capture).prefab.meta",
     "*.unity": "$(capture).unity.meta",
     "*.sln": "*.slnx, *.csproj",
-    "*.slnx": "*.csproj",
+    "*.slnx": "*.csproj, *.sln",
     "package.json": "package-lock.json, .yarnrc*, yarn.lock, .npmrc",
     "README*": "AUTHORS, BACKERS*, CHANGELOG*, CITATION*, CODE_OF_CONDUCT*, CONTRIBUTING*, CONTRIBUTORS, DESIGN*, LICENSE*, OPT-IN*, OPT-OUT*, README*, TRADEMARK*, SECURITY*"
   },
@@ -22,14 +22,50 @@
     "*.uxml": "xml",
     "*.uss": "css",
     "*.tss": "css",
-    "*.compute": "hlsl"
+    "*.compute": "hlsl",
+    "*.shader": "hlsl",
+    "*.cginc": "hlsl",
+    "*.hlsl": "hlsl",
+    "*.asmdef": "json",
+    "*.asmref": "json"
   },
   "files.watcherExclude": {
     "**/Library/**": true,
     "**/Temp/**": true,
     "**/obj/**": true,
     "**/Build/**": true,
-    "**/UserSettings/**": true
+    "**/Logs/**": true,
+    "**/ProfilerCaptures/**": true,
+    "**/.vs/**": true,
+    "**/.git/**": true,
+    "**/UserSettings/**": true,
+    "**/FodinaeAudio/.cache/**": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/Library": true,
+    "**/Temp": true,
+    "**/obj": true,
+    "**/Build": true,
+    "**/Logs": true,
+    "**/ProfilerCaptures": true,
+    "**/.vs": true,
+    "**/UserSettings": true,
+    "**/FodinaeAudio/.cache": true
+  },
+  "search.exclude": {
+    "**/Library": true,
+    "**/Temp": true,
+    "**/obj": true,
+    "**/Build": true,
+    "**/Logs": true,
+    "**/ProfilerCaptures": true,
+    "**/.vs": true,
+    "**/*.meta": true,
+    "**/*.mapb": true,
+    "**/UserSettings": true,
+    "**/FodinaeAudio/.cache": true
   },
   "dotnet.defaultSolution": "Fodislop.slnx",
   "csharp.analyzerDiagnosticScope": "openFiles",
@@ -38,8 +74,5 @@
   "csharp.enableEditorConfigSupport": true,
   "csharp.suppressHiddenDiagnostics": false,
   "dotnet.server.useOmnisharp": false,
-  "vstuc.useInfiniteLoopTimeout": true,
-  "editor.codeActionsOnSave": {
-    "source.organizeImports": "explicit"
-  }
+  "vstuc.useInfiniteLoopTimeout": true
 }

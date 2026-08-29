@@ -1,7 +1,10 @@
 {
   "recommendations": [
     "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
     "visualstudiotoolsforunity.vstuc",
-    "editorconfig.editorconfig"
+    "editorconfig.editorconfig",
+    "slevesque.shader",
+    "tintoy.msbuild-project-tools"
   ]
 }

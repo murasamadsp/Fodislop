@@ -4,8 +4,13 @@
     {
       "name": "Attach to Unity Editor",
       "type": "vstuc",
+      "request": "attach"
+    },
+    {
+      "name": "Attach to Unity Editor & Play",
+      "type": "vstuc",
       "request": "attach",
-      "endPoint": "127.0.0.1:5650"
+      "play": true
     }
   ]
 }
