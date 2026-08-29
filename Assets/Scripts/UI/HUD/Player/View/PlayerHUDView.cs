@@ -1,21 +1,18 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
 using Fodinae.Core.Models;
 using Fodinae.Networking;
-using Fodinae.Player;
 using Fodinae.Player.Logic;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.GUI;
-using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -25,18 +22,12 @@ namespace Fodinae.UI.HUD.Player.View
 {
     public class PlayerHUDView : MonoBehaviour, ILocalizableUI
     {
-        private const int SKILL_GRID_COLS = 4;
-
         private Color _hpBarFillColor = new Color(0.2f, 0.8f, 0.2f, 1f);
         private Color _hpBarLowColor = new Color(0.9f, 0.2f, 0.2f, 1f);
 
-        private readonly List<Texture2D> _crystalTextures = new();
-        private readonly List<Label> _basketCrystalLabels = new();
-        private readonly Dictionary<SkillType, (Label arrow, VisualElement barFill)> _skillIcons = new();
-        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
-        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
-
         private readonly PlayerHUDStatusPanel _statusPanel = new();
+        private readonly PlayerHUDSkillGrid _skillGrid = new();
+        private readonly PlayerHUDBasketView _basketView = new();
         private PlayerHUDMissionPanel _missionPanel = null!;
         private PlayerHUDBonusController _bonusController = null!;
         private PlayerHUDPopups _popups = null!;
@@ -70,8 +61,6 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _aggressionIndicator;
         private Label? _aggressionLabel;
 
-        private VisualElement? _currentSkillRow;
-        private int _skillCountInRow = 0;
         private ProgrammatorGrid? _programmatorGrid;
         private bool _initializationStarted;
 
@@ -130,13 +119,11 @@ namespace Fodinae.UI.HUD.Player.View
                 return;
             }
 
-            // Реестр применяет текст сразу и на каждой смене языка — подписка
-            // вручную не нужна и запрещена линтером.
             _loc.RegisterLocalizable(this);
 
             try
             {
-                await LoadCrystalTextures(cancellationToken);
+                await _basketView.LoadCrystalTextures(_assetLoader, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -144,9 +131,6 @@ namespace Fodinae.UI.HUD.Player.View
             }
             catch (Exception ex)
             {
-                // Crystal icons are optional HUD content. Keep the gameplay HUD
-                // alive and report the asset miss only to diagnostics; an optional
-                // visual asset must not cover or block the game UI.
                 Debug.LogWarning($"[PlayerHUD] Optional crystal textures unavailable: {ex.Message}");
             }
 
@@ -155,15 +139,9 @@ namespace Fodinae.UI.HUD.Player.View
                 return;
             }
 
-            RebuildCrystalRows();
+            _basketView.RebuildRows();
         }
 
-        /// <summary>
-        /// Переприменяет локализованный текст после смены языка: статические
-        /// ключи UXML через UILocalizer, динамические лейблы — RefreshAll()
-        /// (он перечитывает модель и ставит тексты заново), плюс программатор,
-        /// если его дерево уже построено.
-        /// </summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(PlayerHUDView));
@@ -191,18 +169,7 @@ namespace Fodinae.UI.HUD.Player.View
             _programmatorGrid?.Dispose();
             _programmatorGrid = null;
             StopSkeletonPulse();
-            foreach (var schedule in _bounceSchedules.Values)
-            {
-                schedule.Pause();
-            }
-
-            foreach (var schedule in _pulseSchedules.Values)
-            {
-                schedule.Pause();
-            }
-
-            _bounceSchedules.Clear();
-            _pulseSchedules.Clear();
+            _skillGrid.ClearSchedules();
             _statusPanel.ClearSchedules();
 
             if (_model != null)
@@ -231,48 +198,6 @@ namespace Fodinae.UI.HUD.Player.View
         private void OnStatusLinesChanged() => _statusPanel.Rebuild(_model);
         private void OnMissionChanged() => _missionPanel.Update(_model);
 
-        private async UniTask LoadCrystalTextures(System.Threading.CancellationToken cancellationToken)
-        {
-            _crystalTextures.Clear();
-            foreach (CrystalType ct in Enum.GetValues(typeof(CrystalType)))
-            {
-                if (ct == CrystalType.Unknown)
-                {
-                    continue;
-                }
-
-                string name = ct.ToString().ToLowerInvariant();
-                Texture2D? tex;
-                try
-                {
-                    tex = await _assetLoader.GetTextureAsync(
-                        "Crystals/" + name,
-                        cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                catch (Exception exception)
-                {
-                    Debug.LogWarning(
-                        $"[PlayerHUD] Optional crystal texture '{name}' was skipped: " +
-                        exception.Message);
-                    continue;
-                }
-
-                if (cancellationToken.IsCancellationRequested || this == null)
-                {
-                    return;
-                }
-
-                if (tex != null)
-                {
-                    _crystalTextures.Add(tex);
-                }
-            }
-        }
-
         public void InitializeEditorPreview(UIDocument doc)
         {
             _doc = doc;
@@ -287,7 +212,6 @@ namespace Fodinae.UI.HUD.Player.View
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
 
-            // Тир раскладки вместо @media: класс на корне панели.
             UILayoutTier.Attach(_doc.rootVisualElement);
 
             LoadTemplate(_doc.rootVisualElement);
@@ -316,7 +240,7 @@ namespace Fodinae.UI.HUD.Player.View
 
             _bonusController.UpdateDailyBonusPanel(_model);
 
-            RebuildCrystalRows();
+            _basketView.RebuildRows();
             if (_model != null)
             {
                 _model.OnStatsChanged += RefreshAll;
@@ -332,16 +256,12 @@ namespace Fodinae.UI.HUD.Player.View
 
             var root = _doc.rootVisualElement;
 
-            // Клавиатурная навигация по интерфейсу вырезана насовсем: стрелки/WASD не
-            // должны двигать фокус по кнопкам, а Enter — активировать их. Подавляем
-            // навигационные события глобально (TrickleDown ловит их до фокус-контроллера).
             root.RegisterCallback<NavigationMoveEvent>(
                 evt => evt.StopPropagation(), TrickleDown.TrickleDown);
 
             root.RegisterCallback<NavigationSubmitEvent>(
                 evt => evt.StopPropagation(), TrickleDown.TrickleDown);
 
-            // Tab тоже не должен перемещать фокус по кнопкам.
             root.RegisterCallback<KeyDownEvent>(
                 evt =>
             {
@@ -363,8 +283,6 @@ namespace Fodinae.UI.HUD.Player.View
             _hudRoot = tree;
             root.Add(tree);
 
-            // Статические ключи UXML (hud.*, тултипы) резолвятся сразу при
-            // сборке, а не только по событию смены языка.
             UILocalizer.Apply(tree, _loc);
 
             _nicknameLabel = tree.Q<Label>("NicknameLabel") ??
@@ -393,10 +311,12 @@ namespace Fodinae.UI.HUD.Player.View
 
             _basketContainer = tree.Q<VisualElement>("BasketContainer") ??
                 throw new InvalidOperationException("[PlayerHUD] BasketContainer is missing from PlayerHUD.uxml.");
+            _basketView.Initialize(_basketContainer);
+
             _skillContainer = tree.Q<VisualElement>("SkillContainer") ??
                 throw new InvalidOperationException("[PlayerHUD] SkillContainer is missing from PlayerHUD.uxml.");
+            _skillGrid.Initialize(_skillContainer);
 
-            // Авто-копка и агрессия: индикатор — LED, текст кнопки статичен.
             _autoDigButton = tree.Q<Button>("AutoDigButton") ??
                 throw new InvalidOperationException("[PlayerHUD] AutoDigButton is missing from PlayerHUD.uxml.");
             _autoDigButton.clicked += ToggleAutoDig;
@@ -655,8 +575,8 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_hpBarFill != null)
             {
-                _hpBarFill!.style.width = new Length(pct * 100, LengthUnit.Percent);
-                _hpBarFill!.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
+                _hpBarFill.style.width = new Length(pct * 100, LengthUnit.Percent);
+                _hpBarFill.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
             }
 
             if (_moneyLabel != null)
@@ -681,203 +601,12 @@ namespace Fodinae.UI.HUD.Player.View
                 _basketPercentLabel.text = _isLoaded ? $"{stats.BasketMaxPercent}%" : "--%";
             }
 
-            for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
-            {
-                _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
-            }
-        }
-
-        private void RebuildCrystalRows()
-        {
-            if (_basketContainer == null)
-            {
-                return;
-            }
-
-            _basketContainer.Clear();
-            _basketCrystalLabels.Clear();
-
-            for (int i = 0; i < _crystalTextures.Count; i++)
-            {
-                var row = new VisualElement();
-                row.AddToClassList("hud-crystal-row");
-
-                var dot = new Image();
-                dot.AddToClassList("hud-crystal-dot");
-                if (_crystalTextures[i] != null)
-                {
-                    dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
-                }
-
-                row.Add(dot);
-
-                var label = new Label("0/0");
-                label.AddToClassList("hud-crystal-label");
-                row.Add(label);
-
-                _basketCrystalLabels.Add(label);
-                _basketContainer.Add(row);
-            }
-        }
-
-        private static string FormatCompact(long val)
-        {
-            if (val >= 1_000_000)
-            {
-                return $"{val / 1_000_000f:F1}M";
-            }
-
-            if (val >= 10_000)
-            {
-                return $"{val / 1_000}K";
-            }
-
-            return val.ToString("N0");
+            _basketView.Refresh(stats);
         }
 
         private void OnSkillProgress(SkillType skill, long current, long max)
         {
-            if (!_skillIcons.TryGetValue(skill, out var icon))
-            {
-                var created = CreateSkillIcon(skill);
-                icon.arrow = created.arrow;
-                icon.barFill = created.barFill;
-            }
-
-            float progress = max > 0 ? (float)current / max : 0f;
-
-            icon.barFill.style.backgroundColor = Color.Lerp(Color.green, Color.red, Mathf.Clamp01(progress));
-
-            icon.arrow.text = progress >= 1f ? "up" : string.Empty;
-
-            if (progress >= 1f)
-            {
-                StopBarPulse(skill);
-                StartBounce(skill, icon.arrow);
-            }
-            else
-            {
-                StopBounce(skill, icon.arrow);
-                StartBarPulse(skill, icon.barFill, progress);
-            }
-        }
-
-        private void StartBounce(SkillType skill, Label arrow)
-        {
-            StopBounce(skill, arrow);
-            arrow.style.translate = new Translate(0, 0);
-        }
-
-        private void StopBounce(SkillType skill, Label arrow)
-        {
-            if (_bounceSchedules.TryGetValue(skill, out var existing))
-            {
-                existing.Pause();
-                _bounceSchedules.Remove(skill);
-            }
-
-            arrow.style.translate = new Translate(0, 0);
-        }
-
-        // Full height of .hud-skill-bar-container in HUD.uss. The fill is sized
-        // to this once and then scaled, so the animation never touches layout.
-        private const float SkillBarHeightPixels = 24f;
-
-        /// <summary>
-        /// Applies skill progress without installing a permanent UI scheduler.
-        /// </summary>
-        /// <remarks>
-        /// A scheduler per skill used to mutate inline transforms every 33 ms
-        /// for the entire session. Even though transforms avoid Yoga layout,
-        /// every mutation still invalidates UI Toolkit painting. Progress only
-        /// changes when a new packet arrives, so its visual state does too.
-        /// </remarks>
-        private void StartBarPulse(SkillType skill, VisualElement barFill, float progress)
-        {
-            StopBarPulse(skill);
-
-            float normalizedProgress = Mathf.Clamp01(progress);
-
-            barFill.style.height = new Length(SkillBarHeightPixels, LengthUnit.Pixel);
-            barFill.style.transformOrigin =
-                new TransformOrigin(Length.Percent(50f), Length.Percent(100f));
-            barFill.style.scale = new Scale(new Vector2(1f, normalizedProgress));
-        }
-
-        private void StopBarPulse(SkillType skill)
-        {
-            if (_pulseSchedules.TryGetValue(skill, out var existing))
-            {
-                existing.Pause();
-                _pulseSchedules.Remove(skill);
-            }
-
-            // Leaves the bar full rather than frozen mid-pulse. Both callers
-            // want that: the skill reached maximum (StopBounce path), or
-            // StartBarPulse is about to set its own scale immediately after.
-            if (_skillIcons.TryGetValue(skill, out var icon) && icon.barFill != null)
-            {
-                icon.barFill.style.scale = new Scale(Vector2.one);
-            }
-        }
-
-        private void EnsureSkillRow()
-        {
-            if (_currentSkillRow != null && _skillCountInRow < SKILL_GRID_COLS)
-            {
-                return;
-            }
-
-            _currentSkillRow = new VisualElement();
-            _currentSkillRow!.AddToClassList("hud-skill-row");
-            _skillContainer!.Add(_currentSkillRow!);
-            _skillCountInRow = 0;
-        }
-
-        private (Label arrow, VisualElement barFill) CreateSkillIcon(SkillType skill)
-        {
-            EnsureSkillRow();
-
-            var cell = new VisualElement();
-            cell.AddToClassList("hud-skill-icon");
-
-            var iconColumn = new VisualElement();
-            iconColumn.AddToClassList("hud-skill-icon-column");
-
-            var arrow = new Label("up");
-            arrow.AddToClassList("hud-skill-arrow");
-            iconColumn.Add(arrow);
-
-            var iconImage = new Image();
-            iconImage.AddToClassList("hud-skill-icon-image");
-
-            var tex = Resources.Load<Texture2D>($"Skills/{skill}");
-            if (tex != null)
-            {
-                RuntimeTextureFactory.ApplySampling(
-                    tex,
-                    FilterMode.Point,
-                    TextureWrapMode.Clamp);
-                iconImage.image = tex;
-            }
-
-            iconColumn.Add(iconImage);
-            cell.Add(iconColumn);
-
-            var barContainer = new VisualElement();
-            barContainer.AddToClassList("hud-skill-bar-container");
-
-            var barFill = new VisualElement();
-            barFill.AddToClassList("hud-skill-bar-fill");
-            barFill.AddToClassList("hud-skill-bar-segment");
-            barContainer.Add(barFill);
-            cell.Add(barContainer);
-
-            _currentSkillRow!.Add(cell);
-            _skillCountInRow++;
-
-            _skillIcons[skill] = (arrow, barFill);
-            return (arrow, barFill);
+            _skillGrid.UpdateSkillProgress(skill, current, max);
         }
     }
 }
