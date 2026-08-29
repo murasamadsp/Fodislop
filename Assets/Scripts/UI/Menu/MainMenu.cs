@@ -228,6 +228,30 @@ namespace Fodinae.UI
             Debug.Log($"[MainMenu] UI BUILT successfully: children={_root.childCount}");
         }
 
+        /// <summary>
+        /// Ожидает, пока UI Toolkit выполнит Layout Pass и презентер подготовит текстуры планеты и фона.
+        /// Гарантирует, что экран переходит в PresentationReady без задержек в кадрах.
+        /// </summary>
+        public async UniTask WaitUntilReadyAsync(CancellationToken cancellationToken = default)
+        {
+            float timeout = Time.realtimeSinceStartup + 3f;
+            while (Time.realtimeSinceStartup < timeout && !cancellationToken.IsCancellationRequested)
+            {
+                if (_built && _sceneryPresenter.IsSceneryReady)
+                {
+                    return;
+                }
+
+                _sceneryPresenter.Tick(ref _spaceBgTexture);
+                if (_built && _sceneryPresenter.IsSceneryReady)
+                {
+                    return;
+                }
+
+                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+            }
+        }
+
         [SerializeField]
         private Texture2D? _spaceBgTexture;
 

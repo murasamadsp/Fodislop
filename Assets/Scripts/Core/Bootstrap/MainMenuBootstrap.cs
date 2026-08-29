@@ -44,6 +44,8 @@ public sealed class MainMenuBootstrap : IStartable
             // not pop in a second later when the background bank load lands.
             await _audioSystem.WaitUntilBanksReadyAsync(_scope.destroyCancellationToken);
             _ticket.MarkStartupReady();
+            // Гарантируем, что текстура планеты и звёздное небо готовы ДО показа меню пользователю.
+            await _controller.WaitUntilReadyAsync(_scope.destroyCancellationToken);
             _ticket.MarkPresentationReady();
         }
         catch (Exception exception)

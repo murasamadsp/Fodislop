@@ -72,6 +72,15 @@ namespace Fodinae.UI
         }
 
         /// <summary>
+        /// Возвращает true, когда текстура планеты и звёздное поле сформированы и подставлены в Image.
+        /// </summary>
+        public bool IsSceneryReady =>
+            _planetBodyImage != null &&
+            _planetBodyImage.image != null &&
+            _spaceBgImage != null &&
+            _spaceBgImage.image != null;
+
+        /// <summary>
         /// Пересобирает текстуры и продвигает анимацию. Вызывается каждый кадр:
         /// обе текстуры живут в RenderTexture, которые пересоздаются при смене
         /// разрешения окна, и старая ссылка после этого указывает на
