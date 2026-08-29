@@ -18,31 +18,9 @@ namespace Fodinae.World
         private static readonly ProfilerMarker SurfaceLateUpdateMarker =
             new("Fodinae.Surface.LateUpdate");
 
-        private const string SurfaceShaderName = ProjectRuntimeContracts.ShaderNames.WorldSurface;
         private const string TransitObjectName = "SurfaceTransit";
         private const string PerspectiveObjectName = "SurfacePerspective";
         private const string RedRockObjectName = "SurfaceRedrock";
-        private const string RedRockKeyword = "FODINAE_SURFACE_REDROCK";
-        private const string TransitKeyword = "FODINAE_SURFACE_TRANSIT";
-        private const string PerspectiveKeyword = "FODINAE_SURFACE_PERSPECTIVE";
-        private const float TransitHeight = 2f;
-        private const float PerspectiveHeight = 2f;
-        private const float TransitTileWidth = 32f;
-        private const float PerspectiveTileWidth = 5f;
-        private const float BoundaryOverscan = 2f;
-        private const float GeometryCacheQuantum = 32f;
-        private const float GeometryCachePadding = 16f;
-        private static readonly int[] QuadTriangles =
-        [
-            0, 1, 2, 3, 2, 1,
-        ];
-        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
-        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-        private static readonly int EmissionStrengthId = Shader.PropertyToID("_EmissionStrength");
-        private static readonly int OccupancyId = Shader.PropertyToID("_Occupancy");
-        private static readonly int BaseMapTileCountId =
-            Shader.PropertyToID("_BaseMapTileCount");
-        private static readonly int WorldSizeId = Shader.PropertyToID("_WorldSize");
 
         [Header("Local Assets")]
         [SerializeField]
@@ -69,13 +47,8 @@ namespace Fodinae.World
         [Inject]
         private IGameplayCamera _gameplayCamera = null!;
 
-        private readonly Vector3[] _boundaryVertices = new Vector3[12];
-        private readonly Vector2[] _boundaryUv = new Vector2[12];
-        private readonly Vector2[] _boundaryLightingData = new Vector2[12];
-        private readonly int[] _boundaryTriangles = new int[18];
-        private readonly Vector3[] _quadVertices = new Vector3[4];
-        private readonly Vector2[] _quadUv = new Vector2[4];
-        private readonly Vector2[] _quadLightingData = new Vector2[4];
+        private readonly SurfaceGeometryBuilder _geometry = new();
+        private readonly SurfaceMaterialManager _materialManager = new();
 
         private Camera? _mainCamera;
         private Mesh? _transitMesh;
@@ -94,13 +67,6 @@ namespace Fodinae.World
         private bool _hasCachedCoverage;
         private bool _initialized;
         private bool _registered;
-
-        private enum SurfaceKind
-        {
-            RedRock,
-            Transit,
-            Perspective,
-        }
 
         public ulong LightingGeometryRevision => _lightingGeometryRevision;
         public bool IsInitialized => _initialized;
@@ -125,17 +91,17 @@ namespace Fodinae.World
                 throw new InvalidOperationException(
                     "SurfaceRenderer redrock material is not initialized.");
 
-            ApplyMaterialConfig(
+            _materialManager.ApplyMaterialConfig(
                 transitMaterial,
                 config.TransitEmissionColor,
                 config.TransitEmissionStrength,
                 config.SurfaceOccupancy);
-            ApplyMaterialConfig(
+            _materialManager.ApplyMaterialConfig(
                 perspectiveMaterial,
                 config.PerspectiveEmissionColor,
                 config.PerspectiveEmissionStrength,
                 occupancy: 0f);
-            ApplyMaterialConfig(
+            _materialManager.ApplyMaterialConfig(
                 redRockMaterial,
                 Color.clear,
                 emissionStrength: 0f,
@@ -189,16 +155,16 @@ namespace Fodinae.World
                 context.WorldRect.y,
                 context.WorldRect.x + context.WorldRect.z,
                 context.WorldRect.y + context.WorldRect.w);
-            UpdateBoundaryMesh(
+            _geometry.UpdateBoundaryMesh(
                 _redRockLightingMesh,
                 lightingRect,
                 _mapManager.WorldWidth,
                 _mapManager.WorldHeight);
-            UpdateTransitMesh(
+            _geometry.UpdateTransitMesh(
                 _transitLightingMesh,
                 lightingRect,
                 _mapManager.WorldHeight);
-            UpdatePerspectiveMesh(
+            _geometry.UpdatePerspectiveMesh(
                 _perspectiveLightingMesh,
                 lightingRect,
                 _mapManager.WorldHeight);
@@ -264,11 +230,11 @@ namespace Fodinae.World
             }
 
             Camera mainCamera = _mainCamera;
-            Rect visibleRect = GetVisibleRect(mainCamera);
+            Rect visibleRect = SurfaceGeometryBuilder.GetVisibleRect(mainCamera);
             if (_lastWorldWidth == _mapManager.WorldWidth &&
                 _lastWorldHeight == _mapManager.WorldHeight &&
                 _hasCachedCoverage &&
-                Contains(_cachedCoverageRect, visibleRect))
+                SurfaceGeometryBuilder.Contains(_cachedCoverageRect, visibleRect))
             {
                 return;
             }
@@ -302,9 +268,6 @@ namespace Fodinae.World
             DestroyOwnedObject(_perspectiveMaterial);
             DestroyOwnedObject(_redRockMaterial);
 
-            // Runtime children belong to the parent GameObject and Unity restores them
-            // across domain reloads. Destroying them here during a reload can leave the
-            // restored SurfaceRenderer bound to objects pending destruction.
             if (!Application.isPlaying)
             {
                 DestroyOwnedChild(TransitObjectName);
@@ -320,8 +283,6 @@ namespace Fodinae.World
                 return true;
             }
 
-            // SceneSetup assigns these asynchronously via SetLocalAssets() once its texture
-            // load completes; a null here means "still loading", not a failure.
             if (_transitTexture == null || _perspectiveTexture == null || _redRockTexture == null)
             {
                 return false;
@@ -336,43 +297,35 @@ namespace Fodinae.World
                 return false;
             }
 
-            Shader surfaceShader = Shader.Find(SurfaceShaderName);
-            if (surfaceShader == null || !surfaceShader.isSupported)
-            {
-                throw new InvalidOperationException(
-                    $"Required surface shader '{SurfaceShaderName}' is missing or unsupported.");
-            }
-
-            _transitMaterial = CreateMaterial(
-                surfaceShader,
-                "World Surface Transit",
+            _transitMaterial = _materialManager.CreateSurfaceMaterial(
                 transitTexture,
                 clientConfig.TransitEmissionColor,
                 clientConfig.TransitEmissionStrength,
                 clientConfig.SurfaceOccupancy,
                 Vector2.one,
                 new Vector2(_mapManager.WorldWidth, _mapManager.WorldHeight),
-                SurfaceKind.Transit);
-            _perspectiveMaterial = CreateMaterial(
-                surfaceShader,
-                "World Surface Perspective",
+                SurfaceMaterialManager.SurfaceKind.Transit,
+                "World Surface Transit");
+
+            _perspectiveMaterial = _materialManager.CreateSurfaceMaterial(
                 perspectiveTexture,
                 clientConfig.PerspectiveEmissionColor,
                 clientConfig.PerspectiveEmissionStrength,
                 occupancy: 0f,
                 baseMapTileCount: Vector2.one,
                 worldSize: new Vector2(_mapManager.WorldWidth, _mapManager.WorldHeight),
-                kind: SurfaceKind.Perspective);
-            _redRockMaterial = CreateMaterial(
-                surfaceShader,
-                "World Surface Redrock",
+                kind: SurfaceMaterialManager.SurfaceKind.Perspective,
+                materialName: "World Surface Perspective");
+
+            _redRockMaterial = _materialManager.CreateSurfaceMaterial(
                 redRockTexture,
                 Color.clear,
                 emissionStrength: 0f,
                 occupancy: 1f,
-                baseMapTileCount: GetTerrainSheetTileCount(redRockTexture),
+                baseMapTileCount: _materialManager.GetTerrainSheetTileCount(redRockTexture),
                 worldSize: new Vector2(_mapManager.WorldWidth, _mapManager.WorldHeight),
-                kind: SurfaceKind.RedRock);
+                kind: SurfaceMaterialManager.SurfaceKind.RedRock,
+                materialName: "World Surface Redrock");
 
             _transitMesh = CreateMesh("World Surface Transit Mesh");
             _perspectiveMesh = CreateMesh("World Surface Perspective Mesh");
@@ -414,15 +367,20 @@ namespace Fodinae.World
                     $"SurfaceRenderer received invalid world dimensions {worldWidth}x{worldHeight}.");
             }
 
-            Rect coverageRect = BuildCoverageRect(visibleRect);
+            Rect coverageRect = SurfaceGeometryBuilder.BuildCoverageRect(visibleRect);
 
-            UpdateBoundaryMesh(_redRockMesh!, coverageRect, worldWidth, worldHeight);
-            UpdateTransitMesh(_transitMesh!, coverageRect, worldHeight);
-            UpdatePerspectiveMesh(_perspectiveMesh!, coverageRect, worldHeight);
+            _geometry.UpdateBoundaryMesh(_redRockMesh!, coverageRect, worldWidth, worldHeight);
+            _geometry.UpdateTransitMesh(_transitMesh!, coverageRect, worldHeight);
+            _geometry.UpdatePerspectiveMesh(_perspectiveMesh!, coverageRect, worldHeight);
 
             if (_lastWorldWidth != worldWidth || _lastWorldHeight != worldHeight)
             {
-                SetMaterialWorldSize(worldWidth, worldHeight);
+                _materialManager.SetMaterialWorldSize(
+                    _transitMaterial,
+                    _perspectiveMaterial,
+                    _redRockMaterial,
+                    worldWidth,
+                    worldHeight);
                 _lightingGeometryRevision++;
             }
 
@@ -430,194 +388,6 @@ namespace Fodinae.World
             _lastWorldHeight = worldHeight;
             _cachedCoverageRect = coverageRect;
             _hasCachedCoverage = true;
-        }
-
-        private static Rect GetVisibleRect(Camera camera)
-        {
-            float halfHeight = camera.orthographicSize + BoundaryOverscan;
-            float halfWidth = (camera.orthographicSize * camera.aspect) +
-                BoundaryOverscan;
-            Vector3 position = camera.transform.position;
-            return Rect.MinMaxRect(
-                position.x - halfWidth,
-                position.y - halfHeight,
-                position.x + halfWidth,
-                position.y + halfHeight);
-        }
-
-        private static Rect BuildCoverageRect(Rect visibleRect)
-        {
-            float minX = Mathf.Floor(
-                (visibleRect.xMin - GeometryCachePadding) / GeometryCacheQuantum) *
-                GeometryCacheQuantum;
-            float minY = Mathf.Floor(
-                (visibleRect.yMin - GeometryCachePadding) / GeometryCacheQuantum) *
-                GeometryCacheQuantum;
-            float maxX = Mathf.Ceil(
-                (visibleRect.xMax + GeometryCachePadding) / GeometryCacheQuantum) *
-                GeometryCacheQuantum;
-            float maxY = Mathf.Ceil(
-                (visibleRect.yMax + GeometryCachePadding) / GeometryCacheQuantum) *
-                GeometryCacheQuantum;
-            return Rect.MinMaxRect(minX, minY, maxX, maxY);
-        }
-
-        private static bool Contains(Rect outer, Rect inner)
-        {
-            return inner.xMin >= outer.xMin && inner.xMax <= outer.xMax &&
-                inner.yMin >= outer.yMin && inner.yMax <= outer.yMax;
-        }
-
-        private void UpdateBoundaryMesh(
-            Mesh mesh,
-            Rect coverageRect,
-            int worldWidth,
-            int worldHeight)
-        {
-            int vertexCount = 0;
-            int indexCount = 0;
-            AppendBoundaryQuad(
-                coverageRect.xMin,
-                coverageRect.yMin,
-                Mathf.Min(coverageRect.xMax, 0f),
-                Mathf.Min(coverageRect.yMax, worldHeight),
-                ref vertexCount,
-                ref indexCount);
-            AppendBoundaryQuad(
-                Mathf.Max(coverageRect.xMin, worldWidth),
-                coverageRect.yMin,
-                coverageRect.xMax,
-                Mathf.Min(coverageRect.yMax, worldHeight),
-                ref vertexCount,
-                ref indexCount);
-            AppendBoundaryQuad(
-                Mathf.Max(coverageRect.xMin, 0f),
-                coverageRect.yMin,
-                Mathf.Min(coverageRect.xMax, worldWidth),
-                Mathf.Min(coverageRect.yMax, 0f),
-                ref vertexCount,
-                ref indexCount);
-
-            mesh.Clear(keepVertexLayout: false);
-            if (vertexCount == 0)
-            {
-                return;
-            }
-
-            mesh.SetVertices(_boundaryVertices, 0, vertexCount);
-            mesh.SetUVs(channel: 0, _boundaryUv, 0, vertexCount);
-            mesh.SetUVs(channel: 1, _boundaryLightingData, 0, vertexCount);
-            mesh.SetTriangles(
-                _boundaryTriangles,
-                trianglesStart: 0,
-                trianglesLength: indexCount,
-                submesh: 0,
-                calculateBounds: true);
-        }
-
-        private void AppendBoundaryQuad(
-            float left,
-            float bottom,
-            float right,
-            float top,
-            ref int vertexCount,
-            ref int indexCount)
-        {
-            if (right <= left || top <= bottom)
-            {
-                return;
-            }
-
-            int firstVertex = vertexCount;
-            WriteBoundaryVertex(left, bottom, ref vertexCount);
-            WriteBoundaryVertex(left, top, ref vertexCount);
-            WriteBoundaryVertex(right, bottom, ref vertexCount);
-            WriteBoundaryVertex(right, top, ref vertexCount);
-            _boundaryTriangles[indexCount++] = firstVertex;
-            _boundaryTriangles[indexCount++] = firstVertex + 1;
-            _boundaryTriangles[indexCount++] = firstVertex + 2;
-            _boundaryTriangles[indexCount++] = firstVertex + 3;
-            _boundaryTriangles[indexCount++] = firstVertex + 2;
-            _boundaryTriangles[indexCount++] = firstVertex + 1;
-        }
-
-        private void WriteBoundaryVertex(float x, float y, ref int vertexCount)
-        {
-            _boundaryVertices[vertexCount] = new Vector3(x, y, 0f);
-            _boundaryUv[vertexCount] = new Vector2(x, y);
-            _boundaryLightingData[vertexCount] = Vector2.zero;
-            vertexCount++;
-        }
-
-        private void UpdateTransitMesh(Mesh mesh, Rect coverageRect, int worldHeight)
-        {
-            UpdateBandMesh(
-                mesh,
-                coverageRect,
-                bottom: worldHeight,
-                top: worldHeight + TransitHeight,
-                tileWidth: TransitTileWidth,
-                uvProjectionHeight: TransitHeight,
-                emissionMask: 1f);
-        }
-
-        private void UpdatePerspectiveMesh(Mesh mesh, Rect coverageRect, int worldHeight)
-        {
-            float bottom = worldHeight + TransitHeight;
-            UpdateBandMesh(
-                mesh,
-                coverageRect,
-                bottom,
-                top: bottom + PerspectiveHeight,
-                tileWidth: PerspectiveTileWidth,
-                uvProjectionHeight: PerspectiveHeight,
-                emissionMask: 1f);
-        }
-
-        private void UpdateBandMesh(
-            Mesh mesh,
-            Rect coverageRect,
-            float bottom,
-            float top,
-            float tileWidth,
-            float uvProjectionHeight,
-            float emissionMask)
-        {
-            float clippedBottom = Mathf.Max(coverageRect.yMin, bottom);
-            float clippedTop = Mathf.Min(coverageRect.yMax, top);
-            if (coverageRect.xMax <= coverageRect.xMin ||
-                clippedTop <= clippedBottom || tileWidth <= 0f ||
-                uvProjectionHeight <= 0f)
-            {
-                mesh.Clear(keepVertexLayout: false);
-                return;
-            }
-
-            float left = coverageRect.xMin;
-            float right = coverageRect.xMax;
-            _quadVertices[0] = new Vector3(left, clippedBottom, 0f);
-            _quadVertices[1] = new Vector3(left, clippedTop, 0f);
-            _quadVertices[2] = new Vector3(right, clippedBottom, 0f);
-            _quadVertices[3] = new Vector3(right, clippedTop, 0f);
-            float uLeft = left / tileWidth;
-            float uRight = right / tileWidth;
-            float vBottom = (clippedBottom - bottom) / uvProjectionHeight;
-            float vTop = (clippedTop - bottom) / uvProjectionHeight;
-            _quadUv[0] = new Vector2(uLeft, vBottom);
-            _quadUv[1] = new Vector2(uLeft, vTop);
-            _quadUv[2] = new Vector2(uRight, vBottom);
-            _quadUv[3] = new Vector2(uRight, vTop);
-            Vector2 lightingData = new(emissionMask, 0f);
-            _quadLightingData[0] = lightingData;
-            _quadLightingData[1] = lightingData;
-            _quadLightingData[2] = lightingData;
-            _quadLightingData[3] = lightingData;
-
-            mesh.Clear(keepVertexLayout: false);
-            mesh.SetVertices(_quadVertices);
-            mesh.SetUVs(channel: 0, _quadUv);
-            mesh.SetUVs(channel: 1, _quadLightingData);
-            mesh.SetTriangles(QuadTriangles, submesh: 0, calculateBounds: true);
         }
 
         private void BindBandObject(
@@ -657,9 +427,6 @@ namespace Fodinae.World
             T? component;
             bool found = gameObject.TryGetComponent(out component);
 
-            // TryGetComponent performs the native lookup again. This matters after a
-            // domain reload, where a restored child can retain a stale managed reference
-            // even though its native component was removed during teardown.
             if (!found || component == null)
             {
                 component = gameObject.AddComponent<T>();
@@ -675,76 +442,6 @@ namespace Fodinae.World
             return component;
         }
 
-        private static Material CreateMaterial(
-            Shader shader,
-            string materialName,
-            Texture2D texture,
-            Color emissionColor,
-            float emissionStrength,
-            float occupancy,
-            Vector2 baseMapTileCount,
-            Vector2 worldSize,
-            SurfaceKind kind)
-        {
-            var material = new Material(shader)
-            {
-                name = materialName,
-                hideFlags = HideFlags.DontSave,
-            };
-            RequireShaderProperties(material);
-            material.SetTexture(BaseMapId, texture);
-            material.SetColor(EmissionColorId, emissionColor);
-            material.SetFloat(EmissionStrengthId, emissionStrength);
-            material.SetFloat(OccupancyId, occupancy);
-            material.SetVector(
-                BaseMapTileCountId,
-                new Vector4(baseMapTileCount.x, baseMapTileCount.y, 0f, 0f));
-            material.SetVector(
-                WorldSizeId,
-                new Vector4(worldSize.x, worldSize.y, 0f, 0f));
-            material.EnableKeyword(kind switch
-            {
-                SurfaceKind.RedRock => RedRockKeyword,
-                SurfaceKind.Transit => TransitKeyword,
-                SurfaceKind.Perspective => PerspectiveKeyword,
-                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown surface kind."),
-            });
-            return material;
-        }
-
-        private static void RequireShaderProperties(Material material)
-        {
-            string[] requiredProperties =
-            [
-                "_BaseMap",
-                "_EmissionColor",
-                "_EmissionStrength",
-                "_Occupancy",
-                "_BaseMapTileCount",
-                "_WorldSize",
-            ];
-            foreach (string propertyName in requiredProperties)
-            {
-                if (!material.HasProperty(propertyName))
-                {
-                    throw new InvalidOperationException(
-                        $"World surface shader '{material.shader.name}' is missing required property " +
-                        $"'{propertyName}'. Client graphics settings cannot be applied.");
-                }
-            }
-        }
-
-        private static void ApplyMaterialConfig(
-            Material material,
-            Color emissionColor,
-            float emissionStrength,
-            float occupancy)
-        {
-            material.SetColor(EmissionColorId, emissionColor);
-            material.SetFloat(EmissionStrengthId, emissionStrength);
-            material.SetFloat(OccupancyId, occupancy);
-        }
-
         private static Mesh CreateMesh(string meshName)
         {
             var mesh = new Mesh
@@ -754,38 +451,6 @@ namespace Fodinae.World
             };
             mesh.MarkDynamic();
             return mesh;
-        }
-
-        private static Vector2 GetTerrainSheetTileCount(Texture2D texture)
-        {
-            const int tileSize = RenderingConstants.CELL_SIZE;
-            if (texture.width <= 0 || texture.height <= 0 ||
-                texture.width % tileSize != 0 || texture.height % tileSize != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Surface terrain sheet '{texture.name}' dimensions " +
-                    $"{texture.width}x{texture.height} must be positive multiples " +
-                    $"of the terrain tile size {tileSize}.");
-            }
-
-            return new Vector2(texture.width / tileSize, texture.height / tileSize);
-        }
-
-        private void SetMaterialWorldSize(int worldWidth, int worldHeight)
-        {
-            Material transitMaterial = _transitMaterial ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer transit material is not initialized.");
-            Material perspectiveMaterial = _perspectiveMaterial ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer perspective material is not initialized.");
-            Material redRockMaterial = _redRockMaterial ??
-                throw new InvalidOperationException(
-                    "SurfaceRenderer redrock material is not initialized.");
-            Vector4 worldSize = new(worldWidth, worldHeight, 0f, 0f);
-            transitMaterial.SetVector(WorldSizeId, worldSize);
-            perspectiveMaterial.SetVector(WorldSizeId, worldSize);
-            redRockMaterial.SetVector(WorldSizeId, worldSize);
         }
 
         private static void DrawLightingMesh(
