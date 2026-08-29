@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
+using Fodinae.Rendering;
 using UnityEngine;
 using UnityEngine.UIElements;
 

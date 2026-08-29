@@ -1302,7 +1302,5 @@ namespace Fodinae.UI
                 refresh();
             }
         }
-
-        }
     }
 }

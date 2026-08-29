@@ -785,42 +785,6 @@ namespace Fodinae.World.Terrain
                 $"({globalTexture.width}x{globalTexture.height}) to {_materials.Length} terrain material(s).");
         }
 
-        private static int SnapRegionCoordinate(int coordinate, int anchor)
-        {
-            return Mathf.FloorToInt(coordinate / (float)anchor) * anchor;
-        }
-
-        private static int SelectCachedDimension(
-            int requested,
-            int current,
-            bool initialized,
-            bool viewportSizeSettled)
-        {
-            int allocationSteps = Mathf.CeilToInt(requested / (float)DimensionAllocationQuantum);
-            int allocated = Mathf.Min(
-                MaximumTerrainDimension,
-                allocationSteps * DimensionAllocationQuantum);
-            if (!initialized)
-            {
-                return allocated;
-            }
-
-            // Growing must happen immediately: keeping the smaller mesh while
-            // zooming out leaves the newly-visible edges of the screen
-            // unrendered until the debounce below expires. Only shrinking is
-            // debounced — zoom changes continuously, and shrinking immediately
-            // at each 32-cell boundary would turn one zoom gesture into
-            // several full CPU rebuilds for no visible benefit.
-            if (requested > current)
-            {
-                return allocated;
-            }
-
-            return viewportSizeSettled && current - requested >= DimensionAllocationQuantum
-                ? allocated
-                : current;
-        }
-
         public void RenderLightingMaterialFields(
             CommandBuffer commandBuffer,
             RenderTexture materialField,

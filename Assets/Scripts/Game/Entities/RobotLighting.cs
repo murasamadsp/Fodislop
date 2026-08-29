@@ -2,6 +2,7 @@
 
 using System.Threading;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.World.Lighting;
 using UnityEngine;

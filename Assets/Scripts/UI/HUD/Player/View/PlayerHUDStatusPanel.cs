@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using Fodinae.Core.Models;
 using Fodinae.UI.HUD.Player.Model;
 using UnityEngine;
 using UnityEngine.UIElements;
