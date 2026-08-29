@@ -4,13 +4,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Fodinae;
-using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using Fodinae.World;
 using Fodinae.World.Terrain;
+using Fodinae.World.Textures;
 using MinesServer.Data;
 using UnityEngine;
 using VContainer;
@@ -44,41 +41,9 @@ namespace Fodinae.World
         private ConcurrentDictionary<CellType, TextureRequest> _pendingRequests = null!;
         private List<TextureAtlas> _atlases = null!;
 
-        // Tracked separately from _pendingRequests: that dictionary only gets populated
-        // after GetCellTextureCoordinate's first `await UniTask.SwitchToMainThread()`
-        // continuation resumes, so a request fired via RequestTexture this frame can read
-        // as "not pending" for part of a frame even though it has genuinely started. This
-        // set is written synchronously at the RequestTexture call site instead, so gameplay
-        // code (e.g. the world-loaded gate) can reliably tell "still loading" from "done".
         private readonly ConcurrentDictionary<CellType, byte> _inFlightCellTypeRequests = new();
         public int PendingCellTextureRequests => _inFlightCellTypeRequests.Count;
 
-        /// <summary>
-        /// Earliest time each cell type whose texture load failed may be
-        /// requested again, in <see cref="RetryClock"/> seconds.
-        /// </summary>
-        /// <remarks>
-        /// Without this, a cell type whose texture cannot be produced at all -
-        /// the server does not have it, or the file is corrupt - is retried
-        /// forever. Nothing remembers the failure: the request is removed from
-        /// _pendingRequests in a finally, _inFlightCellTypeRequests is cleared
-        /// in another, and TerrainCellCache re-arms the whole thing because it
-        /// calls RequestTexture for any metadata whose IsTextureReady is false
-        /// and drops that metadata on every ClearCaches - which fires on every
-        /// Cells/ texture that arrives.
-        ///
-        /// So each arriving texture restarted a request for every missing one,
-        /// and each of those failed the same way and threw. The throw is the
-        /// expensive half: it escapes TrackedRequestTextureAsync, which is
-        /// fire-and-forget, so UniTask reports it as an unobserved exception
-        /// and Unity formats a managed stack trace for each one. Exception
-        /// construction, stack capture and log formatting are all managed
-        /// allocation, which is what the profile was full of.
-        ///
-        /// A cooldown rather than a permanent blacklist: a failure early in the
-        /// session usually means "not streamed yet", and that has to be allowed
-        /// to recover on its own.
-        /// </remarks>
         private readonly ConcurrentDictionary<CellType, double> _cellTextureRetryTimes = new();
         private static readonly System.Diagnostics.Stopwatch RetryClock =
             System.Diagnostics.Stopwatch.StartNew();
@@ -90,9 +55,6 @@ namespace Fodinae.World
 
         protected void Awake()
         {
-            // The atlas is created lazily on the first world texture request.
-            // Creating a 4096² RGBA texture during scene startup caused a large
-            // CPU/GPU allocation before the world was even initialized.
             Debug.Log("[WorldTextureManager] Awake — deferred atlas initialization");
         }
 
@@ -168,24 +130,7 @@ namespace Fodinae.World
                 }
             }
 
-            _flowMapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
-                12,
-                10,
-                "ShimmerFlowMap",
-                RuntimeTextureColorSpace.Linear,
-                FilterMode.Bilinear,
-                TextureWrapMode.Repeat);
-
-            var random = new System.Random(42);
-            var pixels = new Color[12 * 10];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                float h = (float)random.NextDouble();
-                pixels[i] = Color.HSVToRGB(h, 1f, 1f);
-            }
-
-            _flowMapTexture.SetPixels(pixels);
-            _flowMapTexture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            _flowMapTexture = WorldTextureGenerator.CreateFlowMap();
         }
 
         public event Action<string, Texture2D>? OnTextureLoaded;
@@ -222,20 +167,12 @@ namespace Fodinae.World
             }
             catch (Exception exception)
             {
-                // Caught here rather than left to escape. This method is
-                // fire-and-forget, so an escaping exception becomes an
-                // unobserved-task report with a formatted managed stack trace
-                // every time the request is retried - and the retry used to be
-                // every time a texture arrived.
                 bool firstFailure = !_cellTextureRetryTimes.ContainsKey(cellType);
                 _cellTextureRetryTimes[cellType] =
                     RetryClock.Elapsed.TotalSeconds + FailedCellTextureRetrySeconds;
 
                 if (firstFailure)
                 {
-                    // Logged once per cell type, not once per attempt: a cell
-                    // type with no texture on the server would otherwise fill
-                    // the console for the whole session.
                     Debug.LogWarning(
                         $"[WorldTextureManager] Texture for cell type {cellType} could not be " +
                         $"loaded: {exception.Message}. Retrying at most every " +
@@ -428,7 +365,6 @@ namespace Fodinae.World
                 filename = "Cells/32";
             }
 
-
             if (_textureCache.TryGetTexture(cellType, out CellTextureInfo cachedTextureInfo))
             {
                 Texture2D cachedTexture = cachedTextureInfo.BaseTexture;
@@ -478,47 +414,8 @@ namespace Fodinae.World
             Debug.LogWarning(
                 $"[AssetDiag] TEXFAIL {filename} — using deterministic random diagnostic texture");
             await UniTask.SwitchToMainThread();
-            texture = CreateMissingTexture(cellType);
+            texture = WorldTextureGenerator.CreateMissingCellTexture(cellType, _cellTextureSize);
             AddTextureToAtlas(cellType, texture, ownsTexture: true);
-        }
-
-        private Texture2D CreateMissingTexture(CellType cellType)
-        {
-            Texture2D texture = RuntimeTextureFactory.CreateRgba32NoMip(
-                _cellTextureSize,
-                _cellTextureSize,
-                $"MissingCell_{(int)cellType}",
-                RuntimeTextureColorSpace.Srgb,
-                FilterMode.Point,
-                TextureWrapMode.Clamp);
-
-            int seed = unchecked((int)cellType * 397) ^ 0x5F3759DF;
-            float baseHue = (float)((seed & 0xFFFF) / 65536.0);
-            Color primaryColor = Color.HSVToRGB(baseHue, 0.85f, 0.90f);
-            Color secondaryColor = Color.HSVToRGB((baseHue + 0.5f) % 1.0f, 0.70f, 0.35f);
-            Color borderColor = Color.HSVToRGB(baseHue, 0.95f, 0.20f);
-
-            int size = _cellTextureSize;
-            Color[] pixels = new Color[size * size];
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    bool isBorder = x == 0 || y == 0 || x == size - 1 || y == size - 1;
-                    bool isCross = x == y || x == (size - 1 - y);
-                    bool isChecker = (((x / 4) + (y / 4)) & 1) == 0;
-
-                    Color pixelColor = isBorder
-                        ? borderColor
-                        : isCross || isChecker ? primaryColor : secondaryColor;
-
-                    pixels[(y * size) + x] = pixelColor;
-                }
-            }
-
-            texture.SetPixels(pixels);
-            texture.Apply(false, true);
-            return texture;
         }
 
         private void AddTextureToAtlas(
@@ -617,8 +514,6 @@ namespace Fodinae.World
                     $"multiples of {_cellTextureSize} pixels.");
             }
 
-            // FrameOffset=0 explicitly means that the server animation operates
-            // on UV/color data and the texture is not a vertically stacked frame atlas.
             if (frameHeight == 0)
             {
                 return;
@@ -693,9 +588,6 @@ namespace Fodinae.World
             _textureCache.Clear();
             foreach (var atlas in _atlases)
             {
-                // Clear() used to drop the atlas list without disposing the
-                // GPU textures. Repeated world reloads therefore leaked every
-                // previous atlas until Unity's native cleanup caught up.
                 atlas.Dispose();
             }
 
