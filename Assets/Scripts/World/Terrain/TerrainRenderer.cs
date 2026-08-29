@@ -19,11 +19,6 @@ namespace Fodinae.World.Terrain
     [DefaultExecutionOrder(100)]
     public class TerrainRenderer : MonoBehaviour, ICachedCellDataProvider
     {
-        private const int TerrainRegionAnchorCells = 8;
-        private const int DimensionAllocationQuantum = 32;
-        private const int MaximumTerrainDimension = 384;
-        private const float DimensionGrowDelay = 0.4f;
-
         [Header("Configuration")]
         [SerializeField]
         private float _cellSize = ProjectRuntimeContracts.World.CellSize;
@@ -607,6 +602,8 @@ namespace Fodinae.World.Terrain
             return lightingEngine;
         }
 
+        private readonly TerrainViewportCalculator _viewportCalculator = new();
+
         private void UpdateViewportDimensions(
             LightingEngine lightingEngine,
             out int requestedWidth,
@@ -614,46 +611,22 @@ namespace Fodinae.World.Terrain
             out int effectiveViewportPadding,
             out bool dimensionsChanged)
         {
-            Camera camera = _mainCamera!;
-            effectiveViewportPadding = _viewportPadding;
-            int requiredLightingPadding = lightingEngine.RequiredTerrainPadding +
-                TerrainRegionAnchorCells + lightingEngine.StableRegionPaddingCells;
-            effectiveViewportPadding = Mathf.Max(
-                effectiveViewportPadding,
-                requiredLightingPadding);
-
-            requestedWidth = Mathf.Clamp(
-                Mathf.CeilToInt((camera.orthographicSize * 2 * camera.aspect) / _cellSize) +
-                    (effectiveViewportPadding * 2),
-                2,
-                MaximumTerrainDimension);
-            requestedHeight = Mathf.Clamp(
-                Mathf.CeilToInt((camera.orthographicSize * 2) / _cellSize) +
-                    (effectiveViewportPadding * 2),
-                2,
-                MaximumTerrainDimension);
-            if (requestedWidth != _lastRequestedWidth || requestedHeight != _lastRequestedHeight)
-            {
-                _lastRequestedWidth = requestedWidth;
-                _lastRequestedHeight = requestedHeight;
-                _lastViewportSizeChangeTime = Time.unscaledTime;
-            }
-
-            bool viewportSizeSettled =
-                !Application.isPlaying ||
-                Time.unscaledTime - _lastViewportSizeChangeTime >= DimensionGrowDelay;
-            int targetWidth = SelectCachedDimension(
-                requestedWidth,
+            _viewportCalculator.CalculateDimensions(
+                _mainCamera!,
+                _cellSize,
+                _viewportPadding,
+                lightingEngine.RequiredTerrainPadding,
+                lightingEngine.StableRegionPaddingCells,
                 _meshWidth,
-                _isInitialized,
-                viewportSizeSettled);
-            int targetHeight = SelectCachedDimension(
-                requestedHeight,
                 _meshHeight,
                 _isInitialized,
-                viewportSizeSettled);
+                out int targetWidth,
+                out int targetHeight,
+                out effectiveViewportPadding,
+                out requestedWidth,
+                out requestedHeight,
+                out dimensionsChanged);
 
-            dimensionsChanged = targetWidth != _meshWidth || targetHeight != _meshHeight;
             if (dimensionsChanged || !_isInitialized)
             {
                 _meshWidth = targetWidth;
@@ -680,56 +653,20 @@ namespace Fodinae.World.Terrain
             out int viewportWidth,
             out int viewportHeight)
         {
-            Camera camera = _mainCamera!;
-            Vector3 camPos = camera.transform.position;
-            Vector2Int desiredGridPos = new Vector2Int(
-                Mathf.FloorToInt(camPos.x / _cellSize) - (_meshWidth / 2),
-                Mathf.FloorToInt(camPos.y / _cellSize) - (_meshHeight / 2));
-            int regionAnchor = Mathf.Clamp(
-                TerrainRegionAnchorCells,
-                1,
-                Mathf.Max(1, effectiveViewportPadding));
-
-            // Keep the current terrain region while the camera remains inside
-            // it. The old implementation snapped the desired origin every
-            // eight cells, which rebuilt the whole mesh/cache/SDF on a fixed
-            // cadence even though the existing mesh still covered the camera.
-            // Recenter only when the actual visible viewport reaches an edge.
-            viewportWidth = Mathf.Max(2, requestedWidth - (effectiveViewportPadding * 2));
-            viewportHeight = Mathf.Max(2, requestedHeight - (effectiveViewportPadding * 2));
-            viewportMinX = Mathf.FloorToInt(camPos.x / _cellSize) - (viewportWidth / 2);
-            viewportMinY = Mathf.FloorToInt(camPos.y / _cellSize) - (viewportHeight / 2);
-            const int viewportMargin = 4;
-            bool regionOutsideViewport =
-                _lastGridPos.x == int.MinValue ||
-                viewportMinX - viewportMargin < _lastGridPos.x ||
-                viewportMinY - viewportMargin < _lastGridPos.y ||
-                viewportMinX + viewportWidth + viewportMargin > _lastGridPos.x + _meshWidth ||
-                viewportMinY + viewportHeight + viewportMargin > _lastGridPos.y + _meshHeight;
-
-            currentGridPos = regionOutsideViewport || dimensionsChanged
-                ? new Vector2Int(
-                    SnapRegionCoordinate(desiredGridPos.x, regionAnchor),
-                    SnapRegionCoordinate(desiredGridPos.y, regionAnchor))
-                : _lastGridPos;
-
-            if (currentGridPos.x == int.MinValue || currentGridPos.y == int.MinValue)
-            {
-                // Mesh rebuilds run every frame while the camera moves; a
-                // persistent NaN camera must not repeat this warning per frame.
-                if (!_invalidGridPositionLogged)
-                {
-                    _invalidGridPositionLogged = true;
-                    Debug.LogWarning(
-                        $"[TerrainRenderer] Invalid terrain grid position {currentGridPos}. " +
-                        $"Camera position={camPos}; desired grid={desiredGridPos}; " +
-                        $"last grid={_lastGridPos}; dimensions={_meshWidth}x{_meshHeight}.");
-                }
-
-                currentGridPos = new Vector2Int(
-                    SnapRegionCoordinate(desiredGridPos.x, regionAnchor),
-                    SnapRegionCoordinate(desiredGridPos.y, regionAnchor));
-            }
+            currentGridPos = _viewportCalculator.ResolveGridPosition(
+                _mainCamera!,
+                _cellSize,
+                _meshWidth,
+                _meshHeight,
+                requestedWidth,
+                requestedHeight,
+                effectiveViewportPadding,
+                dimensionsChanged,
+                _lastGridPos,
+                out viewportMinX,
+                out viewportMinY,
+                out viewportWidth,
+                out viewportHeight);
         }
 
         private void CoalesceOversizedDirtyRects()
