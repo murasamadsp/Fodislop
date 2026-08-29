@@ -8,6 +8,8 @@
   -->
     <PropertyGroup>
         <LangVersion>12.0</LangVersion>
+        <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">$(MSBuildThisFileDirectory)Temp/obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+        <IntermediateOutputPath>$(BaseIntermediateOutputPath)</IntermediateOutputPath>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Assembly-CSharp' Or '$(MSBuildProjectName)' == 'Assembly-CSharp-Editor' Or '$(MSBuildProjectName)' == 'Fodinae.Runtime' Or '$(MSBuildProjectName)' == 'Fodinae.Editor' Or '$(MSBuildProjectName)' == 'Fodinae.Bootstrap' Or '$(MSBuildProjectName)' == 'Fodinae.Tests.Editor'">

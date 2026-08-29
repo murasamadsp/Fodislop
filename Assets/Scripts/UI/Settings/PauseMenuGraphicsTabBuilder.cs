@@ -6,8 +6,10 @@ using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
 using Fodinae.Rendering;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.World.Lighting;
 using Fodinae.World.Lighting.Quality;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
