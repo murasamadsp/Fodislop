@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.World;
 using MinesServer.Data;
 using UnityEngine;
@@ -11,7 +12,7 @@ namespace Fodinae.UI;
 /// <summary>
 /// Handles sampling world cells and rendering pixels into the world map texture buffer.
 /// </summary>
-public sealed class MapViewportRenderer
+internal sealed class MapViewportRenderer
 {
     private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
     private readonly Color32 _defaultColor = UnloadedColor;

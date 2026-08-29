@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
 using UnityEngine.UIElements;
 

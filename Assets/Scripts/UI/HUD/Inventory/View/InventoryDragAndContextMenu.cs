@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core.Localization;
+using Fodinae.Core.Models;
 using Fodinae.UI.HUD.Inventory.Interfaces;
 using Fodinae.UI.HUD.Inventory.Model;
 using UnityEngine;

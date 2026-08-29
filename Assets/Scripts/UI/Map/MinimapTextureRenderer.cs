@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Fodinae.World;
 using MinesServer.Data;
 using UnityEngine;
 
@@ -9,7 +10,7 @@ namespace Fodinae.UI;
 /// <summary>
 /// Handles sampling world cells, applying minimap colors and drawing the player marker into a Texture2D.
 /// </summary>
-public sealed class MinimapTextureRenderer
+internal sealed class MinimapTextureRenderer
 {
     private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
     private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
