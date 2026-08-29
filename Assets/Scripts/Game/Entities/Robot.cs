@@ -11,7 +11,6 @@ using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
-using TMPro;
 using UnityEngine;
 using VContainer;
 using ArgumentOutOfRangeException = System.ArgumentOutOfRangeException;
@@ -23,7 +22,6 @@ namespace Fodinae.Game
     public class Robot : MonoBehaviour, IRobotView
     {
         private const string TAG = "[Robot]";
-        private static int _nextDynamicLightId;
 
         [SerializeField]
         private uint _botId;
@@ -34,7 +32,6 @@ namespace Fodinae.Game
         [SerializeField]
         private SpriteRenderer? _spriteRenderer;
         private Transform? _clanTransform;
-        private TextMeshPro? _nicknameText;
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
         [Inject]
@@ -64,21 +61,11 @@ namespace Fodinae.Game
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
-        private const float MinimumSmoothTime = 0.05f;
-        private const float MaximumSmoothTime = 0.15f;
-        private bool _isMetadataLoaded = false;
+        private bool _isMetadataLoaded;
         private bool _visualsLoadCompleted;
         private CancellationTokenSource? _cts;
-        private float _targetAngle = 0f;
-        private float _smoothAngle = 0f;
-        private Vector3 _targetPosition;
-        private Vector3 _serverPosition;
-        private Vector3 _smoothPosition;
-        private Vector3 _currentVelocity;
-        private float _currentAngularVelocity;
         [SerializeField]
         private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
-        private float _tremor = 0f;
 
         [Inject]
         private IRobotService _robotService = null!;
@@ -88,12 +75,12 @@ namespace Fodinae.Game
         private RobotLighting _lighting = null!;
         private RobotVisuals _visuals = null!;
         private readonly RobotNameplate _nameplate = new();
+        private readonly RobotMovement _movement = new();
 
         private bool _visualElementsInitialized;
         private bool _hasPendingServerPosition;
         private ushort _pendingServerX;
         private ushort _pendingServerY;
-        private bool _hasReceivedInitialPosition;
         private bool _isCulled;
         private const float OffscreenCullDistance = 35f;
         private const float OffscreenCullSqrDistance = OffscreenCullDistance * OffscreenCullDistance;
@@ -116,7 +103,6 @@ namespace Fodinae.Game
         public bool IsLocalPlayer => gameObject.CompareTag("Player");
 
         public float DynamicLightIntensity => _lighting.DynamicLightIntensity;
-
         public Color DynamicLightColor => _lighting.DynamicLightColor;
 
         [Inject]
@@ -127,23 +113,18 @@ namespace Fodinae.Game
             _visuals.Initialize(entityBatchRenderer, _clanTransform);
         }
 
-        /// <summary>
-        /// The logical facing angle in Unity degrees (raw <c>_targetAngle</c>),
-        /// without visual smoothing or tremor. Use this when positioning effects
-        /// that need to align with the bot's true facing direction at creation.
-        /// </summary>
-        public float LogicalFacingAngle => _targetAngle;
+        public float LogicalFacingAngle => _movement.TargetAngle;
 
         public float TargetAngle
         {
-            get => _targetAngle - VISUAL_ROTATION_OFFSET;
-            set => _targetAngle = value + VISUAL_ROTATION_OFFSET;
+            get => _movement.TargetAngle - VISUAL_ROTATION_OFFSET;
+            set => _movement.TargetAngle = value + VISUAL_ROTATION_OFFSET;
         }
 
         public Vector3 TargetPosition
         {
-            get => _targetPosition;
-            set => _targetPosition = value;
+            get => _movement.TargetPosition;
+            set => _movement.TargetPosition = value;
         }
 
         public void SetClanBadge(ushort clanId)
@@ -170,13 +151,19 @@ namespace Fodinae.Game
         public float MoveSpeed
         {
             get => _moveSpeed;
-            set => _moveSpeed = value;
+            set
+            {
+                _moveSpeed = value;
+                _movement.MoveSpeed = value;
+            }
         }
 
         protected void Awake()
         {
             _lighting = new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
             _visuals = new RobotVisuals(transform, IsLocalPlayer);
+            _movement.MoveSpeed = _moveSpeed;
+            _movement.RotationSpeed = _rotationSpeed;
 
             if (_spriteRenderer == null)
             {
@@ -189,10 +176,7 @@ namespace Fodinae.Game
             }
 
             transform.localScale = Vector3.one;
-            _targetPosition = transform.position;
-            _serverPosition = transform.position;
-            _smoothPosition = transform.position;
-            _smoothAngle = transform.eulerAngles.z;
+            _movement.SnapTo(transform.position, transform.eulerAngles.z);
 
             if (TryGetComponent<Rigidbody2D>(out var rb))
             {
@@ -207,7 +191,7 @@ namespace Fodinae.Game
             if (!Application.isPlaying ||
                 (IsLocalPlayer ?
                     _localPlayer != null && _localPlayer.Current is { HasServerPosition: true } :
-                    _isMetadataLoaded && _hasReceivedInitialPosition))
+                    _isMetadataLoaded && _movement.HasReceivedInitialPosition))
             {
                 _visuals.SetTentaclesActive(true);
             }
@@ -272,13 +256,8 @@ namespace Fodinae.Game
                 Mathf.Floor(transform.position.y) + 0.5f,
                 transform.position.z);
             transform.position = snappedPos;
-            _targetPosition = snappedPos;
-            _serverPosition = snappedPos;
-            _smoothPosition = snappedPos;
-            _smoothAngle = transform.eulerAngles.z;
+            _movement.SnapTo(snappedPos, transform.eulerAngles.z);
 
-            // In editor preview (outside Play Mode), populate fallback visuals.
-            // In Play Mode, wait for authoritative server metadata via SetMetadata.
             if (string.IsNullOrEmpty(_skinPath) && IsLocalPlayer && !Application.isPlaying)
             {
                 _skinPath = "Skin/bee.png";
@@ -290,7 +269,7 @@ namespace Fodinae.Game
                 LoadMetadataAssets();
             }
 
-            _targetAngle = transform.eulerAngles.z;
+            _movement.TargetAngle = transform.eulerAngles.z;
 
             if (gameObject.CompareTag("Player"))
             {
@@ -307,7 +286,7 @@ namespace Fodinae.Game
                     return;
                 }
 
-                if (!IsLocalPlayer && (!_isMetadataLoaded || !_hasReceivedInitialPosition))
+                if (!IsLocalPlayer && (!_isMetadataLoaded || !_movement.HasReceivedInitialPosition))
                 {
                     return;
                 }
@@ -334,10 +313,9 @@ namespace Fodinae.Game
                         _lighting.Remove(_lightingEngine);
                     }
 
-                    transform.position = _targetPosition;
-                    _smoothPosition = _targetPosition;
-                    _smoothAngle = _targetAngle;
-                    transform.rotation = Quaternion.Euler(0, 0, _targetAngle);
+                    transform.position = _movement.TargetPosition;
+                    _movement.TeleportToTarget();
+                    transform.rotation = Quaternion.Euler(0, 0, _movement.TargetAngle);
                     return;
                 }
 
@@ -351,61 +329,27 @@ namespace Fodinae.Game
                 }
             }
 
-            bool bodySettled =
-                (_smoothPosition - _targetPosition).sqrMagnitude <= 1e-8f &&
-                _currentVelocity.sqrMagnitude <= 1e-8f &&
-                Mathf.Abs(Mathf.DeltaAngle(_smoothAngle, _targetAngle)) <= 0.001f &&
-                Mathf.Abs(_currentAngularVelocity) <= 0.001f &&
-                _tremor <= 0.01f &&
-                _visuals.TentaclesSettled;
-
-            if (bodySettled)
+            if (_movement.IsSettled(_visuals.TentaclesSettled))
             {
                 _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
                 _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
-                _lighting.Update(_smoothPosition, _lightingEngine);
+                _lighting.Update(_movement.SmoothPosition, _lightingEngine);
                 return;
             }
 
-            float renderDistance = (_smoothPosition - _targetPosition).magnitude;
-            float speedRatio = Mathf.Clamp01(_moveSpeed / ProjectRuntimeContracts.Movement.ReferenceMoveSpeed);
-            float targetSmoothTime = Mathf.Lerp(MinimumSmoothTime, MaximumSmoothTime, speedRatio);
-            float distanceRatio = Mathf.Clamp01(renderDistance / 2f);
-            float smoothTime = Mathf.Lerp(MinimumSmoothTime, targetSmoothTime, distanceRatio);
+            var (finalPosition, nowRotationAngle, movementFactor, snapped) = _movement.Step(Time.deltaTime);
 
-            if (renderDistance > 28f)
+            if (snapped)
             {
-                _smoothPosition = _targetPosition;
-                _smoothAngle = _targetAngle;
-                _currentVelocity = Vector3.zero;
-                _currentAngularVelocity = 0f;
-                _visuals.SnapTentacles(_smoothPosition);
-            }
-            else
-            {
-                float maxVisualSpeed = Mathf.Max(_moveSpeed * 1.25f, 5f);
-                _smoothPosition = Vector3.SmoothDamp(_smoothPosition, _targetPosition, ref _currentVelocity, smoothTime, maxVisualSpeed, Time.deltaTime);
-            }
-
-            Vector3 finalPosition = _smoothPosition;
-            if (_tremor > 0.01f)
-            {
-                _tremor *= Mathf.Pow(0.8f, Time.deltaTime / 0.016f);
-                finalPosition.x += _tremor * (Random.value - 0.5f);
-                finalPosition.y += _tremor * (Random.value - 0.5f);
+                _visuals.SnapTentacles(_movement.SmoothPosition);
             }
 
             transform.position = finalPosition;
-
-            float targetAngle = _targetAngle;
-            _smoothAngle = Mathf.SmoothDampAngle(_smoothAngle, targetAngle, ref _currentAngularVelocity, smoothTime, _rotationSpeed, Time.deltaTime);
-            float nowRotationAngle = _smoothAngle;
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
-            float movementFactor = Mathf.Clamp01(_currentVelocity.magnitude / 5f);
             _visuals.UpdateMotion(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime, false);
             _nameplate.UpdatePosition(finalPosition, _visuals.SkinSprite, transform, _visuals.ClanTransform);
-            _lighting.Update(_smoothPosition, _lightingEngine);
+            _lighting.Update(_movement.SmoothPosition, _lightingEngine);
         }
 
         public void SetDynamicLightIntensity(float intensity)
@@ -501,23 +445,14 @@ namespace Fodinae.Game
 
         private void ApplyServerPosition(ushort x, ushort y)
         {
-            _serverPosition = CoordinateUtils.ServerToUnityPos(x, y, _mapManager.WorldHeight);
-
-            if (!_hasReceivedInitialPosition)
+            if (_movement.ApplyServerPosition(x, y, _mapManager.WorldHeight, IsLocalPlayer, out bool isInitial))
             {
-                _hasReceivedInitialPosition = true;
-                _smoothPosition = _serverPosition;
-                _targetPosition = _serverPosition;
-                transform.position = _serverPosition;
-                _currentVelocity = Vector3.zero;
-                _visuals.SnapTentacles(_smoothPosition);
-                _visuals.SetTentaclesActive(true);
-                return;
-            }
-
-            if (!IsLocalPlayer || Vector3.Distance(_targetPosition, _serverPosition) > 2.0f)
-            {
-                _targetPosition = _serverPosition;
+                if (isInitial)
+                {
+                    transform.position = _movement.ServerPosition;
+                    _visuals.SnapTentacles(_movement.SmoothPosition);
+                    _visuals.SetTentaclesActive(true);
+                }
             }
         }
 
@@ -676,21 +611,14 @@ namespace Fodinae.Game
                 return;
             }
 
-            // Server Position: Red Square
-            Fodinae.World.FodinaeGizmos.DrawBounds(_serverPosition, Vector2.one * 1.0f, Color.red);
-
-            // Client/Target Position: Blue Square
-            Fodinae.World.FodinaeGizmos.DrawBounds(_targetPosition, Vector2.one * 0.9f, Color.blue);
-
-            // Visual Position: Cyan Square
+            Fodinae.World.FodinaeGizmos.DrawBounds(_movement.ServerPosition, Vector2.one * 1.0f, Color.red);
+            Fodinae.World.FodinaeGizmos.DrawBounds(_movement.TargetPosition, Vector2.one * 0.9f, Color.blue);
             Fodinae.World.FodinaeGizmos.DrawBounds(transform.position, Vector2.one * 0.8f, Color.cyan);
 
-            // Draw Rotation Arrow
             float angleRad = (transform.eulerAngles.z + VISUAL_ROTATION_OFFSET) * Mathf.Deg2Rad;
             Vector3 direction = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0);
             Fodinae.World.FodinaeGizmos.DrawArrow(transform.position, direction, Color.yellow, 1.2f);
 
-            // Metadata Status
             string status = $"ID: {_botId}\n{(IsLocalPlayer ? "LOCAL PLAYER" : "REMOTE ROBOT")}\n" +
                             $"Meta: {(_isMetadataLoaded ? "OK" : "PENDING")}\n" +
                             $"Speed: {_moveSpeed:F1}";
@@ -698,10 +626,10 @@ namespace Fodinae.Game
 
             if (!IsLocalPlayer)
             {
-                float lag = Vector3.Distance(_serverPosition, transform.position);
+                float lag = Vector3.Distance(_movement.ServerPosition, transform.position);
                 if (lag > 0.5f)
                 {
-                    Fodinae.World.FodinaeGizmos.DrawDottedLine(transform.position, _serverPosition, Color.red, 4f);
+                    Fodinae.World.FodinaeGizmos.DrawDottedLine(transform.position, _movement.ServerPosition, Color.red, 4f);
                 }
             }
         }
