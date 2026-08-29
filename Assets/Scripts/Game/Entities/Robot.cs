@@ -66,7 +66,6 @@ namespace Fodinae.Game
 
         private const float MinimumSmoothTime = 0.05f;
         private const float MaximumSmoothTime = 0.15f;
-        private const float DynamicLightPositionEpsilon = 0.00390625f;
         private bool _isMetadataLoaded = false;
         private bool _visualsLoadCompleted;
         private CancellationTokenSource? _cts;
@@ -85,26 +84,12 @@ namespace Fodinae.Game
         private IRobotService _robotService = null!;
         [Inject]
         private IProjectDefaults _projectDefaults = null!;
-        private Tentacle[]? _tentacles;
-        private Sprite? _skinSprite;
-        private Sprite? _clanSprite;
-        private bool _dynamicLightEnabled;
-        private int _dynamicLightId;
-        private LightingEngine? _lastDynamicLightEngine;
-        private WorldEntityBatchRenderer.SpriteHandle? _bodyBatchHandle;
-        private WorldEntityBatchRenderer.SpriteHandle? _clanBatchHandle;
-        private uint _lastDynamicLightGeneration;
-        private Vector2 _lastDynamicLightPosition;
-        private Color _lastDynamicLightColor;
-        private float _lastDynamicLightIntensity;
-        private bool _hasSubmittedDynamicLight;
-        private bool _tentaclesSettled;
-        private Vector3 _lastTentacleRootPosition;
-        private float _lastTentacleRotation;
-        private bool _hasUpdatedLabels;
+
+        private RobotLighting _lighting = null!;
+        private RobotVisuals _visuals = null!;
+        private readonly RobotNameplate _nameplate = new();
+
         private bool _visualElementsInitialized;
-        private Vector3 _lastLabelsPosition;
-        private bool _dynamicLightSettingsLoaded;
         private bool _hasPendingServerPosition;
         private ushort _pendingServerX;
         private ushort _pendingServerY;
@@ -130,16 +115,16 @@ namespace Fodinae.Game
         public bool IsVisualsLoaded => _isMetadataLoaded && _visualsLoadCompleted;
         public bool IsLocalPlayer => gameObject.CompareTag("Player");
 
-        public float DynamicLightIntensity => _dynamicLightIntensity;
+        public float DynamicLightIntensity => _lighting.DynamicLightIntensity;
 
-        public Color DynamicLightColor => _dynamicLightColor;
+        public Color DynamicLightColor => _lighting.DynamicLightColor;
 
         [Inject]
         private void InitializeEntityBatch(WorldEntityBatchRenderer entityBatchRenderer)
         {
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
-            EnsureBatchHandles();
+            _visuals.Initialize(entityBatchRenderer, _clanTransform);
         }
 
         /// <summary>
@@ -179,16 +164,7 @@ namespace Fodinae.Game
         public void ClearClanBadge()
         {
             _clanId = 0;
-            if (_clanBatchHandle != null)
-            {
-                _entityBatchRenderer.SetSprite(_clanBatchHandle, null);
-            }
-
-            if (_clanSprite != null)
-            {
-                Object.Destroy(_clanSprite);
-                _clanSprite = null;
-            }
+            _visuals.SetClanSprite(null);
         }
 
         public float MoveSpeed
@@ -199,11 +175,8 @@ namespace Fodinae.Game
 
         protected void Awake()
         {
-            _dynamicLightId = Interlocked.Increment(ref _nextDynamicLightId);
-
-            // Dynamic emission is a property of this Robot source. Terrain
-            // lighting owns the global lighting toggle.
-            _dynamicLightEnabled = _emitsDynamicLight;
+            _lighting = new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _visuals = new RobotVisuals(transform, IsLocalPlayer);
 
             if (_spriteRenderer == null)
             {
@@ -226,31 +199,28 @@ namespace Fodinae.Game
                 rb.freezeRotation = true;
                 rb.simulated = false;
             }
-
         }
 
         protected void OnEnable()
         {
             ApplyWorldUILayer();
-            _tentaclesSettled = false;
             if (!Application.isPlaying ||
                 (IsLocalPlayer ?
                     _localPlayer != null && _localPlayer.Current is { HasServerPosition: true } :
                     _isMetadataLoaded && _hasReceivedInitialPosition))
             {
-                SetTentaclesActive(true);
+                _visuals.SetTentaclesActive(true);
             }
             else
             {
-                SetTentaclesActive(false);
+                _visuals.SetTentaclesActive(false);
             }
         }
 
         protected void OnDisable()
         {
-            _lightingEngine?.RemoveDynamicLight(_dynamicLightId);
-            _hasSubmittedDynamicLight = false;
-            SetTentaclesActive(false);
+            _lighting.Remove(_lightingEngine);
+            _visuals.SetTentaclesActive(false);
         }
 
         private void InitializeVisualElements()
@@ -261,70 +231,7 @@ namespace Fodinae.Game
             }
 
             _visualElementsInitialized = true;
-            Transform? existingNickname = transform.Find("Nickname");
-            if (IsLocalPlayer)
-            {
-                if (existingNickname != null)
-                {
-                    existingNickname.gameObject.SetActive(false);
-                }
-            }
-            else
-            {
-                GameObject textGo;
-                if (existingNickname != null)
-                {
-                    textGo = existingNickname.gameObject;
-                }
-                else if (_sceneObjects != null)
-                {
-                    textGo = _sceneObjects.Create("Nickname", RuntimeOwner.FloatingUI);
-                }
-                else
-                {
-                    throw new InvalidOperationException(
-                        $"{TAG} ISceneObjectFactory was not injected before creating nickname for bot {_botId}.");
-                }
-
-                // Nicknames are world-space UI. They follow the robot position,
-                // but must not inherit the robot's facing rotation, sprite flip,
-                // or non-uniform scale.
-                Transform? floatingOwner = _sceneObjects?.GetOwner(RuntimeOwner.FloatingUI);
-                if (floatingOwner != null)
-                {
-                    textGo.transform.SetParent(floatingOwner, worldPositionStays: true);
-                }
-
-                _nicknameText = textGo.GetComponent<TextMeshPro>() ??
-                    textGo.AddComponent<TextMeshPro>();
-                textGo.SetActive(true);
-                _nicknameText.alignment = TextAlignmentOptions.TopLeft;
-                _nicknameText.rectTransform.pivot = new Vector2(0f, 1f);
-                _nicknameText.fontSize = 6.4f;
-                _nicknameText.textWrappingMode = TextWrappingModes.NoWrap;
-                _nicknameText.overflowMode = TextOverflowModes.Overflow;
-                _nicknameText.color = Color.white;
-
-                if (_nicknameText.font == null)
-                {
-                    var font = Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_SDF") ??
-                               Resources.Load<TMP_FontAsset>("Fonts/Exo2_SDF") ??
-                               TMP_Settings.defaultFontAsset;
-                    if (font != null)
-                    {
-                        _nicknameText.font = font;
-                    }
-                }
-
-                _nicknameText.text = !string.IsNullOrEmpty(_nickname) && !IsLocalPlayer
-                    ? _nickname
-                    : string.Empty;
-
-                MeshRenderer textRenderer = _nicknameText.GetComponent<MeshRenderer>() ??
-                    throw new InvalidOperationException(
-                        $"{TAG} Nickname MeshRenderer is missing for bot {_botId}.");
-                UnityRenderLayerContracts.ApplyWorldUI(textRenderer, 100);
-            }
+            _nameplate.Initialize(transform, _botId, _nickname, IsLocalPlayer, _sceneObjects);
 
             if (_clanTransform == null)
             {
@@ -341,38 +248,9 @@ namespace Fodinae.Game
             }
         }
 
-        private void EnsureBatchHandles()
-        {
-            if (!Application.isPlaying)
-            {
-                return;
-            }
-
-            if (_entityBatchRenderer == null)
-            {
-                return;
-            }
-
-            _bodyBatchHandle ??= _entityBatchRenderer.RegisterSprite(transform, 0);
-            if (_clanTransform != null)
-            {
-                _clanBatchHandle ??=
-                    _entityBatchRenderer.RegisterSprite(_clanTransform, 100);
-            }
-        }
-
-        private static Bounds TransformSpriteBounds(Transform spriteTransform, Sprite sprite)
-        {
-            Bounds local = sprite.bounds;
-            Vector3 minimum = spriteTransform.TransformPoint(local.min);
-            Vector3 maximum = spriteTransform.TransformPoint(local.max);
-            return new Bounds((minimum + maximum) * 0.5f, maximum - minimum);
-        }
-
         public void SetBatchedBodyVisible(bool visible)
         {
-            EnsureBatchHandles();
-            _bodyBatchHandle?.SetEnabled(visible);
+            _visuals.SetBodyVisible(visible);
         }
 
         private void ApplyWorldUILayer()
@@ -382,15 +260,7 @@ namespace Fodinae.Game
                 _clanTransform = transform.Find("ClanIcon");
             }
 
-            if (_nicknameText != null)
-            {
-                MeshRenderer? nicknameRenderer = _nicknameText.GetComponent<MeshRenderer>();
-                if (nicknameRenderer != null)
-                {
-                    UnityRenderLayerContracts.ApplyWorldUI(nicknameRenderer, 100);
-                }
-            }
-
+            _nameplate.ApplyLayer();
         }
 
         protected void Start()
@@ -483,31 +353,11 @@ namespace Fodinae.Game
                 if (_isCulled)
                 {
                     _isCulled = false;
-                    _bodyBatchHandle?.SetEnabled(_spriteRenderer == null || _spriteRenderer.enabled);
-                    if (_clanSprite != null)
-                    {
-                        _clanBatchHandle?.SetEnabled(true);
-                    }
-
-                    if (_nicknameText != null)
-                    {
-                        _nicknameText.enabled = true;
-                    }
-
-                    SetTentaclesActive(true);
-                    if (_tentacles != null)
-                    {
-                        foreach (Tentacle? tentacle in _tentacles)
-                        {
-                            tentacle?.Snap(transform.position);
-                        }
-                    }
+                    _visuals.SetBodyVisible(_spriteRenderer == null || _spriteRenderer.enabled);
+                    _nameplate.SetEnabled(true);
+                    _visuals.SetTentaclesActive(true);
+                    _visuals.SnapTentacles(transform.position);
                 }
-            }
-
-            if (_tentacles == null)
-            {
-                _tentaclesSettled = true;
             }
 
             bool bodySettled =
@@ -516,27 +366,19 @@ namespace Fodinae.Game
                 Mathf.Abs(Mathf.DeltaAngle(_smoothAngle, _targetAngle)) <= 0.001f &&
                 Mathf.Abs(_currentAngularVelocity) <= 0.001f &&
                 _tremor <= 0.01f &&
-                _tentaclesSettled;
+                _visuals.TentaclesSettled;
+
             if (bodySettled)
             {
-                // Tentacles contain a time-based idle animation even when the
-                // robot itself is stationary. Keep their render mesh current
-                // while the body transform can take the cheap early-out path.
-                UpdateTentacles(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime);
-                UpdateLabelsPosition();
-                UpdateDynamicLight();
+                _visuals.UpdateMotion(transform.position, transform.eulerAngles.z, 0f, Time.deltaTime, true);
+                _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
+                _lighting.Update(_smoothPosition, _lightingEngine);
                 return;
             }
 
             float renderDistance = (_smoothPosition - _targetPosition).magnitude;
-
-            // 1. Base smooth time now scales PROPORTIONALLY with speed.
-            // Slower = snappier/tighter (low smooth time). Faster = momentum/curves (higher smooth time).
-            float speedRatio = Mathf.Clamp01(
-                _moveSpeed / ProjectRuntimeContracts.Movement.ReferenceMoveSpeed);
+            float speedRatio = Mathf.Clamp01(_moveSpeed / ProjectRuntimeContracts.Movement.ReferenceMoveSpeed);
             float targetSmoothTime = Mathf.Lerp(MinimumSmoothTime, MaximumSmoothTime, speedRatio);
-
-            // 2. Distance factor: get extra snappy when very close to the target (e.g. moving exactly 1 cell and stopping)
             float distanceRatio = Mathf.Clamp01(renderDistance / 2f);
             float smoothTime = Mathf.Lerp(MinimumSmoothTime, targetSmoothTime, distanceRatio);
 
@@ -546,25 +388,14 @@ namespace Fodinae.Game
                 _smoothAngle = _targetAngle;
                 _currentVelocity = Vector3.zero;
                 _currentAngularVelocity = 0f;
-
-                if (_tentacles != null)
-                {
-                    foreach (var tentacle in _tentacles)
-                    {
-                        tentacle.Snap(_smoothPosition);
-                    }
-                }
+                _visuals.SnapTentacles(_smoothPosition);
             }
             else
             {
-                // 3. Max Visual Speed limits the catch-up rate.
-                // Setting it to 1.25x of logical speed allows it to easily catch up without wildly slingshotting,
-                // bridging the gaps between server "ticks" smoothly when running continuously.
                 float maxVisualSpeed = Mathf.Max(_moveSpeed * 1.25f, 5f);
                 _smoothPosition = Vector3.SmoothDamp(_smoothPosition, _targetPosition, ref _currentVelocity, smoothTime, maxVisualSpeed, Time.deltaTime);
             }
 
-            // Apply tremor logic
             Vector3 finalPosition = _smoothPosition;
             if (_tremor > 0.01f)
             {
@@ -575,261 +406,38 @@ namespace Fodinae.Game
 
             transform.position = finalPosition;
 
-            // Apply rotation smoothing (now limits turning rate using your previously unused _rotationSpeed field)
             float targetAngle = _targetAngle;
             _smoothAngle = Mathf.SmoothDampAngle(_smoothAngle, targetAngle, ref _currentAngularVelocity, smoothTime, _rotationSpeed, Time.deltaTime);
-
             float nowRotationAngle = _smoothAngle;
-
             transform.rotation = Quaternion.Euler(0, 0, nowRotationAngle);
 
             float movementFactor = Mathf.Clamp01(_currentVelocity.magnitude / 5f);
-            bool tentacleStateChanged =
-                !_tentaclesSettled ||
-                (finalPosition - _lastTentacleRootPosition).sqrMagnitude > 1e-8f ||
-                Mathf.Abs(Mathf.DeltaAngle(_lastTentacleRotation, nowRotationAngle)) > 0.001f ||
-                movementFactor > 0.0001f;
-            if (tentacleStateChanged)
-            {
-                UpdateTentacles(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime);
-                _tentaclesSettled = AreTentaclesSettled();
-                _lastTentacleRootPosition = finalPosition;
-                _lastTentacleRotation = nowRotationAngle;
-            }
-
-            UpdateLabelsPosition();
-            UpdateDynamicLight();
-        }
-
-        private void UpdateDynamicLight()
-        {
-            LightingEngine? lighting = _lightingEngine;
-            if (!_dynamicLightEnabled || lighting == null || !lighting.IsRuntimeConfigReady)
-            {
-                if (_hasSubmittedDynamicLight)
-                {
-                    lighting?.RemoveDynamicLight(_dynamicLightId);
-                }
-
-                _hasSubmittedDynamicLight = false;
-                return;
-            }
-
-            if (!_dynamicLightSettingsLoaded)
-            {
-                _dynamicLightIntensity = lighting.DynamicLightIntensity;
-                _dynamicLightColor = lighting.DynamicLightColor;
-                _dynamicLightSettingsLoaded = true;
-            }
-
-            Vector2 position = new(_smoothPosition.x, _smoothPosition.y);
-            uint generation = lighting.DynamicLightGeneration;
-            if (_hasSubmittedDynamicLight &&
-                ReferenceEquals(_lastDynamicLightEngine, lighting) &&
-                _lastDynamicLightGeneration == generation &&
-                (_lastDynamicLightPosition - position).sqrMagnitude <=
-                    DynamicLightPositionEpsilon * DynamicLightPositionEpsilon &&
-                _lastDynamicLightColor == _dynamicLightColor &&
-                Mathf.Approximately(_lastDynamicLightIntensity, _dynamicLightIntensity))
-            {
-                return;
-            }
-
-            // Lighting follows the interpolated render position. Using
-            // _targetPosition here made the sprite move smoothly while
-            // its emission snapped between server cells.
-            lighting.SetDynamicLight(
-                _dynamicLightId,
-                position,
-                _dynamicLightColor,
-                _dynamicLightIntensity);
-            _lastDynamicLightEngine = lighting;
-            _lastDynamicLightGeneration = generation;
-            _lastDynamicLightPosition = position;
-            _lastDynamicLightColor = _dynamicLightColor;
-            _lastDynamicLightIntensity = _dynamicLightIntensity;
-            _hasSubmittedDynamicLight = true;
+            _visuals.UpdateMotion(finalPosition, nowRotationAngle, movementFactor, Time.deltaTime, false);
+            _nameplate.UpdatePosition(finalPosition, _visuals.SkinSprite, transform, _visuals.ClanTransform);
+            _lighting.Update(_smoothPosition, _lightingEngine);
         }
 
         public void SetDynamicLightIntensity(float intensity)
         {
-            _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
-            _lightingEngine?.SetDynamicLightSettings(
-                _dynamicLightIntensity,
-                _dynamicLightColor);
+            _lighting.SetIntensity(intensity, _lightingEngine);
         }
 
         public void SetDynamicLightColor(Color color)
         {
-            _dynamicLightColor = new Color(
-                Mathf.Max(0f, color.r),
-                Mathf.Max(0f, color.g),
-                Mathf.Max(0f, color.b),
-                1f);
-            _lightingEngine?.SetDynamicLightSettings(
-                _dynamicLightIntensity,
-                _dynamicLightColor);
+            _lighting.SetColor(color, _lightingEngine);
         }
 
         public void ResetDynamicLightPreferences()
         {
-            if (!IsLocalPlayer)
+            if (IsLocalPlayer)
             {
-                return;
+                _lighting.ResetPreferences(_projectDefaults, _lightingEngine);
             }
-
-            LightingEngine? lighting = _lightingEngine;
-            _dynamicLightIntensity = lighting?.DynamicLightIntensity ??
-                _projectDefaults.Lighting.DynamicLightIntensity;
-            _dynamicLightColor = lighting?.DynamicLightColor ??
-                _projectDefaults.Lighting.DynamicLightColor;
-            _dynamicLightSettingsLoaded = true;
-        }
-
-        private void InitializeDynamicLightSettings()
-        {
-            LightingDefaultsSnapshot defaults = _projectDefaults.Lighting;
-            LightingEngine? lighting = _lightingEngine;
-            _dynamicLightIntensity = lighting?.IsRuntimeConfigReady == true
-                ? lighting.DynamicLightIntensity
-                : defaults.DynamicLightIntensity;
-            _dynamicLightColor = lighting?.IsRuntimeConfigReady == true
-                ? lighting.DynamicLightColor
-                : defaults.DynamicLightColor;
-            _dynamicLightSettingsLoaded = lighting?.IsRuntimeConfigReady == true;
         }
 
         private void TryInitializeDynamicLightSettings()
         {
-            if (_dynamicLightSettingsLoaded)
-            {
-                return;
-            }
-
-            if (_projectDefaults == null)
-            {
-                return;
-            }
-
-            InitializeDynamicLightSettings();
-        }
-
-        private void CreateTentacles(Texture2D tailTexture)
-        {
-            ClearTentacles();
-            if (_entityBatchRenderer == null)
-            {
-                return;
-            }
-
-            _tentacles = new Tentacle[4];
-            _tentaclesSettled = false;
-            // Offsets fan the strands out; length scales vary them slightly so
-            // the tail reads organic instead of four identical spikes.
-            float[] offsets = { -45f, -15f, 15f, 45f };
-            float[] lengthScales = { 0.92f, 1.06f, 1.12f, 0.97f };
-            for (int i = 0; i < 4; i++)
-            {
-                _tentacles[i] = new Tentacle(
-                    _entityBatchRenderer,
-                    tailTexture,
-                    transform.position,
-                    offsets[i],
-                    i,
-                    4,
-                    lengthScales[i]);
-            }
-        }
-
-        private void ClearTentacles()
-        {
-            if (_tentacles != null)
-            {
-                foreach (var tentacle in _tentacles)
-                {
-                    tentacle?.Destroy();
-                }
-
-                _tentacles = null;
-            }
-        }
-
-        private void SetTentaclesActive(bool active)
-        {
-            if (_tentacles == null)
-            {
-                return;
-            }
-
-            foreach (Tentacle? tentacle in _tentacles)
-            {
-                tentacle?.SetActive(active);
-            }
-        }
-
-        private bool AreTentaclesSettled()
-        {
-            if (_tentacles == null)
-            {
-                return true;
-            }
-
-            foreach (Tentacle? tentacle in _tentacles)
-            {
-                if (tentacle != null && !tentacle.IsSettled)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private void UpdateTentacles(Vector3 rootPosition, float rotationAngle, float movementFactor, float deltaTime)
-        {
-            if (_tentacles == null)
-            {
-                return;
-            }
-
-            foreach (var tentacle in _tentacles)
-            {
-                tentacle?.Update(rootPosition, rotationAngle, movementFactor, deltaTime);
-            }
-        }
-
-
-        private void UpdateLabelsPosition()
-        {
-            Vector3 position = transform.position;
-            if (_hasUpdatedLabels &&
-                (position - _lastLabelsPosition).sqrMagnitude <= 1e-8f)
-            {
-                return;
-            }
-
-            if (_nicknameText != null)
-            {
-                Bounds spriteBounds = _skinSprite != null
-                    ? TransformSpriteBounds(transform, _skinSprite)
-                    : new Bounds(position, Vector3.one);
-                Vector3 topRight = new(spriteBounds.max.x, spriteBounds.max.y + 0.5f, position.z);
-
-                // World-space labels use the actual rendered sprite bounds, not a
-                // fixed offset from the robot pivot. TopLeft alignment makes the
-                // nickname grow rightward from the robot's top-right corner.
-                _nicknameText.transform.SetPositionAndRotation(
-                    topRight,
-                    Quaternion.identity);
-            }
-
-            if (_clanTransform != null)
-            {
-                _clanTransform.SetPositionAndRotation(position + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
-            }
-
-            _lastLabelsPosition = position;
-            _hasUpdatedLabels = true;
+            _lighting.InitializeSettings(_projectDefaults, _lightingEngine);
         }
 
         public void Initialize(uint botId)
@@ -845,17 +453,9 @@ namespace Fodinae.Game
                 _spriteRenderer.color = Color.white;
             }
 
-            _bodyBatchHandle?.SetColor(Color.white);
-
-            if (_nicknameText != null)
-            {
-                _nicknameText.text = string.Empty;
-            }
-
-            if (_clanBatchHandle != null)
-            {
-                _entityBatchRenderer.SetSprite(_clanBatchHandle, null);
-            }
+            _visuals.SetColor(Color.white);
+            _nameplate.SetText(string.Empty, IsLocalPlayer);
+            _visuals.SetClanSprite(null);
         }
 
         public void SetMetadata(int playerId, byte clanid, string nickname, string skinPath, string tailPath)
@@ -883,20 +483,11 @@ namespace Fodinae.Game
                 _spriteRenderer.color = Color.white;
             }
 
-            _bodyBatchHandle?.SetColor(Color.white);
-
-            if (_nicknameText == null && !IsLocalPlayer)
-            {
-                InitializeVisualElements();
-            }
-
-            if (_nicknameText != null)
-            {
-                _nicknameText.text = IsLocalPlayer ? string.Empty : nickname;
-            }
-
-            _hasUpdatedLabels = false;
-            UpdateLabelsPosition();
+            _visuals.SetColor(Color.white);
+            InitializeVisualElements();
+            _nameplate.SetText(nickname, IsLocalPlayer);
+            _nameplate.InvalidatePosition();
+            _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
 
             LoadMetadataAssets();
         }
@@ -928,22 +519,11 @@ namespace Fodinae.Game
                 _targetPosition = _serverPosition;
                 transform.position = _serverPosition;
                 _currentVelocity = Vector3.zero;
-                if (_tentacles != null)
-                {
-                    foreach (var tentacle in _tentacles)
-                    {
-                        tentacle?.Snap(_smoothPosition);
-                    }
-
-                    SetTentaclesActive(true);
-                }
-
+                _visuals.SnapTentacles(_smoothPosition);
+                _visuals.SetTentaclesActive(true);
                 return;
             }
 
-            // Only update target position from server for remote robots.
-            // Local player manages its own target position via PlayerMovementController.
-            // If the local player is too far from server position, we should snap.
             if (!IsLocalPlayer || Vector3.Distance(_targetPosition, _serverPosition) > 2.0f)
             {
                 _targetPosition = _serverPosition;
@@ -993,10 +573,7 @@ namespace Fodinae.Game
                 return;
             }
 
-            Texture2D? skinTexture = await TryLoadOptionalTextureAsync(
-                _assetLoader,
-                _skinPath,
-                token);
+            Texture2D? skinTexture = await TryLoadOptionalTextureAsync(_assetLoader, _skinPath, token);
             if (token.IsCancellationRequested)
             {
                 return;
@@ -1008,21 +585,10 @@ namespace Fodinae.Game
                 return;
             }
 
-            if (_skinSprite != null)
-            {
-                Object.Destroy(_skinSprite);
-            }
-
-            _skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
-            EnsureBatchHandles();
-            _entityBatchRenderer.SetSprite(_bodyBatchHandle!, _skinSprite);
-            if (!IsLocalPlayer)
-            {
-                _bodyBatchHandle!.SetEnabled(true);
-            }
-
-            _hasUpdatedLabels = false;
-            UpdateLabelsPosition();
+            Sprite skinSprite = Sprite.Create(skinTexture, new Rect(0, 0, skinTexture.width, skinTexture.height), new Vector2(0.5f, 0.5f), skinTexture.width);
+            _visuals.SetSkinSprite(skinSprite);
+            _nameplate.InvalidatePosition();
+            _nameplate.UpdatePosition(transform.position, _visuals.SkinSprite, transform, _visuals.ClanTransform);
             _visualsLoadCompleted = true;
         }
 
@@ -1031,17 +597,19 @@ namespace Fodinae.Game
             if (_spriteRenderer != null && _spriteRenderer.sprite == null)
             {
                 var botTex = Resources.Load<Texture2D>("Textures/bot") ?? Resources.Load<Texture2D>("bot");
+                Sprite previewSprite;
                 if (botTex != null)
                 {
-                    _skinSprite = Sprite.Create(botTex, new Rect(0, 0, botTex.width, botTex.height), new Vector2(0.5f, 0.5f), 16);
+                    previewSprite = Sprite.Create(botTex, new Rect(0, 0, botTex.width, botTex.height), new Vector2(0.5f, 0.5f), 16);
                 }
                 else
                 {
                     var tex = Texture2D.whiteTexture;
-                    _skinSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16);
+                    previewSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 16);
                 }
 
-                _spriteRenderer.sprite = _skinSprite;
+                _visuals.SetSkinSprite(previewSprite);
+                _spriteRenderer.sprite = previewSprite;
                 _spriteRenderer.color = new Color(0.2f, 0.65f, 0.95f, 1f);
                 _spriteRenderer.enabled = true;
             }
@@ -1051,14 +619,11 @@ namespace Fodinae.Game
         {
             if (string.IsNullOrEmpty(_tailPath))
             {
-                ClearTentacles();
+                _visuals.ClearTentacles();
                 return;
             }
 
-            Texture2D? tailTexture = await TryLoadOptionalTextureAsync(
-                _assetLoader,
-                _tailPath,
-                token);
+            Texture2D? tailTexture = await TryLoadOptionalTextureAsync(_assetLoader, _tailPath, token);
             if (token.IsCancellationRequested)
             {
                 return;
@@ -1066,11 +631,11 @@ namespace Fodinae.Game
 
             if (tailTexture == null)
             {
-                ClearTentacles();
+                _visuals.ClearTentacles();
                 return;
             }
 
-            CreateTentacles(tailTexture);
+            _visuals.CreateTentacles(tailTexture, transform.position);
         }
 
         private async UniTaskVoid LoadClanAsync(CancellationToken token)
@@ -1081,30 +646,14 @@ namespace Fodinae.Game
             }
 
             string clanPath = $"/Clan/{_clanId}";
-            Texture2D? clanTexture = await TryLoadOptionalTextureAsync(
-                _assetLoader,
-                clanPath,
-                token);
-            if (token.IsCancellationRequested)
+            Texture2D? clanTexture = await TryLoadOptionalTextureAsync(_assetLoader, clanPath, token);
+            if (token.IsCancellationRequested || clanTexture == null)
             {
                 return;
             }
 
-            if (clanTexture == null)
-            {
-                return;
-            }
-
-
-            if (_clanSprite != null)
-            {
-                Object.Destroy(_clanSprite);
-            }
-
-            _clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
-            EnsureBatchHandles();
-            _entityBatchRenderer.SetSprite(_clanBatchHandle!, _clanSprite);
-            _clanBatchHandle!.SetEnabled(true);
+            Sprite clanSprite = Sprite.Create(clanTexture, new Rect(0, 0, clanTexture.width, clanTexture.height), new Vector2(0f, 0.5f), clanTexture.width);
+            _visuals.SetClanSprite(clanSprite);
         }
 
         private static async UniTask<Texture2D?> TryLoadOptionalTextureAsync(
@@ -1158,7 +707,6 @@ namespace Fodinae.Game
 
             if (!IsLocalPlayer)
             {
-                // Draw line to server position if it's lagging
                 float lag = Vector3.Distance(_serverPosition, transform.position);
                 if (lag > 0.5f)
                 {
@@ -1174,29 +722,8 @@ namespace Fodinae.Game
             _cts?.Dispose();
 
             _robotService?.UnregisterRobot(_botId);
-
-            _entityBatchRenderer?.UnregisterSprite(_bodyBatchHandle);
-            _entityBatchRenderer?.UnregisterSprite(_clanBatchHandle);
-            _bodyBatchHandle = null;
-            _clanBatchHandle = null;
-
-            if (_skinSprite != null)
-            {
-                Object.Destroy(_skinSprite);
-            }
-
-            if (_clanSprite != null)
-            {
-                Object.Destroy(_clanSprite);
-            }
-
-            if (_nicknameText != null)
-            {
-                Object.Destroy(_nicknameText.gameObject);
-                _nicknameText = null;
-            }
-
-            ClearTentacles();
+            _nameplate.Destroy();
+            _visuals?.Destroy();
         }
     }
 }
