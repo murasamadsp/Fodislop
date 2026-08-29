@@ -1,13 +1,11 @@
 #nullable enable
 
 using System;
-using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
-using Fodinae.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
@@ -21,11 +19,10 @@ namespace Fodinae.UI
     {
         private const string GameSceneName = "MainGame";
 
-        // USS modifiers toggled on the station badge so it flips to whichever
-        // side of the marker has room instead of sliding off-screen.
-
         [SerializeField]
         private Texture2D? _shadeTexture;
+        [SerializeField]
+        private Texture2D? _spaceBgTexture;
 
         private UIDocument? _doc;
         private VisualElement? _root;
@@ -34,8 +31,9 @@ namespace Fodinae.UI
         private VisualElement? _loaderContainer;
         private VisualElement? _loaderContent;
         private MenuLoaderProgress? _loaderProgress;
-        // Шаги маршрута в футере. Это контейнеры, а не Label: внутри каждого
-        // лежит ромб активного шага и подпись.
+        private readonly MenuModalManager _modalManager = new();
+
+        // Шаги маршрута в футере
         private VisualElement? _routeOrbit;
         private VisualElement? _routeDescent;
         private VisualElement? _routeSurface;
@@ -61,32 +59,6 @@ namespace Fodinae.UI
         private Button? _newsTickerButton;
         private Button? _footerVersionButton;
 
-        // Модальный слой
-        private VisualElement? _modalOverlay;
-        private VisualElement? _serverBrowserModal;
-        private VisualElement? _settingsModal;
-        private VisualElement? _chronicleModal;
-        private VisualElement? _repairModal;
-        private VisualElement? _profileModal;
-        private VisualElement? _updateModal;
-        private VisualElement? _activeModal;
-
-        // Модалка настроек: табы
-        private Button? _settingsTabGraphics;
-        private Button? _settingsTabAudio;
-        private Button? _settingsTabControls;
-        private Button? _settingsTabNetwork;
-        private VisualElement? _settingsPaneGraphics;
-        private VisualElement? _settingsPaneAudio;
-        private VisualElement? _settingsPaneControls;
-        private VisualElement? _settingsPaneNetwork;
-
-        // Модалка выбора серверов
-        private Button? _serverItemHades;
-        private Button? _serverItemTartarus;
-        private Button? _serverItemCyber;
-        private Button? _confirmServerButton;
-
         private bool _loadingActive;
         private bool _built;
         private bool _subscribed;
@@ -101,6 +73,9 @@ namespace Fodinae.UI
         private IWorldLoadProgress _loadProgress = null!;
 
         private bool _loaderHiddenAtDone;
+        private MenuStarfield? _sceneStarfield;
+        private MenuSceneryController? _sceneScenery;
+        private readonly MenuSceneryPresenter _sceneryPresenter = new();
 
         protected void OnValidate()
         {
@@ -117,11 +92,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            // Первичная сборка — в Start(): к нему гарантированы и инжекция
-            // (мост, фаза Awake), и панель UIDocument (создаётся в OnEnable
-            // документа). Здесь только реактивация: если дерево пережило
-            // отключение (переактивация контента), переприменяем биндинги и
-            // текст, не перестраивая UI.
             if (_built && Application.isPlaying && _tree != null)
             {
                 UIDocument doc = GetComponent<UIDocument>();
@@ -129,30 +99,22 @@ namespace Fodinae.UI
                 {
                     // Реактивация — best-effort: панель может пересоздаться позже
                     // (повторный OnEnable документа); первичная сборка в Start
-                    // уже прошла, поэтому тихий выход не теряет экран.
+                    // уже прошла, поэтому тихий возврат не теряет экран.
                     return;
                 }
 
                 _root = doc.rootVisualElement;
                 SubscribeEvents();
-
-                // The presenter is a plain field, so a domain reload hands us a
-                // fresh one with no elements resolved while _tree survived.
-                // Rebinding is idempotent, so it is safe on the normal path too.
                 _sceneryPresenter.Bind(_tree);
                 _sceneryPresenter.ApplyTextures(ref _shadeTexture, ref _spaceBgTexture);
 
                 if (_loc != null)
                 {
-                    // Реестр применяет текст сразу и на каждой смене языка.
                     _loc.RegisterLocalizable(this);
                     ApplyLocalizedText();
                 }
             }
         }
-
-        private MenuStarfield? _sceneStarfield;
-        private MenuSceneryController? _sceneScenery;
 
         public void InitializeScene(MenuStarfield? starfield, MenuSceneryController? scenery)
         {
@@ -180,9 +142,6 @@ namespace Fodinae.UI
             _root = _doc != null ? _doc.rootVisualElement : null;
             if (_doc == null || _root == null)
             {
-                // К Start панель гарантирована: UIDocument создаёт её в своём
-                // OnEnable, а Start выполняется после всех OnEnable сцены.
-                // Недоступность здесь — дефект, а не гонка.
                 throw new InvalidOperationException(
                     "[MainMenu] UIDocument panel is not available at Start (панель создаётся в OnEnable документа и к Start обязана существовать).");
             }
@@ -200,24 +159,18 @@ namespace Fodinae.UI
             _root.Add(tree);
             _tree = tree;
 
-            // Тир раскладки вместо @media: класс на корне, границы и значения
-            // совпадают с visual/main-menu-mirror/css/tokens.css §3.
             UILayoutTier.Attach(tree);
 
             BindUIElements(tree);
+            _modalManager.Bind(tree);
             _sceneryPresenter.Bind(tree);
 
-            // Новое дерево — подписки предыдущего экземпляра недействительны
-            // (OnDisable больше не сбрасывает флаг, чтобы не дублировать клики
-            // на живом дереве). Сбрасываем только здесь, при полной перестройке.
             _subscribed = false;
             SubscribeEvents();
             _sceneryPresenter.ApplyTextures(ref _shadeTexture, ref _spaceBgTexture);
 
             if (_loc != null)
             {
-                // Реестр применяет текст сразу и на каждой смене языка —
-                // стартовое применение не может быть забыто.
                 _loc.RegisterLocalizable(this);
             }
 
@@ -228,10 +181,6 @@ namespace Fodinae.UI
             Debug.Log($"[MainMenu] UI BUILT successfully: children={_root.childCount}");
         }
 
-        /// <summary>
-        /// Ожидает, пока UI Toolkit выполнит Layout Pass и презентер подготовит текстуры планеты и фона.
-        /// Гарантирует, что экран переходит в PresentationReady без задержек в кадрах.
-        /// </summary>
         public async UniTask WaitUntilReadyAsync(CancellationToken cancellationToken = default)
         {
             float timeout = Time.realtimeSinceStartup + 3f;
@@ -252,14 +201,8 @@ namespace Fodinae.UI
             }
         }
 
-        [SerializeField]
-        private Texture2D? _spaceBgTexture;
-
-        private readonly MenuSceneryPresenter _sceneryPresenter = new();
-
         private void BindUIElements(VisualElement tree)
         {
-
             _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer");
             _loaderContainer = tree.Q<VisualElement>("LoaderContainer");
             _loaderProgress = new MenuLoaderProgress(
@@ -273,14 +216,12 @@ namespace Fodinae.UI
             _routeDescent = tree.Q<VisualElement>("MainMenuRouteDescent");
             _routeSurface = tree.Q<VisualElement>("MainMenuRouteSurface");
 
-            // Кнопки основного меню
             _playButton = tree.Q<Button>("PlayButton");
             _serverSelectButton = tree.Q<Button>("ServerSelectButton");
             _updateAlertBanner = tree.Q<Button>("UpdateAlertBanner");
             _userPillButton = tree.Q<Button>("UserPillButton");
             _cancelDescentButton = tree.Q<Button>("CancelDescentButton");
 
-            // Правая боковая панель
             _sideChronicleButton = tree.Q<Button>("SideChronicleButton");
             _sideSettingsButton = tree.Q<Button>("SideSettingsButton");
             _sideRepairButton = tree.Q<Button>("SideRepairButton");
@@ -290,8 +231,6 @@ namespace Fodinae.UI
             _sideVkButton = tree.Q<Button>("SideVkButton");
             _sideExitButton = tree.Q<Button>("SideExitButton");
 
-            // Локализованная копия кнопок главного меню: текст из словаря
-            // (ru/en), а не хардкод из MainMenu.uxml.
             if (_loc != null)
             {
                 Label? playLabel = _playButton?.Q<Label>(null, "mm-btn-primary-text");
@@ -349,34 +288,8 @@ namespace Fodinae.UI
                 }
             }
 
-            // Футер
             _newsTickerButton = tree.Q<Button>("NewsTickerButton");
             _footerVersionButton = tree.Q<Button>("FooterVersionButton");
-
-            // Модалки
-            _modalOverlay = tree.Q<VisualElement>("ModalOverlay");
-            _serverBrowserModal = tree.Q<VisualElement>("ServerBrowserModal");
-            _settingsModal = tree.Q<VisualElement>("SettingsModal");
-            _chronicleModal = tree.Q<VisualElement>("ChronicleModal");
-            _repairModal = tree.Q<VisualElement>("RepairModal");
-            _profileModal = tree.Q<VisualElement>("ProfileModal");
-            _updateModal = tree.Q<VisualElement>("UpdateModal");
-
-            // Настройки табы
-            _settingsTabGraphics = tree.Q<Button>("SettingsTabGraphics");
-            _settingsTabAudio = tree.Q<Button>("SettingsTabAudio");
-            _settingsTabControls = tree.Q<Button>("SettingsTabControls");
-            _settingsTabNetwork = tree.Q<Button>("SettingsTabNetwork");
-            _settingsPaneGraphics = tree.Q<VisualElement>("SettingsPaneGraphics");
-            _settingsPaneAudio = tree.Q<VisualElement>("SettingsPaneAudio");
-            _settingsPaneControls = tree.Q<VisualElement>("SettingsPaneControls");
-            _settingsPaneNetwork = tree.Q<VisualElement>("SettingsPaneNetwork");
-
-            // Серверы
-            _serverItemHades = tree.Q<Button>("ServerItemHades");
-            _serverItemTartarus = tree.Q<Button>("ServerItemTartarus");
-            _serverItemCyber = tree.Q<Button>("ServerItemCyber");
-            _confirmServerButton = tree.Q<Button>("ConfirmServerButton");
 
             if (_loaderContainer != null)
             {
@@ -388,21 +301,7 @@ namespace Fodinae.UI
             {
                 _loaderContent.style.display = DisplayStyle.None;
             }
-
-            if (_modalOverlay != null)
-            {
-                _modalOverlay.style.display = DisplayStyle.None;
-            }
         }
-
-
-
-
-
-
-
-
-
 
         protected void Update()
         {
@@ -420,27 +319,11 @@ namespace Fodinae.UI
                 }
             }
 
-            // Enter Play Mode Options (Reload Domain/Scene disabled) re-creates
-            // the UIDocument's panel on play entry WITHOUT re-running OnEnable:
-            // the tree built at scene load stays attached to the old, disposed
-            // panel, and the fresh root remains empty. The panel itself is alive
-            // (it renders a separate probe panel fine), so this reads as a black
-            // screen - not a rendering failure. Rebuild when our tree is no
-            // longer attached to any panel. (Hot-reload is already handled in
-            // OnEnable; this covers the panel-recreation case.)
             if (Application.isPlaying && _built && _doc != null && _tree != null)
             {
-                // The live root is whatever the UIDocument currently exposes;
-                // on play entry the panel is re-created and the old root (where
-                // our tree still hangs) is replaced by a fresh empty one.
                 var liveRoot = _doc.rootVisualElement;
                 if (liveRoot == null || !ReferenceEquals(_tree.parent, liveRoot))
                 {
-                    // Clear _built alongside _tree. This is a deliberate invalidation, and
-                    // leaving _built set made OnEnable report it as an unexplained
-                    // hot-reload desync — a warning, with a full native stack trace, on
-                    // every single play-mode entry, describing a state this line just
-                    // created on purpose one statement earlier.
                     _tree = null;
                     _built = false;
                     InitializeScene(_sceneStarfield, _sceneScenery);
@@ -453,21 +336,10 @@ namespace Fodinae.UI
                 UpdateLoaderProgress();
             }
 
-            // Обе текстуры переприсваиваются каждый кадр, а не один раз при
-            // сборке UI: обе живут в RenderTexture, которые пересоздаются при
-            // смене разрешения окна, и старая ссылка после этого указывает на
-            // уничтоженный объект.
             _sceneryPresenter.Tick(ref _spaceBgTexture);
             HandleKeyboardInput();
         }
 
-        /// <summary>
-        /// Server windows (e.g. the auth window) open in the MainGame UIDocument, which
-        /// renders BELOW this menu's fullscreen layer. If the descent layer stays visible,
-        /// the window is invisible and unclickable — the game looks frozen on "connecting".
-        /// The moment a window is open, yield the whole layer. When the window closes,
-        /// resume the descent loader after a server window closes.
-        /// </summary>
         private void HandleKeyboardInput()
         {
             if (!Application.isPlaying)
@@ -483,9 +355,9 @@ namespace Fodinae.UI
 
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
-                if (_activeModal != null)
+                if (_modalManager.HasActiveModal)
                 {
-                    CloseCurrentModal();
+                    _modalManager.CloseCurrentModal();
                 }
                 else if (_loadingActive)
                 {
@@ -494,7 +366,7 @@ namespace Fodinae.UI
             }
             else if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
             {
-                if (_activeModal == null && !_loadingActive)
+                if (!_modalManager.HasActiveModal && !_loadingActive)
                 {
                     OnPlayButtonClicked();
                 }
@@ -503,9 +375,6 @@ namespace Fodinae.UI
 
         private void UpdateLoaderProgress()
         {
-            // Phase comes from the real world-readiness gate (GameManager), not
-            // a timer: the descent loader shows the actual startup stage and
-            // hides itself the moment the world is fully loaded.
             WorldLoadPhase phase = _loadProgress != null
                 ? _loadProgress.CurrentPhase
                 : WorldLoadPhase.Handshake;
@@ -525,7 +394,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            // Основные кнопки
             if (_playButton != null)
             {
                 _playButton.clicked += OnPlayButtonClicked;
@@ -533,17 +401,17 @@ namespace Fodinae.UI
 
             if (_serverSelectButton != null)
             {
-                _serverSelectButton.clicked += () => OpenModal(_serverBrowserModal);
+                _serverSelectButton.clicked += _modalManager.OpenServerBrowser;
             }
 
             if (_updateAlertBanner != null)
             {
-                _updateAlertBanner.clicked += () => OpenModal(_updateModal);
+                _updateAlertBanner.clicked += _modalManager.OpenUpdate;
             }
 
             if (_userPillButton != null)
             {
-                _userPillButton.clicked += () => OpenModal(_profileModal);
+                _userPillButton.clicked += _modalManager.OpenProfile;
             }
 
             if (_cancelDescentButton != null)
@@ -551,25 +419,24 @@ namespace Fodinae.UI
                 _cancelDescentButton.clicked += CancelDescent;
             }
 
-            // Сайдбар
             if (_sideChronicleButton != null)
             {
-                _sideChronicleButton.clicked += () => OpenModal(_chronicleModal);
+                _sideChronicleButton.clicked += _modalManager.OpenChronicle;
             }
 
             if (_sideSettingsButton != null)
             {
-                _sideSettingsButton.clicked += () => OpenModal(_settingsModal);
+                _sideSettingsButton.clicked += _modalManager.OpenSettings;
             }
 
             if (_sideRepairButton != null)
             {
-                _sideRepairButton.clicked += () => OpenModal(_repairModal);
+                _sideRepairButton.clicked += _modalManager.OpenRepair;
             }
 
             if (_sideUpdateButton != null)
             {
-                _sideUpdateButton.clicked += () => OpenModal(_updateModal);
+                _sideUpdateButton.clicked += _modalManager.OpenUpdate;
             }
 
             if (_sideDiscordButton != null)
@@ -592,223 +459,31 @@ namespace Fodinae.UI
                 _sideExitButton.clicked += QuitGame;
             }
 
-            // Футер
             if (_newsTickerButton != null)
             {
-                _newsTickerButton.clicked += () => OpenModal(_chronicleModal);
+                _newsTickerButton.clicked += _modalManager.OpenChronicle;
             }
 
             if (_footerVersionButton != null)
             {
-                // Версия берётся из настроек плеера, а не из строки в разметке.
-                // Захардкоженная «ВЕРСИЯ 0.8.14» не менялась от сборки к сборке,
-                // то есть по экрану нельзя было понять, какой билд запущен.
                 ApplyVersionLabel();
-
-                _footerVersionButton.clicked += () => OpenModal(_updateModal);
+                _footerVersionButton.clicked += _modalManager.OpenUpdate;
             }
 
-            // Модалки: закрытие
-            BindModalClose("CloseServerModalButton");
-            BindModalClose("CloseSettingsModalButton");
-            BindModalClose("CloseChronicleModalButton");
-            BindModalClose("CloseChronicleFooterButton");
-            BindModalClose("CloseRepairModalButton");
-            BindModalClose("ConfirmRepairButton");
-            BindModalClose("CloseProfileModalButton");
-            BindModalClose("CloseProfileFooterButton");
-            BindModalClose("CloseUpdateModalButton");
-
-            // Настройки табы
-            if (_settingsTabGraphics != null)
+            if (_tree != null)
             {
-                _settingsTabGraphics.clicked += () => SwitchSettingsTab(_settingsTabGraphics, _settingsPaneGraphics);
+                _modalManager.SubscribeEvents(_tree, OnPlayButtonClicked);
             }
-
-            if (_settingsTabAudio != null)
-            {
-                _settingsTabAudio.clicked += () => SwitchSettingsTab(_settingsTabAudio, _settingsPaneAudio);
-            }
-
-            if (_settingsTabControls != null)
-            {
-                _settingsTabControls.clicked += () => SwitchSettingsTab(_settingsTabControls, _settingsPaneControls);
-            }
-
-            if (_settingsTabNetwork != null)
-            {
-                _settingsTabNetwork.clicked += () => SwitchSettingsTab(_settingsTabNetwork, _settingsPaneNetwork);
-            }
-
-            // Серверы
-            if (_serverItemHades != null)
-            {
-                _serverItemHades.clicked += () => SelectServer("HADES-ALPHA (EU NORTH) · 32 MS", _serverItemHades);
-            }
-
-            if (_serverItemTartarus != null)
-            {
-                _serverItemTartarus.clicked += () => SelectServer("TARTARUS-02 (EU CENTRAL) · 44 MS", _serverItemTartarus);
-            }
-
-            if (_serverItemCyber != null)
-            {
-                _serverItemCyber.clicked += () => SelectServer("CYBER-PROSPECTORS (US EAST) · 118 MS", _serverItemCyber);
-            }
-
-            if (_confirmServerButton != null)
-            {
-                _confirmServerButton.clicked += () =>
-                {
-                    CloseCurrentModal();
-                    OnPlayButtonClicked();
-                };
-            }
-
-            var saveSettingsBtn = _tree?.Q<Button>("SaveSettingsButton");
-            if (saveSettingsBtn != null)
-            {
-                saveSettingsBtn.clicked += CloseCurrentModal;
-            }
-
-            var applyUpdateBtn = _tree?.Q<Button>("ApplyUpdateButton");
-            if (applyUpdateBtn != null)
-            {
-                applyUpdateBtn.clicked += () =>
-                {
-                    CloseCurrentModal();
-                    OnPlayButtonClicked();
-                };
-            }
-
-            _modalOverlay?.RegisterCallback<PointerDownEvent>(evt =>
-            {
-                if (evt.target == _modalOverlay)
-                {
-                    CloseCurrentModal();
-                }
-            });
 
             _subscribed = true;
         }
 
-        private void BindModalClose(string buttonName)
-        {
-            var btn = _tree?.Q<Button>(buttonName);
-            if (btn != null)
-            {
-                btn.clicked += CloseCurrentModal;
-            }
-        }
-
         protected void OnDisable()
         {
-            // НЕ сбрасываем _subscribed: обработчики уже навешаны на живые элементы
-            // дерева. Сброс флага при повторном OnEnable заставил бы SubscribeEvents
-            // добавить второй экземпляр каждого клика (двойное срабатывание). Дерево
-            // живёт, пока жив MainMenu; полную очистку делает OnDestroy.
         }
 
-        public void OpenModal(VisualElement? modal)
-        {
-            if (modal == null || _modalOverlay == null)
-            {
-                return;
-            }
-
-            HideAllModals();
-            _modalOverlay.style.display = DisplayStyle.Flex;
-            modal.style.display = DisplayStyle.Flex;
-            _activeModal = modal;
-        }
-
-        public void CloseCurrentModal()
-        {
-            if (_modalOverlay != null)
-            {
-                _modalOverlay.style.display = DisplayStyle.None;
-            }
-
-            HideAllModals();
-            _activeModal = null;
-        }
-
-        private void HideAllModals()
-        {
-            if (_serverBrowserModal != null)
-            {
-                _serverBrowserModal.style.display = DisplayStyle.None;
-            }
-
-            if (_settingsModal != null)
-            {
-                _settingsModal.style.display = DisplayStyle.None;
-            }
-
-            if (_chronicleModal != null)
-            {
-                _chronicleModal.style.display = DisplayStyle.None;
-            }
-
-            if (_repairModal != null)
-            {
-                _repairModal.style.display = DisplayStyle.None;
-            }
-
-            if (_profileModal != null)
-            {
-                _profileModal.style.display = DisplayStyle.None;
-            }
-
-            if (_updateModal != null)
-            {
-                _updateModal.style.display = DisplayStyle.None;
-            }
-        }
-
-        private void SwitchSettingsTab(Button tabBtn, VisualElement? targetPane)
-        {
-            _settingsTabGraphics?.RemoveFromClassList("mm-nav-tab--active");
-            _settingsTabAudio?.RemoveFromClassList("mm-nav-tab--active");
-            _settingsTabControls?.RemoveFromClassList("mm-nav-tab--active");
-            _settingsTabNetwork?.RemoveFromClassList("mm-nav-tab--active");
-
-            if (_settingsPaneGraphics != null)
-            {
-                _settingsPaneGraphics.style.display = DisplayStyle.None;
-            }
-
-            if (_settingsPaneAudio != null)
-            {
-                _settingsPaneAudio.style.display = DisplayStyle.None;
-            }
-
-            if (_settingsPaneControls != null)
-            {
-                _settingsPaneControls.style.display = DisplayStyle.None;
-            }
-
-            if (_settingsPaneNetwork != null)
-            {
-                _settingsPaneNetwork.style.display = DisplayStyle.None;
-            }
-
-            tabBtn.AddToClassList("mm-nav-tab--active");
-            if (targetPane != null)
-            {
-                targetPane.style.display = DisplayStyle.Flex;
-            }
-        }
-
-        private void SelectServer(string serverName, Button serverCard)
-        {
-            _serverItemHades?.RemoveFromClassList("mm-server-card--active");
-            _serverItemTartarus?.RemoveFromClassList("mm-server-card--active");
-            _serverItemCyber?.RemoveFromClassList("mm-server-card--active");
-
-            serverCard.AddToClassList("mm-server-card--active");
-
-        }
+        public void OpenModal(VisualElement? modal) => _modalManager.OpenModal(modal);
+        public void CloseCurrentModal() => _modalManager.CloseCurrentModal();
 
         private void QuitGame()
         {
@@ -849,11 +524,6 @@ namespace Fodinae.UI
                     : _loc.Get("mainmenu.version", Application.version);
         }
 
-        /// <summary>
-        /// Переприменяет локализованный текст после смены языка: статические
-        /// ключи через UILocalizer, динамические (версия, список фаз загрузки) —
-        /// напрямую.
-        /// </summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(MainMenu));
@@ -871,8 +541,6 @@ namespace Fodinae.UI
         protected void OnDestroy()
         {
             _teardownStarted = true;
-            // _loc can still be null if this view is torn down before
-            // Bootstrap-scope injection lands (async scene transitions).
             if (_loc != null)
             {
                 _loc.UnregisterLocalizable(this);
@@ -913,7 +581,7 @@ namespace Fodinae.UI
             Debug.Log("[MainMenu] Play button clicked - initiating descent sequence");
 
             HideMenu();
-            CloseCurrentModal();
+            _modalManager.CloseCurrentModal();
             _loadingActive = true;
             _descentCancellation?.Dispose();
             _descentCancellation = CancellationTokenSource.CreateLinkedTokenSource(
@@ -921,9 +589,6 @@ namespace Fodinae.UI
 
             if (_loaderContainer != null)
             {
-                // LoaderContainer скрыт display:none по умолчанию (UXML inline + USS .mm-loader).
-                // Показ только LoaderContent бесполезен — родитель остаётся невидимым, и весь
-                // экран спуска (включая шкалу прогресса) не отображается.
                 _loaderContainer.style.display = DisplayStyle.Flex;
             }
 
@@ -943,10 +608,6 @@ namespace Fodinae.UI
 
         private async UniTaskVoid RunDescentAsync()
         {
-            // Capture the token while this component is alive. Unity's
-            // destroyCancellationToken property is not safe to query from an
-            // async continuation after OnDestroy has started (Unity throws a
-            // MissingReferenceException from the property getter itself).
             CancellationToken transitionToken = _descentCancellation?.Token ?? CancellationToken.None;
             try
             {
@@ -954,7 +615,6 @@ namespace Fodinae.UI
             }
             catch (OperationCanceledException) when (transitionToken.IsCancellationRequested)
             {
-                // Scene teardown owns cancellation; there is no UI left to restore.
             }
             catch (Exception exception)
             {
@@ -977,10 +637,7 @@ namespace Fodinae.UI
 
         private void CancelDescent()
         {
-            // The scene route is linear. Once descent starts, the coordinator
-            // owns the transition and there is no staged scene to roll back.
             Debug.Log("[MainMenu] Descent is already in progress; waiting for MainGame.");
         }
-
     }
 }
