@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 
