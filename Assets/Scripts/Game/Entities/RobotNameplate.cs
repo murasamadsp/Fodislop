@@ -13,6 +13,7 @@ namespace Fodinae.Game;
 /// </summary>
 public sealed class RobotNameplate
 {
+    private static TMP_FontAsset? s_nameplateFont;
     private TextMeshPro? _nicknameText;
     private Vector3 _lastLabelsPosition;
     private bool _hasUpdatedLabels;
@@ -73,12 +74,12 @@ public sealed class RobotNameplate
         // SC/TC TMP fonts as its CJK fallback chain.
         if (_nicknameText.font == null)
         {
-            var font = Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_TMP") ??
-                       Resources.Load<TMP_FontAsset>("Fonts/NotoSansSC_TMP") ??
-                       TMP_Settings.defaultFontAsset;
-            if (font != null)
+            s_nameplateFont ??= Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_TMP") ??
+                                Resources.Load<TMP_FontAsset>("Fonts/NotoSansSC_TMP") ??
+                                TMP_Settings.defaultFontAsset;
+            if (s_nameplateFont != null)
             {
-                _nicknameText.font = font;
+                _nicknameText.font = s_nameplateFont;
             }
         }
 

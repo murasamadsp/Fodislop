@@ -319,8 +319,10 @@ namespace Fodinae.Game
             if (!IsLocalPlayer)
             {
                 Camera? cam = _gameplayCamera?.Camera;
-                Vector3 camPos = cam != null ? cam.transform.position : transform.position;
-                float sqrDistToCam = (transform.position - camPos).sqrMagnitude;
+                Vector2 diff = cam != null
+                    ? new Vector2(transform.position.x - cam.transform.position.x, transform.position.y - cam.transform.position.y)
+                    : Vector2.zero;
+                float sqrDistToCam = diff.sqrMagnitude;
                 bool shouldCull = sqrDistToCam > OffscreenCullSqrDistance;
 
                 if (shouldCull)

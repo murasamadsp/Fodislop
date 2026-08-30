@@ -38,6 +38,12 @@ public sealed class PlayerHUDBonusController
         }
 
         _bonusPanel = root.Q<VisualElement>("BonusPanel");
+        var bonusCloseButton = root.Q<Button>("BonusCloseButton");
+        if (bonusCloseButton != null)
+        {
+            bonusCloseButton.clicked += CloseBonusPanel;
+        }
+
         _bonusStatusLabel = root.Q<Label>("BonusStatusLabel");
         _bonusClaimButton = root.Q<Button>("BonusClaimButton");
         if (_bonusClaimButton != null)
@@ -55,6 +61,15 @@ public sealed class PlayerHUDBonusController
 
         _isBonusOpen = !_isBonusOpen;
         _bonusPanel.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
+    }
+
+    public void CloseBonusPanel()
+    {
+        _isBonusOpen = false;
+        if (_bonusPanel != null)
+        {
+            _bonusPanel.style.display = DisplayStyle.None;
+        }
     }
 
     public void UpdateDailyBonusPanel(PlayerStatsModel? stats)
@@ -77,6 +92,7 @@ public sealed class PlayerHUDBonusController
         else
         {
             _bonusButton.style.display = DisplayStyle.None;
+            CloseBonusPanel();
             _bonusStatusLabel.text = _loc.Get("hud.bonus.none");
             _bonusStatusLabel.style.color = Color.gray;
             if (_bonusClaimButton != null)
