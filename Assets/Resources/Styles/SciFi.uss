@@ -1,0 +1,252 @@
+/* ═══════════════════════════════════════════════════════════
+   SciFi.uss — компонентная библиотека, жившая внутри ThemeTokens.uss.
+
+   Двадцать семь правил (.sci-fi-panel, .sci-fi-btn-*, .sci-fi-badge-*,
+   .sci-fi-bar-*, .sci-fi-input) лежали в файле, который называется
+   «токены». Из-за этого ThemeTokens.uss нельзя было сделать машинным:
+   генератор затёр бы работающие компоненты.
+
+   Здесь они и остаются, пока не будут сведены с макетом: из 560 классов
+   игры с макетом совпадает 21, и .sci-fi-* — часть этого расхождения.
+   ═══════════════════════════════════════════════════════════ */
+
+.sci-fi-panel {
+    background-color: var(--surface-panel);
+    border-width: 1px;
+    border-color: var(--border-subtle);
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.sci-fi-panel--tech {
+    border-color: var(--border-cyan);
+    background-color: var(--surface-abyss-dense);
+}
+
+.sci-fi-panel--gold {
+    border-color: var(--border-gold);
+}
+
+.sci-fi-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--border-subtle);
+}
+
+.sci-fi-header-title {
+    -unity-font-definition: var(--face-display);
+    color: var(--text-primary);
+    font-size: 13px;
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+}
+
+.sci-fi-btn-gold {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    padding: 0 16px;
+    background-color: var(--accent-gold);
+    border-width: 1px;
+    border-color: var(--accent-gold);
+    border-radius: 3px;
+    color: var(--surface-void-solid);
+    -unity-font-definition: var(--face-display);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-btn-gold:hover {
+    background-color: var(--accent-gold-hover);
+    border-color: var(--accent-gold-hover);
+}
+
+.sci-fi-btn-cyan {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 14px;
+    background-color: var(--accent-cyan-wash);
+    border-width: 1px;
+    border-color: var(--border-cyan);
+    border-radius: 3px;
+    color: var(--accent-cyan);
+    -unity-font-definition: var(--face-display);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-btn-cyan:hover {
+    background-color: rgba(38, 198, 218, 0.35);
+    border-color: var(--accent-cyan-hover);
+    color: var(--accent-cyan-hover);
+}
+
+.sci-fi-btn-dark {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    padding: 0 12px;
+    background-color: rgba(14, 22, 32, 0.85);
+    border-width: 1px;
+    border-color: var(--border-subtle);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    -unity-font-definition: var(--face-body);
+    font-size: 12px;
+}
+
+.sci-fi-btn-dark:hover {
+    background-color: rgba(26, 40, 58, 0.95);
+    border-color: var(--border-cyan);
+    color: var(--text-primary);
+}
+
+.sci-fi-badge-mono {
+    -unity-font-definition: var(--face-data);
+    background-color: var(--accent-cyan-wash);
+    color: var(--accent-cyan);
+    border-width: 1px;
+    border-color: var(--border-cyan);
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-badge-gold {
+    -unity-font-definition: var(--face-data);
+    background-color: var(--accent-gold-glow);
+    color: var(--accent-gold);
+    border-width: 1px;
+    border-color: var(--border-gold);
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-bar-track {
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-width: 1px;
+    border-color: var(--border-subtle);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.sci-fi-bar-fill-hp {
+    height: 100%;
+    width: 100%;
+    background-color: var(--state-ok);
+    border-radius: 1px;
+}
+
+.sci-fi-bar-fill-cyan {
+    height: 100%;
+    background-color: var(--accent-cyan);
+    border-radius: 1px;
+}
+
+.sci-fi-bar-fill-gold {
+    height: 100%;
+    background-color: var(--accent-gold);
+    border-radius: 1px;
+}
+
+.sci-fi-input {
+    background-color: rgba(5, 8, 11, 0.85);
+    border-width: 1px;
+    border-color: var(--border-subtle);
+    border-radius: 3px;
+    color: var(--text-primary);
+    -unity-font-definition: var(--face-body);
+    font-size: 13px;
+    padding: 6px 10px;
+    margin: 4px 0;
+}
+
+.sci-fi-input:focus {
+    border-color: var(--accent-cyan-hover);
+    background-color: rgba(7, 14, 20, 0.95);
+}
+
+.sci-fi-btn-red {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 14px;
+    background-color: var(--state-danger-glow);
+    border-width: 1px;
+    border-color: rgba(231, 76, 60, 0.5);
+    border-radius: 3px;
+    color: #ff7675;
+    -unity-font-definition: var(--face-display);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-btn-red:hover {
+    background-color: rgba(231, 76, 60, 0.45);
+    border-color: #ff7675;
+    color: #ffffff;
+}
+
+.sci-fi-text-title {
+    -unity-font-definition: var(--face-display);
+    color: var(--text-primary);
+    font-size: 16px;
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.sci-fi-text-body {
+    -unity-font-definition: var(--face-body);
+    color: var(--text-primary);
+    font-size: 13px;
+    white-space: normal;
+}
+
+.sci-fi-text-muted {
+    -unity-font-definition: var(--face-body);
+    color: var(--text-secondary);
+    font-size: 12px;
+    white-space: normal;
+}
+
+.sci-fi-text-gold {
+    -unity-font-definition: var(--face-display);
+    color: var(--accent-gold-hover);
+    font-size: 13px;
+    -unity-font-style: bold;
+}
+
+.sci-fi-window-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(5, 8, 11, 0.75);
+    align-items: center;
+    justify-content: center;
+}
+
+.sci-fi-window {
+    background-color: var(--surface-panel);
+    border-width: 1px;
+    border-color: var(--border-cyan);
+    border-radius: 4px;
+    padding: 16px;
+    min-width: 320px;
+    max-width: 800px;
+}

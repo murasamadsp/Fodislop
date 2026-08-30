@@ -33,6 +33,7 @@
 "use strict";
 
 const fs = require("fs");
+const { spawnSync } = require("child_process");
 const path = require("path");
 
 const RED = "\x1b[0;31m";
@@ -1456,7 +1457,100 @@ function checkUssStyles() {
         problemCount++;
     }
 
+    problemCount += checkNoTokenNamesInComments(names);
+    problemCount += checkNoRelativeUnits(names);
+    problemCount += checkTokensMatchMirror();
+
     console.log(`${CYAN}${BOLD}USS stylesheets:${NC} ${names.length} file(s), ${declared.size} token(s) declared, ${problemCount} violation(s)`);
+}
+
+// ---------------------------------------------------------------------------
+// Part 4a: имя токена внутри комментария ломает импорт
+// ---------------------------------------------------------------------------
+//
+// Парсер USS видит последовательность «--имя» ДАЖЕ ВНУТРИ комментария,
+// принимает её за объявление пользовательского свойства и падает с
+// ColonMissing — файл не импортируется целиком. Поймано на живом примере:
+// комментарий «слоем псевдонимов --color-*/--mm-*» уронил Theme.uss.
+// Поэтому в комментариях имена пишутся без ведущих дефисов.
+
+function checkNoTokenNamesInComments(names) {
+    let count = 0;
+    for (const name of names) {
+        const full = path.join(STYLES_DIR, name);
+        const src = fs.readFileSync(full, "utf8");
+        for (const match of src.matchAll(/\/\*[\s\S]*?\*\//g)) {
+            if (!match[0].includes("--")) continue;
+            const line = src.slice(0, match.index).split("\n").length;
+            recordViolation("USS Stylesheet", full,
+                `${name}:${line} имя токена с «--» внутри комментария: парсер USS ` +
+                "примет его за объявление и уронит импорт (ColonMissing). " +
+                "Пишите имя без ведущих дефисов.");
+            count++;
+        }
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// Part 4a2: относительных единиц в USS не существует
+// ---------------------------------------------------------------------------
+//
+// letter-spacing и прочие длины принимают только пиксели и проценты. em, rem,
+// ch, vw, vh роняют импорт целиком: «Unsupported unit: '0.04em'». Пересчитать
+// em в px статически нельзя — величина зависит от кегля правила.
+
+const USS_BAD_UNITS = /(?<![\w-])[0-9.]+(em|rem|ch|ex|vw|vh|vmin|vmax)(?![\w-])/g;
+
+function checkNoRelativeUnits(names) {
+    let count = 0;
+    for (const name of names) {
+        const full = path.join(STYLES_DIR, name);
+        const code = fs.readFileSync(full, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+        code.split("\n").forEach((line, i) => {
+            for (const m of line.matchAll(USS_BAD_UNITS)) {
+                recordViolation("USS Stylesheet", full,
+                    `${name}:${i + 1} относительная единица '${m[0]}': USS понимает только px и %`);
+                count++;
+            }
+        });
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
+// Part 4b: токены игры обязаны совпадать с макетом
+// ---------------------------------------------------------------------------
+//
+// Связь макета и игры два месяца держалась на просьбе в шапке файла: «меняя
+// значение здесь, поменяй его и там». Просьба не выполнялась. Замер показал
+// шестнадцать разошедшихся значений, худшее — --border-subtle 0.08 против
+// 0.22, втрое ярче, почти на каждой поверхности интерфейса.
+//
+// Дальше эту связь держит не человек, а генератор, и проверяет — сборка.
+// Договор, который нельзя проверить, договором не является.
+
+function checkTokensMatchMirror() {
+    const generator = path.join(__dirname, "..", "visual", "main-menu-mirror", "tools", "emit-uss-tokens.py");
+    if (!fs.existsSync(generator)) {
+        recordViolation("USS Stylesheet", generator,
+            "нет генератора токенов: макет перестал быть источником истины");
+        return 1;
+    }
+
+    const result = spawnSync("python3", [generator, "--check"], { encoding: "utf8" });
+    if (result.error) {
+        recordViolation("USS Stylesheet", generator,
+            `генератор токенов не запустился: ${result.error.message}`);
+        return 1;
+    }
+    if (result.status !== 0) {
+        const detail = `${result.stdout || ""}${result.stderr || ""}`.trim().replace(/\n/g, " | ");
+        recordViolation("USS Stylesheet", path.join(STYLES_DIR, "ThemeTokens.uss"),
+            `токены игры разошлись с макетом. ${detail}`);
+        return 1;
+    }
+    return 0;
 }
 
 // ---------------------------------------------------------------------------

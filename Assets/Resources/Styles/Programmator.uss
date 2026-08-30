@@ -7,17 +7,17 @@
     top: 50%;
     left: 50%;
     translate: -50% -50%;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
-    border-width: var(--panel-border-width);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
+    border-width: 1px;
     border-radius: 4px;
-    padding: var(--panel-padding);
+    padding: var(--space-6);
 }
 
 .programmator-grid {
     flex-wrap: wrap;
     background-color: rgba(30, 30, 30, 1);
-    border-color: var(--btn-border);
+    border-color: var(--border-subtle);
     border-width: 1px;
     border-radius: 3px;
     padding: 4px;
@@ -27,22 +27,22 @@
     width: 40px;
     height: 40px;
     background-color: rgba(38, 38, 38, 1);
-    border-color: var(--btn-border);
+    border-color: var(--border-subtle);
     border-width: 1px;
     border-radius: 2px;
     margin: 1px;
     -unity-text-align: middle-center;
-    font-size: var(--font-size-sm);
-    color: var(--color-text);
+    font-size: var(--size-sm);
+    color: var(--text-primary);
 }
 
 .programmator-cell:hover {
-    border-color: var(--color-accent);
+    border-color: var(--accent-gold);
 }
 
 .programmator-cell.has-operator {
     background-color: rgba(178, 166, 128, 0.3);
-    color: var(--color-accent);
+    color: var(--accent-gold);
 }
 
 .programmator-toolbar {

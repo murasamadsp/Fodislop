@@ -1,0 +1,483 @@
+{
+  "_": "Машинный файл. Источник visual/main-menu-mirror/css/tokens.css, генератор tools/emit-uss-tokens.py. Правки будут затёрты.",
+  "colors": {
+    "--accent-cyan": [
+      86,
+      221,
+      212,
+      1.0
+    ],
+    "--accent-cyan-deep": [
+      30,
+      112,
+      106,
+      1.0
+    ],
+    "--accent-cyan-dense": [
+      86,
+      221,
+      212,
+      0.85
+    ],
+    "--accent-cyan-fill": [
+      86,
+      221,
+      212,
+      0.55
+    ],
+    "--accent-cyan-glow": [
+      86,
+      221,
+      212,
+      0.3
+    ],
+    "--accent-cyan-hover": [
+      134,
+      237,
+      230,
+      1.0
+    ],
+    "--accent-cyan-solid": [
+      86,
+      221,
+      212,
+      1.0
+    ],
+    "--accent-cyan-tint": [
+      86,
+      221,
+      212,
+      0.08
+    ],
+    "--accent-cyan-wash": [
+      86,
+      221,
+      212,
+      0.12
+    ],
+    "--accent-gold": [
+      245,
+      197,
+      66,
+      1.0
+    ],
+    "--accent-gold-fill": [
+      245,
+      197,
+      66,
+      0.55
+    ],
+    "--accent-gold-glow": [
+      245,
+      197,
+      66,
+      0.3
+    ],
+    "--accent-gold-hover": [
+      255,
+      207,
+      77,
+      1.0
+    ],
+    "--accent-gold-tint": [
+      245,
+      197,
+      66,
+      0.08
+    ],
+    "--accent-gold-wash": [
+      245,
+      197,
+      66,
+      0.12
+    ],
+    "--border-cyan": [
+      86,
+      221,
+      212,
+      0.55
+    ],
+    "--border-danger": [
+      255,
+      85,
+      85,
+      0.4
+    ],
+    "--border-gold": [
+      245,
+      197,
+      66,
+      0.55
+    ],
+    "--border-hairline": [
+      140,
+      185,
+      205,
+      0.08
+    ],
+    "--border-line": [
+      140,
+      185,
+      205,
+      0.15
+    ],
+    "--border-strong": [
+      140,
+      185,
+      205,
+      0.15
+    ],
+    "--border-subtle": [
+      140,
+      185,
+      205,
+      0.08
+    ],
+    "--focus-ring-color": [
+      134,
+      237,
+      230,
+      1.0
+    ],
+    "--light-edge": [
+      255,
+      255,
+      255,
+      0.45
+    ],
+    "--light-film": [
+      255,
+      255,
+      255,
+      0.06
+    ],
+    "--light-gleam": [
+      255,
+      255,
+      255,
+      0.7
+    ],
+    "--light-sheen": [
+      255,
+      255,
+      255,
+      0.12
+    ],
+    "--light-solid": [
+      255,
+      255,
+      255,
+      1.0
+    ],
+    "--rarity-common": [
+      133,
+      152,
+      163,
+      1.0
+    ],
+    "--rarity-epic": [
+      168,
+      85,
+      247,
+      1.0
+    ],
+    "--rarity-legendary": [
+      245,
+      197,
+      66,
+      1.0
+    ],
+    "--rarity-rare": [
+      86,
+      221,
+      212,
+      1.0
+    ],
+    "--rarity-uncommon": [
+      74,
+      222,
+      128,
+      1.0
+    ],
+    "--shadow-solid": [
+      0,
+      0,
+      0,
+      1.0
+    ],
+    "--state-anomaly": [
+      168,
+      85,
+      247,
+      1.0
+    ],
+    "--state-anomaly-glow": [
+      168,
+      85,
+      247,
+      0.4
+    ],
+    "--state-anomaly-wash": [
+      168,
+      85,
+      247,
+      0.15
+    ],
+    "--state-danger": [
+      255,
+      85,
+      85,
+      1.0
+    ],
+    "--state-danger-glow": [
+      255,
+      85,
+      85,
+      0.4
+    ],
+    "--state-danger-hover": [
+      255,
+      123,
+      123,
+      1.0
+    ],
+    "--state-danger-wash": [
+      255,
+      85,
+      85,
+      0.15
+    ],
+    "--state-magma-glow": [
+      255,
+      122,
+      54,
+      0.4
+    ],
+    "--state-magma-tint": [
+      255,
+      122,
+      54,
+      0.08
+    ],
+    "--state-ok": [
+      74,
+      222,
+      128,
+      1.0
+    ],
+    "--state-ok-tint": [
+      74,
+      222,
+      128,
+      0.08
+    ],
+    "--state-ok-wash": [
+      74,
+      222,
+      128,
+      0.08
+    ],
+    "--state-warn": [
+      255,
+      122,
+      54,
+      1.0
+    ],
+    "--state-warn-wash": [
+      255,
+      122,
+      54,
+      0.08
+    ],
+    "--surface-abyss-dense": [
+      7,
+      13,
+      20,
+      0.9
+    ],
+    "--surface-abyss-solid": [
+      7,
+      13,
+      20,
+      1.0
+    ],
+    "--surface-abyss-veil": [
+      7,
+      13,
+      20,
+      0.6
+    ],
+    "--surface-crisis-dense": [
+      16,
+      3,
+      3,
+      0.9
+    ],
+    "--surface-crisis-solid": [
+      16,
+      3,
+      3,
+      1.0
+    ],
+    "--surface-ember-solid": [
+      26,
+      18,
+      6,
+      1.0
+    ],
+    "--surface-inset": [
+      3,
+      5,
+      9,
+      0.5
+    ],
+    "--surface-on-accent": [
+      4,
+      8,
+      14,
+      1.0
+    ],
+    "--surface-panel": [
+      7,
+      13,
+      20,
+      0.9
+    ],
+    "--surface-raised": [
+      11,
+      20,
+      30,
+      0.6
+    ],
+    "--surface-scrim": [
+      3,
+      5,
+      9,
+      0.9
+    ],
+    "--surface-shelf-dense": [
+      17,
+      30,
+      46,
+      0.9
+    ],
+    "--surface-shelf-solid": [
+      17,
+      30,
+      46,
+      1.0
+    ],
+    "--surface-slate-dense": [
+      11,
+      20,
+      30,
+      0.9
+    ],
+    "--surface-slate-solid": [
+      11,
+      20,
+      30,
+      1.0
+    ],
+    "--surface-slate-veil": [
+      11,
+      20,
+      30,
+      0.6
+    ],
+    "--surface-solid": [
+      8,
+      16,
+      24,
+      1.0
+    ],
+    "--surface-sunken": [
+      3,
+      5,
+      9,
+      0.6
+    ],
+    "--surface-void": [
+      3,
+      5,
+      9,
+      1.0
+    ],
+    "--surface-void-dense": [
+      3,
+      5,
+      9,
+      0.9
+    ],
+    "--surface-void-haze": [
+      3,
+      5,
+      9,
+      0.2
+    ],
+    "--surface-void-shade": [
+      3,
+      5,
+      9,
+      0.5
+    ],
+    "--surface-void-solid": [
+      3,
+      5,
+      9,
+      1.0
+    ],
+    "--surface-void-veil": [
+      3,
+      5,
+      9,
+      0.6
+    ],
+    "--text-disabled": [
+      77,
+      99,
+      112,
+      1.0
+    ],
+    "--text-on-gold": [
+      4,
+      8,
+      14,
+      1.0
+    ],
+    "--text-primary": [
+      240,
+      246,
+      248,
+      1.0
+    ],
+    "--text-secondary": [
+      133,
+      152,
+      163,
+      1.0
+    ],
+    "--text-tertiary": [
+      98,
+      123,
+      137,
+      1.0
+    ]
+  },
+  "space": {
+    "--space-1": 2,
+    "--space-2": 4,
+    "--space-3": 6,
+    "--space-4": 8,
+    "--space-5": 10,
+    "--space-6": 12,
+    "--space-7": 14,
+    "--space-8": 16,
+    "--space-9": 20,
+    "--space-10": 24,
+    "--space-11": 28,
+    "--space-12": 32,
+    "--space-13": 40,
+    "--space-14": 48
+  }
+}

@@ -3,17 +3,17 @@
    ═══════════════════════════════════════════════════════════ */
 
 .panel {
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
-    border-width: var(--panel-border-width);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
+    border-width: 1px;
     border-radius: 4px;
-    padding: var(--panel-padding);
-    color: var(--color-text);
+    padding: var(--space-6);
+    color: var(--text-primary);
 }
 
 .panel-header {
-    font-size: var(--font-size-xl);
-    color: var(--color-accent);
+    font-size: var(--size-xl);
+    color: var(--accent-gold);
     margin-bottom: 8px;
 }
 
