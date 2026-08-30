@@ -122,6 +122,11 @@ function buildScriptClassIndex() {
 
 const COMMENT_LINE_REGEX = /^\s*(?:\/\/|\/\*|\*|\/\/\/)/;
 
+// Transitional debt list for the async-lifecycle migration. The rule below
+// rejects every new production .Forget() call; each existing owner must be
+// removed from this list when its operations move under a supervisor.
+const LEGACY_UNSUPERVISED_ASYNC_FILES = /^Assets\/Scripts\/Core\/Lifecycle\/AsyncOperationSupervisor\.cs$/;
+
 // Each rule: { pattern, name, allow (path exemption, nullable), allowContent (line exemption, nullable) }.
 // "allow" and "allowContent" were the ALLOW_REGEX / ALLOW_CONTENT_REGEX arrays of the shell linter.
 const RULES = [
@@ -156,7 +161,7 @@ const RULES = [
     { pattern: /QualitySettings\.antiAliasing\s*=/, name: "MSAA ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
     { pattern: /QualitySettings\.SetQualityLevel\s*\(/, name: "Unity quality-level ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
     { pattern: /\.renderScale\s*=/, name: "URP render-scale ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
-    { pattern: /PlayerPrefs\.(Set|Delete|Save)/, name: "settings persistence in PlayerPrefs", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Networking\/Auth\/AuthTokenManager\.cs|Assets\/Scripts\/UI\/(AuthGate\.cs|GatewayController\.cs|Gateway\/AuthGate\.cs|Gateway\/GatewayController\.cs))$/, allowContent: null },
+    { pattern: /PlayerPrefs\.(Set|Delete|Save)/, name: "settings persistence in PlayerPrefs", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Networking\/Auth\/(AuthTokenManager|VkAuthService)\.cs|Assets\/Scripts\/UI\/(AuthGate\.cs|GatewayController\.cs|Gateway\/AuthGate\.cs|Gateway\/GatewayController\.cs))$/, allowContent: null },
     { pattern: /(slider|toggle|dropdown|quality|preset)\.value\s*=/, name: "notifying UI settings refresh", allow: null, allowContent: null },
     { pattern: /ServerConfig[^;]*(Master|Sfx|Music|Ambience|Voice|Ui)Volume/, name: "audio volume in ServerConfig", allow: null, allowContent: null },
     { pattern: /_clientConfig\.Config\.[A-Za-z0-9_]+\s*=/, name: "direct ClientConfig field mutation", allow: null, allowContent: null },
@@ -174,11 +179,18 @@ const RULES = [
     { pattern: /\bDontDestroyOnLoad\s*\(/, name: "DontDestroyOnLoad outside BootstrapLifetimeScope", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Core\/Bootstrap\/BootstrapLifetimeScope\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
     { pattern: /\bScreen\.SetResolution\s*\(/, name: "Screen.SetResolution outside DisplayManager", allow: /^Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs$/, allowContent: null },
     { pattern: /\bThread\.Sleep\s*\(/, name: "blocking Thread.Sleep in gameplay/async code", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
+    { pattern: /\.Forget\s*\(/, name: "unsupervised async operation (use AsyncOperationSupervisor)", allow: LEGACY_UNSUPERVISED_ASYNC_FILES, allowContent: null },
+    { pattern: /\bclass\s+WorldLayer\s*</, name: "WorldLayer implementation outside persistence assembly", allow: /^Assets\/Scripts\/World\/Persistence\/WorldLayer\.cs$/, allowContent: null },
+    { pattern: /\b(?:FileStream|BinaryReader|BinaryWriter)\b/, name: "file persistence implementation inside Contracts", allow: /^(?!Assets\/Scripts\/Core\/Interfaces\/Contracts\/)/, allowContent: null },
+    { pattern: /\bclass\s+LocalChatPopup\b/, name: "disconnected legacy local-chat controller (use GlobalChatUI local channel)", allow: null, allowContent: null },
+    { pattern: /\.GetChunk\s*\(/, name: "ambiguous world-layer chunk access (use ReadChunk or GetOrCreateChunk)", allow: null, allowContent: null },
     { pattern: /\bGC\.Collect\s*\(/, name: "manual GC.Collect in runtime gameplay", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
     { pattern: /\bCamera\.(allCameras|current)\b/, name: "unmanaged camera lookup (use explicit gameplay camera contract)", allow: null, allowContent: null },
     { pattern: /\bTime\.timeScale\s*=/, name: "unowned Time.timeScale mutation", allow: /^(Assets\/Scripts\/UI\/(PauseMenu\.cs|Settings\/PauseMenu\.cs)|Assets\/Scripts\/Game\/Managers\/GameManager\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
     { pattern: /new\s+(WebClient|HttpClient)\s*\(/, name: "ad-hoc HTTP client (use ClientAssetLoader or UnityWebRequest)", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
     { pattern: /Shader\.WarmupAllShaders/, name: "Shader.WarmupAllShaders in URP (throws keyword space assert)", allow: null, allowContent: null },
+    { pattern: /_starfieldMaterial\.(?:SetFloat|SetVector|SetColor|SetTexture|SetInt|SetMatrix)\s*\(/, name: "mutation of the serialized Starfield material asset (use the HideAndDontSave runtime clone)", allow: null, allowContent: null },
+    { pattern: /\.sharedMaterial\.(?:SetFloat|SetVector|SetColor|SetTexture|SetInt|SetMatrix)\s*\(/, name: "mutation through Renderer.sharedMaterial (clone the material or use MaterialPropertyBlock)", allow: null, allowContent: null },
     { pattern: /GameStartupServices/, name: "deleted GameStartupServices aggregate (inject startup dependencies directly into GameBootstrap)", allow: /^Assets\/Scripts\/Tests\//, allowContent: null },
     { pattern: /SceneScopeAuthoring|SceneContractMigration/, name: "scene auto-fixing editor tools are deleted (use the read-only ProductionSceneContractValidator)", allow: null, allowContent: null },
     { pattern: /PlayerMovementController\.(LocalPlayer|OnLocalPlayerSpawned)/, name: "static local-player access (resolve ILocalPlayerState)", allow: /^Assets\/Scripts\/Core\/Interfaces\/ILocalPlayerState\.cs$/, allowContent: null },
@@ -1883,6 +1895,9 @@ function checkLocalizationRegistry() {
 
     const loaderFiles = new Map(); // basename -> Set<file>
     for (const file of walkCs(SCRIPTS_DIR)) {
+        if (/Assets\/Scripts\/Tests\//.test(file)) {
+            continue;
+        }
         const src = readFile(file);
         if (src === null) {
             continue;

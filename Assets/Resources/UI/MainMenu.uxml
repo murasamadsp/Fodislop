@@ -41,6 +41,25 @@
         <!-- ТЕНЕВОЙ ГРАДИЕНТ СЛЕВА -->
         <ui:Image name="LoaderShade" class="mm-loader-shade" picking-mode="Ignore" scale-mode="StretchToFill" />
 
+        <!-- ЭКРАН СПУСКА (ФАЗЫ ЗАГРУЗКИ) -->
+        <ui:VisualElement name="LoaderContainer" class="mm-loader">
+            <ui:VisualElement name="LoaderContent" class="mm-loader-content">
+                <ui:Label class="mm-eyebrow" text="mainmenu.loading_eyebrow" />
+                <ui:Label class="mm-heading-white" text="mainmenu.loading_heading" />
+                <ui:Label class="mm-heading-gold" text="mainmenu.loading_heading_accent" />
+                <ui:Label class="mm-subtitle" text="mainmenu.loading_subtitle" />
+                <ui:VisualElement name="LoaderProgressTrack" class="mm-loader-progress-track">
+                    <ui:VisualElement name="LoaderProgressFill" class="mm-loader-progress-fill" />
+                </ui:VisualElement>
+                <ui:VisualElement name="LoaderProgressMeta" class="mm-loader-progress-meta">
+                    <ui:Label name="LoaderPhaseLabel" class="mm-loader-phase-label" text="menu.loading.phase.handshake" />
+                    <ui:Label name="LoaderPhaseCount" class="mm-loader-phase-count" text="1 / 5" />
+                </ui:VisualElement>
+                <ui:VisualElement name="LoaderPhaseList" class="mm-loader-phases" />
+                <ui:Button name="CancelDescentButton" class="mm-btn-outline" text="menu.cancel_descent" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
         <!-- ВЕРХНИЙ ХЕДЕР (64px) -->
         <ui:VisualElement name="MainMenuHeader" class="mm-header">
             <ui:VisualElement name="MainMenuWordmark" class="mm-wordmark">
@@ -182,50 +201,95 @@
         <!-- МОДАЛЬНЫЕ ОКНА (OVERLAY) -->
         <ui:VisualElement name="ModalOverlay" class="mm-modal-overlay">
 
-            <!-- 1. Браузер серверов -->
-            <ui:VisualElement name="ServerBrowserModal" class="mm-modal-card">
+            <!-- 1. Браузер серверов (2 колонки + IP ввод + карточка деталей) -->
+            <ui:VisualElement name="ServerBrowserModal" class="mm-modal-card mm-modal-card--wide">
                 <ui:VisualElement class="mm-modal-header">
                     <ui:Label class="mm-modal-title" text="mainmenu.server_modal_title" />
                     <ui:Button name="CloseServerModalButton" class="mm-modal-close" text="✕" />
                 </ui:VisualElement>
                 <ui:VisualElement class="mm-modal-body">
                     <ui:Label class="mm-modal-desc" text="mainmenu.server_modal_desc" />
-                    <ui:VisualElement class="mm-server-list">
-                        <ui:Button name="ServerItemHades" class="mm-server-card mm-server-card--active">
-                            <ui:VisualElement class="mm-sc-left">
-                                <ui:Label class="mm-sc-title" text="mainmenu.server_eu_north" />
-                                <ui:Label class="mm-sc-desc" text="mainmenu.server_eu_north_desc" />
-                            </ui:VisualElement>
-                            <ui:VisualElement class="mm-sc-right">
-                                <ui:Label class="mm-sc-ping" text="mainmenu.server_eu_north_ping" />
-                                <ui:Label class="mm-sc-online" text="mainmenu.server_eu_north_online" />
-                            </ui:VisualElement>
-                        </ui:Button>
+                    <ui:VisualElement class="mm-settings-layout">
+                        <!-- Левая колонка: Серверы и IP -->
+                        <ui:VisualElement class="mm-settings-content mm-settings-content--servers">
+                            <ui:VisualElement class="mm-server-list">
+                                <ui:Button name="ServerItemHades" class="mm-server-card mm-server-card--active">
+                                    <ui:VisualElement class="mm-sc-left">
+                                        <ui:Label class="mm-sc-title" text="mainmenu.server_eu_north" />
+                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_eu_north_desc" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="mm-sc-right">
+                                        <ui:Label class="mm-sc-ping" text="mainmenu.server_eu_north_ping" />
+                                        <ui:Label class="mm-sc-online" text="mainmenu.server_eu_north_online" />
+                                    </ui:VisualElement>
+                                </ui:Button>
 
-                        <ui:Button name="ServerItemTartarus" class="mm-server-card">
-                            <ui:VisualElement class="mm-sc-left">
-                                <ui:Label class="mm-sc-title" text="mainmenu.server_eu_east" />
-                                <ui:Label class="mm-sc-desc" text="mainmenu.server_eu_east_desc" />
-                            </ui:VisualElement>
-                            <ui:VisualElement class="mm-sc-right">
-                                <ui:Label class="mm-sc-ping" text="mainmenu.server_eu_east_ping" />
-                                <ui:Label class="mm-sc-online" text="mainmenu.server_eu_east_online" />
-                            </ui:VisualElement>
-                        </ui:Button>
+                                <ui:Button name="ServerItemTartarus" class="mm-server-card">
+                                    <ui:VisualElement class="mm-sc-left">
+                                        <ui:Label class="mm-sc-title" text="mainmenu.server_eu_east" />
+                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_eu_east_desc" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="mm-sc-right">
+                                        <ui:Label class="mm-sc-ping" text="mainmenu.server_eu_east_ping" />
+                                        <ui:Label class="mm-sc-online" text="mainmenu.server_eu_east_online" />
+                                    </ui:VisualElement>
+                                </ui:Button>
 
-                        <ui:Button name="ServerItemCyber" class="mm-server-card">
-                            <ui:VisualElement class="mm-sc-left">
-                                <ui:Label class="mm-sc-title" text="mainmenu.server_asia" />
-                                <ui:Label class="mm-sc-desc" text="mainmenu.server_asia_desc" />
+                                <ui:Button name="ServerItemCyber" class="mm-server-card">
+                                    <ui:VisualElement class="mm-sc-left">
+                                        <ui:Label class="mm-sc-title" text="mainmenu.server_asia" />
+                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_asia_desc" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="mm-sc-right">
+                                        <ui:Label class="mm-sc-ping mm-sc-ping--yellow" text="mainmenu.server_asia_ping" />
+                                        <ui:Label class="mm-sc-online" text="mainmenu.server_asia_online" />
+                                    </ui:VisualElement>
+                                </ui:Button>
+
+                                <ui:Button name="ServerItemDummy" class="mm-server-card">
+                                    <ui:VisualElement class="mm-sc-left">
+                                        <ui:Label class="mm-sc-title" text="DUMMY OFFLINE" />
+                                        <ui:Label class="mm-sc-desc" text="mainmenu.server_dummy_desc" />
+                                    </ui:VisualElement>
+                                    <ui:VisualElement class="mm-sc-right">
+                                        <ui:Label class="mm-sc-ping" text="0 ms" />
+                                        <ui:Label class="mm-sc-online" text="LOCAL" />
+                                    </ui:VisualElement>
+                                </ui:Button>
                             </ui:VisualElement>
-                            <ui:VisualElement class="mm-sc-right">
-                                <ui:Label class="mm-sc-ping mm-sc-ping--yellow" text="mainmenu.server_asia_ping" />
-                                <ui:Label class="mm-sc-online" text="mainmenu.server_asia_online" />
+
+                            <ui:VisualElement class="mm-card-box mm-ip-connect-box">
+                                <ui:Label class="mm-card-tag" text="IP:" />
+                                <ui:TextField name="DirectServerIpInput" value="127.0.0.1:7777" class="mm-flex-1" />
+                                <ui:Button name="DirectConnectButton" class="mm-btn-outline" text="mainmenu.server_direct_connect" />
                             </ui:VisualElement>
-                        </ui:Button>
+                        </ui:VisualElement>
+
+                        <!-- Правая колонка: Карточка деталей -->
+                        <ui:VisualElement class="mm-card-box mm-server-detail-card">
+                            <ui:Label name="ServerDetailTitle" class="mm-item-title mm-detail-title" text="HADES-ALPHA" />
+                            <ui:Label name="ServerDetailDesc" class="mm-card-tag mm-detail-desc" text="mainmenu.server_eu_north_desc" />
+                            <ui:VisualElement class="mm-row-item">
+                                <ui:Label class="mm-item-title" text="mainmenu.server_depth_label" />
+                                <ui:Label name="ServerDetailDepth" class="mm-item-val mm-text--gold" text="mainmenu.server_default_depth" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-row-item">
+                                <ui:Label class="mm-item-title" text="mainmenu.server_seed_label" />
+                                <ui:Label name="ServerDetailSeed" class="mm-item-val" text="#849201" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-row-item">
+                                <ui:Label class="mm-item-title" text="mainmenu.server_ping_label" />
+                                <ui:Label name="ServerDetailPing" class="mm-item-val" text="32 ms" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-row-item">
+                                <ui:Label class="mm-item-title" text="mainmenu.server_hazard_label" />
+                                <ui:Label name="ServerDetailHazard" class="mm-item-val" text="mainmenu.server_hazard_high" />
+                            </ui:VisualElement>
+                        </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:VisualElement>
                 <ui:VisualElement class="mm-modal-footer">
+                    <ui:Button name="CloseServerFooterButton" class="mm-btn-outline" text="mainmenu.server_close" />
                     <ui:Button name="ConfirmServerButton" class="mm-btn-gold" text="mainmenu.server_confirm" />
                 </ui:VisualElement>
             </ui:VisualElement>
@@ -288,6 +352,13 @@
                         <!-- Вкладка Управление -->
                         <ui:VisualElement name="SettingsPaneControls" class="mm-tab-pane">
                             <ui:VisualElement class="mm-card-box">
+                                <ui:Label class="mm-card-tag" text="gateway.onb.controls_scheme_label" />
+                                <ui:VisualElement class="mm-row-item">
+                                    <ui:Label class="mm-item-title" text="gateway.onb.controls_scheme_hint" />
+                                    <ui:DropdownField name="MenuSettingsControlScheme" class="onb-select mm-select--controls" />
+                                </ui:VisualElement>
+                            </ui:VisualElement>
+                            <ui:VisualElement class="mm-card-box mm-card-box--gap-top">
                                 <ui:Label class="mm-card-tag" text="mainmenu.settings_card_keys" />
                                 <ui:VisualElement class="mm-row-item">
                                     <ui:Label class="mm-item-title" text="mainmenu.settings_key_move" />
@@ -413,26 +484,39 @@
                         <ui:VisualElement class="mm-profile-info">
                             <ui:Label class="mm-profile-name" text="mainmenu.user_name" />
                             <ui:Label class="mm-profile-clan" text="mainmenu.profile_clan" />
-                            <ui:Label class="mm-profile-uid" text="UID: 4195-F765-6275-458C" />
+                            <ui:Label class="mm-profile-uid" text="mainmenu.profile_expedition_id" />
                         </ui:VisualElement>
                     </ui:VisualElement>
+
+                    <!-- Блок токена доступа -->
                     <ui:VisualElement class="mm-card-box mm-card-box--gap-top">
-                        <ui:Label class="mm-card-tag" text="mainmenu.profile_stats" />
+                        <ui:Label class="mm-card-tag" text="mainmenu.profile_token_title" />
+                        <ui:VisualElement class="mm-row-item mm-row-item--gap">
+                            <ui:TextField name="ProfileTokenField" value="fdn_tok_9948a204e18" is-read-only="true" class="mm-flex-1" />
+                            <ui:Button name="CopyTokenButton" class="mm-btn-outline" text="mainmenu.profile_copy_token" />
+                        </ui:VisualElement>
+                        <ui:Label name="CopyTokenFeedback" class="mm-card-tag mm-text--gold mm-feedback-tag" text="" />
+                    </ui:VisualElement>
+
+                    <!-- Экипировка -->
+                    <ui:VisualElement class="mm-card-box mm-card-box--gap-top">
+                        <ui:Label class="mm-card-tag" text="mainmenu.profile_equipment" />
                         <ui:VisualElement class="mm-row-item">
-                            <ui:Label class="mm-item-title" text="mainmenu.profile_depth" />
-                            <ui:Label class="mm-item-val" text="mainmenu.profile_depth_val" />
+                            <ui:Label class="mm-item-title" text="mainmenu.profile_drill" />
+                            <ui:Label class="mm-item-val mm-text--gold" text="mainmenu.profile_drill_val" />
                         </ui:VisualElement>
                         <ui:VisualElement class="mm-row-item">
-                            <ui:Label class="mm-item-title" text="mainmenu.profile_ore" />
-                            <ui:Label class="mm-item-val" text="mainmenu.profile_ore_val" />
+                            <ui:Label class="mm-item-title" text="mainmenu.profile_drone" />
+                            <ui:Label class="mm-item-val" text="Hexapod Scout v1" />
                         </ui:VisualElement>
                         <ui:VisualElement class="mm-row-item">
-                            <ui:Label class="mm-item-title" text="mainmenu.profile_drones" />
-                            <ui:Label class="mm-item-val" text="mainmenu.profile_drones_val" />
+                            <ui:Label class="mm-item-title" text="mainmenu.profile_inventory_slots" />
+                            <ui:Label class="mm-item-val" text="mainmenu.profile_inventory_slots_val" />
                         </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:VisualElement>
-                <ui:VisualElement class="mm-modal-footer">
+                <ui:VisualElement class="mm-modal-footer mm-footer--between">
+                    <ui:Button name="SwitchAccountButton" class="mm-btn-outline" text="mainmenu.profile_switch_account" />
                     <ui:Button name="CloseProfileFooterButton" class="mm-btn-gold" text="mainmenu.profile_close" />
                 </ui:VisualElement>
             </ui:VisualElement>
@@ -445,20 +529,40 @@
                 </ui:VisualElement>
                 <ui:VisualElement class="mm-modal-body">
                     <ui:Label class="mm-modal-desc" text="mainmenu.update_modal_desc" />
+                    <ui:VisualElement class="mm-card-box mm-update-hero-box">
+                        <ui:Label class="mm-item-title mm-text--gold mm-update-title" text="v0.9.0 — DEEP SUBSURFACE EXPANSION" />
+                        <ui:Label class="mm-card-tag" text="mainmenu.update_protocol_version" />
+                    </ui:VisualElement>
+
                     <ui:VisualElement class="mm-card-box">
                         <ui:Label class="mm-card-tag" text="mainmenu.update_changelog" />
                         <ui:VisualElement class="mm-row-item">
-                            <ui:Label class="mm-item-title" text="• Radiance Cascades 2D GPU Lighting" />
+                            <ui:Label class="mm-item-title" text="mainmenu.update_changelog_1" />
                         </ui:VisualElement>
                         <ui:VisualElement class="mm-row-item">
-                            <ui:Label class="mm-item-title" text="• FMOD Spatial 3D Audio Engine" />
+                            <ui:Label class="mm-item-title" text="mainmenu.update_changelog_2" />
                         </ui:VisualElement>
                         <ui:VisualElement class="mm-row-item">
-                            <ui:Label class="mm-item-title" text="mainmenu.update_changelog_item" />
+                            <ui:Label class="mm-item-title" text="mainmenu.update_changelog_3" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-row-item">
+                            <ui:Label class="mm-item-title" text="mainmenu.update_changelog_4" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <!-- Блок симуляции скачивания -->
+                    <ui:VisualElement name="UpdateProgressBlock" class="mm-card-box mm-card-box--gap-top mm-progress-block">
+                        <ui:VisualElement class="mm-loader-progress-track">
+                            <ui:VisualElement name="UpdateProgressFill" class="mm-loader-progress-fill mm-progress-fill--init" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="mm-row-item mm-row-item--meta">
+                            <ui:Label name="UpdateProgressStatus" class="mm-card-tag" text="mainmenu.update_downloading" />
+                            <ui:Label name="UpdateProgressPercent" class="mm-item-val mm-text--gold" text="0%" />
                         </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:VisualElement>
-                <ui:VisualElement class="mm-modal-footer">
+                <ui:VisualElement class="mm-modal-footer mm-footer--between">
+                    <ui:Button name="DeferUpdateOfflineButton" class="mm-btn-outline" text="mainmenu.update_offline" />
                     <ui:Button name="ConfirmUpdateButton" class="mm-btn-gold" text="mainmenu.update_confirm" />
                 </ui:VisualElement>
             </ui:VisualElement>

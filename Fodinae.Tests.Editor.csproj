@@ -65,8 +65,10 @@
     <Compile Include="Assets/Scripts/Tests/Editor/World/Lighting/LightingQualityWiringTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ConnectionTransportConfigTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/InventoryModelTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/UI/LocalChatContractTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementBoundaryTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/WorldLayerRleTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/AssetPipeline/PersistentAssetCacheFormatTests.cs" />
     <Compile Include="Assets/Scripts/Tests/ProjectDefaultsTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/SceneTransitionTicketTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalPlayerStateTests.cs" />

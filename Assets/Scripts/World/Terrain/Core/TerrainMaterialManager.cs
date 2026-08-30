@@ -14,6 +14,17 @@ namespace Fodinae.World.Terrain;
 /// </summary>
 public sealed class TerrainMaterialManager
 {
+    private static readonly int BaseMapPropertyId = Shader.PropertyToID("_BaseMap");
+    private static readonly int FlowMapPropertyId = Shader.PropertyToID("_FlowMap");
+    private static readonly int FlowScalePropertyId = Shader.PropertyToID("_FlowScale");
+    private static readonly int ShimmerSpeedScalePropertyId = Shader.PropertyToID("_ShimmerSpeedScale");
+    private static readonly int PulseSpeedScalePropertyId = Shader.PropertyToID("_PulseSpeedScale");
+    private static readonly int ShimmerColorPropertyId = Shader.PropertyToID("_ShimmerColor");
+    private static readonly int DebugColorPropertyId = Shader.PropertyToID("_DebugColor");
+    private static readonly int DebugModePropertyId = Shader.PropertyToID("_DebugMode");
+    private static readonly int WorldLightTexturePropertyId = Shader.PropertyToID("_WorldLightTexture");
+    private static readonly int WorldLightRectPropertyId = Shader.PropertyToID("_WorldLightRect");
+
     private Material[] _materials = Array.Empty<Material>();
     private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
     private Shader? _terrainShader;
@@ -55,12 +66,12 @@ public sealed class TerrainMaterialManager
 
         foreach (Material material in _materials)
         {
-            material.SetVector("_FlowScale", config.TerrainFlowScale);
-            material.SetFloat("_ShimmerSpeedScale", config.TerrainShimmerSpeedScale);
-            material.SetFloat("_PulseSpeedScale", config.TerrainPulseSpeedScale);
-            material.SetColor("_ShimmerColor", config.TerrainShimmerColor);
-            material.SetColor("_DebugColor", config.TerrainDebugColor);
-            material.SetFloat("_DebugMode", config.TerrainDebugMode ? 1f : 0f);
+            material.SetVector(FlowScalePropertyId, config.TerrainFlowScale);
+            material.SetFloat(ShimmerSpeedScalePropertyId, config.TerrainShimmerSpeedScale);
+            material.SetFloat(PulseSpeedScalePropertyId, config.TerrainPulseSpeedScale);
+            material.SetColor(ShimmerColorPropertyId, config.TerrainShimmerColor);
+            material.SetColor(DebugColorPropertyId, config.TerrainDebugColor);
+            material.SetFloat(DebugModePropertyId, config.TerrainDebugMode ? 1f : 0f);
         }
     }
 
@@ -69,7 +80,7 @@ public sealed class TerrainMaterialManager
         int meshWidth,
         int meshHeight,
         IClientConfigManager clientConfigManager,
-        Action onAtlasCountChanged)
+        TerrainCellCache cellCache)
     {
         bool materialsChanged = false;
         if (atlases.Count != _lastAtlasCount)
@@ -83,7 +94,7 @@ public sealed class TerrainMaterialManager
 
             _lastAtlasCount = atlases.Count;
             _lightingBindingValidated = false;
-            onAtlasCountChanged();
+            cellCache.ClearCaches();
             CleanupMaterials();
 
             _subMeshIndices = new List<int>[atlases.Count];
@@ -95,14 +106,18 @@ public sealed class TerrainMaterialManager
                 Shader shader = _terrainShader ??
                     throw new InvalidOperationException(
                         "Terrain shader was not initialized before atlas material creation.");
-                _materials[i] = new Material(shader);
+                _materials[i] = new Material(shader)
+                {
+                    name = $"Terrain Atlas Material {i}",
+                    hideFlags = HideFlags.HideAndDontSave,
+                };
                 RequireShaderProperties(_materials[i]);
-                _materials[i].SetVector("_FlowScale", clientConfig.TerrainFlowScale);
-                _materials[i].SetFloat("_ShimmerSpeedScale", clientConfig.TerrainShimmerSpeedScale);
-                _materials[i].SetFloat("_PulseSpeedScale", clientConfig.TerrainPulseSpeedScale);
-                _materials[i].SetColor("_ShimmerColor", clientConfig.TerrainShimmerColor);
-                _materials[i].SetColor("_DebugColor", clientConfig.TerrainDebugColor);
-                _materials[i].SetFloat("_DebugMode", clientConfig.TerrainDebugMode ? 1f : 0f);
+                _materials[i].SetVector(FlowScalePropertyId, clientConfig.TerrainFlowScale);
+                _materials[i].SetFloat(ShimmerSpeedScalePropertyId, clientConfig.TerrainShimmerSpeedScale);
+                _materials[i].SetFloat(PulseSpeedScalePropertyId, clientConfig.TerrainPulseSpeedScale);
+                _materials[i].SetColor(ShimmerColorPropertyId, clientConfig.TerrainShimmerColor);
+                _materials[i].SetColor(DebugColorPropertyId, clientConfig.TerrainDebugColor);
+                _materials[i].SetFloat(DebugModePropertyId, clientConfig.TerrainDebugMode ? 1f : 0f);
 
                 if (_materials[i].FindPass("Universal2D") < 0 ||
                     _materials[i].FindPass("LightingMaterialField") < 0)
@@ -140,14 +155,14 @@ public sealed class TerrainMaterialManager
         for (int i = 0; i < atlases.Count; i++)
         {
             var atlasTex = atlases[i].Texture;
-            if (_materials[i].GetTexture("_BaseMap") != atlasTex)
+            if (_materials[i].GetTexture(BaseMapPropertyId) != atlasTex)
             {
-                _materials[i].SetTexture("_BaseMap", atlasTex);
+                _materials[i].SetTexture(BaseMapPropertyId, atlasTex);
             }
 
-            if (_materials[i].GetTexture("_FlowMap") != textureService.FlowMapTexture)
+            if (_materials[i].GetTexture(FlowMapPropertyId) != textureService.FlowMapTexture)
             {
-                _materials[i].SetTexture("_FlowMap", textureService.FlowMapTexture);
+                _materials[i].SetTexture(FlowMapPropertyId, textureService.FlowMapTexture);
             }
 
             mesh.SetIndices(_subMeshIndices[i], MeshTopology.Triangles, i, false, 0);
@@ -172,8 +187,8 @@ public sealed class TerrainMaterialManager
             }
         }
 
-        Texture globalTexture = Shader.GetGlobalTexture("_WorldLightTexture");
-        Vector4 globalRect = Shader.GetGlobalVector("_WorldLightRect");
+        Texture globalTexture = Shader.GetGlobalTexture(WorldLightTexturePropertyId);
+        Vector4 globalRect = Shader.GetGlobalVector(WorldLightRectPropertyId);
         if (globalTexture == null || globalRect.z <= 0f || globalRect.w <= 0f)
         {
             throw new InvalidOperationException(

@@ -90,6 +90,8 @@ namespace Fodinae.UI
         private ISceneNavigator _sceneNavigator = null!;
         [Inject]
         private ILocalizationService _loc = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         private void OnEnable()
         {
@@ -215,15 +217,36 @@ namespace Fodinae.UI
                 }
             }
 
-            var preset = _root.Q<DropdownField>("OnbGraphicsPreset");
-            if (preset != null)
+            var colorblind = _root.Q<DropdownField>("OnbColorblind");
+            if (colorblind != null)
             {
-                preset.choices = new System.Collections.Generic.List<string>
+                colorblind.choices = new System.Collections.Generic.List<string>
                 {
-                    _loc.Get("gateway.onb.preset.ultra"),
-                    _loc.Get("gateway.onb.preset.high"),
-                    _loc.Get("gateway.onb.preset.medium"),
-                    _loc.Get("gateway.onb.preset.fast"),
+                    _loc.Get("gateway.onb.colorblind.none"),
+                    _loc.Get("gateway.onb.colorblind.deuteranopia"),
+                    _loc.Get("gateway.onb.colorblind.protanopia"),
+                    _loc.Get("gateway.onb.colorblind.tritanopia"),
+                    _loc.Get("gateway.onb.colorblind.high_contrast"),
+                };
+            }
+
+            var photoSens = _root.Q<DropdownField>("OnbPhotosensitivity");
+            if (photoSens != null)
+            {
+                photoSens.choices = new System.Collections.Generic.List<string>
+                {
+                    _loc.Get("gateway.onb.photosens.off"),
+                    _loc.Get("gateway.onb.photosens.on"),
+                };
+            }
+
+            var controlScheme = _root.Q<DropdownField>("OnbControlScheme");
+            if (controlScheme != null)
+            {
+                controlScheme.choices = new System.Collections.Generic.List<string>
+                {
+                    _loc.Get("gateway.onb.controls.keyboard"),
+                    _loc.Get("gateway.onb.controls.mouse"),
                 };
             }
 
@@ -301,6 +324,31 @@ namespace Fodinae.UI
                 uiScale.RegisterValueChangedCallback(_ => ApplyUIScale(ValueOfUIScale(uiScale.index)));
             }
 
+            var colorblind = _root.Q<DropdownField>("OnbColorblind");
+            if (colorblind != null)
+            {
+                colorblind.choices = new System.Collections.Generic.List<string>
+                {
+                    _loc.Get("gateway.onb.colorblind.none"),
+                    _loc.Get("gateway.onb.colorblind.deuteranopia"),
+                    _loc.Get("gateway.onb.colorblind.protanopia"),
+                    _loc.Get("gateway.onb.colorblind.tritanopia"),
+                    _loc.Get("gateway.onb.colorblind.high_contrast"),
+                };
+                colorblind.index = Mathf.Clamp(config.ColorblindMode, 0, 4);
+            }
+
+            var photoSens = _root.Q<DropdownField>("OnbPhotosensitivity");
+            if (photoSens != null)
+            {
+                photoSens.choices = new System.Collections.Generic.List<string>
+                {
+                    _loc.Get("gateway.onb.photosens.off"),
+                    _loc.Get("gateway.onb.photosens.on"),
+                };
+                photoSens.index = config.ReducePhotosensitivity ? 1 : 0;
+            }
+
             var frameRate = _root.Q<DropdownField>("OnbFrameRate");
             if (frameRate != null)
             {
@@ -331,6 +379,36 @@ namespace Fodinae.UI
             if (vsync != null)
             {
                 vsync.SetValueWithoutNotify(config.VSync);
+            }
+
+            var controlScheme = _root.Q<DropdownField>("OnbControlScheme");
+            if (controlScheme != null)
+            {
+                controlScheme.choices = new System.Collections.Generic.List<string>
+                {
+                    _loc.Get("gateway.onb.controls.keyboard"),
+                    _loc.Get("gateway.onb.controls.mouse"),
+                };
+                controlScheme.index = Mathf.Clamp(config.ControlScheme, 0, 1);
+            }
+
+            var masterVol = _root.Q<Slider>("OnbMasterVolume");
+            var masterVolLbl = _root.Q<Label>("OnbMasterVolumeLabel");
+            if (masterVol != null)
+            {
+                masterVol.value = Mathf.RoundToInt(config.MasterVolume * 100f);
+                if (masterVolLbl != null)
+                {
+                    masterVolLbl.text = $"{Mathf.RoundToInt(masterVol.value)}%";
+                }
+
+                masterVol.RegisterValueChangedCallback(evt =>
+                {
+                    if (masterVolLbl != null)
+                    {
+                        masterVolLbl.text = $"{Mathf.RoundToInt(evt.newValue)}%";
+                    }
+                });
             }
 
             var mute = _root.Q<Toggle>("OnbMuteInBackground");
@@ -433,6 +511,18 @@ namespace Fodinae.UI
                     config.UIScale = ValueOfUIScale(uiScale.index);
                 }
 
+                var colorblind = _root.Q<DropdownField>("OnbColorblind");
+                if (colorblind != null && colorblind.index >= 0)
+                {
+                    config.ColorblindMode = colorblind.index;
+                }
+
+                var photoSens = _root.Q<DropdownField>("OnbPhotosensitivity");
+                if (photoSens != null && photoSens.index >= 0)
+                {
+                    config.ReducePhotosensitivity = photoSens.index == 1;
+                }
+
                 var frameRate = _root.Q<DropdownField>("OnbFrameRate");
                 if (frameRate != null && frameRate.index >= 0 && frameRate.index < FrameRates.Length)
                 {
@@ -443,6 +533,18 @@ namespace Fodinae.UI
                 if (vsync != null)
                 {
                     config.VSync = vsync.value;
+                }
+
+                var controlScheme = _root.Q<DropdownField>("OnbControlScheme");
+                if (controlScheme != null && controlScheme.index >= 0)
+                {
+                    config.ControlScheme = controlScheme.index;
+                }
+
+                var masterVol = _root.Q<Slider>("OnbMasterVolume");
+                if (masterVol != null)
+                {
+                    config.MasterVolume = masterVol.value / 100f;
                 }
 
                 var mute = _root.Q<Toggle>("OnbMuteInBackground");
@@ -528,15 +630,17 @@ namespace Fodinae.UI
             }
 
             _leaving = true;
-            LoadMainMenuAsync().Forget();
+            _operations.Run("gateway_to_main_menu", LoadMainMenuAsync);
         }
 
-        private async UniTaskVoid LoadMainMenuAsync()
+        private async UniTask LoadMainMenuAsync(CancellationToken supervisorToken)
         {
-            CancellationToken transitionToken = destroyCancellationToken;
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
             await _sceneNavigator.TransitionAsync(
                 MainMenuSceneName,
-                transitionToken);
+                linkedCancellation.Token);
         }
     }
 }

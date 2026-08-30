@@ -19,7 +19,8 @@
          ни регистрации — ClientHelloPacket несёт только токен из
          PlayerPrefs, а сервер отвечает AuthTokenPacket. Поля пароля и
          вкладка регистрации здесь — заглушки по макету; рабочие пути
-         это «Войти» (обычное подключение) и «Офлайн режим (Dummy)».
+         это «Войти» (обычное подключение), «Войти через VK» (VK ID
+         device-flow) и «Офлайн режим (Dummy)».
          ═══════════════════════════════════════════════════════ -->
     <ui:VisualElement name="AuthOverlay" class="auth-overlay">
         <ui:VisualElement name="AuthCard" class="auth-card">
@@ -85,6 +86,17 @@
 
             <ui:Button name="AuthSubmitButton" class="auth-submit" text="gateway.auth.submit" />
 
+            <!-- VK ID: device-flow без редиректа. Текст и доступность ведёт AuthGate. -->
+            <ui:VisualElement class="auth-vk-sep">
+                <ui:VisualElement class="auth-vk-sep-line" />
+                <ui:Label class="auth-vk-sep-label" text="gateway.auth.vk_or" />
+                <ui:VisualElement class="auth-vk-sep-line" />
+            </ui:VisualElement>
+            <ui:Button name="AuthVkButton" class="auth-vk">
+                <ui:Label class="auth-vk-badge" text="VK" />
+                <ui:Label name="AuthVkLabel" class="auth-vk-label" text="gateway.auth.vk" />
+            </ui:Button>
+
             <ui:VisualElement class="auth-footer">
                 <ui:Button name="AuthOfflineButton" class="auth-footer-link" text="gateway.auth.offline" />
                 <ui:Label class="auth-footer-sep" text="|" />
@@ -114,7 +126,7 @@
             </ui:VisualElement>
 
             <ui:ScrollView class="onb-body" mode="Vertical">
-                <!-- Шаг 1 -->
+                <!-- Шаг 1: Доступность -->
                 <ui:VisualElement name="OnbStep1" class="onb-step onb-step--active">
                     <ui:Label class="onb-block-title" text="gateway.onb.step1_block_title" />
                     <ui:VisualElement class="onb-row">
@@ -126,14 +138,21 @@
                     </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="gateway.onb.colorblind_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.colorblind_hint" />
+                        </ui:VisualElement>
+                        <ui:DropdownField name="OnbColorblind" class="onb-select" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
                             <ui:Label class="onb-label" text="gateway.onb.flicker_label" />
                             <ui:Label class="onb-hint" text="gateway.onb.flicker_hint" />
                         </ui:VisualElement>
-                        <ui:Toggle name="OnbReduceFlashes" class="onb-toggle" />
+                        <ui:DropdownField name="OnbPhotosensitivity" class="onb-select" />
                     </ui:VisualElement>
                 </ui:VisualElement>
 
-                <!-- Шаг 2 -->
+                <!-- Шаг 2: Графика -->
                 <ui:VisualElement name="OnbStep2" class="onb-step">
                     <ui:Label class="onb-block-title" text="gateway.onb.step2_block_title" />
                     <ui:VisualElement class="onb-row">
@@ -159,22 +178,32 @@
                     </ui:VisualElement>
                 </ui:VisualElement>
 
-                <!-- Шаг 3 -->
+                <!-- Шаг 3: Управление и Звук -->
                 <ui:VisualElement name="OnbStep3" class="onb-step">
                     <ui:Label class="onb-block-title" text="gateway.onb.step3_block_title" />
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="gateway.onb.controls_scheme_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.controls_scheme_hint" />
+                        </ui:VisualElement>
+                        <ui:DropdownField name="OnbControlScheme" class="onb-select" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="gateway.onb.master_volume_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.master_volume_hint" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="onb-slider-group">
+                            <ui:Slider name="OnbMasterVolume" class="onb-slider" low-value="0" high-value="100" />
+                            <ui:Label name="OnbMasterVolumeLabel" class="onb-slider-val" text="85%" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
                             <ui:Label class="onb-label" text="gateway.onb.mute_label" />
                             <ui:Label class="onb-hint" text="gateway.onb.mute_hint" />
                         </ui:VisualElement>
                         <ui:Toggle name="OnbMuteInBackground" class="onb-toggle" />
-                    </ui:VisualElement>
-                    <ui:VisualElement class="onb-row">
-                        <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="gateway.onb.controls_label" />
-                            <ui:Label class="onb-hint" text="gateway.onb.controls_hint" />
-                        </ui:VisualElement>
-                        <ui:Label class="onb-static" text="gateway.onb.controls_keys" />
                     </ui:VisualElement>
                 </ui:VisualElement>
             </ui:ScrollView>

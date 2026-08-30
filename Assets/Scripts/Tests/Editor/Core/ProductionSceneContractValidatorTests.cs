@@ -17,11 +17,13 @@ namespace Fodinae.Tests.Core
     public sealed class ProductionSceneContractValidatorTests
     {
         private SceneSetup[] _originalSetup = null!;
+        private EditorBuildSettingsScene[] _originalBuildScenes = null!;
 
         [SetUp]
         public void SetUp()
         {
             _originalSetup = EditorSceneManager.GetSceneManagerSetup();
+            _originalBuildScenes = EditorBuildSettings.scenes;
         }
 
         [TearDown]
@@ -31,6 +33,8 @@ namespace Fodinae.Tests.Core
             {
                 EditorSceneManager.RestoreSceneManagerSetup(_originalSetup);
             }
+
+            EditorBuildSettings.scenes = _originalBuildScenes;
         }
 
         [Test]
@@ -87,6 +91,26 @@ namespace Fodinae.Tests.Core
             Assert.That(after.Select(item => item.path), Is.EqualTo(before.Select(item => item.path)));
             Assert.That(after.Select(item => item.isLoaded), Is.EqualTo(before.Select(item => item.isLoaded)));
             Assert.That(after.Select(item => item.isActive), Is.EqualTo(before.Select(item => item.isActive)));
+        }
+
+        [Test]
+        public void BuildSettingsValidation_AcceptsAuthoredProductionOrder()
+        {
+            Assert.DoesNotThrow(BuildSettingsFix.ValidateScenesInBuildSettings);
+        }
+
+        [Test]
+        public void BuildSettingsValidation_RejectsWrongOrderWithoutRepairingAuthoringData()
+        {
+            EditorBuildSettingsScene[] invalid = EditorBuildSettings.scenes.ToArray();
+            Assert.That(invalid.Length, Is.GreaterThanOrEqualTo(2));
+            (invalid[0], invalid[1]) = (invalid[1], invalid[0]);
+            EditorBuildSettings.scenes = invalid;
+
+            Assert.Throws<System.InvalidOperationException>(
+                BuildSettingsFix.ValidateScenesInBuildSettings);
+            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(invalid[0].path));
+            Assert.That(EditorBuildSettings.scenes[1].path, Is.EqualTo(invalid[1].path));
         }
 
         [Test]

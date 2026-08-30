@@ -10,6 +10,7 @@
         "Fodinae.UI",
         "Fodinae.Editor",
         "Fodinae.Contracts",
+        "Fodinae.Persistence",
         "Fodinae.Networking",
         "Fodinae.AssetPipeline",
         "Fodinae.World",

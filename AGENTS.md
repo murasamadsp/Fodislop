@@ -109,7 +109,7 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 * Клиент получает от сервера лёгкое состояние (координаты и идентификаторы), а тяжёлые текстуры, спрайты и FMOD-банки загружает on-demand один раз.
 * **Иерархия кэширования:** RAM (`AssetCache`, `CellTextureCache`) → диск (`PersistentAssetCache`, ETag/MD5) → CDN/сервер. Рендеринг после загрузки выполняется локально.
 * `NetworkService` / `ConnectionManager` — подписки, транспорт, авторизация и реконнект. `PacketHandler` — чистый диспетчер: связывает тип пакета с процессором и владеет временем жизни подписок; он не содержит UI, менеджеров сцены и состояния игрока. Логика пакетов — в `Networking/Processors/*` (обновляют модели, gateways и доменные сервисы: `WorldInitProcessor`, `AuthTokenProcessor`, `PlayerInfoProcessor`, `StatusProcessor` и т.д.).
-* `DummyConnection` — оффлайн-транспорт. При невалидном токене шлёт `OpenWindowPacket('auth')` (штатный флоу первого входа; токены лежат в `temporaryCachePath/server_tokens.json`, клиентский — в PlayerPrefs `AuthToken6`).
+* `DummyConnection` — оффлайн-транспорт. Окна авторизации не вызывает: пермиссивно принимает VK-токены (`fdn_vk_*`), знакомые токены из `temporaryCachePath/server_tokens.json`, а для пустого/незнакомого токена сам выдаёт новый (первый вход без экрана; клиентский токен — в PlayerPrefs `AuthToken6`).
 * Процессоры пакетов обрабатывают: `world`, `map`, `chat`, `clan`, `audio`, `windows`, `inventory`, `stats`, `player`, `robots`, `packs`, `missions`, `config`.
 
 ### UI Toolkit, слои и оконная система
@@ -289,3 +289,7 @@ Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.
 * `F3`: оверлей `InGameDebugOverlay` (FPS, frametime, замеры CPU Meshing / FloodFill, счётчики ребилдов террейна, трассировка каскадов в ray-steps и atlas taps, размер управляемой кучи);
 * `F3` (детальный режим `FPSCounter`): отображение `FrameProfiler.GcAllocPerFrameBytes` в формате `GC: X KB/f` (аллокации главного потока за кадр);
 * `F4` / `F5` / `F6` / `F7` / `F8`: покадровое переключение и изоляция подсистем (`BypassLightingCompute`, `BypassPostProcessPass`, `BypassTerrainDraw`, `BypassCpuMeshRebuild`, динамический свет) для мгновенной бисекции источников просадок за одну сессию.
+
+
+
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО В СИНК ВООБЩЕ. НИКОГДА. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ГОВОРИТ ЧТО ВЫКЛЮЧИЛ ВСЁ И ВСЁ РАВНО 40 ФПС - НЕ ГОВОРИТЬ ПРО ШЕЙДЕРЫ.

@@ -84,7 +84,8 @@ namespace Fodinae.Game
             IAudioSystem audioSystem,
             IAssetLoader assetLoader,
             MapManager mapManager,
-            IVFXService vfxPool)
+            IVFXService vfxPool,
+            IAsyncOperationSupervisor operations)
         {
             _effectType = packet.EffectType;
             _sourceX = packet.X;
@@ -110,7 +111,12 @@ namespace Fodinae.Game
             if (slot != null)
             {
                 _cts = new CancellationTokenSource();
-                LoadVisualAsync(_cts.Token).Forget();
+                CancellationToken eventToken = _cts.Token;
+                operations.Run(
+                    "load_server_audio_visual",
+                    supervisorToken => LoadVisualWithCancellationAsync(
+                        eventToken,
+                        supervisorToken));
             }
             else
             {
@@ -370,7 +376,17 @@ namespace Fodinae.Game
             _audioSystem.PlayAt(eventName, _intendedWorldPosition);
         }
 
-        private async UniTaskVoid LoadVisualAsync(CancellationToken token)
+        private async UniTask LoadVisualWithCancellationAsync(
+            CancellationToken eventToken,
+            CancellationToken supervisorToken)
+        {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                eventToken,
+                supervisorToken);
+            await LoadVisualAsync(linkedCancellation.Token);
+        }
+
+        private async UniTask LoadVisualAsync(CancellationToken token)
         {
             try
             {

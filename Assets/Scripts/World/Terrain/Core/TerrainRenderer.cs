@@ -66,12 +66,13 @@ namespace Fodinae.World.Terrain
         private int _meshWidth;
         private int _meshHeight;
         private bool _isInitialized = false;
+        private bool _hasMissingTextures;
         private bool _needsRefresh = false;
         private readonly HashSet<CellType> _pendingTextureCellTypes = [];
         private readonly DirtyRectSet _dirtyRects = new();
         private bool _useColorLod = false;
         private bool _fatalBuildError;
-        private WorldLayer<CellType>? _subscribedCellLayer;
+        private IWorldLayer<CellType>? _subscribedCellLayer;
         private WorldTextureManager? _subscribedTextureManager;
         private MapManager? _subscribedMapManager;
         private IWorldDataStorage? _subscribedStorage;
@@ -100,7 +101,8 @@ namespace Fodinae.World.Terrain
             _isInitialized &&
             _meshManager.Mesh != null &&
             _meshManager.Mesh.vertexCount > 0 &&
-            _materialManager.Materials.Length > 0;
+            _materialManager.Materials.Length > 0 &&
+            _pendingTextureCellTypes.Count == 0;
 
         public void ApplyClientConfig()
         {
@@ -337,7 +339,7 @@ namespace Fodinae.World.Terrain
 
         private void SubscribeToCellLayer()
         {
-            WorldLayer<CellType>? cellLayer = _storage?.CellLayer;
+            IWorldLayer<CellType>? cellLayer = _storage?.CellLayer;
             if (ReferenceEquals(_subscribedCellLayer, cellLayer))
             {
                 return;
@@ -383,12 +385,6 @@ namespace Fodinae.World.Terrain
                 LogDiag(1 << 1, "[TerrainDiag] gate passed: storage ready");
             }
 
-            _materialManager.TerrainShader = _terrainShader;
-            _materialManager.InitializeShader();
-            _meshFilter ??= GetComponent<MeshFilter>();
-            _meshRenderer ??= GetComponent<MeshRenderer>();
-            _meshManager.EnsureMesh(ref _meshFilter);
-
             if (!TryResolveCamera())
             {
                 return;
@@ -429,6 +425,7 @@ namespace Fodinae.World.Terrain
                 _pendingTextureCellTypes.Clear();
             }
 
+            FrameProfiler.ResetFrameTimers();
             CoalesceOversizedDirtyRects();
 
             RebuildOrPatchTerrain(currentGridPos, dimensionsChanged);
@@ -647,7 +644,7 @@ namespace Fodinae.World.Terrain
                 _meshWidth,
                 _meshHeight,
                 _clientConfigManager,
-                () => _cellCache.ClearCaches());
+                _cellCache);
 
             textureService.FlushDirtyAtlases();
 
@@ -748,29 +745,7 @@ namespace Fodinae.World.Terrain
                     ex));
             }
 
-            bool needReassignMaterials = materialsChanged;
-            if (!needReassignMaterials && _meshRenderer != null)
-            {
-                var sharedMats = _meshRenderer.sharedMaterials;
-                Material[] materials = _materialManager.Materials;
-                if (sharedMats == null || sharedMats.Length != materials.Length)
-                {
-                    needReassignMaterials = true;
-                }
-                else
-                {
-                    for (int i = 0; i < materials.Length; i++)
-                    {
-                        if (sharedMats[i] != materials[i])
-                        {
-                            needReassignMaterials = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (needReassignMaterials && _meshRenderer != null)
+            if (materialsChanged && _meshRenderer != null)
             {
                 _meshRenderer.sharedMaterials = _materialManager.Materials;
             }
@@ -853,6 +828,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
+            _textureService.FlushDirtyAtlases();
             _cellCache.RefreshTextureMetadata(
                 _pendingTextureCellTypes,
                 _mapManager,
@@ -881,10 +857,11 @@ namespace Fodinae.World.Terrain
             }
 
             _meshManager.UploadDirectVertexBuffer(_meshBuilder);
-            if (_meshBuilder.IndicesChanged)
+            Mesh? mesh = _meshManager.Mesh;
+            if (mesh != null)
             {
-                Mesh? mesh = _meshManager.Mesh;
-                if (mesh != null)
+                _materialManager.BindAtlasTextures(atlases, _textureService, mesh);
+                if (_meshBuilder.IndicesChanged)
                 {
                     for (int i = 0; i < atlases.Count && i < _materialManager.SubMeshIndices.Length; i++)
                     {

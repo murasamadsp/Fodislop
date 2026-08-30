@@ -119,7 +119,6 @@ public sealed class RobotVisuals
         _tentacles = new Tentacle[4];
         _tentaclesSettled = false;
         float[] offsets = { -45f, -15f, 15f, 45f };
-        float[] lengthScales = { 0.92f, 1.06f, 1.12f, 0.97f };
         for (int i = 0; i < 4; i++)
         {
             _tentacles[i] = new Tentacle(
@@ -128,8 +127,7 @@ public sealed class RobotVisuals
                 position,
                 offsets[i],
                 i,
-                4,
-                lengthScales[i]);
+                4);
         }
     }
 
@@ -163,7 +161,8 @@ public sealed class RobotVisuals
     {
         if (_tentacles != null)
         {
-            foreach (var tentacle in _tentacles)
+            _tentaclesSettled = false;
+            foreach (Tentacle? tentacle in _tentacles)
             {
                 tentacle?.Snap(position);
             }
@@ -209,9 +208,15 @@ public sealed class RobotVisuals
             return;
         }
 
+        if (bodySettled && _tentaclesSettled)
+        {
+            return;
+        }
+
         if (bodySettled)
         {
             UpdateTentacles(position, rotationAngle, 0f, deltaTime);
+            _tentaclesSettled = AreTentaclesSettled();
             return;
         }
 

@@ -40,6 +40,16 @@ namespace Fodinae.UI
             if (_textMesh == null)
             {
                 _textMesh = gameObject.AddComponent<TextMesh>();
+                // Legacy TextMesh has no fallback chain (unlike TMP/UI Toolkit),
+                // and the default font has no CJK glyphs. The bundled Noto Sans SC
+                // covers Latin/Cyrillic + Simplified & Traditional CJK in one font,
+                // so chat text renders Chinese instead of boxes.
+                var font = Resources.Load<Font>("Fonts/NotoSansSC-Regular");
+                if (font != null)
+                {
+                    _textMesh.font = font;
+                }
+
                 _meshRenderer = GetComponent<MeshRenderer>();
                 UnityRenderLayerContracts.ApplyWorldUI(_meshRenderer, 300);
 

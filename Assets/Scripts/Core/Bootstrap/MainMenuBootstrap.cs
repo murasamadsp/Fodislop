@@ -3,6 +3,7 @@
 using System;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.UI;
 using VContainer.Unity;
 
@@ -14,26 +15,29 @@ public sealed class MainMenuBootstrap : IStartable
     private readonly MainMenu _controller;
     private readonly IAudioSystem _audioSystem;
     private readonly SceneTransitionTicket _ticket;
+    private readonly AsyncOperationSupervisor _operations;
 
     public MainMenuBootstrap(
         MainMenuLifetimeScope scope,
         MainMenu controller,
         IAudioSystem audioSystem,
-        SceneTransitionTicket ticket)
+        SceneTransitionTicket ticket,
+        AsyncOperationSupervisor operations)
     {
         _scope = scope;
         _controller = controller;
         _audioSystem = audioSystem;
         _ticket = ticket;
+        _operations = operations;
         _ticket.Attach(_scope.gameObject.scene);
     }
 
     public void Start()
     {
-        StartAsync().Forget();
+        _operations.Run("main_menu_startup", _ => StartAsync());
     }
 
-    private async UniTaskVoid StartAsync()
+    private async UniTask StartAsync()
     {
         try
         {

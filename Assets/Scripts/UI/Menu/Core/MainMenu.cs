@@ -71,6 +71,10 @@ namespace Fodinae.UI
         private ISceneNavigator _sceneNavigator = null!;
         [Inject]
         private IWorldLoadProgress _loadProgress = null!;
+        [Inject]
+        private IClientConfigManager _clientConfig = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         private bool _loaderHiddenAtDone;
         private MenuStarfield? _sceneStarfield;
@@ -203,15 +207,44 @@ namespace Fodinae.UI
 
         private void BindUIElements(VisualElement tree)
         {
-            _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer");
-            _loaderContainer = tree.Q<VisualElement>("LoaderContainer");
+            VisualElement searchRoot = _root ?? tree;
+            _mainMenuContainer = tree.Q<VisualElement>("MainMenuContainer") ?? searchRoot.Q<VisualElement>("MainMenuContainer");
+            _loaderContainer = tree.Q<VisualElement>("LoaderContainer") ?? searchRoot.Q<VisualElement>("LoaderContainer");
+            _loaderContent = tree.Q<VisualElement>("LoaderContent") ?? searchRoot.Q<VisualElement>("LoaderContent");
+            VisualElement? loaderProgressFill = tree.Q<VisualElement>("LoaderProgressFill") ?? searchRoot.Q<VisualElement>("LoaderProgressFill");
+            Label? loaderPhaseLabel = tree.Q<Label>("LoaderPhaseLabel") ?? searchRoot.Q<Label>("LoaderPhaseLabel");
+            Label? loaderPhaseCount = tree.Q<Label>("LoaderPhaseCount") ?? searchRoot.Q<Label>("LoaderPhaseCount");
+            VisualElement? loaderPhaseList = tree.Q<VisualElement>("LoaderPhaseList") ?? searchRoot.Q<VisualElement>("LoaderPhaseList");
+
+            if (_loaderContainer == null || _loaderContent == null ||
+                loaderProgressFill == null || loaderPhaseLabel == null ||
+                loaderPhaseCount == null || loaderPhaseList == null)
+            {
+                Debug.LogWarning("[MainMenu] Some loader elements missing from MainMenu.uxml, synthesizing placeholders to prevent startup crash.");
+                _loaderContainer ??= new VisualElement { name = "LoaderContainer" };
+                _loaderContent ??= new VisualElement { name = "LoaderContent" };
+                loaderProgressFill ??= new VisualElement { name = "LoaderProgressFill" };
+                loaderPhaseLabel ??= new Label { name = "LoaderPhaseLabel" };
+                loaderPhaseCount ??= new Label { name = "LoaderPhaseCount" };
+                loaderPhaseList ??= new VisualElement { name = "LoaderPhaseList" };
+
+                _loaderContainer.Add(_loaderContent);
+                _loaderContent.Add(loaderProgressFill);
+                _loaderContent.Add(loaderPhaseLabel);
+                _loaderContent.Add(loaderPhaseCount);
+                _loaderContent.Add(loaderPhaseList);
+                if (searchRoot != null && !searchRoot.Contains(_loaderContainer))
+                {
+                    searchRoot.Add(_loaderContainer);
+                }
+            }
+
             _loaderProgress = new MenuLoaderProgress(
-                tree.Q<VisualElement>("LoaderProgressFill"),
-                tree.Q<Label>("LoaderPhaseLabel"),
-                tree.Q<Label>("LoaderPhaseCount"),
-                tree.Q<VisualElement>("LoaderPhaseList"),
+                loaderProgressFill,
+                loaderPhaseLabel,
+                loaderPhaseCount,
+                loaderPhaseList,
                 _loc);
-            _loaderContent = tree.Q<VisualElement>("LoaderContent");
             _routeOrbit = tree.Q<VisualElement>("MainMenuRouteOrbit");
             _routeDescent = tree.Q<VisualElement>("MainMenuRouteDescent");
             _routeSurface = tree.Q<VisualElement>("MainMenuRouteSurface");
@@ -472,7 +505,13 @@ namespace Fodinae.UI
 
             if (_tree != null)
             {
-                _modalManager.SubscribeEvents(_tree, OnPlayButtonClicked);
+                _modalManager.SubscribeEvents(
+                    _tree,
+                    OnPlayButtonClicked,
+                    _clientConfig,
+                    _sceneNavigator,
+                    _operations,
+                    _loc);
             }
 
             _subscribed = true;
@@ -603,12 +642,15 @@ namespace Fodinae.UI
             _sceneryPresenter.DescentTarget = 1f;
             UpdateLoaderProgress();
 
-            RunDescentAsync().Forget();
+            _operations.Run("main_menu_descent", RunDescentAsync);
         }
 
-        private async UniTaskVoid RunDescentAsync()
+        private async UniTask RunDescentAsync(CancellationToken supervisorToken)
         {
-            CancellationToken transitionToken = _descentCancellation?.Token ?? CancellationToken.None;
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                _descentCancellation?.Token ?? CancellationToken.None);
+            CancellationToken transitionToken = linkedCancellation.Token;
             try
             {
                 await _sceneNavigator.TransitionAsync(GameSceneName, transitionToken);

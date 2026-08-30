@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -74,6 +75,8 @@ namespace Fodinae.UI.HUD.Player.View
         private INetworkService _networkService = null!;
         [Inject]
         private ILocalizationService _loc = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         protected void Start()
         {
@@ -98,17 +101,23 @@ namespace Fodinae.UI.HUD.Player.View
             }
 
             if (_doc == null || _doc.rootVisualElement == null || _model == null ||
-                _globalChatUI == null || _assetLoader == null || _networkService == null || _inputBlocker == null || _loc == null)
+                _globalChatUI == null || _assetLoader == null || _networkService == null ||
+                _inputBlocker == null || _loc == null || _operations == null)
             {
                 return;
             }
 
             _initializationStarted = true;
-            StartAsync(this.destroyCancellationToken).Forget();
+            _operations.Run("player_hud_startup", StartAsync);
         }
 
-        private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
+        private async UniTask StartAsync(CancellationToken supervisorToken)
         {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
+            CancellationToken cancellationToken = linkedCancellation.Token;
+
             try
             {
                 InitializeHUD();

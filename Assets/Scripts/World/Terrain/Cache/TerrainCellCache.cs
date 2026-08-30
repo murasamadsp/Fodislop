@@ -33,6 +33,39 @@ namespace Fodinae.World.Terrain
         public int CacheWidth => _cacheWidth;
         public int CacheHeight => _cacheHeight;
 
+        /// <summary>
+        /// Returns true if any loaded terrain cell in the active viewport cache is still waiting for its atlas texture.
+        /// </summary>
+        public bool HasMissingTextures
+        {
+            get
+            {
+                if (_cellCache == null)
+                {
+                    return false;
+                }
+
+                int w = _cacheWidth;
+                int h = _cacheHeight;
+                for (int x = 0; x < w; x++)
+                {
+                    for (int y = 0; y < h; y++)
+                    {
+                        var cell = _cellCache[x, y];
+                        if (cell.State == TerrainCellState.Loaded &&
+                            cell.Type != CellType.Empty &&
+                            cell.Type != CellType.Unloaded &&
+                            !cell.IsTextureReady)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+        }
+
         public void EnsureCapacity(int width, int height)
         {
             _cacheWidth = width + 2;
@@ -122,7 +155,7 @@ namespace Fodinae.World.Terrain
             _cacheMinX = minX - 1;
             _cacheMinY = minY - 1;
 
-            System.Threading.Tasks.Parallel.For(0, _cacheWidth, x =>
+            for (int x = 0; x < _cacheWidth; x++)
             {
                 int gridX = _cacheMinX + x;
                 int lastChunkIndex = -1;
@@ -142,7 +175,7 @@ namespace Fodinae.World.Terrain
                     var meta = GetMetadata(type, mm, wtm, atlases);
                     _cellCache[x, y] = CreateCachedData(type, meta);
                 }
-            });
+            }
 
             wtm.RequestTexture(CellType.Empty);
         }
@@ -285,7 +318,7 @@ namespace Fodinae.World.Terrain
             wtm.RequestTexture(CellType.Empty);
         }
 
-        private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, WorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[]? currentChunk)
+        private CellType GetCellType(int gridX, int unityY, int worldWidth, int worldHeight, IWorldLayer<CellType> layer, ref int lastChunkIndex, ref CellType[]? currentChunk)
         {
             if (unityY >= worldHeight)
             {
@@ -310,7 +343,10 @@ namespace Fodinae.World.Terrain
 
             if (chunkIndex != lastChunkIndex)
             {
-                currentChunk = layer.GetChunk(chunkIndex, false, false);
+                ChunkReadResult<CellType> result = layer.ReadChunk(chunkIndex, touchLru: false);
+                currentChunk = result.Status == ChunkReadStatus.Available
+                    ? result.Data
+                    : null;
                 lastChunkIndex = chunkIndex;
             }
 
@@ -358,11 +394,16 @@ namespace Fodinae.World.Terrain
                     : 0f,
                 AnimationFrameCount = frameCount,
                 FrameHeightTiles = (float)frameSize / RenderingConstants.CELL_SIZE,
-                IsTextureReady = atlasRect.z > 0.0001f,
+                IsTextureReady = atlasIndex >= 0 && atlasRect.z > 0f,
                 IsPopulated = true,
             };
 
-            if ((uint)idx < (uint)_metadataLookup.Length)
+            // The metadata is always fully populated (IsPopulated = true) once built here.
+            // Only the fast _metadataLookup cache entry is skipped while the atlas texture is
+            // not yet ready, so callers fall through to RequestTexture instead of caching an
+            // unready rect. The per-cell IsTextureReady flag (read by HasMissingTextures) is
+            // what actually gates drawing of not-yet-loaded cells.
+            if (meta.IsTextureReady && (uint)idx < (uint)_metadataLookup.Length)
             {
                 _metadataLookup[idx] = meta;
             }
@@ -394,6 +435,7 @@ namespace Fodinae.World.Terrain
                 UVTileSize = meta.UVTileSize,
                 AnimationFrameCount = meta.AnimationFrameCount,
                 FrameHeightTiles = meta.FrameHeightTiles,
+                IsTextureReady = meta.IsTextureReady,
             };
         }
 

@@ -4,5 +4,6 @@
     "AutoStartServer": true,
     "EnableInfoLogs": true,
     "NpmExecutablePath": "",
-    "AllowRemoteConnections": false
+    "AllowRemoteConnections": false,
+    "AutoBringToForeground": false
 }

@@ -42,6 +42,8 @@ namespace Fodinae.Game
 
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         private EffekseerHandle _effekseerHandle;
         private EffekseerEffectAsset? _effekseerAsset;
@@ -87,12 +89,23 @@ namespace Fodinae.Game
         {
             _cts?.Cancel();
             _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+            CancellationToken entityToken = _cts.Token;
 
-            LoadBuildingAsync(_cts.Token).Forget();
-            LoadClanAsync(_cts.Token).Forget();
+            _operations.Run(
+                "load_building_visual",
+                supervisorToken => RunWithLinkedCancellationAsync(
+                    LoadBuildingAsync,
+                    entityToken,
+                    supervisorToken));
+            _operations.Run(
+                "load_building_clan_badge",
+                supervisorToken => RunWithLinkedCancellationAsync(
+                    LoadClanAsync,
+                    entityToken,
+                    supervisorToken));
         }
 
-        private async UniTaskVoid LoadBuildingAsync(CancellationToken token)
+        private async UniTask LoadBuildingAsync(CancellationToken token)
         {
             string buildingName = _buildingType.ToString();
             string buildingPath = $"Pack/{buildingName}/{_variant}";
@@ -164,7 +177,7 @@ namespace Fodinae.Game
             Debug.Log($"[Building] Playing Effekseer effect for building '{buildingName}' variant {_variant} at {transform.position}");
         }
 
-        private async UniTaskVoid LoadClanAsync(CancellationToken token)
+        private async UniTask LoadClanAsync(CancellationToken token)
         {
             if (_linkedClan == 0)
             {
@@ -223,6 +236,17 @@ namespace Fodinae.Game
                     $"[Building] Optional texture '{filename}' was skipped: {exception.Message}");
                 return null;
             }
+        }
+
+        private static async UniTask RunWithLinkedCancellationAsync(
+            Func<CancellationToken, UniTask> operation,
+            CancellationToken entityToken,
+            CancellationToken supervisorToken)
+        {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                entityToken,
+                supervisorToken);
+            await operation(linkedCancellation.Token);
         }
 
         private void UpdateClanPosition()

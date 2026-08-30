@@ -1,6 +1,10 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
     <ui:VisualElement name="ChatPanel" class="gchat-panel">
         <ui:Label name="ChatHeader" class="gchat-header"  text="" />
+        <ui:VisualElement name="ChatChannels" class="gchat-channel-tabs">
+            <ui:Button name="GlobalChannelButton" class="gchat-channel-button gchat-channel-button--active" text="chat.channel.global" />
+            <ui:Button name="LocalChannelButton" class="gchat-channel-button" text="chat.channel.local" />
+        </ui:VisualElement>
         <ui:Label name="ChatMuteStatus" class="gchat-mute-status" style="display: none;" />
         <ui:ScrollView name="ChatScroll" class="gchat-scroll" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
         <ui:VisualElement name="BottomRow" class="gchat-bottom-row">

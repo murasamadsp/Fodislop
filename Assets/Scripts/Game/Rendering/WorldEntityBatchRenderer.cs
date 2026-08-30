@@ -17,9 +17,8 @@ namespace Fodinae.Game
     /// </summary>
     public class WorldEntityBatchRenderer : MonoBehaviour
     {
-        // Enough points to give the tail real length (≈2.6 cells at
-        // MAX_SEGMENT_DIST) and enough resolution for a smooth traveling wave.
-        public const int POINT_COUNT = 12;
+        // Matches the five-point tail used by the stable June implementation.
+        public const int POINT_COUNT = 5;
         private const int VERTS_PER_TENTACLE = POINT_COUNT * 2;
         private const int TRIS_PER_TENTACLE = (POINT_COUNT - 1) * 6;
         private const int INITIAL_CAPACITY = 64;
@@ -62,7 +61,9 @@ namespace Fodinae.Game
             internal Sprite? Sprite { get; private set; }
             internal Color Color { get; private set; } = Color.white;
             internal bool Enabled { get; private set; }
-            private Matrix4x4 _lastLocalToWorld;
+            private Vector3 _lastPosition;
+            private Quaternion _lastRotation;
+            private Vector3 _lastScale;
             private Sprite? _lastSprite;
             private Color _lastColor;
             private bool _lastEnabled;
@@ -95,7 +96,9 @@ namespace Fodinae.Game
                 }
 
                 return !_hasSnapshot ||
-                    _lastLocalToWorld != Transform.localToWorldMatrix ||
+                    _lastPosition != Transform.position ||
+                    _lastRotation != Transform.rotation ||
+                    _lastScale != Transform.lossyScale ||
                     _lastSprite != Sprite ||
                     _lastColor != Color ||
                     _lastEnabled != Enabled;
@@ -103,9 +106,19 @@ namespace Fodinae.Game
 
             internal void CaptureState()
             {
-                _lastLocalToWorld = Transform == null
-                    ? Matrix4x4.zero
-                    : Transform.localToWorldMatrix;
+                if (Transform == null)
+                {
+                    _lastPosition = Vector3.zero;
+                    _lastRotation = Quaternion.identity;
+                    _lastScale = Vector3.one;
+                }
+                else
+                {
+                    _lastPosition = Transform.position;
+                    _lastRotation = Transform.rotation;
+                    _lastScale = Transform.lossyScale;
+                }
+
                 _lastSprite = Sprite;
                 _lastColor = Color;
                 _lastEnabled = Enabled;

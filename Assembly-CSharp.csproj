@@ -116,6 +116,7 @@
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerDigCooldownTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementBoundaryTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/InventoryModelTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/UI/LocalChatContractTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/UI/PlayerStatsModelTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/ContactOcclusionE2ETests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/CoordinateUtilsTests.cs" />
@@ -123,6 +124,7 @@
     <Compile Include="Assets/Scripts/Tests/Editor/World/Lighting/LightingQualityWiringTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/TileBitmaskConverterTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/WorldLayerRleTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/AssetPipeline/PersistentAssetCacheFormatTests.cs" />
     <Compile Include="Assets/Scripts/Tests/PlayMode/SceneTransitionPlayModeTests.cs" />
     <Compile Include="Assets\\Scripts\\UI\\Common\\Interaction\\InputBlockState.cs" />
     <Compile Include="Assets\Scripts\UI\Map\MapModeState.cs" />
@@ -198,7 +200,7 @@
     <Compile Include="Assets\Scripts\UI\Gateway\AuthGate.cs" />
     <Compile Include="Assets/Scripts/UI/HUD/Player/Model/PlayerStatsModel.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/IClientConfigManager.cs" />
-    <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/AudioPlaybackHandle.cs" />
+    <Compile Include="Assets/Scripts/Audio/Backend/AudioPlaybackHandle.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/ProjectRuntimeContracts.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/InstanceProvider.cs" />
     <Compile Include="Assets/Scripts/Rendering/PostProcessing/PostProcessRenderPass.cs" />
@@ -312,6 +314,8 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/ComponentRegistrationBuilder.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/MissionArrowProcessor.cs" />
     <Compile Include="Assets/Scripts/Core/GlobalUsings.cs" />
+    <Compile Include="Assets/Scripts/AssetPipeline/AssemblyInfo.cs" />
+    <Compile Include="Assets/Scripts/AssetPipeline/Cache/PersistentAssetCacheFormat.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Registry.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Diagnostics/DiagnosticsContext.cs" />
     <Compile Include="Assets\\Scripts\\UI\\Builders\\Widgets\\SliderPacketBuilder.cs" />
@@ -357,7 +361,6 @@
     <Compile Include="Assets/Scripts/World/Lighting/Quality/LightingQualityResolver.cs" />
     <Compile Include="Assets/Scripts/Networking/Processors/AudioPacketProcessor.cs" />
     <Compile Include="Assets\\Scripts\\Networking\\Core\\NetworkService.cs" />
-    <Compile Include="Assets\Scripts\UI\Chat\LocalChatPopup.cs" />
     <Compile Include="Assets\\Scripts\\UI\\Menu\\Scenery\\MenuPlanetSpin.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Registration.cs" />
     <Compile Include="Assets/Scripts/VContainer/Runtime/Unity/UnmanagedSystemRegistrationBuilder.cs" />
@@ -414,7 +417,8 @@
     <Compile Include="Assets/Scripts/VContainer/Runtime/Internal/InstanceProviders/ContainerLocalInstanceProvider.cs" />
     <Compile Include="Assets/Scripts/Networking/Auth/AuthTokenManager.cs" />
     <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/IAudioSystem.cs" />
-    <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/WorldLayer.cs" />
+    <Compile Include="Assets/Scripts/Core/Interfaces/Contracts/IWorldLayer.cs" />
+    <Compile Include="Assets/Scripts/World/Persistence/WorldLayer.cs" />
     <Compile Include="Assets\Scripts\Game\VFX\Tentacle.cs" />
     <Compile Include="Assets\\Scripts\\UI\\Builders\\Widgets\\ImagePacketBuilder.cs" />
     <Compile Include="Assets\\Scripts\\Core\\Rendering\\SharedMaterialCache.cs" />

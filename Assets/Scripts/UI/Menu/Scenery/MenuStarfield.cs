@@ -28,6 +28,8 @@ namespace Fodinae.UI
     {
         [SerializeField]
         private Material? _starfieldMaterial;
+        private Material? _runtimeMaterial;
+        private Material? _runtimeMaterialSource;
 
         private const int ResizeThresholdPixels = 24;
 
@@ -63,17 +65,20 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
+            EnsureRuntimeMaterial();
             EnsureTexture();
         }
 
         private void OnDisable()
         {
             ReleaseTexture();
+            ReleaseRuntimeMaterial();
         }
 
         private void OnDestroy()
         {
             ReleaseTexture();
+            ReleaseRuntimeMaterial();
         }
 
         private Vector2 _smoothParallax;
@@ -83,7 +88,8 @@ namespace Fodinae.UI
         // sky is invisible to every camera-based capture.
         public void RenderNow()
         {
-            if (_starfieldMaterial == null)
+            EnsureRuntimeMaterial();
+            if (_runtimeMaterial == null)
             {
                 return;
             }
@@ -110,10 +116,10 @@ namespace Fodinae.UI
             _smoothParallax = Vector2.Lerp(_smoothParallax, targetParallax, Time.unscaledDeltaTime * 3.0f);
 
             float currentTime = Application.isPlaying ? Time.time : (float)Time.realtimeSinceStartup;
-            _starfieldMaterial.SetFloat("_ShaderTime", currentTime);
-            _starfieldMaterial.SetFloat("_Aspect", (float)_texture.width / Mathf.Max(_texture.height, 1));
-            _starfieldMaterial.SetVector("_ParallaxOffset", new Vector4(_smoothParallax.x, _smoothParallax.y, 0f, 0f));
-            Graphics.Blit(Texture2D.whiteTexture, _texture, _starfieldMaterial);
+            _runtimeMaterial.SetFloat("_ShaderTime", currentTime);
+            _runtimeMaterial.SetFloat("_Aspect", (float)_texture.width / Mathf.Max(_texture.height, 1));
+            _runtimeMaterial.SetVector("_ParallaxOffset", new Vector4(_smoothParallax.x, _smoothParallax.y, 0f, 0f));
+            Graphics.Blit(Texture2D.whiteTexture, _texture, _runtimeMaterial);
         }
 
         private void LateUpdate()
@@ -167,6 +173,46 @@ namespace Fodinae.UI
             }
 
             _texture = null;
+        }
+
+        private void EnsureRuntimeMaterial()
+        {
+            if (_starfieldMaterial == null)
+            {
+                ReleaseRuntimeMaterial();
+                return;
+            }
+
+            if (_runtimeMaterial != null && ReferenceEquals(_runtimeMaterialSource, _starfieldMaterial))
+            {
+                return;
+            }
+
+            ReleaseRuntimeMaterial();
+            _runtimeMaterial = new Material(_starfieldMaterial)
+            {
+                name = $"{_starfieldMaterial.name} (Runtime)",
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+            _runtimeMaterialSource = _starfieldMaterial;
+        }
+
+        private void ReleaseRuntimeMaterial()
+        {
+            if (_runtimeMaterial != null)
+            {
+                if (Application.isPlaying)
+                {
+                    Destroy(_runtimeMaterial);
+                }
+                else
+                {
+                    DestroyImmediate(_runtimeMaterial);
+                }
+            }
+
+            _runtimeMaterial = null;
+            _runtimeMaterialSource = null;
         }
     }
 }

@@ -15,20 +15,26 @@ internal static class DummyBotRunner
 {
     private static IHBPacket[] s_positionsArray = new IHBPacket[6];
 
-    public static async UniTaskVoid RunCircularBots(int count, int lifecycleVersion, Action<ServerPacket> sendPacket, Func<bool> loopAlive)
+    /// <summary>
+    /// Имена ботов-«игроков». Единый источник истины: DummyChatSimulator
+    /// ссылается на него, чтобы чат-игроки были теми же, кого видно на карте.
+    /// </summary>
+    public static readonly string[] BotNames =
+    {
+        "Mira",
+        "Kite",
+        "Rook",
+        "Nova",
+        "Iris",
+        "Vex",
+    };
+
+    public static async UniTask RunCircularBots(int count, int lifecycleVersion, Action<ServerPacket> sendPacket, Func<bool> loopAlive)
     {
         const int BASE_ID = 1000;
         const float CENTER_X = 30f;
         const float CENTER_Y = 50f;
-        string[] names =
-        {
-            "Mira",
-            "Kite",
-            "Rook",
-            "Nova",
-            "Iris",
-            "Vex",
-        };
+        string[] names = BotNames;
 
         var bots = new List<(ushort id, string name, float cx, float cy, float r, float a, float speed)>();
         for (int i = 0; i < count; i++)

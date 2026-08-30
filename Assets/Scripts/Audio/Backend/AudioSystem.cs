@@ -31,6 +31,8 @@ namespace Fodinae.Audio.Backend
         private IClientConfigManager _clientConfig = null!;
         [Inject]
         private IAssetLoader _assetLoader = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
         private bool _configApplied;
         private bool _configWaitLogged;
         private bool _pausedInBackground;
@@ -47,7 +49,7 @@ namespace Fodinae.Audio.Backend
 
         private void Start()
         {
-            _backend.Initialize(this, _assetLoader);
+            _backend.Initialize(this, _assetLoader, _operations);
             TryApplySavedBusVolumes();
         }
 
@@ -126,7 +128,7 @@ namespace Fodinae.Audio.Backend
             {
                 _backend?.Shutdown();
                 _backend = new FmodAudioBackend();
-                _backend.Initialize(this, _assetLoader);
+                _backend.Initialize(this, _assetLoader, _operations);
                 ApplySavedBusVolumes();
                 _backend.SetPaused(_pausedInBackground);
                 Debug.Log($"{TAG} Audio backend successfully re-initialized after device change.");
@@ -197,7 +199,7 @@ namespace Fodinae.Audio.Backend
         }
 
         /// <summary>Воспроизвести событие по имени с опциональной 3D-позицией.</summary>
-        public AudioPlaybackHandle? Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
+        public IAudioPlaybackHandle? Play(string eventName, Vector3? worldPosition = null, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName))
             {
@@ -222,7 +224,7 @@ namespace Fodinae.Audio.Backend
                 // события (часть исходного дизайна аудио-пайплайна) и звук дожимает ретраем.
                 if (TryAutoLoadFeatureBank(eventName))
                 {
-                    LoadBankAndReplayAsync(eventName, layer, worldPosition, null).Forget();
+                    RunBankLoadAndReplay(eventName, layer, worldPosition, null);
                     return null;
                 }
 
@@ -235,7 +237,7 @@ namespace Fodinae.Audio.Backend
         }
 
         /// <summary>Воспроизвести 3D-событие с нативной привязкой FMOD к GameObject (позиция/поворот следуют автоматически в C++).</summary>
-        public AudioPlaybackHandle? PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
+        public IAudioPlaybackHandle? PlayAttached(string eventName, GameObject targetGameObject, AudioLayer? overrideLayer = null, float? overrideVolume = null)
         {
             if (string.IsNullOrEmpty(eventName) || targetGameObject == null)
             {
@@ -258,7 +260,7 @@ namespace Fodinae.Audio.Backend
             {
                 if (TryAutoLoadFeatureBank(eventName))
                 {
-                    LoadBankAndReplayAsync(eventName, layer, null, targetGameObject).Forget();
+                    RunBankLoadAndReplay(eventName, layer, null, targetGameObject);
                     return null;
                 }
 
@@ -321,9 +323,31 @@ namespace Fodinae.Audio.Backend
         private bool _autoLoadInFlight;
         private readonly HashSet<string> _autoLoadedBanks = new();
 
-        private async Cysharp.Threading.Tasks.UniTaskVoid LoadBankAndReplayAsync(
-            string eventName, AudioLayer layer, Vector3? worldPosition, GameObject? targetGameObject)
+        private void RunBankLoadAndReplay(
+            string eventName,
+            AudioLayer layer,
+            Vector3? worldPosition,
+            GameObject? targetGameObject)
         {
+            string operationName = $"load_audio_bank_for_{eventName}";
+            _operations.Run(
+                operationName,
+                cancellationToken => LoadBankAndReplayAsync(
+                    eventName,
+                    layer,
+                    worldPosition,
+                    targetGameObject,
+                    cancellationToken));
+        }
+
+        private async UniTask LoadBankAndReplayAsync(
+            string eventName,
+            AudioLayer layer,
+            Vector3? worldPosition,
+            GameObject? targetGameObject,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             var bankName = GetFeatureBankName(eventName);
             if (string.IsNullOrEmpty(bankName))
             {
@@ -334,6 +358,7 @@ namespace Fodinae.Audio.Backend
             try
             {
                 var ok = await EnsureBankLoadedAsync(bankName);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!ok)
                 {
                     // Bank not present in current environment (e.g. offline test mode without FMOD bank assets)
@@ -350,7 +375,7 @@ namespace Fodinae.Audio.Backend
         }
 
         /// <summary>Воспроизвести FMOD Snapshot (например "snapshot:/cave_ambient").</summary>
-        public AudioPlaybackHandle? PlaySnapshot(string snapshotPath)
+        public IAudioPlaybackHandle? PlaySnapshot(string snapshotPath)
         {
             if (string.IsNullOrEmpty(snapshotPath))
             {
@@ -372,11 +397,11 @@ namespace Fodinae.Audio.Backend
         }
 
         /// <summary>Воспроизвести 3D-событие на заданной позиции в мире.</summary>
-        public AudioPlaybackHandle? PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null)
+        public IAudioPlaybackHandle? PlayAt(string eventName, Vector3 worldPosition, AudioLayer? layer = null, float? volume = null)
             => Play(eventName, worldPosition, layer, volume);
 
         /// <summary>Воспроизвести 2D-событие (без пространственного позиционирования).</summary>
-        public AudioPlaybackHandle? Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
+        public IAudioPlaybackHandle? Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
             => Play(eventName, null, layer, volume);
 
         // ═══════════════════════════════════════════════════════════

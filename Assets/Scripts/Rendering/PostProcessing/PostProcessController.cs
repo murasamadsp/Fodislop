@@ -247,7 +247,15 @@ namespace Fodinae.Rendering.PostProcessing
             // switched off, because the two subsystems are unrelated.
             PostProcessRenderPass.SetAdvancedSettings(config.AdvancedPostProcess);
 
-            BloomIntensity = config.BloomIntensity;
+            float bloomIntensity = config.BloomIntensity;
+            float chromaticAberration = config.ChromaticAberrationIntensity;
+            if (config.ReducePhotosensitivity)
+            {
+                bloomIntensity = Mathf.Min(bloomIntensity, 0.3f);
+                chromaticAberration = 0f;
+            }
+
+            BloomIntensity = bloomIntensity;
             BloomComponent bloom = GetRequired(_bloom, nameof(_bloom));
             bloom.threshold.overrideState = true;
             bloom.threshold.value = config.BloomThreshold;
@@ -269,16 +277,38 @@ namespace Fodinae.Rendering.PostProcessing
             vignette.center.overrideState = true;
             vignette.center.value = config.VignetteCenter;
 
-            ChromaticAberrationIntensity = config.ChromaticAberrationIntensity;
-            Exposure = config.ColorGradingExposure;
+            ChromaticAberrationIntensity = chromaticAberration;
             ColorGradingComponent colorGrading = GetRequired(_colorGrading, nameof(_colorGrading));
+            Exposure = config.ColorGradingExposure;
+            Color baseFilter = config.ColorGradingFilter;
+            float contrast = config.ColorGradingContrast;
+            float saturation = config.ColorGradingSaturation;
+
+            // Apply colorblind accessibility matrix adjustment
+            switch (config.ColorblindMode)
+            {
+                case 1: // Deuteranopia (green-weak)
+                    baseFilter = new Color(baseFilter.r * 0.8f + baseFilter.g * 0.2f, baseFilter.g * 0.7f + baseFilter.b * 0.3f, baseFilter.b);
+                    break;
+                case 2: // Protanopia (red-weak)
+                    baseFilter = new Color(baseFilter.r * 0.6f + baseFilter.g * 0.4f, baseFilter.g * 0.9f, baseFilter.b * 1.1f);
+                    break;
+                case 3: // Tritanopia (blue-weak)
+                    baseFilter = new Color(baseFilter.r * 0.95f, baseFilter.g * 0.85f + baseFilter.b * 0.15f, baseFilter.b * 0.5f + baseFilter.r * 0.5f);
+                    break;
+                case 4: // High-Contrast
+                    contrast = Mathf.Min(contrast + 0.35f, 1f);
+                    saturation = Mathf.Min(saturation + 0.2f, 2f);
+                    break;
+            }
+
             colorGrading.colorFilter.overrideState = true;
-            colorGrading.colorFilter.value = config.ColorGradingFilter;
+            colorGrading.colorFilter.value = baseFilter;
             colorGrading.toneMappingWhitePoint.overrideState = true;
             colorGrading.toneMappingWhitePoint.value = config.ColorGradingToneMappingWhitePoint;
 
-            Contrast = config.ColorGradingContrast;
-            Saturation = config.ColorGradingSaturation;
+            Contrast = contrast;
+            Saturation = saturation;
             ToneMapping = config.ColorGradingToneMapping;
             EigengrauIntensity = config.EigengrauIntensity;
             EigengrauComponent eigengrau = GetRequired(_eigengrau, nameof(_eigengrau));

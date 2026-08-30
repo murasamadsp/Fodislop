@@ -14,7 +14,7 @@ internal static class DummyMapStreamer
     private static readonly Dictionary<int, CellType[]> _chunkPayloadCache = new();
     private static readonly object _cacheLock = new object();
 
-    public static void SendMapChunksAround(WorldLayer<CellType>? worldLayer, HashSet<int> sentMapChunks, ushort serverX, ushort serverY, Action<ServerPacket> sendPacket)
+    public static void SendMapChunksAround(IWorldLayer<CellType>? worldLayer, HashSet<int> sentMapChunks, ushort serverX, ushort serverY, Action<ServerPacket> sendPacket)
     {
         const int ChunkSize = 32;
         const int StreamingRadiusChunks = 4;
@@ -44,14 +44,7 @@ internal static class DummyMapStreamer
                     continue;
                 }
 
-                CellType[]? source = worldLayer.GetChunk(
-                    chunkIndex,
-                    createIfMissing: true,
-                    touchLru: true);
-                if (source == null)
-                {
-                    continue;
-                }
+                CellType[] source = worldLayer.GetOrCreateChunk(chunkIndex, touchLru: true);
 
                 CellType[] payload = GetOrCreatePayload(chunkIndex, source);
                 sendPacket(new ServerPacket(new HBPacket(new IHBPacket[]

@@ -184,15 +184,6 @@ table {
 }
 
 /* Цветовые модификаторы текста — общие для всех ролей. */
-.fdn-text--primary   { color: var(--text-primary); }
-.fdn-text--secondary { color: var(--text-secondary); }
-.fdn-text--tertiary  { color: var(--text-tertiary); }
-.fdn-text--gold      { color: var(--accent-gold); }
-.fdn-text--cyan      { color: var(--accent-cyan); }
-.fdn-text--ok        { color: var(--state-ok); }
-.fdn-text--warn      { color: var(--state-warn); }
-.fdn-text--danger    { color: var(--state-danger); }
-.fdn-text--anomaly   { color: var(--state-anomaly); }
 
 /* ==========================================================================
    §4  СКРОЛЛБАР
@@ -247,6 +238,16 @@ table {
 
 /* Внутри тёмных утопленных слотов смещение наружу срезается соседями —
    там кольцо рисуется внутрь. */
+.fdn-text--primary   { color: var(--text-primary); }
+.fdn-text--secondary { color: var(--text-secondary); }
+.fdn-text--tertiary  { color: var(--text-tertiary); }
+.fdn-text--gold      { color: var(--accent-gold); }
+.fdn-text--cyan      { color: var(--accent-cyan); }
+.fdn-text--ok        { color: var(--state-ok); }
+.fdn-text--warn      { color: var(--state-warn); }
+.fdn-text--danger    { color: var(--state-danger); }
+.fdn-text--anomaly   { color: var(--state-anomaly); }
+
 .fdn-focus-inset:focus-visible {
   outline-offset: calc(var(--focus-ring-offset) * -1);
 }
@@ -267,12 +268,19 @@ table {
   border: 0;
 }
 
-/* Пользовательский тумблер «уменьшить движение» из настроек. Системную
-   настройку обрабатывают токены длительности в tokens.css §3. */
+/* Пользовательский тумблер «уменьшить движение» из настроек.
+
+   Два пути дополняют друг друга, а не дублируются: системная настройка гасит
+   ШКАЛУ длительностей (tokens.css §3), из-за чего короче становятся переходы —
+   но бесконечные фоновые циклы (корона, пульс маяка, радар, тикер) от короткой
+   длительности не останавливаются, а лишь ускоряются. Их останавливает только
+   правило ниже, через animation-iteration-count. Поэтому нужны оба.
+
+   Контракт — атрибут на <html>, его ставит toggleReduceMotion() в app.js. */
 [data-reduce-motion='true'] *,
 [data-reduce-motion='true'] *::before,
 [data-reduce-motion='true'] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important; /* lint-ignore: страховочная сетка для литеральных длительностей вне шкалы; шкалу гасят токены в tokens.css */
 }

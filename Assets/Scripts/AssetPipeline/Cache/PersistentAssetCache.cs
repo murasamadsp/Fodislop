@@ -170,7 +170,7 @@ public static class PersistentAssetCache
         }
 
         _cachePath = Path.Combine(persistentPath, "AssetCache");
-        Directory.CreateDirectory(_cachePath);
+        PersistentAssetCacheFormat.EnsureCurrent(_cachePath);
         _isInitialized = true;
     }
 

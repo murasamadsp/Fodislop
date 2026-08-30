@@ -243,7 +243,7 @@ namespace Fodinae.Core
                 if (previousScene.HasValue && previousScene.Value != candidateScene &&
                     previousScene.Value.IsValid() && previousScene.Value.isLoaded)
                 {
-                    PrepareSceneForUnload(previousScene.Value);
+                    await PrepareSceneForUnloadAsync(previousScene.Value);
                     await SceneManager.UnloadSceneAsync(previousScene.Value).ToUniTask();
                 }
 
@@ -329,7 +329,7 @@ namespace Fodinae.Core
             return result;
         }
 
-        private static void PrepareSceneForUnload(Scene scene)
+        private static async UniTask PrepareSceneForUnloadAsync(Scene scene)
         {
             GameLifetimeScope? scope = FindGameScope(scene);
             if (scope == null || scope.Container == null)
@@ -337,10 +337,11 @@ namespace Fodinae.Core
                 return;
             }
 
-            scope.PrepareForUnload(
+            await scope.PrepareForUnloadAsync(
                 scope.Container.Resolve<PacketHandler>(),
                 scope.Container.Resolve<GameManager>(),
-                scope.Container.Resolve<MapManager>());
+                scope.Container.Resolve<MapManager>(),
+                scope.Container.Resolve<AsyncOperationSupervisor>());
         }
 
 
@@ -351,10 +352,12 @@ namespace Fodinae.Core
         /// </summary>
         public void ReturnToMainMenu()
         {
-            ReturnToMainMenuAsync().Forget();
+            Container.Resolve<AsyncOperationSupervisor>().Run(
+                "return_to_main_menu",
+                ReturnToMainMenuAsync);
         }
 
-        private async UniTaskVoid ReturnToMainMenuAsync()
+        private async UniTask ReturnToMainMenuAsync(CancellationToken cancellationToken)
         {
             // Packet subscriptions come off first, while the game scope is still
             // alive and this resolve is still valid. Leaving it to
@@ -373,7 +376,7 @@ namespace Fodinae.Core
             // unloads the scene, those references point at destroyed objects.
             // Repointing first means late resolves hit the Bootstrap container, where
             // Game-scoped types are not registered, and TryResolve returns null.
-            await EnsureMainMenuLoadedAsync();
+            await TransitionAsync(MainMenuSceneName, cancellationToken);
         }
 
         protected override void Configure(IContainerBuilder builder)
@@ -396,8 +399,14 @@ namespace Fodinae.Core
                 Lifetime.Singleton);
             builder.RegisterInstance(ProjectDefaultsLoader.LoadRequired());
             builder.RegisterInstance(GraphicsQualityProfileLoader.LoadRequired());
+            builder.Register<AsyncOperationSupervisor>(Lifetime.Singleton)
+                .AsSelf()
+                .As<IAsyncOperationSupervisor>();
 
-            builder.Register<DummyConnection>(Lifetime.Singleton).AsSelf();
+            // DummyConnection — офлайн-транспорт и точка подключения симуляторов
+            // (сейчас — VK-входа). Регистрируется интерфейсами, чтобы другие
+            // подсистемы могли подвязаться под него без зависимости от класса.
+            builder.Register<DummyConnection>(Lifetime.Singleton).AsSelf().AsImplementedInterfaces();
 
             // Application-tier session state: NetworkService (Bootstrap) and
             // Game-tier processors both resolve the same local-player state.

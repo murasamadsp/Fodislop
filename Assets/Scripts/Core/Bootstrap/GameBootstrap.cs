@@ -49,6 +49,7 @@ namespace Fodinae.Core
         private readonly Scene _ownScene;
         private readonly GameLifetimeScope _scope;
         private readonly SceneTransitionTicket _ticket;
+        private readonly AsyncOperationSupervisor _operations;
 
         public GameBootstrap(
             IProjectDefaults projectDefaults,
@@ -67,7 +68,8 @@ namespace Fodinae.Core
             InventoryView inventory,
             Scene ownScene,
             GameLifetimeScope scope,
-            SceneTransitionTicket ticket)
+            SceneTransitionTicket ticket,
+            AsyncOperationSupervisor operations)
         {
             _projectDefaults = projectDefaults;
             _clientConfig = clientConfig;
@@ -86,15 +88,16 @@ namespace Fodinae.Core
             _ownScene = ownScene;
             _scope = scope;
             _ticket = ticket;
+            _operations = operations;
             _ticket.Attach(_ownScene);
         }
 
         public void PostStart()
         {
-            StartAsync().Forget();
+            _operations.Run("game_startup", _ => StartAsync());
         }
 
-        private async UniTaskVoid StartAsync()
+        private async UniTask StartAsync()
         {
             CancellationToken scopeToken = _scope.destroyCancellationToken;
             try

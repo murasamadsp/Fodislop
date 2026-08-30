@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Text;
 using Fodinae.Core;
 using Fodinae.Networking;
 using Fodinae.World.Lighting;
@@ -32,8 +33,8 @@ namespace Fodinae.UI
         private VisualElement? _rootElement;
         private Label? _fpsLabel;
         private float _nextDisplayUpdate;
-        private bool _showDetailedProfiler;
         private int _currentDebugViewIndex;
+        private readonly StringBuilder _displaySb = new(512);
 
         public float CurrentFps { get; private set; }
 
@@ -82,7 +83,10 @@ namespace Fodinae.UI
 
         protected void OnDestroy()
         {
-            _rootElement?.RemoveFromHierarchy();
+            if (_rootElement != null && _doc != null && _doc.rootVisualElement != null)
+            {
+                _doc.rootVisualElement.Remove(_rootElement);
+            }
             _rootElement = null;
             _fpsLabel = null;
         }
@@ -144,26 +148,15 @@ namespace Fodinae.UI
 
         protected void Update()
         {
-            FrameProfiler.BeginFrame();
-
             var keyboard = Keyboard.current;
-            if (keyboard != null)
+            if (keyboard != null && keyboard.f2Key.wasPressedThisFrame)
             {
-                if (keyboard.f3Key.wasPressedThisFrame)
+                LightingEngine? engine = _lightingEngine;
+                if (engine != null)
                 {
-                    _showDetailedProfiler = !_showDetailedProfiler;
-                    FrameProfiler.SetAllocationTrackingEnabled(_showDetailedProfiler);
-                }
-
-                if (keyboard.f2Key.wasPressedThisFrame)
-                {
-                    LightingEngine? engine = _lightingEngine;
-                    if (engine != null)
-                    {
-                        _currentDebugViewIndex = (_currentDebugViewIndex + 1) % 6;
-                        var view = (LightingEngine.DebugView)_currentDebugViewIndex;
-                        engine.SetDebugView(view);
-                    }
+                    _currentDebugViewIndex = (_currentDebugViewIndex + 1) % 6;
+                    var view = (LightingEngine.DebugView)_currentDebugViewIndex;
+                    engine.SetDebugView(view);
                 }
             }
 
@@ -182,29 +175,20 @@ namespace Fodinae.UI
 
             if (_fpsLabel != null && Time.unscaledTime >= _nextDisplayUpdate)
             {
-                _nextDisplayUpdate = Time.unscaledTime + 0.1f;
+                _nextDisplayUpdate = Time.unscaledTime + 0.25f;
                 float frameTimeMs = avg * 1000f;
                 int pingMs = _networkStatus.PingMs;
                 int online = _networkStatus.OnlinePlayers;
 
-                if (!_showDetailedProfiler)
-                {
-                    _fpsLabel.text = $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {pingMs}ms  Online: {online}  [F3 for details]";
-                }
-                else
-                {
-                    LightingEngine? engine = _lightingEngine;
-                    string debugViewStr = engine != null ? engine.ActiveDebugView.ToString() : "Off";
-                    float gcAllocKb = FrameProfiler.GcAllocPerFrameBytes / 1024f;
+                _displaySb.Clear();
+                _displaySb.Append("FPS: ").Append((int)fps)
+                    .Append(" (").Append(frameTimeMs.ToString("F1")).Append("ms)  Ping: ")
+                    .Append(pingMs).Append("ms  Online: ").Append(online).Append("  [F3]");
 
-                    _fpsLabel.text =
-                        $"FPS: {fps:F0} ({frameTimeMs:F1}ms)  Ping: {pingMs}ms  Online: {online}\n" +
-                        $"<color=#aaffaa>[Terrain CPU]</color> Mesh: {FrameProfiler.TerrainMeshTimeMs:F2}ms | Flood: {FrameProfiler.TerrainFloodFillTimeMs:F2}ms | Cache: {FrameProfiler.TerrainCacheTimeMs:F2}ms | Upload: {FrameProfiler.TerrainGpuUploadTimeMs:F2}ms\n" +
-                        $"<color=#ffffaa>[Lighting CPU]</color> Build: {FrameProfiler.LightingBuildCommandsTimeMs:F2}ms | Execute: {FrameProfiler.LightingExecuteCommandsTimeMs:F2}ms | Cmd: {FrameProfiler.LightingCommandBufferBytes / 1024f:F1}KB | View: {debugViewStr} [F2]\n" +
-                        $"<color=#ffffaa>[Lighting counts]</color> Static: {FrameProfiler.LightingStaticSolveCount} | Dynamic: {FrameProfiler.LightingDynamicSolveCount} | Invalidations: {FrameProfiler.LightingRegionInvalidationCount} | DynLights: {FrameProfiler.ActiveDynamicLights}\n" +
-                        $"<color=#ffaaff>[Memory]</color> GC: {gcAllocKb:F1} KB/f | " +
-                        $"{FrameProfiler.GcAllocTotalPerSecondBytes / (1024f * 1024f):F2} MB/s | " +
-                        $"collections: {FrameProfiler.GcCollectionCount} | [F3 to close]";
+                string newText = _displaySb.ToString();
+                if (_fpsLabel.text != newText)
+                {
+                    _fpsLabel.text = newText;
                 }
             }
         }

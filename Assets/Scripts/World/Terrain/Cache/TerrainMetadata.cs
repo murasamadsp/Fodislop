@@ -30,6 +30,7 @@ namespace Fodinae.World.Terrain
         public float UVTileSize;
         public int AnimationFrameCount;
         public float FrameHeightTiles;
+        public bool IsTextureReady;
     }
 
     public struct CellMetadata

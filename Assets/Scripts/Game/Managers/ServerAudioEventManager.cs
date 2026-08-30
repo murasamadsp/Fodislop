@@ -36,6 +36,8 @@ namespace Fodinae.Game.Managers
 
         [Inject]
         private VFXPool _vfxPool = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         public void PlayEffect(AudioPacket packet)
         {
@@ -55,7 +57,8 @@ namespace Fodinae.Game.Managers
                 _audioSystem,
                 _assetLoader,
                 _mapManager,
-                _vfxPool);
+                _vfxPool,
+                _operations);
             _activeEffects.Add(effect);
         }
 
@@ -96,6 +99,11 @@ namespace Fodinae.Game.Managers
 
         protected void Update()
         {
+            if (_activeEffects.Count == 0)
+            {
+                return;
+            }
+
             for (int i = _activeEffects.Count - 1; i >= 0; i--)
             {
                 var effect = _activeEffects[i];

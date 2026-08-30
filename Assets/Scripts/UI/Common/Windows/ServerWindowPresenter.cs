@@ -17,6 +17,7 @@ namespace Fodinae.UI;
 public sealed class ServerWindowPresenter : IDisposable
 {
     private readonly IAssetLoader _assetLoader;
+    private readonly IAsyncOperationSupervisor _operations;
     private readonly UIInputManager _uiInputManager;
     private readonly INetworkService _networkService;
     private readonly UIDocument _document;
@@ -29,9 +30,11 @@ public sealed class ServerWindowPresenter : IDisposable
         UIInputManager uiInputManager,
         INetworkService networkService,
         UIDocument document,
-        WindowCommandStream commands)
+        WindowCommandStream commands,
+        IAsyncOperationSupervisor operations)
     {
         _assetLoader = assetLoader;
+        _operations = operations;
         _uiInputManager = uiInputManager;
         _networkService = networkService;
         _document = document;
@@ -65,7 +68,7 @@ public sealed class ServerWindowPresenter : IDisposable
 
     private void Open(OpenWindowPacket packet)
     {
-        VisualElement element = new PacketUIBuilder(_assetLoader).Build(packet.Content) ??
+        VisualElement element = new PacketUIBuilder(_assetLoader, _operations).Build(packet.Content) ??
             throw new InvalidDataException($"Server window '{packet.WindowTag}' produced no UI element.");
         element.style.width = packet.Width;
         element.style.height = packet.Height;

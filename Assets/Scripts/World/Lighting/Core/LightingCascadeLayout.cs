@@ -2,7 +2,7 @@
 
 namespace Fodinae.World.Lighting
 {
-    internal readonly record struct CascadeLayout(
+    public readonly record struct CascadeLayout(
         int Offset,
         int EntryCount,
         int ProbeWidth,

@@ -1475,3 +1475,19 @@ Button.mm-btn-outline:hover {
     border-radius: var(--radius-sharp);
     margin-left: var(--space-6);
 }
+
+.mm-settings-content--servers { flex: 1.3; }
+.mm-ip-connect-box { flex-direction: row; align-items: center; margin-top: 8px; }
+.mm-flex-1 { flex-grow: 1; }
+.mm-server-detail-card { flex: 0.9; margin-left: 12px; }
+.mm-detail-title { font-size: 16px; -unity-font-style: bold; }
+.mm-detail-desc { white-space: normal; margin-bottom: 12px; }
+.mm-select--controls { min-width: 180px; }
+.mm-row-item--gap { margin-top: 4px; }
+.mm-feedback-tag { margin-top: 4px; display: none; }
+.mm-footer--between { justify-content: space-between; }
+.mm-update-hero-box { background-color: var(--accent-gold-wash); border-color: var(--border-gold-soft); margin-bottom: 12px; }
+.mm-update-title { font-size: 16px; -unity-font-style: bold; }
+.mm-progress-block { display: none; }
+.mm-progress-fill--init { width: 0%; }
+.mm-row-item--meta { margin-top: 4px; }

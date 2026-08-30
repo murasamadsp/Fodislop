@@ -32,6 +32,7 @@ namespace Fodinae
         private readonly ConcurrentDictionary<string, byte> _missingAssets = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, byte> _reportedAssetFailures = new(StringComparer.OrdinalIgnoreCase);
         private CancellationTokenSource? _loopCts;
+        private bool _batchLoopStarted;
         private bool _packetSubscribed;
         private bool _isDestroyed;
         private bool _batchLoopFailureLogged;
@@ -51,6 +52,8 @@ namespace Fodinae
         private IConnectionService _connectionService = null!;
         [Inject]
         private ITextureStorageService _textureStorage = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         private IConnectionService ConnectionService =>
             _connectionService ??
@@ -70,7 +73,23 @@ namespace Fodinae
             _batchLoopFailureLogged = false;
             _cache = new AssetCache(LoadBytesFromServer);
             _loopCts = new CancellationTokenSource();
-            ProcessBatchLoop(_loopCts.Token).Forget();
+        }
+
+        protected void Start()
+        {
+            if (_operations == null)
+            {
+                throw new InvalidOperationException(
+                    "ClientAssetLoader requires IAsyncOperationSupervisor before startup.");
+            }
+
+            if (_batchLoopStarted)
+            {
+                return;
+            }
+
+            _batchLoopStarted = true;
+            _operations.Run("asset_request_batch_loop", ProcessBatchLoop);
         }
 
         protected void OnDestroy()
@@ -131,7 +150,13 @@ namespace Fodinae
         {
             // Teardown-safe: unsubscribe even if the injected subscription was
             // never bound, so a stale delegate cannot leak across reconnects.
-            _connectionService.OnPacketReceived -= OnPacketReceived;
+            // OnDestroy may fire during a domain reload before VContainer
+            // injection populated the field, so the injected reference must be
+            // null-checked before unsubscribing (NRE at teardown otherwise).
+            if (_connectionService != null)
+            {
+                _connectionService.OnPacketReceived -= OnPacketReceived;
+            }
 
             _packetSubscribed = false;
 
@@ -251,8 +276,9 @@ namespace Fodinae
                 return;
             }
 
-            _connectionService.OnPacketReceived -= OnPacketReceived;
-            _connectionService.OnPacketReceived += OnPacketReceived;
+            var connectionService = ConnectionService;
+            connectionService.OnPacketReceived -= OnPacketReceived;
+            connectionService.OnPacketReceived += OnPacketReceived;
             _packetSubscribed = true;
         }
 
@@ -387,8 +413,13 @@ namespace Fodinae
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private async UniTaskVoid ProcessBatchLoop(CancellationToken ct)
+        private async UniTask ProcessBatchLoop(CancellationToken supervisorToken)
         {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                _loopCts?.Token ?? CancellationToken.None);
+            CancellationToken ct = linkedCancellation.Token;
+
             while (!ct.IsCancellationRequested && !_isDestroyed)
             {
                 try

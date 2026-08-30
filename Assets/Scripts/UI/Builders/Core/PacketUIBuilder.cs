@@ -14,14 +14,19 @@ namespace Fodinae.UI
     public class PacketUIBuilder
     {
         private readonly IAssetLoader _assetLoader;
+        private readonly IAsyncOperationSupervisor _operations;
         private readonly PacketUIBuilderFactory _builderFactory = new();
 
-        public PacketUIBuilder(IAssetLoader assetLoader)
+        public PacketUIBuilder(
+            IAssetLoader assetLoader,
+            IAsyncOperationSupervisor operations)
         {
             _assetLoader = assetLoader ?? throw new ArgumentNullException(nameof(assetLoader));
+            _operations = operations ?? throw new ArgumentNullException(nameof(operations));
         }
 
         internal IAssetLoader AssetLoader => _assetLoader;
+        internal IAsyncOperationSupervisor Operations => _operations;
 
         public VisualElement? Build(IGUIComponentPacket packet)
         {

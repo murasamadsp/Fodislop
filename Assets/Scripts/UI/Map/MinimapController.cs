@@ -41,7 +41,7 @@ namespace Fodinae.UI
 
         [Inject]
         private MapManager _mapManager = null!;
-        private WorldLayer<CellType>? _cellLayer;
+        private IWorldLayer<CellType>? _cellLayer;
         private int _worldWidth;
         private int _worldHeight;
 
@@ -57,8 +57,12 @@ namespace Fodinae.UI
         private bool _lastRefreshHadLoadedCells;
         private long _lastRenderedStorageRevision = -1;
         private bool _chunkLoadRefreshRequested;
-        private WorldLayer<CellType>? _subscribedCellLayer;
+        private bool _pendingPlayerMoveRefresh;
+        private IWorldLayer<CellType>? _subscribedCellLayer;
         private bool _playerMoveSubscribed;
+        private int _lastDisplayedX = int.MinValue;
+        private int _lastDisplayedY = int.MinValue;
+        private readonly System.Text.StringBuilder _coordsSb = new(16);
 
         // Toggle state
         private bool _isVisible = true;
@@ -160,18 +164,22 @@ namespace Fodinae.UI
 
             if (_ready && _initialRefreshDone && _isVisible &&
                 _player != null && _player.HasServerPosition &&
-                _mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)
+                (_pendingPlayerMoveRefresh || (_mapStorage != null && _mapStorage.Revision != _lastRenderedStorageRevision)) &&
+                CanRefreshTexture())
             {
+                _pendingPlayerMoveRefresh = false;
                 _cellSampler.Invalidate();
                 RefreshTexture(_player.Position.x, _player.Position.y);
-                _lastRenderedStorageRevision = _mapStorage.Revision;
+                _lastUpdateTime = Time.time;
+                _lastRenderedStorageRevision = _mapStorage != null ? _mapStorage.Revision : -1;
             }
 
             if (_chunkLoadRefreshRequested && _ready && _isVisible &&
-                _player != null && _player.HasServerPosition)
+                _player != null && _player.HasServerPosition && CanRefreshTexture())
             {
                 _chunkLoadRefreshRequested = false;
                 RefreshTexture(_player.Position.x, _player.Position.y);
+                _lastUpdateTime = Time.time;
                 _initialRefreshDone = _lastRefreshHadLoadedCells;
                 if (_initialRefreshDone)
                 {
@@ -400,12 +408,17 @@ namespace Fodinae.UI
             float now = Time.time;
             if (now - _lastUpdateTime >= UPDATE_DELAY)
             {
+                _pendingPlayerMoveRefresh = false;
                 _lastUpdateTime = now;
                 _lastUpdatePos = newPos;
                 RefreshTexture(newPos.x, newPos.y);
                 MapStorage storage = _mapStorage ??
                     throw new InvalidOperationException("Minimap storage was lost during refresh.");
                 _lastRenderedStorageRevision = storage.Revision;
+            }
+            else
+            {
+                _pendingPlayerMoveRefresh = true;
             }
         }
 
@@ -431,11 +444,20 @@ namespace Fodinae.UI
                 _cellSampler);
         }
 
+        private bool CanRefreshTexture()
+        {
+            return Time.time - _lastUpdateTime >= UPDATE_DELAY;
+        }
+
         private void UpdateCoordinatesText(int x, int y)
         {
-            if (_coordinatesLabel != null)
+            if (_coordinatesLabel != null && (_lastDisplayedX != x || _lastDisplayedY != y))
             {
-                _coordinatesLabel.text = $"{x}:{y}";
+                _lastDisplayedX = x;
+                _lastDisplayedY = y;
+                _coordsSb.Clear();
+                _coordsSb.Append(x).Append(':').Append(y);
+                _coordinatesLabel.text = _coordsSb.ToString();
             }
         }
 

@@ -42,6 +42,8 @@ namespace Fodinae.Game
         private int _softMaxPerType = 30;
 
         private readonly Dictionary<VFXType, SubPool> _pools = new();
+        private readonly List<SubPool> _poolList = new();
+        private int _totalActiveVfxCount;
 
         [Inject]
         private WorldEntityBatchRenderer _entityBatchRenderer = null!;
@@ -67,32 +69,41 @@ namespace Fodinae.Game
 
         protected void OnDestroy()
         {
-            foreach (var kvp in _pools)
+            for (int i = 0; i < _poolList.Count; i++)
             {
-                TeardownSubPool(kvp.Value);
+                TeardownSubPool(_poolList[i]);
             }
 
             _pools.Clear();
+            _poolList.Clear();
+            _totalActiveVfxCount = 0;
         }
 
         public void ResetForNewGeneration()
         {
-            foreach (SubPool pool in _pools.Values)
+            for (int i = 0; i < _poolList.Count; i++)
             {
-                TeardownSubPool(pool);
+                TeardownSubPool(_poolList[i]);
             }
 
             _pools.Clear();
+            _poolList.Clear();
+            _totalActiveVfxCount = 0;
             InitializePools();
         }
 
         protected void Update()
         {
+            if (_totalActiveVfxCount == 0)
+            {
+                return;
+            }
+
             var now = Time.realtimeSinceStartup;
 
-            foreach (var kvp in _pools)
+            for (int p = 0; p < _poolList.Count; p++)
             {
-                var pool = kvp.Value;
+                var pool = _poolList[p];
                 var activeList = pool.Active;
 
                 for (int i = activeList.Count - 1; i >= 0; i--)
@@ -102,6 +113,7 @@ namespace Fodinae.Game
                     if (slot.GameObject == null)
                     {
                         activeList.RemoveAt(i);
+                        _totalActiveVfxCount = Mathf.Max(0, _totalActiveVfxCount - 1);
                         continue;
                     }
 
@@ -113,6 +125,7 @@ namespace Fodinae.Game
                     if ((now - slot.PlayStartTime) > 30f)
                     {
                         ReleaseInternal(pool, slot, i);
+                        _totalActiveVfxCount = Mathf.Max(0, _totalActiveVfxCount - 1);
                     }
                 }
 
@@ -146,6 +159,7 @@ namespace Fodinae.Game
                     LastReleaseTime = Time.realtimeSinceStartup,
                 };
                 _pools[vfxType] = pool;
+                _poolList.Add(pool);
             }
 
             return pool;
@@ -198,11 +212,13 @@ namespace Fodinae.Game
             }
 
             ReleaseInternal(pool, pooled, idx);
+            _totalActiveVfxCount = Mathf.Max(0, _totalActiveVfxCount - 1);
         }
 
         private PooledSlot AcquireInternal(SubPool pool)
         {
             PooledSlot slot;
+            _totalActiveVfxCount++;
 
             if (pool.Available.Count > 0)
             {

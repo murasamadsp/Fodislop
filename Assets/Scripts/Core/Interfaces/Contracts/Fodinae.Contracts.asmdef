@@ -3,7 +3,6 @@
     "rootNamespace": "Fodinae.Core.Interfaces",
     "references": [
         "UniTask",
-        "FMODUnity",
         "MinesServer.Data",
         "MinesServer.Networking",
         "MinesServer.Networking.Connection",

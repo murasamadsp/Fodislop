@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
@@ -93,6 +94,8 @@ namespace Fodinae.Game
         private MapManager _mapManager = null!;
         [Inject]
         private RobotManager _robotManager = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         public uint BotId => _botId;
         public int PlayerId => _playerId;
@@ -108,9 +111,22 @@ namespace Fodinae.Game
         [Inject]
         private void InitializeEntityBatch(WorldEntityBatchRenderer entityBatchRenderer)
         {
+            _lighting ??= new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
             _visuals.Initialize(entityBatchRenderer, _clanTransform);
+        }
+
+        /// <summary>
+        /// Lazily creates <see cref="_visuals"/> and <see cref="_lighting"/> when
+        /// VContainer resolves [Inject] methods before <see cref="Awake"/> has run.
+        /// Safe to call multiple times — Awake re-assigns with the same values.
+        /// </summary>
+        private void EnsureVisuals()
+        {
+            _lighting ??= new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
         }
 
         public float LogicalFacingAngle => _movement.TargetAngle;
@@ -138,7 +154,13 @@ namespace Fodinae.Game
 
             if (_cts != null)
             {
-                LoadClanAsync(_cts.Token).Forget();
+                CancellationToken entityToken = _cts.Token;
+                _operations.Run(
+                    "load_robot_clan_badge",
+                    supervisorToken => RunWithLinkedCancellationAsync(
+                        LoadClanAsync,
+                        entityToken,
+                        supervisorToken));
             }
         }
 
@@ -160,8 +182,7 @@ namespace Fodinae.Game
 
         protected void Awake()
         {
-            _lighting = new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
-            _visuals = new RobotVisuals(transform, IsLocalPlayer);
+            EnsureVisuals();
             _movement.MoveSpeed = _moveSpeed;
             _movement.RotationSpeed = _rotationSpeed;
 
@@ -322,7 +343,7 @@ namespace Fodinae.Game
                 if (_isCulled)
                 {
                     _isCulled = false;
-                    _visuals.SetBodyVisible(_spriteRenderer == null || _spriteRenderer.enabled);
+                    _visuals.SetBodyVisible(true);
                     _nameplate.SetEnabled(true);
                     _visuals.SetTentaclesActive(true);
                     _visuals.SnapTentacles(transform.position);
@@ -476,23 +497,44 @@ namespace Fodinae.Game
             _cts?.Cancel();
             _cts?.Dispose();
             _cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+            CancellationToken entityToken = _cts.Token;
 
-            LoadMetadataAssetsAsync(_cts.Token).Forget();
+            _operations.Run(
+                "load_robot_metadata_assets",
+                supervisorToken => LoadMetadataAssetsAsync(
+                    entityToken,
+                    supervisorToken));
         }
 
-        private async UniTaskVoid LoadMetadataAssetsAsync(CancellationToken token)
+        private async UniTask LoadMetadataAssetsAsync(
+            CancellationToken entityToken,
+            CancellationToken supervisorToken)
         {
-            LoadSkinAsync(token).Forget();
-            LoadTailAsync(token).Forget();
-            if (!IsLocalPlayer)
-            {
-                LoadClanAsync(token).Forget();
-            }
-
-            await UniTask.CompletedTask;
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                entityToken,
+                supervisorToken);
+            CancellationToken token = linkedCancellation.Token;
+            UniTask clanTask = IsLocalPlayer
+                ? UniTask.CompletedTask
+                : LoadClanAsync(token);
+            await UniTask.WhenAll(
+                LoadSkinAsync(token),
+                LoadTailAsync(token),
+                clanTask);
         }
 
-        private async UniTaskVoid LoadSkinAsync(CancellationToken token)
+        private static async UniTask RunWithLinkedCancellationAsync(
+            Func<CancellationToken, UniTask> operation,
+            CancellationToken entityToken,
+            CancellationToken supervisorToken)
+        {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                entityToken,
+                supervisorToken);
+            await operation(linkedCancellation.Token);
+        }
+
+        private async UniTask LoadSkinAsync(CancellationToken token)
         {
             if (string.IsNullOrEmpty(_skinPath))
             {
@@ -541,7 +583,7 @@ namespace Fodinae.Game
             }
         }
 
-        private async UniTaskVoid LoadTailAsync(CancellationToken token)
+        private async UniTask LoadTailAsync(CancellationToken token)
         {
             if (string.IsNullOrEmpty(_tailPath))
             {
@@ -564,7 +606,7 @@ namespace Fodinae.Game
             _visuals.CreateTentacles(tailTexture, transform.position);
         }
 
-        private async UniTaskVoid LoadClanAsync(CancellationToken token)
+        private async UniTask LoadClanAsync(CancellationToken token)
         {
             if (_clanId == 0)
             {

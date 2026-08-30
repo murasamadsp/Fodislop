@@ -26,11 +26,14 @@ namespace Fodinae.Audio.Backend
         private AudioSystem _system = null!;
         private IAssetLoader _assetLoader = null!;
 
-        public void Initialize(AudioSystem system, IAssetLoader assetLoader)
+        public void Initialize(
+            AudioSystem system,
+            IAssetLoader assetLoader,
+            IAsyncOperationSupervisor operations)
         {
             _system = system;
             _assetLoader = assetLoader;
-            LoadRequiredBanksAsync().Forget();
+            operations.Run("load_required_audio_banks", LoadRequiredBanksAsync);
         }
 
         private readonly Dictionary<AudioBusType, FMOD.Studio.Bus> _fmodBuses = new();
@@ -62,12 +65,14 @@ namespace Fodinae.Audio.Backend
         public UniTask WaitUntilBanksReadyAsync(CancellationToken cancellationToken = default)
             => _banksReady.Task.AttachExternalCancellation(cancellationToken);
 
-        public async UniTaskVoid LoadRequiredBanksAsync()
+        public async UniTask LoadRequiredBanksAsync(CancellationToken cancellationToken)
         {
             try
             {
                 foreach (var bankName in _requiredBanks)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     try
                     {
                         if (await EnsureBankLoadedAsync(bankName))
@@ -397,6 +402,7 @@ namespace Fodinae.Audio.Backend
             instance.setVolume(layer.Volume);
             instance.setPitch(layer.Pitch);
             instance.start();
+            instance.release();
 
             return new AudioPlaybackHandle(instance, layer.Bus);
         }
@@ -421,6 +427,7 @@ namespace Fodinae.Audio.Backend
             if (eventDescription.createInstance(out var instance) == FMOD.RESULT.OK && instance.isValid())
             {
                 instance.start();
+                instance.release();
                 return new AudioPlaybackHandle(instance, AudioBusType.Master);
             }
 

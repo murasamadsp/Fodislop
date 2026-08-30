@@ -15,14 +15,47 @@
 
   // --- Классификация токенов ------------------------------------------------
 
+  /* Суффиксы плотности из tokens.css §2.1. Имя токена читается «слой — цвет —
+     плотность», поэтому принадлежность к слою плотности определяется концом
+     имени, а не началом. */
+  const DENSITY = [
+    'tint', 'mist', 'film', 'hairline',
+    'wash', 'haze', 'sheen', 'line',
+    'glow', 'shade', 'edge', 'line-strong',
+    'fill', 'veil', 'gleam',
+    'dense', 'solid', 'cast',
+  ];
+
+  const isDensity = n => DENSITY.some(suffix => n.endsWith('-' + suffix));
+
   const GROUPS = {
     elevation: n => ['--rgb-void', '--rgb-abyss', '--rgb-slate', '--rgb-shelf'].includes(n),
     material: n => n.startsWith('--mat-'),
     primitive: n => n.startsWith('--rgb-') || n.startsWith('--hex-'),
+    density: isDensity,
     semantic: n =>
-      n.startsWith('--surface-') || n.startsWith('--border-') || n.startsWith('--text-') ||
-      n.startsWith('--accent-') || n.startsWith('--state-') || n.startsWith('--rarity-'),
+      !isDensity(n) && (
+        n.startsWith('--surface-') || n.startsWith('--border-') || n.startsWith('--text-') ||
+        n.startsWith('--accent-') || n.startsWith('--state-') || n.startsWith('--rarity-')),
   };
+
+  /* Классификация по списку префиксов — это вторая, ручная копия ответа на
+     вопрос «какие бывают токены». Она молча расходится с первой: новое
+     семейство просто не появляется в витрине, и заметить это нечем.
+
+     Поэтому витрина обязана сама сообщать о том, чего не знает. Список ниже —
+     токены, которым место в витрине не нашлось; он выводится на странице, а не
+     прячется в консоль. Пустой список — единственное допустимое состояние. */
+  const SHOWN_ELSEWHERE = [
+    '--space-', '--size-', '--radius-', '--dur-', '--ease-', '--blur-',
+    '--layer-', '--leading-', '--tracking-', '--weight-', '--face-', '--font-',
+    '--focus-', '--planet-', '--menu-', '--hex-ink', '--btn-', '--cell-', '--icon-',
+    '--order-', '--fit-', '--safe-',
+  ];
+
+  const isClassified = n =>
+    Object.values(GROUPS).some(test => test(n)) ||
+    SHOWN_ELSEWHERE.some(prefix => n.startsWith(prefix));
 
   /** Токен объявлен как «3 5 9», а не как цвет — превращаем в rgb() для показа. */
   const asColor = (name, raw) =>
@@ -163,6 +196,17 @@
       picked.forEach(n => el.appendChild(swatch(n, value(n))));
     }
 
+    // Самопроверка витрины: назвать то, чего она не знает.
+    const orphans = names.filter(n => !isClassified(n));
+    const orphanBox = document.querySelector('[data-orphans]');
+    if (orphanBox) {
+      orphanBox.textContent = orphans.length
+        ? `Не показано в витрине (${orphans.length}): ${orphans.join(', ')}. `
+          + 'Витрина уже́ у́же системы — допишите классификацию в js/styleguide.js.'
+        : `Все ${names.length} объявленных токенов показаны. Витрина полна.`;
+      orphanBox.classList.toggle('sg-note--warn', orphans.length > 0);
+    }
+
     const contrastTable = document.querySelector('[data-contrast]');
     if (contrastTable) renderContrast(contrastTable);
 
@@ -206,6 +250,76 @@
         body.appendChild(tr);
       }
       layerTable.appendChild(body);
+    }
+
+    /* --order-* — вторая, ЛОКАЛЬНАЯ шкала порядка: внутри одного слоя.
+       Отдельная таблица, а не строки в предыдущей: смешать их значило бы
+       сказать, что маяк и модальное окно сравнимы по глубине. Они не
+       сравнимы — маяк упорядочен только относительно планеты. */
+    const orderTable = document.querySelector('[data-scale="order"]');
+    if (orderTable) {
+      orderTable.innerHTML = '<thead><tr><th>Токен</th><th>Значение</th><th>Внутри чего</th></tr></thead>';
+      const within = {
+        '--order-corona': 'планета', '--order-orbit': 'планета',
+        '--order-planet': 'планета', '--order-beacon': 'планета',
+        '--order-surface': 'шахта', '--order-magma': 'шахта',
+        '--order-geogrid': 'шахта', '--order-night': 'шахта',
+        '--order-atmosphere': 'шахта', '--order-target': 'шахта',
+        '--order-mine-canvas': 'игровой экран', '--order-mine-robot': 'игровой экран',
+        '--order-bead': 'таймлайн хроники',
+      };
+      const ob = document.createElement('tbody');
+      for (const n of names.filter(x => x.startsWith('--order-'))) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><code>${n}</code></td><td class="fdn-font-data">${value(n)}</td><td>${within[n] || ''}</td>`;
+        ob.appendChild(tr);
+      }
+      orderTable.appendChild(ob);
+    }
+
+    /* Лестница сейф-зон читается из токенов, а не набирается в таблице:
+       набранная руками таблица расходится со значениями при первой правке
+       шкалы, и витрина начинает врать. */
+    const safeTable = document.querySelector('[data-scale="safe"]');
+    if (safeTable) {
+      safeTable.innerHTML = '<thead><tr><th>Токен</th><th>Значение</th><th>Уровень</th></tr></thead>';
+      const level = {
+        '--safe-screen': 'край экрана: шапка, футер',
+        '--safe-panel': 'карточка, модалка, крупная панель',
+        '--safe-box': 'вложенная коробка внутри панели',
+        '--safe-tight': 'плотная строка, чип, бейдж',
+      };
+      const tb = document.createElement('tbody');
+      for (const n of names.filter(x => x.startsWith('--safe-'))) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><code>${n}</code></td>`
+          + `<td class="fdn-font-data">${value(n)} → ${getComputedStyle(document.documentElement).getPropertyValue(n).trim()}</td>`
+          + `<td>${level[n] || ''}</td>`;
+        tb.appendChild(tr);
+      }
+      safeTable.appendChild(tb);
+    }
+
+    /* Шкала ширин модалки — тоже из токенов, по той же причине. */
+    const modalTable = document.querySelector('[data-scale="modal"]');
+    if (modalTable) {
+      modalTable.innerHTML =
+        '<thead><tr><th>Токен</th><th>Значение</th><th>Кто занимает</th></tr></thead>';
+      const who = {
+        '--modal-sm': 'чат — одна колонка сообщений',
+        '--modal-md': 'профиль, клан, обновление — карточка с двумя колонками',
+        '--modal-lg': 'инвентарь — сетка и инспектор рядом',
+        '--modal-xl': 'браузер серверов, хроника — таблица во всю ширину',
+      };
+      const tb = document.createElement('tbody');
+      for (const n of names.filter(x => x.startsWith('--modal-'))) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><code>${n}</code></td>`
+          + `<td class="fdn-font-data">${value(n)}</td>`
+          + `<td>${who[n] || ''}</td>`;
+        tb.appendChild(tr);
+      }
+      modalTable.appendChild(tb);
     }
 
     const radii = document.querySelector('[data-radii]');

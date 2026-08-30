@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae;
+using Fodinae.Core.Lifecycle;
 using Fodinae.UI;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -50,6 +51,9 @@ namespace Fodinae.Core
             // VContainer rejects the conflicting singleton.
             builder.RegisterComponent(_document);
             builder.RegisterComponent(_controller);
+            builder.Register<AsyncOperationSupervisor>(Lifetime.Singleton)
+                .AsSelf()
+                .As<IAsyncOperationSupervisor>();
             builder.RegisterEntryPoint<MainMenuBootstrap>();
         }
 

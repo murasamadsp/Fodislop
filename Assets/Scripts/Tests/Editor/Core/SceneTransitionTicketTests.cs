@@ -1,12 +1,14 @@
 #nullable enable
 
 using System;
-using System.Threading;
+using System.Collections;
+using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
 
 namespace Fodinae.Tests.Core
 {
@@ -163,16 +165,13 @@ namespace Fodinae.Tests.Core
                 () => new SceneTransitionTicket("MainGame", TimeSpan.FromMilliseconds(-1)));
         }
 
-        [Test]
-        public void WaitForStartup_Timeout_FailsWithTimeoutException()
+        [UnityTest]
+        public IEnumerator WaitForStartup_Timeout_FailsWithTimeoutException()
         {
             var ticket = new SceneTransitionTicket("MainGame", TimeSpan.FromMilliseconds(50));
             try
             {
-                // Let the hard budget expire on the timer thread before blocking
-                // the main thread, so the waiter observes an already-completed
-                // failure instead of a continuation that needs the player loop.
-                Thread.Sleep(400);
+                yield return UniTask.Delay(150).ToCoroutine();
 
                 Assert.Throws<TimeoutException>(
                     () => ticket.WaitForStartupAsync().GetAwaiter().GetResult());
@@ -185,13 +184,13 @@ namespace Fodinae.Tests.Core
             }
         }
 
-        [Test]
-        public void Timeout_RejectsLateStateChanges()
+        [UnityTest]
+        public IEnumerator Timeout_RejectsLateStateChanges()
         {
             var ticket = new SceneTransitionTicket("MainGame", TimeSpan.FromMilliseconds(50));
             try
             {
-                Thread.Sleep(400);
+                yield return UniTask.Delay(150).ToCoroutine();
 
                 Assert.Throws<InvalidOperationException>(() => ticket.RequestActivation());
                 Assert.Throws<InvalidOperationException>(() => ticket.MarkStartupReady());
@@ -203,8 +202,8 @@ namespace Fodinae.Tests.Core
             }
         }
 
-        [Test]
-        public void Timeout_AfterPresentationReady_IsIgnored()
+        [UnityTest]
+        public IEnumerator Timeout_AfterPresentationReady_IsIgnored()
         {
             var ticket = CreateAttachedTicket(TimeSpan.FromMilliseconds(50));
             try
@@ -213,7 +212,7 @@ namespace Fodinae.Tests.Core
                 ticket.MarkStartupReady();
                 ticket.MarkPresentationReady();
 
-                Thread.Sleep(400);
+                yield return UniTask.Delay(150).ToCoroutine();
 
                 Assert.IsTrue(ticket.IsPresentationReady);
                 Assert.DoesNotThrow(

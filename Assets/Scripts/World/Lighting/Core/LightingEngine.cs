@@ -32,17 +32,7 @@ namespace Fodinae.World.Lighting
             ContactOcclusion,
         }
 
-        private const int LightingCacheAnchorCells = 8;
-        private const int LightingRegionSizeQuantum = 32;
-        private const int LightingRegionPaddingCells = 16;
-        private const int MaximumCascadeDirections = 256;
         private const int DynamicLightStride = sizeof(float) * 8;
-        private const float DynamicLightPositionEpsilon = 0.00390625f;
-
-        // One sixteenth of a world cell. Ceiling on the movement a dynamic light
-        // is allowed to accumulate before it forces a re-solve, so a coarse
-        // field cannot turn the threshold into visible stepping.
-        private const float MaximumDynamicLightPositionEpsilon = 0.0625f;
         private const int RadianceStride = sizeof(uint) * 3;
         private const int MaximumDispatchGroupsPerDimension = 65535;
         private const string WorldLightingKeyword = "FODINAE_WORLD_LIGHTING";
@@ -169,7 +159,7 @@ namespace Fodinae.World.Lighting
         private DebugView _debugView;
 
         private readonly List<CascadeLayout> _cascades = new();
-        private readonly SortedDictionary<int, DynamicLightSource> _externalLights = new();
+        private readonly DynamicLightManager _dynamicLightManager = new();
         private GraphicsQualitySettings _qualitySettings;
         private ComputeShader? _lightingCompute;
         private ComputeBuffer? _dynamicLightBuffer;
@@ -227,7 +217,6 @@ namespace Fodinae.World.Lighting
         private Vector4 _lastVisibleRegion = new(float.NaN, float.NaN, float.NaN, float.NaN);
 
         private bool _hasRenderedLightState;
-        private bool _externalLightsDirty;
         private bool _initialized;
         private bool _gpuPipelineInitialized;
         private bool _lightingDisabledStatePublished;
@@ -247,33 +236,7 @@ namespace Fodinae.World.Lighting
         public event Action? OnInitialized;
         private bool _hasStaticRadianceState;
         private bool _hasDynamicRadianceState;
-        private uint _dynamicLightGeneration;
         private bool _dynamicSolveInProgress;
-        [Header("Diffuse Bounce")]
-        private DynamicLight[] _dynamicLights = new DynamicLight[1];
-        private readonly List<int> _lastDroppedDynamicLightIds = new();
-        private int _lastDynamicLightCount;
-        private int _lastDroppedDynamicLightCount;
-
-        private readonly struct DynamicLight
-        {
-            public readonly Vector4 PositionRadius;
-            public readonly Vector4 ColorIntensity;
-
-            public DynamicLight(
-                Vector2 position,
-                Color color,
-                float intensity)
-            {
-                PositionRadius = new Vector4(position.x, position.y, 0f, 0f);
-                ColorIntensity = new Vector4(color.r, color.g, color.b, intensity);
-            }
-        }
-
-        private readonly record struct DynamicLightSource(
-            Vector2 Position,
-            Color Color,
-            float Intensity);
 
         public static bool BypassLightingCompute { get; set; }
 
@@ -327,15 +290,15 @@ namespace Fodinae.World.Lighting
 
         public int LightSafeBorder => _configHolder.LightSafeBorder;
 
-        public int DynamicLightCount => _externalLights.Count;
+        public int DynamicLightCount => _dynamicLightManager.Count;
 
-        public uint DynamicLightGeneration => _dynamicLightGeneration;
+        public uint DynamicLightGeneration => _dynamicLightManager.Generation;
 
-        public int UploadedDynamicLightCount => _lastDynamicLightCount;
+        public int UploadedDynamicLightCount => _dynamicLightManager.UploadedCount;
 
-        public int DroppedDynamicLightCount => _lastDroppedDynamicLightCount;
+        public int DroppedDynamicLightCount => _dynamicLightManager.DroppedCount;
 
-        public IReadOnlyList<int> DroppedDynamicLightIds => _lastDroppedDynamicLightIds;
+        public IReadOnlyList<int> DroppedDynamicLightIds => _dynamicLightManager.DroppedLightIds;
 
         public ulong SolveCount => _solveCount;
 
@@ -372,72 +335,13 @@ namespace Fodinae.World.Lighting
         /// the direction count multiplies by four), so the atlas looks evenly
         /// balanced. The march does not. <c>SolveCascade</c> derives its step
         /// count from the interval length, and the interval quadruples per
-        /// cascade, so the last cascade issues about as many ray steps as all
-        /// the earlier ones together. These numbers make that visible instead of
-        /// leaving it to be inferred from the shader.
-        /// </remarks>
-        public readonly record struct CascadeCostSample(
-            int Index,
-            int ProbeWidth,
-            int ProbeHeight,
-            int DirectionCount,
-            float IntervalStart,
-            float IntervalEnd,
-            int StepCount,
-            long RayCount,
-            long RayStepCount,
-            long MergeTapCount);
-
         /// <summary>
         /// Rays, ray-march steps and far-cascade atlas taps one full solve
         /// issues. Mirrors the arithmetic in <c>WorldLighting.compute</c>.
         /// </summary>
         public void CollectCascadeCosts(List<CascadeCostSample> destination)
         {
-            if (destination == null)
-            {
-                throw new ArgumentNullException(nameof(destination));
-            }
-
-            destination.Clear();
-            int maximumSteps = MaximumIntervalSteps;
-            for (int index = 0; index < _cascades.Count; index++)
-            {
-                CascadeLayout cascade = _cascades[index];
-
-                // SolveCascade: intervalLength = max(end - start, 1);
-                // stepCount = clamp(ceil(intervalLength), 1, min(_MaximumIntervalSteps, 64)).
-                float intervalLength = Mathf.Max(cascade.IntervalEnd - cascade.IntervalStart, 1f);
-                int stepCount = Mathf.Clamp(
-                    Mathf.CeilToInt(intervalLength),
-                    1,
-                    maximumSteps);
-
-                // The merge reads directionBranchCount * 4 atlas entries per ray,
-                // at scattered indices, for every cascade that has a coarser one
-                // above it.
-                long mergeTaps = 0;
-                if (index + 1 < _cascades.Count)
-                {
-                    int branchCount = Mathf.Clamp(
-                        _cascades[index + 1].DirectionCount / Mathf.Max(1, cascade.DirectionCount),
-                        1,
-                        4);
-                    mergeTaps = (long)cascade.EntryCount * branchCount * 4;
-                }
-
-                destination.Add(new CascadeCostSample(
-                    index,
-                    cascade.ProbeWidth,
-                    cascade.ProbeHeight,
-                    cascade.DirectionCount,
-                    cascade.IntervalStart,
-                    cascade.IntervalEnd,
-                    stepCount,
-                    cascade.EntryCount,
-                    (long)cascade.EntryCount * stepCount,
-                    mergeTaps));
-            }
+            CascadeCostCalculator.CollectCascadeCosts(_cascades, MaximumIntervalSteps, destination);
         }
 
         /// <summary>
@@ -484,7 +388,7 @@ namespace Fodinae.World.Lighting
         public Color ComputeSolidExtinction =>
             _configHolder.SolidExtinctionRgb * _configHolder.SolidExtinctionMultiplier;
 
-        public int StableRegionPaddingCells => LightingRegionPaddingCells;
+        public int StableRegionPaddingCells => LightingRegionCalculator.LightingRegionPaddingCells;
 
         public int RequiredTerrainPadding
         {
@@ -594,72 +498,17 @@ namespace Fodinae.World.Lighting
             Color color,
             float intensity)
         {
-            var source = new DynamicLightSource(
-                position,
-                color,
-                Mathf.Max(0f, intensity));
-            if (_externalLights.TryGetValue(id, out DynamicLightSource previous) &&
-                DynamicLightSourceApproximatelyEquals(previous, source))
-            {
-                return;
-            }
-
-            _externalLights[id] = source;
-            _externalLightsDirty = true;
-        }
-
-        /// <summary>
-        /// Whether two light states are close enough that re-solving would
-        /// produce the same image.
-        /// </summary>
-        /// <remarks>
-        /// The position threshold is the tighter of half a field texel and
-        /// <see cref="MaximumDynamicLightPositionEpsilon"/>. Sources are
-        /// rasterized into the emission field, so a move smaller than half a
-        /// texel lands on the same texels with the same bilinear weights - the
-        /// field is unchanged, and the full cascade re-solve it triggers
-        /// produces the same image.
-        ///
-        /// The hard cap matters because the field is not always dense. A low
-        /// preset can leave roughly one texel per world cell, where half a texel
-        /// is half a cell - large enough that the lamp would visibly jump from
-        /// step to step as the player walks. The cap keeps the threshold
-        /// imperceptible no matter how coarse the field gets.
-        ///
-        /// The old constant was 1/256 of a world cell, a small fraction of a
-        /// texel at any density, so sub-texel drift alone ordered a fresh solve
-        /// of every cascade.
-        /// </remarks>
-        private bool DynamicLightSourceApproximatelyEquals(
-            DynamicLightSource left,
-            DynamicLightSource right)
-        {
-            float epsilon = _effectivePixelsPerCell > 0f
-                ? Mathf.Min(0.5f / _effectivePixelsPerCell, MaximumDynamicLightPositionEpsilon)
-                : DynamicLightPositionEpsilon;
-            return (left.Position - right.Position).sqrMagnitude <= epsilon * epsilon &&
-                left.Color == right.Color &&
-                Mathf.Approximately(left.Intensity, right.Intensity);
+            _dynamicLightManager.SetDynamicLight(id, position, color, intensity, _effectivePixelsPerCell);
         }
 
         public void RemoveDynamicLight(int id)
         {
-            if (_externalLights.Remove(id))
-            {
-                _externalLightsDirty = true;
-            }
+            _dynamicLightManager.RemoveDynamicLight(id);
         }
 
         public void ClearDynamicLights()
         {
-            if (_externalLights.Count == 0)
-            {
-                return;
-            }
-
-            _externalLights.Clear();
-            _externalLightsDirty = true;
-            _dynamicLightGeneration++;
+            _dynamicLightManager.ClearDynamicLights();
         }
 
         public void InvalidateStaticCache()
@@ -701,7 +550,7 @@ namespace Fodinae.World.Lighting
             _ambientOcclusionDirty = true;
             _bounceDirty = true;
             _compositeDirty = true;
-            _dynamicLightGeneration++;
+            _dynamicLightManager.IncrementGeneration();
         }
 
         public void SetDebugView(DebugView debugView)
@@ -897,6 +746,19 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
+            // The MUTE toggle must short-circuit before any region tracking or
+            // resource allocation. GetStableLightingRegion + EnsureResources
+            // run every frame even when the solve is bypassed, so crossing a
+            // 32-cell region boundary used to re-allocate the entire light field
+            // on the GPU (a hard hitch) while the cascade solve was muted. Keep
+            // publishing the white identity texture so no other global ends up
+            // stale, but do none of the per-frame field work.
+            if (BypassLightingCompute)
+            {
+                Shader.SetGlobalTexture(WorldLightTextureId, Texture2D.whiteTexture);
+                return;
+            }
+
             EnsureGpuPipelineInitialized();
 
             Vector4 lightingRegion = GetStableLightingRegion(
@@ -940,11 +802,6 @@ namespace Fodinae.World.Lighting
             float nextAllowedUpdateTime = dynamicOnlyUpdate
                 ? _nextDynamicLightingUpdateTime
                 : _nextLightingUpdateTime;
-            if (BypassLightingCompute)
-            {
-                Shader.SetGlobalTexture(WorldLightTextureId, Texture2D.whiteTexture);
-                return;
-            }
 
             if (!continueDynamicSolve &&
                 Time.unscaledTime < nextAllowedUpdateTime &&
@@ -989,7 +846,7 @@ namespace Fodinae.World.Lighting
 
                 if (_dynamicSolveInProgress)
                 {
-                    dynamicLightCount = _lastDynamicLightCount;
+                    dynamicLightCount = _dynamicLightManager.UploadedCount;
                     dynamicLightsChanged = false;
                 }
                 else
@@ -1363,87 +1220,12 @@ namespace Fodinae.World.Lighting
             out bool uploadedLightsChanged)
         {
             using var dynamicUploadMarker = DynamicUploadMarker.Auto();
-            int maximumLightCount = _dynamicLights.Length;
-            int dynamicLightCount = 0;
-            int previousDynamicLightCount = _lastDynamicLightCount;
-            uploadedLightsChanged = false;
-            _lastDroppedDynamicLightIds.Clear();
-            foreach (KeyValuePair<int, DynamicLightSource> pair in _externalLights)
-            {
-                DynamicLightSource source = pair.Value;
-                if (dynamicLightCount >= maximumLightCount)
-                {
-                    _lastDroppedDynamicLightIds.Add(pair.Key);
-                    continue;
-                }
-
-                if (source.Intensity <= 0f)
-                {
-                    _lastDroppedDynamicLightIds.Add(pair.Key);
-                    continue;
-                }
-
-                if (!IntersectsWorldRect(source.Position, 32f, worldRect, cellSize))
-                {
-                    _lastDroppedDynamicLightIds.Add(pair.Key);
-                    continue;
-                }
-
-                DynamicLight dynamicLight = new(
-                    source.Position * cellSize,
-                    source.Color,
-                    source.Intensity);
-                if (dynamicLightCount >= previousDynamicLightCount ||
-                    !DynamicLightEquals(_dynamicLights[dynamicLightCount], dynamicLight))
-                {
-                    uploadedLightsChanged = true;
-                }
-
-                _dynamicLights[dynamicLightCount++] = dynamicLight;
-            }
-
-            if (dynamicLightCount != previousDynamicLightCount)
-            {
-                uploadedLightsChanged = true;
-            }
-
-            _lastDynamicLightCount = dynamicLightCount;
-            _lastDroppedDynamicLightCount = _lastDroppedDynamicLightIds.Count;
-
-            if (uploadedLightsChanged && dynamicLightCount > 0)
-            {
-                commandBuffer.SetBufferData(
-                    _dynamicLightBuffer!,
-                    _dynamicLights,
-                    0,
-                    0,
-                    dynamicLightCount);
-            }
-
-            return dynamicLightCount;
-        }
-
-        private static bool DynamicLightEquals(
-            DynamicLight left,
-            DynamicLight right)
-        {
-            return left.PositionRadius == right.PositionRadius &&
-                left.ColorIntensity == right.ColorIntensity;
-        }
-
-        private static bool IntersectsWorldRect(
-            Vector2 position,
-            float radius,
-            Vector4 worldRect,
-            float cellSize)
-        {
-            float worldRadius = radius * cellSize;
-            float worldPositionX = position.x * cellSize;
-            float worldPositionY = position.y * cellSize;
-            return worldPositionX + worldRadius >= worldRect.x &&
-                worldPositionX - worldRadius <= worldRect.x + worldRect.z &&
-                worldPositionY + worldRadius >= worldRect.y &&
-                worldPositionY - worldRadius <= worldRect.y + worldRect.w;
+            return _dynamicLightManager.UploadDynamicLights(
+                commandBuffer,
+                _dynamicLightBuffer,
+                worldRect,
+                cellSize,
+                out uploadedLightsChanged);
         }
 
         private void DispatchRadianceCascades(CommandBuffer commandBuffer, int maxCascades = -1)
@@ -1631,7 +1413,7 @@ namespace Fodinae.World.Lighting
 
         private bool HasDynamicLightsChanged()
         {
-            return !_hasRenderedLightState || _externalLightsDirty;
+            return !_hasRenderedLightState || _dynamicLightManager.IsDirty;
         }
 
         private void LoadRuntimeConfig()
@@ -1655,7 +1437,7 @@ namespace Fodinae.World.Lighting
         private void RememberDynamicLightState()
         {
             _hasRenderedLightState = true;
-            _externalLightsDirty = false;
+            _dynamicLightManager.ClearDirty();
         }
 
         private Vector4 GetStableLightingRegion(
@@ -1664,50 +1446,12 @@ namespace Fodinae.World.Lighting
             int visibleWidth,
             int visibleHeight)
         {
-            int visibleMaxX = visibleMinX + visibleWidth;
-            int visibleMaxY = visibleMinY + visibleHeight;
-            if (!float.IsNaN(_lastVisibleRegion.x))
-            {
-                int currentMinX = Mathf.RoundToInt(_lastVisibleRegion.x);
-                int currentMinY = Mathf.RoundToInt(_lastVisibleRegion.y);
-                int currentMaxX = currentMinX + Mathf.RoundToInt(_lastVisibleRegion.z);
-                int currentMaxY = currentMinY + Mathf.RoundToInt(_lastVisibleRegion.w);
-                int regionWidth = Mathf.RoundToInt(_lastVisibleRegion.z);
-                int regionHeight = Mathf.RoundToInt(_lastVisibleRegion.w);
-                int quarterRegionSize = Mathf.Min(regionWidth, regionHeight) / 4;
-                int safeMargin = Mathf.Min(
-                    LightingRegionPaddingCells,
-                    Mathf.Max(2, quarterRegionSize));
-                if (visibleMinX >= currentMinX + safeMargin &&
-                    visibleMaxX <= currentMaxX - safeMargin &&
-                    visibleMinY >= currentMinY + safeMargin &&
-                    visibleMaxY <= currentMaxY - safeMargin)
-                {
-                    return _lastVisibleRegion;
-                }
-            }
-
-            int paddedMinX = SnapLightingRegion(visibleMinX - LightingRegionPaddingCells);
-            int paddedMinY = SnapLightingRegion(visibleMinY - LightingRegionPaddingCells);
-            int requiredWidth = visibleMaxX + LightingRegionPaddingCells - paddedMinX;
-            int requiredHeight = visibleMaxY + LightingRegionPaddingCells - paddedMinY;
-            int paddedWidth = Mathf.CeilToInt(
-                requiredWidth / (float)LightingRegionSizeQuantum) *
-                LightingRegionSizeQuantum;
-            int paddedHeight = Mathf.CeilToInt(
-                requiredHeight / (float)LightingRegionSizeQuantum) *
-                LightingRegionSizeQuantum;
-            return new Vector4(
-                paddedMinX,
-                paddedMinY,
-                Mathf.Max(2, paddedWidth),
-                Mathf.Max(2, paddedHeight));
-        }
-
-        private static int SnapLightingRegion(int coordinate)
-        {
-            return Mathf.FloorToInt(coordinate / (float)LightingCacheAnchorCells) *
-                LightingCacheAnchorCells;
+            return LightingRegionCalculator.GetStableLightingRegion(
+                visibleMinX,
+                visibleMinY,
+                visibleWidth,
+                visibleHeight,
+                _lastVisibleRegion);
         }
 
         private void EnsureResources(int gridWidth, int gridHeight, Camera camera)
@@ -1867,8 +1611,8 @@ namespace Fodinae.World.Lighting
                     continue;
                 }
 
-                int maximumCascadeCount = GetMaximumCascadeCount(atlasDimension);
-                long requiredEntryCount = CalculateCascadeEntryCount(
+                int maximumCascadeCount = CascadeLayoutBuilder.GetMaximumCascadeCount(atlasDimension);
+                long requiredEntryCount = CascadeLayoutBuilder.CalculateCascadeEntryCount(
                     width,
                     height,
                     maximumCascadeCount);
@@ -1923,92 +1667,16 @@ namespace Fodinae.World.Lighting
                     ComputeBufferType.Structured);
             }
 
-            if (_dynamicLights.Length != maximumLightCount)
-            {
-                _dynamicLights = new DynamicLight[maximumLightCount];
-            }
-        }
-
-        private static long CalculateCascadeEntryCount(
-            int width,
-            int height,
-            int maximumCascadeCount)
-        {
-            if (maximumCascadeCount <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(maximumCascadeCount));
-            }
-
-            float requiredDistance = Mathf.Sqrt((width * width) + (height * height));
-            long entryCount = 0;
-            int spacing = 1;
-            int directions = 4;
-            float intervalEnd = 1f;
-            while (true)
-            {
-                int probeWidth = Mathf.CeilToInt(width / (float)spacing);
-                int probeHeight = Mathf.CeilToInt(height / (float)spacing);
-                entryCount += (long)probeWidth * probeHeight * directions;
-                if (intervalEnd >= requiredDistance ||
-                    maximumCascadeCount == 1)
-                {
-                    return entryCount;
-                }
-
-                maximumCascadeCount--;
-                spacing *= 2;
-                directions = Mathf.Min(MaximumCascadeDirections, directions * 4);
-                intervalEnd *= 4f;
-            }
+            _dynamicLightManager.EnsureCapacity(maximumLightCount);
         }
 
         private void BuildCascadeLayouts(int width, int height)
         {
-            _cascades.Clear();
-            float requiredDistance = Mathf.Sqrt((width * width) + (height * height));
-            int maxCascades = GetMaximumCascadeCount(
-                _qualitySettings.LightingCascadeAtlasLimit);
-            int offset = 0;
-            int spacing = 1;
-            int directions = 4;
-            float intervalStart = 0f;
-            float intervalEnd = 1f;
-            while (true)
-            {
-                int probeWidth = Mathf.CeilToInt(width / (float)spacing);
-                int probeHeight = Mathf.CeilToInt(height / (float)spacing);
-                long entryCountLong = (long)probeWidth * probeHeight * directions;
-                if (entryCountLong > int.MaxValue - offset)
-                {
-                    throw new InvalidOperationException("Radiance cascade atlas exceeds the supported buffer size.");
-                }
-
-                int entryCount = (int)entryCountLong;
-                _cascades.Add(new CascadeLayout(
-                    offset,
-                    entryCount,
-                    probeWidth,
-                    probeHeight,
-                    spacing,
-                    directions,
-                    intervalStart,
-                    intervalEnd));
-                offset += entryCount;
-                if (_cascades.Count >= maxCascades || intervalEnd >= requiredDistance)
-                {
-                    break;
-                }
-
-                spacing *= 2;
-                directions = Mathf.Min(MaximumCascadeDirections, directions * 4);
-                intervalStart = intervalEnd;
-                intervalEnd *= 4f;
-            }
-        }
-
-        private static int GetMaximumCascadeCount(long atlasDimension)
-        {
-            return atlasDimension <= 256 ? 3 : 4;
+            CascadeLayoutBuilder.BuildCascadeLayouts(
+                width,
+                height,
+                _qualitySettings.LightingCascadeAtlasLimit,
+                _cascades);
         }
 
         private static RenderTexture CreateTexture(
@@ -2291,9 +1959,7 @@ namespace Fodinae.World.Lighting
         {
             _dynamicLightBuffer?.Release();
             _dynamicLightBuffer = null;
-            _lastDynamicLightCount = 0;
-            _lastDroppedDynamicLightCount = 0;
-            _lastDroppedDynamicLightIds.Clear();
+            _dynamicLightManager.ResetUploadState();
             _radianceAtlas?.Release();
             _radianceAtlas = null;
             _atlasCapacity = 0;

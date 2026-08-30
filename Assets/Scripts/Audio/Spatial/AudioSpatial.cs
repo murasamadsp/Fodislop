@@ -29,7 +29,7 @@ namespace Fodinae.Audio.Spatial
         [SerializeField]
         [Range(0f, 2f)]
         private float _volume;
-        private AudioPlaybackHandle? _handle;
+        private IAudioPlaybackHandle? _handle;
 
         [Inject]
         private IAudioSystem _audioSystem = null!;

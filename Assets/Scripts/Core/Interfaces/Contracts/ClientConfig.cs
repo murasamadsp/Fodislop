@@ -23,6 +23,10 @@ namespace Fodinae.Core
         public float UIVolume;
         public float UIScale;
         public string Language = "ru";
+        /// <summary>ID приложения VK ID (id.vk.com) для авторизации через VK. Пустое значение — вход через VK недоступен.</summary>
+        public string VkClientId = string.Empty;
+        /// <summary>HTTPS endpoint доверенного backend для обмена VK access token на игровую сессию.</summary>
+        public string VkAuthBackendUrl = string.Empty;
         public int ResolutionWidth;
         public int ResolutionHeight;
         public int RefreshRate;
@@ -30,6 +34,9 @@ namespace Fodinae.Core
         public bool VSync = true;
         public int TargetFrameRate = -1;
         public bool MuteAudioInBackground = true;
+        public int ColorblindMode; // 0: None, 1: Deuteranopia, 2: Protanopia, 3: Tritanopia, 4: HighContrast
+        public bool ReducePhotosensitivity;
+        public int ControlScheme; // 0: Keyboard (WASD), 1: Mouse
         [FormerlySerializedAs("GraphicsQuality")]
 
         public GraphicsPreset GraphicsPreset;

@@ -204,11 +204,13 @@ namespace Fodinae.Game.Managers
             }
 
             if (player == null || !player.HasServerPosition ||
+                robot == null || !robot.IsVisualsLoaded ||
                 _playerStats == null || !_playerStats.IsReady ||
                 terrain == null || !terrain.IsReadyForGameplay ||
                 _lightingEngine == null || !_lightingEngine.IsInitialized ||
                 (_surfaceRenderer != null && !_surfaceRenderer.IsInitialized) ||
                 (pendingAssets > 0) ||
+                (queuedAssets > 0) ||
                 _loadProgress == null)
             {
                 return;

@@ -11,18 +11,18 @@ namespace Fodinae.Game;
 /// </summary>
 public class Tentacle
 {
-    private const float MAX_SEGMENT_DIST = 0.24f;
-    private const float START_WIDTH = 0.17f;
+    private const float MAX_SEGMENT_DIST = 0.2f;
+    private const float SMOOTH_TIME = 0.08f;
+    private const float START_WIDTH = 0.15f;
     private const float END_WIDTH = 0.02f;
 
     private readonly WorldEntityBatchRenderer _renderer;
     private readonly Texture2D _texture;
     private readonly float _wiggleOffset;
-    private readonly float _lengthScale;
     private readonly float _sliceOffsetV;
     private readonly float _sliceScaleV;
     private readonly Vector3[] _positions;
-    private readonly Vector3[] _prevPositions;
+    private readonly Vector3[] _velocities;
     private readonly Vector3[] _renderPoints;
     private readonly float[] _segmentLengths;
     private bool _isActive = true;
@@ -33,17 +33,15 @@ public class Tentacle
         Vector3 startPosition,
         float wiggleOffset,
         int sliceIndex,
-        int totalSlices,
-        float lengthScale = 1f)
+        int totalSlices)
     {
         _renderer = renderer;
         _texture = texture;
         _wiggleOffset = wiggleOffset;
-        _lengthScale = lengthScale;
 
         const int count = WorldEntityBatchRenderer.POINT_COUNT;
         _positions = new Vector3[count];
-        _prevPositions = new Vector3[count];
+        _velocities = new Vector3[count];
         _renderPoints = new Vector3[count];
         _segmentLengths = new float[count];
 
@@ -53,7 +51,6 @@ public class Tentacle
         for (int i = 0; i < count; i++)
         {
             _positions[i] = startPosition;
-            _prevPositions[i] = startPosition;
             _renderPoints[i] = startPosition;
         }
 
@@ -75,7 +72,7 @@ public class Tentacle
         {
             for (int i = 1; i < _positions.Length; i++)
             {
-                if ((_positions[i] - _prevPositions[i]).sqrMagnitude > 1e-7f)
+                if (_velocities[i].sqrMagnitude > 1e-6f)
                 {
                     return false;
                 }
@@ -101,7 +98,7 @@ public class Tentacle
         for (int i = 0; i < _positions.Length; i++)
         {
             _positions[i] = position;
-            _prevPositions[i] = position;
+            _velocities[i] = Vector3.zero;
             _renderPoints[i] = position;
         }
 
@@ -115,74 +112,39 @@ public class Tentacle
             return;
         }
 
-        float angleRad = rotationAngle * Mathf.Deg2Rad;
-        Vector3 backwardDir = new Vector3(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0f);
-        float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
-        Vector3 spreadDir = new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0f);
-
-        // Curl: each strand bends toward its own spread side, so the fan
-        // curves open instead of trailing as four straight spikes. The sign of
-        // the offset picks the side; the force is constant, which gives the
-        // tail a characterful resting pose even when the robot stands still.
-        float curlSign = _wiggleOffset >= 0f ? 1f : -1f;
-        Vector3 curlDir = new Vector3(-spreadDir.y, spreadDir.x, 0f) * curlSign;
-        Vector3 driftBias = (backwardDir * (0.40f * movementFactor))
-                          + (spreadDir * (0.08f * movementFactor))
-                          + (curlDir * 0.055f);
-
-        // 1. Pin root
+        // This is the motion model from 54b48bd (2026-06-27, "Стабилизация FPS"),
+        // adapted to the current shared-mesh renderer. Unlike the later Verlet
+        // version it has no perpetual idle wave, so a stationary tail settles
+        // and stops invalidating the entity batch.
         _positions[0] = rootPosition;
-        _prevPositions[0] = rootPosition;
         _renderPoints[0] = rootPosition;
         _segmentLengths[0] = 0f;
 
-        // 2. Verlet Step with inertia and damping
-        float damping = Mathf.Clamp(1.0f - (deltaTime * 12f), 0.70f, 0.95f);
+        float angleRad = rotationAngle * Mathf.Deg2Rad;
+        Vector3 backwardDirection = new(-Mathf.Cos(angleRad), -Mathf.Sin(angleRad), 0f);
+        Vector3 baseOffset = backwardDirection * (0.2f * movementFactor);
+        float spreadAngle = (rotationAngle + _wiggleOffset) * Mathf.Deg2Rad;
+        baseOffset += new Vector3(Mathf.Cos(spreadAngle), Mathf.Sin(spreadAngle), 0f) *
+            (0.15f * movementFactor);
+
+        Vector3 lastPosition = rootPosition;
+        Vector3 targetPosition = rootPosition + baseOffset;
         for (int i = 1; i < _positions.Length; i++)
         {
-            Vector3 velocity = (_positions[i] - _prevPositions[i]) * damping;
-            _prevPositions[i] = _positions[i];
-            _positions[i] += velocity + (driftBias * (deltaTime * 4f));
-        }
+            _positions[i] = Vector3.SmoothDamp(
+                _positions[i],
+                targetPosition,
+                ref _velocities[i],
+                SMOOTH_TIME,
+                50f,
+                deltaTime);
 
-        // 3. PBD Distance Constraints (Relaxation iterations)
-        float targetSegmentDist = MAX_SEGMENT_DIST * _lengthScale * Mathf.Max(0.5f, movementFactor);
-        for (int iter = 0; iter < 3; iter++)
-        {
-            _positions[0] = rootPosition;
-            for (int i = 1; i < _positions.Length; i++)
-            {
-                Vector3 delta = _positions[i] - _positions[i - 1];
-                float dist = delta.magnitude;
-                if (dist > 1e-5f)
-                {
-                    float diff = (dist - targetSegmentDist) / dist;
-                    _positions[i] -= delta * (diff * 0.8f);
-                }
-                else
-                {
-                    _positions[i] = _positions[i - 1] + (backwardDir * 0.05f);
-                }
-            }
-        }
-
-        // 4. Procedural traveling wave for secondary motion. The phase sweeps
-        // from root to tip (a wave that runs along the tail), amplitude grows
-        // toward the tip so the end whips while the base stays attached, and a
-        // slow idle sway keeps the tail alive when the robot stands still.
-        int lastIndex = _positions.Length - 1;
-        for (int i = 1; i < _positions.Length; i++)
-        {
-            float t = (float)i / lastIndex;
-            float phase = (Time.time * 8f) - (t * 4.6f) + _wiggleOffset;
-            float amplitude = (0.035f + (0.16f * movementFactor))
-                * (0.35f + (0.65f * t))
-                + (t * t * 0.05f);
-            float wiggle = Mathf.Sin(phase) * amplitude;
-            Vector3 direction = _positions[i] - _positions[i - 1];
+            float wiggle = Mathf.Sin((Time.time * 15f) + (i * 1.5f) + _wiggleOffset) *
+                (0.1f * movementFactor);
+            Vector3 direction = _positions[i] - lastPosition;
             if (direction.sqrMagnitude < 1e-6f)
             {
-                direction = backwardDir;
+                direction = backwardDirection;
             }
             else
             {
@@ -192,6 +154,8 @@ public class Tentacle
             Vector3 perpendicular = new Vector3(-direction.y, direction.x, 0f);
             _renderPoints[i] = _positions[i] + (perpendicular * wiggle);
             _segmentLengths[i] = Vector3.Distance(_renderPoints[i], _renderPoints[i - 1]);
+            lastPosition = _positions[i];
+            targetPosition = _positions[i] + (direction * MAX_SEGMENT_DIST * movementFactor);
         }
 
         _renderer.MarkDirty(_texture);

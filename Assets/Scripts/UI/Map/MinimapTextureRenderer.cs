@@ -17,7 +17,7 @@ internal sealed class MinimapTextureRenderer
     private static readonly Color32 MarkerColor = Color.white;
     private static readonly Color32 CenterColor = Color.red;
 
-    private readonly Dictionary<CellType, Color32> _cellColors = new(256);
+    private readonly Color32[] _cellColors = new Color32[256];
     private Color32[]? _pixelColors;
     private readonly int _uiSize;
 
@@ -39,7 +39,7 @@ internal sealed class MinimapTextureRenderer
             CellType cellType = (CellType)i;
             if (cellType == CellType.Unloaded)
             {
-                _cellColors[cellType] = UnloadedColor;
+                _cellColors[i] = UnloadedColor;
                 continue;
             }
 
@@ -49,7 +49,7 @@ internal sealed class MinimapTextureRenderer
                 color = new Color(0.3f, 0.3f, 0.3f, 1f);
             }
 
-            _cellColors[cellType] = (Color32)color;
+            _cellColors[i] = (Color32)color;
         }
     }
 
@@ -103,7 +103,7 @@ internal sealed class MinimapTextureRenderer
                     hasLoadedCells = true;
                     colors[index++] = cellType == CellType.Unloaded
                         ? UnloadedColor
-                        : _cellColors[cellType];
+                        : _cellColors[(byte)cellType];
                 }
                 else
                 {
@@ -121,8 +121,8 @@ internal sealed class MinimapTextureRenderer
 
         if (texture != null)
         {
-            texture.SetPixels32(colors);
-            texture.Apply(false);
+            texture.SetPixelData(colors, 0);
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
         }
 
         return hasLoadedCells;

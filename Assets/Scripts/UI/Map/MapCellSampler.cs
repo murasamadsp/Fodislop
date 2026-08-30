@@ -17,11 +17,14 @@ namespace Fodinae.UI
 
         private readonly Dictionary<int, CellType[]?> _chunks = new();
         private readonly Queue<int> _chunkOrder = new();
-        private WorldLayer<CellType>? _layer;
+        private IWorldLayer<CellType>? _layer;
         private int _chunkSize;
         private int _heightChunks;
 
-        public void Bind(WorldLayer<CellType>? layer)
+        private int _lastChunkIndex = -1;
+        private CellType[]? _lastChunk;
+
+        public void Bind(IWorldLayer<CellType>? layer)
         {
             if (ReferenceEquals(_layer, layer))
             {
@@ -31,6 +34,8 @@ namespace Fodinae.UI
             _layer = layer;
             _chunks.Clear();
             _chunkOrder.Clear();
+            _lastChunkIndex = -1;
+            _lastChunk = null;
             _chunkSize = layer?.ChunkSize ?? 0;
             _heightChunks = layer?.HeightChunks ?? 0;
         }
@@ -39,6 +44,8 @@ namespace Fodinae.UI
         {
             _chunks.Clear();
             _chunkOrder.Clear();
+            _lastChunkIndex = -1;
+            _lastChunk = null;
         }
 
         public void InvalidateChunk(int serverX, int serverY)
@@ -52,6 +59,11 @@ namespace Fodinae.UI
             int chunkY = serverY / _chunkSize;
             int chunkIndex = chunkY + (chunkX * _heightChunks);
             _chunks.Remove(chunkIndex);
+            if (_lastChunkIndex == chunkIndex)
+            {
+                _lastChunkIndex = -1;
+                _lastChunk = null;
+            }
         }
 
         public bool TryGetCell(int serverX, int serverY, out CellType cellType)
@@ -68,15 +80,28 @@ namespace Fodinae.UI
             int chunkX = serverX / _chunkSize;
             int chunkY = serverY / _chunkSize;
             int chunkIndex = chunkY + (chunkX * _heightChunks);
-            if (!_chunks.TryGetValue(chunkIndex, out CellType[]? chunk))
+
+            CellType[]? chunk;
+            if (chunkIndex == _lastChunkIndex)
             {
-                chunk = _layer.GetChunk(chunkIndex, createIfMissing: false, touchLru: false);
-                if (chunk != null)
+                chunk = _lastChunk;
+            }
+            else
+            {
+                if (!_chunks.TryGetValue(chunkIndex, out chunk))
                 {
-                    _chunks[chunkIndex] = chunk;
-                    _chunkOrder.Enqueue(chunkIndex);
-                    TrimCache();
+                    ChunkReadResult<CellType> result = _layer.ReadChunk(chunkIndex, touchLru: false);
+                    if (result.Status == ChunkReadStatus.Available)
+                    {
+                        chunk = result.Data;
+                        _chunks[chunkIndex] = chunk;
+                        _chunkOrder.Enqueue(chunkIndex);
+                        TrimCache();
+                    }
                 }
+
+                _lastChunkIndex = chunkIndex;
+                _lastChunk = chunk;
             }
 
             if (chunk == null)

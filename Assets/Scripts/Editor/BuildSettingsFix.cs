@@ -72,6 +72,37 @@ namespace Fodinae.Editor
                 static scene => scene.path));
             Debug.Log($"[BuildSettingsFix] Build settings updated ({EditorBuildSettings.scenes.Length} scenes): {summary}");
         }
+
+        public static void ValidateScenesInBuildSettings()
+        {
+            EditorBuildSettingsScene[] scenes = EditorBuildSettings.scenes;
+            if (scenes.Length < RequiredScenePaths.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Build Settings contain {scenes.Length} scene(s); " +
+                    $"at least {RequiredScenePaths.Length} production scenes are required.");
+            }
+
+            for (int index = 0; index < RequiredScenePaths.Length; index++)
+            {
+                string requiredPath = RequiredScenePaths[index];
+                if (!File.Exists(requiredPath))
+                {
+                    throw new FileNotFoundException("Required production scene is missing.", requiredPath);
+                }
+
+                EditorBuildSettingsScene scene = scenes[index];
+                if (scene == null || !scene.enabled || scene.path != requiredPath)
+                {
+                    string actual = scene == null
+                        ? "<null>"
+                        : $"{scene.path} (enabled={scene.enabled})";
+                    throw new InvalidOperationException(
+                        $"Build Settings scene {index} must be '{requiredPath}' and enabled; actual: {actual}. " +
+                        "Run Fodinae/Build/Ensure Build Settings explicitly to migrate authoring data.");
+                }
+            }
+        }
     }
 }
 #endif

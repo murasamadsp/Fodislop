@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -53,6 +54,8 @@ namespace Fodinae.Networking.Connection
         private ISceneNavigator _sceneNavigator = null!;
         [Inject]
         private ILocalizationService _loc = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         [Inject]
         private DummyConnection _dummyConnection = null!;
@@ -296,15 +299,26 @@ namespace Fodinae.Networking.Connection
 
         private void OnConnected()
         {
-            CompleteConnectionAsync().Forget();
+            _operations.Run("complete_connection", CompleteConnectionAsync);
         }
 
-        private async UniTaskVoid CompleteConnectionAsync()
+        private async UniTask CompleteConnectionAsync(CancellationToken supervisorToken)
         {
-            if (_restartWorldOnConnect &&                string.Equals(_sceneNavigator.CurrentSceneName, "MainGame", StringComparison.Ordinal))
-                {
-                    await _sceneNavigator.TransitionAsync("MainGame", destroyCancellationToken);
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
+            CancellationToken cancellationToken = linkedCancellation.Token;
+
+            if (_restartWorldOnConnect &&
+                string.Equals(
+                    _sceneNavigator.CurrentSceneName,
+                    "MainGame",
+                    StringComparison.Ordinal))
+            {
+                await _sceneNavigator.TransitionAsync("MainGame", cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             _restartWorldOnConnect = false;
             _shouldAutoReconnect = false;

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core.Interfaces;
 using Fodinae.World.Terrain;
@@ -35,6 +36,8 @@ namespace Fodinae.World
         private MapManager _mapManager = null!;
         [Inject]
         private IAssetLoader _assetLoader = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
         private CellTextureCache _textureCache = null!;
         private Texture2D? _flowMapTexture;
         public Texture2D? FlowMapTexture => _flowMapTexture;
@@ -155,15 +158,24 @@ namespace Fodinae.World
                 return;
             }
 
-            TrackedRequestTextureAsync(cellType).Forget();
+            _operations.Run(
+                $"load_world_texture_{cellType}",
+                cancellationToken => TrackedRequestTextureAsync(cellType, cancellationToken));
         }
 
-        private async UniTaskVoid TrackedRequestTextureAsync(CellType cellType)
+        private async UniTask TrackedRequestTextureAsync(
+            CellType cellType,
+            CancellationToken cancellationToken)
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 await GetCellTextureCoordinate(cellType, 0, 0);
+                cancellationToken.ThrowIfCancellationRequested();
                 _cellTextureRetryTimes.TryRemove(cellType, out _);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
             }
             catch (Exception exception)
             {
@@ -545,16 +557,21 @@ namespace Fodinae.World
             };
         }
 
+        private readonly List<IAtlasDescriptor> _atlasDescriptorsCache = new();
+
         public IReadOnlyList<IAtlasDescriptor> GetAllAtlases()
         {
             EnsureInitialized();
-            var result = new List<IAtlasDescriptor>(_atlases.Count);
-            foreach (var atlas in _atlases)
+            if (_atlasDescriptorsCache.Count != _atlases.Count)
             {
-                result.Add(atlas);
+                _atlasDescriptorsCache.Clear();
+                for (int i = 0; i < _atlases.Count; i++)
+                {
+                    _atlasDescriptorsCache.Add(_atlases[i]);
+                }
             }
 
-            return result;
+            return _atlasDescriptorsCache;
         }
 
         public void FlushDirtyAtlases()

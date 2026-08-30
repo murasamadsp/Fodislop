@@ -73,7 +73,7 @@ namespace Fodinae.UI.HUD.Inventory.View
                 _model.OnSlotSelected -= OnModelSlotSelected;
             }
 
-            _dragAndContext.Cleanup(_doc?.rootVisualElement, OnDragMove, OnDragDrop);
+            _dragAndContext.Cleanup(_doc?.rootVisualElement);
         }
 
         protected void Update()
@@ -255,7 +255,9 @@ namespace Fodinae.UI.HUD.Inventory.View
             var uxml = Resources.Load<VisualTreeAsset>("UI/Inventory");
             if (uxml != null)
             {
-                var tree = uxml.CloneTree();
+                TemplateContainer tree = uxml.Instantiate();
+                tree.AddToClassList("ui-fullscreen");
+                tree.pickingMode = PickingMode.Ignore;
                 root.Add(tree);
 
                 if (_loc != null)
@@ -353,6 +355,11 @@ namespace Fodinae.UI.HUD.Inventory.View
             cell.name = name;
             cell.userData = slotIndex;
             cell.AddToClassList("inv-cell");
+            // InventoryRoot стоит в picking-mode="Ignore" (клики пустого поля
+            // уходят миру); ячейка обязана явно вернуть Position, иначе Ignore
+            // наследуется на поддерево и слот не получает мышь вообще — хотбар
+            // выглядит как мёртвый интерфейс.
+            cell.pickingMode = PickingMode.Position;
             cell.style.width = CELLSIZE;
             cell.style.height = CELLSIZE;
             cell.style.minWidth = CELLSIZE;
@@ -397,43 +404,14 @@ namespace Fodinae.UI.HUD.Inventory.View
             qtyLabel.pickingMode = PickingMode.Ignore;
             cell.Add(qtyLabel);
 
-            cell.RegisterCallback<MouseEnterEvent>(_ =>
-            {
-                if (!_dragAndContext.IsDragging)
-                {
-                    cell.AddToClassList("inv-cell--highlight");
-                }
-            });
-            cell.RegisterCallback<MouseLeaveEvent>(_ =>
-            {
-                if (!_dragAndContext.IsDragging)
-                {
-                    cell.RemoveFromClassList("inv-cell--highlight");
-                }
-            });
+            cell.RegisterCallback<MouseEnterEvent>(_ => cell.AddToClassList("inv-cell--highlight"));
+            cell.RegisterCallback<MouseLeaveEvent>(_ => cell.RemoveFromClassList("inv-cell--highlight"));
 
             cell.RegisterCallback<MouseDownEvent>(evt =>
             {
                 if (evt.button == 0)
                 {
                     _model!.SelectSlot(slotIndex);
-                    var item = _model!.GetSlot(slotIndex);
-
-                    if (item == null)
-                    {
-                        return;
-                    }
-
-                    _dragAndContext.StartDrag(
-                        slotIndex,
-                        item,
-                        evt.mousePosition,
-                        _doc.rootVisualElement,
-                        cell,
-                        OnDragMove,
-                        OnDragDrop);
-
-                    evt.StopPropagation();
                 }
                 else if (evt.button == 1)
                 {
@@ -458,22 +436,6 @@ namespace Fodinae.UI.HUD.Inventory.View
 
             RefreshSlot(slotIndex);
             return cell;
-        }
-
-        private void OnDragMove(MouseMoveEvent evt)
-        {
-            _dragAndContext.UpdateFloatingPosition(evt.mousePosition);
-        }
-
-        private void OnDragDrop(MouseUpEvent evt)
-        {
-            _dragAndContext.Drop(
-                evt.mousePosition,
-                _doc.rootVisualElement,
-                _model!,
-                _slotElements,
-                OnDragMove,
-                OnDragDrop);
         }
 
         private void RefreshSlot(int slotIndex)

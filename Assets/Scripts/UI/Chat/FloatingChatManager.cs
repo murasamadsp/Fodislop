@@ -20,7 +20,6 @@ namespace Fodinae.UI
         private RobotManager _robotManager = null!;
 
         private Camera? _camera;
-        private FloatingChatBubble? _bubblePrefab;
         private readonly List<FloatingChatBubble> _activeBubbles = new();
         private readonly Queue<FloatingChatBubble> _pool = new();
         [Inject]
@@ -61,17 +60,15 @@ namespace Fodinae.UI
                     "[FloatingChatManager] Required ISceneObjectFactory injection is missing; " +
                     "FloatingChatManager must be registered in the Game scope.");
             }
-
-            if (_bubblePrefab != null)
-            {
-                return;
-            }
-
-            _bubblePrefab = _sceneObjects.Create<FloatingChatBubble>("ChatBubblePrefab", RuntimeOwner.FloatingUI);
         }
 
         protected void Update()
         {
+            if (_activeBubbles.Count == 0)
+            {
+                return;
+            }
+
             for (int i = _activeBubbles.Count - 1; i >= 0; i--)
             {
                 if (_activeBubbles[i] == null || !_activeBubbles[i].gameObject.activeInHierarchy)
@@ -142,13 +139,13 @@ namespace Fodinae.UI
                 }
             }
 
-            if (_bubblePrefab == null)
+            if (_sceneObjects == null)
             {
                 return null;
             }
 
-            var go = Instantiate(_bubblePrefab.gameObject, transform);
-            var newBubble = go.GetComponent<FloatingChatBubble>();
+            var newBubble = _sceneObjects.Create<FloatingChatBubble>("ChatBubble", RuntimeOwner.FloatingUI);
+            newBubble.transform.SetParent(transform, false);
             return newBubble;
         }
 

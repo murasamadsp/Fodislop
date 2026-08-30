@@ -8,18 +8,15 @@ set -e
 LINT_DOTNET_HOME="${DOTNET_CLI_HOME:-${TMPDIR:-/tmp}/fodislop-dotnet-cli}"
 export DOTNET_CLI_HOME="$LINT_DOTNET_HOME"
 
-echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
+echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
 node "$(dirname "$0")/check-architecture.js"
 
-PLATFORM="$(uname -s)"
-if [ "$PLATFORM" != "Windows_NT" ] && [ "$CI" != "true" ]; then
-    echo "Notice: Skipping C# build checks on $PLATFORM (Unity-generated .csproj reference"
-    echo "Unity editor DLLs by absolute path, so the build only works on machines with"
-    echo "Unity 6000.5.0f1 installed, or in CI)."
-    echo "Run Unity Editor or CI for full analyzer validation."
+if [ "$CI" != "true" ]; then
+    echo "Notice: local hooks run fast static checks only."
+    echo "Unity compile, EditMode, PlayMode, and IL2CPP validation are mandatory CI jobs."
     exit 0
 fi
 

@@ -73,7 +73,7 @@ namespace Fodinae.World
             // frontier exactly, which matters: FBPWPropagate fills each Unloaded
             // cell from whichever seed reaches it first, so a different frontier
             // order would be a different background map.
-            Parallel.For(0, w, x =>
+            for (int x = 0; x < w; x++)
             {
                 Span<TypeCount> typeCounts = stackalloc TypeCount[8];
                 List<(int X, int Y)> columnFrontier = _columnFrontiers[x];
@@ -151,7 +151,7 @@ namespace Fodinae.World
                         }
                     }
                 }
-            });
+            }
 
             for (int x = 0; x < w; x++)
             {

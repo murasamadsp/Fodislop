@@ -29,7 +29,7 @@ namespace Fodinae.UI
         private VisualElement? _mapOverlay;
         private Image? _mapImage;
         private Texture2D? _mapTexture;
-        private WorldLayer<CellType>? _cellLayer;
+        private IWorldLayer<CellType>? _cellLayer;
         private int _chunkSize = 32;
         private readonly MapCellSampler _cellSampler = new();
         private readonly MapInteractionController _interaction = new();
@@ -57,7 +57,7 @@ namespace Fodinae.UI
         private bool _renderRequested;
         private long _lastRenderedStorageRevision = -1;
         private bool _followPlayer = true;
-        private WorldLayer<CellType>? _subscribedCellLayer;
+        private IWorldLayer<CellType>? _subscribedCellLayer;
         private int _boundWorldWidth;
         private int _boundWorldHeight;
         private string _boundWorldCodeName = string.Empty;
@@ -229,7 +229,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            WorldLayer<CellType> cellLayer = mapStorage.CellLayer;
+            IWorldLayer<CellType> cellLayer = mapStorage.CellLayer;
             if (!ReferenceEquals(_subscribedCellLayer, cellLayer))
             {
                 BindCellLayer(cellLayer);
@@ -284,7 +284,7 @@ namespace Fodinae.UI
             _renderRequested = true;
         }
 
-        private void BindCellLayer(WorldLayer<CellType>? cellLayer)
+        private void BindCellLayer(IWorldLayer<CellType>? cellLayer)
         {
             if (ReferenceEquals(_subscribedCellLayer, cellLayer))
             {

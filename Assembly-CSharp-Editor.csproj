@@ -53,7 +53,6 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Assets/Editor/BuildSettingsFix.cs" />
     <Compile Include="Assets/Editor/MapbConverter.cs" />
     <Compile Include="Assets/Editor/ProjectDefaultsBuildValidator.cs" />
     <Compile Include="Assets/Editor/BuildTextureStager.cs" />
@@ -61,7 +60,6 @@
     <Compile Include="Assets/Editor/PixelArtTextureImportPolicy.cs" />
     <Compile Include="Assets/Editor/PSOCollectionTool.cs" />
     <Compile Include="Assets/Editor/FmodBankBuilder.cs" />
-    <Compile Include="Assets/Editor/BuildScript.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="UnityEngine">

@@ -135,8 +135,8 @@ internal sealed class MapViewportRenderer
 
         if (mapTexture != null)
         {
-            mapTexture.SetPixels32(_pixelBuffer);
-            mapTexture.Apply(false);
+            mapTexture.SetPixelData(_pixelBuffer, 0);
+            mapTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
         }
     }
 }

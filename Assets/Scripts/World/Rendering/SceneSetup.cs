@@ -20,6 +20,8 @@ namespace Fodinae.World
         private ITextureStorageService _textureStorage = null!;
         [Inject]
         private SurfaceRenderer _surfaceRenderer = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
         private bool _surfaceRendererSetupStarted;
         private bool _surfaceRendererSetupSucceeded;
         private bool _surfaceSetupFailureLogged;
@@ -51,21 +53,24 @@ namespace Fodinae.World
                 return;
             }
 
-            if (_textureStorage == null)
+            if (_textureStorage == null || _operations == null)
             {
                 return;
             }
 
             _surfaceRendererSetupStarted = true;
-            SetupSurfaceRendererAsync(
-                _textureStorage,
-                this.GetCancellationTokenOnDestroy()).Forget();
+            _operations.Run("surface_renderer_setup", SetupSurfaceRendererAsync);
         }
 
         private async UniTask SetupSurfaceRendererAsync(
-            ITextureStorageService textureStorage,
-            CancellationToken cancellationToken)
+            CancellationToken supervisorToken)
         {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
+            CancellationToken cancellationToken = linkedCancellation.Token;
+            ITextureStorageService textureStorage = _textureStorage;
+
             try
             {
                 Texture2D transitTexture = await textureStorage.GetTextureAsync(

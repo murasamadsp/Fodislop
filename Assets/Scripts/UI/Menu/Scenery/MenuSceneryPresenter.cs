@@ -40,6 +40,7 @@ namespace Fodinae.UI
         private int _uiBuiltFrame;
         private bool _planetTimingLogged;
 #endif
+        private bool _uiTexturesReady;
 
         public float DescentTarget
         {
@@ -48,6 +49,7 @@ namespace Fodinae.UI
         }
 
         public bool IsSceneryReady =>
+            _uiTexturesReady &&
             _planetBodyImage != null &&
             _planetBodyImage.image != null &&
             _spaceBgImage != null &&
@@ -143,6 +145,8 @@ namespace Fodinae.UI
             ApplyIconTexture("SideTelegramIcon", "Assets/Textures/UI/mm_icon_telegram.png");
             ApplyIconTexture("SideVkIcon", "Assets/Textures/UI/mm_icon_vk.png");
             ApplyIconTexture("SideExitIcon", "Assets/Textures/UI/mm_icon_exit.png");
+
+            _uiTexturesReady = true;
         }
 
         private static void ApplyImageTexture(Image? image, ref Texture2D? cache, string assetPath, string debugName)

@@ -65,10 +65,16 @@ public sealed class RobotNameplate
         _nicknameText.overflowMode = TextOverflowModes.Overflow;
         _nicknameText.color = Color.white;
 
+        // The project's UI fonts (Exo2/Unbounded/JetBrainsMono) are TextCore
+        // FontAssets for UI Toolkit and cannot feed a TMPro text object (their
+        // runtime type is FontAsset, not TMP_FontAsset; TMP_Text.font needs the
+        // latter). World-space text uses a dedicated mono TMP font built from
+        // JetBrainsMono (keeps the intended mono look) which has the Noto Sans
+        // SC/TC TMP fonts as its CJK fallback chain.
         if (_nicknameText.font == null)
         {
-            var font = Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_SDF") ??
-                       Resources.Load<TMP_FontAsset>("Fonts/Exo2_SDF") ??
+            var font = Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_TMP") ??
+                       Resources.Load<TMP_FontAsset>("Fonts/NotoSansSC_TMP") ??
                        TMP_Settings.defaultFontAsset;
             if (font != null)
             {
@@ -113,24 +119,21 @@ public sealed class RobotNameplate
 
     public void UpdatePosition(Vector3 robotPosition, Sprite? skinSprite, Transform robotTransform, Transform? clanTransform)
     {
-        if (_hasUpdatedLabels && (robotPosition - _lastLabelsPosition).sqrMagnitude <= 1e-8f)
+        if (_hasUpdatedLabels &&
+            (robotPosition - _lastLabelsPosition).sqrMagnitude <= 1e-8f)
         {
             return;
         }
 
         if (_nicknameText != null)
         {
-            Bounds spriteBounds = skinSprite != null
-                ? TransformSpriteBounds(robotTransform, skinSprite)
-                : new Bounds(robotPosition, Vector3.one);
-            Vector3 topRight = new(spriteBounds.max.x, spriteBounds.max.y + 0.5f, robotPosition.z);
-
+            Vector3 topRight = new(robotPosition.x + 0.5f, robotPosition.y + 0.5f, robotPosition.z);
             _nicknameText.transform.SetPositionAndRotation(topRight, Quaternion.identity);
         }
 
         if (clanTransform != null)
         {
-            clanTransform.SetPositionAndRotation(robotPosition + new Vector3(0.6f, -0.5f, 0), Quaternion.identity);
+            clanTransform.SetPositionAndRotation(robotPosition + new Vector3(0.6f, -0.5f, 0f), Quaternion.identity);
         }
 
         _lastLabelsPosition = robotPosition;
@@ -140,14 +143,6 @@ public sealed class RobotNameplate
     public void InvalidatePosition()
     {
         _hasUpdatedLabels = false;
-    }
-
-    private static Bounds TransformSpriteBounds(Transform spriteTransform, Sprite sprite)
-    {
-        Bounds local = sprite.bounds;
-        Vector3 minimum = spriteTransform.TransformPoint(local.min);
-        Vector3 maximum = spriteTransform.TransformPoint(local.max);
-        return new Bounds((minimum + maximum) * 0.5f, maximum - minimum);
     }
 
     public void Destroy()

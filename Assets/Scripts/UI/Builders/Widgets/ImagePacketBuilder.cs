@@ -32,7 +32,14 @@ namespace Fodinae.UI.Builders
                 cts.Dispose();
             });
 
-            LoadImage(element, imagePacket.URI, builder.AssetLoader, cts.Token).Forget();
+            builder.Operations.Run(
+                $"load_packet_image_{imagePacket.URI}",
+                supervisorToken => LoadImage(
+                    element,
+                    imagePacket.URI,
+                    builder.AssetLoader,
+                    cts.Token,
+                    supervisorToken));
 
             return element;
         }
@@ -41,8 +48,13 @@ namespace Fodinae.UI.Builders
             VisualElement element,
             string uri,
             IAssetLoader loader,
-            CancellationToken token)
+            CancellationToken elementToken,
+            CancellationToken supervisorToken)
         {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                elementToken,
+                supervisorToken);
+            CancellationToken token = linkedCancellation.Token;
             Texture2D? texture;
             try
             {

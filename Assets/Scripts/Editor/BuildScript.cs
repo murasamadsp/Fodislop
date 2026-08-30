@@ -20,10 +20,8 @@ namespace Fodinae.Editor
     /// Menu: Build > macOS (Apple Silicon) / Windows 64 / Linux 64 / Android / iOS.
     /// Output goes to Build/&lt;platform&gt;/ (gitignored).
     ///
-    /// Сборка сама себя проверяет и чинит перед запуском:
-    ///   • список сцен приводится к каноническому (BuildSettingsFix) — сцена,
-    ///     выпавшая из Build Settings, ломается только в билде и незаметна
-    ///     при разработке, потому что сцены грузятся аддитивно по имени;
+    /// Сборка проверяет авторские данные, не изменяя их:
+    ///   • список сцен обязан уже иметь канонический порядок;
     ///   • активная платформа переключается на целевую, иначе Unity молча
     ///     собирает не то и тратит на это полный реимпорт;
     ///   • каталог вывода очищается, чтобы файлы прошлой сборки не уезжали
@@ -59,9 +57,7 @@ namespace Fodinae.Editor
 
         private static void Build(BuildTarget target, string relativeOutput, bool isApple = false)
         {
-            // Чинить список сцен до сборки, а не надеяться, что он верен:
-            // отсутствующая сцена проявится только в готовом билде.
-            BuildSettingsFix.EnsureScenesInBuildSettings();
+            BuildSettingsFix.ValidateScenesInBuildSettings();
 
             var scenes = EnabledScenes;
             if (scenes.Length == 0)

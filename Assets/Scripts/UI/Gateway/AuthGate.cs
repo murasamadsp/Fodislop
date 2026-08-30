@@ -20,8 +20,9 @@ namespace Fodinae.UI
     ///
     /// Поэтому поля пароля, вкладка регистрации и EULA — заглушки по макету
     /// visual/main-menu-mirror: они отрисованы, но ни во что не отправляются,
-    /// и экран честно сообщает об этом подсказкой. Реально работают два пути:
-    /// «Войти» (обычное подключение с существующим или пустым токеном) и
+    /// и экран честно сообщает об этом подсказкой. Реально работают три пути:
+    /// «Войти» (обычное подключение с существующим или пустым токеном),
+    /// «Войти через VK» (VK ID device-flow, см. VkAuthService) и
     /// «Офлайн режим (Dummy)» (локальная песочница без сервера).
     ///
     /// Разметка живёт в Resources/UI/MainMenu.uxml, стили — в
@@ -51,6 +52,10 @@ namespace Fodinae.UI
         private readonly Label _hint;
         private readonly IClientConfigManager _clientConfig;
         private readonly ILocalizationService? _loc;
+
+        private Button? _vkButton;
+        private Label? _vkLabel;
+        private bool _vkBusy;
 
         /// <summary>Вызывается, когда игрок прошёл ворота и меню можно показывать.</summary>
         public event Action? Passed;
@@ -85,6 +90,11 @@ namespace Fodinae.UI
         private string L(string key, string fallback, object arg0, object arg1)
         {
             return _loc != null ? _loc.Get(key, arg0, arg1) : fallback;
+        }
+
+        private string L(string key, string fallback, object arg0)
+        {
+            return _loc != null ? _loc.Get(key, arg0) : fallback;
         }
 
         /// <summary>
@@ -147,8 +157,77 @@ namespace Fodinae.UI
                     warn: true);
             }
 
+            _vkButton = tree.Q<Button>("AuthVkButton");
+            _vkLabel = tree.Q<Label>("AuthVkLabel");
+            if (_vkButton != null)
+            {
+                _vkButton.clicked += StartVkLogin;
+                if (_vkLabel != null && VkAuthService.HasValidSession)
+                {
+                    _vkLabel.text = L("gateway.auth.vk_continue", "Продолжить как {0} (VK)", VkAuthService.LoadSession().DisplayName);
+                }
+            }
+
             _login.SetValueWithoutNotify(GenerateCallsign());
             _autoLogin.SetValueWithoutNotify(PlayerPrefs.GetInt(AutoLoginPrefsKey, 0) == 1);
+        }
+
+        /// <summary>
+        /// Вход через VK ID (device-flow). Ссылка подтверждения открывается в
+        /// браузере; сервис опрашивает VK до выдачи токена. При успехе —
+        /// подставляем имя из профиля VK и проходим ворота как обычный «Войти».
+        /// </summary>
+        private async void StartVkLogin()
+        {
+            if (_vkBusy)
+            {
+                return;
+            }
+
+            _vkBusy = true;
+            _vkButton?.SetEnabled(false);
+            ShowHint(
+                L("gateway.auth.vk_started", "VK: откройте ссылку подтверждения в браузере…"),
+                warn: false);
+
+            VkAuthResult result;
+            try
+            {
+                result = await VkAuthService.LoginAsync(_clientConfig);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[AuthGate] VK login failed: {e}");
+                _vkBusy = false;
+                _vkButton?.SetEnabled(true);
+                ShowHint(L("gateway.auth.vk_fail", "Ошибка VK: {0}", e.Message), warn: true);
+                return;
+            }
+
+            _vkBusy = false;
+            _vkButton?.SetEnabled(true);
+            if (result.Success)
+            {
+                ShowHint(
+                    L("gateway.auth.vk_success", "Вход через VK: {0}", result.Session.DisplayName),
+                    warn: false);
+                _login.SetValueWithoutNotify(result.Session.DisplayName);
+
+                // Production-токен выпускает только доверенный backend. В
+                // Dummy-режиме пустой токен штатно выдаст DummyConnection.
+                if (!string.IsNullOrWhiteSpace(result.GameToken))
+                {
+                    AuthTokenManager.SaveToken(result.GameToken);
+                }
+
+                Pass();
+                return;
+            }
+
+            string message = _loc != null && _loc.HasKey(result.Error)
+                ? _loc.Get(result.Error)
+                : result.Error;
+            ShowHint(message, warn: true);
         }
 
         /// <summary>

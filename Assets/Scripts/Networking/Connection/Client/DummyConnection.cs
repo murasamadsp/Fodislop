@@ -12,6 +12,8 @@ using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae;
 using Fodinae.Audio;
 using Fodinae.Core.Interfaces;
+using Fodinae.Persistence;
+using Fodinae.Networking.Auth;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
@@ -41,25 +43,94 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client
 {
-    public class DummyConnection : IServerConnection, IOfflineConnection
+    public class DummyConnection : IServerConnection, IOfflineConnection, IVkOfflineProvider,
+        IOfflineIdentityProvider, IOfflineStatsProvider
     {
         private readonly ITextureStorageService _textureStorage;
         private readonly IItemCatalog _itemCatalog;
+        private readonly IAsyncOperationSupervisor _operations;
         private ConnectionStatus _status = ConnectionStatus.Disconnected;
         private int _lifecycleVersion;
 
-        public DummyConnection(ITextureStorageService textureStorage, IItemCatalog itemCatalog)
+        public DummyConnection(
+            ITextureStorageService textureStorage,
+            IItemCatalog itemCatalog,
+            IAsyncOperationSupervisor operations)
         {
             _textureStorage = textureStorage;
             _itemCatalog = itemCatalog;
+            _operations = operations;
             _validTokens = _tokenStore.Load();
             _missionRunner = new DummyMissionRunner(SendPacket);
-            _buffManager = new DummyBuffManager(SendPacket, _lifecycleVersion);
+            _buffManager = new DummyBuffManager(
+                SendPacket,
+                operations,
+                LoopAlive);
             _teleportManager = new DummyTeleportManager(SendPacket, _teleportPositions);
-            _chatSimulator = new DummyChatSimulator(SendPacket, _lifecycleVersion);
+            // LoopAlive привязан к жизненному циклу соединения: чат-петля
+            // умирает вместе с коннектом (раньше она жила вечно и текла
+            // через реконнекты — фиксированный источник мусора).
+            _chatSimulator = new DummyChatSimulator(
+                SendPacket,
+                () => LoopAlive(_lifecycleVersion),
+                operations);
             _clanManager = new DummyClanManager(SendPacket);
             _pathFinder = new DummyPathFinder(SendPacket, GetCellConfig);
         }
+
+        /// <summary>
+        /// Симуляция VK-входа для офлайн-режима: возвращает стабильную сессию,
+        /// привязанную к устройству. Идентичность детерминирована, чтобы
+        /// имя и профиль оставались одинаковыми между запусками.
+        /// </summary>
+        public VkAuthResult SimulateVkLogin()
+        {
+            long userId = StableDummyVkUserId();
+            return new VkAuthResult
+            {
+                Success = true,
+                GameToken = string.Empty,
+                Session = new VkSession
+                {
+                    AccessToken = "dummy-vk-session",
+                    UserId = userId,
+                    FirstName = $"ШАХТЁР-{100 + (int)(userId % 900)}",
+                    LastName = string.Empty,
+                    AvatarUrl = string.Empty,
+                    ExpiresAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 315_360_000L,
+                },
+            };
+        }
+
+        /// <summary>
+        /// FNV-1a по deviceUniqueIdentifier: стабильный в рамках устройства id.
+        /// GetHashCode() для string в .NET рандомизируется между процессами,
+        /// поэтому годится только собственный детерминированный хэш.
+        /// </summary>
+        private static long StableDummyVkUserId()
+        {
+            string seed = SystemInfo.deviceUniqueIdentifier;
+            uint hash = 2166136261u;
+            foreach (char c in seed)
+            {
+                hash ^= c;
+                hash *= 16777619u;
+            }
+
+            return 10_000_000_000L + (hash % 2_000_000_000L);
+        }
+
+        /// <summary>
+        /// Офлайн-идентичность из симулированной VK-сессии: имя из
+        /// SimulateVkLogin подставляется в PlayerInfoPacket, чтобы мир в
+        /// офлайн-режиме ощущался как настоящий (тот же VK = то же имя).
+        /// </summary>
+        public string PlayerName => SimulateVkLogin().Session.FirstName;
+
+        /// <summary>Офлайн-статистика (уровень/валюта) для мира.</summary>
+        public long Level => 12345;
+
+        public long Currency => 123456;
 
         public ConnectionStatus ConnectionStatus => _status;
 
@@ -73,7 +144,6 @@ namespace MinesServer.Networking.Connection.Client
 
         private readonly DummyTokenStore _tokenStore = new();
         private readonly HashSet<string> _validTokens;
-        private bool _awaitingAuth;
         private readonly DummyMissionRunner _missionRunner;
         private readonly DummyBuffManager _buffManager;
         private readonly DummyTeleportManager _teleportManager;
@@ -128,6 +198,12 @@ namespace MinesServer.Networking.Connection.Client
 
         private static readonly System.Random _rng = new();
 
+        // Сериализует InitWorldAsync: повторный ClientHello (ретрансмит,
+        // двойной вход) больше не запускает второй конкурентный init, который
+        // рвал мир и гонял распаковку карты одновременно с чтением.
+        private UniTaskCompletionSource? _worldInitInFlight;
+        private bool _worldInitialized;
+
         private WorldLayer<CellType>? _worldLayer;
         private readonly HashSet<int> _sentMapChunks = new();
         private CellConfigurationPacket[]? _cellConfigs;
@@ -150,10 +226,13 @@ namespace MinesServer.Networking.Connection.Client
             OnConnecting?.Invoke();
 
             // Run asynchronously, but stay on the Unity Main Thread
-            ConnectAsync(++_lifecycleVersion).Forget();
+            int lifecycleVersion = ++_lifecycleVersion;
+            _operations.Run(
+                "dummy_connect",
+                _ => ConnectAsync(lifecycleVersion));
         }
 
-        private async UniTaskVoid ConnectAsync(int lifecycleVersion)
+        private async UniTask ConnectAsync(int lifecycleVersion)
         {
             await UniTask.Yield();
 
@@ -178,6 +257,7 @@ namespace MinesServer.Networking.Connection.Client
             _lifecycleVersion++;
             _worldLayer?.Dispose();
             _worldLayer = null;
+            _worldInitialized = false;
 
             // Cleared so the buff loop can start again on the next connection.
             // It was never reset, so after one disconnect StartBuffLoop's guard
@@ -187,10 +267,13 @@ namespace MinesServer.Networking.Connection.Client
 
             _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
-            DisconnectAsync(_lifecycleVersion).Forget();
+            int lifecycleVersion = _lifecycleVersion;
+            _operations.Run(
+                "dummy_disconnect",
+                _ => DisconnectAsync(lifecycleVersion));
         }
 
-        private async UniTaskVoid DisconnectAsync(int lifecycleVersion)
+        private async UniTask DisconnectAsync(int lifecycleVersion)
         {
             await UniTask.Delay(100);
 
@@ -203,11 +286,24 @@ namespace MinesServer.Networking.Connection.Client
             OnDisconnected?.Invoke();
         }
 
-        private async UniTaskVoid UpdatePosition()
+        /// <summary>
+        /// Отправляет текущую позицию игрока. Единый источник: раньше этот
+        /// HBPacket-блок дублировался в UpdatePosition и в обеих ветках
+        /// «ход отклонён» (не-соседняя клетка, столкновение).
+        /// </summary>
+        private void SendPositionSnapshot()
+        {
+            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
+            {
+                new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
+            })));
+        }
+
+        private async UniTask UpdatePosition()
         {
             await UniTask.Delay(IgnoreCollision ? 20 : 200);
             DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
-            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot) })));
+            SendPositionSnapshot();
         }
 
         /// <summary>
@@ -245,6 +341,7 @@ namespace MinesServer.Networking.Connection.Client
 
             _worldLayer?.Dispose();
             _worldLayer = null;
+            _worldInitialized = false;
         }
 
         public void TriggerDisconnect(string reason)
@@ -279,10 +376,7 @@ namespace MinesServer.Networking.Connection.Client
 
                     if (!isAdjacent)
                     {
-                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                        {
-                            new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
-                        })));
+                        SendPositionSnapshot();
                         return;
                     }
 
@@ -295,10 +389,7 @@ namespace MinesServer.Networking.Connection.Client
                             bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
                             if (!isPassable && !IgnoreCollision)
                             {
-                                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                                {
-                                    new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
-                                })));
+                                SendPositionSnapshot();
                                 return;
                             }
                         }
@@ -307,13 +398,13 @@ namespace MinesServer.Networking.Connection.Client
                     _x = move.X;
                     _y = move.Y;
                     _pathCts?.Cancel();
-                    UpdatePosition().Forget();
+                    _operations.Run("dummy_position_snapshot", _ => UpdatePosition());
                     _teleportManager.CheckTeleportEntry(_x, _y);
                 }
                 else if (actionPacket.Payload is RotatePacket rotate)
                 {
                     _rot = rotate.Direction;
-                    UpdatePosition().Forget();
+                    _operations.Run("dummy_position_snapshot", _ => UpdatePosition());
                 }
                 else if (actionPacket.Payload is UnmappedKeyPacket)
                 {
@@ -382,6 +473,7 @@ namespace MinesServer.Networking.Connection.Client
                     }
 
                     _missionRunner.OnBlockMined(_inventory);
+                    _chatSimulator.SendMiningReaction();
                 }
                 else if (actionPacket.Payload is SuicidePacket)
                 {
@@ -406,14 +498,7 @@ namespace MinesServer.Networking.Connection.Client
                 }
                 else if (actionPacket.Payload is GeoPacket)
                 {
-                    Vector2Int frontOffset = _rot switch
-                    {
-                        Direction.Down => new Vector2Int(0, 1),
-                        Direction.Up => new Vector2Int(0, -1),
-                        Direction.Left => new Vector2Int(-1, 0),
-                        Direction.Right => new Vector2Int(1, 0),
-                        _ => Vector2Int.zero,
-                    };
+                    Vector2Int frontOffset = GetDirectionOffset(_rot);
                     ushort fx = (ushort)(_x + frontOffset.x);
                     ushort fy = (ushort)(_y + frontOffset.y);
 
@@ -492,7 +577,13 @@ namespace MinesServer.Networking.Connection.Client
                     if (path.Count > 0)
                     {
                         _pathCts = new CancellationTokenSource();
-                        WalkPathAsync(path, _pathCts.Token).Forget();
+                        CancellationToken pathToken = _pathCts.Token;
+                        _operations.Run(
+                            "dummy_walk_path",
+                            supervisorToken => WalkPathAsync(
+                                path,
+                                pathToken,
+                                supervisorToken));
                     }
                 }
 
@@ -503,16 +594,15 @@ namespace MinesServer.Networking.Connection.Client
             {
                 case ClientHelloPacket clientHello:
                     string receivedToken = clientHello.AuthToken;
-                    bool isTokenValid = !string.IsNullOrEmpty(receivedToken) && _validTokens.Contains(receivedToken);
-
-                    if (!isTokenValid)
-                    {
-                        _awaitingAuth = true;
-                        OnReceived?.Invoke(DummyWindowBuilder.BuildAuthWindow());
-                        return;
-                    }
-
-                    _awaitingAuth = false;
+                    // Офлайн-сервер пермиссивный и окна авторизации не вызывает:
+                    // Знакомые токены принимаются как есть, для пустого или
+                    // незнакомого dummy-сервер сам выдаёт новый
+                    // и запоминает его, чтобы авто-вход работал и дальше.
+                    string resolvedToken =
+                        (!string.IsNullOrEmpty(receivedToken) &&
+                         _validTokens.Contains(receivedToken))
+                            ? receivedToken
+                            : IssueNewToken();
 
                     if (clientHello.ClientVersion < 1)
                     {
@@ -525,12 +615,17 @@ namespace MinesServer.Networking.Connection.Client
                         return;
                     }
 
-                    OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(receivedToken)));
+                    OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(resolvedToken)));
 
-                    InitWorldAsync().Forget();
+                    _operations.Run("dummy_world_init", _ => InitWorldAsync());
                     break;
                 case RuntimeAssetRequestPacket runtimeAssets:
-                    DummyAssetHandler.HandleAssetRequest(runtimeAssets, _textureStorage, SendPacket).Forget();
+                    _operations.Run(
+                        "dummy_asset_request",
+                        _ => DummyAssetHandler.HandleAssetRequest(
+                            runtimeAssets,
+                            _textureStorage,
+                            SendPacket));
                     break;
                 case OpenHelpClickPacket:
                     break;
@@ -715,26 +810,60 @@ namespace MinesServer.Networking.Connection.Client
             {
                 OnReceived?.Invoke(DummyWindowBuilder.BuildTestMissionArrowPacket(_x, _y));
             }
-            else if (packet.WindowTag == "auth")
+        }
+
+        /// <summary>
+        /// Выдаёт и запоминает новый токен для первого входа: замена старому
+        /// «окну авторизации», которое раньше открывал сервер на невалидном
+        /// токене. Теперь сервер сразу пускает в мир и выдаёт токен сам.
+        /// </summary>
+        private string IssueNewToken()
+        {
+            string newToken = Guid.NewGuid().ToString("N");
+            _validTokens.Add(newToken);
+            _tokenStore.Save(_validTokens);
+            return newToken;
+        }
+
+        private async UniTask InitWorldAsync()
+        {
+            // Если init уже летит — дожидаемся его вместо повторного запуска:
+            // вторая инициализация параллельно первой обнуляла _worldLayer и
+            // распаковывала карту в момент, когда первая уже читала её. Этот
+            // флаг сбрасывается в Disconnect/Dispose, так что легитимный
+            // реконнект по-прежнему пересоздаёт мир.
+            UniTaskCompletionSource? inFlight = _worldInitInFlight;
+            if (inFlight != null)
             {
-                if (!_awaitingAuth)
+                await inFlight.Task;
+                return;
+            }
+
+            var gate = new UniTaskCompletionSource();
+            _worldInitInFlight = gate;
+            try
+            {
+                if (_worldInitialized)
                 {
                     return;
                 }
 
-                _awaitingAuth = false;
-                OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-
-                string newToken = Guid.NewGuid().ToString("N");
-                _validTokens.Add(newToken);
-                _tokenStore.Save(_validTokens);
-                OnReceived?.Invoke(new ServerPacket(new AuthTokenPacket(newToken)));
-
-                InitWorldAsync().Forget();
+                _worldInitialized = true;
+                await InitWorldCoreAsync();
+                gate.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                gate.TrySetException(ex);
+                throw;
+            }
+            finally
+            {
+                _worldInitInFlight = null;
             }
         }
 
-        private async UniTask InitWorldAsync()
+        private async UniTask InitWorldCoreAsync()
         {
             _cellConfigs = DummyCellConfigurationUtilities.CreateCellConfigurations();
             _worldLayer?.Dispose();
@@ -742,7 +871,7 @@ namespace MinesServer.Networking.Connection.Client
 
             string mapbPath = await DummyWorldMapArchive.ResolveMapFileAsync(PrebakedWorldCodeName);
 
-            (int worldWidth, int worldHeight) = DummyWorldMapArchive.ReadDimensions(mapbPath);
+            (int worldWidth, int worldHeight) = await DummyWorldMapArchive.ReadDimensionsWithRetryAsync(mapbPath);
             if (worldWidth <= 0 || worldHeight <= 0)
             {
                 throw new InvalidDataException(
@@ -755,6 +884,7 @@ namespace MinesServer.Networking.Connection.Client
                 mapbPath,
                 widthChunks,
                 heightChunks,
+                _operations,
                 32,
                 36);
             _sentMapChunks.Clear();
@@ -770,7 +900,7 @@ namespace MinesServer.Networking.Connection.Client
                     new byte[] { 37, 38, 106 },
                 })));
 
-            OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, "Darkar25")));
+            OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, PlayerName)));
             OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(
                 _mockBotId,
                 999,
@@ -780,7 +910,14 @@ namespace MinesServer.Networking.Connection.Client
                 string.Empty)));
             var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
             OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-            DummyBotRunner.RunCircularBots(6, _lifecycleVersion, SendPacket, () => LoopAlive(_lifecycleVersion)).Forget();
+            int lifecycleVersion = _lifecycleVersion;
+            _operations.Run(
+                "dummy_bot_loop",
+                _ => DummyBotRunner.RunCircularBots(
+                    6,
+                    lifecycleVersion,
+                    SendPacket,
+                    () => LoopAlive(lifecycleVersion)));
             _x = 25;
             _y = 50;
             DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
@@ -788,24 +925,29 @@ namespace MinesServer.Networking.Connection.Client
             OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
             OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
             _buffManager.ResetDailyBonus();
-            OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(123456, 1234)));
+            OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(Currency, 1234)));
             _health = 250;
             OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
             _basketContents = new long[6];
             OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, _basketContents)));
             OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
-            OnReceived?.Invoke(new ServerPacket(new LevelPacket(12345)));
+            OnReceived?.Invoke(new ServerPacket(new LevelPacket(Level)));
 
             SendSkillProgressMock();
-            _chatSimulator.SendChatMock(_lifecycleVersion);
+            _chatSimulator.SendChatMock();
 
             OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
             OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
             _buffManager.SendStatusPackets();
 
-            _buffManager.StartBuffLoop(_lifecycleVersion);
-            SendPingMock(_lifecycleVersion).Forget();
-            _buffManager.SendDailyBonusMock(_lifecycleVersion).Forget();
+            _buffManager.StartBuffLoop(lifecycleVersion);
+            _operations.Run(
+                "dummy_ping_loop",
+                _ => SendPingMock(lifecycleVersion));
+            _operations.Run(
+                "dummy_online_loop",
+                _ => SendOnlineFluctuationMock(lifecycleVersion));
+            _buffManager.StartDailyBonusLoop(lifecycleVersion);
 
             OnReceived?.Invoke(new ServerPacket(
                 new MovementSpeedPacket(
@@ -845,6 +987,7 @@ namespace MinesServer.Networking.Connection.Client
             })));
 
         }
+
 
 
 
@@ -892,7 +1035,7 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-        private async UniTaskVoid SendPingMock(int lifecycleVersion)
+        private async UniTask SendPingMock(int lifecycleVersion)
         {
             await UniTask.Delay(2000);
             while (LoopAlive(lifecycleVersion))
@@ -902,10 +1045,28 @@ namespace MinesServer.Networking.Connection.Client
             }
         }
 
-
-        private (ushort X, ushort Y) GetFrontCell()
+        // Онлайн-счётчик живёт: «игроки» заходят и выходят, а не висят на
+        // статичных 42. Простая петля в стиле SendPingMock, останавливается
+        // вместе с коннектом.
+        private async UniTask SendOnlineFluctuationMock(int lifecycleVersion)
         {
-            Vector2Int offset = _rot switch
+            await UniTask.Delay(3000);
+            while (LoopAlive(lifecycleVersion))
+            {
+                ushort players = (ushort)(38 + _rng.Next(0, 9));
+                OnReceived?.Invoke(new ServerPacket(new OnlinePacket(players, 3)));
+                await UniTask.Delay(12000);
+            }
+        }
+
+
+        /// <summary>
+        /// Смещение клетки перед роботом по направлению. Единственный источник
+        /// истины: GeoPacket и GetFrontCell раньше дублировали этот switch.
+        /// </summary>
+        private static Vector2Int GetDirectionOffset(Direction rot)
+        {
+            return rot switch
             {
                 Direction.Down => new Vector2Int(0, 1),
                 Direction.Up => new Vector2Int(0, -1),
@@ -913,11 +1074,23 @@ namespace MinesServer.Networking.Connection.Client
                 Direction.Right => new Vector2Int(1, 0),
                 _ => Vector2Int.zero,
             };
+        }
+
+        private (ushort X, ushort Y) GetFrontCell()
+        {
+            Vector2Int offset = GetDirectionOffset(_rot);
             return ((ushort)(_x + offset.x), (ushort)(_y + offset.y));
         }
 
-        private async UniTaskVoid WalkPathAsync(List<(ushort X, ushort Y)> path, CancellationToken ct)
+        private async UniTask WalkPathAsync(
+            List<(ushort X, ushort Y)> path,
+            CancellationToken pathToken,
+            CancellationToken supervisorToken)
         {
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                pathToken,
+                supervisorToken);
+            CancellationToken ct = linkedCancellation.Token;
             try
             {
                 ushort prevX = _x;
@@ -954,7 +1127,7 @@ namespace MinesServer.Networking.Connection.Client
 
         private static class DummyAssetHandler
         {
-            public static async UniTaskVoid HandleAssetRequest(
+            public static async UniTask HandleAssetRequest(
                 RuntimeAssetRequestPacket runtimeAssets,
                 ITextureStorageService textureStorage,
                 Action<ServerPacket> sendPacket)

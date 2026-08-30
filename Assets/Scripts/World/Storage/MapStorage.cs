@@ -2,8 +2,11 @@
 
 using System;
 using System.IO;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Persistence;
 using Fodinae.World;
 using Fodinae.World.Terrain;
 using MinesServer.Data;
@@ -15,12 +18,15 @@ namespace Fodinae.World
     {
         private WorldLayer<CellType>? _cellLayer;
         private string? _mapFilePath;
+        private readonly SemaphoreSlim _persistenceGate = new(1, 1);
+        private readonly IAsyncOperationSupervisor _operations;
 
         private const string MapExtension = ".map";
         private const string BackupMapSuffix = ".backup.map";
 
-        public MapStorage()
+        public MapStorage(IAsyncOperationSupervisor operations)
         {
+            _operations = operations;
         }
 
         private bool _isInitialized;
@@ -29,7 +35,7 @@ namespace Fodinae.World
         private int _worldHeight;
         private bool _clippedRegionWarningLogged;
 
-        public WorldLayer<CellType>? CellLayer => _cellLayer;
+        public IWorldLayer<CellType>? CellLayer => _cellLayer;
 
         public string MapFilePath => _mapFilePath ?? throw new InvalidOperationException("[MapStorage] Map file path is not initialized");
 
@@ -110,7 +116,13 @@ namespace Fodinae.World
                 }
 
                 CreateBackup(path, worldCodeName);
-                _cellLayer = new WorldLayer<CellType>(path, widthChunks, heightChunks, CHUNK_SIZE, maxRamChunks: 2000);
+                _cellLayer = new WorldLayer<CellType>(
+                    path,
+                    widthChunks,
+                    heightChunks,
+                    _operations,
+                    CHUNK_SIZE,
+                    maxRamChunks: 2000);
                 _mapFilePath = path;
                 _isInitialized = true;
                 IsDisposed = false;
@@ -328,6 +340,35 @@ namespace Fodinae.World
         /// </param>
         public void Flush(bool durable)
         {
+            _persistenceGate.Wait();
+            try
+            {
+                FlushCore(durable);
+            }
+            finally
+            {
+                _persistenceGate.Release();
+            }
+        }
+
+        public async UniTask FlushAsync(
+            bool durable,
+            CancellationToken cancellationToken = default)
+        {
+            await _persistenceGate.WaitAsync(cancellationToken);
+            try
+            {
+                await UniTask.RunOnThreadPool(() => FlushCore(durable));
+            }
+            finally
+            {
+                _persistenceGate.Release();
+                await UniTask.SwitchToMainThread();
+            }
+        }
+
+        private void FlushCore(bool durable)
+        {
             if (_cellLayer == null || !_isInitialized || IsDisposed)
             {
                 return;
@@ -354,6 +395,33 @@ namespace Fodinae.World
             "S3877",
             Justification = "Persistent map close failures must propagate instead of becoming silent data loss.")]
         public void Dispose()
+        {
+            _persistenceGate.Wait();
+            try
+            {
+                DisposeCore();
+            }
+            finally
+            {
+                _persistenceGate.Release();
+            }
+        }
+
+        public async UniTask DisposeAsync(CancellationToken cancellationToken = default)
+        {
+            await _persistenceGate.WaitAsync(cancellationToken);
+            try
+            {
+                await UniTask.RunOnThreadPool(DisposeCore);
+            }
+            finally
+            {
+                _persistenceGate.Release();
+                await UniTask.SwitchToMainThread();
+            }
+        }
+
+        private void DisposeCore()
         {
             Exception? disposeFailure = null;
             try

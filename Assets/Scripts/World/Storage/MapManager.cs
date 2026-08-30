@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.World;
@@ -88,6 +89,19 @@ namespace Fodinae.World
         }
 
         public IWorldDataStorage WorldStorage => _worldStorage;
+
+        public async UniTask FlushForUnloadAsync()
+        {
+            if (!_hasWorldStorage || _worldStorage == null || !_worldStorage.IsInitialized())
+            {
+                return;
+            }
+
+            // Once the durable write begins it must run to completion even when
+            // the scene transition is cancelled. Storage owns its I/O gate and
+            // returns to the main thread before scene teardown continues.
+            await _worldStorage.FlushAsync(durable: true);
+        }
 
         protected void OnDestroy()
         {

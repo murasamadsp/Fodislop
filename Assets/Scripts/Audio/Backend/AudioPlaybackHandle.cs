@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Audio.Core
@@ -18,7 +19,7 @@ namespace Fodinae.Audio.Core
     ///   <item>Менять FMOD параметры: <c>handle.SetParameter("Speed", 1.5f)</c></item>
     /// </list>
     /// </summary>
-    public sealed class AudioPlaybackHandle
+    public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
     {
         public AudioBusType BusType { get; }
         public FMOD.Studio.EventInstance EventInstance { get; }

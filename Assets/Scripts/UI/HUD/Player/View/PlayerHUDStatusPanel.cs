@@ -16,6 +16,7 @@ public sealed class PlayerHUDStatusPanel
 {
     private readonly Dictionary<string, VisualElement> _statusLineElements = new();
     private readonly Dictionary<string, IVisualElementScheduledItem> _statusSchedules = new();
+    private readonly List<string> _toRemove = new();
     private VisualElement? _statusPanel;
 
     public void Initialize(VisualElement root)
@@ -41,17 +42,18 @@ public sealed class PlayerHUDStatusPanel
         }
 
         _statusPanel.style.display = DisplayStyle.Flex;
-        var toRemove = new List<string>();
+        _toRemove.Clear();
         foreach (var kvp in _statusLineElements)
         {
             if (!currentLines.ContainsKey(kvp.Key))
             {
-                toRemove.Add(kvp.Key);
+                _toRemove.Add(kvp.Key);
             }
         }
 
-        foreach (var key in toRemove)
+        for (int i = 0; i < _toRemove.Count; i++)
         {
+            string key = _toRemove[i];
             _statusPanel.Remove(_statusLineElements[key]);
             if (_statusSchedules.TryGetValue(key, out var schedule))
             {

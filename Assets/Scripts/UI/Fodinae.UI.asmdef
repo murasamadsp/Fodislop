@@ -4,6 +4,7 @@
     "references": [
         "UniTask",
         "Fodinae.Contracts",
+        "Fodinae.Persistence",
         "Fodinae.Networking",
         "Fodinae.World",
         "Fodinae.AssetPipeline",

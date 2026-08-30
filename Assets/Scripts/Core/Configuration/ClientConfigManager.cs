@@ -2,6 +2,7 @@
 
 using System;
 using System.IO;
+using System.Text;
 using Fodinae.Core.Interfaces;
 using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
@@ -123,12 +124,13 @@ namespace Fodinae.Core
 
             ClientConfig loaded = JsonUtility.FromJson<ClientConfig>(json) ??
                 throw new InvalidDataException($"Client config '{configPath}' is empty or invalid.");
+            int sourceSchemaVersion = loaded.SchemaVersion;
             bool migrated = Migrate(loaded);
             Validate(loaded);
             Config = loaded;
             if (migrated)
             {
-                Save();
+                SaveAtomically(GetMigrationBackupPath(configPath, sourceSchemaVersion));
             }
 
             Debug.Log(
@@ -313,9 +315,15 @@ namespace Fodinae.Core
         public void Save()
         {
             Validate(Config);
+            SaveAtomically(backupPath: null);
+        }
+
+        private void SaveAtomically(string? backupPath)
+        {
             string configPath = GetConfigPath();
             string directory = Path.GetDirectoryName(configPath) ??
                 throw new InvalidOperationException("Client config path has no parent directory.");
+            string temporaryPath = configPath + ".tmp";
             try
             {
                 if (!Directory.Exists(directory))
@@ -324,12 +332,42 @@ namespace Fodinae.Core
                 }
 
                 string json = JsonUtility.ToJson(Config, prettyPrint: true);
-                File.WriteAllText(configPath, json);
+                byte[] payload = Encoding.UTF8.GetBytes(json);
+                using (var stream = new FileStream(
+                           temporaryPath,
+                           FileMode.Create,
+                           FileAccess.Write,
+                           FileShare.None))
+                {
+                    stream.Write(payload, 0, payload.Length);
+                    stream.Flush(flushToDisk: true);
+                }
+
+                if (File.Exists(configPath))
+                {
+                    File.Replace(temporaryPath, configPath, backupPath);
+                }
+                else
+                {
+                    File.Move(temporaryPath, configPath);
+                }
             }
             catch (Exception ex)
             {
                 throw new IOException($"Failed to save client config '{configPath}'.", ex);
             }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private static string GetMigrationBackupPath(string configPath, int sourceSchemaVersion)
+        {
+            return $"{configPath}.v{sourceSchemaVersion}.backup";
         }
 
         /// <summary>

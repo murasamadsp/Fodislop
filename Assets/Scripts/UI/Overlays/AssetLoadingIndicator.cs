@@ -121,19 +121,23 @@ namespace Fodinae.UI
 
         private void Update()
         {
-            if (_root == null)
+            if (_root == null || !_loadingOverlayVisible)
             {
                 return;
-            }
-
-            if (_loadingOverlayVisible && _loadingStatusLabel != null)
-            {
-                _loadingStatusLabel.text = GetLoadingStatusText();
             }
 
             if (Time.unscaledTime >= _nextRefreshTime)
             {
                 _nextRefreshTime = Time.unscaledTime + 0.25f;
+                if (_loadingStatusLabel != null)
+                {
+                    string statusText = GetLoadingStatusText();
+                    if (_loadingStatusLabel.text != statusText)
+                    {
+                        _loadingStatusLabel.text = statusText;
+                    }
+                }
+
                 Refresh();
             }
         }
@@ -185,6 +189,7 @@ namespace Fodinae.UI
             _loadingOverlay.style.display = DisplayStyle.Flex;
             _loadingOverlay.pickingMode = PickingMode.Position;
             _loadingOverlayVisible = true;
+            _spinnerSchedule?.Resume();
         }
 
         private void HideLoadingOverlay()
@@ -197,6 +202,7 @@ namespace Fodinae.UI
             _loadingOverlay.style.display = DisplayStyle.None;
             _loadingOverlay.pickingMode = PickingMode.Ignore;
             _loadingOverlayVisible = false;
+            _spinnerSchedule?.Pause();
         }
 
         private void CreateUI()

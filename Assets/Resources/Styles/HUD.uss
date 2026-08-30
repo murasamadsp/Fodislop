@@ -249,7 +249,7 @@
 .hud-hp-header {
     flex-direction: row;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
 }
 
 .hud-hp-bar {
@@ -271,7 +271,7 @@
     border-width: 2px;
     border-radius: 3px;
     color: rgba(38, 38, 38, 1);
-    font-size: var(--font-size-title);
+    font-size: var(--font-size-md);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     padding: 0;
@@ -810,7 +810,7 @@
 
 .hud-minimap-coords {
     font-size: 11px;
-    color: var(--scifi-cyan-bright, rgb(80, 200, 255));
+    color: var(--scifi-cyan-bright);
     -unity-font-style: bold;
     margin-bottom: 4px;
     -unity-text-align: middle-center;

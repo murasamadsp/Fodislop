@@ -6,14 +6,17 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Fodinae;
 using UnityEngine;
 
-namespace Fodinae
+namespace Fodinae.Persistence
 {
-    public class WorldLayer<T> : IDisposable
+    public sealed class WorldLayer<T> : IWorldLayer<T>
         where T : unmanaged
     {
         private const int HEADER_SIZE = 16; // 4 ints
+        private const int FORMAT_VERSION_OFFSET = sizeof(int) * 3;
+        private const int CURRENT_FORMAT_VERSION = 1;
 
         private readonly int _chunkSize;
         private readonly int _chunkArea;
@@ -32,19 +35,26 @@ namespace Fodinae
         private readonly LinkedList<int> _lruList;
         private readonly HashSet<int> _dirtyChunks;
         private readonly HashSet<int> _loadingChunks;
+        private readonly Dictionary<int, Exception> _failedChunkLoads = new();
         private readonly object _loadingLock = new object();
+        private readonly IAsyncOperationSupervisor _operations;
         private bool _disposed;
 
         // A failing disk would otherwise warn once per chunk per streaming
         // pass and flood the console within seconds.
         private const int MAX_LOGGED_CHUNK_DISK_FAILURES = 8;
         private readonly HashSet<int> _loggedChunkLoadFailures = [];
-        private readonly HashSet<int> _loggedChunkSaveFailures = [];
         private bool _chunkDiskFailureCapLogged;
 
         private FileStream? _fileStream;
 
-        public WorldLayer(string filePath, int WIDTH_CHUNKS, int HEIGHT_CHUNKS, int CHUNK_SIZE = 32, int maxRamChunks = 1000)
+        public WorldLayer(
+            string filePath,
+            int WIDTH_CHUNKS,
+            int HEIGHT_CHUNKS,
+            IAsyncOperationSupervisor operations,
+            int CHUNK_SIZE = 32,
+            int maxRamChunks = 1000)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -66,6 +76,8 @@ namespace Fodinae
                     HEIGHT_CHUNKS,
                     "World layer height must be positive.");
             }
+
+            _operations = operations ?? throw new ArgumentNullException(nameof(operations));
 
             if (CHUNK_SIZE <= 0)
             {
@@ -100,6 +112,7 @@ namespace Fodinae
             _dirtyChunks = new HashSet<int>();
             _loadingChunks = new HashSet<int>();
 
+            MigrateLegacyFormatIfRequired();
             InitializeFile();
         }
 
@@ -192,12 +205,7 @@ namespace Fodinae
                     $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
-            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: touchLru);
-            if (chunk == null)
-            {
-                throw new InvalidDataException(
-                    $"World layer '{_filePath}' has no loaded chunk for cell ({x}, {y}).");
-            }
+            T[] chunk = GetOrCreateChunk(chunkIndex, touchLru);
 
             return chunk[localIndex];
         }
@@ -211,12 +219,7 @@ namespace Fodinae
                     $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
-            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: touchLru);
-            if (chunk == null)
-            {
-                throw new InvalidDataException(
-                    $"World layer '{_filePath}' could not load chunk for cell ({x}, {y}).");
-            }
+            T[] chunk = GetOrCreateChunk(chunkIndex, touchLru);
 
             return chunk[localIndex];
         }
@@ -230,14 +233,7 @@ namespace Fodinae
                     $"Cell coordinate ({x}, {y}) is outside the world layer bounds.");
             }
 
-            T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
-
-            if (chunk == null)
-            {
-                throw new InvalidDataException(
-                    $"World layer '{_filePath}' cannot write cell ({x}, {y}) " +
-                    $"because chunk {chunkIndex} is not loaded or persisted.");
-            }
+            T[] chunk = GetOrCreateChunk(chunkIndex, touchLru: true);
 
             if (!EqualityComparer<T>.Default.Equals(chunk[localIndex], value))
             {
@@ -316,13 +312,7 @@ namespace Fodinae
                 for (int chunkY = firstChunkY; chunkY <= lastChunkY; chunkY++)
                 {
                     int chunkIndex = chunkY + (chunkX * _heightChunks);
-                    T[]? chunk = GetChunk(chunkIndex, createIfMissing: true, touchLru: true);
-                    if (chunk == null)
-                    {
-                        throw new InvalidDataException(
-                            $"World layer '{_filePath}' could not load chunk {chunkIndex} " +
-                            $"while applying region ({startX},{startY}) {width}x{height}.");
-                    }
+                    T[] chunk = GetOrCreateChunk(chunkIndex, touchLru: true);
 
                     int regionX0 = Math.Max(startX, chunkX * _chunkSize);
                     int regionX1 = Math.Min(endX, (chunkX + 1) * _chunkSize);
@@ -358,11 +348,16 @@ namespace Fodinae
         }
 
         // --- Core Paging Logic ---
-        public T[]? GetChunk(int chunkIndex, bool createIfMissing = false, bool touchLru = true)
+        public T[] GetOrCreateChunk(int chunkIndex, bool touchLru = true)
         {
-            if (_disposed || chunkIndex < 0 || chunkIndex >= _chunkOffsets.Length)
+            if (_disposed)
             {
-                return null;
+                throw new ObjectDisposedException(nameof(WorldLayer<T>));
+            }
+
+            if (chunkIndex < 0 || chunkIndex >= _chunkOffsets.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(chunkIndex), chunkIndex, "Chunk index is outside the world layer.");
             }
 
             if (_loadedChunks.TryGetValue(chunkIndex, out T[]? chunk))
@@ -375,51 +370,78 @@ namespace Fodinae
                 return chunk;
             }
 
-            if (createIfMissing)
+            try
             {
-                try
+                chunk = LoadChunkFromDisk(chunkIndex);
+                if (chunk == null)
                 {
-                    chunk = LoadChunkFromDisk(chunkIndex);
-                    if (chunk == null)
-                    {
-                        // Sparse layers are expected while the server streams
-                        // regions. A synchronous write materializes the chunk;
-                        // read-only streaming still keeps missing chunks
-                        // unloaded and visibly distinct from empty cells.
-                        chunk = new T[_chunkArea];
-                    }
+                    // Sparse layers are expected while the server streams
+                    // regions. A synchronous write materializes the chunk;
+                    // read-only streaming keeps missing chunks distinct.
+                    chunk = new T[_chunkArea];
+                }
 
-                    AddToCache(chunkIndex, chunk);
-                    return chunk;
-                }
-                catch (IOException ioEx)
+                AddToCache(chunkIndex, chunk);
+                return chunk;
+            }
+            catch (IOException ioEx)
+            {
+                throw new IOException($"[WorldLayer] Could not load/create chunk {chunkIndex}: {ioEx.Message}", ioEx);
+            }
+            catch (UnauthorizedAccessException authEx)
+            {
+                throw new UnauthorizedAccessException($"[WorldLayer] Access denied for chunk {chunkIndex}: {authEx.Message}", authEx);
+            }
+            catch (OutOfMemoryException)
+            {
+                throw;
+            }
+        }
+
+        public ChunkReadResult<T> ReadChunk(int chunkIndex, bool touchLru = true)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(WorldLayer<T>));
+            }
+
+            if (chunkIndex < 0 || chunkIndex >= _chunkOffsets.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(chunkIndex), chunkIndex, "Chunk index is outside the world layer.");
+            }
+
+            if (_loadedChunks.TryGetValue(chunkIndex, out T[]? chunk))
+            {
+                if (touchLru)
                 {
-                    throw new IOException($"[WorldLayer] Could not load/create chunk {chunkIndex}: {ioEx.Message}", ioEx);
+                    TouchLru(chunkIndex);
                 }
-                catch (UnauthorizedAccessException authEx)
+
+                return new ChunkReadResult<T>(ChunkReadStatus.Available, chunk, null);
+            }
+
+            lock (_loadingLock)
+            {
+                if (_failedChunkLoads.TryGetValue(chunkIndex, out Exception? failure))
                 {
-                    throw new UnauthorizedAccessException($"[WorldLayer] Access denied for chunk {chunkIndex}: {authEx.Message}", authEx);
+                    return new ChunkReadResult<T>(ChunkReadStatus.Failed, null, failure);
                 }
-                catch (OutOfMemoryException)
+
+                if (_chunkOffsets[chunkIndex] < 0)
                 {
-                    throw;
+                    return new ChunkReadResult<T>(ChunkReadStatus.Missing, null, null);
+                }
+
+                if (!_loadingChunks.Add(chunkIndex))
+                {
+                    return new ChunkReadResult<T>(ChunkReadStatus.Loading, null, null);
                 }
             }
-            else
-            {
-                bool shouldStartLoad;
-                lock (_loadingLock)
-                {
-                    shouldStartLoad = _loadingChunks.Add(chunkIndex);
-                }
 
-                if (shouldStartLoad)
-                {
-                    LoadChunkAsync(chunkIndex).Forget();
-                }
-
-                return null;
-            }
+            _operations.Run(
+                $"load_world_chunk_{chunkIndex}",
+                _ => LoadChunkAsync(chunkIndex));
+            return new ChunkReadResult<T>(ChunkReadStatus.Loading, null, null);
         }
 
         public void Flush(bool flushToDisk = false)
@@ -456,7 +478,13 @@ namespace Fodinae
             string tempPath = _filePath + ".tmp";
             Flush();
 
-            using (var newLayer = new WorldLayer<T>(tempPath, _widthChunks, _heightChunks, _chunkSize, _maxChunksInMemory))
+            using (var newLayer = new WorldLayer<T>(
+                tempPath,
+                _widthChunks,
+                _heightChunks,
+                _operations,
+                _chunkSize,
+                _maxChunksInMemory))
             {
                 for (int i = 0; i < _chunkOffsets.Length; i++)
                 {
@@ -547,6 +575,7 @@ namespace Fodinae
             lock (_loadingLock)
             {
                 _loadingChunks.Clear();
+                _failedChunkLoads.Clear();
             }
 
             if (disposeFailure != null)
@@ -607,9 +636,10 @@ namespace Fodinae
                     int w = reader.ReadInt32();
                     int h = reader.ReadInt32();
                     int s = reader.ReadInt32();
-                    reader.ReadInt32(); // Reserved
+                    int formatVersion = reader.ReadInt32();
 
                     if (w == _widthChunks && h == _heightChunks && s == _chunkSize &&
+                        formatVersion == CURRENT_FORMAT_VERSION &&
                         _fileStream.Length >= HEADER_SIZE + offsetTableBytes)
                     {
                         var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
@@ -645,62 +675,146 @@ namespace Fodinae
                 writer.Write(_widthChunks);
                 writer.Write(_heightChunks);
                 writer.Write(_chunkSize);
-                writer.Write(0);
+                writer.Write(CURRENT_FORMAT_VERSION);
                 var byteSpan = MemoryMarshal.AsBytes(_chunkOffsets.AsSpan());
                 _fileStream.Write(byteSpan);
                 _fileStream.Flush();
             }
         }
 
-        private async Cysharp.Threading.Tasks.UniTaskVoid LoadChunkAsync(int chunkIndex)
+        private void MigrateLegacyFormatIfRequired()
+        {
+            if (!File.Exists(_filePath))
+            {
+                return;
+            }
+
+            string tempPath = _filePath + ".migrate.tmp";
+            string backupPath = _filePath + ".v0.backup";
+            try
+            {
+                using (var source = new FileStream(
+                    _filePath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.None))
+                {
+                    if (source.Length == 0)
+                    {
+                        return;
+                    }
+
+                    if (source.Length < HEADER_SIZE)
+                    {
+                        return;
+                    }
+
+                    using var reader = new BinaryReader(
+                        source,
+                        System.Text.Encoding.UTF8,
+                        leaveOpen: true);
+                    int width = reader.ReadInt32();
+                    int height = reader.ReadInt32();
+                    int chunkSize = reader.ReadInt32();
+                    int formatVersion = reader.ReadInt32();
+                    if (formatVersion == CURRENT_FORMAT_VERSION)
+                    {
+                        return;
+                    }
+
+                    if (formatVersion != 0)
+                    {
+                        throw new IOException(
+                            $"Map file '{_filePath}' uses unsupported format version {formatVersion}; " +
+                            $"this client supports version {CURRENT_FORMAT_VERSION}.");
+                    }
+
+                    if (width != _widthChunks || height != _heightChunks || chunkSize != _chunkSize)
+                    {
+                        return;
+                    }
+
+                    source.Seek(0, SeekOrigin.Begin);
+                    using var destination = new FileStream(
+                        tempPath,
+                        FileMode.Create,
+                        FileAccess.ReadWrite,
+                        FileShare.None);
+                    source.CopyTo(destination);
+                    destination.Seek(FORMAT_VERSION_OFFSET, SeekOrigin.Begin);
+                    using var writer = new BinaryWriter(
+                        destination,
+                        System.Text.Encoding.UTF8,
+                        leaveOpen: true);
+                    writer.Write(CURRENT_FORMAT_VERSION);
+                    writer.Flush();
+                    destination.Flush(true);
+                }
+
+                if (!File.Exists(backupPath))
+                {
+                    File.Copy(_filePath, backupPath);
+                }
+
+                File.Replace(tempPath, _filePath, destinationBackupFileName: null);
+            }
+            finally
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+        }
+
+        private async Cysharp.Threading.Tasks.UniTask LoadChunkAsync(int chunkIndex)
         {
             T[]? chunk = null;
+            Exception? failure = null;
             try
             {
                 chunk = await Cysharp.Threading.Tasks.UniTask.RunOnThreadPool(() => LoadChunkFromDisk(chunkIndex));
             }
             catch (IOException ioEx)
             {
-                LogChunkDiskFailure(
-                    _loggedChunkLoadFailures,
-                    chunkIndex,
-                    $"[WorldLayer] Disk I/O error loading chunk {chunkIndex}: {ioEx.Message}");
-                ClearLoadingChunk(chunkIndex);
-                return;
+                failure = ioEx;
             }
             catch (ObjectDisposedException disposedEx)
             {
-                LogChunkDiskFailure(
-                    _loggedChunkLoadFailures,
-                    chunkIndex,
-                    $"[WorldLayer] Stream disposed while loading chunk {chunkIndex}: {disposedEx.Message}");
-                ClearLoadingChunk(chunkIndex);
-                return;
+                failure = disposedEx;
             }
             catch (UnauthorizedAccessException authEx)
             {
-                LogChunkDiskFailure(
-                    _loggedChunkLoadFailures,
-                    chunkIndex,
-                    $"[WorldLayer] Access denied while loading chunk {chunkIndex}: {authEx.Message}");
-                ClearLoadingChunk(chunkIndex);
-                return;
+                failure = authEx;
             }
-            catch (OutOfMemoryException)
+            catch (InvalidDataException invalidDataEx)
             {
-                LogChunkDiskFailure(
-                    _loggedChunkLoadFailures,
-                    chunkIndex,
-                    $"[WorldLayer] Out of memory while loading chunk {chunkIndex}.");
-                ClearLoadingChunk(chunkIndex);
-                return;
+                failure = invalidDataEx;
+            }
+            catch (OutOfMemoryException outOfMemoryEx)
+            {
+                failure = outOfMemoryEx;
             }
 
             await Cysharp.Threading.Tasks.UniTask.SwitchToMainThread();
 
+            ClearLoadingChunk(chunkIndex);
             if (_disposed)
             {
-                ClearLoadingChunk(chunkIndex);
+                return;
+            }
+
+            if (failure != null)
+            {
+                lock (_loadingLock)
+                {
+                    _failedChunkLoads[chunkIndex] = failure;
+                }
+
+                LogChunkDiskFailure(
+                    _loggedChunkLoadFailures,
+                    chunkIndex,
+                    $"[WorldLayer] Failed to load chunk {chunkIndex}: {failure.Message}");
                 return;
             }
 
@@ -709,11 +823,8 @@ namespace Fodinae
             // do not append a second LRU node for the same chunk.
             if (_loadedChunks.ContainsKey(chunkIndex))
             {
-                ClearLoadingChunk(chunkIndex);
                 return;
             }
-
-            ClearLoadingChunk(chunkIndex);
 
             // A sparse map is expected while the server is streaming regions.
             // Missing data is not an empty chunk: keep it unloaded so consumers
@@ -762,6 +873,11 @@ namespace Fodinae
             }
 
             _loadedChunks[chunkIndex] = chunk;
+            lock (_loadingLock)
+            {
+                _failedChunkLoads.Remove(chunkIndex);
+            }
+
             var node = _lruList.AddFirst(chunkIndex);
             _lruIndexMap[chunkIndex] = node;
         }
@@ -786,29 +902,21 @@ namespace Fodinae
             }
 
             int oldestIndex = _lruList.Last.Value;
-            if (_dirtyChunks.Remove(oldestIndex) && _loadedChunks.TryGetValue(oldestIndex, out T[]? dirtyChunk))
+            if (_dirtyChunks.Contains(oldestIndex) &&
+                _loadedChunks.TryGetValue(oldestIndex, out T[]? dirtyChunk))
             {
-                SaveChunkAsync(oldestIndex, dirtyChunk).Forget();
+                // Eviction is a durability boundary: the only in-memory copy
+                // must not disappear before its append and offset-table update
+                // have completed. A fire-and-forget save allowed Dispose to
+                // close the stream while this write was still queued and also
+                // cleared the dirty bit before success was known.
+                SaveChunkToDisk(oldestIndex, dirtyChunk);
+                _dirtyChunks.Remove(oldestIndex);
             }
 
             _loadedChunks.Remove(oldestIndex);
             _lruIndexMap.Remove(oldestIndex);
             _lruList.RemoveLast();
-        }
-
-        private async Cysharp.Threading.Tasks.UniTaskVoid SaveChunkAsync(int chunkIndex, T[] chunk)
-        {
-            try
-            {
-                await Cysharp.Threading.Tasks.UniTask.RunOnThreadPool(() => SaveChunkToDisk(chunkIndex, chunk));
-            }
-            catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException || ex is UnauthorizedAccessException)
-            {
-                LogChunkDiskFailure(
-                    _loggedChunkSaveFailures,
-                    chunkIndex,
-                    $"[WorldLayer] Background disk save failed for chunk {chunkIndex}: {ex.Message}");
-            }
         }
 
         private void LogChunkDiskFailure(HashSet<int> reported, int chunkIndex, string message)
@@ -830,6 +938,10 @@ namespace Fodinae
         private void MarkDirty(int chunkIndex)
         {
             _dirtyChunks.Add(chunkIndex);
+            lock (_loadingLock)
+            {
+                _failedChunkLoads.Remove(chunkIndex);
+            }
         }
 
         private T[]? LoadChunkFromDisk(int index)

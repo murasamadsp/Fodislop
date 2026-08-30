@@ -148,6 +148,9 @@ namespace Fodinae.Core
 
             builder.RegisterInstance(_uiDocument);
             builder.Register<MapStorage>(Lifetime.Singleton).As<IWorldDataStorage>().AsSelf();
+            builder.Register<AsyncOperationSupervisor>(Lifetime.Singleton)
+                .AsSelf()
+                .As<IAsyncOperationSupervisor>();
             builder.Register<InventoryModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<PlayerStatsModel>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<LightingGeometryRegistry>(Lifetime.Singleton);
@@ -250,10 +253,16 @@ namespace Fodinae.Core
         public void MarkReady() => _readiness.TrySetResult();
         public void MarkFailed(Exception exception) => _readiness.TrySetException(exception);
 
-        public void PrepareForUnload(PacketHandler packetHandler, GameManager gameManager, MapManager mapManager)
+        public async UniTask PrepareForUnloadAsync(
+            PacketHandler packetHandler,
+            GameManager gameManager,
+            MapManager mapManager,
+            AsyncOperationSupervisor operations)
         {
             packetHandler.Shutdown();
             gameManager.DeauthorizeUI();
+            await operations.StopAsync();
+            await mapManager.FlushForUnloadAsync();
             mapManager.ResetWorldState();
 
             // LocalPlayerState lives on the persistent Bootstrap scope and

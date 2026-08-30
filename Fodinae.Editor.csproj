@@ -53,6 +53,8 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/Scripts/Editor/BuildScript.cs" />
+    <Compile Include="Assets/Scripts/Editor/BuildSettingsFix.cs" />
     <Compile Include="Assets/Scripts/Editor/LightingEngineEditor.cs" />
     <Compile Include="Assets/Scripts/Editor/ProductionSceneContractValidator.cs" />
     <Compile Include="Assets/Scripts/Editor/ManagerContractMigrator.cs" />
