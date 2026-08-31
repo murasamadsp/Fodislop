@@ -128,6 +128,59 @@ const COMMENT_LINE_REGEX = /^\s*(?:\/\/|\/\*|\*|\/\/\/)/;
 // removed from this list when its operations move under a supervisor.
 const LEGACY_UNSUPERVISED_ASYNC_FILES = /^Assets\/Scripts\/Core\/Lifecycle\/AsyncOperationSupervisor\.cs$/;
 
+const OVERSIZED_PRODUCTION_FILE_LIMIT = 500;
+const OVERSIZED_PRODUCTION_FILE_DEBT = new Set([
+    "Assets/Scripts/World/Lighting/Core/LightingEngine.cs",
+    "Assets/Scripts/World/Persistence/WorldLayer.cs",
+    "Assets/Scripts/World/Terrain/Core/TerrainRenderer.cs",
+    "Assets/Scripts/UI/Overlays/InGameDebugOverlay.cs",
+    "Assets/Scripts/AssetPipeline/Animation/GifAnimationDecoder.cs",
+    "Assets/Scripts/UI/Chat/GlobalChatUI.cs",
+    "Assets/Scripts/Rendering/PostProcessing/PostProcessRenderPass.cs",
+    "Assets/Scripts/Game/Entities/Robot.cs",
+    "Assets/Scripts/UI/Menu/Core/MainMenu.cs",
+    "Assets/Scripts/World/Textures/WorldTextureManager.cs",
+    "Assets/Scripts/AssetPipeline/Loading/ClientAssetLoader.cs",
+    "Assets/Scripts/UI/Programmator/Model/ProgrammatorData.cs",
+    "Assets/Scripts/UI/Gateway/GatewayController.cs",
+    "Assets/Scripts/UI/Map/WorldMapRenderer.cs",
+    "Assets/Scripts/World/Rendering/BackgroundFloodFill.cs",
+    "Assets/Scripts/UI/Programmator/Grid/ProgrammatorClipboardController.cs",
+    "Assets/Scripts/AssetPipeline/Cache/AssetCacheEntry.cs",
+    "Assets/Scripts/UI/HUD/Player/View/PlayerHUDView.cs",
+    "Assets/Scripts/Game/Audio/ServerAudioEvent.cs",
+    "Assets/Scripts/UI/Settings/PauseMenu.cs",
+    "Assets/Scripts/World/Terrain/Mesh/TerrainMeshBuilder.cs",
+    "Assets/Scripts/World/Lighting/Core/LightingResourceManager.cs",
+    "Assets/Scripts/Player/Controllers/PlayerMovementController.cs",
+    "Assets/Scripts/World/Textures/TextureAtlas.cs",
+]);
+
+function checkOversizedProductionFiles() {
+    for (const filePath of walkCs("Assets/Scripts")) {
+        if (filePath.includes("/Tests/") ||
+            filePath.includes("/Editor/") ||
+            filePath.includes("/VContainer/")) {
+            continue;
+        }
+
+        const source = readFile(filePath);
+        if (source === null) {
+            continue;
+        }
+
+        const lineCount = source.split(/\r?\n/).length - 1;
+        if (lineCount > OVERSIZED_PRODUCTION_FILE_LIMIT &&
+            !OVERSIZED_PRODUCTION_FILE_DEBT.has(filePath)) {
+            recordViolation(
+                "file size",
+                filePath,
+                `${lineCount} lines exceeds the ${OVERSIZED_PRODUCTION_FILE_LIMIT}-line production limit; split responsibilities instead of adding a new god-object or partial class.`,
+            );
+        }
+    }
+}
+
 // Each rule: { pattern, name, allow (path exemption, nullable), allowContent (line exemption, nullable) }.
 // "allow" and "allowContent" were the ALLOW_REGEX / ALLOW_CONTENT_REGEX arrays of the shell linter.
 const RULES = [
@@ -149,16 +202,16 @@ const RULES = [
     { pattern: /Camera\.main/, name: "Camera.main outside GameplayCamera", allow: /^Assets\/Scripts\/Core\/(?:Rendering\/)?GameplayCamera\.cs$/, allowContent: null },
     { pattern: /Application\.targetFrameRate\s*=/, name: "FPS cap outside DisplayManager", allow: /^Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs$/, allowContent: null },
     { pattern: /QualitySettings\.vSyncCount\s*=/, name: "VSync ownership outside DisplayManager", allow: /^Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs$/, allowContent: null },
-    { pattern: /new\s+Texture2D(Array)?\s*\(/, name: "runtime Texture2D construction outside RuntimeTextureFactory", allow: /^(Assets\/Editor\/|Assets\/Scripts\/AssetPipeline\/(?:Loading\/)?RuntimeTextureFactory\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\.LoadImage\s*\(/, name: "runtime image decoding outside RuntimeTextureFactory", allow: /^(Assets\/Editor\/|Assets\/Scripts\/AssetPipeline\/(?:Loading\/)?RuntimeTextureFactory\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
+    { pattern: /new\s+Texture2D(Array)?\s*\(/, name: "runtime Texture2D construction outside RuntimeTextureFactory", allow: /^(Assets\/(?:Scripts\/)?Editor\/|Assets\/Scripts\/AssetPipeline\/(?:Loading\/)?RuntimeTextureFactory\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
+    { pattern: /\.LoadImage\s*\(/, name: "runtime image decoding outside RuntimeTextureFactory", allow: /^(Assets\/(?:Scripts\/)?Editor\/|Assets\/Scripts\/AssetPipeline\/(?:Loading\/)?RuntimeTextureFactory\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
     { pattern: /\.styleSheets\.Add\s*\(/, name: "controller-local UI Toolkit stylesheet", allow: null, allowContent: null },
     { pattern: /new\s+Vector2\s*\([^,]+,\s*Screen\.height\s*-/, name: "manual screen-to-panel Y flip", allow: null, allowContent: null },
     { pattern: /\.style\.(width|height)\s*=[^;]*Screen\.(width|height)/, name: "UI root sized from Screen dimensions", allow: null, allowContent: null },
     { pattern: /LightingCascadeAtlasLimit\s*<=\s*256\s*\?/, name: "duplicated radiance-cascade count policy", allow: null, allowContent: /return atlasDimension <= 256 \? 3 : 4;/ },
     { pattern: /(FindAnyObjectByType|FindFirstObjectByType)<Camera>/, name: "ad-hoc gameplay camera lookup", allow: /^Assets\/Scripts\/Core\/(?:Rendering\/)?GameplayCamera\.cs$/, allowContent: null },
     { pattern: /AddComponent<[A-Za-z0-9_]*(Manager|Service)>/, name: "manual manager/service construction", allow: null, allowContent: null },
-    { pattern: /(Config|config)\.GraphicsPreset\s*=/, name: "graphics preset mutation outside ClientConfigManager", allow: /^(Assets\/Scripts\/Core\/(?:Configuration\/)?ClientConfigManager\.cs|Assets\/Scripts\/World\/Lighting\/(?:(?:Config|Core)\/)?Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
-    { pattern: /(Config|config)\.GraphicsQualitySettings\s*=/, name: "graphics quality snapshot mutation outside ClientConfigManager", allow: /^Assets\/Scripts\/Core\/(?:Configuration\/)?ClientConfigManager\.cs$/, allowContent: null },
+    { pattern: /(Config|config)\.GraphicsPreset\s*=/, name: "graphics preset mutation outside client config owners", allow: /^(Assets\/Scripts\/Core\/Configuration\/ClientConfig(?:Defaults|Manager|Migration)\.cs|Assets\/Scripts\/World\/Lighting\/(?:(?:Config|Core)\/)?Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
+    { pattern: /(Config|config)\.GraphicsQualitySettings\s*=/, name: "graphics quality snapshot mutation outside client config owners", allow: /^Assets\/Scripts\/Core\/Configuration\/ClientConfig(?:Defaults|Manager|Migration)\.cs$/, allowContent: null },
     { pattern: /QualitySettings\.antiAliasing\s*=/, name: "MSAA ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
     { pattern: /QualitySettings\.SetQualityLevel\s*\(/, name: "Unity quality-level ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
     { pattern: /\.renderScale\s*=/, name: "URP render-scale ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
@@ -2193,6 +2246,7 @@ function main() {
     console.log("");
 
     checkPatterns(productionFiles);
+    checkOversizedProductionFiles();
     checkExecutionOrders();
     checkLifetimeScopeConfigure();
     checkProjectCompileIncludes();
@@ -2243,6 +2297,7 @@ function main() {
         console.log("  - unguarded [Inject] access in Awake/OnEnable call graphs");
         console.log("  - safe DI resolution in early lifecycle (TryResolve, not Resolve)");
         console.log("  - no async void in MonoBehaviours (use UniTask)");
+        console.log("  - no new production C# files above 500 lines; finite debt list only");
         console.log("  - every ClientConfig field referenced in production code");
         console.log("  - no ClientConfig field read only from UI controllers (dead wiring)");
         console.log("  - every config consumer applied at startup from GameBootstrap.PostStart");

@@ -28,10 +28,7 @@ namespace Fodinae.UI
         private MapModeState _mapModeState = null!;
         [Inject]
         private ILocalPlayerState _localPlayer = null!;
-        private TemplateContainer? _minimapTree;
-        private VisualElement? _minimapRoot;
-        private Image? _minimapImageElement;
-        private Label? _coordinatesLabel;
+        private MinimapView? _view;
         private Texture2D? _minimapTexture;
 
         // World state
@@ -60,10 +57,6 @@ namespace Fodinae.UI
         private bool _pendingPlayerMoveRefresh;
         private IWorldLayer<CellType>? _subscribedCellLayer;
         private bool _playerMoveSubscribed;
-        private int _lastDisplayedX = int.MinValue;
-        private int _lastDisplayedY = int.MinValue;
-        private readonly System.Text.StringBuilder _coordsSb = new(16);
-
         // Toggle state
         private bool _isVisible = true;
         private bool _uiCreated;
@@ -145,7 +138,7 @@ namespace Fodinae.UI
             BindPlayer(player);
             if (_ready)
             {
-                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                _view?.UpdateCoordinates(_player.Position.x, _player.Position.y);
                 if (_isVisible)
                 {
                     RefreshTexture(_player.Position.x, _player.Position.y);
@@ -220,7 +213,7 @@ namespace Fodinae.UI
 
             if (_player != null && _player.HasServerPosition && !_initialRefreshDone)
             {
-                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                _view?.UpdateCoordinates(_player.Position.x, _player.Position.y);
                 if (_isVisible)
                 {
                     RefreshTexture(_player.Position.x, _player.Position.y);
@@ -287,28 +280,12 @@ namespace Fodinae.UI
                 return;
             }
 
-            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/Minimap") ??
-                throw new InvalidOperationException("[Minimap] Resources/UI/Minimap.uxml is required.");
-            TemplateContainer tree = template.Instantiate();
-            tree.AddToClassList("ui-fullscreen");
-            _minimapTree = tree;
-            _minimapRoot = tree.Q<VisualElement>("MinimapPanel") ??
-                throw new InvalidOperationException("[Minimap] MinimapPanel is missing from Minimap.uxml.");
-            _coordinatesLabel = tree.Q<Label>("MinimapCoordinates") ??
-                throw new InvalidOperationException("[Minimap] MinimapCoordinates is missing from Minimap.uxml.");
-            _minimapImageElement = tree.Q<Image>("MinimapImage") ??
-                throw new InvalidOperationException("[Minimap] MinimapImage is missing from Minimap.uxml.");
-            _minimapImageElement.image = _minimapTexture;
-
-            _minimapRoot.RegisterCallback<ClickEvent>(evt =>
-            {
-                _mapModeState.SetOpen(true);
-                evt.StopPropagation();
-            });
-            _doc.rootVisualElement.Add(tree);
+            _view = MinimapView.Create(
+                _doc,
+                _minimapTexture ?? throw new InvalidOperationException("Minimap texture is required."),
+                () => _mapModeState.SetOpen(true));
 
             _isVisible = true;
-            SetVisible(false);
             _uiCreated = true;
         }
 
@@ -397,7 +374,7 @@ namespace Fodinae.UI
 
             if (_player != null)
             {
-                UpdateCoordinatesText(_player.Position.x, _player.Position.y);
+                _view?.UpdateCoordinates(_player.Position.x, _player.Position.y);
             }
 
             if (!_isVisible)
@@ -449,18 +426,6 @@ namespace Fodinae.UI
             return Time.time - _lastUpdateTime >= UPDATE_DELAY;
         }
 
-        private void UpdateCoordinatesText(int x, int y)
-        {
-            if (_coordinatesLabel != null && (_lastDisplayedX != x || _lastDisplayedY != y))
-            {
-                _lastDisplayedX = x;
-                _lastDisplayedY = y;
-                _coordsSb.Clear();
-                _coordsSb.Append(x).Append(':').Append(y);
-                _coordinatesLabel.text = _coordsSb.ToString();
-            }
-        }
-
         public void ForceRefresh()
         {
             if (isActiveAndEnabled && _player != null && _ready && _isVisible)
@@ -496,13 +461,8 @@ namespace Fodinae.UI
                 _subscribedCellLayer = null;
             }
 
-            if (_minimapTree != null && _minimapTree.parent != null)
-            {
-                _minimapTree.parent.Remove(_minimapTree);
-                _minimapTree = null;
-            }
-
-            _minimapRoot = null;
+            _view?.Dispose();
+            _view = null;
 
             if (_minimapTexture != null)
             {
@@ -527,10 +487,7 @@ namespace Fodinae.UI
 
         private void SetVisible(bool visible)
         {
-            if (_minimapRoot != null)
-            {
-                _minimapRoot.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-            }
+            _view?.SetVisible(visible);
         }
 
         private void OnMapModeChanged(bool mapModeEnabled)

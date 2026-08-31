@@ -76,27 +76,7 @@ namespace Fodinae.World.Lighting
             ClientConfig config = _clientConfig.Config ??
                 throw new InvalidOperationException(
                     "LightingEngine requires an initialized ClientConfig.");
-            config.GraphicsPreset = GraphicsPreset.Custom;
-            config.AmbientOcclusionEnabled = _runtimeConfig.AmbientOcclusionEnabled;
-            config.DiffuseBounceEnabled = _runtimeConfig.DiffuseBounceEnabled;
-            config.AmbientIntensity = _runtimeConfig.AmbientIntensity;
-            config.EmissionScale = _runtimeConfig.EmissionScale;
-            config.AmbientColor = _runtimeConfig.AmbientColor;
-            config.EmptyExtinctionRgb = _runtimeConfig.EmptyExtinctionRgb;
-            config.SolidExtinctionRgb = _runtimeConfig.SolidExtinctionRgb;
-            config.EmptyExtinctionMultiplier = _runtimeConfig.EmptyExtinctionMultiplier;
-            config.SolidExtinctionMultiplier = _runtimeConfig.SolidExtinctionMultiplier;
-            config.BounceStrength = _runtimeConfig.BounceStrength;
-            config.AmbientOcclusionRadiusCells = _runtimeConfig.AmbientOcclusionRadiusCells;
-            config.AmbientOcclusionStrength = _runtimeConfig.AmbientOcclusionStrength;
-            config.MaximumLightMultiplier = _runtimeConfig.MaximumLightMultiplier;
-            config.EnableFinalLightingClamp = _runtimeConfig.EnableFinalLightingClamp;
-            config.TransmittanceDebugDistanceCells = _runtimeConfig.TransmittanceDebugDistanceCells;
-            config.MinimumTransmission = _runtimeConfig.MinimumTransmission;
-            config.LightSafeBorder = _runtimeConfig.LightSafeBorder;
-            config.DynamicLightIntensity = _runtimeConfig.DynamicLightIntensity;
-            config.DynamicLightColor = _runtimeConfig.DynamicLightColor;
-            config.DynamicLightUpdatesPerSecond = _runtimeConfig.DynamicLightUpdatesPerSecond;
+            LightingRuntimeConfigMapper.ApplyToClientConfig(_runtimeConfig, config);
         }
 
         public string ConfigFilePath => _clientConfig.ConfigFilePath;
@@ -446,27 +426,7 @@ namespace Fodinae.World.Lighting
             ClientConfig config = _clientConfig.Config ??
                 throw new InvalidOperationException(
                     "LightingEngine requires an initialized ClientConfig.");
-            config.GraphicsPreset = GraphicsPreset.Custom;
-            config.AmbientOcclusionEnabled = _runtimeConfig.AmbientOcclusionEnabled;
-            config.DiffuseBounceEnabled = _runtimeConfig.DiffuseBounceEnabled;
-            config.AmbientIntensity = _runtimeConfig.AmbientIntensity;
-            config.EmissionScale = _runtimeConfig.EmissionScale;
-            config.AmbientColor = _runtimeConfig.AmbientColor;
-            config.EmptyExtinctionRgb = _runtimeConfig.EmptyExtinctionRgb;
-            config.SolidExtinctionRgb = _runtimeConfig.SolidExtinctionRgb;
-            config.EmptyExtinctionMultiplier = _runtimeConfig.EmptyExtinctionMultiplier;
-            config.SolidExtinctionMultiplier = _runtimeConfig.SolidExtinctionMultiplier;
-            config.BounceStrength = _runtimeConfig.BounceStrength;
-            config.AmbientOcclusionRadiusCells = _runtimeConfig.AmbientOcclusionRadiusCells;
-            config.AmbientOcclusionStrength = _runtimeConfig.AmbientOcclusionStrength;
-            config.MaximumLightMultiplier = _runtimeConfig.MaximumLightMultiplier;
-            config.EnableFinalLightingClamp = _runtimeConfig.EnableFinalLightingClamp;
-            config.TransmittanceDebugDistanceCells = _runtimeConfig.TransmittanceDebugDistanceCells;
-            config.MinimumTransmission = _runtimeConfig.MinimumTransmission;
-            config.LightSafeBorder = _runtimeConfig.LightSafeBorder;
-            config.DynamicLightIntensity = _runtimeConfig.DynamicLightIntensity;
-            config.DynamicLightColor = _runtimeConfig.DynamicLightColor;
-            config.DynamicLightUpdatesPerSecond = _runtimeConfig.DynamicLightUpdatesPerSecond;
+            LightingRuntimeConfigMapper.ApplyToClientConfig(_runtimeConfig, config);
         }
 
         private LightingRuntimeConfig CreateConfigFromClientConfig()
@@ -475,33 +435,7 @@ namespace Fodinae.World.Lighting
                 throw new InvalidOperationException(
                     "Cannot create lighting runtime config: ClientConfig is not initialized.");
 
-            LightingRuntimeConfig runtimeConfig = new()
-            {
-                Schema = LightingRuntimeConfig.SchemaId,
-                Version = LightingRuntimeConfig.CurrentVersion,
-                AmbientOcclusionEnabled = config.AmbientOcclusionEnabled,
-                DiffuseBounceEnabled = config.DiffuseBounceEnabled,
-                AmbientIntensity = Mathf.Clamp(config.AmbientIntensity, 0f, 1f),
-                EmissionScale = Mathf.Clamp(config.EmissionScale <= 0f ? 1.0f : config.EmissionScale, 0.1f, 8f),
-                AmbientColor = config.AmbientColor,
-                EmptyExtinctionRgb = config.EmptyExtinctionRgb,
-                SolidExtinctionRgb = config.SolidExtinctionRgb,
-                EmptyExtinctionMultiplier = Mathf.Clamp(config.EmptyExtinctionMultiplier, 0f, 2f),
-                SolidExtinctionMultiplier = Mathf.Clamp(config.SolidExtinctionMultiplier <= 0f ? 1.0f : config.SolidExtinctionMultiplier, 0.25f, 2f),
-                BounceStrength = Mathf.Clamp(config.BounceStrength, 0f, 1f),
-                AmbientOcclusionRadiusCells = Mathf.Clamp(config.AmbientOcclusionRadiusCells <= 0f ? 2.0f : config.AmbientOcclusionRadiusCells, 0.5f, 8f),
-                AmbientOcclusionStrength = Mathf.Clamp(config.AmbientOcclusionStrength <= 0f ? 1.0f : config.AmbientOcclusionStrength, 0.1f, 8f),
-                MaximumLightMultiplier = Mathf.Clamp(config.MaximumLightMultiplier <= 0f ? 1.5f : config.MaximumLightMultiplier, 0.25f, LightingConfigLimits.MaximumLightMultiplier),
-                EnableFinalLightingClamp = config.EnableFinalLightingClamp,
-                TransmittanceDebugDistanceCells = Mathf.Clamp(config.TransmittanceDebugDistanceCells <= 0f ? 16f : config.TransmittanceDebugDistanceCells, 2f, 32f),
-                MinimumTransmission = Mathf.Clamp(config.MinimumTransmission <= 0f ? 0.01f : config.MinimumTransmission, 0.0001f, 0.1f),
-                LightSafeBorder = Mathf.Clamp(config.LightSafeBorder, 0, 8),
-                DynamicLightIntensity = Mathf.Clamp(config.DynamicLightIntensity, 0f, 4f),
-                DynamicLightColor = config.DynamicLightColor,
-                DynamicLightUpdatesPerSecond = Mathf.Clamp(config.DynamicLightUpdatesPerSecond <= 0f ? 30f : config.DynamicLightUpdatesPerSecond, 1f, LightingConfigLimits.DynamicLightUpdatesPerSecond),
-            };
-            runtimeConfig.Validate();
-            return runtimeConfig;
+            return LightingRuntimeConfigMapper.FromClientConfig(config);
         }
 
         private void ApplyRuntimeConfig(LightingRuntimeConfig config)

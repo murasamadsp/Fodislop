@@ -1,12 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-  schedule:
-    - cron: '20 2 * * *'
+  # Temporarily manual-only while the client refactor is in progress.
+  # Restore push, pull_request, and schedule triggers to re-enable automation.
   workflow_dispatch:
 
 concurrency:
@@ -43,6 +39,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
       - name: Verify toolchain
         run: |
           unity --version
@@ -79,6 +84,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
       - name: Verify toolchain
         shell: pwsh
         run: |
@@ -119,6 +133,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
       - name: Build player
         run: >-
           unity run . --editor-version "$UNITY_EDITOR_VERSION"
@@ -141,6 +164,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
       - name: Build player
         shell: pwsh
         run: >-

@@ -1,18 +1,11 @@
 #nullable enable
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Cysharp.Threading.Tasks.CompilerServices;
 using Fodinae;
 using Fodinae.Audio;
 using Fodinae.Core.Interfaces;
-using Fodinae.Persistence;
 using Fodinae.Networking.Auth;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets;
@@ -47,10 +40,8 @@ namespace MinesServer.Networking.Connection.Client
         IOfflineIdentityProvider, IOfflineStatsProvider
     {
         private readonly ITextureStorageService _textureStorage;
-        private readonly IItemCatalog _itemCatalog;
         private readonly IAsyncOperationSupervisor _operations;
-        private ConnectionStatus _status = ConnectionStatus.Disconnected;
-        private int _lifecycleVersion;
+        private readonly DummyConnectionSession _session = new();
 
         public DummyConnection(
             ITextureStorageService textureStorage,
@@ -58,24 +49,66 @@ namespace MinesServer.Networking.Connection.Client
             IAsyncOperationSupervisor operations)
         {
             _textureStorage = textureStorage;
-            _itemCatalog = itemCatalog;
             _operations = operations;
-            _validTokens = _tokenStore.Load();
+            _worldState = new DummyWorldSimulationState(operations);
+            _authSession = new DummyAuthSession();
             _missionRunner = new DummyMissionRunner(SendPacket);
             _buffManager = new DummyBuffManager(
                 SendPacket,
                 operations,
                 LoopAlive);
+            _inventoryResponder = new DummyInventoryResponder(
+                SendPacket,
+                _buffManager.ActivateBuff,
+                _teleportPositions,
+                _playerState.SetHealth);
             _teleportManager = new DummyTeleportManager(SendPacket, _teleportPositions);
             // LoopAlive привязан к жизненному циклу соединения: чат-петля
             // умирает вместе с коннектом (раньше она жила вечно и текла
             // через реконнекты — фиксированный источник мусора).
             _chatSimulator = new DummyChatSimulator(
                 SendPacket,
-                () => LoopAlive(_lifecycleVersion),
+                () => LoopAlive(_session.LifecycleVersion),
                 operations);
+            _chatResponder = new DummyChatResponder(SendPacket);
             _clanManager = new DummyClanManager(SendPacket);
-            _pathFinder = new DummyPathFinder(SendPacket, GetCellConfig);
+            _pathFinder = new DummyPathFinder(SendPacket, _worldState.GetCellConfig);
+            _movementResponder = new DummyMovementResponder(
+                operations,
+                _playerState,
+                _worldState,
+                _teleportManager,
+                _pathFinder,
+                SendPacket,
+                () => IgnoreCollision,
+                _mockBotId);
+            _actionResponder = new DummyGameplayActionResponder(
+                _playerState,
+                _worldState,
+                _movementResponder,
+                _missionRunner,
+                _inventoryResponder,
+                _chatSimulator,
+                SendPacket,
+                _mockBotId);
+            _windowResponder = new DummyWindowResponder(
+                SendPacket,
+                _buffManager,
+                _inventoryResponder,
+                _teleportManager,
+                _clanManager,
+                _missionRunner);
+            _worldStartup = new DummyWorldStartupResponder(
+                operations,
+                itemCatalog,
+                _worldState,
+                _playerState,
+                _buffManager,
+                _chatSimulator,
+                _inventoryResponder,
+                _teleportPositions,
+                SendPacket,
+                LoopAlive);
         }
 
         /// <summary>
@@ -85,39 +118,7 @@ namespace MinesServer.Networking.Connection.Client
         /// </summary>
         public VkAuthResult SimulateVkLogin()
         {
-            long userId = StableDummyVkUserId();
-            return new VkAuthResult
-            {
-                Success = true,
-                GameToken = string.Empty,
-                Session = new VkSession
-                {
-                    AccessToken = "dummy-vk-session",
-                    UserId = userId,
-                    FirstName = $"ШАХТЁР-{100 + (int)(userId % 900)}",
-                    LastName = string.Empty,
-                    AvatarUrl = string.Empty,
-                    ExpiresAtUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 315_360_000L,
-                },
-            };
-        }
-
-        /// <summary>
-        /// FNV-1a по deviceUniqueIdentifier: стабильный в рамках устройства id.
-        /// GetHashCode() для string в .NET рандомизируется между процессами,
-        /// поэтому годится только собственный детерминированный хэш.
-        /// </summary>
-        private static long StableDummyVkUserId()
-        {
-            string seed = SystemInfo.deviceUniqueIdentifier;
-            uint hash = 2166136261u;
-            foreach (char c in seed)
-            {
-                hash ^= c;
-                hash *= 16777619u;
-            }
-
-            return 10_000_000_000L + (hash % 2_000_000_000L);
+            return _authSession.SimulateVkLogin();
         }
 
         /// <summary>
@@ -125,14 +126,14 @@ namespace MinesServer.Networking.Connection.Client
         /// SimulateVkLogin подставляется в PlayerInfoPacket, чтобы мир в
         /// офлайн-режиме ощущался как настоящий (тот же VK = то же имя).
         /// </summary>
-        public string PlayerName => SimulateVkLogin().Session.FirstName;
+        public string PlayerName => _authSession.PlayerName;
 
         /// <summary>Офлайн-статистика (уровень/валюта) для мира.</summary>
         public long Level => 12345;
 
         public long Currency => 123456;
 
-        public ConnectionStatus ConnectionStatus => _status;
+        public ConnectionStatus ConnectionStatus => _session.Status;
 
         public event Action<ServerPacket>? OnReceived;
         public event Action? OnConnected;
@@ -142,91 +143,46 @@ namespace MinesServer.Networking.Connection.Client
 
         public static bool IgnoreCollision = false;
 
-        private readonly DummyTokenStore _tokenStore = new();
-        private readonly HashSet<string> _validTokens;
+        private readonly DummyAuthSession _authSession;
         private readonly DummyMissionRunner _missionRunner;
         private readonly DummyBuffManager _buffManager;
+        private readonly DummyInventoryResponder _inventoryResponder;
         private readonly DummyTeleportManager _teleportManager;
         private readonly DummyChatSimulator _chatSimulator;
+        private readonly DummyChatResponder _chatResponder;
         private readonly DummyClanManager _clanManager;
         private readonly DummyPathFinder _pathFinder;
+        private readonly DummyMovementResponder _movementResponder;
+        private readonly DummyGameplayActionResponder _actionResponder;
+        private readonly DummyWindowResponder _windowResponder;
+        private readonly DummyPlayerSimulationState _playerState = new();
+        private readonly DummyWorldSimulationState _worldState;
+        private readonly DummyWorldStartupResponder _worldStartup;
 
         private const ushort _mockBotId = 456;
-        private ushort _x = 0;
-        private ushort _y = 0;
-        private Direction _rot = Direction.Up;
-        private bool _aggression;
-        private bool _autoDig;
-        private System.Drawing.Color _chatColor = System.Drawing.Color.FromArgb(255, 200, 180, 100);
-        private ItemType? _selectedItemType;
-        private readonly Dictionary<ItemType, long> _inventory = new();
         private readonly List<(ushort X, ushort Y)> _teleportPositions = new();
-        private CancellationTokenSource? _pathCts;
-        private static readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages();
-
-        private static ChatMessagePacket[] CreateSeedMessages()
-        {
-            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var gray = System.Drawing.Color.FromArgb(255, 120, 120, 120);
-            var green = System.Drawing.Color.FromArgb(255, 80, 220, 80);
-            var blue = System.Drawing.Color.FromArgb(255, 80, 140, 255);
-            var red = System.Drawing.Color.FromArgb(255, 255, 80, 80);
-            var orange = System.Drawing.Color.FromArgb(255, 255, 180, 60);
-            var cyan = System.Drawing.Color.FromArgb(255, 60, 255, 255);
-            var magenta = System.Drawing.Color.FromArgb(255, 220, 60, 220);
-            var yellow = System.Drawing.Color.FromArgb(255, 255, 220, 60);
-            var white = System.Drawing.Color.White;
-
-            return new[]
-            {
-                new ChatMessagePacket(1, now - 300000, 0, 0, gray, "System", gray, "Добро пожаловать на Fodinae!"),
-                new ChatMessagePacket(2, now - 270000, 1, 1, green, "Miner77", white, "привет всем!"),
-                new ChatMessagePacket(3, now - 240000, 2, 0, blue, "DeepDrill", white, "кто на сервере?"),
-                new ChatMessagePacket(4, now - 210000, 3, 2, red, "CrystalMage", white, "иду копать алмазы"),
-                new ChatMessagePacket(5, now - 180000, 4, 0, orange, "RockBreaker", white, "нужна помощь с мобом"),
-                new ChatMessagePacket(6, now - 150000, 5, 1, cyan, "OreTrader", white, "продам редкий блок"),
-                new ChatMessagePacket(7, now - 120000, 6, 0, magenta, "NightMiner", white, "всем удачной шахты!"),
-                new ChatMessagePacket(8, now - 90000, 1, 1, green, "Miner77", white, "кто-нибудь на базе?"),
-                new ChatMessagePacket(9, now - 60000, 7, 0, yellow, "Newbie42", white, "я только зашел"),
-                new ChatMessagePacket(10, now - 30000, 3, 2, red, "CrystalMage", white, "сервер лагает?"),
-            };
-        }
 
         // Depth warning/damage feature disabled in DummyConnection
         // private const int _maxDepth = 200;
         // private bool _depthWarningActive;
 
-        private static readonly System.Random _rng = new();
-
         // Сериализует InitWorldAsync: повторный ClientHello (ретрансмит,
         // двойной вход) больше не запускает второй конкурентный init, который
         // рвал мир и гонял распаковку карты одновременно с чтением.
-        private UniTaskCompletionSource? _worldInitInFlight;
-        private bool _worldInitialized;
-
-        private WorldLayer<CellType>? _worldLayer;
-        private readonly HashSet<int> _sentMapChunks = new();
-        private CellConfigurationPacket[]? _cellConfigs;
-        private long[] _basketContents = new long[6];
-        private readonly Stack<CellType> _geoStack = new();
 
         public bool UsePrebakedMap = true;
         public string PrebakedWorldCodeName = "pallada";
 
-        private int _health = 500;
-
         public void Connect()
         {
-            if (_status != ConnectionStatus.Disconnected)
+            if (!_session.TryBeginConnect(out int lifecycleVersion))
             {
                 return;
             }
 
-            _status = ConnectionStatus.Connecting;
             OnConnecting?.Invoke();
 
             // Run asynchronously, but stay on the Unity Main Thread
-            int lifecycleVersion = ++_lifecycleVersion;
             _operations.Run(
                 "dummy_connect",
                 _ => ConnectAsync(lifecycleVersion));
@@ -236,28 +192,25 @@ namespace MinesServer.Networking.Connection.Client
         {
             await UniTask.Yield();
 
-            if (_status != ConnectionStatus.Connecting || lifecycleVersion != _lifecycleVersion)
+            if (!_session.TryCompleteConnect(lifecycleVersion))
             {
                 return;
             }
 
-            _status = ConnectionStatus.Connected;
             OnConnected?.Invoke();
         }
 
         public void Disconnect()
         {
-            if (_status == ConnectionStatus.Disconnected)
+            if (!_session.TryBeginDisconnect(out int lifecycleVersion))
             {
-                _worldLayer?.Dispose();
-                _worldLayer = null;
+                _worldState.Reset();
+                _movementResponder.CancelPath();
                 return;
             }
 
-            _lifecycleVersion++;
-            _worldLayer?.Dispose();
-            _worldLayer = null;
-            _worldInitialized = false;
+            _worldState.Reset();
+            _movementResponder.CancelPath();
 
             // Cleared so the buff loop can start again on the next connection.
             // It was never reset, so after one disconnect StartBuffLoop's guard
@@ -265,9 +218,7 @@ namespace MinesServer.Networking.Connection.Client
             // the other four loops, which had no guard at all and duplicated.
             _buffManager.ResetLoopGuard();
 
-            _status = ConnectionStatus.Disconnecting;
             OnDisconnecting?.Invoke();
-            int lifecycleVersion = _lifecycleVersion;
             _operations.Run(
                 "dummy_disconnect",
                 _ => DisconnectAsync(lifecycleVersion));
@@ -277,33 +228,12 @@ namespace MinesServer.Networking.Connection.Client
         {
             await UniTask.Delay(100);
 
-            if (lifecycleVersion != _lifecycleVersion || _status != ConnectionStatus.Disconnecting)
+            if (!_session.TryCompleteDisconnect(lifecycleVersion))
             {
                 return;
             }
 
-            _status = ConnectionStatus.Disconnected;
             OnDisconnected?.Invoke();
-        }
-
-        /// <summary>
-        /// Отправляет текущую позицию игрока. Единый источник: раньше этот
-        /// HBPacket-блок дублировался в UpdatePosition и в обеих ветках
-        /// «ход отклонён» (не-соседняя клетка, столкновение).
-        /// </summary>
-        private void SendPositionSnapshot()
-        {
-            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-            {
-                new RobotPositionPacket(_mockBotId, _x, _y, (byte)_rot),
-            })));
-        }
-
-        private async UniTask UpdatePosition()
-        {
-            await UniTask.Delay(IgnoreCollision ? 20 : 200);
-            DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
-            SendPositionSnapshot();
         }
 
         /// <summary>
@@ -327,21 +257,18 @@ namespace MinesServer.Networking.Connection.Client
         /// </remarks>
         private bool LoopAlive(int lifecycleVersion)
         {
-            return _status == ConnectionStatus.Connected &&
-                lifecycleVersion == _lifecycleVersion;
+            return _session.IsAlive(lifecycleVersion);
         }
 
         public void Dispose()
         {
             // Retires every background loop belonging to this instance. Without
             // this the loops outlive the object that owns them.
-            _lifecycleVersion++;
-            _status = ConnectionStatus.Disconnected;
+            _session.Stop();
             _buffManager.ResetLoopGuard();
 
-            _worldLayer?.Dispose();
-            _worldLayer = null;
-            _worldInitialized = false;
+            _worldState.Dispose();
+            _movementResponder.Dispose();
         }
 
         public void TriggerDisconnect(string reason)
@@ -363,230 +290,7 @@ namespace MinesServer.Networking.Connection.Client
         {
             if (packet.Data is ActionClientPacket actionPacket)
             {
-                if (actionPacket.Payload is MovePacket move)
-                {
-                    if (_teleportManager.WindowOpen)
-                    {
-                        return;
-                    }
-
-                    int dx = Math.Abs(move.X - _x);
-                    int dy = Math.Abs(move.Y - _y);
-                    bool isAdjacent = (dx == 1 && dy == 0) || (dx == 0 && dy == 1);
-
-                    if (!isAdjacent)
-                    {
-                        SendPositionSnapshot();
-                        return;
-                    }
-
-                    if (_worldLayer != null)
-                    {
-                        CellType cellType = GetServerCell(move.X, move.Y);
-                        CellConfigurationPacket? cellConfig = GetCellConfig(cellType);
-                        if (cellConfig.HasValue)
-                        {
-                            bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Passable);
-                            if (!isPassable && !IgnoreCollision)
-                            {
-                                SendPositionSnapshot();
-                                return;
-                            }
-                        }
-                    }
-
-                    _x = move.X;
-                    _y = move.Y;
-                    _pathCts?.Cancel();
-                    _operations.Run("dummy_position_snapshot", _ => UpdatePosition());
-                    _teleportManager.CheckTeleportEntry(_x, _y);
-                }
-                else if (actionPacket.Payload is RotatePacket rotate)
-                {
-                    _rot = rotate.Direction;
-                    _operations.Run("dummy_position_snapshot", _ => UpdatePosition());
-                }
-                else if (actionPacket.Payload is UnmappedKeyPacket)
-                {
-                    // intentionally left blank — unmapped keys are ignored
-                }
-                else if (actionPacket.Payload is ToggleAutoDigPacket)
-                {
-                    _autoDig = !_autoDig;
-                    OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(_autoDig)));
-                }
-                else if (actionPacket.Payload is ToggleAgressionPacket)
-                {
-                    _aggression = !_aggression;
-                    OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(_aggression)));
-                }
-                else if (actionPacket.Payload is BzPacket)
-                {
-                    ushort cellX = actionPacket.X;
-                    ushort cellY = actionPacket.Y;
-
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                    {
-                        new AudioPacket(SFX.Bz, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
-                    })));
-
-                    if (_worldLayer != null)
-                    {
-                        CellType cellType = GetServerCell(cellX, cellY);
-                        if (cellType == CellType.Empty)
-                        {
-                            return;
-                        }
-                    }
-
-                    if (_worldLayer != null)
-                    {
-                        CellType cellType = GetServerCell(cellX, cellY);
-                        int crystalIdx = DummyCellConfigurationUtilities.GetCrystalBasketIndex(cellType);
-                        CellConfigurationPacket? cellConfig = GetCellConfig(cellType);
-                        bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
-
-                        if (!isBreakable && cellType != CellType.Empty)
-                        {
-                            return;
-                        }
-
-                        SetServerCell(cellX, cellY, CellType.Empty);
-
-                        if (crystalIdx >= 0)
-                        {
-                            if (_basketContents.Length > crystalIdx)
-                            {
-                                var newContents = new long[_basketContents.Length];
-                                Array.Copy(_basketContents, newContents, newContents.Length);
-                                newContents[crystalIdx] += UnityEngine.Random.Range(1, 101);
-                                _basketContents = newContents;
-                                OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, newContents)));
-                            }
-                        }
-
-                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                        {
-                            new MapRegionPacket(cellX, cellY, 0, 0, new[] { CellType.Empty }),
-                            new AudioPacket(SFX.Destroy, _mockBotId, cellX, cellY, Array.Empty<StringPairPacket>()),
-                        })));
-                    }
-
-                    _missionRunner.OnBlockMined(_inventory);
-                    _chatSimulator.SendMiningReaction();
-                }
-                else if (actionPacket.Payload is SuicidePacket)
-                {
-                    const ushort SPAWN_X = 25;
-                    const ushort SPAWN_Y = 50;
-                    var effectX = _x;
-                    var effectY = _y;
-                    _x = SPAWN_X;
-                    _y = SPAWN_Y;
-                    _rot = Direction.Up;
-                    _health = 500;
-                    _pathCts?.Cancel();
-
-                    DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
-                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                    OnReceived?.Invoke(new ServerPacket(new TeleportPacket(SPAWN_X, SPAWN_Y, false)));
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                    {
-                        new RobotPositionPacket(_mockBotId, SPAWN_X, SPAWN_Y, (byte)_rot),
-                        new AudioPacket(SFX.Death, _mockBotId, effectX, effectY, Array.Empty<StringPairPacket>()),
-                    })));
-                }
-                else if (actionPacket.Payload is GeoPacket)
-                {
-                    Vector2Int frontOffset = GetDirectionOffset(_rot);
-                    ushort fx = (ushort)(_x + frontOffset.x);
-                    ushort fy = (ushort)(_y + frontOffset.y);
-
-                    if (_worldLayer != null)
-                    {
-                        CellType cellType = GetServerCell(fx, fy);
-                        CellConfigurationPacket? cellConfig = GetCellConfig(cellType);
-                        bool isBreakable = cellConfig.HasValue && ((CellConfigProperties)cellConfig.Value.Properties).HasFlag(CellConfigProperties.Breakable);
-
-                        if (cellType != CellType.Empty && isBreakable)
-                        {
-                            _geoStack.Push(cellType);
-                            SetServerCell(fx, fy, CellType.Empty);
-                            OnReceived?.Invoke(new ServerPacket(new GeologyPacket(_geoStack.Count, 10, cellType, cellType.ToString())));
-                            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                            {
-                                new MapRegionPacket(fx, fy, 0, 0, new[] { CellType.Empty }),
-                                new AudioPacket(SFX.Geology, _mockBotId, fx, fy, Array.Empty<StringPairPacket>()),
-                            })));
-                        }
-                        else if (_geoStack.Count > 0)
-                        {
-                            var placeType = _geoStack.Pop();
-                            SetServerCell(fx, fy, placeType);
-                            OnReceived?.Invoke(new ServerPacket(new GeologyPacket(_geoStack.Count, 10, placeType, placeType.ToString())));
-                            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                            {
-                                new MapRegionPacket(fx, fy, 0, 0, new[] { placeType }),
-                                new AudioPacket(SFX.Geology, _mockBotId, fx, fy, Array.Empty<StringPairPacket>()),
-                            })));
-                        }
-                    }
-                }
-                else if (actionPacket.Payload is HealPacket)
-                {
-                    _health = Math.Min(500, _health + 50);
-                    OnReceived?.Invoke(new ServerPacket(new HealthPacket(_health, 500)));
-                }
-                else if (actionPacket.Payload is BuildCyanPacket)
-                {
-                    var front = GetFrontCell();
-                    DummyBuildHandler.TryBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y, CellType.MilitaryBlock);
-                }
-                else if (actionPacket.Payload is BuildGrayPacket)
-                {
-                    var front = GetFrontCell();
-                    if (_worldLayer != null &&
-                        GetServerCell(front.X, front.Y) == CellType.Road)
-                    {
-                        SetServerCell(front.X, front.Y, CellType.Empty);
-                        OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { new MapRegionPacket(front.X, front.Y, 0, 0, new[] { CellType.Empty }) })));
-                    }
-                    else
-                    {
-                        DummyBuildHandler.TryBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y, CellType.Road);
-                    }
-                }
-                else if (actionPacket.Payload is BuildGreenPacket)
-                {
-                    var front = GetFrontCell();
-                    DummyBuildHandler.TryUpgradeBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y,
-                        new (CellType From, CellType To)[] { (CellType.Empty, CellType.GreenBlock), (CellType.GreenBlock, CellType.YellowBlock), (CellType.YellowBlock, CellType.RedBlock) });
-                }
-                else if (actionPacket.Payload is BuildWhitePacket)
-                {
-                    var front = GetFrontCell();
-                    DummyBuildHandler.TryUpgradeBuild(_worldLayer, (x, y) => GetServerCell(x, y), (x, y, t) => SetServerCell(x, y, t), SendPacket, front.X, front.Y,
-                        new (CellType From, CellType To)[] { (CellType.Empty, CellType.Support), (CellType.Support, CellType.QuadBlock) });
-                }
-                else if (actionPacket.Payload is ClickCellPacket click)
-                {
-                    _pathCts?.Cancel();
-                    _pathCts?.Dispose();
-                    _pathCts = null;
-                    var path = _pathFinder.FindPath(_x, _y, click.X, click.Y, GetServerCell);
-                    if (path.Count > 0)
-                    {
-                        _pathCts = new CancellationTokenSource();
-                        CancellationToken pathToken = _pathCts.Token;
-                        _operations.Run(
-                            "dummy_walk_path",
-                            supervisorToken => WalkPathAsync(
-                                path,
-                                pathToken,
-                                supervisorToken));
-                    }
-                }
-
+                _actionResponder.Handle(actionPacket);
                 return;
             }
 
@@ -598,11 +302,7 @@ namespace MinesServer.Networking.Connection.Client
                     // Знакомые токены принимаются как есть, для пустого или
                     // незнакомого dummy-сервер сам выдаёт новый
                     // и запоминает его, чтобы авто-вход работал и дальше.
-                    string resolvedToken =
-                        (!string.IsNullOrEmpty(receivedToken) &&
-                         _validTokens.Contains(receivedToken))
-                            ? receivedToken
-                            : IssueNewToken();
+                    string resolvedToken = _authSession.ResolveToken(receivedToken);
 
                     if (clientHello.ClientVersion < 1)
                     {
@@ -622,7 +322,7 @@ namespace MinesServer.Networking.Connection.Client
                 case RuntimeAssetRequestPacket runtimeAssets:
                     _operations.Run(
                         "dummy_asset_request",
-                        _ => DummyAssetHandler.HandleAssetRequest(
+                        _ => DummyAssetResponder.HandleRequestAsync(
                             runtimeAssets,
                             _textureStorage,
                             SendPacket));
@@ -632,523 +332,62 @@ namespace MinesServer.Networking.Connection.Client
                 case OpenSettingsClickPacket:
                     break;
                 case ChangeChatColorPacket colorChange:
-                    _chatColor = colorChange.Color;
+                    _chatResponder.ChangeColor(colorChange);
                     break;
                 case OpenClanClickPacket:
                     _clanManager.HandleOpenClanClick();
                     break;
                 case QueryChatHistoryPacket qh:
-                    long startFrom = (long)qh.StartFrom;
-                    var filtered = _seedMessages.Where(m => startFrom == 0 || m.Timestamp >= startFrom).ToArray();
-                    OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket(qh.Tag, filtered)));
+                    _chatResponder.SendHistory(qh);
                     break;
                 case SendLocalChatMessagePacket localMsg:
-                    OnReceived?.Invoke(new ServerPacket(new LocalChatMessagePacket(_mockBotId, _x, _y, localMsg.Message)));
+                    _chatResponder.SendLocal(
+                        localMsg,
+                        _mockBotId,
+                        _playerState.X,
+                        _playerState.Y);
                     break;
 
                 case SendChatMessagePacket globalMsg:
-                    var chatMsg = new ChatMessagePacket(
-                        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                        999, 1,
-                        _chatColor,
-                        "You",
-                        _chatColor,
-                        globalMsg.Message);
-                    OnReceived?.Invoke(new ServerPacket(new ChatMessageListPacket("global", new[] { chatMsg })));
+                    _chatResponder.SendGlobal(globalMsg);
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.SelectItemPacket selectItem:
-                    _selectedItemType = selectItem.Item;
-                    OnReceived?.Invoke(new ServerPacket(GetItemInfoPacket(selectItem.Item)));
+                    _inventoryResponder.Select(selectItem.Item);
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.DeselectItemPacket:
-                    _selectedItemType = null;
-                    OnReceived?.Invoke(new ServerPacket(default(MinesServer.Networking.Server.Packets.Inventory.DeselectItemPacket)));
+                    _inventoryResponder.Deselect();
                     break;
                 case MinesServer.Networking.Client.Packets.Inventory.UseItemPacket:
-                    HandleUseItem();
+                    _inventoryResponder.Use(
+                        _playerState.X,
+                        _playerState.Y,
+                        _playerState.Direction);
                     break;
                 case ElementClickPacket elementClick:
-                    HandleElementClick(elementClick);
+                    _windowResponder.Handle(
+                        elementClick,
+                        _playerState.X,
+                        _playerState.Y);
                     break;
                 default:
                     break;
             }
         }
-
-        private static MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket GetItemInfoPacket(ItemType item)
+        private UniTask InitWorldAsync()
         {
-            var (name, desc) = DummyItemInfo.GetItemInfo(item);
-            return new MinesServer.Networking.Server.Packets.Inventory.SelectItemPacket(
-                item, name, desc, 1, 1, 3, false, new BitArray(0));
+            return _worldState.EnsureInitializedAsync(InitWorldCoreAsync);
         }
 
-        private void HandleUseItem()
+        private UniTask InitWorldCoreAsync()
         {
-            if (_selectedItemType == null)
-            {
-                return;
-            }
-
-            var selectedType = _selectedItemType.Value;
-            if (DummyItemInfo.IsBuildingPack(selectedType))
-            {
-                var packType = DummyItemInfo.ItemTypeToPackType(selectedType);
-                if (packType == PackType.None)
-                {
-                    return;
-                }
-
-                ushort frontX = _x;
-                ushort frontY = _y;
-                switch (_rot)
-                {
-                    case Direction.Up: frontY--; break;
-                    case Direction.Down: frontY++; break;
-                    case Direction.Left: frontX--; break;
-                    case Direction.Right: frontX++; break;
-                }
-
-                OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                {
-                    new PackPacket(frontX, frontY, packType, 0, 0),
-                })));
-                if (packType == PackType.Teleport)
-                {
-                    _teleportPositions.Add((frontX, frontY));
-                }
-
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-            else if (selectedType == ItemType.Rem)
-            {
-                _health = 500;
-                OnReceived?.Invoke(new ServerPacket(new HealthPacket(500, 500)));
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-            else if (selectedType == ItemType.UpgradeBooster)
-            {
-                _buffManager.ActivateBuff("xp3", 86400, System.Drawing.Color.FromArgb(0, 200, 0), "Прокачка x3");
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-            else if (selectedType == ItemType.FreeUp)
-            {
-                _buffManager.ActivateBuff("freeup", 43200, System.Drawing.Color.Cyan, "Freeup");
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-            else if (selectedType == ItemType.MineBooster)
-            {
-                _buffManager.ActivateBuff("x4", 43200, System.Drawing.Color.FromArgb(255, 165, 0), "Добыча x4");
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-            else if (selectedType == ItemType.Battery)
-            {
-                _buffManager.ActivateBuff("battery", 3600, System.Drawing.Color.FromArgb(65, 105, 225), "Аккумулятор");
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-            else
-            {
-                DummyItemInfo.ConsumeItem(_inventory, selectedType, 1);
-            }
-        }
-
-        private void HandleElementClick(ElementClickPacket packet)
-        {
-            if (packet.WindowTag == "daily_bonus")
-            {
-                _buffManager.HandleDailyBonusClaim(_inventory);
-            }
-            else if (packet.WindowTag == "teleport")
-            {
-                if (!_teleportManager.WindowOpen)
-                {
-                    return;
-                }
-
-                if (packet.ElementIndex == 0)
-                {
-                    _teleportManager.WindowOpen = false;
-                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                }
-                else
-                {
-                    _teleportManager.HandleTeleportClick(packet.ElementIndex - 1);
-                }
-            }
-            else if (packet.WindowTag == "test_modal")
-            {
-                OnReceived?.Invoke(DummyWindowBuilder.BuildTestModalWindow());
-            }
-            else if (packet.WindowTag is "join_clan" or "leave_clan" or "clan_list" or "clan_info")
-            {
-                _clanManager.HandleElementClick(packet);
-            }
-            else if (packet.WindowTag == "open_missions")
-            {
-                _missionRunner.SendMissionWindow(_x, _y);
-            }
-            else if (packet.WindowTag == "missions")
-            {
-                if (packet.ElementIndex == 0)
-                {
-                    OnReceived?.Invoke(new ServerPacket(new CloseWindowPacket()));
-                }
-                else if (packet.ElementIndex <= _missionRunner.MissionCount)
-                {
-                    _missionRunner.StartMission(packet.ElementIndex - 1, _x, _y);
-                }
-                else
-                {
-                    _missionRunner.CancelMission();
-                }
-            }
-            else if (packet.WindowTag == "open_url_test")
-            {
-                OnReceived?.Invoke(DummyWindowBuilder.BuildOpenUrlPacket("https://vk.ru/mines4reborn"));
-            }
-            else if (packet.WindowTag == "test_mission_arrow")
-            {
-                OnReceived?.Invoke(DummyWindowBuilder.BuildTestMissionArrowPacket(_x, _y));
-            }
-        }
-
-        /// <summary>
-        /// Выдаёт и запоминает новый токен для первого входа: замена старому
-        /// «окну авторизации», которое раньше открывал сервер на невалидном
-        /// токене. Теперь сервер сразу пускает в мир и выдаёт токен сам.
-        /// </summary>
-        private string IssueNewToken()
-        {
-            string newToken = Guid.NewGuid().ToString("N");
-            _validTokens.Add(newToken);
-            _tokenStore.Save(_validTokens);
-            return newToken;
-        }
-
-        private async UniTask InitWorldAsync()
-        {
-            // Если init уже летит — дожидаемся его вместо повторного запуска:
-            // вторая инициализация параллельно первой обнуляла _worldLayer и
-            // распаковывала карту в момент, когда первая уже читала её. Этот
-            // флаг сбрасывается в Disconnect/Dispose, так что легитимный
-            // реконнект по-прежнему пересоздаёт мир.
-            UniTaskCompletionSource? inFlight = _worldInitInFlight;
-            if (inFlight != null)
-            {
-                await inFlight.Task;
-                return;
-            }
-
-            var gate = new UniTaskCompletionSource();
-            _worldInitInFlight = gate;
-            try
-            {
-                if (_worldInitialized)
-                {
-                    return;
-                }
-
-                _worldInitialized = true;
-                await InitWorldCoreAsync();
-                gate.TrySetResult();
-            }
-            catch (Exception ex)
-            {
-                gate.TrySetException(ex);
-                throw;
-            }
-            finally
-            {
-                _worldInitInFlight = null;
-            }
-        }
-
-        private async UniTask InitWorldCoreAsync()
-        {
-            _cellConfigs = DummyCellConfigurationUtilities.CreateCellConfigurations();
-            _worldLayer?.Dispose();
-            _worldLayer = null;
-
-            string mapbPath = await DummyWorldMapArchive.ResolveMapFileAsync(PrebakedWorldCodeName);
-
-            (int worldWidth, int worldHeight) = await DummyWorldMapArchive.ReadDimensionsWithRetryAsync(mapbPath);
-            if (worldWidth <= 0 || worldHeight <= 0)
-            {
-                throw new InvalidDataException(
-                    $"Prebaked map file '{mapbPath}' has invalid dimensions ({worldWidth}x{worldHeight}).");
-            }
-
-            int widthChunks = (worldWidth + 31) / 32;
-            int heightChunks = (worldHeight + 31) / 32;
-            _worldLayer = new WorldLayer<CellType>(
-                mapbPath,
-                widthChunks,
-                heightChunks,
-                _operations,
-                32,
-                36);
-            _sentMapChunks.Clear();
-
-            OnReceived?.Invoke(new ServerPacket(new WorldInitPacket(
+            return _worldStartup.InitializeAsync(
                 PrebakedWorldCodeName,
-                "Pallada",
-                (ushort)worldWidth,
-                (ushort)worldHeight,
-                _cellConfigs,
-                new byte[][]
-                {
-                    new byte[] { 37, 38, 106 },
-                })));
-
-            OnReceived?.Invoke(new ServerPacket(new PlayerInfoPacket(999, _mockBotId, PlayerName)));
-            OnReceived?.Invoke(new ServerPacket(new RobotInfoPacket(
-                _mockBotId,
-                999,
-                1,
-                "Skin/bee.png",
-                "Tail/default.png",
-                string.Empty)));
-            var robotPos = new RobotPositionPacket(_mockBotId, 25, 50, 0);
-            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[] { robotPos })));
-            int lifecycleVersion = _lifecycleVersion;
-            _operations.Run(
-                "dummy_bot_loop",
-                _ => DummyBotRunner.RunCircularBots(
-                    6,
-                    lifecycleVersion,
-                    SendPacket,
-                    () => LoopAlive(lifecycleVersion)));
-            _x = 25;
-            _y = 50;
-            DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
-            OnReceived?.Invoke(new ServerPacket(new AggressionStatePacket(false)));
-            OnReceived?.Invoke(new ServerPacket(new AutoMineStatePacket(false)));
-            OnReceived?.Invoke(new ServerPacket(new DailyBonusStatePacket(false)));
-            _buffManager.ResetDailyBonus();
-            OnReceived?.Invoke(new ServerPacket(new CurrencyPacket(Currency, 1234)));
-            _health = 250;
-            OnReceived?.Invoke(new ServerPacket(new HealthPacket(250, 500)));
-            _basketContents = new long[6];
-            OnReceived?.Invoke(new ServerPacket(new BasketPacket(50000, _basketContents)));
-            OnReceived?.Invoke(new ServerPacket(new GeologyPacket(5, 10, CellType.Lava, "Lava")));
-            OnReceived?.Invoke(new ServerPacket(new LevelPacket(Level)));
-
-            SendSkillProgressMock();
-            _chatSimulator.SendChatMock();
-
-            OnReceived?.Invoke(new ServerPacket(new OnlinePacket(42, 3)));
-            OnReceived?.Invoke(new ServerPacket(default(ClearStatusPacket)));
-            _buffManager.SendStatusPackets();
-
-            _buffManager.StartBuffLoop(lifecycleVersion);
-            _operations.Run(
-                "dummy_ping_loop",
-                _ => SendPingMock(lifecycleVersion));
-            _operations.Run(
-                "dummy_online_loop",
-                _ => SendOnlineFluctuationMock(lifecycleVersion));
-            _buffManager.StartDailyBonusLoop(lifecycleVersion);
-
-            OnReceived?.Invoke(new ServerPacket(
-                new MovementSpeedPacket(
-                    DummyCellConfigurationUtilities.CreateMovementSpeeds(_cellConfigs!))));
-
-            // Depth warning/damage feature disabled in DummyConnection
-            // OnReceived?.Invoke(new ServerPacket(new MaxDepthPacket(200)));
-
-            var inventoryData = new Dictionary<ItemType, long>();
-            foreach (var type in _itemCatalog.AllTypes)
-            {
-                inventoryData[type] = 1;
-            }
-
-            inventoryData[ItemType.Battery] = 2;
-            _inventory.Clear();
-            foreach (var kvp in inventoryData)
-            {
-                _inventory[kvp.Key] = kvp.Value;
-            }
-
-            OnReceived?.Invoke(new ServerPacket(new InventoryPacket(inventoryData)));
-
-            var placeholderMsg = new ChatMessagePacket(0, 0, 0, 0,
-            System.Drawing.Color.White, string.Empty, System.Drawing.Color.White, string.Empty);
-            OnReceived?.Invoke(new ServerPacket(new ChatListPacket(new[] { ("global", "Global", placeholderMsg) })));
-
-            // Send test packs
-            _teleportPositions.Clear();
-            _teleportPositions.Add((27, 50));
-            _teleportPositions.Add((227, 50));
-            OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-            {
-                new PackPacket(27, 50, PackType.Teleport, 0, 1),
-                new PackPacket(227, 50, PackType.Teleport, 0, 1),
-                new PackPacket(25, 48, PackType.Market, 0, 0),
-            })));
-
+                _session.LifecycleVersion,
+                PlayerName,
+                Level,
+                Currency,
+                _mockBotId);
         }
 
-
-
-
-
-
-
-
-        private CellType GetServerCell(ushort serverX, ushort serverY)
-        {
-            return _worldLayer?.GetCellSync(serverX, serverY) ?? CellType.Unloaded;
-        }
-
-        private CellConfigurationPacket? GetCellConfig(CellType type)
-        {
-            int index = (int)type;
-            if (_cellConfigs == null || index < 0 || index >= _cellConfigs.Length)
-            {
-                return null;
-            }
-
-            return _cellConfigs[index];
-        }
-
-        private void SetServerCell(ushort serverX, ushort serverY, CellType type)
-        {
-            if (_worldLayer != null)
-            {
-                _worldLayer[serverX, serverY] = type;
-            }
-        }
-
-        private void SendSkillProgressMock()
-        {
-            var skills = new (SkillType type, long current, long max)[]
-            {
-                (SkillType.MineGeneral, 75, 100),
-                (SkillType.Extraction, 120, 100),
-                (SkillType.Health, 40, 100),
-                (SkillType.Movement, 10, 100),
-            };
-
-            foreach (var s in skills)
-            {
-                OnReceived?.Invoke(new ServerPacket(new SkillProgressPacket(s.type, s.current, s.max)));
-            }
-        }
-
-        private async UniTask SendPingMock(int lifecycleVersion)
-        {
-            await UniTask.Delay(2000);
-            while (LoopAlive(lifecycleVersion))
-            {
-                OnReceived?.Invoke(new ServerPacket(new PingPacket(DateTimeOffset.UtcNow.Ticks, _rng.Next(15, 60))));
-                await UniTask.Delay(5000);
-            }
-        }
-
-        // Онлайн-счётчик живёт: «игроки» заходят и выходят, а не висят на
-        // статичных 42. Простая петля в стиле SendPingMock, останавливается
-        // вместе с коннектом.
-        private async UniTask SendOnlineFluctuationMock(int lifecycleVersion)
-        {
-            await UniTask.Delay(3000);
-            while (LoopAlive(lifecycleVersion))
-            {
-                ushort players = (ushort)(38 + _rng.Next(0, 9));
-                OnReceived?.Invoke(new ServerPacket(new OnlinePacket(players, 3)));
-                await UniTask.Delay(12000);
-            }
-        }
-
-
-        /// <summary>
-        /// Смещение клетки перед роботом по направлению. Единственный источник
-        /// истины: GeoPacket и GetFrontCell раньше дублировали этот switch.
-        /// </summary>
-        private static Vector2Int GetDirectionOffset(Direction rot)
-        {
-            return rot switch
-            {
-                Direction.Down => new Vector2Int(0, 1),
-                Direction.Up => new Vector2Int(0, -1),
-                Direction.Left => new Vector2Int(-1, 0),
-                Direction.Right => new Vector2Int(1, 0),
-                _ => Vector2Int.zero,
-            };
-        }
-
-        private (ushort X, ushort Y) GetFrontCell()
-        {
-            Vector2Int offset = GetDirectionOffset(_rot);
-            return ((ushort)(_x + offset.x), (ushort)(_y + offset.y));
-        }
-
-        private async UniTask WalkPathAsync(
-            List<(ushort X, ushort Y)> path,
-            CancellationToken pathToken,
-            CancellationToken supervisorToken)
-        {
-            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                pathToken,
-                supervisorToken);
-            CancellationToken ct = linkedCancellation.Token;
-            try
-            {
-                ushort prevX = _x;
-                ushort prevY = _y;
-
-                for (int i = 0; i < path.Count; i++)
-                {
-                    ct.ThrowIfCancellationRequested();
-
-                    var (nextX, nextY) = path[i];
-                    Direction dir = nextY > prevY ? Direction.Down
-                        : nextY < prevY ? Direction.Up
-                        : nextX < prevX ? Direction.Left
-                        : Direction.Right;
-
-                    (_x, _y) = (nextX, nextY);
-                    prevX = nextX;
-                    prevY = nextY;
-
-                    DummyMapStreamer.SendMapChunksAround(_worldLayer, _sentMapChunks, _x, _y, SendPacket);
-                    OnReceived?.Invoke(new ServerPacket(new HBPacket(new IHBPacket[]
-                    {
-                        new RobotPositionPacket(_mockBotId, _x, _y, (byte)dir),
-                    })));
-
-                    await UniTask.Delay(100, cancellationToken: ct);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // path walk cancelled — expected when a new click or move cancels the walk
-            }
-        }
-
-        private static class DummyAssetHandler
-        {
-            public static async UniTask HandleAssetRequest(
-                RuntimeAssetRequestPacket runtimeAssets,
-                ITextureStorageService textureStorage,
-                Action<ServerPacket> sendPacket)
-            {
-                foreach (var assetEntry in runtimeAssets.Assets)
-                {
-                    byte[]? data = await textureStorage.GetTextureData(assetEntry.Filename.TrimStart('/'));
-
-                    RuntimeAssetPacket response;
-                    if (data != null)
-                    {
-                        response = new RuntimeAssetPacket(assetEntry.Filename, Guid.NewGuid().ToString(), data);
-                    }
-                    else
-                    {
-                        response = new RuntimeAssetPacket(assetEntry.Filename, string.Empty, Array.Empty<byte>());
-                    }
-
-                    sendPacket(new ServerPacket(response));
-                }
-            }
-        }
     }
 }

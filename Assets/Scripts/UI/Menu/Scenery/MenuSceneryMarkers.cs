@@ -10,8 +10,6 @@ namespace Fodinae.UI;
 /// </summary>
 public sealed class MenuSceneryMarkers
 {
-    private static readonly Vector3 LandingSiteDirection = new(-0.48f, 0.10f, -0.87f);
-
     public static void Animate(
         float time,
         VisualElement? beacon,
@@ -27,8 +25,7 @@ public sealed class MenuSceneryMarkers
 
         if (targetReticle != null)
         {
-            float targetScale = 1.0f + (Mathf.Sin(time * 2.2f) * 0.04f);
-            targetReticle.style.scale = new Scale(new Vector3(targetScale, targetScale, 1f));
+            targetReticle.style.scale = new Scale(Vector3.one);
         }
     }
 
@@ -100,11 +97,7 @@ public sealed class MenuSceneryMarkers
 
         if (beaconPing != null)
         {
-            float pingPhase = (Time.time * 0.4f) % 1.0f;
-            float pingScale = Mathf.Lerp(1.0f, 2.5f, pingPhase);
-            float pingAlpha = Mathf.Sin(pingPhase * Mathf.PI) * 0.8f;
-            beaconPing.style.scale = new Scale(new Vector2(pingScale, pingScale));
-            beaconPing.style.opacity = pingAlpha;
+            beaconPing.style.display = DisplayStyle.None;
         }
 
         float x = rect.x + (viewport.x * rect.width);
@@ -127,7 +120,7 @@ public sealed class MenuSceneryMarkers
 
         if (!TryGetPlanetFrame(planetBodyImage, scenery, out Rect rect, out _) ||
             scenery == null ||
-            !scenery.TryGetPlanetSurfaceViewportPosition(LandingSiteDirection, out Vector2 viewport))
+            !scenery.TryGetPlanetSurfaceViewportPosition(MenuSceneryPresenter.LandingSiteDirection, out Vector2 viewport))
         {
             targetReticle.style.display = DisplayStyle.None;
             return;

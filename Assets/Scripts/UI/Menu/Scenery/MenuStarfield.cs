@@ -81,7 +81,15 @@ namespace Fodinae.UI
             ReleaseRuntimeMaterial();
         }
 
-        private Vector2 _smoothParallax;
+        private bool _isDirty = true;
+
+        /// <summary>
+        /// Marks the starfield for re-rendering on the next frame or immediately.
+        /// </summary>
+        public void SetDirty()
+        {
+            _isDirty = true;
+        }
 
         // Draws one frame of the starfield. Public so the editor capture tool can
         // drive it: LateUpdate does not run on demand outside Play Mode, and the
@@ -100,31 +108,19 @@ namespace Fodinae.UI
                 return;
             }
 
-            Vector2 targetParallax = Vector2.zero;
-            if (Application.isPlaying && Screen.width > 0 && Screen.height > 0)
-            {
-                var mouse = UnityEngine.InputSystem.Mouse.current;
-                if (mouse != null)
-                {
-                    Vector2 mousePos = mouse.position.ReadValue();
-                    float normX = (mousePos.x / Screen.width) - 0.5f;
-                    float normY = (mousePos.y / Screen.height) - 0.5f;
-                    targetParallax = new Vector2(normX * -0.006f, normY * -0.006f);
-                }
-            }
-
-            _smoothParallax = Vector2.Lerp(_smoothParallax, targetParallax, Time.unscaledDeltaTime * 3.0f);
-
-            float currentTime = Application.isPlaying ? Time.time : (float)Time.realtimeSinceStartup;
-            _runtimeMaterial.SetFloat("_ShaderTime", currentTime);
+            _runtimeMaterial.SetFloat("_ShaderTime", 0f);
             _runtimeMaterial.SetFloat("_Aspect", (float)_texture.width / Mathf.Max(_texture.height, 1));
-            _runtimeMaterial.SetVector("_ParallaxOffset", new Vector4(_smoothParallax.x, _smoothParallax.y, 0f, 0f));
+            _runtimeMaterial.SetVector("_ParallaxOffset", Vector4.zero);
             Graphics.Blit(Texture2D.whiteTexture, _texture, _runtimeMaterial);
+            _isDirty = false;
         }
 
         private void LateUpdate()
         {
-            RenderNow();
+            if (_isDirty || _texture == null || !_texture.IsCreated())
+            {
+                RenderNow();
+            }
         }
 
         private void EnsureTexture()
@@ -153,6 +149,10 @@ namespace Fodinae.UI
             };
 
             _texture.Create();
+
+            // Свежая текстура пуста: пометить для перерисовки, иначе после
+            // пересоздания (ресайз / re-enable) LateUpdate не отрисует звёзды.
+            _isDirty = true;
         }
 
         private void ReleaseTexture()

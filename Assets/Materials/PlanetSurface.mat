@@ -19,43 +19,41 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties: 
+  m_LockedProperties:
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs: []
+    m_TexEnvs:
+    - _AlbedoMap:
+        m_Texture: {fileID: 2800000, guid: 9a1c0d5e7b3f4a2c8d6e1f0b2a3c4d5e, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalMap:
+        m_Texture: {fileID: 2800000, guid: 7b2d1e6f8c4a5b3d9e7f2a1c3b4d5e6f, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PackedMap:
+        m_Texture: {fileID: 2800000, guid: 5c3e2f7a9d6b4c1e8f0a3b2d4c5e6f7a, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _BasinLevel: 0.38
-    - _ContinentScale: 3.2
-    - _CrackScale: 4.5
-    - _CrackThreshold: 0.85
-    - _DetailScale: 60
-    - _DetailStrength: 0.05
-    - _MagmaIntensity: 7.2
-    - _MountainHeight: 0.40
-    - _NightAmbient: 0.012
-    - _PeakLevel: 0.68
-    - _PoolCoverage: 0.75
-    - _PoolF0: 0.05
-    - _PoolGloss: 1200
-    - _PoolIntensity: 4.8
-    - _PoolScale: 26
-    - _ReliefStrength: 1.25
-    - _RidgeScale: 12
-    - _Roughness: 0.45
-    - _SunIntensity: 5.8
-    - _TwilightIntensity: 1.4
-    - _WarpStrength: 0.65
+    - _CloudCoverage: 0.54
+    - _CloudOpacity: 0.78
+    - _CloudSoftness: 0.3
+    - _Exposure: 1
+    - _MagmaIntensity: 2
+    - _NightAmbient: 0.007
+    - _NormalStrength: 0.17
+    - _RoughnessMax: 0.94
+    - _RoughnessMin: 0.62
+    - _SunIntensity: 4.5
+    - _TerminatorSoftness: 0.24
+    - _TwilightIntensity: 0.5
     m_Colors:
-    - _BasaltColor: {r: 0.035, g: 0.038, b: 0.052, a: 1}
-    - _CrustColor: {r: 0.26, g: 0.22, b: 0.16, a: 1}
+    - _CloudColor: {r: 0.88, g: 0.88, b: 0.9, a: 1}
     - _MagmaColor: {r: 1, g: 0.35, b: 0.08, a: 1}
-    - _PeakColor: {r: 0.32, g: 0.35, b: 0.40, a: 1}
-    - _PoolAlbedo: {r: 0.02, g: 0.03, b: 0.05, a: 1}
-    - _PoolSpecColor: {r: 1, g: 0.85, b: 0.65, a: 1}
-    - _RegolithColor: {r: 0.16, g: 0.09, b: 0.05, a: 1}
     - _SunColor: {r: 1, g: 0.92, b: 0.82, a: 1}
-    - _SunDirWS: {r: -0.68, g: 0.24, b: 0.52, a: 0}
-    - _TwilightColor: {r: 0.58, g: 0.65, b: 0.22, a: 1}
+    - _SunDirWS: {r: -0.951, g: 0.276, b: -0.139, a: 0}
+    - _TwilightColor: {r: 0.46, g: 0.38, b: 0.24, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

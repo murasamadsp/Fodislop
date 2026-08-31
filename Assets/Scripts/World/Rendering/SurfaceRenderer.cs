@@ -169,9 +169,18 @@ namespace Fodinae.World
                 lightingRect,
                 _mapManager.WorldHeight);
 
-            DrawLightingMesh(commandBuffer, _redRockLightingMesh, _redRockMaterial);
-            DrawLightingMesh(commandBuffer, _perspectiveLightingMesh, _perspectiveMaterial);
-            DrawLightingMesh(commandBuffer, _transitLightingMesh, _transitMaterial);
+            SurfaceMeshUtilities.DrawLightingField(
+                commandBuffer,
+                _redRockLightingMesh,
+                _redRockMaterial);
+            SurfaceMeshUtilities.DrawLightingField(
+                commandBuffer,
+                _perspectiveLightingMesh,
+                _perspectiveMaterial);
+            SurfaceMeshUtilities.DrawLightingField(
+                commandBuffer,
+                _transitLightingMesh,
+                _transitMaterial);
         }
 
         protected void OnEnable()
@@ -258,15 +267,15 @@ namespace Fodinae.World
         protected void OnDestroy()
         {
             UnregisterLightingContributor();
-            DestroyOwnedObject(_transitMesh);
-            DestroyOwnedObject(_perspectiveMesh);
-            DestroyOwnedObject(_redRockMesh);
-            DestroyOwnedObject(_transitLightingMesh);
-            DestroyOwnedObject(_perspectiveLightingMesh);
-            DestroyOwnedObject(_redRockLightingMesh);
-            DestroyOwnedObject(_transitMaterial);
-            DestroyOwnedObject(_perspectiveMaterial);
-            DestroyOwnedObject(_redRockMaterial);
+            SurfaceMeshUtilities.DestroyOwned(_transitMesh);
+            SurfaceMeshUtilities.DestroyOwned(_perspectiveMesh);
+            SurfaceMeshUtilities.DestroyOwned(_redRockMesh);
+            SurfaceMeshUtilities.DestroyOwned(_transitLightingMesh);
+            SurfaceMeshUtilities.DestroyOwned(_perspectiveLightingMesh);
+            SurfaceMeshUtilities.DestroyOwned(_redRockLightingMesh);
+            SurfaceMeshUtilities.DestroyOwned(_transitMaterial);
+            SurfaceMeshUtilities.DestroyOwned(_perspectiveMaterial);
+            SurfaceMeshUtilities.DestroyOwned(_redRockMaterial);
 
             if (!Application.isPlaying)
             {
@@ -327,12 +336,12 @@ namespace Fodinae.World
                 kind: SurfaceMaterialManager.SurfaceKind.RedRock,
                 materialName: "World Surface Redrock");
 
-            _transitMesh = CreateMesh("World Surface Transit Mesh");
-            _perspectiveMesh = CreateMesh("World Surface Perspective Mesh");
-            _redRockMesh = CreateMesh("World Surface Redrock Mesh");
-            _transitLightingMesh = CreateMesh("World Surface Transit Lighting Mesh");
-            _perspectiveLightingMesh = CreateMesh("World Surface Perspective Lighting Mesh");
-            _redRockLightingMesh = CreateMesh("World Surface Redrock Lighting Mesh");
+            _transitMesh = SurfaceMeshUtilities.CreateDynamic("World Surface Transit Mesh");
+            _perspectiveMesh = SurfaceMeshUtilities.CreateDynamic("World Surface Perspective Mesh");
+            _redRockMesh = SurfaceMeshUtilities.CreateDynamic("World Surface Redrock Mesh");
+            _transitLightingMesh = SurfaceMeshUtilities.CreateDynamic("World Surface Transit Lighting Mesh");
+            _perspectiveLightingMesh = SurfaceMeshUtilities.CreateDynamic("World Surface Perspective Lighting Mesh");
+            _redRockLightingMesh = SurfaceMeshUtilities.CreateDynamic("World Surface Redrock Lighting Mesh");
 
             BindBandObject(
                 TransitObjectName,
@@ -413,69 +422,12 @@ namespace Fodinae.World
                 Vector3.zero,
                 Quaternion.identity);
             bandObject.transform.localScale = Vector3.one;
-            MeshFilter meshFilter = GetOrAddComponent<MeshFilter>(bandObject);
-            MeshRenderer meshRenderer = GetOrAddComponent<MeshRenderer>(bandObject);
+            MeshFilter meshFilter = SurfaceMeshUtilities.GetOrAddComponent<MeshFilter>(bandObject);
+            MeshRenderer meshRenderer = SurfaceMeshUtilities.GetOrAddComponent<MeshRenderer>(bandObject);
             meshFilter.sharedMesh = mesh;
             meshRenderer.sharedMaterial = material;
             meshRenderer.sortingOrder = sortingOrder;
             bandObject.SetActive(true);
-        }
-
-        private static T GetOrAddComponent<T>(GameObject gameObject)
-            where T : Component
-        {
-            T? component;
-            bool found = gameObject.TryGetComponent(out component);
-
-            if (!found || component == null)
-            {
-                component = gameObject.AddComponent<T>();
-            }
-
-            if (component == null)
-            {
-                throw new MissingComponentException(
-                    $"Failed to attach required component {typeof(T).Name} to " +
-                    $"surface object '{gameObject.name}'.");
-            }
-
-            return component;
-        }
-
-        private static Mesh CreateMesh(string meshName)
-        {
-            var mesh = new Mesh
-            {
-                name = meshName,
-                hideFlags = HideFlags.DontSave,
-            };
-            mesh.MarkDynamic();
-            return mesh;
-        }
-
-        private static void DrawLightingMesh(
-            CommandBuffer commandBuffer,
-            Mesh mesh,
-            Material material)
-        {
-            if (mesh.vertexCount == 0)
-            {
-                return;
-            }
-
-            int pass = material.FindPass("LightingMaterialField");
-            if (pass < 0)
-            {
-                throw new InvalidOperationException(
-                    $"Surface material '{material.name}' is missing LightingMaterialField pass.");
-            }
-
-            commandBuffer.DrawMesh(
-                mesh,
-                Matrix4x4.identity,
-                material,
-                submeshIndex: 0,
-                shaderPass: pass);
         }
 
         private void UnregisterLightingContributor()
@@ -494,25 +446,9 @@ namespace Fodinae.World
             Transform? ownedChild = transform.Find(objectName);
             if (ownedChild != null)
             {
-                DestroyOwnedObject(ownedChild.gameObject);
+                SurfaceMeshUtilities.DestroyOwned(ownedChild.gameObject);
             }
         }
 
-        private static void DestroyOwnedObject(UnityEngine.Object? ownedObject)
-        {
-            if (ownedObject == null)
-            {
-                return;
-            }
-
-            if (Application.isPlaying)
-            {
-                Destroy(ownedObject);
-            }
-            else
-            {
-                DestroyImmediate(ownedObject);
-            }
-        }
     }
 }

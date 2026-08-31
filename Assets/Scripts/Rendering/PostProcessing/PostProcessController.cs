@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Reflection;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
@@ -212,14 +211,14 @@ namespace Fodinae.Rendering.PostProcessing
                     "PostProcessController requires a runtime VolumeProfile on its serialized Volume.");
             }
 
-            ValidateProfileComponents(profile);
+            PostProcessDefaults.ValidateVolumeProfile(profile);
 
-            RequireComponent(ref _bloom, profile);
-            RequireComponent(ref _vignette, profile);
-            RequireComponent(ref _chromaticAberration, profile);
-            RequireComponent(ref _colorGrading, profile);
-            RequireComponent(ref _eigengrau, profile);
-            RequireComponent(ref _motionBlur, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _bloom, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _vignette, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _chromaticAberration, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _colorGrading, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _eigengrau, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _motionBlur, profile);
             ApplyClientConfig();
         }
 
@@ -481,57 +480,6 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 mainCameraData.cameraStack.Remove(_worldUICamera);
                 _worldUICamera.enabled = false;
-            }
-        }
-
-        private static void RequireComponent<T>(
-            ref T? target,
-            VolumeProfile profile)
-            where T : VolumeComponent
-        {
-            if (!profile.TryGet(out target) || target == null)
-            {
-                target = profile.Add<T>(overrides: true);
-                if (target == null)
-                {
-                    throw new InvalidOperationException(
-                        $"Post-process VolumeProfile '{profile.name}' is missing " +
-                        $"the required '{typeof(T).Name}' component and could not create it.");
-                }
-            }
-
-            EnableOverrides(target);
-        }
-
-
-        private static void ValidateProfileComponents(VolumeProfile profile)
-        {
-            int removed = profile.components.RemoveAll(c => c == null);
-            if (removed > 0)
-            {
-                Debug.LogWarning($"[PostProcessController] Cleaned up {removed} null/missing component(s) from VolumeProfile '{profile.name}'.");
-            }
-        }
-
-        private static void EnableOverrides(VolumeComponent component)
-        {
-            FieldInfo[] fields = component.GetType().GetFields(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            foreach (FieldInfo field in fields)
-            {
-                if (!typeof(VolumeParameter).IsAssignableFrom(field.FieldType))
-                {
-                    continue;
-                }
-
-                object? value = field.GetValue(component);
-                if (value is not VolumeParameter parameter)
-                {
-                    throw new InvalidOperationException(
-                        $"Post-process component '{component.GetType().FullName}' has a null parameter field '{field.Name}'.");
-                }
-
-                parameter.overrideState = true;
             }
         }
 

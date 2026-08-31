@@ -24,24 +24,18 @@ namespace Fodinae.Game
         private const int INITIAL_CAPACITY = 64;
         private const int BATCH_SORTING_ORDER = -1;
         private const int TENTACLE_SORTING_ORDER = -1;
-        private const int ATLAS_SIZE = 2048;
-        private const int ATLAS_PADDING = 1;
 
         private static readonly ProfilerMarker LateUpdateMarker =
             new("Fodinae.WorldEntities.LateUpdate");
 
         private readonly List<Tentacle> _tentacles = [];
         private readonly List<SpriteHandle> _sprites = [];
-        private readonly Dictionary<Texture2D, Rect> _atlasRects = [];
         private Vector3[] _verts = new Vector3[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Vector2[] _uvs = new Vector2[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Color32[] _colors = new Color32[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private int[] _tris = new int[TRIS_PER_TENTACLE * INITIAL_CAPACITY];
         private Mesh? _mesh;
-        private Texture2D? _atlas;
-        private int _atlasCursorX;
-        private int _atlasCursorY;
-        private int _atlasRowHeight;
+        private WorldEntityTextureAtlas? _atlas;
         private int _uploadedTentacleCount = -1;
         private int _uploadedSpriteCount = -1;
         private bool _geometryDirty = true;
@@ -186,13 +180,8 @@ namespace Fodinae.Game
 
         internal Rect GetAtlasRect(Texture2D texture)
         {
-            if (!_atlasRects.TryGetValue(texture, out Rect rect))
-            {
-                throw new InvalidOperationException(
-                    $"Texture '{texture.name}' was not registered in the world-entity atlas.");
-            }
-
-            return rect;
+            return _atlas?.GetRect(texture) ?? throw new InvalidOperationException(
+                "World-entity atlas is not initialized.");
         }
 
         protected void LateUpdate()
@@ -223,14 +212,7 @@ namespace Fodinae.Game
                 return;
             }
 
-            int atlasSize = Mathf.Min(ATLAS_SIZE, SystemInfo.maxTextureSize);
-            _atlas = RuntimeTextureFactory.CreateRgba32NoMip(
-                atlasSize,
-                atlasSize,
-                "WorldEntityAtlas",
-                RuntimeTextureColorSpace.Srgb,
-                FilterMode.Point,
-                TextureWrapMode.Clamp);
+            _atlas = new WorldEntityTextureAtlas();
 
             GameObject renderObject = _sceneObjects.Create("WorldEntityBatch");
 
@@ -245,80 +227,15 @@ namespace Fodinae.Game
             filter.sharedMesh = _mesh;
 
             var renderer = renderObject.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = SharedMaterialCache.GetForTexture(_atlas);
+            renderer.sharedMaterial = SharedMaterialCache.GetForTexture(_atlas.Texture);
             renderer.sortingOrder = BATCH_SORTING_ORDER;
         }
 
         private void EnsureTextureInAtlas(Texture2D texture)
         {
-            if (_atlasRects.ContainsKey(texture))
-            {
-                return;
-            }
-
-            Texture2D atlas = _atlas ?? throw new InvalidOperationException(
+            WorldEntityTextureAtlas atlas = _atlas ?? throw new InvalidOperationException(
                 "World-entity atlas must exist before a texture is registered.");
-            if (!RuntimeTextureFactory.SupportsTexture2DGpuCopy)
-            {
-                throw new InvalidOperationException(
-                    "The active graphics API does not support GPU texture copies required by the world-entity atlas.");
-            }
-
-            if (texture.graphicsFormat != atlas.graphicsFormat)
-            {
-                throw new InvalidOperationException(
-                    $"Texture '{texture.name}' has graphics format {texture.graphicsFormat}; " +
-                    $"the canonical world-entity atlas requires {atlas.graphicsFormat}.");
-            }
-
-            if (texture.width + (ATLAS_PADDING * 2) > atlas.width ||
-                texture.height + (ATLAS_PADDING * 2) > atlas.height)
-            {
-                throw new InvalidOperationException(
-                    $"Texture '{texture.name}' ({texture.width}x{texture.height}) " +
-                    $"does not fit the {atlas.width}x{atlas.height} world-entity atlas.");
-            }
-
-            int paddedWidth = texture.width + (ATLAS_PADDING * 2);
-            int paddedHeight = texture.height + (ATLAS_PADDING * 2);
-            if (_atlasCursorX + paddedWidth > atlas.width)
-            {
-                _atlasCursorX = 0;
-                _atlasCursorY += _atlasRowHeight;
-                _atlasRowHeight = 0;
-            }
-
-            if (_atlasCursorY + paddedHeight > atlas.height)
-            {
-                throw new InvalidOperationException(
-                    $"World-entity atlas is full while registering texture '{texture.name}'.");
-            }
-
-            int destinationX = _atlasCursorX + ATLAS_PADDING;
-            int destinationY = _atlasCursorY + ATLAS_PADDING;
-            Graphics.CopyTexture(
-                texture,
-                0,
-                0,
-                0,
-                0,
-                texture.width,
-                texture.height,
-                atlas,
-                0,
-                0,
-                destinationX,
-                destinationY);
-
-            _atlasRects.Add(
-                texture,
-                new Rect(
-                    (float)destinationX / atlas.width,
-                    (float)destinationY / atlas.height,
-                    (float)texture.width / atlas.width,
-                    (float)texture.height / atlas.height));
-            _atlasCursorX += paddedWidth;
-            _atlasRowHeight = Mathf.Max(_atlasRowHeight, paddedHeight);
+            atlas.EnsureTexture(texture);
         }
 
         private void RebuildMesh()
@@ -535,13 +452,12 @@ namespace Fodinae.Game
 
             if (_atlas != null)
             {
-                Destroy(_atlas);
+                _atlas.Dispose();
                 _atlas = null;
             }
 
             _tentacles.Clear();
             _sprites.Clear();
-            _atlasRects.Clear();
         }
     }
 }

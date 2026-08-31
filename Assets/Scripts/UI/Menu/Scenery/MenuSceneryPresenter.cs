@@ -13,7 +13,10 @@ namespace Fodinae.UI
     /// </summary>
     internal sealed class MenuSceneryPresenter
     {
-        private static readonly Vector3 LandingSiteDirection = new(-0.48f, 0.10f, -0.87f);
+        // Единый источник направления точки высадки: его используют и камера
+        // подлёта, и ретикль на поверхности. Дублировать константу в двух
+        // местах значило бы рискнуть тихим расхождением цели и маркера.
+        internal static readonly Vector3 LandingSiteDirection = new(-0.48f, 0.10f, -0.87f);
         private const float DescentAnimationSeconds = 2.6f;
 
         private VisualElement? _tree;

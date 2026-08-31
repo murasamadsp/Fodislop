@@ -13,50 +13,27 @@ namespace Fodinae.UI
         private Transform? _occluder;
 
         /// <summary>
-        /// Обзорная дистанция камеры. Подобрана так, чтобы диск занимал около
-        /// 80% высоты кадра — это и есть размер планеты из дизайн-кода.
-        /// </summary>
-        private const float RestDistance = 6.9f;
-
-        /// <summary>
-        /// Где стоит центр планеты по ширине кадра в обзорном положении.
-        /// Больше 1.0 означало бы центр за краем экрана; 0.88 оставляет диск
-        /// подрезанным правым краем, но по большей части видимым.
-        /// </summary>
-        private const float RestCentreFraction = 0.88f;
-
-        /// <summary>
-        /// Ближняя дистанция в радиусах планеты.
-        ///
-        /// Это одновременно и композиция, и производительность. Стоимость кадра
-        /// здесь пропорциональна закрашиваемой площади: поверхность и объёмная
-        /// атмосфера считаются попиксельно, а оболочка атмосферы вдобавок
-        /// покрывает больше экрана, чем сама сфера. Замер: при 2.1 радиуса
-        /// планета закрывала весь кадр и давала 8–16 FPS против 70–80 в обзоре
-        /// при том же разрешении рендера.
-        ///
-        /// 3.6 радиуса — диск занимает около 0.9 высоты кадра: подлёт всё ещё
-        /// читается, а площадь закраски меньше примерно в 2.7 раза.
-        /// </summary>
-        private const float CloseDistanceInRadii = 3.6f;
-
-        /// <summary>
         /// На сколько пикселей должен измениться размер, чтобы имело смысл
         /// пересоздавать текстуры.
         /// </summary>
         private const int ResizeThresholdPixels = 24;
 
-        private const float RestFieldOfView = 36f;
-        private const float CloseFieldOfView = 30f;
+        // Потолок стороны offscreen-кадра.
+        //
+        // 1024 давало мыло: вызывающий передаёт сюда уже физические пиксели
+        // (умноженные на scaledPixelsPerPoint), а на Retina планета занимает
+        // втрое больше, и кадр растягивался на элемент.
+        //
+        // Дорог был не размер, а мультисэмплинг поверх него: из 138 МБ той
+        // версии 89 приходилось на MSAA 4x. Без него 3072 стоит 49 МБ, и кадр
+        // при этом статичен — он пересчитывается на изменение размера, а не
+        // каждый кадр. Опускать разрешение ради экономии, которой нет, значит
+        // возвращать мыло: элемент на Retina шире 3000 физических пикселей, и
+        // всё, что меньше, растягивается.
+        private const int MaxTargetSize = 3072;
 
-        /// <summary>
-        /// Насколько путь камеры выгибается влево. Ноль превратил бы облёт
-        /// обратно в подъезд по прямой.
-        /// </summary>
-        private const float SweepDegrees = 38f;
-
-        private int _targetWidth = 512;
-        private int _targetHeight = 512;
+        private int _targetWidth = 1024;
+        private int _targetHeight = 1024;
 
         private RenderTexture? _cameraTarget;
         private RenderTexture? _outputTexture;
@@ -66,13 +43,7 @@ namespace Fodinae.UI
 
         private Material? _resolveMaterial;
         private bool _ownsResolveMaterial;
-
-        // Запекатель статических полей планеты. Живёт здесь, потому что здесь же
-        // живут оба материала, которые их потребляют. Подробности — в
-        // PlanetFieldBaker.
-        private readonly PlanetFieldBaker _fieldBaker = new();
-        private Material? _surfaceMaterial;
-        private Material? _atmosphereMaterial;
+        private bool _renderDirty = true;
 
         // Последнее заданное кадрирование. Хранится, потому что его нужно уметь
         // пересчитать: угол отворота камеры выводится из соотношения сторон
@@ -96,6 +67,10 @@ namespace Fodinae.UI
             int w = Mathf.Max(width, 64);
             int h = Mathf.Max(height, 64);
 
+            float scale = Mathf.Min(1f, MaxTargetSize / (float)Mathf.Max(w, h));
+            w = Mathf.Max(64, Mathf.RoundToInt(w * scale));
+            h = Mathf.Max(64, Mathf.RoundToInt(h * scale));
+
             // Пересоздание пары RenderTexture — не бесплатная операция, а
             // размер приходит сюда из Update каждый кадр и дрожит на пиксель
             // от округлений раскладки. Точное сравнение размеров означало бы
@@ -117,21 +92,31 @@ namespace Fodinae.UI
 
             EnsureTargets();
 
-            // Свежая текстура пуста до ближайшего LateUpdate. Без немедленной
-            // отрисовки кадр после каждого изменения размера показывал дыру на
-            // месте планеты.
-            ResolveOutput();
+            // Свежая текстура пуста до ближайшего LateUpdate. Рисуем сразу,
+            // но больше не перерисовываем статичный фон каждый кадр.
+            RenderNow();
         }
 
         private void EnsureTargets()
         {
             if (_cameraTarget == null)
             {
-                _cameraTarget = new RenderTexture(_targetWidth, _targetHeight, 16, RenderTextureFormat.ARGBHalf)
+                _cameraTarget = new RenderTexture(_targetWidth, _targetHeight, 16, RenderTextureFormat.ARGB32)
                 {
                     name = "MenuSceneryRT_Premultiplied",
                     filterMode = FilterMode.Bilinear,
                     wrapMode = TextureWrapMode.Clamp,
+
+                    // MSAA здесь не нужен совсем.
+                    //
+                    // Сглаживание уже делает FXAA в блите разрешения
+                    // (UnpremultiplyAlpha.shader) — причём по
+                    // премультиплицированной RGBA, то есть вместе с альфой, так
+                    // что силуэт получает частичное покрытие, ради которого
+                    // MSAA обычно и держат. Мультисэмплинг поверх этого
+                    // умножал бы всю площадь кадра на число выборок ради
+                    // единственной дуги, которую уже сгладили дешевле.
+                    antiAliasing = 1,
                 };
                 _cameraTarget.Create();
 
@@ -156,12 +141,13 @@ namespace Fodinae.UI
 
             if (_outputTexture == null)
             {
-                _outputTexture = new RenderTexture(_targetWidth, _targetHeight, 0, RenderTextureFormat.ARGBHalf)
+                _outputTexture = new RenderTexture(_targetWidth, _targetHeight, 0, RenderTextureFormat.ARGB32)
                 {
                     name = "MenuSceneryRT",
                     wrapMode = TextureWrapMode.Clamp,
                     filterMode = FilterMode.Bilinear,
                     useMipMap = false,
+                    autoGenerateMips = false,
                     anisoLevel = 0,
                 };
                 _outputTexture.Create();
@@ -170,76 +156,34 @@ namespace Fodinae.UI
 
         private void OnEnable()
         {
-            _sceneryCamera = GetComponentInChildren<Camera>(includeInactive: true);
-            _station = GetComponentInChildren<OrbitalStationMotion>(includeInactive: true);
-            _planet = transform.Find("PlanetSurface");
-
-            if (_planet != null)
-            {
-                _planet.localPosition = Vector3.zero;
-                var atmo = transform.Find("PlanetAtmosphere");
-                if (atmo != null)
-                {
-                    atmo.localPosition = Vector3.zero;
-                }
-            }
-
-            _occluder = transform.Find("PlanetAtmosphere") ?? _planet;
-
-            _surfaceMaterial = FindMaterial(_planet);
-            _atmosphereMaterial = FindMaterial(transform.Find("PlanetAtmosphere"));
-            _fieldBaker.EnsureBaked(_surfaceMaterial, _atmosphereMaterial);
-
-            if (_sceneryCamera == null)
+            if (!EnsureInitialized() || _sceneryCamera == null)
             {
                 return;
             }
 
-            EnsureTargets();
-
-            if (_resolveMaterial == null)
-            {
-                if (_resolveMaterialAsset != null)
-                {
-                    _resolveMaterial = _resolveMaterialAsset;
-                }
-                else
-                {
-                    Shader? resolve = Shader.Find("Fodinae/UI/UnpremultiplyAlpha");
-                    if (resolve == null)
-                    {
-                        Debug.LogWarning("[MenuSceneryController] Resolve shader 'Fodinae/UI/UnpremultiplyAlpha' is unavailable; scenery compositing is disabled.");
-                    }
-                    else
-                    {
-                        _resolveMaterial = new Material(resolve) { hideFlags = HideFlags.HideAndDontSave };
-                        _ownsResolveMaterial = true;
-                    }
-                }
-            }
-
-            _sceneryCamera.allowHDR = true;
-            _sceneryCamera.fieldOfView = RestFieldOfView;
+            _sceneryCamera.allowHDR = false;
+            _sceneryCamera.fieldOfView = MenuSceneryFraming.FieldOfView;
             _sceneryCamera.ResetAspect();
             _sceneryCamera.ResetProjectionMatrix();
             SetDescentFraming(0f, Vector3.back);
-            if (_cameraTarget != null)
-            {
-                _sceneryCamera.targetTexture = _cameraTarget;
-                _sceneryCamera.Render();
-                ResolveOutput();
-            }
+            RenderNow();
         }
 
         /// <summary>
-        /// Пересобирает запечённые поля прямо сейчас.
-        ///
-        /// Обычно это делает LateUpdate, но в редакторе он у [ExecuteAlways]
-        /// срабатывает только на перерисовке, а инструменты захвата рисуют
-        /// камеру напрямую. Без явного вызова снимок «до» и снимок «после»
-        /// уходили бы в один и тот же режим.
+        /// Принудительно обновляет статичный offscreen-кадр.
         /// </summary>
-        public void RefreshFields() => _fieldBaker.EnsureBaked(_surfaceMaterial, _atmosphereMaterial);
+        public void RenderNow()
+        {
+            if (!EnsureInitialized() || _sceneryCamera == null || _cameraTarget == null)
+            {
+                return;
+            }
+
+            _sceneryCamera.targetTexture = _cameraTarget;
+            _sceneryCamera.Render();
+            ResolveOutput();
+            _renderDirty = false;
+        }
 
         public void ResolveOutput()
         {
@@ -254,20 +198,62 @@ namespace Fodinae.UI
 
         private void LateUpdate()
         {
-            // Проверка стоит сравнения одного int, пока параметры материалов не
-            // менялись. Она здесь, а не только в OnEnable, ради инспектора:
-            // иначе правка ползунка рельефа тихо не доезжала бы до картинки.
-            _fieldBaker.EnsureBaked(_surfaceMaterial, _atmosphereMaterial);
-
-            // The scene camera is permanently disabled by the application camera
-            // authority. Render the menu target explicitly so it never joins URP's
-            // screen camera loop or survives into gameplay as a second active camera.
-            if (_sceneryCamera != null && _cameraTarget != null)
+            if (_renderDirty)
             {
-                _sceneryCamera.Render();
+                RenderNow();
+            }
+        }
+
+        private bool EnsureInitialized()
+        {
+            _sceneryCamera ??= GetComponentInChildren<Camera>(includeInactive: true);
+            _station ??= GetComponentInChildren<OrbitalStationMotion>(includeInactive: true);
+            _planet ??= transform.Find("PlanetSurface");
+
+            if (_planet != null)
+            {
+                _planet.localPosition = Vector3.zero;
             }
 
-            ResolveOutput();
+            Transform? atmosphere = transform.Find("PlanetAtmosphere");
+            if (atmosphere != null)
+            {
+                atmosphere.localPosition = Vector3.zero;
+            }
+
+            _occluder = _planet;
+            if (_sceneryCamera == null)
+            {
+                return false;
+            }
+
+            EnsureTargets();
+            EnsureResolveMaterial();
+            return true;
+        }
+
+        private void EnsureResolveMaterial()
+        {
+            if (_resolveMaterial != null)
+            {
+                return;
+            }
+
+            if (_resolveMaterialAsset != null)
+            {
+                _resolveMaterial = _resolveMaterialAsset;
+                return;
+            }
+
+            Shader? resolve = Shader.Find("Fodinae/UI/UnpremultiplyAlpha");
+            if (resolve == null)
+            {
+                Debug.LogWarning("[MenuSceneryController] Resolve shader 'Fodinae/UI/UnpremultiplyAlpha' is unavailable; scenery compositing is disabled.");
+                return;
+            }
+
+            _resolveMaterial = new Material(resolve) { hideFlags = HideFlags.HideAndDontSave };
+            _ownsResolveMaterial = true;
         }
 
         private void OnDisable()
@@ -280,8 +266,6 @@ namespace Fodinae.UI
 
         private void OnDestroy()
         {
-            _fieldBaker.Dispose();
-
             ReleaseTexture(ref _cameraTarget);
             ReleaseTexture(ref _outputTexture);
 
@@ -303,18 +287,6 @@ namespace Fodinae.UI
             _ownsResolveMaterial = false;
         }
 
-        /// <summary>Материал первого рендерера под указанным узлом, либо null.</summary>
-        private static Material? FindMaterial(Transform? node)
-        {
-            if (node == null)
-            {
-                return null;
-            }
-
-            var renderer = node.GetComponent<Renderer>();
-            return renderer != null ? renderer.sharedMaterial : null;
-        }
-
         /// <summary>
         /// Освобождает текстуру, предварительно отцепив её от камеры.
         ///
@@ -334,6 +306,11 @@ namespace Fodinae.UI
             if (_sceneryCamera != null && ReferenceEquals(_sceneryCamera.targetTexture, texture))
             {
                 _sceneryCamera.targetTexture = null;
+            }
+
+            if (ReferenceEquals(RenderTexture.active, texture))
+            {
+                RenderTexture.active = null;
             }
 
             texture.Release();
@@ -368,81 +345,24 @@ namespace Fodinae.UI
             _framingProgress = Mathf.Clamp01(progress);
             _framingDirection = landingLocalDirection;
 
-            float t = _framingProgress;
-
-            // Сглаживание на концах: линейный подъезд читается как рывок на
-            // старте и обрыв на финише.
-            float eased = t * t * (3f - (2f * t));
-
-            Vector3 restDirection = Vector3.back;
-
-            Vector3 landingDirection = landingLocalDirection.sqrMagnitude > 0.0001f
-                ? landingLocalDirection.normalized
-                : Vector3.back;
-
-            // Ближняя точка отсчитывается от радиуса планеты, а не задаётся
-            // числом: масштаб шара в сцене менялся, и зашитая дистанция
-            // однажды окажется внутри поверхности.
+            // Радиус берётся из сцены, а не задаётся числом: масштаб шара уже
+            // менялся, и зашитая дистанция однажды окажется внутри поверхности.
             float planetRadius = _planet != null ? 0.5f * _planet.lossyScale.x : 1f;
-            float closeDistance = Mathf.Max(planetRadius * CloseDistanceInRadii, planetRadius + 0.35f);
 
-            // Облёт, а не подъезд по прямой.
-            //
-            // Точка высадки лежит почти напротив обзорной позиции — прямая дуга
-            // между ними всего около 29°, и движение читается как простой зум.
-            // Поэтому путь выгибается влево промежуточной точкой: камера сперва
-            // уходит в сторону, показывая планету сбоку, и только потом заходит
-            // на точку. Это две последовательные сферические интерполяции —
-            // построение Безье, перенесённое на сферу.
-            Vector3 sweepMid = Quaternion.AngleAxis(-SweepDegrees, Vector3.up)
-                * Vector3.Slerp(restDirection, landingDirection, 0.5f);
+            MenuSceneryFraming.Placement placement = MenuSceneryFraming.Solve(
+                _framingProgress,
+                landingLocalDirection,
+                planetRadius,
+                Mathf.Max(_sceneryCamera.aspect, 0.1f));
 
-            Vector3 direction = Vector3.Slerp(
-                Vector3.Slerp(restDirection, sweepMid, eased),
-                Vector3.Slerp(sweepMid, landingDirection, eased),
-                eased);
+            _sceneryCamera.transform.localPosition = placement.LocalPosition;
+            _sceneryCamera.transform.localRotation = placement.LocalRotation;
 
-            // Дистанция идёт своей интерполяцией: если гнать её тем же Slerp по
-            // векторам, скорость подхода зависит от кривизны дуги и на выгибе
-            // камера подтормаживает.
-            float distance = Mathf.Lerp(RestDistance, closeDistance, eased);
-            Vector3 local = direction * distance;
-
-            _sceneryCamera.transform.localPosition = local;
-
-            // В обзоре камера смотрит мимо планеты — тем и достигается её
-            // положение справа. К точке высадки она доворачивается точно на
-            // центр, иначе на подлёте цель уезжала бы за край кадра.
-            Quaternion aimAtCentre = Quaternion.LookRotation(-local.normalized, Vector3.up);
-            _sceneryCamera.transform.localRotation =
-                aimAtCentre * Quaternion.Euler(0f, Mathf.Lerp(-RestYaw(), 0f, eased), 0f);
-            _sceneryCamera.fieldOfView = Mathf.Lerp(RestFieldOfView, CloseFieldOfView, eased);
+            // Зум задаётся только дистанцией, а не сужением FOV: макет
+            // увеличивает планету scale(1.18), оставляя угол обзора прежним.
+            // Сужение FOV добавляло лишний ~1.21x и ломало пропорции спуска.
             _sceneryCamera.ResetProjectionMatrix();
-        }
-
-        /// <summary>
-        /// Угол отворота камеры в обзоре, посчитанный из текущего соотношения
-        /// сторон.
-        ///
-        /// Зашивать его числом нельзя: угол постоянен, а горизонтальное поле
-        /// зрения растёт вместе с шириной кадра — на широком экране планета
-        /// поехала бы к центру, на узком ушла бы за край целиком. Считаем из
-        /// доли ширины, и композиция держится на любом экране.
-        /// </summary>
-        private float RestYaw()
-        {
-            if (_sceneryCamera == null)
-            {
-                return 0f;
-            }
-
-            float tanHalfVertical = Mathf.Tan(RestFieldOfView * 0.5f * Mathf.Deg2Rad);
-            float tanHalfHorizontal = tanHalfVertical * Mathf.Max(_sceneryCamera.aspect, 0.1f);
-
-            // Из доли ширины в нормализованную координату кадра: 0.5 — центр, 1 — правый край.
-            float normalized = (RestCentreFraction * 2f) - 1f;
-
-            return Mathf.Atan(normalized * tanHalfHorizontal) * Mathf.Rad2Deg;
+            _renderDirty = true;
         }
 
         /// <summary>Возвращает камеру в обзорное положение меню.</summary>
@@ -457,41 +377,11 @@ namespace Fodinae.UI
         // with nothing underneath.
         public bool TryGetStationViewportPosition(out Vector2 viewportPosition)
         {
-            viewportPosition = default;
-            if (_sceneryCamera == null || _station == null)
-            {
-                return false;
-            }
-
-            Vector3 stationWS = _station.transform.position;
-            Vector3 viewport = _sceneryCamera.WorldToViewportPoint(stationWS);
-            if (viewport.z <= 0f)
-            {
-                return false;
-            }
-
-            if (_occluder != null)
-            {
-                Vector3 cameraWS = _sceneryCamera.transform.position;
-                Vector3 toPlanet = _occluder.position - cameraWS;
-                Vector3 toStation = stationWS - cameraWS;
-
-                // Occluded when the station is on the far side of the planet's
-                // centre AND falls inside its silhouette. A sphere makes this a
-                // cheap exact test - no depth buffer read needed.
-                if (toStation.magnitude > toPlanet.magnitude)
-                {
-                    float radius = _occluder.lossyScale.x * 0.5f;
-                    float offAxis = Vector3.ProjectOnPlane(toStation, toPlanet.normalized).magnitude;
-                    if (offAxis < radius)
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            viewportPosition = new Vector2(viewport.x, viewport.y);
-            return true;
+            return MenuSceneryProjection.TryGetStationViewportPosition(
+                _sceneryCamera,
+                _station,
+                _occluder,
+                out viewportPosition);
         }
 
         /// <summary>
@@ -499,30 +389,12 @@ namespace Fodinae.UI
         /// </summary>
         public bool TryGetOrbitPointViewportPosition(float angleDegrees, out Vector2 viewportPosition)
         {
-            viewportPosition = default;
-            if (_sceneryCamera == null)
-            {
-                return false;
-            }
-
             Transform centerTransform = _planet != null ? _planet : transform;
-            const float orbitRadius = 1.72f;
-            var orbitTilt = new Vector3(72f, 0f, -19f);
-            var localOffset = new Vector3(
-                Mathf.Cos(angleDegrees * Mathf.Deg2Rad),
-                0f,
-                Mathf.Sin(angleDegrees * Mathf.Deg2Rad)) * orbitRadius;
-            Quaternion orbitPlane = Quaternion.Euler(orbitTilt);
-            Vector3 pointWS = centerTransform.position + (orbitPlane * localOffset);
-
-            Vector3 viewport = _sceneryCamera.WorldToViewportPoint(pointWS);
-            if (viewport.z <= 0f)
-            {
-                return false;
-            }
-
-            viewportPosition = new Vector2(viewport.x, viewport.y);
-            return true;
+            return MenuSceneryProjection.TryGetOrbitPointViewportPosition(
+                _sceneryCamera,
+                centerTransform,
+                angleDegrees,
+                out viewportPosition);
         }
 
         /// <summary>
@@ -530,23 +402,11 @@ namespace Fodinae.UI
         /// </summary>
         public bool TryGetPlanetSurfaceViewportPosition(Vector3 localSurfaceDir, out Vector2 viewportPosition)
         {
-            viewportPosition = default;
-            if (_sceneryCamera == null || _planet == null)
-            {
-                return false;
-            }
-
-            float planetRadius = 0.5f * _planet.lossyScale.x;
-            Vector3 pointWS = _planet.position + (localSurfaceDir.normalized * planetRadius);
-
-            Vector3 viewport = _sceneryCamera.WorldToViewportPoint(pointWS);
-            if (viewport.z <= 0f)
-            {
-                return false;
-            }
-
-            viewportPosition = new Vector2(viewport.x, viewport.y);
-            return true;
+            return MenuSceneryProjection.TryGetSurfaceViewportPosition(
+                _sceneryCamera,
+                _planet,
+                localSurfaceDir,
+                out viewportPosition);
         }
     }
 }

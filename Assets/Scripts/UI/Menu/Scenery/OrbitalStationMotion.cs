@@ -15,8 +15,6 @@ namespace Fodinae.UI
         [SerializeField]
         private float _radius = 4f;
         [SerializeField]
-        private float _degreesPerSecond = 6f;
-        [SerializeField]
         private float _startAngleDegrees;
         [SerializeField]
         private Vector3 _orbitPlaneEulerAngles = new(70f, 0f, -22f);
@@ -26,16 +24,6 @@ namespace Fodinae.UI
         private void OnEnable()
         {
             _angleDegrees = _startAngleDegrees;
-            ApplyPosition();
-        }
-
-        private void Update()
-        {
-            if (Application.isPlaying)
-            {
-                _angleDegrees += _degreesPerSecond * Time.deltaTime;
-            }
-
             ApplyPosition();
         }
 

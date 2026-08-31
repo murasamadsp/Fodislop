@@ -539,3 +539,21 @@ ArtCaptures/
 # Temporary Unity test runner scenes
 /[Aa]ssets/InitTestScene*.unity
 /[Aa]ssets/InitTestScene*.unity.meta
+
+# Диагностические снимки планеты: результат запуска инструментов, а не исходник.
+# preview_planet.py и PlanetCapture перезаписывают их на каждом прогоне.
+/planet_preview.png
+/planet_capture.png
+
+# Запечённые карты планеты.
+#
+# Детерминированный вывод scripts/generate_planet_maps.py: в 8K это ~150 МБ, а
+# мелкое зерно в них — шум, который не сжимается, поэтому каждая перепечка
+# осела бы в истории целиком и навсегда. Версионируется генератор, а не его
+# результат. Запекается через меню Fodinae > Planet > Bake Maps.
+#
+# Файлы .meta НЕ игнорируются намеренно: в них GUID, по которым
+# PlanetSurface.mat ссылается на текстуры, и без них ссылки повиснут.
+/[Aa]ssets/Textures/UI/planet_albedo.png
+/[Aa]ssets/Textures/UI/planet_normal.png
+/[Aa]ssets/Textures/UI/planet_packed.png

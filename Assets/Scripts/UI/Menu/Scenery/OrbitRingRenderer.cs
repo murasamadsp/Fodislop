@@ -38,6 +38,10 @@ namespace Fodinae.UI
 
         private void LateUpdate()
         {
+            // Кольцо статично относительно центра: пересобирать его каждый кадр
+            // бессмысленно. Rebuild сам проверяет конфиг и позицию, поэтому
+            // здесь просто делегируем — внутри пересборка произойдёт только при
+            // реальном изменении.
             Rebuild();
         }
 
@@ -51,7 +55,10 @@ namespace Fodinae.UI
             // Segment count / width can be reconfigured (e.g. by an editor
             // build script) after OnEnable already ran, so keep them in sync
             // here rather than caching them once.
-            if (_line.positionCount != _segments)
+            bool configChanged = _line.positionCount != _segments ||
+                                 !Mathf.Approximately(_line.widthMultiplier, _lineWidth);
+
+            if (configChanged)
             {
                 _line.positionCount = _segments;
                 _built = false;
@@ -59,7 +66,7 @@ namespace Fodinae.UI
 
             _line.widthMultiplier = _lineWidth;
 
-            if (_built && _center.position == _lastCenterPosition)
+            if (_built && _center.position == _lastCenterPosition && !configChanged)
             {
                 return;
             }

@@ -6,6 +6,45 @@
 - физику вырезать, матрицы коллизий??? чо это?? тоже вырезать.... слои юнити сделать
 - [ ] реализовать Render Governor / Frame Budget Coordinator (кадрирование и разделение тяжелых задач рендера: terrain remesh, batch sprite rebuild, minimap/worldmap pixel sampling и UI painter во избежание микро-статтеров в одном кадре)
 
+## Реестр огромных production C# файлов
+
+Критерий: production-файл больше 500 строк должен быть разбит по ответственностям,
+а не механически превращён в `partial`. Новые файлы больше 500 строк запрещены;
+текущий конечный debt-list охраняется архитектурным линтером и сокращается до нуля.
+
+- [ ] `World/Lighting/Core/LightingEngine.cs` (2015): coordinator/resources/scheduling/pipelines.
+- [ ] `World/Persistence/WorldLayer.cs` (1081): format/index/cache/IO/compaction.
+- [x] `Networking/Connection/Client/DummyConnection.cs` (393, было 1154): разделён на session/auth/player+world simulation/movement/gameplay+chat+inventory+window+asset responders.
+- [ ] `World/Terrain/Core/TerrainRenderer.cs` (874): lifecycle/coverage/mesh/material updates.
+- [ ] `UI/Overlays/InGameDebugOverlay.cs` (837): state/sampling/presenter/view binding.
+- [ ] `AssetPipeline/Animation/GifAnimationDecoder.cs` (774): parser/LZW/compositing/output.
+- [ ] `UI/Chat/GlobalChatUI.cs` (727): state/presenter/view binding.
+- [ ] `Rendering/PostProcessing/PostProcessRenderPass.cs` (708): resources/scheduling/effect passes.
+- [ ] `Game/Entities/Robot.cs` (692): state/visual loading/presentation.
+- [ ] `UI/Menu/Core/MainMenu.cs` (685): state/presenter/view binding/transition flow.
+- [ ] `World/Textures/WorldTextureManager.cs` (661): loading/cache/atlas orchestration.
+- [ ] `AssetPipeline/Loading/ClientAssetLoader.cs` (656): requests/cache/batching/decoding.
+- [ ] `UI/Programmator/Model/ProgrammatorData.cs` (650): model/serialization/commands.
+- [ ] `UI/Gateway/GatewayController.cs` (646): auth state/presenter/view binding.
+- [ ] `UI/Map/WorldMapRenderer.cs` (638): sampling/texture updates/presentation.
+- [ ] `World/Rendering/BackgroundFloodFill.cs` (627): traversal/cache/output.
+- [ ] `UI/Programmator/Grid/ProgrammatorClipboardController.cs` (627): clipboard/selection/commands.
+- [ ] `AssetPipeline/Cache/AssetCacheEntry.cs` (624): entry state/download/decode/lifecycle.
+- [ ] `UI/HUD/Player/View/PlayerHUDView.cs` (621): binding/presenter/subviews.
+- [ ] `Game/Audio/ServerAudioEvent.cs` (599): lifecycle/audio/VFX/loading.
+- [ ] `UI/Settings/PauseMenu.cs` (596): state/presenter/view binding.
+- [ ] `World/Terrain/Mesh/TerrainMeshBuilder.cs` (587): topology/attributes/output.
+- [ ] `World/Lighting/Core/LightingResourceManager.cs` (577): allocation/ownership/destruction.
+- [ ] `Player/Controllers/PlayerMovementController.cs` (567): state/input/network movement.
+- [ ] `World/Textures/TextureAtlas.cs` (561): packing/storage/upload.
+- [x] `World/Lighting/Config/LightingConfigHolder.cs` (491, было 557): ClientConfig mapping/normalization вынесены в `LightingRuntimeConfigMapper`.
+- [x] `UI/Menu/Scenery/MenuSceneryController.cs` (498, было 554): viewport projection и occlusion вынесены в `MenuSceneryProjection`.
+- [x] `World/Terrain/Cache/TerrainCellCache.cs` (469, было 547): сдвиг coverage-массивов вынесен в `TerrainCacheArrayScroller`.
+- [x] `Game/Rendering/WorldEntityBatchRenderer.cs` (463, было 547): texture atlas packing/upload/ownership вынесены в `WorldEntityTextureAtlas`.
+- [x] `Rendering/PostProcessing/PostProcessController.cs` (493, было 545): profile validation/component override setup вынесены в `PostProcessDefaults`.
+- [x] `UI/Map/MinimapController.cs` (498, было 541): UXML binding, координаты и видимость вынесены в `MinimapView`.
+- [x] `World/Rendering/SurfaceRenderer.cs` (454, было 518): mesh/component/lighting lifecycle вынесен в `SurfaceMeshUtilities`.
+
 ## Программа оздоровления клиента (6–9 месяцев)
 
 Цель: воспроизводимые macOS ARM64 / Windows x64 релизы, отсутствие потери
@@ -50,8 +89,23 @@
 ### 4. Декомпозиция god-object'ов
 
 - [ ] Разделить `LightingEngine` на coordinator, resources, scheduling и pipelines.
-- [ ] Разделить `DummyConnection` на session, auth, simulation и responders.
-- [ ] Разделить config repository, migration и runtime settings.
+- [x] Разделить `DummyConnection` на session, auth, simulation и responders.
+  - [x] Вынести generation-based lifecycle/status в `DummyConnectionSession`.
+  - [x] Вынести offline identity и token resolution в `DummyAuthSession`.
+  - [x] Вынести mutable player state (position/direction/HP/toggles/basket/geology) в `DummyPlayerSimulationState`.
+  - [x] Вынести `WorldLayer`, cell-configs, sent-chunk cache и single-flight gate в `DummyWorldSimulationState`.
+  - [x] Вынести стартовый world/player/status/inventory snapshot и bot/ping/online loops в `DummyWorldStartupResponder`.
+  - [x] Разнести packet responders из центрального `SendAsync`.
+    - [x] Вынести state/history/local/global chat packets в `DummyChatResponder`.
+    - [x] Вынести selection/use-item и inventory state в `DummyInventoryResponder`.
+    - [x] Вынести routing daily bonus/teleport/clan/missions/test windows в `DummyWindowResponder`.
+    - [x] Вынести move/rotate/click-path, cancellation и position snapshots в `DummyMovementResponder`.
+    - [x] Вынести dig/suicide/geology/heal/build в `DummyGameplayActionResponder`.
+    - [x] Вынести runtime asset responses в `DummyAssetResponder`.
+- [x] Разделить config repository, migration и runtime settings.
+  - [x] Вынести чтение, legacy-key normalization и durable atomic save/backup в `ClientConfigRepository`.
+  - [x] Вынести последовательные schema migrations из `ClientConfigManager` в `ClientConfigMigration`.
+  - [x] Вынести default construction и validation; оставить в runtime manager lifecycle, состояние и применение пользовательских настроек.
 - [ ] Разделить крупные UI-классы на view binding, presenter и state.
 
 ### 5. Системная проверка релиза
