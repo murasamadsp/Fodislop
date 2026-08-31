@@ -12,7 +12,7 @@ namespace Fodinae.World.Terrain;
 /// </summary>
 public sealed class TerrainMeshManager
 {
-    private static readonly VertexAttributeDescriptor[] VertexLayout =
+    internal static readonly VertexAttributeDescriptor[] VertexLayout =
     [
         new(VertexAttribute.Position,  VertexAttributeFormat.Float32, 3),
         new(VertexAttribute.Color,     VertexAttributeFormat.UNorm8,  4),

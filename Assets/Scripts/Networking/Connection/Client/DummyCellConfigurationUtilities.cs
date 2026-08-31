@@ -71,8 +71,8 @@ internal static class DummyCellConfigurationUtilities
         SetConfig(configs, CellType.LivingActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF66FF22), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.CorrosiveActiveAcid, SAND_BOULDER_PROPS | CellConfigProperties.Glowing, 1, color: unchecked((int)0xFF9AFF22), distortion: CellDistortionType.Cause);
 
-        SetConfig(configs, CellType.BuildingDoor, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF8B4513), distortion: CellDistortionType.Block);
-        SetConfig(configs, CellType.BuildingCorner, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF555555), distortion: CellDistortionType.Block);
+        SetConfig(configs, CellType.BuildingDoor, INDESTRUCTIBLE_PROPS | CellConfigProperties.Passable, 2, color: unchecked((int)0xFF8B4513), distortion: CellDistortionType.Block);
+        SetConfig(configs, CellType.BuildingCorner, INDESTRUCTIBLE_PROPS, 2, color: unchecked((int)0xFF555555), distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.QuadBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.Support, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.MilitaryBlockFrame, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
@@ -81,7 +81,7 @@ internal static class DummyCellConfigurationUtilities
         SetConfig(configs, CellType.YellowBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.FedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
         SetConfig(configs, CellType.RedBlock, ARTIFICIAL_PROPS, 2, distortion: CellDistortionType.Block);
-        SetConfig(configs, CellType.BuildingWall, ARTIFICIAL_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
+        SetConfig(configs, CellType.BuildingWall, INDESTRUCTIBLE_PROPS, 2, color: unchecked((int)0xFF666666), distortion: CellDistortionType.Block);
 
         SetConfig(configs, CellType.XGreen, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF00FF3D), distortion: CellDistortionType.Cause);
         SetConfig(configs, CellType.XBlue, GLOWING_CRYSTAL_PROPS, 3, color: unchecked((int)0xFF295FFF), distortion: CellDistortionType.Cause);

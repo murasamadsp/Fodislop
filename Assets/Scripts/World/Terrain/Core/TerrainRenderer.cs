@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.World.Lighting;
 using Fodinae.World.Lighting.Quality;
 using MinesServer.Data;
@@ -29,6 +30,8 @@ namespace Fodinae.World.Terrain
         [SerializeField]
         private int _sortingOrder = -1000;
         [SerializeField]
+        private int _doorOverlaySortingOrder = 500;
+        [SerializeField]
         private int _viewportPadding = 2;
 
         private MeshFilter? _meshFilter;
@@ -51,6 +54,8 @@ namespace Fodinae.World.Terrain
         private ILocalPlayerState _localPlayer = null!;
         [Inject]
         private IGameplayCamera _gameplayCamera = null!;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         private Camera? _mainCamera;
 
@@ -61,6 +66,8 @@ namespace Fodinae.World.Terrain
         private readonly TerrainViewportCalculator _viewportCalculator = new();
         private readonly TerrainMeshManager _meshManager = new();
         private readonly TerrainMaterialManager _materialManager = new();
+        private readonly TerrainDoorOverlayRenderer _doorOverlayRenderer = new();
+        private List<int>[] _doorOverlaySubMeshIndices = Array.Empty<List<int>>();
 
         private Vector2Int _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
         private int _meshWidth;
@@ -290,6 +297,7 @@ namespace Fodinae.World.Terrain
             }
 
             _meshManager.DestroyMesh();
+            _doorOverlayRenderer.Dispose();
             _materialManager.CleanupMaterials();
         }
 
@@ -698,6 +706,11 @@ namespace Fodinae.World.Terrain
                 using (MeshBuildMarker.Auto())
                 {
                     _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
+                    EnsureDoorOverlayIndices(atlases.Count);
+                    _meshBuilder.RebuildOverlaySubMeshIndices(
+                        _meshWidth,
+                        _meshHeight,
+                        _doorOverlaySubMeshIndices);
                 }
 
                 FrameProfiler.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
@@ -729,6 +742,7 @@ namespace Fodinae.World.Terrain
                     }
 
                     _materialManager.BindAtlasTextures(atlases, textureService, mesh);
+                    RebuildDoorOverlay();
                 }
 
                 _needsRefresh = false;
@@ -778,6 +792,7 @@ namespace Fodinae.World.Terrain
             FrameProfiler.TerrainDirtyPatchCount++;
 
             bool anyIndicesChanged = false;
+            bool anyOverlayIndicesChanged = false;
             for (int i = 0; i < _dirtyRects.Count; i++)
             {
                 RectInt rect = _dirtyRects[i];
@@ -798,6 +813,7 @@ namespace Fodinae.World.Terrain
                 _meshBuilder.BuildRegion(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
 
                 anyIndicesChanged |= _meshBuilder.IndicesChanged;
+                anyOverlayIndicesChanged |= _meshBuilder.OverlayIndicesChanged;
             }
 
             _meshManager.UploadDirectVertexBuffer(_meshBuilder);
@@ -813,6 +829,16 @@ namespace Fodinae.World.Terrain
                     }
                 }
             }
+
+            if (anyOverlayIndicesChanged)
+            {
+                _meshBuilder.RebuildOverlaySubMeshIndices(
+                    _meshWidth,
+                    _meshHeight,
+                    _doorOverlaySubMeshIndices);
+            }
+
+            RebuildDoorOverlay();
         }
 
         private void UpdateTextureCells(int minX, int minY)
@@ -869,6 +895,45 @@ namespace Fodinae.World.Terrain
                     }
                 }
             }
+
+            if (_meshBuilder.OverlayIndicesChanged)
+            {
+                _meshBuilder.RebuildOverlaySubMeshIndices(
+                    _meshWidth,
+                    _meshHeight,
+                    _doorOverlaySubMeshIndices);
+            }
+
+            RebuildDoorOverlay();
+        }
+
+        private void EnsureDoorOverlayIndices(int atlasCount)
+        {
+            if (_doorOverlaySubMeshIndices.Length == atlasCount)
+            {
+                return;
+            }
+
+            _doorOverlaySubMeshIndices = new List<int>[atlasCount];
+            for (int atlasIndex = 0; atlasIndex < atlasCount; atlasIndex++)
+            {
+                _doorOverlaySubMeshIndices[atlasIndex] = [];
+            }
+        }
+
+        private void RebuildDoorOverlay()
+        {
+            _doorOverlayRenderer.Rebuild(
+                transform,
+                _sceneObjects,
+                _meshBuilder,
+                _doorOverlaySubMeshIndices,
+                _materialManager.Materials,
+                _sortingLayerName,
+                _doorOverlaySortingOrder,
+                _meshWidth,
+                _meshHeight,
+                _cellSize);
         }
     }
 }

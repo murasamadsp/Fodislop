@@ -61,7 +61,9 @@ namespace MinesServer.Networking.Connection.Client
                 SendPacket,
                 _buffManager.ActivateBuff,
                 _teleportPositions,
-                _playerState.SetHealth);
+                _playerState.SetHealth,
+                _worldState.GetCell,
+                _worldState.SetCell);
             _teleportManager = new DummyTeleportManager(SendPacket, _teleportPositions);
             // LoopAlive привязан к жизненному циклу соединения: чат-петля
             // умирает вместе с коннектом (раньше она жила вечно и текла

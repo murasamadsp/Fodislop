@@ -52,6 +52,8 @@ public sealed class DummyInventoryResponderTests
             sent.Add,
             (_, _, _, _) => { },
             [],
-            setHealth);
+            setHealth,
+            (_, _) => CellType.Empty,
+            (_, _, _) => { });
     }
 }

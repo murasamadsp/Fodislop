@@ -38,7 +38,9 @@ public sealed class DummyGameplayActionResponderTests
             sent.Add,
             (_, _, _, _) => { },
             [],
-            player.SetHealth);
+            player.SetHealth,
+            world.GetCell,
+            world.SetCell);
         var responder = new DummyGameplayActionResponder(
             player,
             world,

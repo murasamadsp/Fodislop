@@ -18,6 +18,7 @@ namespace Fodinae.World.Terrain
 
         private int[] _bgAtlasIndices = Array.Empty<int>();
         private int[] _fgAtlasIndices = Array.Empty<int>();
+        private bool[] _foregroundOverlayFlags = Array.Empty<bool>();
 
         /// <summary>
         /// Whether the last <see cref="BuildRegion"/> changed which submesh any
@@ -33,6 +34,8 @@ namespace Fodinae.World.Terrain
         /// main thread, to usually reproduce the identical lists.
         /// </remarks>
         public bool IndicesChanged { get; private set; }
+
+        public bool OverlayIndicesChanged { get; private set; }
 
         /// <summary>
         /// The span of <see cref="VertexBuffer"/> the last
@@ -65,6 +68,7 @@ namespace Fodinae.World.Terrain
             {
                 _bgAtlasIndices = new int[singleLayerQuads];
                 _fgAtlasIndices = new int[singleLayerQuads];
+                _foregroundOverlayFlags = new bool[singleLayerQuads];
             }
         }
 
@@ -83,6 +87,7 @@ namespace Fodinae.World.Terrain
             // A full build rewrites everything, so the incremental bookkeeping
             // reports exactly that to anyone who reads it after this call.
             IndicesChanged = true;
+            OverlayIndicesChanged = true;
             DirtyVertexStart = 0;
             DirtyVertexCount = _vertexBuffer.Length;
 
@@ -154,6 +159,7 @@ namespace Fodinae.World.Terrain
             if (endX <= clampedStartX || endY <= clampedStartY)
             {
                 IndicesChanged = false;
+                OverlayIndicesChanged = false;
                 DirtyVertexStart = 0;
                 DirtyVertexCount = 0;
                 return;
@@ -165,6 +171,7 @@ namespace Fodinae.World.Terrain
             DirtyVertexCount = ((lastQuad + 1) * 8) - DirtyVertexStart;
 
             bool atlasAssignmentChanged = false;
+            bool overlayAssignmentChanged = false;
             for (int x = clampedStartX; x < endX; x++)
             {
                 int gridX = minX + x;
@@ -175,6 +182,7 @@ namespace Fodinae.World.Terrain
                     int baseIdx = quadIdx * 8;
                     int previousBackgroundAtlas = _bgAtlasIndices[quadIdx];
                     int previousForegroundAtlas = _fgAtlasIndices[quadIdx];
+                    bool previousOverlay = _foregroundOverlayFlags[quadIdx];
                     _bgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, true, baseIdx, atlases, useColorLod, mapManager, textureManager);
                     _fgAtlasIndices[quadIdx] = FillQuadData(x, y, gridX, unityY, cellCache, precalc, bgFloodFill, worldWidth, worldHeight, false, baseIdx + 4, atlases, useColorLod, mapManager, textureManager);
                     if (_bgAtlasIndices[quadIdx] != previousBackgroundAtlas ||
@@ -182,10 +190,14 @@ namespace Fodinae.World.Terrain
                     {
                         atlasAssignmentChanged = true;
                     }
+
+                    overlayAssignmentChanged |=
+                        previousOverlay != _foregroundOverlayFlags[quadIdx];
                 }
             }
 
             IndicesChanged = atlasAssignmentChanged;
+            OverlayIndicesChanged = overlayAssignmentChanged || atlasAssignmentChanged;
             if (!atlasAssignmentChanged)
             {
                 // The vertices moved onto different textures within the same
@@ -284,6 +296,7 @@ namespace Fodinae.World.Terrain
             }
 
             IndicesChanged = atlasAssignmentChanged;
+            OverlayIndicesChanged = atlasAssignmentChanged;
             DirtyVertexStart = lastDirtyQuad >= 0 ? firstDirtyQuad * 8 : 0;
             DirtyVertexCount = lastDirtyQuad >= 0 ? ((lastDirtyQuad + 1) * 8) - DirtyVertexStart : 0;
             if (!atlasAssignmentChanged)
@@ -335,6 +348,45 @@ namespace Fodinae.World.Terrain
             }
         }
 
+        public void RebuildOverlaySubMeshIndices(
+            int meshWidth,
+            int meshHeight,
+            List<int>[] overlaySubMeshIndices)
+        {
+            foreach (List<int> indices in overlaySubMeshIndices)
+            {
+                indices.Clear();
+            }
+
+            int totalQuads = meshWidth * meshHeight;
+            for (int i = 0; i < totalQuads; i++)
+            {
+                int foregroundAtlas = _fgAtlasIndices[i];
+                if (!_foregroundOverlayFlags[i] ||
+                    foregroundAtlas < 0 ||
+                    foregroundAtlas >= overlaySubMeshIndices.Length)
+                {
+                    continue;
+                }
+
+                List<int> indices = overlaySubMeshIndices[foregroundAtlas];
+                int baseIndex = (i * 8) + 4;
+                indices.Add(baseIndex);
+                indices.Add(baseIndex + 3);
+                indices.Add(baseIndex + 2);
+                indices.Add(baseIndex + 2);
+                indices.Add(baseIndex + 1);
+                indices.Add(baseIndex);
+            }
+        }
+
+        private static bool IsBuildingBlock(CellType type)
+        {
+            return type is CellType.BuildingWall or
+                CellType.BuildingDoor or
+                CellType.BuildingCorner;
+        }
+
         private int FillQuadData(int x, int y, int gridX, int unityY, TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
             int worldWidth, int worldHeight, bool isBackground, int vIdx, IReadOnlyList<IAtlasDescriptor> atlases, bool useColorLod,
             MapManager mapManager, ITextureService textureManager)
@@ -350,12 +402,22 @@ namespace Fodinae.World.Terrain
 
             CachedCellData ccd = cellCache.GetCellData(cx, cy);
             CellType cellFgType = ccd.Type;
+            if (!isBackground)
+            {
+                _foregroundOverlayFlags[vIdx / 8] = cellFgType == CellType.BuildingDoor;
+            }
+
             if (ccd.State != TerrainCellState.Loaded)
             {
                 return -1;
             }
 
             CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
+            if (isBackground && IsBuildingBlock(cellFgType))
+            {
+                cellType = CellType.Road;
+            }
+
             bool isSameCell = !isBackground || cellType == cellFgType;
             if (isBackground && (cellType == cellFgType || cellType == CellType.Unloaded))
             {
@@ -444,9 +506,41 @@ namespace Fodinae.World.Terrain
             Vector2 uv3 = new Vector2(0, 1);
 
             int descriptor = isSameCell ? precalc.CellTilingDescriptors[x, y] : 0;
-            float packedW = hasTileGroup ? 1f : 0f;
+            int cornerSideMask = precalc.CellCornerVariants[x, y];
+            bool useNeighborVariants =
+                !isBackground &&
+                cellFgType == CellType.BuildingWall &&
+                cornerSideMask != 0;
+            float packedW = hasTileGroup || useNeighborVariants ? 1f : 0f;
+            if (useNeighborVariants)
+            {
+                bool hasLeft = (cornerSideMask & 1) != 0;
+                bool hasRight = (cornerSideMask & 2) != 0;
+                bool hasTop = (cornerSideMask & 4) != 0;
+                bool hasBottom = (cornerSideMask & 8) != 0;
+                int cornerCount =
+                    (hasLeft ? 1 : 0) +
+                    (hasRight ? 1 : 0) +
+                    (hasTop ? 1 : 0) +
+                    (hasBottom ? 1 : 0);
+                int column = RenderingConstants.BUILDING_WALL_VARIANT_BASE_TILE +
+                    Math.Min(cornerCount, 2);
+                byte transforms = (byte)(descriptor & 0xE0);
+                if ((cornerCount == 1 && hasRight) ||
+                    (cornerCount == 1 && hasBottom))
+                {
+                    transforms ^= 0x40;
+                }
 
-            if (hasTileGroup && descriptor != 0)
+                if (cornerCount >= 2 && !hasLeft && !hasRight)
+                {
+                    transforms ^= 0x80;
+                }
+
+                descriptor = transforms | (column & 0x1F);
+            }
+
+            if ((hasTileGroup || useNeighborVariants) && descriptor != 0)
             {
                 if ((descriptor & 0x40) != 0)
                 {

@@ -23,6 +23,7 @@ namespace Fodinae.Game
         private const int TRIS_PER_TENTACLE = (POINT_COUNT - 1) * 6;
         private const int INITIAL_CAPACITY = 64;
         private const int BATCH_SORTING_ORDER = -1;
+        private const int OVERLAY_BATCH_SORTING_ORDER = 600;
         private const int TENTACLE_SORTING_ORDER = -1;
 
         private static readonly ProfilerMarker LateUpdateMarker =
@@ -35,6 +36,7 @@ namespace Fodinae.Game
         private Color32[] _colors = new Color32[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private int[] _tris = new int[TRIS_PER_TENTACLE * INITIAL_CAPACITY];
         private Mesh? _mesh;
+        private WorldEntityOverlayBatch? _overlayBatch;
         private WorldEntityTextureAtlas? _atlas;
         private int _uploadedTentacleCount = -1;
         private int _uploadedSpriteCount = -1;
@@ -202,6 +204,7 @@ namespace Fodinae.Game
             if (_geometryDirty && _mesh != null)
             {
                 RebuildMesh();
+                _overlayBatch?.Rebuild(_sprites, GetAtlasRect);
             }
         }
 
@@ -229,6 +232,11 @@ namespace Fodinae.Game
             var renderer = renderObject.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = SharedMaterialCache.GetForTexture(_atlas.Texture);
             renderer.sortingOrder = BATCH_SORTING_ORDER;
+
+            _overlayBatch = new WorldEntityOverlayBatch(
+                _sceneObjects,
+                renderer.sharedMaterial,
+                OVERLAY_BATCH_SORTING_ORDER);
         }
 
         private void EnsureTextureInAtlas(Texture2D texture)
@@ -254,7 +262,9 @@ namespace Fodinae.Game
             int activeSpriteCount = 0;
             for (int i = 0; i < _sprites.Count; i++)
             {
-                if (_sprites[i].Enabled && _sprites[i].Transform != null)
+                if (_sprites[i].Enabled &&
+                    _sprites[i].Transform != null &&
+                    _sprites[i].SortingOrder < OVERLAY_BATCH_SORTING_ORDER)
                 {
                     activeSpriteCount++;
                 }
@@ -269,7 +279,9 @@ namespace Fodinae.Game
             for (int i = 0; i < _sprites.Count; i++)
             {
                 SpriteHandle handle = _sprites[i];
-                if (!IsRenderable(handle) || handle.SortingOrder >= TENTACLE_SORTING_ORDER)
+                if (!IsRenderable(handle) ||
+                    handle.SortingOrder >= TENTACLE_SORTING_ORDER ||
+                    handle.SortingOrder >= OVERLAY_BATCH_SORTING_ORDER)
                 {
                     continue;
                 }
@@ -317,7 +329,9 @@ namespace Fodinae.Game
             for (int i = 0; i < _sprites.Count; i++)
             {
                 SpriteHandle handle = _sprites[i];
-                if (!IsRenderable(handle) || handle.SortingOrder < TENTACLE_SORTING_ORDER)
+                if (!IsRenderable(handle) ||
+                    handle.SortingOrder < TENTACLE_SORTING_ORDER ||
+                    handle.SortingOrder >= OVERLAY_BATCH_SORTING_ORDER)
                 {
                     continue;
                 }
@@ -455,6 +469,9 @@ namespace Fodinae.Game
                 _atlas.Dispose();
                 _atlas = null;
             }
+
+            _overlayBatch?.Dispose();
+            _overlayBatch = null;
 
             _tentacles.Clear();
             _sprites.Clear();

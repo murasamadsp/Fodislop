@@ -9,6 +9,7 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Fodinae.Effekseer;
 using Fodinae.Game.Managers;
+using Fodinae.Networking.Buildings;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -25,6 +26,7 @@ namespace Fodinae.Game
     public class Building : MonoBehaviour
     {
         private Transform? _clanTransform;
+        private Transform? _visualTransform;
         private BuildingType? _buildingType;
         private byte _variant;
         private byte _linkedClan;
@@ -55,6 +57,17 @@ namespace Fodinae.Game
             {
                 obsoleteRenderer.enabled = false;
             }
+
+            Transform? existingVisual = transform.Find("BuildingVisual");
+            GameObject visualObject = existingVisual != null
+                ? existingVisual.gameObject
+                : (_sceneObjects != null
+                    ? _sceneObjects.Create("BuildingVisual", RuntimeOwner.Buildings)
+                    : throw new InvalidOperationException(
+                        "Building requires injected ISceneObjectFactory before creating its visual."));
+            visualObject.transform.SetParent(transform, worldPositionStays: false);
+            visualObject.transform.localPosition = Vector3.zero;
+            _visualTransform = visualObject.transform;
 
             Transform? existingClan = transform.Find("ClanIcon");
             GameObject clanGo = existingClan != null
@@ -132,8 +145,12 @@ namespace Fodinae.Game
                     Destroy(_buildingSprite);
                 }
 
-                // Use central PIXELS_PER_UNIT for consistency
-                _buildingSprite = Sprite.Create(buildingTexture, new Rect(0, 0, buildingTexture.width, buildingTexture.height), new Vector2(0.5f, 0.5f), RenderingConstants.PIXELS_PER_UNIT);
+                _buildingSprite = Sprite.Create(
+                    buildingTexture,
+                    new Rect(0, 0, buildingTexture.width, buildingTexture.height),
+                    new Vector2(0.5f, 0.5f),
+                    RenderingConstants.CELL_SIZE);
+                ApplyRoofOffset();
                 EnsureBatchHandles();
                 _entityBatchRenderer.SetSprite(_buildingBatchHandle!, _buildingSprite);
                 _buildingBatchHandle!.SetEnabled(true);
@@ -257,9 +274,28 @@ namespace Fodinae.Game
             }
 
             // Position to the right and slightly below the center
-            float packWidth = _buildingSprite != null ? _buildingSprite.texture.width : RenderingConstants.PIXELS_PER_UNIT;
-            float xOffset = (packWidth / (RenderingConstants.PIXELS_PER_UNIT * 2)) + 0.1f; // Right edge + 0.1 gap
+            float packWidth = _buildingSprite != null
+                ? _buildingSprite.texture.width
+                : RenderingConstants.CELL_SIZE;
+            float xOffset = (packWidth / (RenderingConstants.CELL_SIZE * 2f)) + 0.1f;
             _clanTransform.localPosition = new Vector3(xOffset, -0.5f, 0);
+        }
+
+        private void ApplyRoofOffset()
+        {
+            if (_visualTransform == null ||
+                _buildingType == null ||
+                !BuildingTemplates.TryGet(_buildingType.Value, out PackBuilding? building) ||
+                building == null)
+            {
+                return;
+            }
+
+            Vector2 center = building.RoofCenterOffsetCells;
+            _visualTransform.localPosition = new Vector3(
+                center.x * ProjectRuntimeContracts.World.CellSize,
+                -center.y * ProjectRuntimeContracts.World.CellSize,
+                0f);
         }
 
         protected void Update()
@@ -293,11 +329,18 @@ namespace Fodinae.Game
                 return;
             }
 
-            _buildingBatchHandle ??= _entityBatchRenderer.RegisterSprite(transform, 0);
+            if (_visualTransform != null)
+            {
+                _buildingBatchHandle ??= _entityBatchRenderer.RegisterSprite(
+                    _visualTransform,
+                    RenderingConstants.BUILDING_ROOF_SORTING_ORDER);
+            }
             if (_clanTransform != null)
             {
                 _clanBatchHandle ??=
-                    _entityBatchRenderer.RegisterSprite(_clanTransform, 10);
+                    _entityBatchRenderer.RegisterSprite(
+                        _clanTransform,
+                        RenderingConstants.BUILDING_ROOF_SORTING_ORDER + 10);
             }
         }
 

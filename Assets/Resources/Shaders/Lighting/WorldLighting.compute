@@ -6,6 +6,8 @@
 #pragma kernel CompositeLighting
 #pragma kernel ResolveAndComposite
 
+#pragma target 5.0
+
 #define PI2 6.28318530718
 #define MAX_INTERVAL_STEPS 64
 #define CONTACT_DIRECTION_COUNT 8
