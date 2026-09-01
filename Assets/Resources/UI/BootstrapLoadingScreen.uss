@@ -1,0 +1,27 @@
+.bootstrap-loading-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    display: none;
+    background-color: rgba(4, 8, 18, 0.94);
+}
+
+.bootstrap-loading-overlay--visible {
+    display: flex;
+}
+
+.bootstrap-loading-title {
+    color: rgb(230, 238, 255);
+    font-size: 28px;
+    -unity-font-style: bold;
+}
+
+.bootstrap-loading-phase {
+    margin-top: 12px;
+    color: rgb(144, 166, 204);
+    font-size: 16px;
+}

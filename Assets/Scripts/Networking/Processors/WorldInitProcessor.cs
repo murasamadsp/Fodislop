@@ -1,33 +1,34 @@
 #nullable enable
 
-using System;
-using Fodinae.Core.DI;
-using Fodinae.Game.Managers;
+using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.Connection;
-using UnityEngine;
 
-namespace Fodinae.Networking.Processors
+namespace Fodinae.Networking.Processors;
+
+/// <summary>
+/// Applies WorldInitPacket to the world domain: loads the world into
+/// MapStorage/MapManager and routes the manager's world-initialized signal to
+/// GameManager so world readiness is published from one place.
+/// </summary>
+public sealed class WorldInitProcessor : System.IDisposable
 {
-    public class WorldInitProcessor : IPacketProcessor<WorldInitPacket>
+    private readonly IMapDataProvider _mapManager;
+    private readonly IWorldReadiness _gameManager;
+
+    public WorldInitProcessor(IMapDataProvider mapManager, IWorldReadiness gameManager)
     {
-        private readonly ISessionContainer _session;
+        _mapManager = mapManager;
+        _gameManager = gameManager;
+        mapManager.OnWorldInitialized += gameManager.NotifyWorldLoaded;
+    }
 
-        public WorldInitProcessor(ISessionContainer session)
-        {
-            _session = session;
-        }
+    public void Process(WorldInitPacket packet)
+    {
+        _mapManager.LoadWorldInit(packet);
+    }
 
-        public void Process(WorldInitPacket packet)
-        {
-            Debug.Log("[WorldInitProcessor] Processing WorldInitPacket");
-            var mm = _session.TryResolve<MapManager>();
-            if (mm == null)
-            {
-                throw new InvalidOperationException(
-                    "MapManager is not registered; cannot process WorldInitPacket.");
-            }
-
-            mm.LoadWorldInit(packet);
-        }
+    public void Dispose()
+    {
+        _mapManager.OnWorldInitialized -= _gameManager.NotifyWorldLoaded;
     }
 }

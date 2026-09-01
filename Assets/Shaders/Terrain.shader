@@ -29,12 +29,13 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Tags { "LightMode" = "Universal2D" }
 
             Blend SrcAlpha OneMinusSrcAlpha
-            ZWrite On
+            ZWrite Off
             Cull Off
 
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ FODINAE_WORLD_LIGHTING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "TerrainTileAddressing.hlsl"
@@ -93,8 +94,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return saturate((worldPos - _WorldLightRect.xy) / rectSize);
             }
 
-            float3 GetTerrariaLightColor(float2 worldPos)
+            float3 GetWorldLightColor(float2 worldPos)
             {
+                #if !defined(FODINAE_WORLD_LIGHTING)
+                    return 1.0;
+                #else
                 float2 lightUV = GetWorldLightUv(worldPos);
                 if (_WorldLightDebugView != 0)
                 {
@@ -108,6 +112,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 return _WorldLightTexture.Sample(
                     sampler_WorldLightTexture,
                     lightUV).rgb;
+                #endif
             }
 
             float3 RgbToHsv(float3 c)
@@ -175,7 +180,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(
-                        GetTerrariaLightColor(input.worldPosition.xy),
+                        GetWorldLightColor(input.worldPosition.xy),
                         1.0);
                 }
 
@@ -189,7 +194,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         return half4(0.0, 0.0, 0.0, 0.0);
                     }
 
-                    float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
+                    float3 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     float3 diagnosticTexture = SampleMissingTexture(input.worldPos.xy);
                     return half4(diagnosticTexture * worldLight, input.color.a);
                 }
@@ -207,7 +212,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 if (subAtlasSizeUV.x <= 0 || tileSizeUV.x <= 0)
                 {
                     if (input.color.a < 0.05) return half4(0.0, 0.0, 0.0, 0.0);
-                    float3 worldLight = GetTerrariaLightColor(input.worldPosition.xy);
+                    float3 worldLight = GetWorldLightColor(input.worldPosition.xy);
                     return half4(0.0, 0.0, 0.0, input.color.a * worldLight.r);
                 }
 
@@ -236,9 +241,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float2 quadUV = input.uv;
                 int animTypeEarly = (int)(input.animData.x + 0.5);
                 bool isScrollAnimated = animTypeEarly == 4;
+
                 if (input.packedData.x > 0.5)
                 {
-                    float2 anchoredUV = input.packedData.zw;
+                    float2 anchoredUV = input.packedData.yz;
                     float2 stepUV = float2(0.0, 0.0);
                     stepUV.x = anchoredUV.x >= 1.0 ? 1.0 : (anchoredUV.x <= 0.0 ? -1.0 : 0.0);
                     stepUV.y = anchoredUV.y >= 1.0 ? -1.0 : (anchoredUV.y <= 0.0 ? 1.0 : 0.0);
@@ -257,19 +263,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     if (outsideX || outsideY)
                     {
                         float2 stepPos = input.worldPos.xy + stepUV;
-                        float2 wrappedStep;
-                        float stepVariantY = fmod(abs(stepPos.y), tilesCount.y);
-                        wrappedStep.y = floor(tilesCount.y - EPS - stepVariantY);
-                        if (isTiling)
-                        {
-                            wrappedStep.x = floor(input.worldPos.z + stepUV.x + EPS);
-                        }
-                        else
-                        {
-                            wrappedStep.x = floor(fmod(abs(stepPos.x), tilesCount.x) + EPS);
-                        }
+                        float2 wrappedStep = FodinaeResolveTerrainTileIndex(
+                            stepPos,
+                            tilesCount,
+                            input.worldPos.z,
+                            isTiling ? 1.0 : 0.0);
 
-                        wrappedStep = clamp(wrappedStep, 0.0, tilesCount - 1.0);
                         if (isScrollAnimated)
                         {
                             wrappedStep.y = wrapped.y;
@@ -359,7 +358,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 bool isRoundable = (iflags & 2) != 0;
                 if (isRoundable)
                 {
-                    int sameMask = int(round(glowFlags.w));
+                    int sameMask = int(glowFlags.y) & 15; // bits 0-3 of packedLightingFlags = solidBoundaryMask
                     float4 bits = frac(sameMask * float4(0.5, 0.25, 0.125, 0.0625));
                     bool4 hasSame = bits >= 0.5;
                     float2 p = input.uv - 0.5;
@@ -395,7 +394,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     alpha = lerp(alpha, 1.0, cornerExclude);
                     finalAlpha *= alpha;
                 }
-                float3 lightColor = GetTerrariaLightColor(input.worldPosition.xy);
+                float3 lightColor = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRgb = finalRgb * lightColor;
                 if (finalAlpha < 0.99 && finalAlpha > 0.01)
                 {
@@ -518,8 +517,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     : 0.0;
                 bool hasRoundedPhysicalContour = (lightingFlags & 32u) != 0u;
                 bool isPhysicalMass = (lightingFlags & 64u) != 0u;
-                float occupancy = isPhysicalMass ? isForeground : 0.0;
-                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.zw : input.uv;
+                // Occupancy — физическая масса переднего плана. isPhysicalMass уже
+                // гарантирует !isBackground (фон никогда не получает флаг 64),
+                // поэтому isForeground здесь избыточен и только добавлял хрупкую
+                // зависимость от точности positionOS.z.
+                float occupancy = isPhysicalMass ? 1.0 : 0.0;
+                float2 contourUV = input.packedData.x > 0.5 ? input.packedData.yz : input.uv;
                 occupancy *= hasRoundedPhysicalContour
                     ? PhysicalContour(
                         contourUV,

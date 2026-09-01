@@ -11,20 +11,20 @@ namespace Fodinae.Editor
 {
     /// <summary>
     /// Editor utility for synchronizing FMOD Studio compiled banks
-    /// from 'FodinaeAudio/Build/Desktop/' to 'Assets/StreamingAssets/Audio/' and CDN export targets.
+    /// from 'FodinaeAudio/Build/Desktop/' to 'Assets/StreamingAssets/Audio/'.
     ///
     /// CLI:
     ///   Unity -quit -batchmode -nographics -projectPath . \
     ///         -executeMethod Fodinae.Editor.FmodBankBuilder.SyncBanks
     ///
-    /// Menu: Tools > FMOD > Sync Banks to StreamingAssets & CDN
+    /// Menu: Tools > FMOD > Sync Banks to StreamingAssets
     /// </summary>
     public static class FmodBankBuilder
     {
         private const string FmodSourceBuildPath = "FodinaeAudio/Build/Desktop";
         private const string StreamingAssetsAudioPath = "Assets/StreamingAssets/Audio";
 
-        [MenuItem("Tools/FMOD/Sync Banks to StreamingAssets & CDN")]
+        [MenuItem("Tools/FMOD/Sync Banks to StreamingAssets")]
         public static void SyncBanks()
         {
             var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -81,17 +81,13 @@ namespace Fodinae.Editor
                 return;
             }
 
-            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            var buildScriptPath = Path.Combine(projectRoot, "FodinaeAudio", "build_fmod_project.js");
-            var scriptArg = File.Exists(buildScriptPath) ? $"-script \"{buildScriptPath}\" " : string.Empty;
-
             try
             {
-                Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' -build {scriptArg}'{fsproPath}'...");
+                Log($"Invoking FMOD Studio CLI compiler: '{fmodCliPath}' -build -ignore-warnings \"{fsproPath}\"...");
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = fmodCliPath,
-                    Arguments = $"-build {scriptArg}-ignore-warnings \"{fsproPath}\"",
+                    Arguments = $"-build -ignore-warnings \"{fsproPath}\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -99,12 +95,28 @@ namespace Fodinae.Editor
                 };
 
                 using var process = System.Diagnostics.Process.Start(psi);
-                process.WaitForExit(30000);
-                Log($"FMOD Studio CLI build completed with exit code: {process.ExitCode}");
+
+                // Компиляция крупного проекта может занять заметно больше 30 с —
+                // таймаут сделан щедрым, а не минимальным.
+                if (!process.WaitForExit(5 * 60 * 1000))
+                {
+                    process.Kill();
+                    Fail($"FMOD Studio CLI build timed out after 5 minutes. Banks were not synced.");
+                    return;
+                }
+
+                if (process.ExitCode != 0)
+                {
+                    string error = process.StandardError.ReadToEnd();
+                    Fail($"FMOD Studio CLI build failed with exit code {process.ExitCode}: {error}");
+                    return;
+                }
+
+                Log("FMOD Studio CLI build completed successfully.");
             }
             catch (Exception ex)
             {
-                Log($"Could not run FMOD Studio CLI compiler: {ex.Message}");
+                Fail($"Could not run FMOD Studio CLI compiler: {ex.Message}");
             }
         }
 

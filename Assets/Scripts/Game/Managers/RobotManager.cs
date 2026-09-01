@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Game;
 using Fodinae.World;
 using Fodinae.World.Terrain;
@@ -15,9 +16,12 @@ namespace Fodinae.Game.Managers
     {
         private const string TAG = "[RobotManager]";
         private Dictionary<uint, Robot> _robots = new();
+        private readonly HashSet<uint> _overwriteWarningsLogged = [];
 
         [Inject]
-        private IObjectResolver _resolver = null!;
+        private ISceneObjectFactory _sceneObjects = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
 
         public static bool ShowDebugVisuals { get; set; }
 
@@ -25,11 +29,11 @@ namespace Fodinae.Game.Managers
 
         public int RobotCount => _robots.Count;
 
-        public void RegisterRobot(Robot robot)
+        public void RegisterRobot(IRobotView robot)
         {
-            if (robot == null)
+            if (robot is not Robot concrete)
             {
-                Debug.LogWarning($"{TAG} RegisterRobot called with null robot");
+                Debug.LogWarning($"{TAG} RegisterRobot called with non-Robot view");
                 return;
             }
 
@@ -56,13 +60,19 @@ namespace Fodinae.Game.Managers
                     return;
                 }
 
-                Debug.LogWarning($"{TAG} Robot {robot.BotId} already registered, overwriting");
+                // Server resends can target a bot whose stale instance is still
+                // registered. Warn once per bot id so a resend storm cannot
+                // flood the console.
+                if (_overwriteWarningsLogged.Add(robot.BotId))
+                {
+                    Debug.LogWarning($"{TAG} Robot {robot.BotId} already registered, overwriting");
+                }
             }
 
-            _robots[robot.BotId] = robot;
+            _robots[robot.BotId] = concrete;
         }
 
-        public Robot GetOrCreateRobot(uint botId)
+        public IRobotView GetOrCreateRobot(uint botId)
         {
             if (_robots.TryGetValue(botId, out var robot))
             {
@@ -71,8 +81,8 @@ namespace Fodinae.Game.Managers
 
             if (botId != 0 && botId == LocalPlayerBotId)
             {
-                var pmc = Fodinae.Player.Logic.PlayerMovementController.LocalPlayer;
-                var playerObj = pmc != null ? pmc.gameObject : GameObject.FindGameObjectWithTag("Player");
+                var pmc = _localPlayer.Current;
+                var playerObj = pmc != null ? pmc.gameObject : null;
                 if (playerObj != null)
                 {
                     robot = playerObj.GetComponent<Robot>();
@@ -85,19 +95,7 @@ namespace Fodinae.Game.Managers
                 }
             }
 
-            GameObject robotGo = new GameObject($"Robot_{botId}");
-            robotGo.transform.SetParent(transform);
-            robotGo.AddComponent<SpriteRenderer>();
-
-            robot = robotGo.GetComponent<Robot>();
-            if (robot == null)
-            {
-                robot = robotGo.AddComponent<Robot>();
-            }
-
-            // Runtime-created components never reach GameLifetimeScope's startup
-            // injection scan — inject explicitly so Robot's [Inject] fields are filled.
-            _resolver?.Inject(robot);
+            robot = _sceneObjects.Create<Robot>($"Robot_{botId}", RuntimeOwner.Robots);
 
             robot.Initialize(botId);
             _robots[botId] = robot;
@@ -138,6 +136,7 @@ namespace Fodinae.Game.Managers
         public void ClearAllRobots()
         {
             int cleared = 0;
+            _overwriteWarningsLogged.Clear();
             var keysToRemove = new List<uint>();
             foreach (var kvp in _robots)
             {
@@ -166,6 +165,7 @@ namespace Fodinae.Game.Managers
         public void UnregisterRobot(uint botId)
         {
             _robots.Remove(botId);
+            _overwriteWarningsLogged.Remove(botId);
         }
     }
 }

@@ -14,7 +14,7 @@ namespace VContainer.Unity
 
         public Type Type { get; private set; }
 
-        private ParentReference(Type type)
+        ParentReference(Type type)
         {
             Type = type;
             TypeName = type.FullName;
@@ -34,15 +34,12 @@ namespace VContainer.Unity
                 {
                     Type = assembly.GetType(TypeName);
                     if (Type != null)
-                    {
                         break;
-                    }
                 }
             }
         }
 
-        public static ParentReference Create<T>()
-            where T : LifetimeScope
+        public static ParentReference Create<T>() where T : LifetimeScope
         {
             return new ParentReference(typeof(T));
         }

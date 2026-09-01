@@ -13,12 +13,14 @@ Shader "Fodinae/UI/UnpremultiplyAlpha"
     // atmosphere was present in the render target and then almost entirely
     // erased by the UI blend.
     //
-    // The same blit is also the cheapest place to anti-alias the render. The
-    // camera target already carries 4x MSAA, but MSAA only supersamples triangle
+    // The same blit is also the only place the render is anti-aliased. The
+    // camera target carries no MSAA: multisampling only supersamples triangle
     // coverage - it cannot touch the aliasing that lives inside a fragment: the
     // fractal crust detail, the cloud deck's zonal bands and the sub-pixel
     // orbit line all shimmer because of shader-generated high frequency, not
-    // geometry edges. This pass applies a lightweight FXAA (a 9-tap luma-guided
+    // geometry edges - and the one edge it would help with, the limb, this pass
+    // already covers. So MSAA was pure cost on every pixel of the target for a
+    // single arc. This pass applies a lightweight FXAA (a 9-tap luma-guided
     // blend) to the premultiplied image, then unpremultiplies. Blending the
     // premultiplied RGBA directly is the correct operator here: at the
     // atmosphere limb the premultiplied colour is exactly the coverage-weighted

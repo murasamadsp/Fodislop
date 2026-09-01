@@ -40,6 +40,15 @@ namespace Fodinae.Rendering.PostProcessing
         {
             _pass?.Dispose();
             _pass = null;
+            _mainCamera = null;
+        }
+
+        private void EnsurePassCreated(Camera gameplayCamera)
+        {
+            if (_pass != null)
+            {
+                return;
+            }
 
             var computeShader = _settings.ComputeShader != null
                 ? _settings.ComputeShader
@@ -52,16 +61,9 @@ namespace Fodinae.Rendering.PostProcessing
                     "the renderer feature cannot be disabled silently.");
             }
 
-            var velocityShader = Shader.Find(ProjectRuntimeContracts.ShaderNames.Velocity);
-            if (velocityShader == null || !velocityShader.isSupported)
-            {
-                throw new InvalidOperationException(
-                    $"PostProcessRendererFeature requires the supported {ProjectRuntimeContracts.ShaderNames.Velocity} shader.");
-            }
-
-            _pass = new PostProcessRenderPass(computeShader, velocityShader);
+            _pass = new PostProcessRenderPass(computeShader);
             _pass.ConfigureInput(ScriptableRenderPassInput.Color);
-            _mainCamera = GameplayCamera.Resolve();
+            _mainCamera = gameplayCamera;
             PostProcessRenderPass.SetMainCamera(_mainCamera);
         }
 
@@ -69,30 +71,38 @@ namespace Fodinae.Rendering.PostProcessing
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
+            // Do not enqueue a pass which requests the camera color when the
+            // active preset has disabled post-processing. Returning later from
+            // RecordRenderGraph is too late: URP has already inspected the
+            // pass inputs and may select an intermediate-color render path.
+            if (!PostProcessRenderPass.IsEnabled)
+            {
+                _pass?.Dispose();
+                _pass = null;
+                _mainCamera = null;
+                return;
+            }
+
+            ref var cameraData = ref renderingData.cameraData;
+            if (cameraData.renderType != CameraRenderType.Base ||
+                cameraData.camera.cameraType != CameraType.Game)
+            {
+                return;
+            }
+
+            EnsurePassCreated(cameraData.camera);
             if (_pass == null)
             {
                 return;
             }
 
-            if (_mainCamera == null)
+            if (_mainCamera != cameraData.camera)
             {
-                _mainCamera = GameplayCamera.Resolve();
-            }
-
-            if (_mainCamera == null)
-            {
-                return;
+                _mainCamera = cameraData.camera;
+                PostProcessRenderPass.SetMainCamera(_mainCamera);
             }
 
             PostProcessRenderPass.SetMainCamera(_mainCamera);
-
-            ref var cameraData = ref renderingData.cameraData;
-            if (cameraData.renderType != CameraRenderType.Base ||
-                cameraData.camera.cameraType != CameraType.Game ||
-                cameraData.camera != _mainCamera)
-            {
-                return;
-            }
 
             if (!_settings.RunInSceneView && cameraData.isSceneViewCamera)
             {

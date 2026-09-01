@@ -4,20 +4,20 @@
 
 .text-field {
     background-color: rgba(30, 30, 30, 1);
-    border-color: var(--btn-border);
+    border-color: var(--border-subtle);
     border-width: 1px;
     border-radius: 3px;
     padding: 6px 10px;
-    color: var(--color-text);
-    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    font-size: var(--size-md);
 }
 
 .text-field:focus {
-    border-color: var(--color-accent);
+    border-color: var(--accent-gold);
 }
 
 .text-field-label {
-    color: var(--color-text-dim);
-    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-size: var(--size-sm);
     margin-bottom: 4px;
 }

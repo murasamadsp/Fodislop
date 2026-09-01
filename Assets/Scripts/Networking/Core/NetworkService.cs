@@ -1,0 +1,284 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Fodinae.Core.Interfaces;
+using Fodinae.Networking.Connection;
+using MinesServer.Networking.Client;
+using MinesServer.Networking.Client.Packets;
+using MinesServer.Networking.Client.Packets.Actions;
+using MinesServer.Networking.Server.Packets;
+using MinesServer.Networking.Server.Packets.Compression;
+using MinesServer.Networking.Server.Packets.World;
+using UnityEngine;
+using VContainer;
+
+namespace Fodinae.Networking
+{
+    public class NetworkService : MonoBehaviour, INetworkService
+    {
+        [Inject]
+        private IConnectionService _connectionService = null!;
+        [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+        private IConnectionService? _subscribedConnection;
+
+        private readonly Dictionary<Type, List<Subscription>> _subscribers = new();
+        private readonly Dictionary<Type, Subscription[]> _subscriberSnapshots = new();
+        private readonly HashSet<Type> _reportedDispatchFailures = [];
+        private readonly object _subscribersLock = new();
+        private bool _connectionSubscribed;
+
+        public bool IsConnectionSubscriptionEstablished => _connectionSubscribed;
+
+        protected void Awake()
+        {
+        }
+
+        protected void OnEnable()
+        {
+            EnsureConnectionSubscription();
+        }
+
+        protected void OnDisable()
+        {
+            UnsubscribeFromConnection();
+        }
+
+        protected void OnDestroy()
+        {
+            UnsubscribeFromConnection();
+        }
+
+        /// <summary>
+        /// Binds the packet stream after VContainer injection. Unity may call
+        /// OnEnable before [Inject] has populated the connection field.
+        /// </summary>
+        public void EnsureConnectionSubscription()
+        {
+            if (_subscribedConnection != null)
+            {
+                _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+                _subscribedConnection = null;
+            }
+
+            if (_connectionService == null)
+            {
+                _connectionSubscribed = false;
+                return;
+            }
+
+            // Rebind even when the local flag says "subscribed". During an
+            // editor/domain reload the ConnectionManager instance can be
+            // replaced while this component survives; the old boolean then
+            // describes a dead connection event source.
+            _connectionService.OnPacketReceived -= OnPacketReceived;
+            _connectionService.OnPacketReceived += OnPacketReceived;
+            _subscribedConnection = _connectionService;
+            _connectionSubscribed = true;
+            lock (_subscribersLock)
+            {
+                _reportedDispatchFailures.Clear();
+            }
+        }
+
+        private void UnsubscribeFromConnection()
+        {
+            if (_subscribedConnection == null)
+            {
+                _connectionSubscribed = false;
+                return;
+            }
+
+            _subscribedConnection.OnPacketReceived -= OnPacketReceived;
+            _subscribedConnection = null;
+            _connectionSubscribed = false;
+        }
+
+        public bool IsConnected
+        {
+            get
+            {
+                return _connectionService != null && _connectionService.IsConnected;
+            }
+        }
+
+        private ILocalPlayer? _cachedPlayerController;
+        private bool _missingPlayerActionWarningLogged;
+
+        public void SendAction(IActionClientPacket action)
+        {
+            if (!IsConnected)
+            {
+                return;
+            }
+
+            if (_cachedPlayerController == null)
+            {
+                _cachedPlayerController = _localPlayer.Current;
+            }
+
+            if (_cachedPlayerController == null)
+            {
+                if (!_missingPlayerActionWarningLogged)
+                {
+                    Debug.LogWarning("[NetworkService] Action dropped: local player is not ready.");
+                    _missingPlayerActionWarningLogged = true;
+                }
+
+                return;
+            }
+
+            _missingPlayerActionWarningLogged = false;
+
+            Vector2Int pos = _cachedPlayerController.Position;
+            ushort serverX = (ushort)pos.x;
+            ushort serverY = (ushort)pos.y;
+
+            Send(new ActionClientPacket(serverX, serverY, action));
+        }
+
+        public void Send(IRootClientPacket packet)
+        {
+            var connectionService = _connectionService ??
+                throw new InvalidOperationException(
+                    "NetworkService requires IConnectionService before sending.");
+            var timestamp = (uint)DateTimeOffset.UtcNow.Ticks;
+            connectionService.Send(new ClientPacket(timestamp, packet));
+        }
+
+        void INetworkService.Send(IRootClientPacket packet) => Send(packet);
+
+        public void Subscribe<T>(Action<T> handler)
+        {
+            var type = typeof(T);
+            lock (_subscribersLock)
+            {
+                if (!_subscribers.TryGetValue(type, out var handlers))
+                {
+                    handlers = new List<Subscription>();
+                    _subscribers[type] = handlers;
+                }
+
+                bool alreadySubscribed = false;
+                for (int i = 0; i < handlers.Count; i++)
+                {
+                    if (handlers[i].OriginalHandler == (Delegate)handler)
+                    {
+                        alreadySubscribed = true;
+                        break;
+                    }
+                }
+
+                if (alreadySubscribed)
+                {
+                    return;
+                }
+
+                handlers.Add(new Subscription
+                {
+                    OriginalHandler = handler,
+                    Wrapper = obj => handler((T)obj),
+                });
+                _subscriberSnapshots[type] = handlers.ToArray();
+            }
+        }
+
+        public void Unsubscribe<T>(Action<T> handler)
+        {
+            var type = typeof(T);
+            lock (_subscribersLock)
+            {
+                if (_subscribers.TryGetValue(type, out var handlers))
+                {
+                    handlers.RemoveAll(s => s.OriginalHandler == (Delegate)handler);
+                    _subscriberSnapshots[type] = handlers.ToArray();
+                }
+            }
+        }
+
+        private void OnPacketReceived(ServerPacket packet)
+        {
+            var payload = packet.Payload;
+            if (payload == null)
+            {
+                Debug.LogWarning("[NetworkService] Received ServerPacket with null Payload");
+                return;
+            }
+
+            while (payload is LzmaPacket lzma)
+            {
+                payload = lzma.Payload;
+            }
+
+            while (payload is LZ4Packet lz4)
+            {
+                payload = lz4.Payload;
+            }
+
+            if (payload is HBPacket hbPacket && hbPacket.Payload != null)
+            {
+                foreach (var innerPacket in hbPacket.Payload)
+                {
+                    Dispatch(innerPacket);
+                }
+            }
+            else
+            {
+                Dispatch(payload);
+            }
+        }
+
+        private void Dispatch(object packet)
+        {
+            if (packet == null)
+            {
+                return;
+            }
+
+            var packetType = packet.GetType();
+
+            Subscription[] handlers;
+            lock (_subscribersLock)
+            {
+                if (!_subscriberSnapshots.TryGetValue(packetType, out var snapshot))
+                {
+                    return;
+                }
+
+                handlers = snapshot;
+            }
+
+            for (int i = handlers.Length - 1; i >= 0; i--)
+            {
+                try
+                {
+                    handlers[i].Wrapper(packet);
+                }
+                catch (Exception ex)
+                {
+                    bool firstFailure;
+                    lock (_subscribersLock)
+                    {
+                        firstFailure = _reportedDispatchFailures.Add(packetType);
+                    }
+
+                    if (firstFailure)
+                    {
+                        Debug.LogException(new InvalidOperationException(
+                            $"[NetworkService] Error dispatching packet {packetType.Name} to subscriber.",
+                            ex));
+                    }
+                }
+            }
+        }
+
+
+        private class Subscription
+        {
+            public Delegate OriginalHandler { get; set; } = null!;
+            public Action<object> Wrapper { get; set; } = null!;
+        }
+    }
+}

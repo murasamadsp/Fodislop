@@ -2,213 +2,417 @@
 
 Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.5, C# 12, UI Toolkit, UniTask и сетевые пакеты `darkar25.fodinae.*` из MinesServerNetworking.
 
-## 1. Обязательные стандарты
+---
 
-- Обычные типы используют file-scoped namespace. Типы Unity, наследующие `MonoBehaviour`, `ScriptableObject`, `ScriptableRendererFeature` или `VolumeComponent`, используют block namespace: file-scoped namespace для них может дать `MonoScript.GetClass() == null`.
-- Включён `#nullable enable`: все поля, свойства и параметры явно nullable/non-null (`string?`, `null!`). Использовать primary constructors, `readonly record struct` и collection expressions `[]`, где это уместно.
-- Global usings находятся в `Fodinae.Core.GlobalUsings` и покрывают `Fodinae.Core`, `AssetPipeline`, `Audio`, `Networking`, `World`, `Game`, `Player`, `UI`, `Effekseer`.
-- StyleCop: Allman braces; обязательные `{}`; пустая строка после `}` (SA1513), но не перед `}` (SA1508); trailing comma в многострочных инициализаторах; пустая строка перед `//`.
+## 0. Абсолютный запрет на операции с Unity без явного запроса пользователя
 
-Клиент получает от сервера лёгкое состояние (координаты и идентификаторы), а тяжёлые текстуры, спрайты и FMOD-банки загружает один раз on-demand. Кэширование: RAM (`AssetCache`, `CellTextureCache`) → диск (`PersistentAssetCache`, ETag/MD5) → CDN/сервер. Рендеринг после загрузки выполняется локально.
+**Агенту запрещены любые операции с Unity, Unity Editor и Unity Hub, если пользователь в своём текущем сообщении явно не запросил конкретную операцию с Unity.** Наличие задачи по Unity-проекту, необходимость проверки изменений, ранее запущенный Editor или общая просьба «реализовать» не являются разрешением управлять Unity.
 
-## 2. Карта проекта
+Без отдельного явного запроса пользователя запрещено:
 
-```text
-Assets/
-  Editor/                 BuildScript, FmodBankBuilder, MapbConverter, utilities
-  Plugins/                FMOD, UniTask и vendored DLL
-  Prefabs/                Player.prefab
-  Resources/              UI, Styles, Programmator, Skills, profiles
-  Scenes/                 MainGame.unity и Tests/
-  Scripts/
-    AssetPipeline/       загрузка и кэш ассетов
-    Audio/                FMOD Backend/Core/Spatial
-    Core/                 DI, сервисы, GameLifetimeScope, global usings
-    Editor/               Unity editor utilities
-    Game/                 managers, robots, packs, VFX
-    Networking/           connection, PacketHandler, processors, tests
-    Player/               input, movement, camera, interaction
-    Rendering/            URP post-processing
-    UI/                   builders, HUD, chat, map, Programmator, controls
-    World/                map, terrain, atlas, lighting, world rendering
-    Tests/                Core/UI/World tests
-  Settings/               URP, renderer, input and volume profiles
-  Shaders/                terrain, background, lighting, post-processing
-  StreamingAssets/       FMOD banks and local maps
-  Textures/, UI Toolkit/  графика и UI-темы
-scripts/                  pre-commit-lint.sh, setup-hooks.sh, helpers
-.agents/skills/           fmod-sync и run-linter
-```
+* запускать, открывать, закрывать, перезапускать, завершать, активировать или фокусировать Unity Editor и Unity Hub;
+* вызывать `unity`, Unity CLI, Unity MCP/Pipeline, Editor API, menu items, batch mode, build, test runner и любые команды, подключающиеся к Editor или Player;
+* проверять состояние Unity (`unity status`, процессы, окна, логи Editor), ждать компиляцию, посылать процессу сигналы или иным способом диагностировать и контролировать запущенный Editor;
+* открывать или сохранять сцены, материалы, prefabs и `.asset` через Editor, запускать импорт, reimport, domain reload, компиляцию шейдеров, bake, capture или рендер;
+* самостоятельно запрашивать разрешение на такую операцию через системный диалог: инициатива должна исходить от явного сообщения пользователя.
 
-## 3. Архитектура
+Разрешение действует только на прямо названную пользователем операцию и не распространяется автоматически на последующие Unity-действия. Агент может без запуска Unity редактировать обычные исходные файлы (`.cs`, `.shader`, `.hlsl`, `.uxml`, `.uss` и документацию), анализировать уже предоставленные данные и выполнять инструменты, не запускающие и не контролирующие Unity. Если завершение задачи требует Unity, агент останавливается и сообщает, какая конкретная операция остаётся пользователю или требует его явного запроса.
 
-### DI и жизненный цикл
+---
 
-CompositionRoot и `SingletonMonoBehaviour` удалены. Регистрация двухуровневая: `BootstrapLifetimeScope` (DontDestroyOnLoad, `DefaultExecutionOrder -30000`) держит менеджеры, переживающие переходы сцен (`ConnectionManager`, `NetworkService`, `AudioSystem`, `ClientConfigManager`, `ClientAssetLoader`), а `GameLifetimeScope` (в MainGame, `-20000`) — игровые. `RegisterManager<T>` ищет объект строго в своей сцене (`gameObject.scene == _ownScene`), регистрирует найденный экземпляр через `RegisterComponent(existing)` или — если менеджера нет в сцене — через `RegisterComponentOnNewGameObject<T>(Lifetime.Singleton).UnderTransform(transform)`.
+## 1. Обязательные стандарты разработки
 
-**Запрещено создавать менеджеров вручную через `AddComponent` внутри `Configure`.** `Configure` выполняется до сборки контейнера: `AddComponent` мгновенно дёргает `Awake`/`OnEnable` в момент, когда ServiceLocator ещё указывает на Bootstrap-скоуп, сцена не активна, а `[Inject]`-поля не заполнены — это даёт весь класс гонок (резолв `UIDocument` из Bootstrap, захват меню-камеры в `Awake`, NRE в `Start`). `RegisterComponentOnNewGameObject` делегирует создание `NewGameObjectProvider`: неактивный GO → `AddComponent` (Awake не вызывается) → инъекция → активация. Создание происходит при первом резолве — в `GameBootstrap.PostStart`.
+### C# и Unity-типы
 
-Инициализация графа выполняется НЕ в build-callback, а в `GameBootstrap` (`IPostStartable.PostStart`):
+* **Namespace:** Обычные типы используют file-scoped namespace. Типы Unity, наследующие `MonoBehaviour`, `ScriptableObject`, `ScriptableRendererFeature` или `VolumeComponent`, используют block namespace: file-scoped namespace для них может дать `MonoScript.GetClass() == null`.
+* **Nullable Reference Types:** Включён `#nullable enable`. Все поля, свойства и параметры явно nullable/non-null (`string?`, `null!`). Использовать primary constructors, `readonly record struct` и collection expressions `[]`, где это уместно.
+* **Global Usings:** Находятся в `Fodinae.Core.GlobalUsings` и покрывают `Fodinae.Core`, `AssetPipeline`, `Audio`, `Networking`, `World`, `Game`, `Player`, `UI`, `Effekseer`.
+* **StyleCop:**
+* Allman braces;
+* Обязательные `{}`;
+* Пустая строка после `}` (SA1513), но не перед `}` (SA1508);
+* Trailing comma в многострочных инициализаторах;
+* Пустая строка перед `//`.
 
-1. `ServiceLocator.Initialize(resolver)`;
-2. `SceneManager.SetActiveScene(_ownScene)` — иначе лениво создаваемые менеджеры попадут в сцену, загрузившую нас (например, меню);
-3. инъекция scene-MonoBehaviours с `[Inject]` (`InjectSceneBehaviours`);
-4. **явный резолв ВСЕХ менеджеров** в детерминированном порядке: ConnectionManager → NetworkService → MapManager → PacketHandler → IAssetLoader → AudioSystem → IPlayerStats → PlayerMovementController → CameraFollow → TerrainRenderer → TentacleBatchRenderer → UI-сервисы (GlobalChatUI, FloatingChatManager, FPSCounter, DiagnosticRunner, IInputBlocker, MinimapController, DisplayManager, UIInputManager, PlayerHUDView, InventoryView, PauseMenu) → PostProcessController.EnsureVolumeSetup → GameManager → ServerConfig → TerrariaLightingEngine.EnsureInitialized → SurfaceRenderer → TextureStorageManager → WorldTextureManager → ServerAudioEventManager → VFXPool → PackManager → RobotManager;
-5. `gameManager.EnsureUISetup()` — ПОСЛЕ резолвов всех UI-сервисов, иначе `SetupUI` не найдёт их через `FindAnyObjectByType` и создаст дубликаты без регистрации в контейнере;
-6. `TerrainRenderer.EnsureSubscriptions()`;
-7. `ValidateStartup()` (критические поля: `PacketHandler`, `PauseMenu`, `PlayerHUDView`, `InventoryView`, `PlayerMovementController`, `MapManager`, `WorldTextureManager`, `ClientAssetLoader`, `AudioSystem`, `TerrainRenderer`).
+* **Именование:**
+* Типы / публичные члены / константы — `PascalCase`;
+* Private поля — `_camelCase`;
+* Параметры и локальные переменные — `camelCase`;
+* FMOD events, сетевые теги и CDN-пути — `lowercase/snake_case`.
 
-Порядок резолвов в `PostStart` — **контракт, а не деталь реализации**: ленивые синглтоны создаются в порядке первого резолва, поэтому добавление нового `RegisterManager<T>` без резолва в `PostStart` означает, что менеджер вообще не создастся (или создастся недетерминированно при первом обращении). Любой новый менеджер обязан быть зарезолвлен в `PostStart` в правильной позиции.
+### Сериализация, ассеты и документация
 
-Регистрируются `MapStorage`, `InventoryModel`, `PlayerStatsModel` как instances; managers: `MapManager`, `TerrainRenderer`, `ClientAssetLoader`, `AudioSystem`, `WorldTextureManager`, `ServerAudioEventManager`, `ConnectionManager`, `PacketHandler`, `NetworkService`, `GameManager`, `VFXPool`, `PackManager`, `RobotManager`, `TentacleBatchRenderer`, `ServerConfig`, `TextureStorageManager`, `GlobalChatUI`, `UIInputManager`, `FPSCounter`, `FloatingChatManager`, `PlayerHUDView`, `InventoryView`, `PauseMenu`, `MinimapController`, `DisplayManager`, `CameraFollow`, `PostProcessController`, `TerrariaLightingEngine`, `SurfaceRenderer` — с соответствующими интерфейсами из `Core/Interfaces`.
+* `.prefab`, `.unity`, `.asset` нельзя редактировать текстом. Менять их только через Unity Editor API/Inspector; сохранять GUID и `.meta`.
+* Имя файла Unity-скрипта должно строго совпадать с классом. После создания/переименования проверять `MonoScript.GetClass()` в Editor (`dotnet build` этого не проверяет).
+* `VolumeProfile.Add<T>()` создаёт component только в памяти; editor-код обязан вызвать `AssetDatabase.AddObjectToAsset()` до `SaveAssets()`.
+* Документация в `docs/` содержит только автономные HTML с inline `<style>`, без Markdown и внешних зависимостей.
 
-`ServiceLocator` содержит только `Initialize(IObjectResolver)` и `Resolve<T>()`. Для старого монолитного кода допустимы `Instance`; новый код использует `[Inject]`.
+---
 
-### Сеть и UI
+## 2. Карта проекта и структура сцен
 
-- `NetworkService`/`PacketHandler`/`ConnectionManager` — сервисы подписок, диспетчеризации, авторизации и реконнекта. `DummyConnection` — offline transport; при невалидном токене отправляет `OpenWindowPacket('auth')` — это штатный флоу первого входа (токены хранятся в `temporaryCachePath/server_tokens.json`, клиентский — в PlayerPrefs `AuthToken6`), и его окно обязано быть видимым поверх лоадера меню (см. слои UIDocument).
-- Процессоры обрабатывают world, map, chat, clan, audio, windows, inventory, stats, player, robots, packs, missions и config. Packet UI строится из `OpenWindowPacket` через `PacketUIBuilderFactory`.
-- Единственный источник обычного UI — `GameManager.SetupUI()` под выключенным `_uiRoot`; `AuthorizeUI()` его активирует. `FindAnyObjectByType` не видит inactive объекты.
-- Сервер авторитетен при закрытии packet-окон: ESC/кнопка отправляют запрос, локально окно не скрывать; закрытие происходит только после `CloseWindowPacket`.
-- `PacketHandler.IsInputBlocked` вычисляется как `ChatInput.IsFocused || HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen`. Фокус чата входит в блокировку: пока пользователь печатает, движение, копка, геймплейные клавиши и камера заблокированы (это единственный источник блокировки ввода для `PlayerMovementController`/`PlayerInteractionController`/`CameraFollow`). `PauseMenu` сначала отдаёт ESC программатору, затем отправляет серверный close верхнего окна. Enter в чате отправляет сообщение даже при `IsInputBlocked` — условие в `GlobalChatUI.Update` учитывает `ChatInput.IsFocused`.
-- `WindowBinding` использует SmartFormat. Inventory — модель/presenter/view, 9×6 + хотбар; HUD включает HP, энергию, баффы, авто-копку и Programmator. Chat состоит из global/local/floating компонентов.
-- `MainMenu` загружает `Resources/UI/MainMenu.uxml`; после сборки UI фиксированный `PanelSettings` нужно восстановить, иначе элементы могут отображаться, но не принимать события.
-- **Слои UIDocument — часть контракта.** `MainMenu` UIDocument: `sortingOrder 100` (полноэкранный лоадер «спуска»); игровой `MainGame` UIDocument: `sortingOrder 0` (ПОД лоадером — во время загрузки игровой UI не должен быть виден, иначе на экране загрузки мелькают появляющиеся по одному элементы HUD/миникарты). Серверные окна (`OpenWindowPacket` — auth, кланы, миссии) открываются в игровом UIDocument, поэтому при открытии окна `MainMenu.DismissDescentIfServerWindowOpened()` скрывает свой полный слой (лоадер уступает окну, сцена меню при этом НЕ выгружается — финальный teardown остаётся за `OnWorldLoaded`). Не поднимать игровой sortingOrder выше меню и не скрывать игровой UI иначе — это ломает видимость окна.
+*(Секция карты проекта находится на пересмотре)*
 
-#### Идиоматика UI Toolkit (обязательна для нового/переписываемого кода)
+### Сцены проекта (Build Settings)
 
-1. **Один источник стилей** — `PanelSettings.themeUss` → `FodinaeTheme.tss`, который `@import`'ит все `Resources/Styles/*.uss`. Запрещено в контроллерах делать `element.styleSheets.Add(Resources.Load<StyleSheet>(...))` и дублировать уже импортированные стили.
-2. **Структура в UXML, не в коде.** Статическая разметка (контейнеры, кнопки, панели) — в `.uxml` в `Resources/UI/`; код через `VisualTreeAsset.CloneTree()` и `tree.Q<T>("Name")` только привязывает обработчики и data-bound контент. Конструкция `new VisualElement()` в C# — только для динамических списков/сеток.
-3. **Размер панели — дело PanelSettings, не кода.** Запрещено выставлять `root.style.width/height` из `Screen.width/height` и полагаться на абсолютные `top/left` координаты. Рут и контейнеры растягиваются через `position:absolute; left/right/top/bottom:0` или `flex-grow:1` в USS; центрирование — flexbox (`align-items/justify-content`).
-4. **Переключение видимости — `display:Flex/None`** через класс или inline-стиль на существующем элементе UXML. Не добавлять/удалять оверлеи из иерархии на каждом кадре и не играться `pickingMode` для «прозрачности» — модальные/фоновые слои задаются z-порядком в UXML и USS.
-5. **Сборка UI один раз** (guard по флагу в `OnEnable`/`Start`), а не при каждом показе. `clicked`/`RegisterCallback` подписывать один раз; при `OnDisable` — отписываться.
-6. **`Screen.width` ненадёжен в редакторе** — до первого layout панель может дать NaN; причина некликабельности. Диагностировать по `root.layout` (конечный размер ≠ NaN) и `element.worldBound`. После `CloneTree` не модифицировать `root` кроме `Add(tree)`.
-7. **Клавиатурная навигация по UI вырезана насовсем.** EventSystem/`InputSystemUIInputModule` не создаются ни в одном скоупе (проект 100% UI Toolkit, uGUI нет). `PlayerHUDView.InitializeHUD` безусловно подавляет навигационные события панели (`NavigationMoveEvent`, `NavigationSubmitEvent`, Tab через `KeyDownEvent`) в TrickleDown — стрелки/WASD/Enter/Tab не двигают фокус по кнопкам и не активируют их. Всё UI-взаимодействие — мышью; геймплейные клавиши читаются напрямую через `Keyboard.current` в `PlayerInputHandler`.
-8. **Перевод координат экран→панель только через `RuntimePanelUtils.ScreenToPanel(root.panel, screenPos)`.** `PanelSettings` — `ScaleWithScreenSize` (reference 1200×800); ручной флип Y (`new Vector2(x, Screen.height - y)`) не учитывает масштаб и мажет тем сильнее, чем дальше точка от верхнего левого угла. При 1920×1080 у миникарты (низ слева) `Pick` промахивался на сотни пикселей — клики по кнопкам проваливались в мир, и `PlayerInteractionController` слал `ClickCellPacket`, из-за чего робот «сам» шёл копать.
+Четыре production-сцены (канонический порядок регистрации в Build Settings — см. `BuildSettingsFix.EnsureScenesInBuildSettings`):
 
-### Мир и координаты
+1. **`Bootstrap.unity`** (Build Index 0) — `BootstrapLifetimeScope`, DontDestroyOnLoad-менеджеры.
+2. **`Gateway.unity`** (Build Index 1) — гейт авторизации.
+3. **`MainMenu.unity`** (Build Index 2) — только UI главного меню, без DI-графа.
+4. **`MainGame.unity`** (Build Index 3) — весь `GameLifetimeScope`, DI-граф и геймплей. Offline-режим обеспечивает `DummyConnection`.
 
-- Серверные координаты: левый верхний угол `(0, 0)`, X вправо, Y вниз. Все преобразования — через `CoordinateUtils`; всегда учитывать `MapManager.WorldHeight`.
-- `MapManager` получает `WorldInitPacket`/`MapRegionPacket`; `MapStorage` хранит чанки 32×32, `persistentDataPath/*.mapb`, и уведомляет renderer через `OnCellChanged()`.
-- `WorldLayer<T>` — дисковый streaming, LRU RAM-кэш, RLE и append-only запись с компактификацией. Текстуры загружаются из файловой системы, не из Resources/Addressables.
-- `TerrainRenderer` рисует видимый мир одним mesh (7 UV-каналов, sorting order `-1000`) и обновляет изменения дифференциально. `SurfaceRenderer` обслуживает закартовые поверхности и обязан регистрироваться/разрешаться через `GameLifetimeScope` до startup validation. `SceneSetup` только загружает его обязательные текстуры; вручную создавать второй `SurfaceRenderer` запрещено.
-- `TerrainCellCache` привязан к мировой сетке шагом 8: при движении сохранять пересечение и заполнять только новые полосы. Zoom-кэш квантовать по 32 клеткам, уменьшать через 0.4 с после стабилизации; не аллоцировать ресурсы каждый кадр.
-- `AnimationContainerDecoder` поддерживает PNG/GIF/WebP; анимация тайла не меняет его окклюзию или emission.
-- `CellConfigurationPacket.Animation` задаёт shader-анимацию и **не означает**, что PNG является frame-atlas. Только `FrameOffset > 0` задаёт высоту вертикального кадра в клетках; `FrameOffset == 0` легитимен для UV/color-анимаций. В частности, Lava использует animation type `4`, серверную скорость и намеренный `FrameOffset=0`: она скроллит UV единого tiled sheet. Не выводить frame count из `Animation != None` и не обнулять `AnimationSpeed` при отсутствии кадров.
-- Геометрия верхней закартовой поверхности фиксирована авторским контрактом: от верхней границы мира идут `Transit` высотой `2` world cells и шириной горизонтального тайла `32`, затем `Perspective` высотой `2` и шириной тайла `5`; выше остаётся фон/небо. Обе текстуры повторяются только по X и clamp'ятся по Y. Красноскал бесконечен только слева, справа и снизу карты, но не сверху. Эти размеры нельзя заменять размерами PNG или границей камеры.
-- Production runtime-текстуры создаются/декодируются только через `RuntimeTextureFactory`: канонический `RGBA32`, без mipmaps, с явно заданными color space, filter и wrap. Прямые `new Texture2D(...)` и `LoadImage(...)` вне фабрики запрещены. Terrain atlas copy предварительно проверяет точные размеры и совместимый graphics format; диагностическая случайная texture отсутствующего terrain-ассета — сознательная обязательная функция, не удалять.
+### Флоу загрузки и выгрузки сцен (SceneTransitionTicket)
 
-### Игрок
+* **Единственный путь перехода:** `BootstrapLifetimeScope.TransitionAsync(sceneName)`. На каждый переход создаётся `SceneTransitionTicket`, передаётся в дочерний скоуп через `LifetimeScope.EnqueueParent` + `Enqueue(builder => builder.RegisterInstance(ticket))`. Сериализованные `ParentReference` в сценах запрещены; поиск скоупа по загруженным сценам запрещён.
+* **Handshake тикета:** дочерний composition root обязан вызвать `ticket.Attach(scene)` ровно один раз (второй attach — исключение) → `RequestActivation` → `MarkStartupReady` → `MarkPresentationReady`. Bootstrap выгружает предыдущую сцену ТОЛЬКО после `WaitForPresentationAsync`.
+* **Провал:** любое исключение старта закрывает тикет через `Fail(ex)` — Bootstrap отменяет переход, выгружает кандидат-сцену и публикует `TransitionFailed`; UI возвращается в рабочее состояние с одной диагностической ошибкой.
+* **Роли скоупов:** `BootstrapLifetimeScope` — application-сервисы + `ApplicationBootstrap`; `GatewayLifetimeScope`/`MainMenuLifetimeScope` — только typed references, контроллер и свой bootstrap; `GameLifetimeScope` — models, processors, factories, typed scene contract и `GameBootstrap`.
+* **Выход в меню (Game → Menu):** Реализован через `BootstrapLifetimeScope.ReturnToMainMenu()`: disconnect → teardown (`GameLifetimeScope.PrepareForUnload`) → повторная загрузка `MainMenu`.
+* **MainMenu живёт до готовности мира:** при входе в игру `MainMenu` остаётся загруженной и показывает loader, пока `GameManager.WorldReady` не опубликует готовность; только после этого тикет получает `MarkPresentationReady` и меню выгружается.
+* **Контракт сцены:** типизированные serialized-ссылки (roots, `UIDocument`, `Services`, камера, робот игрока) на скоупе; `Services` авторствуется НЕактивным и активируется только после DI (`ActivateSceneServices`). Проверка — read-only `Fodinae/Architecture/Validate Production Scene Contracts` (`ProductionSceneContractValidator`), а также перед билдом. Никаких авто-починок сцены: сцена — данные автора, валидатор только сообщает о нарушениях. Переносить объекты и менять Build Settings разрешено только через Unity MCP/Editor API, не текстовой правкой YAML.
 
-- Единственный источник позиции — `PlayerMovementController.Position` (`Vector2Int`, server Top-Left). `ClientPosition` и `ServerPosition` не возвращать.
-- `IPlayerInput → PlayerInputHandler`: WASD/стрелки — движение, Space — копка, E — авто-копка, L — агрессия, Shift — бег. Валидация — `Passable` на клиенте и `MovePacket` на сервере. `PlayerInputHandler` поллит `Keyboard.current` глобально и НЕ знает про UI: блокировка ввода при печати в чате/окнах обеспечивается через `PacketHandler.IsInputBlocked` (включает `ChatInput.IsFocused`), а не внутри обработчика.
-- Клик мышью по миру (`ClickCellPacket` — копка/взаимодействие) шлётся из `PlayerInteractionController.HandleMouseClick` только если `IsPointerOverUI` вернул false. `IsPointerOverUI` обязан использовать `RuntimePanelUtils.ScreenToPanel` (см. идиоматику UI Toolkit п. 8) — иначе клики по UI в нижней части экрана проваливаются в мир и двигают робота.
-- `DigCooldown = 0.3f` блокирует и повторную копку, и движение. Направление — `_lastSentDirection`, по умолчанию `Direction.Down`. Dummy отправляет SFX пустой клетки до проверки `Empty`.
+---
 
-### FMOD
+## 3. Архитектура: DI и жизненный цикл
 
-`AudioSystem`/`FmodAudioBackend` используют FMOD Studio C++ Engine. Банки скачиваются через `ClientAssetLoader`, кэшируются на диске и загружаются `loadBankFile` по пути; feature-банки загружаются/выгружаются on-demand. 3D-звук привязывать нативно через `AttachInstanceToGameObject`, зоны используют Snapshots и global parameters. Шины: Master, SFX, Music, Voice, Ambience, UI. FMOD-проект: `FodinaeAudio/FodinaeAudio.fspro`.
+### Контейнеры и скоупы (VContainer)
 
-Примеры: `Play2D`, `PlayAttached`, `PlaySnapshot`, `SetGlobalParameter`, `SetBusVolume`. `ServerAudioEventManager` принимает `SFXPacket`, проигрывает 3D-звук и создаёт визуальное событие.
+`CompositionRoot` и `SingletonMonoBehaviour` удалены. Используется штатный VContainer (vendor-код не модифицируется). Асинхронность — UniTask, межсистемная связь — через модели/event gateways и `Action`.
 
-### Программатор
+Регистрация двухуровневая:
 
-`ProgrammatorGrid` — визуальный редактор робота: список программ → сетка → Save/Run/Stop. Данные программ сессионные (`_programItems` в RAM); единственный файл — `programmator.json`, сохраняемый через `JsonUtility`. Run/Stop пока визуальные. Сетка 16×12, `CELLSIZE=32`, `CELL_GAP=2`, контейнер 608 px, панель 648 px. `_popup` содержит `dimmer`, `_programListPanel`, `_panel`; `_createDialog` — абсолютный overlay. ESC: grid → список с сохранением, список → закрытие, dialog закрывается только ×/Отмена.
+* **`BootstrapLifetimeScope`** (`DontDestroyOnLoad`, `DefaultExecutionOrder -30000`): менеджеры, переживающие переходы сцен (`ConnectionManager`, `NetworkService`, `AudioSystem`, `ClientConfigManager`, `ClientAssetLoader`), плюс application-tier состояние (`LocalPlayerState`/`ILocalPlayerState` — публикуется игроком, читается сетевым слоем и UI).
+* **`GameLifetimeScope`** (в сцене `MainGame`, `DefaultExecutionOrder -20000`): игровые сервисы; зарегистрирован как entry point `GameBootstrap`.
+* **Регистрация компонентов:** `RegisterManager<T>` отдаёт предпочтение сериализованному типизированному контракту (`Core/Lifecycle/ManagerBinding`, список `_managerBindings` на скоупе): concrete reference без опоры на имена объектов. Пока биндинги не заполнены (сцена ещё не смигрирована), `RegisterManager<T>` откатывается на строгий поиск строго в своей сцене (`gameObject.scene == _ownScene`) по `Services/{group}/{T.Name}` и регистрирует экземпляр через `RegisterComponent(existing)`. Сцена — единственный источник истины для менеджеров: отсутствие менеджера — ошибка контракта (`SceneContractException`, fail-fast), ленивое создание в рантайме не используется.
+* **Заполнение контракта:** one-way editor-инструмент `Fodinae/Architecture/Populate Manager Contract` (`Editor/ManagerContractMigrator.cs`) читает вызовы `RegisterManager<T>(builder, "group")` прямо из `GameLifetimeScope.cs`, находит каждый менеджер в сцене и пишет `ManagerBinding`. Он ничего не чинит и не перемещает — только привязывает ссылки. Проверка охвата — `ProductionSceneContractValidator` (полностью пустой контракт даёт warning, частичный — ошибку перед build).
 
-### Lighting и terrain invariants
+### Запрет на ручной `AddComponent` в `Configure`
 
-- Активный lighting-пайплайн — GPU Radiance Cascades из `WorldLighting.compute`: `LightingMaterialField`/`EmissionField → SolveCascade → ResolveDirect → SolveDiffuseBounce → CompositeLighting`. Не возвращать старые SDF/raymarch/AO-neighbour/blur проходы, CPU sweep, GPU readback или runtime fallback.
-- Единственный источник emission — серверный `CellConfigProperties.Glowing` (в Dummy выставлять тот же флаг), не `CellType` и не клиентские allow/deny-листы. Цвет можно брать из `CellConfigurationPacket.Color`.
-- `MaterialField.rgb` — surface albedo для одного diffuse bounce, `MaterialField.a` — физическая occupancy; `EmissionField` содержит излучение. Альфа атласа, visual blending, анимации и песок поверх валуна не меняют физическую массу. Соседние `DropsShadow`-клетки образуют единый контур без внутренних границ.
-- Beer–Lambert extinction — **ослабление света**, итоговая surviving fraction — **пропускание света**. Direct radiance, transmission и AO — разные величины; не называть поглощение или visibility «AO». Receiver self-skip разрешён только внутри исходной клетки, после выхода соседняя масса снова ослабляет свет.
-- Новый обязательный трек описан в корневом `LIGHTING_AO_PLAN.md`: удалить legacy `nearSolidPath` pseudo-AO и добавить отдельный полноразрешённый contact/cavity AO из occupancy. AO даёт слабую тень у открытой границы, более сильную в 90° углах/щелях, не создаёт швов внутри массива и влияет только на ambient и diffuse bounce, но не на direct radiance/emission.
-- AO хранится отдельно в persistent `RHalf`, публикуется в alpha итоговой `_WorldLightTexture` и пересчитывается только при geometry revision, смене региона/размера поля или AO-настроек. Изменение источников света AO не пересчитывает. Ambient добавляется ровно один раз; Eigengrau не относится к lighting reconstruction.
-- Статическое поле геометрии растеризуется фактическим terrain mesh одним command buffer; динамические источники добавляются GPU draw. Незагруженные и выходящие за границы мира клетки не должны попадать в submesh indices или подставлять cell type `0`.
-- Сохранять внешний контракт `TerrariaLightingEngine`: `_WorldLightTexture`, `_WorldLightRect`, `InvalidateCell`. Профили `Low/Medium/High/Ultra` меняют только качество/стоимость существующего алгоритма; отдельные визуальные пресеты и скрытые fallback-коэффициенты запрещены. Normal map/Lambert пока не реализованы.
+**Запрещено создавать менеджеров вручную через `AddComponent` внутри `Configure`.**
 
-### Рендер-архитектура и камеры (меню и игра)
+`Configure` выполняется до сборки контейнера: прямой `AddComponent` мгновенно вызывает `Awake`/`OnEnable`, пока `[Inject]`-поля не заполнены. Это порождает критические гонки (резолв `UIDocument` из Bootstrap, захват меню-камеры в `Awake`, NRE в `Start`).
 
-- **Игровую камеру получать только через `GameplayCamera.Resolve()`** (`Assets/Scripts/Core/GameplayCamera.cs`), никогда через `Camera.main` напрямую. `Camera.main` — tag-поиск по всем загруженным сценам, а `MainMenu` НЕ выгружается при старте игры (живёт до `MainMenu.OnWorldLoaded`), поэтому во время всего спуска это «монетка» между камерой меню и игровой. Все потребители уже переведены: `PostProcessController`, `PostProcessRendererFeature` (гейтит весь проход по `cameraData.camera == resolved`), `TerrainRenderer`, `SurfaceRenderer`, `FloatingChatManager/Bubble`, `MissionArrowUI`, `MapManager`, `DiagnosticRunner`, `PlayerInteractionController`, `UIGizmosController`. Хелпер отбрасывает камеры чужих сцен, Overlay-камеры и камеры с `targetTexture` (офскрин-риги). `ResolveIn(scene)` — для компонентов, которым нужна камера СВОЕЙ сцены до `SetActiveScene` (см. `TerrainRenderer.Start`).
-- **Камеры меню обязаны иметь tag `Untagged`.** `BuildMenuSceneryRig` ставит его явно при каждой пересборке; не возвращать `MainCamera` ни `MenuSceneryCamera`, ни `MenuDisplayBackdropCamera`.
-- **Меню не рисует ничего в дисплей из мировой геометрии.** Звёзды — `MenuStarfield` (Graphics.Blit в RenderTexture, без камеры и без меша), планета/атмосфера/станция — `MenuSceneryCamera` в RenderTexture; UI показывает обе текстуры как `Image`. Квад звёзд на камере (старый `StarfieldQuad`/слой `MenuBackdrop`) — запрещённый паттерн: это мировая геометрия с `Queue=Background`/`ZTest Always`, которую любая камера с `cullingMask Everything` (а такие все в проекте) рисует поверх всего кадра, пока сцена меню жива.
-- **Риг `MenuScenery` припаркован на `(0, 20000, 0)`** — far plane любой камеры проекта 1000, дотянуться невозможно. Слой `MenuScenery` продолжает исключаться из игровой камеры в `PostProcessController` (`cullingMask &= ~MenuLayerMask()`, `volumeLayerMask = ~MenuLayerMask()`), но это второй рубеж, а не единственный. Исключение слоёв применять только к камере из `GameplayCamera.Resolve()`, никогда к `Camera.main` вслепую.
-- **`MenuSceneryCamera` обязана иметь depth = -101 (ниже `MenuDisplayBackdropCamera` на -100).** URP рисует UI Toolkit-оверлей только после ПОСЛЕДНЕЙ base-камеры, которая резолвится в экран (`rendersOverlayUI && isLastBaseCamera` в `UniversalRendererRenderGraph.cs`). Эта камера рендерит в RT, не в экран, — если она окажется последней по depth, оверлей не отрисуется нигде и меню будет чёрным экраном без UI вообще. Бэкдроп-камера (-100, mask 0, solid color) должна быть последней base-камерой меню; игровая камера (depth -1) остаётся последней после загрузки игры и держит свой оверлей. `BuildMenuSceneryRig` ставит depth = -101 при каждой пересборке; не поднимать её выше -100 и не опускать бэкдроп до 0 (в игре это даст недетерминированный порядок с игровой камерой и бэкдроп зальёт экран).
-- `targetTexture` камеры меню сериализуется как `null`; RenderTexture владеет и пересоздаёт только `MenuSceneryController` (1800×1800, mip-цепочка + trilinear на выходном). Встроенный в сцену RT (900×900 `MenuSceneryRT_Premultiplied`) удалён — при возврате «иногда мыльно» искать причину в рантайм-цепи, а не возвращать сериализованный targetTexture.
+Порядок инициализации графа — в `GameBootstrap.PostStart` (IPostStartable), порядок читается в коде и охраняется линтером и тестами:
 
-## 4. Unity, YAML и код
+1. ожидание `ticket.WaitForActivationAsync()` (Bootstrap активирует сцену после attach);
+2. `scope.ActivateSceneServices()` — активация авторственного неактивного `Services` root (Awake/OnEnable менеджеров выполняются только после DI);
+3. `InitializeRequiredServices()`: config/сеть/процессоры/ассеты/terrain-подписки (fail-fast на недоступных подписках);
+4. применение настроек: `TerrainRenderer.ApplyClientConfig` → `PostProcessController.EnsureVolumeSetup` → `LightingEngine.EnsureInitialized` → `SurfaceRenderer.ApplyClientConfig` (линтер охраняет применение каждой настройки на старте);
+5. UI-сервисы: `GameManager.EnsureUISetup` → `PlayerHUDView.EnsureInitialized` → `InventoryView.EnsureInitialized`;
+6. `_connection.Connect()` — старт соединения ПОСЛЕ инициализации диспетчера;
+7. `ValidateStartup()` — шейдеры, compute-шейдеры, ProjectDefaults;
+8. `scope.MarkReady()` + `ticket.MarkStartupReady()`;
+9. ожидание полной готовности мира (`GameManager.IsWorldLoaded` — серверная позиция, terrain, surface, lighting, ассеты);
+10. `ticket.MarkPresentationReady()` — только теперь Bootstrap выгружает предыдущую сцену.
 
-- `.prefab`, `.unity`, `.asset` нельзя редактировать текстом. Менять их только через Unity Editor API/Inspector; сохранять GUID и `.meta`.
-- Имя файла Unity-скрипта должно совпадать с классом. После создания/переименования проверять `MonoScript.GetClass()` в Editor: `dotnet build` этого не проверяет.
-- `VolumeProfile.Add<T>()` создаёт component только в памяти; editor-код обязан вызвать `AssetDatabase.AddObjectToAsset()` до `SaveAssets()`.
-- `Renderer2D.asset` содержит ровно одну активную `PostProcessRendererFeature`. Post-process применяется к базовой камере; world-space UI на слое `UI` рисуется отдельной Overlay `WorldUICamera` без post-process; UI Toolkit/Screen Space Overlay идёт позже.
-- Внутренний URP HDR (`supportsHDR`) включён для lighting/bloom, HDR display отключён (`PlayerSettings.allowHDRDisplaySupport = false`). Не отключать URP HDR ради SDR.
-- Motion blur строит velocity только для удалённых `Robot` с `MotionBlurTag`; локального игрока исключать. Передавать реальные sprite texture и GPU matrices; teleport delta сбрасывать.
-- Terrain material не затемнять relief/connectivity или `u-v`/`u+v` градиентами; затемнение только через `_WorldLightTexture`.
-- DI — VContainer; singleton-паттерн только `Instance + Awake`, без `SingletonMonoBehaviour`. Асинхронность — UniTask, связь — `Action`.
+> **Контракт:** добавление подсистемы = одна регистрация в `GameLifetimeScope.Configure` + при необходимости один вызов в `PostStart`. Порядок инициализации живёт в типизированном коде `GameBootstrap`, а не в markdown: этот список — описание, а не источник истины.
 
-Именование: типы/публичные члены/константы — `PascalCase`, private поля — `_camelCase`, параметры/локальные — `camelCase`. FMOD events, сетевые теги и CDN-пути — lowercase/snake_case. `docs/` содержит только автономные HTML с inline `<style>`, без Markdown и внешних зависимостей.
+### Регистрация зависимостей
 
-## 5. Критические нюансы
+* **Инстансы:** `MapStorage`, `InventoryModel`, `PlayerStatsModel`.
+* **Менеджеры:** полный список живёт в `GameLifetimeScope.Configure` (`RegisterManager<T>(builder, group)`) и в `BootstrapLifetimeScope.Configure` — код есть источник истины. Каждый менеджер обязан лежать в своей группе `Services/<Group>/<Name>` в сцене.
+* **Модели и gateways (DI-синглтоны):** `NetworkStatusModel` (ping/online из `StatusProcessor`, читается UI), `ChatEventGateway`, `WindowCommandStream` (пакеты → презентация окон через `ServerWindowPresenter`), `MapModeState`, `InputBlockState` (композиция `IInputBlocker`).
+* Ambient session resolver отсутствует. Игровые зависимости получают через прямой `[Inject]`; `IObjectResolver` разрешён только в composition root и фабриках.
+* `RegisterInstance` не инжектит зависимости в созданные вручную объекты; для scene-компонентов использовать `RegisterComponent`, для prefab/entity — `ISceneObjectFactory`.
 
-1. Рендеринг ждёт `MapStorage.IsReady`, которое становится true после `WorldInitPacket`.
-2. `DummyConnection._cellConfigs` и тестовые конфигурации создать **до** `WorldInitPacket`, иначе `MapManager` не сможет ломать клетки.
-3. Инверсия Y — частый баг; проверять Top-Left server coordinates и `WorldHeight`.
-4. Текстуры не в Resources; билд вручную копирует `Textures/`.
-5. `RegisterInstance` не инжектит вручную созданные экземпляры; для объектов с `[Inject]` использовать регистрацию через VContainer или явный `resolver.Inject()`.
-5a. Никогда не резолвить зависимости через `ServiceLocator` из `Awake`/`OnEnable`/`Start` до того, как объект получил `[Inject]`-поля (в ленивых синглтонах это гарантирует `NewGameObjectProvider`: инъекция до активации). Если менеджер требует готовности другой системы — использовать `Update`-ретрай или явный гейт готовности (`IsInitialized`/`EnsureInitialized`), а не `throw`.
-5b. При teardown (`Dispose`/`OnDestroy`) серверных окон допускается гонка с выгрузкой сцены: `UIDocument` может быть уже уничтожен. Очистку окна (`rootVisualElement.Remove`) оборачивать в null-проверку и `try/catch` — teardown не должен ронять `OnDestroy`.
-6. `FPSCounter` использует UI Toolkit `UIDocument` и не создаёт legacy `Canvas`.
-7. `ProgrammatorGrid` ширина контейнера: `COLS * (CELLSIZE + CELL_GAP * 2 + 2f)`; `+2f` обязателен из-за border.
-8. UI Toolkit не поддерживает `calc()`: использовать готовое число или inline-стиль из C#.
-9. Shader-анимация terrain и frame-atlas — независимые признаки: `AnimationSpeed` применяется и при одном texture frame; `FrameOffset=0` нельзя превращать в скрытую высоту кадра.
-10. Контракт ввода: нет EventSystem, клавиатурная навигация UI подавлена, `IsInputBlocked` включает фокус чата, экран→панель — только `ScreenToPanel`. Нарушение любого пункта даёт класс багов «робот двигается/копает, когда не должен» (см. разделы «Сеть и UI» и «Игрок»).
+---
 
-## 6. Workflow и диагностика
+## 4. Подсистемы клиента
 
-- **Кэш Unity никогда не считать причиной дефекта.** Не списывать ошибки на `Library/`, кэш импорта, кэш шейдеров или layout-кэш редактора. Причину искать в исходном коде, сериализованных данных, настройках проекта и фактическом runtime-состоянии; очистка кэша не является исправлением.
-- **Перекомпиляция не является универсальным объяснением.** Нельзя объяснять визуальный или runtime-дефект только тем, что «Unity не перекомпилировал скрипты», «сборка старая» или «нужно обновить домен». Сначала обязательно проверить саму реализацию, сериализованные ссылки/настройки, фактические параметры объектов и диагностические логи. Перекомпиляцию можно указать только как отдельно подтверждённый blocker после доказательства, что исполняемый код действительно отличается от исходников.
-- **Компиляция никогда не равна «игра работает».** Успешный `dotnet build`/отсутствие ошибок компиляции ничего не говорит о фактическом поведении игры в Play Mode — это лишь проверка синтаксиса и типов. Нельзя делать вывод об исправности или поломке проекта на основании одной лишь сборки, и нельзя останавливать диагностику на «билд прошёл» или «билд не прошёл». Фактическое поведение проверять только запуском/сценарием в Unity (Play Mode, Unity MCP), а не через компилятор.
-- **Разрешение экрана и Retina никогда не считать оправданием дефектов производительности.** Запрещено оправдывать просадки FPS высоким разрешением экрана, плотностью пикселей Retina, размером окна Game View или характеристиками дисплея. 2D-песочница обязана обеспечивать высокий и стабильный FPS при любых стандартных экранных разрешениях; причину искать исключительно в архитектуре алгоритмов, объёме GPU/CPU работы и лишних операциях конвейера.
-- **VSync и частоту монитора никогда не считать причиной дефектов производительности.** Запрещено оправдывать или объяснять просадки FPS, спайки и высокое время этапов кадра вертикальной синхронизацией (VSync), герцовкой монитора или троттлингом. Причину искать исключительно в фактическом времени выполнения алгоритмов, аллокациях, блокировках и структуре кода.
+### Сетевой стек, кэширование и авторизация
 
-- Две production-сцены: `Assets/Scenes/MainMenu.unity` (build index 0, только UI главного меню, без DI-графа) и `Assets/Scenes/MainGame.unity` (build index 1, весь `GameLifetimeScope`/DI-граф и геймплей); offline режим даёт `DummyConnection`. По клику "Играть" `MainMenu` грузит `MainGame` аддитивно (`SceneManager.LoadSceneAsync`), ждёт `GameManager.OnWorldLoaded`, затем выгружает себя. `GameLifetimeScope.Configure` ищет свой `UIDocument` и инжектит MonoBehaviour строго в пределах своей сцены (`gameObject.scene`), чтобы не задевать объекты параллельно загруженной `MainMenu`. Переносить объекты и менять Build Settings только через Unity MCP/Editor API, не текстовой правкой YAML. "Выход в меню" (game → menu) реализован через `BootstrapLifetimeScope.ReturnToMainMenu()`: disconnect → выгрузка MainGame → `ServiceLocator.Initialize(Bootstrap.Container)` → повторная загрузка MainMenu. Смена активной сцены при аддитивной загрузке выполняется в `GameBootstrap.PostStart` (`SetActiveScene(_ownScene)`), а не в `Configure` (сцена ещё не загружена — SetActiveScene бросил бы).
-- Сборка: `BuildScript.BuildMacOS` из `Assets/Editor/`; стандартный Build Settings не копирует текстуры.
-- Сцена должна содержать/инициализировать `TerrainMesh`, `TerrainRenderer`, `UIDocument`, `Main Camera`, `Global Light 2D`, `SceneSetup`, `MapManager`, `GameLifetimeScope`.
-- F12 пишет runtime snapshot в `diagnostic.txt`, F11 повторно сканирует `[Inject]` в `inject_diagnostic.txt`. Edit Mode: `Fodinae/Diagnostics/Validate Injections`. Статический анализ — `scripts/inject_analysis.py`.
+* Клиент получает от сервера лёгкое состояние (координаты и идентификаторы), а тяжёлые текстуры, спрайты и FMOD-банки загружает on-demand один раз.
+* **Иерархия кэширования:** RAM (`AssetCache`, `CellTextureCache`) → диск (`PersistentAssetCache`, ETag/MD5) → CDN/сервер. Рендеринг после загрузки выполняется локально.
+* `NetworkService` / `ConnectionManager` — подписки, транспорт, авторизация и реконнект. `PacketHandler` — чистый диспетчер: связывает тип пакета с процессором и владеет временем жизни подписок; он не содержит UI, менеджеров сцены и состояния игрока. Логика пакетов — в `Networking/Processors/*` (обновляют модели, gateways и доменные сервисы: `WorldInitProcessor`, `AuthTokenProcessor`, `PlayerInfoProcessor`, `StatusProcessor` и т.д.).
+* `DummyConnection` — оффлайн-транспорт. Окна авторизации не вызывает: пермиссивно принимает VK-токены (`fdn_vk_*`), знакомые токены из `temporaryCachePath/server_tokens.json`, а для пустого/незнакомого токена сам выдаёт новый (первый вход без экрана; клиентский токен — в PlayerPrefs `AuthToken6`).
+* Процессоры пакетов обрабатывают: `world`, `map`, `chat`, `clan`, `audio`, `windows`, `inventory`, `stats`, `player`, `robots`, `packs`, `missions`, `config`.
 
-## 7. Линтинг C# (обязательно)
+### UI Toolkit, слои и оконная система
 
-Используются Roslyn-анализаторы StyleCop (`SA`), NetAnalyzers (`CA`), Roslynator (`RCS`), Sonar (`S`) и Unity (`UNT`). После генерации/изменения C# запускать:
+* **Управление UI:** Единственный источник обычного UI — `GameManager.SetupUI()` под выключенным `_uiRoot`; метод `AuthorizeUI()` активирует его (`FindAnyObjectByType` не видит неактивные объекты).
+* **Packet UI:** Строится из `OpenWindowPacket` через `PacketUIBuilderFactory`. Сервер строго авторитетен при закрытии окон: нажатие ESC или кнопки UI шлёт запрос серверу, локально окно не скрывать — закрытие выполняется только по факту получения `CloseWindowPacket`. `WindowBinding` использует SmartFormat.
+* **Компоненты интерфейса:**
+* `Inventory`: модель / presenter / view, сетка 9×6 + хотбар.
+* `HUD`: HP, энергия, баффы, авто-копка, Programmator.
+* `Chat`: global, local, floating компоненты.
+* `FPSCounter`: использует `UIDocument`, создание legacy `Canvas` запрещено.
+* `MainMenu`: загружает `Resources/UI/MainMenu.uxml`; после сборки UI фиксированный `PanelSettings` нужно восстановить, иначе элементы могут отображаться, но не принимать события.
 
-```bash
-dotnet build Assembly-CSharp.csproj -maxcpucount -p:UseSharedCompilation=true -nodeReuse:true -clp:NoSummary 2>&1
-```
+* **Слои UIDocument (контракт):**
+* `MainMenu` UIDocument: `sortingOrder 100` (полноэкранный лоадер «спуска»).
+* `MainGame` UIDocument: `sortingOrder 0` (находится ПОД лоадером — во время загрузки игровой UI скрыт, чтобы элементы HUD/миникарты не мелькали по отдельности).
+* Серверные окна (`OpenWindowPacket` — auth, кланы, миссии) открываются в игровом UIDocument. При открытии такого окна `MainMenu.DismissDescentIfServerWindowOpened()` скрывает слой лоадера меню (сцена меню при этом НЕ выгружается до `OnWorldLoaded`). Не поднимать игровой `sortingOrder` выше меню и не скрывать игровой UI иначе.
 
-`scripts/pre-commit-lint.sh` обязан собирать `Assembly-CSharp.csproj` раньше `Assembly-CSharp-Editor.csproj`: editor assembly ссылается на runtime DLL, и обратный/недетерминированный порядок создаёт ложные missing-member ошибки против старой DLL.
+#### Идиоматика UI Toolkit (обязательна для нового и переписываемого кода)
 
-Все предупреждения `SA`, `CA`, `RCS`, `S`, `UNT` исправить до финального ответа. Не использовать `--no-verify` и не обходить pre-commit hooks; при зависании разобраться с причиной.
+1. **Один источник стилей:** `PanelSettings.themeUss` → `FodinaeTheme.tss`, который `@import`'ит все `Resources/Styles/*.uss`. Запрещено в контроллерах вызывать `element.styleSheets.Add(Resources.Load<StyleSheet>(...))` и дублировать импортированные стили.
+2. **Структура в UXML, а не в коде:** Статическая разметка (панели, кнопки, контейнеры) — строго в `.uxml` в `Resources/UI/`. В C# через `VisualTreeAsset.CloneTree()` и `tree.Q<T>("Name")` выполняется только привязка обработчиков и данных. Вызов `new VisualElement()` в коде допустим исключительно для динамических сеток/списков.
+3. **Размер панели определяется PanelSettings:** Запрещено задавать `root.style.width/height` из `Screen.width/height` и использовать абсолютные координаты `top/left`. Рут и контейнеры растягиваются через `position: absolute; left: 0; right: 0; top: 0; bottom: 0` или `flex-grow: 1` в USS; выравнивание — flexbox (`align-items`, `justify-content`).
+4. **Переключение видимости — `display: Flex/None`:** Применять через USS-класс или inline-стиль на существующем элементе UXML. Не добавлять/удалять оверлеи из иерархии каждый кадр и не переключать `pickingMode` ради прозрачности — z-порядок слоёв задаётся в UXML/USS.
+5. **Однократная сборка UI:** Сборка выполняется один раз (под guard-флагом в `OnEnable`/`Start`), а не при каждом показе. Подписки на `clicked`/`RegisterCallback` делать один раз; отписываться в `OnDisable`.
+6. **Ненадежность `Screen.width` в редакторе:** До первого layout панель может вернуть `NaN` (причина некликабельности). Диагностировать по `root.layout` (размер ≠ NaN) и `element.worldBound`. После `CloneTree` не модифицировать `root` кроме `Add(tree)`.
+7. **Полное отключение клавиатурной навигации UI:** `EventSystem` и `InputSystemUIInputModule` не создаются ни в одном скоупе (в проекте 100% UI Toolkit, uGUI отсутствует). `PlayerHUDView.InitializeHUD` безусловно подавляет навигационные события (`NavigationMoveEvent`, `NavigationSubmitEvent`, Tab в `KeyDownEvent`) через TrickleDown. Стрелки, WASD, Enter и Tab не должны перемещать фокус по кнопкам. Всё UI-взаимодействие — только мышью.
+8. **Экранные координаты в панель — строго через `RuntimePanelUtils.ScreenToPanel`:** `PanelSettings` настроен на `ScaleWithScreenSize` (reference 1200×800). Ручной пересчёт Y (`new Vector2(x, Screen.height - y)`) не учитывает scale и даёт промах по координатам (например, при 1920×1080 клики по миникарте проваливались в мир и слали `ClickCellPacket`, вызывая ложное движение/копку робота).
 
-`Directory.Build.props` подключает анализаторы, `.stylecop.json` отключает нерелевантные Unity-правила, `.editorconfig` задаёт severity. Для `[Inject]` полей использовать `= null!;`.
+### Рендеринг планеты в главном меню (Fodinae/UI/PlanetSurface + PlanetAtmosphere) — контракт фотореализма
+* **Цель:** физически правдоподобная планета, снятая камерой с орбиты. Никакого масляного, жидкого, пластикового, мраморного или стилизованного вида. Сцена — одна сфера с минимальным GPU-бюджетом; камера только облёт/подлёт (максимум 3.6 радиуса), посадка не рендерится.
+* **Источник истины вида:** дефолты в `Assets/Shaders/UI/PlanetSurface.shader` и `Assets/Shaders/UI/PlanetAtmosphere.shader`. `.mat`-ассеты (`PlanetSurface.mat`, `PlanetAtmosphere.mat`) правятся только через Unity Editor/Inspector и обязаны оставаться в тех же диапазонах, что и дефолты (см. ниже).
+* **Обязательные диапазоны параметров поверхности:** `_Roughness` 0.65–0.9 (матовая сухая порода), `_ReliefStrength` ≤ 0.5 (рельеф не должен гнуть освещение в видимые «волны» с орбиты), `_MagmaIntensity` ≤ 2.0, `_PoolIntensity` ≤ 2.0 и `_PoolGloss` ≤ 512 (никаких мокрых/глянцевых пятен), `_DetailStrength` ≤ 0.12, `_SunIntensity` 4.0–5.0.
+* **Запрещено:** один процедурный шум, питающий одновременно albedo + roughness + normals + emission; Voronoi/cellular как непосредственно видимый паттерн поверхности; glossy/wet-ответ; marble/liquid domain-warp как видимый узор; художественное усиление контраста вразрез с физикой света.
+* **Порядок работы над видом:** сначала скриншот текущей сцены, затем изменение ОДНОЙ параметрической оси, затем контрольный скриншот. Одновременная правка нескольких осей в шейдере и материале запрещена — именно она повторно воспроизводила «масляный» вид.
+* **GPU-бюджет:** рендер планеты должен оставаться пренебрежимым. Попиксельная процедурная генерация в рантайме запрещена: поля запекаются `PlanetFieldBaker` в кубические карты и в шейдере только сэмплируются (≤ ~5 texture samples на пиксель). Запрещены tessellation, displacement, raymarching, volumetrics и per-pixel noise в горячем пути.
 
-## 8. Правила пользователя
+### Мир, чанки и координаты
 
-- Не добавлять фичи без явного запроса; при вопросе об отсутствии чего-либо сначала уточнить требуемое поведение.
-- Проверки (build/lint) запускать осмысленно, не без необходимости.
-- Не выбирать ленивые фоллбеки и временные решения.
-- **Запрещено вручную менять префабы, ассеты и сцены.**
-- **Перед сценовыми правками через Unity MCP (create/update/reparent/duplicate GameObject, add_component и т.п.) обязательно проверить, что редактор не в Play Mode** (например, пробным `save_scene` — ошибка "cannot be used during play mode" значит редактор в Play Mode). Unity молча откатывает все изменения GameObject'ов в сцене при выходе из Play Mode — работа через MCP, сделанная в Play Mode, будет полностью потеряна без явной ошибки в момент правки. Скрипты (.cs) это не касается — они компилируются и сохраняются на диск независимо от Play Mode.
-- **Запрещено «дрочить Unity» и команды:** не запускать Unity вручную через
-  shell/batchmode, `osascript`, GUI automation или принудительный Refresh; не
-  повторять build/restore/poll-команды без нового диагностического основания и
-  не ждать зависшие процессы бесконечными циклами. Editor, Console, Play Mode,
-  scene state и импорт проверять только через Unity MCP. Если Unity MCP не
-  подключён или не экспонирует нужный инструмент, остановиться, назвать точный
-  blocker и запросить восстановление MCP, а не обходить его ручным управлением.
+* **Система координат:** Серверные координаты — левый верхний угол `(0, 0)`, ось X направлена вправо, ось Y — вниз (Top-Left). Все преобразования производить исключительно через `CoordinateUtils`, всегда учитывая `MapManager.WorldHeight`.
+* **Хранение данных мира:** `MapManager` принимает `WorldInitPacket`/`MapRegionPacket`. `MapStorage` хранит чанки 32×32 (`persistentDataPath/*.mapb`) и оповещает рендерер через `OnCellChanged()`. Рендеринг ожидает `MapStorage.IsReady = true` (наступает после `WorldInitPacket`). В `DummyConnection` конфигурации клеток `_cellConfigs` должны создаваться ДО `WorldInitPacket`.
+* **Стриминг:** `WorldLayer<T>` реализует дисковый streaming, LRU RAM-кэш, RLE и append-only запись с компактификацией. Текстуры загружаются из файловой системы, а не из Resources/Addressables (при билде папка `Textures/` копируется вручную).
 
-## 9. Принцип No Implicit Defaults и Fail-Fast
+### Рендеринг террейна и закартовых поверхностей
 
-- **Никаких неявных дефолтов и тихих фоллбеков**: Запрещено подставлять неявные дефолтные позиции `(0,0)`, генерировать случайные/дефолтные текстуры или тестовые карты при отсутствии оригинальных файлов, а также гасить ошибки тихими `try/catch`.
-- **Fail-Fast**: При отсутствии/повреждении `.mapb` файлов, конфигов или сетевых данных немедленно прерывать процесс (`TriggerDisconnect`/исключение), не пытаясь разворачивать временные структуры.
-- **Синхронизация загрузки мира**: При старте игры `MainMenu` удерживает защитный экран загрузки (`LoaderContainer`) и скрывает его только после события `GameManager.OnWorldLoaded` (когда `MapStorage.IsReady == true`, каскады и меши террейна готовы, а камера позиционирована на спавн).
-- **Моментальное позиционирование камеры**: При инициализации спавна `CameraFollow` выполняет немедленный мгновенный сдвиг (`SnapToTarget()`), исключая слепой полёт камеры через карту из точек по умолчанию.
-- **Запрет O(Heap) обходов в рантайме**: Запрещено использовать `Resources.FindObjectsOfTypeAll`, глобальное сканирование рефлексией по всем скриптам сцены или некэшированные вызовы `GetComponent` в `Update`/`LateUpdate`/`PostProcessRenderPass`.
+* **TerrainRenderer:** Отрисовывает видимый мир единым mesh (7 UV-каналов, sorting order `-1000`) и применяет дифференциальные обновления.
+* **SurfaceRenderer:** Рендерит закартовые поверхности. Регистрируется и резолвится через `GameLifetimeScope` до этапа startup validation. `SceneSetup` только загружает обязательные текстуры; вручную создавать второй `SurfaceRenderer` запрещено.
+* **Кэширование геометрии:**
+* `TerrainCellCache` привязан к мировой сетке с шагом 8: при перемещении сохраняется область пересечения и достраиваются только новые полосы.
+* Zoom-кэш квантуется по 32 клеткам, сжатие происходит через 0.4 с после стабилизации (без покадровых аллокаций).
+* Зависящая от камеры геометрия (`SurfaceRenderer` и аналоги) содержится в квантованном coverage-кэше с запасом. Запрещено перестраивать mesh на каждом кадре плавного движения/зума по точному сравнению `transform.position`, `orthographicSize` или `aspect`.
+
+* **Геометрия верхней поверхности мира (авторский контракт):**
+* От верхней границы мира идут: слой `Transit` (высота `2` world cells, ширина тайла `32`), затем слой `Perspective` (высота `2`, ширина тайла `5`); выше располагается фон/небо.
+* Текстуры повторяются по X и зажимаются (clamp) по Y.
+* Красноскал бесконечен слева, справа и снизу карты, но НЕ сверху. Запрещено подменять эти размеры размерами PNG или границами камеры.
+
+* **Анимации и текстуры тайлов:**
+* `AnimationContainerDecoder` поддерживает форматы PNG/GIF/WebP; анимация тайла не изменяет его окклюзию или emission.
+* `CellConfigurationPacket.Animation` задаёт shader-анимацию и **не означает**, что исходный PNG является frame-атласом. Только `FrameOffset > 0` задаёт высоту кадра в клетках; `FrameOffset == 0` валиден для UV/color-анимаций (например, Lava использует animation type `4`, серверную скорость и `FrameOffset = 0` для UV-скролла tiled sheet). Запрещено выводить число кадров из условия `Animation != None` и занулять `AnimationSpeed` при отсутствии атласа.
+* Production runtime-текстуры создаются/декодируются строго через `RuntimeTextureFactory`: канонический формат `RGBA32`, без mipmaps, с явными color space, filter и wrap modes. Прямые вызовы `new Texture2D(...)` и `LoadImage(...)` вне фабрики запрещены.
+* Копирование в terrain atlas предварительно проверяет совпадение размеров и graphics format. Случайная диагностическая текстура при отсутствии ассета — обязательный функционал, не удалять.
+* Материал террейна не затемнять градиентами (`u-v`/`u+v`) или relief/connectivity; затемнение производится исключительно через `_WorldLightTexture`.
+
+### Игрок, ввод и блокировки
+
+* **Позиция:** Единственный источник истины позиции игрока — `PlayerMovementController.Position` (`Vector2Int`, server Top-Left). Возврат устаревших полей `ClientPosition` и `ServerPosition` запрещён.
+* **Управление (`PlayerInputHandler`):** WASD/стрелки — передвижение, Space — копка, E — авто-копка, L — агрессия, Shift — бег. Валидация: локально по `Passable`, на сервере через `MovePacket`.
+* **Обработка кликов:** `PlayerInteractionController.HandleMouseClick` отправляет `ClickCellPacket` только если `IsPointerOverUI` вернул `false` (с обязательным использованием `RuntimePanelUtils.ScreenToPanel`).
+* **Тайминги и механики:** `DigCooldown = 0.3f` блокирует повторную копку и движение. Направление задаётся `_lastSentDirection` (по умолчанию `Direction.Down`). В Dummy SFX пустой клетки отправляется до проверки на `Empty`.
+* **Блокировка ввода (`IInputBlocker`):**
+* Единственная реализация — `UI/InputBlockState` (UI-слой): композиция `ChatInput.IsFocused || ServerWindowPresenter.HasOpenWindows || IsModalShowing || PauseMenu.IsMenuOpen || ProgrammatorGrid.IsOpen`. `PacketHandler` и сетевой слой не реализуют блокировку ввода.
+* Фокус чата входит в блокировку: пока открыт ввод текста, движение, копка, геймплейные клавиши и камера заблокированы. Потребители (`PlayerMovementController`, `PlayerInteractionController`, `CameraFollow`, HUD) инжектят `IInputBlocker` — статический доступ к UI-синглтонам извне `Assets/Scripts/UI` запрещён линтером.
+* **Локальный игрок:** единственный типизированный источник — `ILocalPlayerState` (application-tier, `LocalPlayerState`, публикуется `PlayerMovementController`). Статические `PlayerMovementController.LocalPlayer`/`OnLocalPlayerSpawned` удалены; использование запрещено линтером.
+* Клавиша Enter отправляет сообщение чата даже при `IsInputBlocked` (условие в `GlobalChatUI.Update` проверяет `ChatInput.IsFocused`).
+* Клавиша ESC в `PauseMenu` сначала передаёт управление в Программатор, затем шлёт серверный запрос на закрытие верхнего окна.
+
+### Освещение (Lighting Pipeline & Ambient Occlusion)
+
+* **Активный конвейер:** GPU Radiance Cascades из `WorldLighting.compute`:
+`LightingMaterialField` / `EmissionField` → `SolveCascade` → `ResolveDirect` → `SolveDiffuseBounce` → `CompositeLighting`.
+Старые проходы (SDF, raymarch, AO-neighbour, blur, CPU sweep, GPU readback, runtime fallbacks) запрещены к возврату.
+* **Поля материалов и излучения:**
+* Единственный источник эмиссии — серверный флаг `CellConfigProperties.Glowing` (в Dummy выставлять его же), а не `CellType` или клиентские списки. Цвет берётся из `CellConfigurationPacket.Color`.
+* `MaterialField.rgb` — surface albedo для одного diffuse bounce; `MaterialField.a` — физическая occupancy.
+* `EmissionField` содержит излучение.
+* Альфа атласа, visual blending, анимации и песок поверх валуна не изменяют физическую массу. Соседние `DropsShadow`-клетки формируют непрерывный контур без внутренних границ.
+
+* **Физика света:**
+* Ослабление света рассчитывается по Beer–Lambert extinction; итоговая величина — surviving fraction (пропускание). Direct radiance, transmission и AO — строго раздельные величины (поглощение нельзя называть «AO»).
+* Receiver self-skip разрешён только внутри исходной клетки; при выходе наружу соседняя масса снова ослабляет свет.
+
+* **Contact / Cavity Ambient Occlusion (`LIGHTING_AO_PLAN.md`):**
+* Legacy `nearSolidPath` pseudo-AO удалён. Реализуется отдельный полноразрешённый contact/cavity AO из occupancy.
+* AO создаёт слабую тень у открытой границы, усиливается в 90° углах и щелях, не создаёт внутренних швов в массиве пород. Влияет **только** на ambient и diffuse bounce; direct radiance и emission не модифицирует.
+* Данные AO хранятся отдельно в persistent `RHalf`, упаковываются в alpha-канал итоговой `_WorldLightTexture` и пересчитываются **только** при: изменении geometry revision, смене региона/размера поля или изменении настроек AO. Смена источников света пересчёт AO не триггерит.
+* Ambient добавляется ровно один раз; Eigengrau не относится к lighting reconstruction.
+
+* **Сетка и масштабирование Lighting Field:**
+* Статическое поле геометрии растеризуется фактическим terrain mesh через единый command buffer; динамические источники добавляются через GPU draw. Не загруженные или закартовые клетки не должны попадать в submesh indices или подменять cell type `0`.
+* Размер lighting field обязан быть **строго целым числом** текселей на клетку (`4`, `3`, `2`, `1`). При нехватке видеопамяти выбирается максимальный помещающийся **целый** масштаб — дробное сжатие запрещено.
+* Lighting region смещается по сетке шагом 8 клеток. Дробный `pixelsPerCell` сбивает фазу текселей/проб при reanchor, делая освещение зависимым от направления движения камеры.
+* Повторное использование текстур полей допускается только при точном совпадении с размером `gridSize * integerScale`.
+* Внешний контракт `LightingEngine`: `_WorldLightTexture`, `_WorldLightRect`, `InvalidateCell`.
+* Профили качества (`Low`/`Medium`/`High`/`Ultra`) меняют только точность/стоимость шагов существующего алгоритма (скрытые fallback-коэффициенты и отдельные пресеты запрещены). Normal map и Lambert не реализованы.
+
+### Рендер-архитектура, камеры и пост-процессинг
+
+* **Разрешение игровой камеры:**
+* Игровую камеру DI-компоненты получают через **инъекцию `IGameplayCamera`** (`Core/Interfaces/IGameplayCamera.cs`, регистрируется в `BootstrapLifetimeScope` поверх persistent application-камеры), вызов `Camera.main` напрямую **запрещён** (ищет по тегу во всех сценах, а `MainMenu` живёт параллельно до завершения загрузки). Переиспользование `IGameplayCamera` запрещено из Render Feature: единственное оставшееся статическое место — `PostProcessRendererFeature`, которому нельзя сделать field-инъекцию (ScriptableRendererFeature), он определяет игровую камеру через `cameraData.camera == _mainCamera`.
+* Потребители `IGameplayCamera`: `PostProcessController`, `TerrainRenderer`, `SurfaceRenderer`, `FloatingChatManager`, `FloatingChatBubble`, `MissionArrowUI`, `InGameDebugOverlay`, `MapManager`, `DiagnosticRunner`, `Robot`, `PlayerInteractionController`.
+* Статический хелпер `GameplayCamera.Resolve()`/`ResolveIn(scene)` — только для независимых от VContainer мест (Render Feature); в новых DI-компонентах использовать `IGameplayCamera`.
+
+* **Камеры Главного Меню:**
+* Все камеры меню обязаны иметь тег `Untagged` (выставляется в `BuildMenuSceneryRig`); тег `MainCamera` запрещён.
+* Меню не рисует в экран мировую геометрию: звёзды генерируются через `MenuStarfield` (`Graphics.Blit` в RT, без меша и камеры), сцены планеты/станции рендерятся `MenuSceneryCamera` в RT. UI отображает обе текстуры как `Image`. Старый квад звёзд на камере (`StarfieldQuad`/слой `MenuBackdrop`) запрещён — любая камера с `cullingMask: Everything` отрисует его поверх игры.
+* Риг `MenuScenery` размещён по координатам `(0, 20000, 0)` (far plane камер равен 1000, попадание исключено). Дополнительно слой `MenuScenery` исключается из игровой камеры в `PostProcessController` (`cullingMask &= ~MenuLayerMask()`, `volumeLayerMask = ~MenuLayerMask()`).
+
+* **Порядок глубин (Depth) камер меню и URP Overlay:**
+* `MenuSceneryCamera` обязана иметь `depth = -101` (строго ниже `MenuDisplayBackdropCamera` с `depth = -100`).
+* URP рендерит оверлей UI Toolkit только после последней base-камеры, выводящей изображение в экран (`rendersOverlayUI && isLastBaseCamera`). Так как `MenuSceneryCamera` рендерит в RT, оказавшись последней по глубине, она сломает рендер UI Toolkit (чёрный экран).
+* `MenuDisplayBackdropCamera` (`depth = -100`, `cullingMask = 0`, Solid Color) обязана быть последней base-камерой меню.
+* Игровая камера (`depth = -1`) становится последней base-камерой после загрузки мира и держит свой UI-оверлей. Запрещено поднимать глубину Scenery-камеры выше -100 или опускать Backdrop-камеру до 0.
+
+* **RenderTexture меню:** `targetTexture` камеры сериализуется как `null`; RT создаётся и управляется исключительно через `MenuSceneryController` (1800×1800, mip-цепочка + trilinear). Встроенный в сцену RT (900×900 `MenuSceneryRT_Premultiplied`) удалён.
+* **Настройки конвейера рендера:**
+* `Renderer2D.asset` содержит ровно одну активную `PostProcessRendererFeature`. Post-process применяется к базовой камере.
+* World-space UI на слое `UI` рисуется отдельной Overlay-камерой `WorldUICamera` без пост-процессинга. UI Toolkit / Screen Space Overlay рендерится поверх.
+* Внутренний URP HDR (`supportsHDR`) включён для корректного lighting/bloom, вывод на HDR-дисплей отключён (`PlayerSettings.allowHDRDisplaySupport = false`). Отключение URP HDR ради SDR запрещено.
+* **Motion Blur:** строит вектор скорости (velocity) только для удалённых `Robot` с компонентом `MotionBlurTag`. Локальный игрок исключается. Передаются реальные текстуры спрайтов и матрицы GPU; delta при телепортации сбрасывается.
+
+### Звуковой движок (FMOD)
+
+* `AudioSystem` и `FmodAudioBackend` базируются на FMOD Studio C++ Engine.
+* FMOD-проект расположен в `FodinaeAudio/FodinaeAudio.fspro`.
+* Банки скачиваются через `ClientAssetLoader`, кэшируются на диске и загружаются через `loadBankFile`; feature-банки подключаются и выгружаются on-demand.
+* 3D-звук позиционируется нативно через `AttachInstanceToGameObject`. Зоны используют Snapshots и глобальные параметры.
+* Иерархия шин: `Master`, `SFX`, `Music`, `Voice`, `Ambience`, `UI`.
+* Базовые вызовы: `Play2D`, `PlayAttached`, `PlaySnapshot`, `SetGlobalParameter`, `SetBusVolume`.
+* `ServerAudioEventManager` принимает `SFXPacket`, инициирует 3D-звук и порождает визуальное событие.
+
+### Программатор (`ProgrammatorGrid`)
+
+* Визуальный редактор алгоритмов робота: Список программ → Сетка → Действия (Save / Run / Stop).
+* Данные сессионные (`_programItems` хранятся в RAM); единственный сохраняемый файл — `programmator.json` (через `JsonUtility`). Кнопки Run/Stop на текущем этапе визуальные.
+* **Геометрия сетки:** 16×12 ячеек, `CELLSIZE = 32`, `CELL_GAP = 2`.
+* Ширина контейнера: 608 px (рассчитывается по формуле `COLS * (CELLSIZE + CELL_GAP * 2 + 2f)`, где `+2f` обязателен из-за border).
+* Ширина панели: 648 px.
+
+* **Иерархия элементов:** `_popup` содержит `dimmer`, `_programListPanel`, `_panel`; диалог создания `_createDialog` представляет собой абсолютный overlay.
+* **Навигация ESC:**
+* Из режима сетки — возврат к списку с автоматическим сохранением;
+* Из списка программ — закрытие окна программатора;
+* Диалог создания закрывается только по кнопкам «×» или «Отмена».
+
+---
+
+## 5. Свод критических инвариантов и нюансов
+
+1. **Готовность рендера:** Рендеринг ждёт `MapStorage.IsReady = true`, выставляемое после `WorldInitPacket`.
+2. **Конфигурации клеток:** В `DummyConnection` структуры `_cellConfigs` и мок-данные должны быть инициализированы строго до `WorldInitPacket`, иначе `MapManager` не сможет обрабатывать разрушение клеток.
+3. **Ориентация осей:** Постоянно контролировать Top-Left серверные координаты и инверсию Y относительно `WorldHeight`.
+4. **Хранение ассетов:** Текстуры не хранятся в `Resources`; при сборке билда папка `Textures/` копируется во внешнюю директорию.
+5. **Инъекция в существующие объекты:** `RegisterInstance` не выполняет инъекцию зависимостей автоматически — для ручных объектов вызывать `resolver.Inject()`.
+6. **Резолв зависимостей в Lifecycle-методах:** Не обращаться к контейнеру из `Awake`/`OnEnable`/`Start`. Scene-компоненты получают зависимости через `[Inject]`, а запуск выполняется явным entrypoint после сборки scope.
+7. **Безопасный Teardown окон:** При закрытии/уничтожении серверных окон (`Dispose`/`OnDestroy`) возможна гонка с выгрузкой сцены (когда `UIDocument` уже уничтожен). Операции очистки (`rootVisualElement.Remove`) оборачивать в null-check и блок `try/catch` — ошибки очистки UI не должны прерывать `OnDestroy`.
+8. **Ограничения CSS/USS:** UI Toolkit не поддерживает функцию `calc()`: расчетные значения вычисляются заранее или задаются inline-стилем из C#.
+9. **Свойства террейн-анимаций:** Шейдерная анимация и покадровый атлас не связаны: `AnimationSpeed` работает и для одиночного кадра; значение `FrameOffset = 0` является валидным и не должно трактоваться как ошибка.
+10. **Инварианты системы ввода:** EventSystem отсутствует, навигация с клавиатуры в UI отключена, блокировка ввода — только через `IInputBlocker` (`InputBlockState`), перевод координат мыши — только через `ScreenToPanel`. Нарушение ведёт к багам спонтанного движения/копки персонажа.
+
+---
+
+## 6. Workflow, диагностика и оптимизация
+
+* **Кэш Unity никогда не является причиной дефекта:** Запрещено списывать баги на `Library/`, кэш шейдеров, кэш импорта или layout-кэш редактора. Причина всегда кроется в исходном коде, сериализованных данных, конфигурациях или runtime-состоянии. Очистка кэша не признаётся решением проблемы.
+* **Перекомпиляция — не универсальное объяснение:** Запрещено оправдывать баги фразами «Unity не перекомпилировал скрипты» или «нужно обновить домен». Сначала проверяются реализация, сериализованные ссылки, свойства инспекторов и логи. Проблема со сборкой может указываться только как доказанный блокер, если бинарный код гарантированно разошёлся с исходным.
+* **Компиляция ≠ работоспособность игры:** Успешный `dotnet build` лишь подтверждает корректность типов и синтаксиса. Запрещено судить о работоспособности проекта только по отсутствию ошибок компилятора. Поведение проверяется исключительно прогоном сценариев в Play Mode или через Unity MCP.
+* **Запрет на перекладывание тестов на пользователя:** Если доступен Unity MCP, агент обязан проводить диагностику самостоятельно: запускать Play Mode через MCP, активировать Debug View (`SetDebugView`), инспектировать консоль (`get_console_logs`), состояние сцены и объектов (`get_gameobject`, `get_scene_info`), запускать тесты (`run_tests`). Запросы к пользователю вида «запусти сам и проверь» допустимы только при исчерпании возможностей MCP с описанием конкретного блокера.
+* **Разрешение экрана и Retina — не оправдание плохой производительности:** Запрещено оправдывать падение FPS высоким разрешением, Retina-экранами или размером окна Game View. 2D-песочница обязана выдавать стабильный высокий фреймрейт на любом стандартном разрешении. Причину искать в алгоритмической сложности, избыточных вызовах и неэффективной работе с CPU/GPU.
+* **VSync и частота обновления монитора — не причина спайков:** Запрещено списывать просадки производительности и долгие кадры на герцовку монитора или вертикальную синхронизацию. Анализу подлежит исключительно «чистое» время выполнения алгоритмов и аллокации памяти.
+* **Запрет на маскировку просадок FPS ограничением частоты:** Запрещено вводить искусственные FPS-caps, пропуск кадров (frame skipping), искусственные задержки, троттлинг или снижение частоты тиков симуляции/рендера для видимого «исправления» нагрузки. Оптимизация должна сокращать реальный объём работы за один кадр (убирать лишние rebuild/upload геометрии, аллокации, обходы коллекций и дублирующие расчёты), сохраняя покадровое обновление везде, где оно заложено архитектурой.
+* **Проверка исходных намерений пользователя перед правкой настроек:** Прежде чем заявлять о «баге в проводке настроек», необходимо выяснить, не были ли параметры выставлены пользователем вручную. *(Прецедент: оверлей отображал профиль Ultra — `px/cell 4`, `max steps 16`, атлас `1280²×4`. Был сделан ошибочный вывод о поломке логики в `LightingQualityResolver`, хотя пользователь намеренно выставил Ultra для стресс-теста).*
+* **Запрет правок по непроверенным гипотезам:** Код модифицируется только после воспроизведения или строгого подтверждения дефекта по кодовой базе. Изменения «наугад» в горячих путях рендера или цепочках конфигурации ломают осознанное поведение системы. Недоказанная идея должна сначала озвучиваться как гипотеза с планом проверки.
+* **Использование встроенного диагностического инструментария:** Перед созданием новых логов/счётчиков использовать готовые тулзы:
+* `F3`: оверлей `InGameDebugOverlay` (FPS, frametime, замеры CPU Meshing / FloodFill, счётчики ребилдов террейна, трассировка каскадов в ray-steps и atlas taps, размер управляемой кучи);
+* `F3` (детальный режим `FPSCounter`): отображение `FrameProfiler.GcAllocPerFrameBytes` в формате `GC: X KB/f` (аллокации главного потока за кадр);
+* `F4` / `F5` / `F6` / `F7` / `F8`: покадровое переключение и изоляция подсистем (`BypassLightingCompute`, `BypassPostProcessPass`, `BypassTerrainDraw`, `BypassCpuMeshRebuild`, динамический свет) для мгновенной бисекции источников просадок за одну сессию.
+
+
+
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.
+ЗАПРЕЩЕНО ГОВОРИТЬ ПРО ВСИНК ВООБЩЕ. НИКОГДА.

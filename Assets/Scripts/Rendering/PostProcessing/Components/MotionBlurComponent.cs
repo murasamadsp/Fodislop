@@ -12,13 +12,10 @@ namespace Fodinae.Rendering.PostProcessing
     [SupportedOnRenderPipeline(typeof(UniversalRenderPipelineAsset))]
     public class MotionBlurComponent : VolumeComponent, IPostProcessComponent
     {
-        // Keep the serialized Volume parameter names stable for existing profiles.
+        // Keep the serialized Volume parameter name stable for existing profiles.
 #pragma warning disable SA1307
-        [Tooltip("Directional blur strength for remote robots. The local player and UI are excluded.")]
+        [Tooltip("Temporal motion blur strength for the gameplay camera.")]
         public ClampedFloatParameter intensity = PostProcessDefaults.MotionBlurIntensity();
-
-        [Tooltip("Samples along each remote robot's per-frame motion vector.")]
-        public ClampedIntParameter maxSamples = PostProcessDefaults.MotionBlurMaxSamples();
 
         public bool IsActive() => intensity.value > 0f;
         public bool IsTileCompatible() => true;

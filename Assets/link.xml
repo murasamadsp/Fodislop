@@ -1,5 +1,15 @@
 <linker>
+  <assembly fullname="Fodinae.Runtime" preserve="all"/>
   <assembly fullname="Assembly-CSharp" preserve="all"/>
   <assembly fullname="VContainer" preserve="all"/>
   <assembly fullname="UniTask" preserve="all"/>
+  <assembly fullname="MinesServer.Data" preserve="all"/>
+  <assembly fullname="MinesServer.Utils" preserve="all"/>
+  <assembly fullname="MinesServer.Networking" preserve="all"/>
+  <assembly fullname="MinesServer.Networking.Connection" preserve="all"/>
+  <assembly fullname="MinesServer.Networking.Connection.Client" preserve="all"/>
+  <assembly fullname="FMODUnity" preserve="all"/>
+  <assembly fullname="Effekseer" preserve="all"/>
+  <assembly fullname="Effekseer.URP" preserve="all"/>
+  <assembly fullname="unity.webp" preserve="all"/>
 </linker>

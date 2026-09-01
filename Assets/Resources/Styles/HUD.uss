@@ -4,7 +4,27 @@
 
 .hud-root {
     position: absolute;
-    flex-grow: 1;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.world-map-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.82);
+}
+
+.world-map-image {
+    width: 100%;
+    height: 100%;
+    -unity-background-scale-mode: scale-to-fit;
 }
 
 .hud-top-left {
@@ -54,7 +74,7 @@
 .asset-status-button:hover,
 .asset-status-button.asset-status-loading {
     background-color: rgba(70, 70, 70, 0.96);
-    border-color: var(--color-accent);
+    border-color: var(--accent-gold);
 }
 
 .asset-status-button-label {
@@ -83,50 +103,50 @@
 
 .asset-status-metrics {
     margin-top: 5px;
-    color: var(--color-text-dim);
+    color: var(--text-secondary);
 }
 
 .asset-status-details {
     margin-top: 5px;
-    color: var(--color-text-dim);
+    color: var(--text-secondary);
 }
 
 .hud-button {
-    background-color: var(--btn-bg);
-    border-color: var(--btn-border);
+    background-color: var(--surface-raised);
+    border-color: var(--border-subtle);
     border-width: 2px;
     border-radius: 3px;
     padding: 0;
     min-width: 100px;
     height: 28px;
-    font-size: var(--font-size-sm);
-    color: var(--color-text);
+    font-size: var(--size-sm);
+    color: var(--text-primary);
     -unity-text-align: middle-center;
 }
 
 .hud-button:hover {
-    background-color: var(--btn-hover);
+    background-color: var(--accent-cyan-wash);
 }
 
 .hud-button.active {
-    background-color: var(--color-accent);
+    background-color: var(--accent-gold);
     color: black;
 }
 
 .hud-stat {
-    color: var(--color-text);
-    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    font-size: var(--size-md);
     margin: 2px 0;
 }
 
 .hud-stat-label {
-    color: var(--color-text-dim);
-    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    font-size: var(--size-sm);
 }
 
 .hud-bar {
     background-color: rgba(40, 40, 40, 1);
-    border-color: var(--btn-border);
+    border-color: var(--border-subtle);
     border-width: 1px;
     border-radius: 2px;
     height: 12px;
@@ -134,7 +154,7 @@
 }
 
 .hud-bar-fill {
-    background-color: var(--color-accent);
+    background-color: var(--accent-gold);
     border-radius: 2px;
 }
 
@@ -144,8 +164,8 @@
     left: 10px;
     width: 240px;
     padding: 12px;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
     border-width: 2px;
     flex-direction: column;
 }
@@ -173,48 +193,48 @@
 }
 
 .hud-panel .hud-nickname {
-    font-size: var(--font-size-lg);
+    font-size: var(--size-lg);
     -unity-font-style: bold;
-    color: var(--color-accent);
+    color: var(--accent-gold);
     flex-grow: 1;
 }
 
 .hud-panel .hud-level {
-    font-size: var(--font-size-lg);
-    color: var(--color-text);
+    font-size: var(--size-lg);
+    color: var(--text-primary);
     margin-right: 2px;
 }
 
 .hud-panel .hud-separator {
     height: 1px;
-    background-color: var(--color-text-dim);
+    background-color: var(--text-secondary);
     margin-bottom: 4px;
 }
 
 .hud-panel .hud-stat {
-    font-size: var(--font-size-md);
-    color: var(--color-text);
+    font-size: var(--size-md);
+    color: var(--text-primary);
     margin: 0 0 2px;
 }
 
 .hud-panel .hud-money {
     -unity-font-style: bold;
-    font-size: var(--font-size-md);
+    font-size: var(--size-md);
     color: rgb(0, 200, 0);
     margin: 0;
 }
 
 .hud-panel .hud-creds {
     -unity-font-style: bold;
-    font-size: var(--font-size-md);
+    font-size: var(--size-md);
     color: rgb(200, 200, 0);
     margin: 0;
 }
 
 .hud-panel .hud-basket {
     -unity-font-style: bold;
-    font-size: var(--font-size-md);
-    color: var(--color-accent);
+    font-size: var(--size-md);
+    color: var(--accent-gold);
     margin-bottom: 2px;
 }
 
@@ -224,6 +244,12 @@
 
 .hud-stat-wrap {
     white-space: normal;
+}
+
+.hud-hp-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .hud-hp-bar {
@@ -240,19 +266,19 @@
 }
 
 .hud-button-accent {
-    background-color: var(--color-accent);
-    border-color: var(--color-panel-border);
+    background-color: var(--accent-gold);
+    border-color: var(--border-subtle);
     border-width: 2px;
     border-radius: 3px;
     color: rgba(38, 38, 38, 1);
-    font-size: var(--font-size-title);
+    font-size: var(--size-md);
     -unity-font-style: bold;
     -unity-text-align: middle-center;
     padding: 0;
 }
 
 .hud-button-accent:hover {
-    background-color: var(--color-accent-hover);
+    background-color: var(--accent-gold-hover);
 }
 
 .hud-button-close {
@@ -273,7 +299,7 @@
     border-width: 2px;
     border-radius: 3px;
     padding: 4px 16px;
-    font-size: var(--font-size-md);
+    font-size: var(--size-md);
 }
 
 .hud-button-claim:hover {
@@ -293,8 +319,8 @@
     left: 256px;
     width: 260px;
     padding: 10px;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
     border-width: 2px;
     flex-direction: column;
 }
@@ -309,24 +335,25 @@
 }
 
 .hud-bonus-panel .hud-title-row .hud-stat {
-    color: var(--color-accent);
+    color: var(--accent-gold);
     flex-grow: 1;
 }
 
 .hud-status-panel {
     position: absolute;
-    top: 10px;
+    /* Ниже кнопки бонуса (top:10 + высота 50 + зазор 6) — как было в C#-версии */
+    top: 66px;
     left: 256px;
     width: 220px;
     padding: 12px;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
     border-width: 2px;
     flex-direction: column;
 }
 
 .hud-status-line {
-    font-size: var(--font-size-md);
+    font-size: var(--size-md);
     margin-bottom: 2px;
     white-space: normal;
 }
@@ -367,7 +394,7 @@
     width: 24px;
     font-size: 11px;
     -unity-font-style: bold;
-    color: var(--color-accent);
+    color: var(--accent-gold);
     -unity-text-align: middle-center;
 }
 
@@ -404,7 +431,7 @@
 
 .hud-crystal-label {
     font-size: 11px;
-    color: var(--color-text);
+    color: var(--text-primary);
 }
 
 .hud-skill-icon-image {
@@ -432,14 +459,14 @@
     translate: -50% 0;
     min-width: 300px;
     padding: 8px;
-    background-color: var(--color-panel-bg);
-    border-color: var(--color-panel-border);
+    background-color: var(--surface-panel);
+    border-color: var(--border-subtle);
     border-width: 1px;
     flex-direction: column;
 }
 
 .hud-mission-title {
-    color: var(--color-accent);
+    color: var(--accent-gold);
     margin-bottom: 4px;
 }
 
@@ -477,9 +504,9 @@
     border-color: rgba(90, 90, 90, 1);
     border-width: 2px;
     border-radius: 3px;
-    font-size: var(--font-size-sm);
+    font-size: var(--size-sm);
     -unity-font-style: bold;
-    color: var(--color-text);
+    color: var(--text-primary);
     -unity-text-align: middle-center;
     padding: 0;
     height: 28px;
@@ -530,6 +557,11 @@
     height: 28px;
 }
 
+/* Смещения кнопок верхнего ряда (были inline right в C#-версии) */
+.hud-btn-top-row--respawn { right: 222px; }
+.hud-btn-top-row--buildings { right: 116px; }
+.hud-btn-top-row--faq { right: 10px; }
+
 .hud-bonus-button {
     position: absolute;
     left: 256px;
@@ -571,8 +603,8 @@
 }
 
 .hud-nickname {
-    -unity-font-definition: var(--font-heading);
-    color: var(--scifi-text-white);
+    -unity-font-definition: var(--face-display);
+    color: var(--text-primary);
     font-size: 14px;
     -unity-font-style: bold;
     letter-spacing: 0.5px;
@@ -586,7 +618,7 @@
 
 .hud-separator {
     height: 1px;
-    background-color: var(--scifi-border-subtle);
+    background-color: var(--border-subtle);
     margin-bottom: 8px;
 }
 
@@ -601,14 +633,14 @@
 }
 
 .hud-stat-title {
-    -unity-font-definition: var(--font-body);
-    color: var(--scifi-text-dim);
+    -unity-font-definition: var(--face-body);
+    color: var(--text-secondary);
     font-size: 11px;
 }
 
 .hud-stat-percent {
-    -unity-font-definition: var(--font-mono);
-    color: var(--scifi-green);
+    -unity-font-definition: var(--face-data);
+    color: var(--state-ok);
     font-size: 11px;
     -unity-font-style: bold;
 }
@@ -631,23 +663,23 @@
 
 .hud-currency-icon {
     font-size: 14px;
-    color: var(--scifi-cyan);
+    color: var(--accent-cyan);
     margin-right: 4px;
 }
 
 .hud-currency-icon--gold {
-    color: var(--scifi-gold);
+    color: var(--accent-gold);
 }
 
 .hud-currency-value {
-    -unity-font-definition: var(--font-mono);
-    color: var(--scifi-text-white);
+    -unity-font-definition: var(--face-data);
+    color: var(--text-primary);
     font-size: 12px;
     -unity-font-style: bold;
 }
 
 .hud-currency-value--gold {
-    color: var(--scifi-gold-bright);
+    color: var(--accent-gold-hover);
 }
 
 /* Корзина */
@@ -667,8 +699,8 @@
 }
 
 .hud-geology-text {
-    -unity-font-definition: var(--font-body);
-    color: var(--scifi-text-dim);
+    -unity-font-definition: var(--face-body);
+    color: var(--text-secondary);
     font-size: 10px;
 }
 
@@ -689,16 +721,16 @@
 }
 
 .hud-mission-title {
-    -unity-font-definition: var(--font-heading);
-    color: var(--scifi-text-white);
+    -unity-font-definition: var(--face-display);
+    color: var(--text-primary);
     font-size: 12px;
     -unity-font-style: bold;
     margin-left: 8px;
 }
 
 .hud-mission-desc {
-    -unity-font-definition: var(--font-body);
-    color: var(--scifi-text-dim);
+    -unity-font-definition: var(--face-body);
+    color: var(--text-secondary);
     font-size: 11px;
     white-space: normal;
     margin-bottom: 6px;
@@ -709,9 +741,13 @@
     margin-bottom: 4px;
 }
 
+#MissionProgressFill {
+    width: 0%;
+}
+
 .hud-mission-progress-text {
-    -unity-font-definition: var(--font-mono);
-    color: var(--scifi-cyan);
+    -unity-font-definition: var(--face-data);
+    color: var(--accent-cyan);
     font-size: 10px;
     align-self: flex-end;
 }
@@ -733,13 +769,14 @@
     width: 6px;
     height: 6px;
     border-radius: 3px;
-    background-color: var(--scifi-text-muted);
+    background-color: var(--text-disabled);
     margin-right: 8px;
 }
 
 .hud-mode-led--active {
-    background-color: var(--scifi-cyan-bright);
+    background-color: var(--accent-cyan-hover);
 }
+
 
 /* ─── Системная миникарта (UI Toolkit) ─── */
 
@@ -773,7 +810,7 @@
 
 .hud-minimap-coords {
     font-size: 11px;
-    color: var(--scifi-cyan-bright, rgb(80, 200, 255));
+    color: var(--accent-cyan-hover);
     -unity-font-style: bold;
     margin-bottom: 4px;
     -unity-text-align: middle-center;

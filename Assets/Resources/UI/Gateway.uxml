@@ -19,7 +19,8 @@
          ни регистрации — ClientHelloPacket несёт только токен из
          PlayerPrefs, а сервер отвечает AuthTokenPacket. Поля пароля и
          вкладка регистрации здесь — заглушки по макету; рабочие пути
-         это «Войти» (обычное подключение) и «Офлайн режим (Dummy)».
+         это «Войти» (обычное подключение), «Войти через VK» (VK ID
+         device-flow) и «Офлайн режим (Dummy)».
          ═══════════════════════════════════════════════════════ -->
     <ui:VisualElement name="AuthOverlay" class="auth-overlay">
         <ui:VisualElement name="AuthCard" class="auth-card">
@@ -38,57 +39,68 @@
             </ui:VisualElement>
 
             <ui:VisualElement class="auth-tabs">
-                <ui:Button name="AuthTabLogin" class="auth-tab auth-tab--active" text="ВХОД В АККАУНТ" />
-                <ui:Button name="AuthTabRegister" class="auth-tab" text="РЕГИСТРАЦИЯ" />
+                <ui:Button name="AuthTabLogin" class="auth-tab auth-tab--active" text="gateway.auth.login_tab" />
+                <ui:Button name="AuthTabRegister" class="auth-tab" text="gateway.auth.register_tab" />
             </ui:VisualElement>
 
             <!-- Форма входа -->
             <ui:VisualElement name="AuthLoginForm" class="auth-form">
                 <ui:VisualElement class="auth-field">
-                    <ui:Label class="auth-field-label" text="ПОЗЫВНОЙ ШАХТЁРА (ЛОГИН):" />
+                    <ui:Label class="auth-field-label" text="gateway.auth.login_field" />
                     <ui:TextField name="AuthLogin" class="auth-input" />
                 </ui:VisualElement>
                 <ui:VisualElement class="auth-field">
-                    <ui:Label class="auth-field-label" text="ПАРОЛЬ ДОСТУПА:" />
+                    <ui:Label class="auth-field-label" text="gateway.auth.password_field" />
                     <ui:TextField name="AuthPassword" class="auth-input" password="true" />
                 </ui:VisualElement>
                 <ui:VisualElement class="auth-options">
-                    <ui:Toggle name="AuthRememberMe" class="auth-check" value="true" text="Запомнить данные" />
-                    <ui:Toggle name="AuthAutoLogin" class="auth-check" text="Авто-вход" />
+                    <ui:Toggle name="AuthRememberMe" class="auth-check" value="true" text="gateway.auth.remember" />
+                    <ui:Toggle name="AuthAutoLogin" class="auth-check" text="gateway.auth.auto_login" />
                 </ui:VisualElement>
             </ui:VisualElement>
 
             <!-- Форма регистрации -->
             <ui:VisualElement name="AuthRegisterForm" class="auth-form auth-form--hidden">
                 <ui:VisualElement class="auth-field">
-                    <ui:Label class="auth-field-label" text="ПОЗЫВНОЙ НОВОГО ШАХТЁРА:" />
+                    <ui:Label class="auth-field-label" text="gateway.auth.new_callsign_field" />
                     <ui:TextField name="AuthRegLogin" class="auth-input" />
                 </ui:VisualElement>
                 <ui:VisualElement class="auth-field">
-                    <ui:Label class="auth-field-label" text="ПАРОЛЬ ДОСТУПА:" />
+                    <ui:Label class="auth-field-label" text="gateway.auth.password_field" />
                     <ui:TextField name="AuthRegPassword" class="auth-input" password="true" />
                 </ui:VisualElement>
                 <ui:VisualElement class="auth-field">
-                    <ui:Label class="auth-field-label" text="ПОДТВЕРЖДЕНИЕ ПАРОЛЯ:" />
+                    <ui:Label class="auth-field-label" text="gateway.auth.confirm_password_field" />
                     <ui:TextField name="AuthRegConfirm" class="auth-input" password="true" />
                 </ui:VisualElement>
                 <ui:VisualElement class="auth-field">
-                    <ui:Label class="auth-field-label" text="КОДЕКС ЭКСПЕДИЦИИ И EULA:" />
+                    <ui:Label class="auth-field-label" text="gateway.auth.eula_title" />
                     <ui:ScrollView class="auth-eula">
-                        <ui:Label class="auth-eula-line" text="1. РЕГЛАМЕНТ ШАХТЫ: игрок обязуется соблюдать правила кластера Hades-Orbit." />
-                        <ui:Label class="auth-eula-line" text="2. АВТОРИТЕТ СЕРВЕРА: координаты и добыча рассчитываются сервером авторитарно." />
-                        <ui:Label class="auth-eula-line" text="3. ПРОГРЕСС: все данные синхронизируются по протоколу MinesProtocol v7." />
+                        <ui:Label class="auth-eula-line" text="gateway.auth.eula_line1" />
+                        <ui:Label class="auth-eula-line" text="gateway.auth.eula_line2" />
+                        <ui:Label class="auth-eula-line" text="gateway.auth.eula_line3" />
                     </ui:ScrollView>
-                    <ui:Toggle name="AuthAcceptEula" class="auth-check" text="Принимаю Пользовательское соглашение и EULA" />
+                    <ui:Toggle name="AuthAcceptEula" class="auth-check" text="gateway.auth.eula_accept" />
                 </ui:VisualElement>
             </ui:VisualElement>
 
-            <ui:Button name="AuthSubmitButton" class="auth-submit" text="ВОЙТИ В МИР FODINAE" />
+            <ui:Button name="AuthSubmitButton" class="auth-submit" text="gateway.auth.submit" />
+
+            <!-- VK ID: device-flow без редиректа. Текст и доступность ведёт AuthGate. -->
+            <ui:VisualElement class="auth-vk-sep">
+                <ui:VisualElement class="auth-vk-sep-line" />
+                <ui:Label class="auth-vk-sep-label" text="gateway.auth.vk_or" />
+                <ui:VisualElement class="auth-vk-sep-line" />
+            </ui:VisualElement>
+            <ui:Button name="AuthVkButton" class="auth-vk">
+                <ui:Label class="auth-vk-badge" text="VK" />
+                <ui:Label name="AuthVkLabel" class="auth-vk-label" text="gateway.auth.vk" />
+            </ui:Button>
 
             <ui:VisualElement class="auth-footer">
-                <ui:Button name="AuthOfflineButton" class="auth-footer-link" text="Офлайн режим (Dummy)" />
+                <ui:Button name="AuthOfflineButton" class="auth-footer-link" text="gateway.auth.offline" />
                 <ui:Label class="auth-footer-sep" text="|" />
-                <ui:Button name="AuthRecoverButton" class="auth-footer-link" text="Забыли пароль?" />
+                <ui:Button name="AuthRecoverButton" class="auth-footer-link" text="gateway.auth.recover" />
             </ui:VisualElement>
 
             <ui:Label name="AuthHint" class="auth-hint" />
@@ -103,87 +115,104 @@
         <ui:VisualElement class="onb-card">
             <ui:VisualElement class="onb-header">
                 <ui:VisualElement class="onb-header-text">
-                    <ui:Label class="onb-eyebrow" text="КАЛИБРОВКА ОБОРУДОВАНИЯ ШАХТЁРА" />
-                    <ui:Label name="OnboardingTitle" class="onb-title" text="Доступность и визуальный комфорт" />
+                    <ui:Label class="onb-eyebrow" text="gateway.onb.eyebrow" />
+                    <ui:Label name="OnboardingTitle" class="onb-title"  text="" />
                 </ui:VisualElement>
                 <ui:VisualElement class="onb-steps">
-                    <ui:Label name="OnbPill1" class="onb-pill onb-pill--active" text="1. ДОСТУПНОСТЬ" />
-                    <ui:Label name="OnbPill2" class="onb-pill" text="2. ГРАФИКА" />
-                    <ui:Label name="OnbPill3" class="onb-pill" text="3. УПРАВЛЕНИЕ" />
+                    <ui:Label name="OnbPill1" class="onb-pill onb-pill--active" text="gateway.onb.pill1" />
+                    <ui:Label name="OnbPill2" class="onb-pill" text="gateway.onb.pill2" />
+                    <ui:Label name="OnbPill3" class="onb-pill" text="gateway.onb.pill3" />
                 </ui:VisualElement>
             </ui:VisualElement>
 
             <ui:ScrollView class="onb-body" mode="Vertical">
-                <!-- Шаг 1 -->
+                <!-- Шаг 1: Доступность -->
                 <ui:VisualElement name="OnbStep1" class="onb-step onb-step--active">
-                    <ui:Label class="onb-block-title" text="ОПТИЧЕСКАЯ АДАПТАЦИЯ И ДОСТУПНОСТЬ" />
+                    <ui:Label class="onb-block-title" text="gateway.onb.step1_block_title" />
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Масштаб интерфейса" />
-                            <ui:Label class="onb-hint" text="Калибровка размера панелей UI Toolkit под монитор" />
+                            <ui:Label class="onb-label" text="gateway.onb.ui_scale_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.ui_scale_hint" />
                         </ui:VisualElement>
-                        <ui:DropdownField name="OnbUiScale" class="onb-select" />
+                        <ui:DropdownField name="OnbUIScale" class="onb-select" />
                     </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Снижение фоточувствительности" />
-                            <ui:Label class="onb-hint" text="Подавление резких вспышек при контакте с лавой" />
+                            <ui:Label class="onb-label" text="gateway.onb.colorblind_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.colorblind_hint" />
                         </ui:VisualElement>
-                        <ui:Toggle name="OnbReduceFlashes" class="onb-toggle" />
+                        <ui:DropdownField name="OnbColorblind" class="onb-select" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="gateway.onb.flicker_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.flicker_hint" />
+                        </ui:VisualElement>
+                        <ui:DropdownField name="OnbPhotosensitivity" class="onb-select" />
                     </ui:VisualElement>
                 </ui:VisualElement>
 
-                <!-- Шаг 2 -->
+                <!-- Шаг 2: Графика -->
                 <ui:VisualElement name="OnbStep2" class="onb-step">
-                    <ui:Label class="onb-block-title" text="РЕНДЕРИНГ И ТРАССИРОВКА ОСВЕЩЕНИЯ" />
+                    <ui:Label class="onb-block-title" text="gateway.onb.step2_block_title" />
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Качество освещения" />
-                            <ui:Label class="onb-hint" text="Каскадный расчёт диффузного света в породе" />
+                            <ui:Label class="onb-label" text="gateway.onb.lighting_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.lighting_hint" />
                         </ui:VisualElement>
                         <ui:DropdownField name="OnbGraphicsPreset" class="onb-select" />
                     </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Ограничение частоты кадров" />
-                            <ui:Label class="onb-hint" text="Синхронизация частоты кадров" />
+                            <ui:Label class="onb-label" text="gateway.onb.fps_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.fps_hint" />
                         </ui:VisualElement>
                         <ui:DropdownField name="OnbFrameRate" class="onb-select" />
                     </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Вертикальная синхронизация" />
-                            <ui:Label class="onb-hint" text="Убирает разрыв кадра ценой задержки ввода" />
+                            <ui:Label class="onb-label" text="gateway.onb.vsync_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.vsync_hint" />
                         </ui:VisualElement>
                         <ui:Toggle name="OnbVSync" class="onb-toggle" />
                     </ui:VisualElement>
                 </ui:VisualElement>
 
-                <!-- Шаг 3 -->
+                <!-- Шаг 3: Управление и Звук -->
                 <ui:VisualElement name="OnbStep3" class="onb-step">
-                    <ui:Label class="onb-block-title" text="ТАКТИЛЬНЫЙ КОНТРОЛЬ И FMOD AUDIO" />
+                    <ui:Label class="onb-block-title" text="gateway.onb.step3_block_title" />
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Приглушать звук в фоне" />
-                            <ui:Label class="onb-hint" text="Тишина, когда окно клиента неактивно" />
+                            <ui:Label class="onb-label" text="gateway.onb.controls_scheme_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.controls_scheme_hint" />
                         </ui:VisualElement>
-                        <ui:Toggle name="OnbMuteInBackground" class="onb-toggle" />
+                        <ui:DropdownField name="OnbControlScheme" class="onb-select" />
                     </ui:VisualElement>
                     <ui:VisualElement class="onb-row">
                         <ui:VisualElement class="onb-row-text">
-                            <ui:Label class="onb-label" text="Схема движения бурового дрона" />
-                            <ui:Label class="onb-hint" text="Клавиатура — единственная схема в этой сборке" />
+                            <ui:Label class="onb-label" text="gateway.onb.master_volume_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.master_volume_hint" />
                         </ui:VisualElement>
-                        <ui:Label class="onb-static" text="WASD / СТРЕЛКИ" />
+                        <ui:VisualElement class="onb-slider-group">
+                            <ui:Slider name="OnbMasterVolume" class="onb-slider" low-value="0" high-value="100" />
+                            <ui:Label name="OnbMasterVolumeLabel" class="onb-slider-val" text="85%" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                    <ui:VisualElement class="onb-row">
+                        <ui:VisualElement class="onb-row-text">
+                            <ui:Label class="onb-label" text="gateway.onb.mute_label" />
+                            <ui:Label class="onb-hint" text="gateway.onb.mute_hint" />
+                        </ui:VisualElement>
+                        <ui:Toggle name="OnbMuteInBackground" class="onb-toggle" />
                     </ui:VisualElement>
                 </ui:VisualElement>
             </ui:ScrollView>
 
             <ui:VisualElement class="onb-footer">
-                <ui:Button name="OnbPrevButton" class="onb-btn onb-btn--ghost" text="← НАЗАД" />
+                <ui:Button name="OnbPrevButton" class="onb-btn onb-btn--ghost" text="gateway.onb.prev" />
                 <ui:VisualElement class="onb-footer-spacer" />
-                <ui:Button name="OnbSkipButton" class="onb-btn onb-btn--ghost" text="ПРОПУСТИТЬ" />
-                <ui:Button name="OnbNextButton" class="onb-btn onb-btn--gold" text="ДАЛЕЕ →" />
+                <ui:Button name="OnbSkipButton" class="onb-btn onb-btn--ghost" text="gateway.onb.skip" />
+                <ui:Button name="OnbNextButton" class="onb-btn onb-btn--gold"  text="" />
             </ui:VisualElement>
         </ui:VisualElement>
     </ui:VisualElement>

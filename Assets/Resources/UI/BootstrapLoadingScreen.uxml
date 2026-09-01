@@ -1,0 +1,7 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="BootstrapLoadingScreen.uss" />
+    <ui:VisualElement name="BootstrapLoadingOverlay" class="bootstrap-loading-overlay">
+        <ui:Label class="bootstrap-loading-title" text="assetload.title" />
+        <ui:Label name="BootstrapLoadingPhase" class="bootstrap-loading-phase" />
+    </ui:VisualElement>
+</ui:UXML>

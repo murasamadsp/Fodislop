@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using MinesServer.Data;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Game.Managers
@@ -25,6 +26,33 @@ namespace Fodinae.Game.Managers
         public static string GetDescription(ItemType type) => string.Empty;
 
         public static IEnumerable<ItemType> AllTypes => (ItemType[])System.Enum.GetValues(typeof(ItemType));
+
+        /// <summary>
+        /// Выполняет фоновый прогрев кэша иконок предметов, исключая синхронный I/O лаг во время игры.
+        /// </summary>
+        public static async Cysharp.Threading.Tasks.UniTask PreloadAllAsync(System.Threading.CancellationToken cancellationToken = default)
+        {
+            string? itemsDir = Fodinae.Core.RuntimeAssetPaths.TexturesSubfolder("Items");
+            if (itemsDir == null || !Directory.Exists(itemsDir))
+            {
+                return;
+            }
+
+            foreach (ItemType type in AllTypes)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (!_iconCache.ContainsKey(type))
+                {
+                    GetIcon(type);
+                }
+
+                await Cysharp.Threading.Tasks.UniTask.Yield();
+            }
+        }
 
         public static Texture2D? GetIcon(ItemType type)
         {

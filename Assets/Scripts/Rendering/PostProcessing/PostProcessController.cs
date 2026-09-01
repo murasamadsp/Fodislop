@@ -1,76 +1,25 @@
 #nullable enable
 
 using System;
-using System.Reflection;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using VContainer;
+using Unity.Profiling;
 
 namespace Fodinae.Rendering.PostProcessing
 {
-    public static class PostProcessDefaults
-    {
-        // These values only construct valid VolumeParameter instances for Unity
-        // serialization. ProjectDefaults/ClientConfig is the sole visual source
-        // of truth and overwrites every parameter before the first render.
-        public static ClampedFloatParameter BloomIntensity() => new(0f, 0f, 5f);
-
-        public static ClampedFloatParameter BloomThreshold() => new(0f, 0f, 2f);
-
-        public static ClampedFloatParameter BloomScatter() => new(0.1f, 0.1f, 1f);
-
-        public static ColorParameter BloomTint() => new(Color.white);
-
-        public static ClampedFloatParameter VignetteIntensity() => new(0f, 0f, 1f);
-
-        public static ColorParameter VignetteColor() => new(Color.black);
-
-        public static ClampedFloatParameter VignetteSmoothness() => new(0.01f, 0.01f, 1f);
-
-        public static Vector2Parameter VignetteCenter() => new(new Vector2(0.5f, 0.5f));
-
-        public static ClampedFloatParameter ChromaticAberrationIntensity() => new(0f, 0f, 1f);
-
-        public static ClampedFloatParameter ColorGradingExposure() => new(0f, -4f, 4f);
-
-        public static ColorParameter ColorGradingFilter() => new(Color.white);
-
-        public static ClampedFloatParameter ColorGradingContrast() => new(0f, -1f, 1f);
-
-        public static ClampedFloatParameter ColorGradingSaturation() => new(1f, 0f, 2f);
-
-        public static BoolParameter ColorGradingToneMapping() => new(false);
-
-        public static ClampedFloatParameter ColorGradingWhitePoint() => new(0.25f, 0.25f, 8f);
-
-        public static ClampedFloatParameter EigengrauIntensity() => new(0f, 0f, 1f);
-
-        public static ColorParameter EigengrauColor() => new(Color.black);
-
-        public static ClampedFloatParameter EigengrauDarknessThreshold() => new(0.02f, 0.02f, 0.75f);
-
-        public static ClampedFloatParameter EigengrauNoiseScale() => new(0.75f, 0.75f, 2f);
-
-        public static ClampedFloatParameter EigengrauAnimationSpeed() => new(1f, 1f, 60f);
-
-        public static ClampedFloatParameter MotionBlurIntensity() => new(0f, 0f, 1f);
-
-        public static ClampedIntParameter MotionBlurMaxSamples() => new(2, 2, 32);
-    }
-
     [DisallowMultipleComponent]
     public class PostProcessController : MonoBehaviour
     {
-        private static PostProcessController? _instance;
-        public static PostProcessController Instance => _instance!;
+        private static readonly ProfilerMarker PostProcessLateUpdateMarker =
+            new("Fodinae.PostProcess.LateUpdate");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForDomainReload()
         {
-            _instance = null;
         }
 
         [SerializeField]
@@ -78,17 +27,18 @@ namespace Fodinae.Rendering.PostProcessing
 
         private Camera? _configuredMainCamera;
         private UniversalAdditionalCameraData? _configuredMainCameraData;
-        private Camera? _worldUiCamera;
-        private UniversalAdditionalCameraData? _worldUiCameraData;
+        private Camera? _worldUICamera;
+        private UniversalAdditionalCameraData? _worldUICameraData;
         private Camera? _mainCamera;
         private UniversalAdditionalCameraData? _cachedMainCameraData;
-        private int _worldUiLayerMask;
-        private float _lastWorldUiOrthographicSize = float.NaN;
-        private float _lastWorldUiFieldOfView = float.NaN;
-        private float _lastWorldUiNearClipPlane = float.NaN;
-        private float _lastWorldUiFarClipPlane = float.NaN;
-        private Matrix4x4 _lastWorldUiProjection;
-        private bool _hasWorldUiProjection;
+        private int _worldUILayerMask;
+        private float _lastWorldUIOrthographicSize = float.NaN;
+        private float _lastWorldUIFieldOfView = float.NaN;
+        private float _lastWorldUINearClipPlane = float.NaN;
+        private float _lastWorldUIFarClipPlane = float.NaN;
+        private Matrix4x4 _lastWorldUIProjection;
+        private bool _hasWorldUIProjection;
+        private bool _worldUISeparationRequired = true;
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -98,7 +48,15 @@ namespace Fodinae.Rendering.PostProcessing
         private MotionBlurComponent? _motionBlur;
 
         [Inject]
-        private IClientConfigManager? _clientConfigManager;
+        private IClientConfigManager _clientConfigManager = null!;
+        [Inject]
+        private IGameplayCamera _gameplayCamera = null!;
+
+        [Inject]
+        private void Construct(Volume volume)
+        {
+            _volume = volume ?? throw new ArgumentNullException(nameof(volume));
+        }
 
         public float BloomIntensity
         {
@@ -193,16 +151,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void Awake()
         {
-            _instance = this;
-            _mainCamera = GameplayCamera.Resolve();
+            _mainCamera = _gameplayCamera?.Camera;
         }
 
         private void OnDestroy()
         {
-            if (_instance == this)
-            {
-                _instance = null;
-            }
         }
 
         private void OnEnable()
@@ -236,7 +189,7 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_mainCamera == null)
             {
-                _mainCamera = GameplayCamera.Resolve();
+                _mainCamera = _gameplayCamera?.Camera;
             }
 
             var mainCam = _mainCamera;
@@ -244,23 +197,6 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 EnsureCameraSetup(mainCam);
             }
-
-            if (_volume == null)
-            {
-                foreach (Volume vol in FindObjectsByType<Volume>(FindObjectsInactive.Include))
-                {
-                    if (vol.profile != null &&
-                        !vol.profile.name.Contains("MenuScenery", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _volume = vol;
-                        break;
-                    }
-                }
-
-
-                _volume ??= FindAnyObjectByType<Volume>(FindObjectsInactive.Include);
-            }
-
 
             if (_volume == null)
             {
@@ -275,14 +211,14 @@ namespace Fodinae.Rendering.PostProcessing
                     "PostProcessController requires a runtime VolumeProfile on its serialized Volume.");
             }
 
-            ValidateProfileComponents(profile);
+            PostProcessDefaults.ValidateVolumeProfile(profile);
 
-            RequireComponent(ref _bloom, profile);
-            RequireComponent(ref _vignette, profile);
-            RequireComponent(ref _chromaticAberration, profile);
-            RequireComponent(ref _colorGrading, profile);
-            RequireComponent(ref _eigengrau, profile);
-            RequireComponent(ref _motionBlur, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _bloom, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _vignette, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _chromaticAberration, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _colorGrading, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _eigengrau, profile);
+            PostProcessDefaults.RequireVolumeComponent(ref _motionBlur, profile);
             ApplyClientConfig();
         }
 
@@ -301,10 +237,31 @@ namespace Fodinae.Rendering.PostProcessing
             ClientConfig config = clientConfigManager.Config ??
                 throw new InvalidOperationException(
                     "PostProcessController requires an initialized ClientConfig.");
-            BloomIntensity = config.BloomIntensity;
+            // The graphics preset used to stop at this class's doorstep: every
+            // value below is an artistic one from ClientConfig, and nothing
+            // here ever read GraphicsQualitySettings. That made the whole
+            // post-processing stack cost the same on VeryLow as on Ultra -
+            // bloom pyramid, motion blur and all - no matter which preset the
+            // player picked, and it kept costing that with world lighting
+            // switched off, because the two subsystems are unrelated.
+            PostProcessRenderPass.SetAdvancedSettings(config.AdvancedPostProcess);
+
+            float bloomIntensity = config.BloomIntensity;
+            float chromaticAberration = config.ChromaticAberrationIntensity;
+            if (config.ReducePhotosensitivity)
+            {
+                bloomIntensity = Mathf.Min(bloomIntensity, 0.3f);
+                chromaticAberration = 0f;
+            }
+
+            BloomIntensity = bloomIntensity;
             BloomComponent bloom = GetRequired(_bloom, nameof(_bloom));
             bloom.threshold.overrideState = true;
             bloom.threshold.value = config.BloomThreshold;
+            bloom.softKnee.overrideState = true;
+            bloom.softKnee.value = config.BloomSoftKnee;
+            bloom.radius.overrideState = true;
+            bloom.radius.value = config.BloomRadius;
             bloom.scatter.overrideState = true;
             bloom.scatter.value = config.BloomScatter;
             bloom.tint.overrideState = true;
@@ -319,16 +276,38 @@ namespace Fodinae.Rendering.PostProcessing
             vignette.center.overrideState = true;
             vignette.center.value = config.VignetteCenter;
 
-            ChromaticAberrationIntensity = config.ChromaticAberrationIntensity;
-            Exposure = config.ColorGradingExposure;
+            ChromaticAberrationIntensity = chromaticAberration;
             ColorGradingComponent colorGrading = GetRequired(_colorGrading, nameof(_colorGrading));
+            Exposure = config.ColorGradingExposure;
+            Color baseFilter = config.ColorGradingFilter;
+            float contrast = config.ColorGradingContrast;
+            float saturation = config.ColorGradingSaturation;
+
+            // Apply colorblind accessibility matrix adjustment
+            switch (config.ColorblindMode)
+            {
+                case 1: // Deuteranopia (green-weak)
+                    baseFilter = new Color(baseFilter.r * 0.8f + baseFilter.g * 0.2f, baseFilter.g * 0.7f + baseFilter.b * 0.3f, baseFilter.b);
+                    break;
+                case 2: // Protanopia (red-weak)
+                    baseFilter = new Color(baseFilter.r * 0.6f + baseFilter.g * 0.4f, baseFilter.g * 0.9f, baseFilter.b * 1.1f);
+                    break;
+                case 3: // Tritanopia (blue-weak)
+                    baseFilter = new Color(baseFilter.r * 0.95f, baseFilter.g * 0.85f + baseFilter.b * 0.15f, baseFilter.b * 0.5f + baseFilter.r * 0.5f);
+                    break;
+                case 4: // High-Contrast
+                    contrast = Mathf.Min(contrast + 0.35f, 1f);
+                    saturation = Mathf.Min(saturation + 0.2f, 2f);
+                    break;
+            }
+
             colorGrading.colorFilter.overrideState = true;
-            colorGrading.colorFilter.value = config.ColorGradingFilter;
+            colorGrading.colorFilter.value = baseFilter;
             colorGrading.toneMappingWhitePoint.overrideState = true;
             colorGrading.toneMappingWhitePoint.value = config.ColorGradingToneMappingWhitePoint;
 
-            Contrast = config.ColorGradingContrast;
-            Saturation = config.ColorGradingSaturation;
+            Contrast = contrast;
+            Saturation = saturation;
             ToneMapping = config.ColorGradingToneMapping;
             EigengrauIntensity = config.EigengrauIntensity;
             EigengrauComponent eigengrau = GetRequired(_eigengrau, nameof(_eigengrau));
@@ -343,8 +322,18 @@ namespace Fodinae.Rendering.PostProcessing
 
             MotionBlurIntensity = config.MotionBlurIntensity;
             MotionBlurComponent motionBlur = GetRequired(_motionBlur, nameof(_motionBlur));
-            motionBlur.maxSamples.overrideState = true;
-            motionBlur.maxSamples.value = config.MotionBlurMaxSamples;
+            motionBlur.intensity.overrideState = true;
+
+            // Enable the renderer pass only after every Volume value and every
+            // fused setting has been applied as one coherent configuration.
+            PostProcessRenderPass.SetQuality(
+                config.GraphicsQualitySettings.PostProcessQuality);
+
+            _worldUISeparationRequired = false;
+            if (_configuredMainCamera != null && _configuredMainCameraData != null)
+            {
+                ConfigureWorldUIRendering(_configuredMainCamera, _configuredMainCameraData);
+            }
         }
 
         public float Exposure
@@ -378,9 +367,10 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
+            using var marker = PostProcessLateUpdateMarker.Auto();
             if (_mainCamera == null)
             {
-                _mainCamera = GameplayCamera.Resolve();
+                _mainCamera = _gameplayCamera?.Camera;
             }
 
             Camera? mainCamera = _configuredMainCamera;
@@ -397,50 +387,47 @@ namespace Fodinae.Rendering.PostProcessing
             bool cameraSeparationIsBroken =
                 _configuredMainCamera != mainCamera ||
                 _configuredMainCameraData == null ||
-                _worldUiCamera == null ||
-                _worldUiCameraData == null ||
-                (mainCamera.cullingMask & _worldUiLayerMask) != 0 ||
-                _worldUiCamera.cullingMask != _worldUiLayerMask ||
-                _worldUiCameraData.renderType != CameraRenderType.Overlay ||
-                _worldUiCameraData.renderPostProcessing ||
-                !_configuredMainCameraData.cameraStack.Contains(_worldUiCamera);
+                (mainCamera.cullingMask & _worldUILayerMask) == 0 ||
+                (_worldUICamera != null && _worldUICamera.enabled) ||
+                (_worldUICamera != null &&
+                    _configuredMainCameraData.cameraStack.Contains(_worldUICamera));
 
             if (cameraSeparationIsBroken)
             {
                 EnsureCameraSetup(mainCamera);
             }
 
-            if (_worldUiCamera == null)
+            if (!_worldUISeparationRequired || _worldUICamera == null)
             {
                 return;
             }
 
             Matrix4x4 projection = mainCamera.projectionMatrix;
             bool projectionChanged =
-                !_hasWorldUiProjection ||
-                _worldUiCamera.orthographic != mainCamera.orthographic ||
-                !Mathf.Approximately(_lastWorldUiOrthographicSize, mainCamera.orthographicSize) ||
-                !Mathf.Approximately(_lastWorldUiFieldOfView, mainCamera.fieldOfView) ||
-                !Mathf.Approximately(_lastWorldUiNearClipPlane, mainCamera.nearClipPlane) ||
-                !Mathf.Approximately(_lastWorldUiFarClipPlane, mainCamera.farClipPlane) ||
-                _lastWorldUiProjection != projection;
+                !_hasWorldUIProjection ||
+                _worldUICamera.orthographic != mainCamera.orthographic ||
+                !Mathf.Approximately(_lastWorldUIOrthographicSize, mainCamera.orthographicSize) ||
+                !Mathf.Approximately(_lastWorldUIFieldOfView, mainCamera.fieldOfView) ||
+                !Mathf.Approximately(_lastWorldUINearClipPlane, mainCamera.nearClipPlane) ||
+                !Mathf.Approximately(_lastWorldUIFarClipPlane, mainCamera.farClipPlane) ||
+                _lastWorldUIProjection != projection;
             if (!projectionChanged)
             {
                 return;
             }
 
-            _worldUiCamera.orthographic = mainCamera.orthographic;
-            _worldUiCamera.orthographicSize = mainCamera.orthographicSize;
-            _worldUiCamera.fieldOfView = mainCamera.fieldOfView;
-            _worldUiCamera.nearClipPlane = mainCamera.nearClipPlane;
-            _worldUiCamera.farClipPlane = mainCamera.farClipPlane;
-            _worldUiCamera.projectionMatrix = projection;
-            _lastWorldUiOrthographicSize = mainCamera.orthographicSize;
-            _lastWorldUiFieldOfView = mainCamera.fieldOfView;
-            _lastWorldUiNearClipPlane = mainCamera.nearClipPlane;
-            _lastWorldUiFarClipPlane = mainCamera.farClipPlane;
-            _lastWorldUiProjection = projection;
-            _hasWorldUiProjection = true;
+            _worldUICamera.orthographic = mainCamera.orthographic;
+            _worldUICamera.orthographicSize = mainCamera.orthographicSize;
+            _worldUICamera.fieldOfView = mainCamera.fieldOfView;
+            _worldUICamera.nearClipPlane = mainCamera.nearClipPlane;
+            _worldUICamera.farClipPlane = mainCamera.farClipPlane;
+            _worldUICamera.projectionMatrix = projection;
+            _lastWorldUIOrthographicSize = mainCamera.orthographicSize;
+            _lastWorldUIFieldOfView = mainCamera.fieldOfView;
+            _lastWorldUINearClipPlane = mainCamera.nearClipPlane;
+            _lastWorldUIFarClipPlane = mainCamera.farClipPlane;
+            _lastWorldUIProjection = projection;
+            _hasWorldUIProjection = true;
         }
 
         private void EnsureCameraSetup(Camera mainCamera)
@@ -469,93 +456,30 @@ namespace Fodinae.Rendering.PostProcessing
 
             _configuredMainCamera = mainCamera;
             _configuredMainCameraData = cameraData;
-            EnsureWorldUiCamera(mainCamera, cameraData);
+            ConfigureWorldUIRendering(mainCamera, cameraData);
         }
 
-        private void EnsureWorldUiCamera(Camera mainCamera, UniversalAdditionalCameraData mainCameraData)
+        private void ConfigureWorldUIRendering(
+            Camera mainCamera,
+            UniversalAdditionalCameraData mainCameraData)
         {
             int uiLayer = UnityRenderLayerContracts.RequireWorldUIGameObjectLayer();
             UnityRenderLayerContracts.RequireWorldUISortingLayer();
+            _worldUILayerMask = 1 << uiLayer;
 
-            _worldUiLayerMask = 1 << uiLayer;
-            mainCamera.cullingMask &= ~_worldUiLayerMask;
-
-            var existingTransform = mainCamera.transform.Find("WorldUICamera");
-            _worldUiCamera = existingTransform != null ? existingTransform.GetComponent<Camera>() : null;
-            if (_worldUiCamera == null)
+            mainCamera.cullingMask |= _worldUILayerMask;
+            if (_worldUICamera == null)
             {
-                var cameraObject = new GameObject("WorldUICamera");
-                cameraObject.transform.SetParent(mainCamera.transform, false);
-                _worldUiCamera = cameraObject.AddComponent<Camera>();
-                _worldUiCamera.CopyFrom(mainCamera);
+                Transform? existingTransform = mainCamera.transform.Find("WorldUICamera");
+                _worldUICamera = existingTransform != null
+                    ? existingTransform.GetComponent<Camera>()
+                    : null;
             }
 
-            _worldUiCamera.cullingMask = _worldUiLayerMask;
-            _worldUiCamera.clearFlags = CameraClearFlags.Nothing;
-            _worldUiCamera.depth = mainCamera.depth + 1f;
-
-            _worldUiCameraData = _worldUiCamera.GetComponent<UniversalAdditionalCameraData>();
-            if (_worldUiCameraData == null)
+            if (_worldUICamera != null)
             {
-                _worldUiCameraData = _worldUiCamera.gameObject.AddComponent<UniversalAdditionalCameraData>();
-            }
-
-            _worldUiCameraData.renderType = CameraRenderType.Overlay;
-            _worldUiCameraData.renderPostProcessing = false;
-            if (!mainCameraData.cameraStack.Contains(_worldUiCamera))
-            {
-                mainCameraData.cameraStack.Add(_worldUiCamera);
-            }
-        }
-
-        private static void RequireComponent<T>(
-            ref T? target,
-            VolumeProfile profile)
-            where T : VolumeComponent
-        {
-            if (!profile.TryGet(out target) || target == null)
-            {
-                target = profile.Add<T>(overrides: true);
-                if (target == null)
-                {
-                    throw new InvalidOperationException(
-                        $"Post-process VolumeProfile '{profile.name}' is missing " +
-                        $"the required '{typeof(T).Name}' component and could not create it.");
-                }
-            }
-
-            EnableOverrides(target);
-        }
-
-
-        private static void ValidateProfileComponents(VolumeProfile profile)
-        {
-            int removed = profile.components.RemoveAll(c => c == null);
-            if (removed > 0)
-            {
-                Debug.LogWarning($"[PostProcessController] Cleaned up {removed} null/missing component(s) from VolumeProfile '{profile.name}'.");
-            }
-        }
-
-        private static void EnableOverrides(VolumeComponent component)
-        {
-            FieldInfo[] fields = component.GetType().GetFields(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            foreach (FieldInfo field in fields)
-            {
-                if (!typeof(VolumeParameter).IsAssignableFrom(field.FieldType))
-                {
-                    continue;
-                }
-
-                object? value = field.GetValue(component);
-                if (value is not VolumeParameter parameter)
-                {
-                    throw new InvalidOperationException(
-                        $"Post-process component '{component.GetType().FullName}' has a null parameter field '{field.Name}'.");
-                }
-
-                parameter.overrideState = true;
+                mainCameraData.cameraStack.Remove(_worldUICamera);
+                _worldUICamera.enabled = false;
             }
         }
 

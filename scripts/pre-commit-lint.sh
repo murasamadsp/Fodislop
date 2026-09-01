@@ -8,13 +8,15 @@ set -e
 LINT_DOTNET_HOME="${DOTNET_CLI_HOME:-${TMPDIR:-/tmp}/fodislop-dotnet-cli}"
 export DOTNET_CLI_HOME="$LINT_DOTNET_HOME"
 
-echo "=== C# Pre-Commit & CI/CD Analyzer Check ==="
+echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
-PLATFORM="$(uname -s)"
-if [ "$PLATFORM" != "Windows_NT" ] && [ "$CI" != "true" ]; then
-    echo "Notice: Skipping C# build checks on $PLATFORM (Unity-generated .NET Framework 4.7.1 csproj is not buildable outside Windows)."
-    echo "Run Unity Editor or Windows CI for full analyzer validation."
+echo "--- Step 0: Auditing project architecture and settings invariants ---"
+node "$(dirname "$0")/check-architecture.js"
+
+if [ "$CI" != "true" ]; then
+    echo "Notice: local hooks run fast static checks only."
+    echo "Unity compile, EditMode, PlayMode, and IL2CPP validation are mandatory CI jobs."
     exit 0
 fi
 
@@ -75,15 +77,14 @@ done
 # Assembly-CSharp.dll, so filesystem-dependent find order can otherwise validate
 # editor code against a stale runtime assembly and report false missing members.
 PROJECTS=()
-if [ -f "./Assembly-CSharp.csproj" ]; then
-    PROJECTS+=("./Assembly-CSharp.csproj")
-fi
-
-while IFS= read -r PROJECT_FILE; do
-    if [ "$PROJECT_FILE" != "./Assembly-CSharp.csproj" ]; then
+for PROJECT_FILE in \
+    "./Fodinae.Runtime.csproj" \
+    "./Fodinae.Editor.csproj" \
+    "./Fodinae.Tests.Editor.csproj"; do
+    if [ -f "$PROJECT_FILE" ]; then
         PROJECTS+=("$PROJECT_FILE")
     fi
-done < <(find . -maxdepth 1 -name "Assembly-CSharp*.csproj" | sort)
+done
 
 if [ "${#PROJECTS[@]}" -eq 0 ]; then
     echo "Notice: No Assembly-CSharp*.csproj files found in repository root."
@@ -119,9 +120,9 @@ for PROJECT_FILE in "${PROJECTS[@]}"; do
         PROJECT_ERRORS=$(echo "$BUILD_LOG" | grep -E ": error " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" || true)
 
         # Only catch warnings in user codebase (Assets/Scripts or Assets/Editor)
-        # Exclude vendored VContainer and MgGifDecoder from linting
+        # Exclude vendored VContainer from linting
         # In CI mode check all codebase warnings, locally check staged files
-        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" | grep -v "Assets/Scripts/MgGifDecoder/" || true)
+        ALL_WARNINGS=$(echo "$BUILD_LOG" | grep -E ": warning " | grep -E "(^|/|\\\\)Assets/(Scripts|Editor)/" | grep -v "Assets/Scripts/VContainer/" || true)
         PROJECT_WARNINGS=""
 
         if [ "$CI" = "true" ]; then

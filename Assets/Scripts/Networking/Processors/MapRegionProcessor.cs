@@ -1,29 +1,23 @@
 #nullable enable
 
 using System;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
-using Fodinae.Game.Managers;
 using MinesServer.Networking.Server.Packets.World;
 
 namespace Fodinae.Networking.Processors
 {
     public class MapRegionProcessor : IPacketProcessor<MapRegionPacket>
     {
-        private readonly ISessionContainer _session;
+        private readonly IWorldDataStorage _storage;
 
-        public MapRegionProcessor(ISessionContainer session)
+        public MapRegionProcessor(IWorldDataStorage storage)
         {
-            _session = session;
+            _storage = storage;
         }
 
         public void Process(MapRegionPacket packet)
         {
-            MapStorage storage = _session.TryResolve<MapStorage>() ??
-                throw new InvalidOperationException(
-                    "[MapRegionProcessor] MapStorage is not registered while processing a map region.");
-
-            if (!storage.IsReady || storage.CellLayer == null)
+            if (!_storage.IsReady || _storage.CellLayer == null)
             {
                 throw new InvalidOperationException(
                     $"[MapRegionProcessor] MapStorage is not ready for region " +
@@ -47,12 +41,12 @@ namespace Fodinae.Networking.Processors
                     $"expected at least {expectedCellCount}.");
             }
 
-            storage.SetRegion(
+            _storage.SetRegion(
                 packet.X,
                 packet.Y,
                 width,
                 height,
-                packet.Payload);
+                packet.Payload.AsSpan());
         }
     }
 }

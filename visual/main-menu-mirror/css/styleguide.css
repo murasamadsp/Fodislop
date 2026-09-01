@@ -275,3 +275,14 @@ body.sg {
   }
   .sg-main { padding: var(--space-9) var(--space-6) var(--space-13); }
 }
+
+/* Самопроверка витрины: она обязана называть то, чего не знает, а не прятать. */
+.sg-note--warn {
+  border-color: var(--state-warn);
+  color: var(--state-warn);
+}
+
+/* Витрина показывает компоненты в их полную ширину — это условие показа,
+   а не свойство компонента, поэтому класс витрины, а не инлайн. */
+.sg-title { margin-bottom: var(--space-6); }
+.sg-full  { width: 100%; }

@@ -1,4 +1,4 @@
-﻿#if EFFEKSEER_URP_SUPPORT
+#if EFFEKSEER_URP_SUPPORT
 
 using Effekseer.Internal;
 using System;
@@ -175,6 +175,13 @@ public class EffekseerURPRenderPassFeature : ScriptableRendererFeature
 			if (Effekseer.EffekseerSystem.Instance == null) return;
 
 			UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
+			int allEffectMask = Effekseer.EffekseerSystem.CameraCullingMaskToShowAllEffects;
+			int cameraMask = cameraData.camera.cullingMask & layerMask.value;
+			if ((allEffectMask & cameraMask) == 0)
+			{
+				return;
+			}
+
 			UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
 			var colorTexture = resourceData.activeColorTexture;
 			if (!colorTexture.IsValid())
@@ -215,6 +222,18 @@ public class EffekseerURPRenderPassFeature : ScriptableRendererFeature
 
 	public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
 	{
+		if (Effekseer.EffekseerSystem.Instance == null)
+		{
+			return;
+		}
+
+		int allEffectMask = Effekseer.EffekseerSystem.CameraCullingMaskToShowAllEffects;
+		int cameraMask = renderingData.cameraData.camera.cullingMask & LayerMask.value;
+		if ((allEffectMask & cameraMask) == 0)
+		{
+			return;
+		}
+
 		m_ScriptablePass = m_ScriptablePass ?? new EffekseerRenderPassURP(LayerMask);
 		m_ScriptablePass.SetLayerMask(LayerMask);
 		renderer.EnqueuePass(m_ScriptablePass);

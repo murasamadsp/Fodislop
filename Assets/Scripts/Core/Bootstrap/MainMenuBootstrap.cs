@@ -1,0 +1,60 @@
+#nullable enable
+
+using System;
+using Cysharp.Threading.Tasks;
+using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
+using Fodinae.UI;
+using VContainer.Unity;
+
+namespace Fodinae.Core;
+
+public sealed class MainMenuBootstrap : IStartable
+{
+    private readonly MainMenuLifetimeScope _scope;
+    private readonly MainMenu _controller;
+    private readonly IAudioSystem _audioSystem;
+    private readonly SceneTransitionTicket _ticket;
+    private readonly AsyncOperationSupervisor _operations;
+
+    public MainMenuBootstrap(
+        MainMenuLifetimeScope scope,
+        MainMenu controller,
+        IAudioSystem audioSystem,
+        SceneTransitionTicket ticket,
+        AsyncOperationSupervisor operations)
+    {
+        _scope = scope;
+        _controller = controller;
+        _audioSystem = audioSystem;
+        _ticket = ticket;
+        _operations = operations;
+        _ticket.Attach(_scope.gameObject.scene);
+    }
+
+    public void Start()
+    {
+        _operations.Run("main_menu_startup", _ => StartAsync());
+    }
+
+    private async UniTask StartAsync()
+    {
+        try
+        {
+            await _ticket.WaitForActivationAsync();
+            _controller.InitializeScene(_scope.Starfield, _scope.Scenery);
+            // Presentation readiness requires the required audio banks to be
+            // resident: scene audio must be live the moment the scene is shown,
+            // not pop in a second later when the background bank load lands.
+            await _audioSystem.WaitUntilBanksReadyAsync(_scope.destroyCancellationToken);
+            _ticket.MarkStartupReady();
+            // Гарантируем, что текстура планеты и звёздное небо готовы ДО показа меню пользователю.
+            await _controller.WaitUntilReadyAsync(_scope.destroyCancellationToken);
+            _ticket.MarkPresentationReady();
+        }
+        catch (Exception exception)
+        {
+            _ticket.Fail(exception);
+        }
+    }
+}

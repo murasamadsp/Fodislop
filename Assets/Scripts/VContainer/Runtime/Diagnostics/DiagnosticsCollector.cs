@@ -10,8 +10,8 @@ namespace VContainer.Diagnostics
     {
         public string ScopeName { get; }
 
-        private readonly List<DiagnosticsInfo> diagnosticsInfos = new List<DiagnosticsInfo>();
-        private readonly ThreadLocal<Stack<DiagnosticsInfo>> resolveCallStack
+        readonly List<DiagnosticsInfo> diagnosticsInfos = new List<DiagnosticsInfo>();
+        readonly ThreadLocal<Stack<DiagnosticsInfo>> resolveCallStack
             = new ThreadLocal<Stack<DiagnosticsInfo>>(() => new Stack<DiagnosticsInfo>());
 
         public DiagnosticsCollector(string scopeName)
@@ -84,7 +84,6 @@ namespace VContainer.Diagnostics
 
                 return instance;
             }
-
             return resolving(registration);
         }
 
@@ -96,15 +95,12 @@ namespace VContainer.Diagnostics
             switch (current.ResolveInfo.Registration.Lifetime)
             {
                 case Lifetime.Transient:
-                    resolveTime = ((resolveTime * (resolves - 1)) + elapsedMilliseconds) / resolves;
+                    resolveTime = (resolveTime * (resolves - 1) + elapsedMilliseconds) / resolves;
                     break;
                 case Lifetime.Scoped:
                 case Lifetime.Singleton:
                     if (elapsedMilliseconds > resolveTime)
-                    {
                         resolveTime = elapsedMilliseconds;
-                    }
-
                     break;
                 default:
                     throw new ArgumentOutOfRangeException();

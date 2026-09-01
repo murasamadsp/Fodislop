@@ -1,0 +1,8 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="MinimapPanel" class="hud-minimap-panel sci-fi-panel">
+        <ui:Label name="MinimapCoordinates" class="hud-minimap-coords" />
+        <ui:VisualElement class="hud-minimap-container">
+            <ui:Image name="MinimapImage" class="hud-minimap-image" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

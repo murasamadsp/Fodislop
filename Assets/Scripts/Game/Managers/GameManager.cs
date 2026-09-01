@@ -3,10 +3,11 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Lifecycle;
 using Fodinae.Player;
 using Fodinae.Player.Logic;
-using Fodinae.UI;
-using Fodinae.UI.HUD.Player.Model;
+using Fodinae.World;
+using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
 using VContainer;
@@ -31,7 +32,7 @@ namespace Fodinae.Game.Managers
     ///
     /// Управляет высокими состояниями сессии и связывает событийно геймплейные подсистемы.
     /// </summary>
-    public sealed class GameManager : MonoBehaviour
+    public sealed class GameManager : MonoBehaviour, IWorldReadiness
     {
         public GameState CurrentState { get; private set; } = GameState.Offline;
         public bool IsUIAuthorized { get; private set; }
@@ -47,9 +48,19 @@ namespace Fodinae.Game.Managers
         [Inject]
         private IRobotService _robotService = null!;
         [Inject]
+        private ILocalPlayerState _localPlayer = null!;
+        [Inject]
         private IPlayerStats _playerStats = null!;
         [Inject]
-        private IObjectResolver _resolver = null!;
+        private IWorldLoadProgress _loadProgress = null!;
+        [Inject]
+        private TerrainRenderer _terrainRenderer = null!;
+        [Inject]
+        private SurfaceRenderer _surfaceRenderer = null!;
+        [Inject]
+        private LightingEngine _lightingEngine = null!;
+        [Inject]
+        private ISceneObjectFactory _sceneObjects = null!;
 
         private GameObject? _uiRoot;
         private bool _worldLoadPending;
@@ -95,69 +106,9 @@ namespace Fodinae.Game.Managers
 
         private void SetupUI()
         {
-            _uiRoot = new GameObject("UIRoot");
+            _uiRoot = _sceneObjects.Create("UIRoot", RuntimeOwner.FloatingUI);
             _uiRoot.SetActive(false);
             _uiRoot.transform.SetParent(transform);
-
-            if (UnityEngine.Object.FindAnyObjectByType<ReconnectUI>(FindObjectsInactive.Include) == null)
-            {
-                var reconnectGO = new GameObject("ReconnectUI");
-                reconnectGO.transform.SetParent(transform);
-                AddInjectedComponent<ReconnectUI>(reconnectGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Inventory.View.InventoryView>(FindObjectsInactive.Include) == null)
-            {
-                var invGO = new GameObject("InventoryRoot");
-                invGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<Fodinae.UI.HUD.Inventory.View.InventoryView>(invGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<Fodinae.UI.HUD.Player.View.PlayerHUDView>(FindObjectsInactive.Include) == null)
-            {
-                var hudGO = new GameObject("PlayerHUD");
-                hudGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<Fodinae.UI.HUD.Player.View.PlayerHUDView>(hudGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<PauseMenu>(FindObjectsInactive.Include) == null)
-            {
-                var pauseGO = new GameObject("PauseMenu");
-                pauseGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<PauseMenu>(pauseGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<GlobalChatUI>(FindObjectsInactive.Include) == null)
-            {
-                var chatGO = new GameObject("ChatSystem");
-                chatGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponents(
-                    chatGO,
-                    typeof(LocalChatPopup),
-                    typeof(GlobalChatUI),
-                    typeof(FloatingChatManager));
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<AssetLoadingIndicator>(FindObjectsInactive.Include) == null)
-            {
-                var loaderGO = new GameObject("LoaderContainer");
-                loaderGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<AssetLoadingIndicator>(loaderGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<GameErrorUI>(FindObjectsInactive.Include) == null)
-            {
-                var errorGO = new GameObject("ErrorUI");
-                errorGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<GameErrorUI>(errorGO);
-            }
-
-            if (UnityEngine.Object.FindAnyObjectByType<MissionArrowUI>(FindObjectsInactive.Include) == null)
-            {
-                var arrowGO = new GameObject("MissionArrowUI");
-                arrowGO.transform.SetParent(_uiRoot.transform);
-                AddInjectedComponent<MissionArrowUI>(arrowGO);
-            }
         }
 
         public void SetState(GameState newState)
@@ -180,6 +131,8 @@ namespace Fodinae.Game.Managers
             IsWorldLoaded = false;
             _worldLoadPublished = false;
             _worldLoadPending = true;
+            _readinessDiagNextLog = -1f;
+            _loadProgress.Report(WorldLoadPhase.WorldManifest);
             TryPublishWorldLoaded();
         }
 
@@ -191,6 +144,8 @@ namespace Fodinae.Game.Managers
             }
         }
 
+        private float _readinessDiagNextLog = -1f;
+
         private void TryPublishWorldLoaded()
         {
             if (_worldLoadPublished)
@@ -198,47 +153,70 @@ namespace Fodinae.Game.Managers
                 return;
             }
 
-            PlayerMovementController? player = PlayerMovementController.LocalPlayer;
-            if (player == null || !player.HasServerPosition)
+            ILocalPlayer? player = _localPlayer.Current;
+            Robot? robot = player != null ? player.GetComponent<Robot>() : null;
+            TerrainRenderer? terrain = _terrainRenderer;
+            int pendingAssets = _assetLoader is ClientAssetLoader ca ? ca.PendingAssetCount : -1;
+            int queuedAssets = _assetLoader is ClientAssetLoader cb ? cb.QueuedAssetCount : -1;
+
+            // Re-log the readiness gate roughly every two seconds while the
+            // world is pending. The conditions converge at different times
+            // (player position, robot meta/visuals and stats latch on packets
+            // that arrive after WorldInit), so a one-shot snapshot at WorldInit
+            // cannot show what is actually stuck.
+            if (Time.unscaledTime >= _readinessDiagNextLog)
+            {
+                _readinessDiagNextLog = Time.unscaledTime + 2f;
+                UnityEngine.Debug.Log(
+                    $"[GameManager] World readiness gate (t={Time.unscaledTime:F1}s): " +
+                    $"player={player != null && player.HasServerPosition}," +
+                    $"robotMeta={(robot != null && robot.IsMetadataLoaded)}," +
+                    $"robotVisuals={(robot != null && robot.IsVisualsLoaded)}," +
+                    $"statsReady={(_playerStats != null && _playerStats.IsReady)}," +
+                    $"statsDetail=hp={_playerStats?.MaxHealth}/basket={_playerStats?.BasketCapacity}/nick=({_playerStats?.Nickname})/lvl={_playerStats?.Level}," +
+                    $"terrain={(terrain != null && terrain.IsReadyForGameplay)}," +
+                    $"surface={(_surfaceRenderer == null || _surfaceRenderer.IsInitialized)}," +
+                    $"lighting={(_lightingEngine == null || _lightingEngine.IsInitialized)}," +
+                    $"assetPending={pendingAssets}," +
+                    $"assetQueued={queuedAssets}," +
+                    $"cellTexPending={_textureService.PendingCellTextureRequests}");
+            }
+
+            // Publish monotonic loader phases from the gate itself: the same
+            // conditions that block WorldReady drive the descent loader, so the
+            // MainMenu progress bar reflects real readiness rather than a timer.
+            if (player != null && player.HasServerPosition)
+            {
+                _loadProgress.Report(WorldLoadPhase.SpawnSync);
+            }
+
+            if (terrain != null && terrain.IsReadyForGameplay)
+            {
+                _loadProgress.Report(WorldLoadPhase.TerrainMesh);
+            }
+
+            if ((_surfaceRenderer == null || _surfaceRenderer.IsInitialized) &&
+                (_lightingEngine == null || _lightingEngine.IsInitialized) &&
+                pendingAssets == 0 && queuedAssets == 0 &&
+                _textureService.PendingCellTextureRequests == 0)
+            {
+                _loadProgress.Report(WorldLoadPhase.SurfaceAssets);
+            }
+
+            if (player == null || !player.HasServerPosition ||
+                robot == null || !robot.IsVisualsLoaded ||
+                _playerStats == null || !_playerStats.IsReady ||
+                terrain == null || !terrain.IsReadyForGameplay ||
+                _lightingEngine == null || !_lightingEngine.IsInitialized ||
+                (_surfaceRenderer != null && !_surfaceRenderer.IsInitialized) ||
+                (pendingAssets > 0) ||
+                (queuedAssets > 0) ||
+                _loadProgress == null)
             {
                 return;
             }
 
-            Robot? robot = player.GetComponent<Robot>();
-            if (robot == null || !robot.IsMetadataLoaded)
-            {
-                return;
-            }
-
-            if (_playerStats == null || !_playerStats.IsReady)
-            {
-                return;
-            }
-
-            TerrainRenderer? terrain = TerrainRenderer.Instance;
-            if (terrain == null || !terrain.IsReadyForGameplay)
-            {
-                return;
-            }
-
-            // Terrain geometry being ready doesn't mean its textures (or robot sprites,
-            // loaded through the same pipeline) have actually arrived yet — without this,
-            // the loading screen hides while assets are still visibly popping in.
-            if (_assetLoader is ClientAssetLoader clientAssetLoader &&
-                (clientAssetLoader.PendingAssetCount > 0 || clientAssetLoader.QueuedAssetCount > 0))
-            {
-                return;
-            }
-
-            // ClientAssetLoader only tracks requests that have reached it — a cell texture
-            // RequestTexture() just fired this frame hasn't reached ClientAssetLoader yet
-            // (WorldTextureManager's own async chain yields once before enqueueing there).
-            // PendingCellTextureRequests is set synchronously at the RequestTexture call
-            // site, so it catches that gap.
-            if (_textureService.PendingCellTextureRequests > 0)
-            {
-                return;
-            }
+            _loadProgress.Report(WorldLoadPhase.Done);
 
             _worldLoadPending = false;
             _worldLoadPublished = true;
@@ -246,43 +224,14 @@ namespace Fodinae.Game.Managers
             Debug.Log($"[Probe] WorldLoaded {UnityEngine.Time.realtimeSinceStartup:F3}");
             SetState(GameState.InGame);
             player.SetGameplayVisible();
-            CameraFollow.Instance?.SnapToTarget();
             AuthorizeUI();
             int robotCount = _robotService?.RobotCount ?? -1;
             Debug.Log(
-                $"[GameManager] World load completed: server position and terrain are ready. " +
+                $"[GameManager] World load completed: server position, terrain, shaders and textures are ready. " +
                 $"robots={robotCount}, pendingAssets={(_assetLoader is ClientAssetLoader c ? c.PendingAssetCount : -1)}, " +
                 $"queuedAssets={(_assetLoader is ClientAssetLoader c2 ? c2.QueuedAssetCount : -1)}, " +
                 $"pendingCellTextures={_textureService.PendingCellTextureRequests}");
             OnWorldLoaded?.Invoke();
-        }
-
-        // Runtime-created components never reach GameLifetimeScope's startup injection
-        // scan — inject explicitly so their [Inject] fields are filled immediately.
-        // The temporary SetActive(false) ensures OnEnable/Start are not invoked before
-        // injection completes, matching VContainer's NewGameObjectProvider ordering.
-        private void AddInjectedComponent<T>(GameObject go)
-            where T : Component
-        {
-            AddInjectedComponents(go, typeof(T));
-        }
-
-        private void AddInjectedComponents(GameObject go, params Type[] componentTypes)
-        {
-            bool wasActive = go.activeSelf;
-            go.SetActive(false);
-            try
-            {
-                for (int i = 0; i < componentTypes.Length; i++)
-                {
-                    Component component = go.AddComponent(componentTypes[i]);
-                    _resolver.Inject(component);
-                }
-            }
-            finally
-            {
-                go.SetActive(wasActive);
-            }
         }
 
         public void AuthorizeUI()

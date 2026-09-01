@@ -2,6 +2,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using Fodinae.Core.Models;
 using Fodinae.Networking.Processors;
 using Fodinae.UI.HUD.Inventory.Interfaces;
 using Fodinae.UI.HUD.Inventory.Model;

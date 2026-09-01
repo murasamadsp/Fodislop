@@ -7,11 +7,11 @@ using Cysharp.Threading.Tasks;
 
 namespace VContainer.Unity
 {
-    internal sealed class StartableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class StartableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IEnumerable<IStartable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IEnumerable<IStartable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public StartableLoopItem(
             IEnumerable<IStartable> entries,
@@ -23,11 +23,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             foreach (var x in entries)
             {
                 try
@@ -36,26 +32,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return false;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class PostStartableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class PostStartableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IEnumerable<IPostStartable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IEnumerable<IPostStartable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public PostStartableLoopItem(
             IEnumerable<IPostStartable> entries,
@@ -67,11 +58,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             foreach (var x in entries)
             {
                 try
@@ -80,26 +67,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return false;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class FixedTickableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class FixedTickableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IReadOnlyList<IFixedTickable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IReadOnlyList<IFixedTickable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public FixedTickableLoopItem(
             IReadOnlyList<IFixedTickable> entries,
@@ -111,11 +93,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             for (var i = 0; i < entries.Count; i++)
             {
                 try
@@ -124,26 +102,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return !disposed;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class PostFixedTickableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class PostFixedTickableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IReadOnlyList<IPostFixedTickable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IReadOnlyList<IPostFixedTickable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public PostFixedTickableLoopItem(
             IReadOnlyList<IPostFixedTickable> entries,
@@ -155,11 +128,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             for (var i = 0; i < entries.Count; i++)
             {
                 try
@@ -168,26 +137,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return !disposed;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class TickableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class TickableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IReadOnlyList<ITickable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IReadOnlyList<ITickable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public TickableLoopItem(
             IReadOnlyList<ITickable> entries,
@@ -199,11 +163,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             for (var i = 0; i < entries.Count; i++)
             {
                 try
@@ -212,26 +172,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return !disposed;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class PostTickableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class PostTickableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IReadOnlyList<IPostTickable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IReadOnlyList<IPostTickable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public PostTickableLoopItem(
             IReadOnlyList<IPostTickable> entries,
@@ -243,11 +198,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             for (var i = 0; i < entries.Count; i++)
             {
                 try
@@ -256,26 +207,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return !disposed;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class LateTickableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class LateTickableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IReadOnlyList<ILateTickable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IReadOnlyList<ILateTickable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public LateTickableLoopItem(
             IReadOnlyList<ILateTickable> entries,
@@ -287,11 +233,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             for (var i = 0; i < entries.Count; i++)
             {
                 try
@@ -300,26 +242,21 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return !disposed;
         }
 
         public void Dispose() => disposed = true;
     }
 
-    internal sealed class PostLateTickableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class PostLateTickableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IReadOnlyList<IPostLateTickable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private bool disposed;
+        readonly IReadOnlyList<IPostLateTickable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        bool disposed;
 
         public PostLateTickableLoopItem(
             IReadOnlyList<IPostLateTickable> entries,
@@ -331,11 +268,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             for (var i = 0; i < entries.Count; i++)
             {
                 try
@@ -344,15 +277,10 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
             }
-
             return !disposed;
         }
 
@@ -360,12 +288,12 @@ namespace VContainer.Unity
     }
 
 #if VCONTAINER_UNITASK_INTEGRATION || UNITY_2021_3_OR_NEWER
-    internal sealed class AsyncStartableLoopItem : IPlayerLoopItem, IDisposable
+    sealed class AsyncStartableLoopItem : IPlayerLoopItem, IDisposable
     {
-        private readonly IEnumerable<IAsyncStartable> entries;
-        private readonly EntryPointExceptionHandler exceptionHandler;
-        private readonly CancellationTokenSource cts = new CancellationTokenSource();
-        private bool disposed;
+        readonly IEnumerable<IAsyncStartable> entries;
+        readonly EntryPointExceptionHandler exceptionHandler;
+        readonly CancellationTokenSource cts = new CancellationTokenSource();
+        bool disposed;
 
         public AsyncStartableLoopItem(
             IEnumerable<IAsyncStartable> entries,
@@ -377,11 +305,7 @@ namespace VContainer.Unity
 
         public bool MoveNext()
         {
-            if (disposed)
-            {
-                return false;
-            }
-
+            if (disposed) return false;
             foreach (var x in entries)
             {
 #if VCONTAINER_UNITASK_INTEGRATION
@@ -402,16 +326,11 @@ namespace VContainer.Unity
                 }
                 catch (Exception ex)
                 {
-                    if (exceptionHandler == null)
-                    {
-                        throw;
-                    }
-
+                    if (exceptionHandler == null) throw;
                     exceptionHandler.Publish(ex);
                 }
 #endif
             }
-
             return false;
         }
 
@@ -419,14 +338,9 @@ namespace VContainer.Unity
         {
             lock (entries)
             {
-                if (disposed)
-                {
-                    return;
-                }
-
+                if (disposed) return;
                 disposed = true;
             }
-
             cts.Cancel();
             cts.Dispose();
         }

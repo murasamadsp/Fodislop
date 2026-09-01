@@ -2,8 +2,8 @@
 
 using Fodinae.Audio.Backend;
 using Fodinae.Audio.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using VContainer;
 using UnityEngine;
 
 namespace Fodinae.Audio.Spatial
@@ -29,20 +29,22 @@ namespace Fodinae.Audio.Spatial
         [SerializeField]
         [Range(0f, 2f)]
         private float _volume;
-        private AudioPlaybackHandle? _handle;
+        private IAudioPlaybackHandle? _handle;
+
+        [Inject]
+        private IAudioSystem _audioSystem = null!;
 
         /// <summary>Начать проигрывание текущего события с нативной привязкой FMOD к GameObject.</summary>
         public void PlayCurrent()
         {
-            var audioSystem = SessionAccess.Resolve()?.TryResolve<IAudioSystem>();
-            if (string.IsNullOrEmpty(_eventName) || audioSystem == null)
+            if (string.IsNullOrEmpty(_eventName) || _audioSystem == null)
             {
                 return;
             }
 
             Stop();
             float? vol = _volume > 0f ? _volume : null;
-            _handle = audioSystem.PlayAttached(_eventName, gameObject, _layer, vol);
+            _handle = _audioSystem.PlayAttached(_eventName, gameObject, _layer, vol);
         }
 
         /// <summary>Сменить событие на лету (старое останавливается, новое стартует).</summary>

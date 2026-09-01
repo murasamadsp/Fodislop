@@ -21,7 +21,13 @@ namespace Fodinae.Rendering.PostProcessing
         [Tooltip("Minimum source brightness that contributes to Bloom.")]
         public ClampedFloatParameter threshold = PostProcessDefaults.BloomThreshold();
 
-        [Tooltip("How widely the glow spreads. It does not change brightness directly.")]
+        [Tooltip("Threshold transition width as a fraction of Threshold.")]
+        public ClampedFloatParameter softKnee = PostProcessDefaults.BloomSoftKnee();
+
+        [Tooltip("Dual Kawase sampling radius in source texels.")]
+        public ClampedFloatParameter radius = PostProcessDefaults.BloomRadius();
+
+        [Tooltip("How strongly reconstructed wide glow is mixed with the local glow.")]
         public ClampedFloatParameter scatter = PostProcessDefaults.BloomScatter();
 
         [Tooltip("Color multiplier applied to the glow.")]

@@ -1,0 +1,12 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="RadialRoot">
+        <!-- Фон внешнего кольца — виден только когда заданы элементы внешнего кольца -->
+        <ui:VisualElement name="OuterRingBg" class="prog-radial-ring prog-radial-ring--outer" picking-mode="Ignore" />
+        <ui:VisualElement name="OuterContainer" class="prog-radial-fill" picking-mode="Ignore" />
+        <ui:VisualElement name="InnerRingBg" class="prog-radial-ring prog-radial-ring--inner" picking-mode="Ignore" />
+        <ui:VisualElement name="InnerContainer" class="prog-radial-fill" picking-mode="Ignore" />
+        <ui:VisualElement name="RadialBackButton" class="prog-radial-back">
+            <ui:Label class="prog-radial-back-label" text="←" picking-mode="Ignore" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

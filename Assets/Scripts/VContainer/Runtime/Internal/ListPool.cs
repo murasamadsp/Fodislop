@@ -5,7 +5,7 @@ namespace VContainer.Internal
 {
     internal static class ListPool<T>
     {
-        private const int DefaultCapacity = 32;
+        const int DefaultCapacity = 32;
 
         private static readonly Stack<List<T>> _pool = new Stack<List<T>>(4);
 

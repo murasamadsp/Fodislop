@@ -28,8 +28,8 @@ namespace VContainer
 
         public override string ToString()
         {
-            var contractTypes = InterfaceTypes != null ? string.Join(", ", InterfaceTypes) : string.Empty;
-            var keyStr = Key == null ? string.Empty : $" (Key: {Key})";
+            var contractTypes = InterfaceTypes != null ? string.Join(", ", InterfaceTypes) : "";
+            var keyStr = Key == null ? "" : $" (Key: {Key})";
             return $"Registration {ImplementationType.Name}{keyStr} ContractTypes=[{contractTypes}] {Lifetime} {Provider}";
         }
 

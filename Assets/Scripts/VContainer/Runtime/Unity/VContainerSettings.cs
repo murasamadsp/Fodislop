@@ -9,7 +9,7 @@ namespace VContainer.Unity
         public static VContainerSettings Instance { get; private set; }
         public static bool DiagnosticsEnabled => Instance != null && Instance.EnableDiagnostics;
 
-        private static LifetimeScope rootLifetimeScopeInstance;
+        static LifetimeScope rootLifetimeScopeInstance;
 
         [SerializeField]
         [Tooltip("Set the Prefab to be the parent of the entire Project.")]
@@ -38,9 +38,7 @@ namespace VContainer.Unity
                 string.Empty);
 
             if (string.IsNullOrEmpty(path))
-            {
                 return;
-            }
 
             var newSettings = CreateInstance<VContainerSettings>();
             UnityEditor.AssetDatabase.CreateAsset(newSettings, path);
@@ -59,6 +57,13 @@ namespace VContainer.Unity
                 instance.OnDisable();
                 instance.OnEnable();
             }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void RuntimeInitialize()
+        {
+            // For editor, we need to load the Preload asset manually.
+            LoadInstanceFromPreloadAssets();
         }
 #endif
 
@@ -79,14 +84,13 @@ namespace VContainer.Unity
                     RootLifetimeScope.gameObject.SetActive(activeBefore);
                 }
             }
-
             return rootLifetimeScopeInstance;
         }
 
         public bool IsRootLifetimeScopeInstance(LifetimeScope lifetimeScope) =>
             RootLifetimeScope == lifetimeScope || rootLifetimeScopeInstance == lifetimeScope;
 
-        private void OnEnable()
+        void OnEnable()
         {
             if (Application.isPlaying)
             {
@@ -105,29 +109,26 @@ namespace VContainer.Unity
             }
         }
 
-        private void OnDisable()
+        void OnDisable()
         {
             Instance = null;
         }
 
-        private void OnFirstSceneLoaded(Scene scene, LoadSceneMode mode)
+        void OnFirstSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (RootLifetimeScope != null &&
-                RootLifetimeScope.AutoRun &&
+                RootLifetimeScope.autoRun &&
                 (rootLifetimeScopeInstance == null || rootLifetimeScopeInstance.Container == null))
             {
                 GetOrCreateRootLifetimeScopeInstance();
             }
-
             SceneManager.sceneLoaded -= OnFirstSceneLoaded;
         }
 
-        private static void SetName(Object instance, Object prefab)
+        static void SetName(Object instance, Object prefab)
         {
             if (Instance != null && Instance.RemoveClonePostfix)
-            {
                 instance.name = prefab.name;
-            }
         }
     }
 }

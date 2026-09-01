@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace VContainer.Internal
 {
-    internal sealed class InjectConstructorInfo
+    sealed class InjectConstructorInfo
     {
         public readonly ConstructorInfo ConstructorInfo;
         public readonly ParameterInfo[] ParameterInfos;
@@ -39,12 +39,11 @@ namespace VContainer.Internal
                     keys[i] = keyAttribute.Key;
                 }
             }
-
             return keys;
         }
     }
 
-    internal sealed class InjectMethodInfo
+    sealed class InjectMethodInfo
     {
         public readonly MethodInfo MethodInfo;
         public readonly ParameterInfo[] ParameterInfos;
@@ -68,12 +67,11 @@ namespace VContainer.Internal
                     keys[i] = attr.Key;
                 }
             }
-
             return keys;
         }
     }
 
-    internal sealed class InjectFieldInfo
+    sealed class InjectFieldInfo
     {
         public readonly FieldInfo FieldInfo;
         public readonly object Key;
@@ -94,7 +92,7 @@ namespace VContainer.Internal
         public void SetValue(object obj, object value) => FieldInfo.SetValue(obj, value);
     }
 
-    internal sealed class InjectPropertyInfo
+    sealed class InjectPropertyInfo
     {
         public readonly PropertyInfo PropertyInfo;
         public readonly object Key;
@@ -115,7 +113,7 @@ namespace VContainer.Internal
         public void SetValue(object obj, object value) => PropertyInfo.SetValue(obj, value);
     }
 
-    internal sealed class InjectTypeInfo
+    sealed class InjectTypeInfo
     {
         public readonly Type Type;
         public readonly InjectConstructorInfo InjectConstructor;
@@ -138,15 +136,15 @@ namespace VContainer.Internal
         }
     }
 
-    internal readonly struct DependencyInfo
+    readonly struct DependencyInfo
     {
         public Type ImplementationType => Dependency.ImplementationType;
         public IInstanceProvider Provider => Dependency.Provider;
 
         public readonly Registration Dependency;
-        private readonly Registration owner;
-        private readonly object method; // ctor or method
-        private readonly ParameterInfo param; // param or field or prop
+        readonly Registration owner;
+        readonly object method; // ctor or method
+        readonly ParameterInfo param; // param or field or prop
 
         public DependencyInfo(Registration dependency)
         {
@@ -201,21 +199,21 @@ namespace VContainer.Internal
                 case PropertyInfo prop:
                     return $"{owner.ImplementationType.FullName}.{prop.Name}";
                 default:
-                    return string.Empty;
+                    return "";
             }
         }
     }
 
-    internal static class TypeAnalyzer
+    static class TypeAnalyzer
     {
         public static InjectTypeInfo AnalyzeWithCache(Type type) => Cache.GetOrAdd(type, AnalyzeFunc);
 
-        private static readonly ConcurrentDictionary<Type, InjectTypeInfo> Cache = new ConcurrentDictionary<Type, InjectTypeInfo>();
+        static readonly ConcurrentDictionary<Type, InjectTypeInfo> Cache = new ConcurrentDictionary<Type, InjectTypeInfo>();
 
         [ThreadStatic]
-        private static Stack<DependencyInfo> circularDependencyChecker;
+        static Stack<DependencyInfo> circularDependencyChecker;
 
-        private static readonly Func<Type, InjectTypeInfo> AnalyzeFunc = Analyze;
+        static readonly Func<Type, InjectTypeInfo> AnalyzeFunc = Analyze;
 
         public static InjectTypeInfo Analyze(Type type)
         {
@@ -234,7 +232,6 @@ namespace VContainer.Internal
                     {
                         throw new VContainerException(type, $"Type found multiple [Inject] marked constructors, type: {type.Name}");
                     }
-
                     injectConstructor = new InjectConstructorInfo(constructorInfo);
                 }
                 else if (annotatedConstructorCount <= 0)
@@ -263,7 +260,7 @@ namespace VContainer.Internal
             var injectMethods = default(List<InjectMethodInfo>);
             var injectFields = default(List<InjectFieldInfo>);
             var injectProperties = default(List<InjectPropertyInfo>);
-            const BindingFlags bindingFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+            var bindingFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
             while (type != null && type != typeof(object))
             {
@@ -283,17 +280,14 @@ namespace VContainer.Internal
                             foreach (var x in injectMethods)
                             {
                                 if (x.MethodInfo.GetBaseDefinition() == methodInfo.GetBaseDefinition())
-                                {
                                     goto EndMethod;
-                                }
                             }
                         }
 
                         injectMethods.Add(new InjectMethodInfo(methodInfo));
                     }
                 }
-
-            EndMethod:
+                EndMethod:
 
                 // Fields, [Inject] Only
                 var fields = type.GetFields(bindingFlags);
@@ -338,17 +332,13 @@ namespace VContainer.Internal
                             foreach (var x in injectProperties)
                             {
                                 if (x.Name == propertyInfo.Name)
-                                {
                                     goto EndProperty;
-                                }
                             }
                         }
-
                         injectProperties.Add(new InjectPropertyInfo(propertyInfo));
                     }
                 }
-
-            EndProperty:
+                EndProperty:
 
                 type = type.BaseType;
             }
@@ -379,9 +369,7 @@ namespace VContainer.Internal
         {
             // ThreadStatic
             if (circularDependencyChecker == null)
-            {
                 circularDependencyChecker = new Stack<DependencyInfo>();
-            }
 
             for (var i = 0; i < registrations.Count; i++)
             {
@@ -390,7 +378,7 @@ namespace VContainer.Internal
             }
         }
 
-        private static void CheckCircularDependencyRecursive(DependencyInfo current, Registry registry, Stack<DependencyInfo> stack)
+        static void CheckCircularDependencyRecursive(DependencyInfo current, Registry registry, Stack<DependencyInfo> stack)
         {
             var i = 0;
             foreach (var dependency in stack)
@@ -405,16 +393,13 @@ namespace VContainer.Internal
 
                     stack.Push(current);
 
-                    var path = string.Join(
-                        "\n",
+                    var path = string.Join("\n",
                         stack.Take(i + 1)
                             .Reverse()
                             .Select((item, itemIndex) => $"    [{itemIndex + 1}] {item} --> {item.ImplementationType.FullName}"));
-                    throw new VContainerException(
-                        current.Dependency.ImplementationType,
+                    throw new VContainerException(current.Dependency.ImplementationType,
                         $"Circular dependency detected!\n{path}");
                 }
-
                 i++;
             }
 

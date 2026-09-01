@@ -1,8 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
-using Fodinae.Game;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -18,15 +16,14 @@ namespace Fodinae.Rendering.PostProcessing
         private static readonly int SourceTexID = Shader.PropertyToID("_SourceTex");
         private static readonly int BaseTexID = Shader.PropertyToID("_BaseTex");
         private static readonly int BloomTexID = Shader.PropertyToID("_BloomTex");
-        private static readonly int VelocityTexID = Shader.PropertyToID("_VelocityTex");
-        private static readonly int VelocityPropID = Shader.PropertyToID("_Velocity");
-        private static readonly int VelocitySpriteTextureID = Shader.PropertyToID("_VelocitySpriteTexture");
         private static readonly int DestTexID = Shader.PropertyToID("_DestTex");
         private static readonly int OutputTexID = Shader.PropertyToID("_OutputTex");
         private static readonly int ScreenSizeID = Shader.PropertyToID("_ScreenSize");
         private static readonly int SourceTexelSizeID = Shader.PropertyToID("_SourceTexelSize");
 
         private static readonly int BloomThresholdID = Shader.PropertyToID("_BloomThreshold");
+        private static readonly int BloomSoftKneeID = Shader.PropertyToID("_BloomSoftKnee");
+        private static readonly int BloomRadiusID = Shader.PropertyToID("_BloomRadius");
         private static readonly int BloomScatterID = Shader.PropertyToID("_BloomScatter");
         private static readonly int BloomTintID = Shader.PropertyToID("_BloomTint");
         private static readonly int BloomIntensityID = Shader.PropertyToID("_BloomIntensity");
@@ -52,32 +49,28 @@ namespace Fodinae.Rendering.PostProcessing
         private static readonly int EigengrauAnimationSpeedID = Shader.PropertyToID("_EigengrauAnimationSpeed");
         private static readonly int TimeID = Shader.PropertyToID("_Time");
 
-        private static readonly int MotionBlurIntensityID = Shader.PropertyToID("_MotionBlurIntensity");
-        private static readonly int MotionBlurMaxSamplesID = Shader.PropertyToID("_MotionBlurMaxSamples");
+        private static readonly int Advanced0ID = Shader.PropertyToID("_Advanced0");
+        private static readonly int Advanced1ID = Shader.PropertyToID("_Advanced1");
+        private static readonly int Advanced2ID = Shader.PropertyToID("_Advanced2");
+        private static readonly int Advanced3ID = Shader.PropertyToID("_Advanced3");
+        private static readonly int HistoryTexID = Shader.PropertyToID("_HistoryTex");
+        private static readonly int TemporalID = Shader.PropertyToID("_Temporal");
         private static readonly string[] BloomDownNames =
         {
             "_PPBloomDown_0",
-            "_PPBloomDown_1",
-            "_PPBloomDown_2",
-            "_PPBloomDown_3",
-            "_PPBloomDown_4",
         };
         private static readonly string[] BloomUpNames =
         {
             "_PPBloomUp_0",
-            "_PPBloomUp_1",
-            "_PPBloomUp_2",
-            "_PPBloomUp_3",
         };
 
         private readonly ComputeShader _postProcessCS;
-        private readonly Material? _velocityMaterial;
         private readonly int _kernelPrefilter;
         private readonly int _kernelDownsample;
         private readonly int _kernelUpsample;
         private readonly int _kernelComposite;
-        private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[5];
-        private readonly TextureHandle[] _bloomUpTextures = new TextureHandle[4];
+        private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[1];
+        private readonly TextureHandle[] _bloomUpTextures = new TextureHandle[1];
         private VolumeStack? _cachedVolumeStack;
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -85,14 +78,54 @@ namespace Fodinae.Rendering.PostProcessing
         private ColorGradingComponent? _colorGrading;
         private EigengrauComponent? _eigengrau;
         private MotionBlurComponent? _motionBlur;
+        private RTHandle? _historyTexture;
+        private GraphicsFormat _historyFormat;
+        private bool _historyValid;
+        private bool _temporalWasActive;
+        private uint _observedCameraGeneration;
 
         private static Camera? _mainCamera;
+        private static uint _cameraGeneration;
+
+        // Set by PostProcessController from the active graphics preset. Static
+        // for the same reason _mainCamera is: a ScriptableRenderPass is owned by
+        // the renderer asset, not by the scene, so there is no injection path
+        // into it - the controller pushes, the pass reads.
+        //
+        // Renderer features are created before the client config is available.
+        // Defaulting to Off prevents startup from eagerly constructing GPU
+        // resources for a feature whose actual preset may disable it.
+        private static PostProcessQualityMode _quality = PostProcessQualityMode.Off;
+        private static AdvancedPostProcessSnapshot _advanced;
+        private static int _enableAfterFrame;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForDomainReload()
         {
             _mainCamera = null;
+            _cameraGeneration = 0;
+            _quality = PostProcessQualityMode.Off;
+            _advanced = default;
+            _enableAfterFrame = int.MaxValue;
         }
+
+        public static void SetQuality(PostProcessQualityMode quality)
+        {
+            _quality = quality;
+            _enableAfterFrame = quality == PostProcessQualityMode.Off
+                ? int.MaxValue
+                : Time.frameCount + 1;
+        }
+
+        public static void SetAdvancedSettings(AdvancedPostProcessSettings settings)
+        {
+            _advanced = AdvancedPostProcessSnapshot.From(settings);
+        }
+
+        public static bool IsEnabled =>
+            _quality != PostProcessQualityMode.Off &&
+            Time.frameCount >= _enableAfterFrame &&
+            !PostProcessRendererFeature.BypassPostProcessPass;
 
         private void RefreshVolumeComponents(VolumeStack stack)
         {
@@ -119,89 +152,26 @@ namespace Fodinae.Rendering.PostProcessing
 
         public static void SetMainCamera(Camera? camera)
         {
+            if (_mainCamera != camera)
+            {
+                _cameraGeneration++;
+                _enableAfterFrame = _quality == PostProcessQualityMode.Off
+                    ? int.MaxValue
+                    : Time.frameCount + 1;
+            }
+
             _mainCamera = camera;
         }
 
-        public PostProcessRenderPass(ComputeShader postProcessCS, Shader? velocityShader)
+        public PostProcessRenderPass(ComputeShader postProcessCS)
         {
             renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
             renderPassEvent2D = RenderPassEvent2D.BeforeRenderingPostProcessing;
             _postProcessCS = postProcessCS;
-            if (velocityShader != null)
-            {
-                _velocityMaterial = new Material(velocityShader)
-                {
-                    hideFlags = HideFlags.HideAndDontSave,
-                };
-            }
-
             _kernelPrefilter = _postProcessCS.FindKernel("BloomPrefilter");
             _kernelDownsample = _postProcessCS.FindKernel("BloomDownsample");
             _kernelUpsample = _postProcessCS.FindKernel("BloomUpsample");
             _kernelComposite = _postProcessCS.FindKernel("CompositeFinal");
-        }
-
-        private static bool TryGetRemoteRobotRenderer(MotionBlurTag? tag, out SpriteRenderer renderer)
-        {
-            renderer = null!;
-            if (tag == null || !tag.gameObject.activeInHierarchy)
-            {
-                return false;
-            }
-
-            Robot? robot = tag.CachedRobot;
-            if (robot == null || robot.IsLocalPlayer)
-            {
-                return false;
-            }
-
-            SpriteRenderer? cachedRenderer = tag.CachedSpriteRenderer;
-            if (cachedRenderer == null)
-            {
-                return false;
-            }
-
-            renderer = cachedRenderer;
-            return renderer != null && renderer.enabled && renderer.sprite != null;
-        }
-
-        private static bool HasRemoteRobotRenderers()
-        {
-            IReadOnlyList<MotionBlurTag> tags = MotionBlurTag.ActiveTags;
-            for (int i = 0; i < tags.Count; i++)
-            {
-                if (TryGetRemoteRobotRenderer(tags[i], out _))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static Vector2 CalculateUvVelocity(MotionBlurTag tag, Camera camera)
-        {
-            float screenHeightWorld = camera.orthographic
-                ? camera.orthographicSize * 2f
-                : 10f;
-            float screenWidthWorld = screenHeightWorld * Mathf.Max(camera.aspect, 0.001f);
-            Vector2 frameVelocity = tag.Velocity * Mathf.Min(Time.deltaTime, 1f / 20f);
-            var uvVelocity = new Vector2(
-                frameVelocity.x / Mathf.Max(screenWidthWorld, 0.001f),
-                frameVelocity.y / Mathf.Max(screenHeightWorld, 0.001f));
-
-            if (!float.IsFinite(uvVelocity.x) || !float.IsFinite(uvVelocity.y))
-            {
-                return Vector2.zero;
-            }
-
-            var pixelVelocity = new Vector2(
-                uvVelocity.x * Mathf.Max(camera.pixelWidth, 1),
-                uvVelocity.y * Mathf.Max(camera.pixelHeight, 1));
-            pixelVelocity = Vector2.ClampMagnitude(pixelVelocity, 16f);
-            return new Vector2(
-                pixelVelocity.x / Mathf.Max(camera.pixelWidth, 1),
-                pixelVelocity.y / Mathf.Max(camera.pixelHeight, 1));
         }
 
         private class PassData
@@ -217,13 +187,13 @@ namespace Fodinae.Rendering.PostProcessing
             public TextureHandle BloomPrefilterTexture;
             public TextureHandle[] BloomDownTextures = null!;
             public TextureHandle[] BloomUpTextures = null!;
-            public TextureHandle VelocityTexture;
+            public TextureHandle HistoryTexture;
             public RenderTextureDescriptor Descriptor;
-            public Camera Camera = null!;
-            public Material? VelocityMaterial;
 
             public bool BloomActive;
             public float BloomThreshold;
+            public float BloomSoftKnee;
+            public float BloomRadius;
             public float BloomScatter;
             public Vector4 BloomTint;
             public float BloomIntensity;
@@ -252,18 +222,36 @@ namespace Fodinae.Rendering.PostProcessing
             public float EigengrauNoiseScale;
             public float EigengrauAnimationSpeed;
 
-            public bool MbActive;
-            public bool RenderRobotVelocity;
-            public float MbIntensity;
-            public int MbMaxSamples;
+            public Vector4 Advanced0;
+            public Vector4 Advanced1;
+            public Vector4 Advanced2;
+            public Vector4 Advanced3;
+            public Vector4 Temporal;
+            public bool HistoryValid;
+            public bool TemporalActive;
+            public float TimeSeconds;
         }
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
+            if (_observedCameraGeneration != _cameraGeneration)
+            {
+                _observedCameraGeneration = _cameraGeneration;
+                _historyValid = false;
+            }
+
             UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
             if (cameraData.renderType != CameraRenderType.Base ||
                 cameraData.camera.cameraType != CameraType.Game ||
                 cameraData.camera != _mainCamera)
+            {
+                return;
+            }
+
+            // Before touching the volume stack: Off means the graphics preset
+            // has bought out of post-processing entirely, and there is nothing
+            // downstream that could re-enable it.
+            if (!IsEnabled)
             {
                 return;
             }
@@ -283,21 +271,30 @@ namespace Fodinae.Rendering.PostProcessing
                 nameof(EigengrauComponent));
             MotionBlurComponent mb = RequireComponent(_motionBlur, nameof(MotionBlurComponent));
 
-            bool bloomActive = bloom.active && bloom.IsActive();
+            // Essential keeps fused one-pass effects. Full additionally enables
+            // ordinary bloom and temporal motion blur. Optical effects that need
+            // a bright-pass explicitly request the compact Kawase chain below.
+            bool expensiveEffectsAllowed = _quality == PostProcessQualityMode.Full;
+
+            bool bloomActive =
+                (expensiveEffectsAllowed && bloom.active && bloom.IsActive()) ||
+                _advanced.RequiresBloomTexture;
             bool vignetteActive = vignette.active && vignette.IsActive();
             bool caActive = ca.active && ca.IsActive();
             bool cgActive = cg.active && cg.IsActive();
             bool eigengrauActive = eigengrau.active && eigengrau.IsActive();
-            bool mbActive = mb.active && mb.IsActive();
+            bool mbActive = expensiveEffectsAllowed && mb.active && mb.IsActive();
 
-            if (PostProcessRendererFeature.BypassPostProcessPass ||
-                (!bloomActive &&
+            if (!bloomActive &&
                 !vignetteActive &&
                 !caActive &&
                 !cgActive &&
                 !eigengrauActive &&
-                !mbActive))
+                !mbActive &&
+                !_advanced.HasAnyEffects)
             {
+                _temporalWasActive = false;
+                _historyValid = false;
                 return;
             }
 
@@ -308,30 +305,53 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
+            var activeColorDesc = resourceData.activeColorTexture.GetDescriptor(renderGraph);
             var desc = cameraData.cameraTargetDescriptor;
+            desc.graphicsFormat = activeColorDesc.colorFormat;
             desc.depthBufferBits = 0;
             desc.msaaSamples = 1;
             desc.bindMS = false;
             desc.enableRandomWrite = true;
 
+            bool temporalActive =
+                _advanced.TemporalPersistenceIntensity > 0f ||
+                _advanced.LightStability > 0f ||
+                mbActive;
+            if (temporalActive && !_temporalWasActive)
+            {
+                _historyValid = false;
+            }
+
+            _temporalWasActive = temporalActive;
+            TextureHandle historyTexture = default;
+            if (temporalActive)
+            {
+                EnsureHistoryTexture(desc);
+                historyTexture = renderGraph.ImportTexture(
+                    _historyTexture ?? throw new InvalidOperationException(
+                        "Post-process history texture allocation failed."));
+            }
+
             TextureHandle intermediateTexture = UniversalRenderer.CreateRenderGraphTexture(
                 renderGraph,
                 desc,
                 "_PPIntermediateColor",
-                true,
+                false,
                 FilterMode.Point);
 
             TextureHandle bloomPrefilterTexture = default;
             if (bloomActive)
             {
+                var bloomDesc = desc;
+                bloomDesc.width = Mathf.Max(1, bloomDesc.width / 2);
+                bloomDesc.height = Mathf.Max(1, bloomDesc.height / 2);
                 bloomPrefilterTexture = UniversalRenderer.CreateRenderGraphTexture(
                     renderGraph,
-                    desc,
+                    bloomDesc,
                     "_PPBloomPrefilter",
-                    true,
+                    false,
                     FilterMode.Bilinear);
 
-                var bloomDesc = desc;
                 for (int i = 0; i < _bloomDownTextures.Length; i++)
                 {
                     bloomDesc.width = Mathf.Max(1, bloomDesc.width / 2);
@@ -340,39 +360,22 @@ namespace Fodinae.Rendering.PostProcessing
                         renderGraph,
                         bloomDesc,
                         BloomDownNames[i],
-                        true,
+                        false,
                         FilterMode.Bilinear);
-
-                    if (i < _bloomUpTextures.Length)
-                    {
-                        _bloomUpTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
-                            renderGraph,
-                            bloomDesc,
-                            BloomUpNames[i],
-                            true,
-                            FilterMode.Bilinear);
-                    }
                 }
-            }
 
-            // Motion blur stays enabled in the volume profile, but do not allocate
-            // and clear a full-screen velocity target when there is no remote
-            // robot that can contribute to it.
-            bool renderRobotVelocity = mbActive &&
-                                       _velocityMaterial != null &&
-                                       HasRemoteRobotRenderers();
-            TextureHandle velocityTexture = default;
-            if (renderRobotVelocity)
-            {
-                var velocityDesc = desc;
-                velocityDesc.enableRandomWrite = false;
-                velocityDesc.graphicsFormat = GraphicsFormat.R16G16_SFloat;
-                velocityTexture = UniversalRenderer.CreateRenderGraphTexture(
-                    renderGraph,
-                    velocityDesc,
-                    "_PPRobotVelocity",
-                    true,
-                    FilterMode.Point);
+                for (int i = 0; i < _bloomUpTextures.Length; i++)
+                {
+                    var bloomUpDesc = desc;
+                    bloomUpDesc.width = Mathf.Max(1, bloomUpDesc.width >> (i + 1));
+                    bloomUpDesc.height = Mathf.Max(1, bloomUpDesc.height >> (i + 1));
+                    _bloomUpTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
+                        renderGraph,
+                        bloomUpDesc,
+                        BloomUpNames[i],
+                        false,
+                        FilterMode.Bilinear);
+                }
             }
 
             using (var builder = renderGraph.AddUnsafePass<PassData>(PASS_NAME, out var passData, profilingSampler))
@@ -389,12 +392,12 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.BloomDownTextures = _bloomDownTextures;
                 passData.BloomUpTextures = _bloomUpTextures;
                 passData.Descriptor = desc;
-                passData.Camera = cameraData.camera;
-                passData.VelocityMaterial = _velocityMaterial;
-                passData.VelocityTexture = velocityTexture;
+                passData.HistoryTexture = historyTexture;
 
                 passData.BloomActive = bloomActive;
                 passData.BloomThreshold = bloom.threshold.value;
+                passData.BloomSoftKnee = bloom.softKnee.value;
+                passData.BloomRadius = bloom.radius.value;
                 passData.BloomScatter = bloom.scatter.value;
                 passData.BloomTint = bloom.tint.value;
                 passData.BloomIntensity = bloom.intensity.value;
@@ -423,13 +426,43 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.EigengrauNoiseScale = eigengrau.noiseScale.value;
                 passData.EigengrauAnimationSpeed = eigengrau.animationSpeed.value;
 
-                passData.MbActive = mbActive;
-                passData.RenderRobotVelocity = renderRobotVelocity;
-                passData.MbIntensity = mb.intensity.value;
-                passData.MbMaxSamples = mb.maxSamples.value;
+                passData.Advanced0 = new Vector4(
+                    _advanced.LocalContrastIntensity,
+                    _advanced.LensDirtIntensity,
+                    _advanced.LensDirtScale,
+                    _advanced.AnamorphicIntensity);
+                passData.Advanced1 = new Vector4(
+                    _advanced.AnamorphicLength,
+                    _advanced.ChromaticDiffractionIntensity,
+                    _advanced.HeatRefractionIntensity,
+                    _advanced.HeatRefractionScale);
+                passData.Advanced2 = new Vector4(
+                    _advanced.GlintIntensity,
+                    _advanced.GlintThreshold,
+                    _advanced.VolumetricDustIntensity,
+                    _advanced.VolumetricDustScale);
+                passData.Advanced3 = new Vector4(
+                    _advanced.VolumetricDustSpeed,
+                    _advanced.PhosphorMaskIntensity,
+                    _advanced.DitheringIntensity,
+                    0f);
+                passData.HistoryValid = _historyValid;
+                passData.Temporal = passData.HistoryValid
+                    ? new Vector4(
+                        _advanced.TemporalPersistenceIntensity,
+                        _advanced.TemporalPersistenceDecay,
+                        _advanced.LightStability,
+                        mbActive ? mb.intensity.value : 0f)
+                    : Vector4.zero;
+                passData.TemporalActive = temporalActive;
+                passData.TimeSeconds = Time.time;
 
                 builder.UseTexture(passData.ColorTexture, AccessFlags.ReadWrite);
-                builder.UseTexture(passData.IntermediateTexture, AccessFlags.Write);
+                builder.UseTexture(passData.IntermediateTexture, AccessFlags.ReadWrite);
+                if (passData.TemporalActive)
+                {
+                    builder.UseTexture(passData.HistoryTexture, AccessFlags.ReadWrite);
+                }
                 if (passData.BloomActive)
                 {
                     builder.UseTexture(passData.BloomPrefilterTexture, AccessFlags.ReadWrite);
@@ -444,11 +477,6 @@ namespace Fodinae.Rendering.PostProcessing
                     }
                 }
 
-                if (passData.RenderRobotVelocity)
-                {
-                    builder.UseTexture(passData.VelocityTexture, AccessFlags.ReadWrite);
-                }
-
                 builder.AllowPassCulling(false);
 
                 builder.SetRenderFunc(static (PassData data, UnsafeGraphContext context) =>
@@ -457,48 +485,46 @@ namespace Fodinae.Rendering.PostProcessing
                     int width = data.Descriptor.width;
                     int height = data.Descriptor.height;
 
-                    if (data.RenderRobotVelocity && data.VelocityMaterial != null)
-                    {
-                        cmd.SetRenderTarget(data.VelocityTexture);
-                        cmd.ClearRenderTarget(false, true, Color.clear);
-                        cmd.SetViewProjectionMatrices(
-                            data.Camera.worldToCameraMatrix,
-                            GL.GetGPUProjectionMatrix(data.Camera.projectionMatrix, true));
-                        IReadOnlyList<MotionBlurTag> tags = MotionBlurTag.ActiveTags;
-                        for (int i = 0; i < tags.Count; i++)
-                        {
-                            var tag = tags[i];
-                            if (!TryGetRemoteRobotRenderer(tag, out var spriteRenderer))
-                            {
-                                continue;
-                            }
-
-                            Vector2 uvVelocity = CalculateUvVelocity(tag, data.Camera);
-                            cmd.SetGlobalVector(VelocityPropID, new Vector4(uvVelocity.x, uvVelocity.y, 0f, 0f));
-                            cmd.SetGlobalTexture(VelocitySpriteTextureID, spriteRenderer.sprite.texture);
-                            cmd.DrawRenderer(spriteRenderer, data.VelocityMaterial, 0, 0);
-                        }
-                    }
-
                     cmd.SetComputeVectorParam(data.PostProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
 
                     if (data.BloomActive)
                     {
                         cmd.SetComputeFloatParam(data.PostProcessCS, BloomThresholdID, data.BloomThreshold);
+                        cmd.SetComputeFloatParam(data.PostProcessCS, BloomSoftKneeID, data.BloomSoftKnee);
+                        cmd.SetComputeFloatParam(data.PostProcessCS, BloomRadiusID, data.BloomRadius);
                         cmd.SetComputeFloatParam(data.PostProcessCS, BloomScatterID, data.BloomScatter);
                         cmd.SetComputeVectorParam(data.PostProcessCS, BloomTintID, data.BloomTint);
                         cmd.SetComputeFloatParam(data.PostProcessCS, BloomIntensityID, data.BloomIntensity);
 
+                        int prefilterWidth = Mathf.Max(1, width / 2);
+                        int prefilterHeight = Mathf.Max(1, height / 2);
+                        cmd.SetComputeVectorParam(
+                            data.PostProcessCS,
+                            ScreenSizeID,
+                            new Vector4(
+                                prefilterWidth,
+                                prefilterHeight,
+                                1f / prefilterWidth,
+                                1f / prefilterHeight));
+                        cmd.SetComputeVectorParam(
+                            data.PostProcessCS,
+                            SourceTexelSizeID,
+                            new Vector4(1f / width, 1f / height, width, height));
                         cmd.BeginSample("Fodinae.PostProcess.Bloom.Prefilter");
                         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, InputTexID, data.ColorTexture);
                         cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelPrefilter, DestTexID, data.BloomPrefilterTexture);
-                        cmd.DispatchCompute(data.PostProcessCS, data.KernelPrefilter, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                        cmd.DispatchCompute(
+                            data.PostProcessCS,
+                            data.KernelPrefilter,
+                            Mathf.CeilToInt(prefilterWidth / 8f),
+                            Mathf.CeilToInt(prefilterHeight / 8f),
+                            1);
                         cmd.EndSample("Fodinae.PostProcess.Bloom.Prefilter");
 
-                        int downWidth = width;
-                        int downHeight = height;
-                        int sourceWidth = width;
-                        int sourceHeight = height;
+                        int downWidth = prefilterWidth;
+                        int downHeight = prefilterHeight;
+                        int sourceWidth = prefilterWidth;
+                        int sourceHeight = prefilterHeight;
                         TextureHandle currentSource = data.BloomPrefilterTexture;
                         cmd.BeginSample("Fodinae.PostProcess.Bloom.Downsample");
                         for (int i = 0; i < data.BloomDownTextures.Length; i++)
@@ -536,6 +562,9 @@ namespace Fodinae.Rendering.PostProcessing
                         {
                             int upWidth = Mathf.Max(1, width >> (i + 1));
                             int upHeight = Mathf.Max(1, height >> (i + 1));
+                            TextureHandle baseTexture = i == 0
+                                ? data.BloomPrefilterTexture
+                                : data.BloomDownTextures[i - 1];
                             cmd.SetComputeVectorParam(
                                 data.PostProcessCS,
                                 ScreenSizeID,
@@ -545,7 +574,7 @@ namespace Fodinae.Rendering.PostProcessing
                                 SourceTexelSizeID,
                                 new Vector4(1f / currentUpWidth, 1f / currentUpHeight, currentUpWidth, currentUpHeight));
                             cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelUpsample, SourceTexID, currentUp);
-                            cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelUpsample, BaseTexID, data.BloomDownTextures[i]);
+                            cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelUpsample, BaseTexID, baseTexture);
                             cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelUpsample, DestTexID, data.BloomUpTextures[i]);
                             cmd.DispatchCompute(
                                 data.PostProcessCS,
@@ -600,40 +629,80 @@ namespace Fodinae.Rendering.PostProcessing
                         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauDarknessThresholdID, data.EigengrauDarknessThreshold);
                         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauNoiseScaleID, data.EigengrauNoiseScale);
                         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauAnimationSpeedID, data.EigengrauAnimationSpeed);
-                        cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, Time.time);
+                        cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
                     }
 
-                    cmd.SetComputeFloatParam(data.PostProcessCS, MotionBlurIntensityID, data.MbActive ? data.MbIntensity : 0f);
-                    cmd.SetComputeIntParam(data.PostProcessCS, MotionBlurMaxSamplesID, data.MbMaxSamples);
+                    cmd.SetComputeVectorParam(data.PostProcessCS, Advanced0ID, data.Advanced0);
+                    cmd.SetComputeVectorParam(data.PostProcessCS, Advanced1ID, data.Advanced1);
+                    cmd.SetComputeVectorParam(data.PostProcessCS, Advanced2ID, data.Advanced2);
+                    cmd.SetComputeVectorParam(data.PostProcessCS, Advanced3ID, data.Advanced3);
+                    cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
+                    cmd.SetComputeVectorParam(data.PostProcessCS, TemporalID, data.Temporal);
+                    if (data.TemporalActive && data.HistoryValid)
+                    {
+                        cmd.SetComputeTextureParam(
+                            data.PostProcessCS,
+                            data.KernelComposite,
+                            HistoryTexID,
+                            data.HistoryTexture);
+                    }
+                    else
+                    {
+                        cmd.SetComputeTextureParam(
+                            data.PostProcessCS,
+                            data.KernelComposite,
+                            HistoryTexID,
+                            Texture2D.blackTexture);
+                    }
 
                     cmd.BeginSample("Fodinae.PostProcess.Composite");
                     cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, InputTexID, data.ColorTexture);
                     cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, OutputTexID, data.IntermediateTexture);
-                    if (data.RenderRobotVelocity)
-                    {
-                        cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, VelocityTexID, data.VelocityTexture);
-                    }
-                    else
-                    {
-                        cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, VelocityTexID, Texture2D.blackTexture);
-                    }
-
                     cmd.DispatchCompute(data.PostProcessCS, data.KernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
                     cmd.EndSample("Fodinae.PostProcess.Composite");
 
                     cmd.BeginSample("Fodinae.PostProcess.BlitBack");
                     Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
+                    if (data.TemporalActive)
+                    {
+                        cmd.CopyTexture(data.IntermediateTexture, data.HistoryTexture);
+                    }
                     cmd.EndSample("Fodinae.PostProcess.BlitBack");
                 });
             }
+
+            if (temporalActive)
+            {
+                _historyValid = true;
+            }
+        }
+
+        private void EnsureHistoryTexture(RenderTextureDescriptor descriptor)
+        {
+            if (_historyTexture != null &&
+                _historyTexture.rt.width == descriptor.width &&
+                _historyTexture.rt.height == descriptor.height &&
+                _historyFormat == descriptor.graphicsFormat)
+            {
+                return;
+            }
+
+            _historyTexture?.Release();
+            _historyTexture = RTHandles.Alloc(
+                descriptor,
+                FilterMode.Bilinear,
+                TextureWrapMode.Clamp,
+                name: "_PPTemporalHistory");
+            _historyFormat = descriptor.graphicsFormat;
+            _historyValid = false;
         }
 
         public void Dispose()
         {
-            if (_velocityMaterial != null)
-            {
-                CoreUtils.Destroy(_velocityMaterial);
-            }
+            _historyTexture?.Release();
+            _historyTexture = null;
+            _historyValid = false;
+            _temporalWasActive = false;
         }
     }
 }

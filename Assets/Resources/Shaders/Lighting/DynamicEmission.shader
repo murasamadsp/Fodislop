@@ -91,7 +91,10 @@ Shader "Hidden/Fodinae/DynamicEmission"
                 float window = saturate(1.0 - (distRatio * distRatio * distRatio * distRatio));
                 float smoothWindow = window * window;
 
-                float atten = smoothWindow / (d * d + 1.0);
+                // Затухание 1/(d^1.5 + 1) вместо inverse-square 1/(d²+1):
+                // согласовано с Transmission в WorldLighting.compute, чтобы
+                // источники и марш не расходились по дальности света.
+                float atten = smoothWindow / (pow(d, 1.5) + 1.0);
 
                 // Alpha stays zero: the pass blends One One into a field whose
                 // alpha the ray march never reads, and adding coverage there

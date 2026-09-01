@@ -20,7 +20,7 @@ MonoBehaviour:
   maxSquares: 8192
   isRightEffekseerHandledCoordinateSystem: 0
   threadCount: 2
-  soundInstances: 16
+  soundInstances: 0
   enableDistortion: 1
   enableDistortionMobile: 0
   enableDepth: 1

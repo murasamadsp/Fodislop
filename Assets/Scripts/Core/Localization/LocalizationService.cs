@@ -11,18 +11,43 @@ namespace Fodinae.Core.Localization
     public class LocalizationService : ILocalizationService
     {
         private readonly Dictionary<string, string> _translations = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> _fallbackTranslations = new(StringComparer.OrdinalIgnoreCase);
-        private readonly IClientConfigManager? _clientConfig;
+        private readonly HashSet<ILocalizableUI> _localizable = new();
+        private readonly IClientConfigManager _clientConfig;
 
         public string CurrentLanguage { get; private set; } = "ru";
 
         public event Action? OnLanguageChanged;
 
-        [Inject]
-        public LocalizationService(IClientConfigManager? clientConfig = null)
+        /// <summary>
+        /// Единственная точка входа для UI: регистрация сразу применяет текст и
+        /// вешает переприменение на смену языка. Повторная регистрация той же
+        /// сущности идемпотентна (HashSet). Вызов до готовности дерева безопасен
+        /// — ApplyLocalizedText вьюхи сам гвардится.
+        /// </summary>
+        public void RegisterLocalizable(ILocalizableUI target)
         {
-            _clientConfig = clientConfig;
-            string initialLang = _clientConfig?.Config?.Language ?? "ru";
+            if (target == null || !_localizable.Add(target))
+            {
+                return;
+            }
+
+            target.ApplyLocalizedText();
+        }
+
+        public void UnregisterLocalizable(ILocalizableUI target)
+        {
+            if (target != null)
+            {
+                _localizable.Remove(target);
+            }
+        }
+
+        [Inject]
+        public LocalizationService(IClientConfigManager clientConfig)
+        {
+            _clientConfig = clientConfig ?? throw new ArgumentNullException(nameof(clientConfig));
+            _clientConfig.EnsureInitialized();
+            string initialLang = _clientConfig.Config.Language;
             SetLanguage(initialLang);
         }
 
@@ -36,13 +61,20 @@ namespace Fodinae.Core.Localization
             CurrentLanguage = languageCode.ToLowerInvariant();
             LoadTranslations();
 
-            if (_clientConfig?.Config != null && _clientConfig.Config.Language != CurrentLanguage)
+            if (_clientConfig.Config.Language != CurrentLanguage)
             {
-                _clientConfig.Config.Language = CurrentLanguage;
-                _clientConfig.Save();
+                _clientConfig.UpdateAndSave(config => config.Language = CurrentLanguage);
             }
 
             OnLanguageChanged?.Invoke();
+
+            // Реестр — основной канал переприменения: смена языка доходит до всех
+            // зарегистрированных UI-сущностей независимо от того, подписался ли
+            // кто-то на событие.
+            foreach (ILocalizableUI target in _localizable)
+            {
+                target.ApplyLocalizedText();
+            }
         }
 
         public string Get(string key, params object[] args)
@@ -52,8 +84,7 @@ namespace Fodinae.Core.Localization
                 return string.Empty;
             }
 
-            if (!_translations.TryGetValue(key, out string? value) &&
-                !_fallbackTranslations.TryGetValue(key, out value))
+            if (!_translations.TryGetValue(key, out string? value))
             {
                 value = key;
             }
@@ -75,21 +106,17 @@ namespace Fodinae.Core.Localization
 
         public bool HasKey(string key)
         {
-            return _translations.ContainsKey(key) || _fallbackTranslations.ContainsKey(key);
+            return _translations.ContainsKey(key);
         }
 
         private void LoadTranslations()
         {
             _translations.Clear();
-            _fallbackTranslations.Clear();
-
-            // Load primary dictionary
             LoadDictionaryInto(CurrentLanguage, _translations);
-
-            // Load English as fallback if current is not English
-            if (CurrentLanguage != "en")
+            if (_translations.Count == 0)
             {
-                LoadDictionaryInto("en", _fallbackTranslations);
+                throw new InvalidOperationException(
+                    $"Required localization dictionary '{CurrentLanguage}' is missing or empty.");
             }
         }
 
@@ -119,12 +146,7 @@ namespace Fodinae.Core.Localization
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var parsed = JsonUtility.FromJson<JsonDictionaryWrapper>("{\"items\":" + json + "}");
-            if (parsed != null && parsed.Items != null)
-            {
-                // Fallback manual key-value extraction for flat dictionaries
-            }
-
-            // High performance regex/token-based flat json parser for Unity compatibility
+            // High performance token-based flat JSON parser for Unity compatibility
             int index = 0;
             while (index < json.Length)
             {

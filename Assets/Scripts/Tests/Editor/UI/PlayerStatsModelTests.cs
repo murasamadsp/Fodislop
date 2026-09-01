@@ -55,6 +55,21 @@ namespace Fodinae.Tests.UI
         }
 
         [Test]
+        public void SetHealth_WithSameValues_DoesNotFireEvents()
+        {
+            int healthEvents = 0;
+            int statsEvents = 0;
+            _statsModel.OnHealthChanged += () => healthEvents++;
+            _statsModel.OnStatsChanged += () => statsEvents++;
+
+            _statsModel.SetHealth(75, 100);
+            _statsModel.SetHealth(75, 100);
+
+            Assert.AreEqual(1, healthEvents);
+            Assert.AreEqual(1, statsEvents);
+        }
+
+        [Test]
         public void StatusLines_AddAndRemove_UpdatesDictionaryAndFiresEvents()
         {
             bool statusLinesChanged = false;
@@ -72,6 +87,18 @@ namespace Fodinae.Tests.UI
 
             Assert.IsTrue(statusLinesChanged);
             Assert.AreEqual(0, _statsModel.StatusLines.Count);
+        }
+
+        [Test]
+        public void StatusLines_RepeatedPayload_DoesNotFireChangeEvent()
+        {
+            int changeEvents = 0;
+            _statsModel.OnStatusLinesChanged += () => changeEvents++;
+
+            _statsModel.AddStatusLine("online", new[] { "Online", "42" }, Color.white, 0, 0);
+            _statsModel.AddStatusLine("online", new[] { "Online", "42" }, Color.white, 0, 0);
+
+            Assert.AreEqual(1, changeEvents);
         }
 
         [Test]

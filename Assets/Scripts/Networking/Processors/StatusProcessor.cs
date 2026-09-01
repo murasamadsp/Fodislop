@@ -2,8 +2,8 @@
 
 using System.Linq;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
 using Fodinae.Networking;
-using Fodinae.UI;
 using MinesServer.Networking.Client.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Connection;
 using MinesServer.Networking.Server.Packets.Information;
@@ -15,32 +15,27 @@ namespace Fodinae.Networking.Processors
     public class StatusProcessor : IPacketProcessor<OnlinePacket>, IPacketProcessor<PingPacket>, IPacketProcessor<OutdatedClientPacket>, IPacketProcessor<AddStatusLinePacket>, IPacketProcessor<ClearStatusLinePacket>, IPacketProcessor<ClearStatusPacket>
     {
         private readonly IPlayerStats _stats;
-        private readonly FPSCounter _fps;
+        private readonly NetworkStatusModel _statusModel;
         private readonly INetworkService _networkService;
+        private readonly ILocalizationService? _loc;
+        private bool _outdatedClientHandled;
 
-        public StatusProcessor(IPlayerStats stats, FPSCounter fps, INetworkService networkService)
+        public StatusProcessor(IPlayerStats stats, NetworkStatusModel statusModel, INetworkService networkService, ILocalizationService? loc = null)
         {
             _stats = stats;
-            _fps = fps;
+            _statusModel = statusModel;
             _networkService = networkService;
+            _loc = loc;
         }
 
         public void Process(OnlinePacket packet)
         {
-            var fps = _fps;
-            if (fps != null)
-            {
-                fps.SetOnline((int)packet.Players, (int)packet.Programmator);
-            }
+            _statusModel.SetOnline((int)packet.Players, (int)packet.Programmator);
         }
 
         public void Process(PingPacket packet)
         {
-            var fps = _fps;
-            if (fps != null)
-            {
-                fps.SetPing(packet.PreviousPing);
-            }
+            _statusModel.SetPing(packet.PreviousPing);
 
             var networkService = _networkService;
             networkService?.Send(new PongPacket(packet.SentAt));
@@ -48,10 +43,26 @@ namespace Fodinae.Networking.Processors
 
         public void Process(OutdatedClientPacket packet)
         {
-            string detail = $"\u0412\u0435\u0440\u0441\u0438\u044f: {packet.Name}\n{packet.Description}\n\u0421\u043a\u0430\u0447\u0430\u0442\u044c: {packet.UpdateURL}";
-            Debug.LogError($"[StatusProcessor] \u041a\u043b\u0438\u0435\u043d\u0442 \u0443\u0441\u0442\u0430\u0440\u0435\u043b: {packet.Name}");
-            GameErrorUI.ReportFatal(detail);
-            Application.OpenURL(packet.UpdateURL);
+            if (_outdatedClientHandled)
+            {
+                return;
+            }
+
+            _outdatedClientHandled = true;
+
+            // Description приходит от сервера свободным текстом; известные
+            // клиентские причины передаются ключами словаря — резолвим их.
+            string description = _loc != null && _loc.HasKey(packet.Description)
+                ? _loc.Get(packet.Description)
+                : packet.Description;
+            string detail = _loc != null
+                ? _loc.Get("network.error.outdated", packet.Name, description, packet.UpdateURL)
+                : $"Версия: {packet.Name}\n{description}\nСкачать: {packet.UpdateURL}";
+            Debug.LogWarning($"[StatusProcessor] Клиент устарел: {detail}");
+            if (!string.IsNullOrWhiteSpace(packet.UpdateURL))
+            {
+                Application.OpenURL(packet.UpdateURL);
+            }
         }
 
         public void Process(AddStatusLinePacket packet)
@@ -59,7 +70,7 @@ namespace Fodinae.Networking.Processors
             var stats = _stats;
             if (stats == null)
             {
-                GameErrorUI.ReportError("IPlayerStats не зарегистрирован — статус-линия не добавлена");
+                Debug.LogWarning("[StatusProcessor] IPlayerStats не зарегистрирован — статус-линия не добавлена");
                 return;
             }
 

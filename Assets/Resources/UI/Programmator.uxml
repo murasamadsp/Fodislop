@@ -1,0 +1,63 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="ProgrammatorPopup" class="prog-popup" style="display: none;">
+        <ui:VisualElement class="prog-dimmer" picking-mode="Ignore" />
+
+        <!-- Основная панель: заголовок с управлением + сетка -->
+        <ui:VisualElement name="ProgrammatorPanel" class="prog-panel">
+            <ui:VisualElement class="prog-header-row">
+                <ui:VisualElement name="ProgrammatorTop" class="prog-top">
+                    <ui:VisualElement class="prog-row">
+                        <ui:Label name="ProgramTitle" class="prog-title"  text="" />
+                        <ui:Button name="PrevPageButton" class="prog-ctrl-btn" text="&lt;" />
+                        <ui:Label name="PageLabel" class="prog-pager-label"  text="" />
+                        <ui:Button name="NextPageButton" class="prog-ctrl-btn" text="&gt;" />
+                        <ui:IntegerField name="PageInput" class="prog-page-input" />
+                        <ui:Button name="AddPageButton" class="prog-ctrl-btn" text="+" />
+                        <ui:Button name="RemovePageButton" class="prog-ctrl-btn prog-ctrl-btn--gap" text="−" />
+                        <ui:Button name="ShiftUpButton" class="prog-ctrl-btn" text="↑" />
+                        <ui:Button name="ShiftDownButton" class="prog-ctrl-btn" text="↓" />
+                        <ui:Button name="ShiftLeftButton" class="prog-ctrl-btn" text="←" />
+                        <ui:Button name="ShiftRightButton" class="prog-ctrl-btn prog-ctrl-btn--gap" text="→" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="prog-action-row">
+                        <ui:Button name="SaveButton" class="prog-save-btn" text="💾" />
+                        <ui:Button name="RunButton" class="prog-run-btn" text="▶" />
+                        <ui:Button name="StopButton" class="prog-stop-btn" text="■" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+                <ui:Button name="ProgrammatorCloseButton" class="prog-close-btn" text="×" />
+            </ui:VisualElement>
+
+            <!-- Сетка: ячейки создаются в коде (динамический список) -->
+            <ui:VisualElement class="prog-grid-row">
+                <ui:VisualElement name="GridScroll" class="prog-grid-scroll">
+                    <ui:VisualElement name="GridContainer" class="prog-grid-container" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Список программ -->
+        <ui:VisualElement name="ProgramListPanel" class="prog-list-panel" style="display: none;">
+            <ui:VisualElement class="prog-list-header-row">
+                <ui:Label class="prog-list-title" text="programmator.list_title" />
+                <ui:Button name="ListCloseButton" class="prog-close-btn" text="×" />
+            </ui:VisualElement>
+            <ui:ScrollView name="ListScroll" class="prog-list-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto" />
+            <ui:VisualElement class="prog-create-container">
+                <ui:Button name="CreateButton" class="prog-create-btn" text="programmator.create" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Диалог создания программы -->
+        <ui:VisualElement name="CreateDialog" class="prog-dialog" style="display: none;">
+            <ui:VisualElement class="prog-dialog-panel">
+                <ui:Label class="prog-dialog-title" text="programmator.new_program" />
+                <ui:TextField name="CreateInput" class="prog-dialog-input" />
+                <ui:VisualElement class="prog-dialog-buttons">
+                    <ui:Button name="DialogCancelButton" class="prog-dialog-cancel" text="common.cancel" />
+                    <ui:Button name="DialogConfirmButton" class="prog-dialog-confirm" text="common.create" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

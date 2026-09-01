@@ -1,20 +1,19 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Localization;
+using Fodinae.Core.Models;
 using Fodinae.Networking;
-using Fodinae.Player;
 using Fodinae.Player.Logic;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.UI.Programmator;
 using MinesServer.Data;
 using MinesServer.Networking.Client.Packets.Actions;
 using MinesServer.Networking.Client.Packets.GUI;
-using MinesServer.Networking.Server.Packets.Information;
 using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -22,24 +21,17 @@ using VContainer;
 
 namespace Fodinae.UI.HUD.Player.View
 {
-    public class PlayerHUDView : MonoBehaviour
+    public class PlayerHUDView : MonoBehaviour, ILocalizableUI
     {
-        private const int BTN_SIZE = 50;
-        private const int GAP = 6;
-        private const int SKILL_GRID_COLS = 4;
-
         private Color _hpBarFillColor = new Color(0.2f, 0.8f, 0.2f, 1f);
         private Color _hpBarLowColor = new Color(0.9f, 0.2f, 0.2f, 1f);
-        private Color _accentColor = new Color(0.7f, 0.65f, 0.5f, 1f);
-        private Color _accentHoverColor = new Color(0.8f, 0.75f, 0.6f, 1f);
 
-        private readonly List<Texture2D> _crystalTextures = new();
-        private readonly List<Label> _basketCrystalLabels = new();
-        private readonly Dictionary<SkillType, (Label arrow, VisualElement barFill)> _skillIcons = new();
-        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _bounceSchedules = new();
-        private readonly Dictionary<SkillType, IVisualElementScheduledItem> _pulseSchedules = new();
-        private readonly Dictionary<string, VisualElement> _statusLineElements = new();
-        private readonly Dictionary<string, IVisualElementScheduledItem> _statusSchedules = new();
+        private readonly PlayerHUDStatusPanel _statusPanel = new();
+        private readonly PlayerHUDSkillGrid _skillGrid = new();
+        private readonly PlayerHUDBasketView _basketView = new();
+        private PlayerHUDMissionPanel _missionPanel = null!;
+        private PlayerHUDBonusController _bonusController = null!;
+        private PlayerHUDPopups _popups = null!;
 
         [Inject]
         private UIDocument _doc = null!;
@@ -47,17 +39,15 @@ namespace Fodinae.UI.HUD.Player.View
         private bool _isLoaded;
         [Inject]
         private Fodinae.Core.Interfaces.IInputBlocker _inputBlocker = null!;
+        [Inject]
+        private Fodinae.Core.Interfaces.ILocalPlayerState _localPlayer = null!;
         private IVisualElementScheduledItem? _skeletonPulse;
-        private VisualElement? _panel;
-        private Button? _bonusButton;
-        private VisualElement? _bonusPanel;
-        private Label? _bonusStatusLabel;
-        private Button? _bonusClaimButton;
-        private bool _isBonusOpen;
+        private TemplateContainer? _hudRoot;
 
         private Label? _nicknameLabel;
         private Label? _levelLabel;
         private Label? _hpLabel;
+        private Label? _hpPercentLabel;
         private VisualElement? _hpBarFill;
         private Label? _moneyLabel;
         private Label? _credsLabel;
@@ -66,17 +56,12 @@ namespace Fodinae.UI.HUD.Player.View
         private VisualElement? _basketContainer;
         private VisualElement? _skillContainer;
         private Button? _autoDigButton;
+        private VisualElement? _autoDigIndicator;
         private Label? _autoDigLabel;
         private Button? _aggressionButton;
+        private VisualElement? _aggressionIndicator;
         private Label? _aggressionLabel;
 
-        private VisualElement? _currentSkillRow;
-        private int _skillCountInRow = 0;
-        private Button? _chatButton;
-        private VisualElement? _statusPanel;
-        private VisualElement? _respawnPopup;
-        private VisualElement? _buildingsPopup;
-        private VisualElement? _faqPopup;
         private ProgrammatorGrid? _programmatorGrid;
         private bool _initializationStarted;
 
@@ -89,52 +74,65 @@ namespace Fodinae.UI.HUD.Player.View
         [Inject]
         private INetworkService _networkService = null!;
         [Inject]
-        private ISessionContainer _session = null!;
-        private VisualElement? _missionPanel;
-        private Label? _missionTitleLabel;
-        private Label? _missionDescLabel;
-        private VisualElement? _missionProgressFill;
-        private Label? _missionProgressLabel;
+        private ILocalizationService _loc = null!;
+        [Inject]
+        private IAsyncOperationSupervisor _operations = null!;
 
         protected void Start()
         {
             TryStartInitialization();
         }
 
+        public void EnsureInitialized()
+        {
+            TryStartInitialization();
+        }
+
         protected void Update()
         {
-            if (!_initializationStarted)
-            {
-                TryStartInitialization();
-            }
+            _programmatorGrid?.Tick();
         }
 
         private void TryStartInitialization()
         {
-            if (_initializationStarted || _session?.Current == null)
+            if (_initializationStarted)
             {
                 return;
             }
 
             if (_doc == null || _doc.rootVisualElement == null || _model == null ||
-                _globalChatUI == null || _assetLoader == null || _networkService == null || _inputBlocker == null)
+                _globalChatUI == null || _assetLoader == null || _networkService == null ||
+                _inputBlocker == null || _loc == null || _operations == null)
             {
-                // Не бросаем: инъекция может завершиться после этого Start (PostStart).
-                // Update ретраит TryStartInitialization — ждём готовности молча, иначе
-                // каждый кадр до инжекта будет сыпать исключениями.
                 return;
             }
 
             _initializationStarted = true;
-            StartAsync(this.destroyCancellationToken).Forget();
+            _operations.Run("player_hud_startup", StartAsync);
         }
 
-        private async UniTaskVoid StartAsync(System.Threading.CancellationToken cancellationToken)
+        private async UniTask StartAsync(CancellationToken supervisorToken)
         {
-            InitializeHUD();
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                supervisorToken,
+                destroyCancellationToken);
+            CancellationToken cancellationToken = linkedCancellation.Token;
+
             try
             {
-                await LoadCrystalTextures(cancellationToken);
+                InitializeHUD();
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning($"[PlayerHUD] HUD unavailable: {exception.Message}");
+                return;
+            }
+
+            _loc.RegisterLocalizable(this);
+
+            try
+            {
+                await _basketView.LoadCrystalTextures(_assetLoader, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -142,9 +140,6 @@ namespace Fodinae.UI.HUD.Player.View
             }
             catch (Exception ex)
             {
-                // Crystal icons are optional HUD content. Keep the gameplay HUD
-                // alive and report the asset miss only to diagnostics; an optional
-                // visual asset must not cover or block the game UI.
                 Debug.LogWarning($"[PlayerHUD] Optional crystal textures unavailable: {ex.Message}");
             }
 
@@ -153,35 +148,49 @@ namespace Fodinae.UI.HUD.Player.View
                 return;
             }
 
-            RebuildCrystalRows();
+            _basketView.RebuildRows();
+        }
+
+        public void ApplyLocalizedText()
+        {
+            UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(PlayerHUDView));
+            if (_doc == null || _doc.rootVisualElement == null || _loc == null)
+            {
+                // Тихий возврат безопасен: ApplyLocalizedText идемпотентен и будет
+                // вызван снова (реестр / RegisterLocalizable), когда панель и
+                // сервис будут готовы.
+                return;
+            }
+
+            UILocalizer.Apply(_doc.rootVisualElement, _loc);
+            RefreshAll();
+            _programmatorGrid?.RefreshLocalization();
+            UILocalizer.AssertLocalized(_doc.rootVisualElement, _loc);
         }
 
         protected void OnDestroy()
         {
+            if (_loc != null)
+            {
+                _loc.UnregisterLocalizable(this);
+            }
+
+            _programmatorGrid?.Dispose();
+            _programmatorGrid = null;
             StopSkeletonPulse();
-            foreach (var schedule in _bounceSchedules.Values)
-            {
-                schedule.Pause();
-            }
-
-            foreach (var schedule in _pulseSchedules.Values)
-            {
-                schedule.Pause();
-            }
-
-            _bounceSchedules.Clear();
-            _pulseSchedules.Clear();
+            _skillGrid.ClearSchedules();
+            _statusPanel.ClearSchedules();
 
             if (_model != null)
             {
                 _model.OnStatsChanged -= RefreshAll;
                 _model.OnSkillProgress -= OnSkillProgress;
-                _model.OnDailyBonusChanged -= UpdateDailyBonusPanel;
-                _model.OnStatusLinesChanged -= RebuildStatusPanel;
-                _model.OnMissionChanged -= UpdateMissionPanel;
+                _model.OnDailyBonusChanged -= OnDailyBonusChanged;
+                _model.OnStatusLinesChanged -= OnStatusLinesChanged;
+                _model.OnMissionChanged -= OnMissionChanged;
             }
 
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.OnAutoDigChanged -= UpdateAutoDigButton;
@@ -194,47 +203,9 @@ namespace Fodinae.UI.HUD.Player.View
             }
         }
 
-        private async UniTask LoadCrystalTextures(System.Threading.CancellationToken cancellationToken)
-        {
-            _crystalTextures.Clear();
-            foreach (CrystalType ct in Enum.GetValues(typeof(CrystalType)))
-            {
-                if (ct == CrystalType.Unknown)
-                {
-                    continue;
-                }
-
-                string name = ct.ToString().ToLowerInvariant();
-                Texture2D? tex;
-                try
-                {
-                    tex = await _assetLoader.GetTextureAsync(
-                        "Crystals/" + name,
-                        cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
-                catch (Exception exception)
-                {
-                    Debug.LogWarning(
-                        $"[PlayerHUD] Optional crystal texture '{name}' was skipped: " +
-                        exception.Message);
-                    continue;
-                }
-
-                if (cancellationToken.IsCancellationRequested || this == null)
-                {
-                    return;
-                }
-
-                if (tex != null)
-                {
-                    _crystalTextures.Add(tex);
-                }
-            }
-        }
+        private void OnDailyBonusChanged() => _bonusController.UpdateDailyBonusPanel(_model);
+        private void OnStatusLinesChanged() => _statusPanel.Rebuild(_model);
+        private void OnMissionChanged() => _missionPanel.Update(_model);
 
         public void InitializeEditorPreview(UIDocument doc)
         {
@@ -245,30 +216,23 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void InitializeHUD()
         {
+            _programmatorGrid ??= new ProgrammatorGrid(_doc, _loc);
+            _programmatorGrid?.Initialize();
             _tooltip = new Tooltip();
             _tooltip.Initialize(_doc);
 
-            // Тир раскладки вместо @media: класс на корне панели.
-            UiLayoutTier.Attach(_doc.rootVisualElement);
+            UILayoutTier.Attach(_doc.rootVisualElement);
 
-            CreatePanel(_doc.rootVisualElement);
-            CreateBonusButton(_doc.rootVisualElement);
-            CreateBonusPanel(_doc.rootVisualElement);
-            CreateAggressionToggle(_doc.rootVisualElement);
-            CreateAutoDigToggle(_doc.rootVisualElement);
-            CreateChatButton(_doc.rootVisualElement);
-            CreateButtonsAndPopups(_doc.rootVisualElement);
-            CreateStatusPanel(_doc.rootVisualElement);
-            CreateSkillContainer(_doc.rootVisualElement);
-            CreateMissionPanel(_doc.rootVisualElement);
+            LoadTemplate(_doc.rootVisualElement);
+
             if (_model != null)
             {
                 _model.OnSkillProgress += OnSkillProgress;
-                _model.OnStatusLinesChanged += RebuildStatusPanel;
-                _model.OnMissionChanged += UpdateMissionPanel;
+                _model.OnStatusLinesChanged += OnStatusLinesChanged;
+                _model.OnMissionChanged += OnMissionChanged;
             }
 
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.OnAutoDigChanged += UpdateAutoDigButton;
@@ -280,10 +244,12 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_model != null)
             {
-                _model.OnDailyBonusChanged += UpdateDailyBonusPanel;
+                _model.OnDailyBonusChanged += OnDailyBonusChanged;
             }
 
-            RebuildCrystalRows();
+            _bonusController.UpdateDailyBonusPanel(_model);
+
+            _basketView.RebuildRows();
             if (_model != null)
             {
                 _model.OnStatsChanged += RefreshAll;
@@ -298,18 +264,13 @@ namespace Fodinae.UI.HUD.Player.View
             RefreshAll();
 
             var root = _doc.rootVisualElement;
-            Debug.Log("[PlayerHUD] InitializeHUD complete, skills container created=" + (_skillContainer != null));
 
-            // Клавиатурная навигация по интерфейсу вырезана насовсем: стрелки/WASD не
-            // должны двигать фокус по кнопкам, а Enter — активировать их. Подавляем
-            // навигационные события глобально (TrickleDown ловит их до фокус-контроллера).
             root.RegisterCallback<NavigationMoveEvent>(
                 evt => evt.StopPropagation(), TrickleDown.TrickleDown);
 
             root.RegisterCallback<NavigationSubmitEvent>(
                 evt => evt.StopPropagation(), TrickleDown.TrickleDown);
 
-            // Tab тоже не должен перемещать фокус по кнопкам.
             root.RegisterCallback<KeyDownEvent>(
                 evt =>
             {
@@ -320,438 +281,98 @@ namespace Fodinae.UI.HUD.Player.View
             }, TrickleDown.TrickleDown);
         }
 
-        private void CreatePanel(VisualElement root)
+        private void LoadTemplate(VisualElement root)
         {
-            _panel = new VisualElement();
-            _panel.name = "PlayerHUD";
-            _panel.AddToClassList("hud-panel");
+            VisualTreeAsset template = Resources.Load<VisualTreeAsset>("UI/PlayerHUD") ??
+                throw new InvalidOperationException(
+                    "[PlayerHUD] Resources/UI/PlayerHUD.uxml is required.");
+            TemplateContainer tree = template.Instantiate();
+            tree.AddToClassList("ui-fullscreen");
+            tree.pickingMode = PickingMode.Ignore;
+            _hudRoot = tree;
+            root.Add(tree);
 
-            var topRow = new VisualElement();
-            topRow.AddToClassList("hud-title-row");
+            UILocalizer.Apply(tree, _loc);
 
-            _nicknameLabel = new Label("---");
-            _nicknameLabel.AddToClassList("hud-nickname");
-            topRow.Add(_nicknameLabel);
+            _nicknameLabel = tree.Q<Label>("NicknameLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] NicknameLabel is missing from PlayerHUD.uxml.");
+            _levelLabel = tree.Q<Label>("LevelLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] LevelLabel is missing from PlayerHUD.uxml.");
+            Button clanButton = tree.Q<Button>("ClanButton") ??
+                throw new InvalidOperationException("[PlayerHUD] ClanButton is missing from PlayerHUD.uxml.");
+            clanButton.clicked += () => _networkService?.Send(new OpenClanClickPacket());
 
-            _levelLabel = new Label("Ур: ---");
-            _levelLabel.AddToClassList("hud-level");
-            topRow.Add(_levelLabel);
+            _hpLabel = tree.Q<Label>("HPLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] HPLabel is missing from PlayerHUD.uxml.");
+            _hpPercentLabel = tree.Q<Label>("HPPercentLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] HPPercentLabel is missing from PlayerHUD.uxml.");
+            _hpBarFill = tree.Q<VisualElement>("HPBarFill") ??
+                throw new InvalidOperationException("[PlayerHUD] HPBarFill is missing from PlayerHUD.uxml.");
 
-            var clanButton = new Button(() => _networkService?.Send(new OpenClanClickPacket()));
-            clanButton.AddToClassList("hud-clan-button");
-            clanButton.tooltip = "Клан";
-            topRow.Add(clanButton);
+            _moneyLabel = tree.Q<Label>("MoneyLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] MoneyLabel is missing from PlayerHUD.uxml.");
+            _credsLabel = tree.Q<Label>("CredsLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] CredsLabel is missing from PlayerHUD.uxml.");
+            _basketPercentLabel = tree.Q<Label>("BasketPercentLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] BasketPercentLabel is missing from PlayerHUD.uxml.");
+            _geologyLabel = tree.Q<Label>("GeologyLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] GeologyLabel is missing from PlayerHUD.uxml.");
 
-            _panel.Add(topRow);
+            _basketContainer = tree.Q<VisualElement>("BasketContainer") ??
+                throw new InvalidOperationException("[PlayerHUD] BasketContainer is missing from PlayerHUD.uxml.");
+            _basketView.Initialize(_basketContainer);
 
-            var separator = new VisualElement();
-            separator.AddToClassList("hud-separator");
-            _panel.Add(separator);
+            _skillContainer = tree.Q<VisualElement>("SkillContainer") ??
+                throw new InvalidOperationException("[PlayerHUD] SkillContainer is missing from PlayerHUD.uxml.");
+            _skillGrid.Initialize(_skillContainer);
 
-            _hpLabel = new Label("Прочность: --/--");
-            _hpLabel.AddToClassList("hud-stat");
-            _panel.Add(_hpLabel);
+            _autoDigButton = tree.Q<Button>("AutoDigButton") ??
+                throw new InvalidOperationException("[PlayerHUD] AutoDigButton is missing from PlayerHUD.uxml.");
+            _autoDigButton.clicked += ToggleAutoDig;
+            _autoDigIndicator = tree.Q<VisualElement>("AutoDigIndicator") ??
+                throw new InvalidOperationException("[PlayerHUD] AutoDigIndicator is missing from PlayerHUD.uxml.");
+            _autoDigLabel = tree.Q<Label>("AutoDigLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] AutoDigLabel is missing from PlayerHUD.uxml.");
+            Tooltip.AttachTo(_autoDigButton, () => _loc.Get("hud.tooltip.autodig"), _tooltip!);
 
-            var hpContainer = new VisualElement();
-            hpContainer.AddToClassList("hud-hp-bar");
+            _aggressionButton = tree.Q<Button>("AggressionButton") ??
+                throw new InvalidOperationException("[PlayerHUD] AggressionButton is missing from PlayerHUD.uxml.");
+            _aggressionButton.clicked += ToggleAggression;
+            _aggressionIndicator = tree.Q<VisualElement>("AggressionIndicator") ??
+                throw new InvalidOperationException("[PlayerHUD] AggressionIndicator is missing from PlayerHUD.uxml.");
+            _aggressionLabel = tree.Q<Label>("AggressionLabel") ??
+                throw new InvalidOperationException("[PlayerHUD] AggressionLabel is missing from PlayerHUD.uxml.");
+            Tooltip.AttachTo(_aggressionButton, () => _loc.Get("hud.tooltip.aggression"), _tooltip!);
 
-            _hpBarFill = new VisualElement();
-            _hpBarFill.AddToClassList("hud-hp-fill");
-            hpContainer.Add(_hpBarFill);
+            Button chatButton = tree.Q<Button>("ChatButton") ??
+                throw new InvalidOperationException("[PlayerHUD] ChatButton is missing from PlayerHUD.uxml.");
+            chatButton.clicked += () => _globalChatUI.Toggle();
+            Tooltip.AttachTo(chatButton, () => _loc.Get("hud.tooltip.chat"), _tooltip!);
 
-            _panel.Add(hpContainer);
-
-            _moneyLabel = new Label("$ ---");
-            _moneyLabel.AddToClassList("hud-money");
-            _panel.Add(_moneyLabel);
-
-            _credsLabel = new Label("C ---");
-            _credsLabel.AddToClassList("hud-creds");
-            _panel.Add(_credsLabel);
-
-            _geologyLabel = new Label("Геология: --/--");
-            _geologyLabel.AddToClassList("hud-stat");
-            _panel.Add(_geologyLabel);
-
-            var basketSep = new VisualElement();
-            basketSep.AddToClassList("hud-separator");
-            _panel.Add(basketSep);
-
-            _basketPercentLabel = new Label("Груз: --%");
-            _basketPercentLabel.AddToClassList("hud-basket");
-            _panel.Add(_basketPercentLabel);
-
-            _basketContainer = new VisualElement();
-            _basketContainer.name = "BasketCrystals";
-            _basketContainer.AddToClassList("hud-basket-container");
-            _panel.Add(_basketContainer);
-
-            root.Add(_panel);
-        }
-
-        private void CreateBonusButton(VisualElement root)
-        {
-            _bonusButton = new Button(ToggleBonusPanel);
-            _bonusButton.text = "Бонусы";
-            _bonusButton.AddToClassList("hud-button-accent");
-            _bonusButton.AddToClassList("hud-bonus-button");
-            Tooltip.AttachTo(_bonusButton, "Открыть панель бонусов", _tooltip);
-
-            root.Add(_bonusButton);
-        }
-
-        private void CreateBonusPanel(VisualElement root)
-        {
-            _bonusPanel = new VisualElement();
-            _bonusPanel.AddToClassList("hud-bonus-panel");
-
-            var titleRow = new VisualElement();
-            titleRow.AddToClassList("hud-title-row");
-
-            var title = new Label("Бонусы");
-            title.AddToClassList("hud-stat");
-            titleRow.Add(title);
-
-            var closeBtn = new Button(ToggleBonusPanel);
-            closeBtn.text = "×";
-            closeBtn.AddToClassList("hud-button-close");
-            titleRow.Add(closeBtn);
-
-            _bonusPanel.Add(titleRow);
-
-            _bonusStatusLabel = new Label("Ежедневный бонус: ...");
-            _bonusStatusLabel.AddToClassList("hud-stat");
-            _bonusStatusLabel.AddToClassList("hud-stat-wrap");
-            _bonusPanel.Add(_bonusStatusLabel);
-
-            _bonusClaimButton = new Button(ClaimDailyBonus);
-            _bonusClaimButton.text = "Забрать";
-            _bonusClaimButton.AddToClassList("hud-button-claim");
-            _bonusClaimButton.style.display = DisplayStyle.None;
-            _bonusPanel.Add(_bonusClaimButton);
-
-            _bonusPanel.style.display = DisplayStyle.None;
-            root.Add(_bonusPanel);
-        }
-
-        private void ToggleBonusPanel()
-        {
-            _isBonusOpen = !_isBonusOpen;
-            _bonusPanel!.style.display = _isBonusOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            _bonusButton!.style.backgroundColor = _isBonusOpen ? _accentHoverColor : _accentColor;
-            if (_isBonusOpen)
+            _bonusController = new PlayerHUDBonusController(packet => _networkService?.Send(packet), _loc);
+            _bonusController.Initialize(tree);
+            var bonusButton = tree.Q<Button>("BonusButton");
+            if (bonusButton != null)
             {
-                UpdateDailyBonusPanel();
+                Tooltip.AttachTo(bonusButton, () => _loc.Get("hud.tooltip.bonus"), _tooltip!);
             }
 
-            UpdateStatusPanelPosition();
-        }
+            _popups = new PlayerHUDPopups(packet => _networkService?.SendAction(packet));
+            _popups.Initialize(tree);
 
-        private void UpdateStatusPanelPosition()
-        {
-            if (_statusPanel == null)
-            {
-                return;
-            }
+            _statusPanel.Initialize(tree);
+            _missionPanel = new PlayerHUDMissionPanel(_loc);
+            _missionPanel.Initialize(tree);
 
-            if (_isBonusOpen && _bonusPanel != null)
-            {
-                _bonusPanel.schedule.Execute(() =>
-                {
-                    if (!_isBonusOpen)
-                    {
-                        return;
-                    }
-
-                    _statusPanel.style.top = 10 + GAP + _bonusPanel.resolvedStyle.height;
-                }).StartingIn(16);
-            }
-            else
-            {
-                _statusPanel.style.top = 10 + BTN_SIZE + GAP;
-            }
-        }
-
-        private void UpdateDailyBonusPanel()
-        {
-            if (_bonusStatusLabel == null)
-            {
-                return;
-            }
-
-            var stats = _model;
-            if (stats == null)
-            {
-                return;
-            }
-
-            if (stats.DailyBonusAvailable)
-            {
-                _bonusStatusLabel!.text = "Ежедневный бонус: <color=lime>Доступен!</color>";
-                _bonusStatusLabel!.style.color = Color.green;
-                _bonusClaimButton!.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                _bonusStatusLabel!.text = "Ежедневный бонус: Нет активных бонусов";
-                _bonusStatusLabel!.style.color = Color.gray;
-                _bonusClaimButton!.style.display = DisplayStyle.None;
-            }
-
-            UpdateStatusPanelPosition();
-        }
-
-        private void CreateStatusPanel(VisualElement root)
-        {
-            _statusPanel = new VisualElement();
-            _statusPanel.name = "StatusPanel";
-            _statusPanel.AddToClassList("hud-status-panel");
-            _statusPanel.style.display = DisplayStyle.None;
-            root.Add(_statusPanel);
-        }
-
-        private void RebuildStatusPanel()
-        {
-            if (_statusPanel == null)
-            {
-                return;
-            }
-
-            var stats = _model;
-            if (stats == null)
-            {
-                return;
-            }
-
-            var currentLines = stats.StatusLines;
-            if (currentLines.Count == 0)
-            {
-                _statusPanel.style.display = DisplayStyle.None;
-                foreach (var schedule in _statusSchedules.Values)
-                {
-                    schedule.Pause();
-                }
-
-                _statusSchedules.Clear();
-                _statusLineElements.Clear();
-                _statusPanel.Clear();
-                return;
-            }
-
-            _statusPanel.style.display = DisplayStyle.Flex;
-            var toRemove = new List<string>();
-            foreach (var kvp in _statusLineElements)
-            {
-                if (!currentLines.ContainsKey(kvp.Key))
-                {
-                    toRemove.Add(kvp.Key);
-                }
-            }
-
-            foreach (var key in toRemove)
-            {
-                _statusPanel.Remove(_statusLineElements[key]);
-                if (_statusSchedules.TryGetValue(key, out var schedule))
-                {
-                    schedule.Pause();
-                    _statusSchedules.Remove(key);
-                }
-
-                _statusLineElements.Remove(key);
-            }
-
-            foreach (var kvp in currentLines)
-            {
-                if (_statusLineElements.TryGetValue(kvp.Key, out var existing))
-                {
-                    var label = existing as Label;
-                    if (label != null)
-                    {
-                        UpdateStatusLabel(label, kvp.Value);
-                    }
-
-                    label!.style.color = kvp.Value.Color;
-                }
-                else
-                {
-                    var row = new Label();
-                    row.AddToClassList("hud-status-line");
-                    row.style.color = kvp.Value.Color;
-                    UpdateStatusLabel(row, kvp.Value);
-                    _statusPanel.Add(row);
-
-                    if (kvp.Value.Expiry > 0)
-                    {
-                        var schedule = row.schedule.Execute(() =>
-                        {
-                            if (_statusPanel == null || !_statusLineElements.ContainsKey(kvp.Key))
-                            {
-                                return;
-                            }
-
-                            var entry = stats.StatusLines.GetValueOrDefault(kvp.Key);
-                            if (entry.Text == null)
-                            {
-                                return;
-                            }
-
-                            UpdateStatusLabel(row, entry);
-                        }).Every(1000);
-                        _statusSchedules[kvp.Key] = schedule;
-                    }
-
-                    _statusLineElements[kvp.Key] = row;
-                }
-            }
-        }
-
-        private static void UpdateStatusLabel(Label label, StatusLineEntry entry)
-        {
-            if (entry.Text == null || entry.Text.Length == 0)
-            {
-                label.text = string.Empty;
-                return;
-            }
-
-            var name = entry.Text[0];
-            if (entry.Expiry > 0)
-            {
-                var remaining = Math.Max(0, entry.Expiry - DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-                label.text = $"{name}: {FormatTime(remaining)}";
-            }
-            else if (entry.Text.Length > 1)
-            {
-                label.text = $"{name}: {entry.Text[1]}";
-            }
-            else
-            {
-                label.text = name;
-            }
-        }
-
-        private static string FormatTime(long seconds)
-        {
-            var ts = TimeSpan.FromSeconds(seconds);
-            if (ts.TotalHours >= 1)
-            {
-                return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
-            }
-
-            return $"{ts.Minutes:D2}:{ts.Seconds:D2}";
-        }
-
-        private void ClaimDailyBonus()
-        {
-            Debug.Log("[PlayerHUD] ClaimDailyBonus: sending claim request");
-            var ns = _networkService;
-            ns?.Send(new ElementClickPacket("daily_bonus", 0, Array.Empty<StringPairPacket>()));
-        }
-
-        private void CreateAutoDigToggle(VisualElement root)
-        {
-            _autoDigButton = new Button(ToggleAutoDig);
-            _autoDigButton.text = string.Empty;
-            _autoDigButton.AddToClassList("hud-button");
-            _autoDigButton.AddToClassList("hud-toggle-btn");
-            _autoDigButton.AddToClassList("hud-toggle-auto-dig");
-
-            _autoDigLabel = new Label("Копать ✗");
-            _autoDigLabel.AddToClassList("hud-toggle-btn-label");
-            _autoDigButton.Add(_autoDigLabel);
-
-
-            Tooltip.AttachTo(_autoDigButton, "Автоматическое копание блоков", _tooltip);
-
-            root.Add(_autoDigButton);
-        }
-
-        private void CreateAggressionToggle(VisualElement root)
-        {
-            _aggressionButton = new Button(ToggleAggression);
-            _aggressionButton.text = string.Empty;
-            _aggressionButton.AddToClassList("hud-button");
-            _aggressionButton.AddToClassList("hud-toggle-btn");
-            _aggressionButton.AddToClassList("hud-toggle-aggression");
-
-            _aggressionLabel = new Label("Агрессия ✗");
-            _aggressionLabel.AddToClassList("hud-toggle-btn-label");
-            _aggressionButton.Add(_aggressionLabel);
-            Tooltip.AttachTo(_aggressionButton, "Робот копает под чужими пушками", _tooltip);
-
-            root.Add(_aggressionButton);
-        }
-
-        private void CreateSkillContainer(VisualElement root)
-        {
-            _skillContainer = new VisualElement();
-            _skillContainer.name = "MiniSkills";
-            _skillContainer.AddToClassList("hud-skill-container");
-            root.Add(_skillContainer);
-            Debug.Log("[PlayerHUD] Skill container created");
-        }
-
-        private void EnsureSkillRow()
-        {
-            if (_currentSkillRow != null && _skillCountInRow < SKILL_GRID_COLS)
-            {
-                return;
-            }
-
-            _currentSkillRow = new VisualElement();
-            _currentSkillRow!.AddToClassList("hud-skill-row");
-            _skillContainer!.Add(_currentSkillRow!);
-            _skillCountInRow = 0;
-        }
-
-        private (Label arrow, VisualElement barFill) CreateSkillIcon(SkillType skill)
-        {
-            EnsureSkillRow();
-
-            var cell = new VisualElement();
-            cell.AddToClassList("hud-skill-icon");
-
-            var iconColumn = new VisualElement();
-            iconColumn.AddToClassList("hud-skill-icon-column");
-
-            var arrow = new Label("up");
-            arrow.AddToClassList("hud-skill-arrow");
-            iconColumn.Add(arrow);
-
-            var iconImage = new Image();
-            iconImage.AddToClassList("hud-skill-icon-image");
-
-            var tex = Resources.Load<Texture2D>($"Skills/{skill}");
-            if (tex != null)
-            {
-                RuntimeTextureFactory.ApplySampling(
-                    tex,
-                    FilterMode.Point,
-                    TextureWrapMode.Clamp);
-                iconImage.image = tex;
-            }
-
-            iconColumn.Add(iconImage);
-            cell.Add(iconColumn);
-
-            var barContainer = new VisualElement();
-            barContainer.AddToClassList("hud-skill-bar-container");
-
-            var barFill = new VisualElement();
-            barFill.AddToClassList("hud-skill-bar-fill");
-            barFill.AddToClassList("hud-skill-bar-segment");
-            barContainer.Add(barFill);
-            cell.Add(barContainer);
-
-            _currentSkillRow!.Add(cell);
-            _skillCountInRow++;
-
-            _skillIcons[skill] = (arrow, barFill);
-            return (arrow, barFill);
+            Button programmatorButton = tree.Q<Button>("ProgrammatorButton") ??
+                throw new InvalidOperationException("[PlayerHUD] ProgrammatorButton is missing from PlayerHUD.uxml.");
+            programmatorButton.text = _loc.Get("hud.programmator");
+            programmatorButton.clicked += () => _programmatorGrid?.Show();
         }
 
         private void ToggleAutoDig()
         {
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.AutoDig = !player.AutoDig;
@@ -760,25 +381,18 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void UpdateAutoDigButton(bool enabled)
         {
-            if (_autoDigLabel == null)
+            _autoDigButton?.EnableInClassList("enabled", enabled);
+            if (_autoDigLabel != null)
             {
-                return;
+                _autoDigLabel.text = enabled ? _loc.Get("hud.autodig.on") : _loc.Get("hud.autodig.off");
             }
 
-            _autoDigLabel.text = enabled ? "Копать ✓" : "Копать ✗";
-            _autoDigLabel.EnableInClassList("hud-toggle-btn-label", true);
-            if (_autoDigButton != null)
-            {
-                _autoDigButton.EnableInClassList("hud-toggle-btn", true);
-                _autoDigButton.EnableInClassList("enabled", enabled);
-            }
-
-            _autoDigLabel.EnableInClassList("enabled", enabled);
+            _autoDigIndicator?.EnableInClassList("hud-mode-led--active", enabled);
         }
 
         private void ToggleAggression()
         {
-            var player = PlayerMovementController.LocalPlayer;
+            var player = _localPlayer.Current;
             if (player != null)
             {
                 player.ToggleAggression();
@@ -787,14 +401,13 @@ namespace Fodinae.UI.HUD.Player.View
 
         private void UpdateAggressionButton(bool enabled)
         {
-            if (_aggressionLabel == null)
+            _aggressionButton?.EnableInClassList("enabled", enabled);
+            if (_aggressionLabel != null)
             {
-                return;
+                _aggressionLabel.text = enabled ? _loc.Get("hud.aggression.on") : _loc.Get("hud.aggression.off");
             }
 
-            _aggressionLabel.text = enabled ? "Агрессия ✓" : "Агрессия ✗";
-            _aggressionLabel.EnableInClassList("enabled", enabled);
-            _aggressionButton?.EnableInClassList("enabled", enabled);
+            _aggressionIndicator?.EnableInClassList("hud-mode-led--active", enabled);
         }
 
         private void StartSkeletonPulse()
@@ -805,9 +418,9 @@ namespace Fodinae.UI.HUD.Player.View
             float t = 0f;
             bool rising = true;
 
-            _skeletonPulse = _panel!.schedule.Execute(() =>
+            _skeletonPulse = _hudRoot!.schedule.Execute(() =>
             {
-                if (_panel == null)
+                if (_hudRoot == null)
                 {
                     return;
                 }
@@ -839,6 +452,11 @@ namespace Fodinae.UI.HUD.Player.View
                 if (_hpLabel != null)
                 {
                     _hpLabel.style.opacity = alpha;
+                }
+
+                if (_hpPercentLabel != null)
+                {
+                    _hpPercentLabel.style.opacity = alpha;
                 }
 
                 if (_hpBarFill != null)
@@ -889,6 +507,11 @@ namespace Fodinae.UI.HUD.Player.View
             if (_hpLabel != null)
             {
                 _hpLabel.style.opacity = 1;
+            }
+
+            if (_hpPercentLabel != null)
+            {
+                _hpPercentLabel.style.opacity = 1;
             }
 
             if (_hpBarFill != null)
@@ -943,383 +566,56 @@ namespace Fodinae.UI.HUD.Player.View
 
             if (_levelLabel != null)
             {
-                _levelLabel.text = _isLoaded ? $"Ур: {stats.Level:N0}" : "Ур: ---";
+                _levelLabel.text = _isLoaded ? _loc.Get("hud.level", stats.Level) : _loc.Get("hud.level_unknown");
             }
 
             if (_hpLabel != null)
             {
-                _hpLabel.text = _isLoaded ? $"Прочность: {stats.Health:N0}/{stats.MaxHealth:N0}" : "Прочность: --/--";
+                string hpPrefix = _loc.Get("hud.health");
+                _hpLabel.text = _isLoaded ? $"{hpPrefix}: {stats.Health:N0} / {stats.MaxHealth:N0}" : $"{hpPrefix}: -- / --";
                 _hpLabel.style.opacity = 1;
             }
 
             float pct = stats.HealthPercent;
+            if (_hpPercentLabel != null)
+            {
+                _hpPercentLabel.text = $"{pct * 100f:F0}%";
+            }
+
             if (_hpBarFill != null)
             {
-                _hpBarFill!.style.width = new Length(pct * 100, LengthUnit.Percent);
-                _hpBarFill!.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
+                _hpBarFill.style.width = new Length(pct * 100, LengthUnit.Percent);
+                _hpBarFill.style.backgroundColor = pct < 0.25f ? _hpBarLowColor : _hpBarFillColor;
             }
 
             if (_moneyLabel != null)
             {
-                _moneyLabel.text = _isLoaded ? $"$ {stats.Money:N0}" : "$ ---";
+                _moneyLabel.text = _isLoaded ? $"{stats.Money:N0}" : "---";
             }
 
             if (_credsLabel != null)
             {
-                _credsLabel.text = _isLoaded ? $"C {stats.Creds:N0}" : "C ---";
+                _credsLabel.text = _isLoaded ? $"{stats.Creds:N0}" : "---";
             }
 
             if (_geologyLabel != null)
             {
                 _geologyLabel.text = string.IsNullOrEmpty(stats.GeologyText) || !_isLoaded
-                    ? "Геология: 0/0"
-                    : $"Геология: {stats.GeologyCurrent}/{stats.GeologyMax} ({stats.GeologyText})";
+                    ? _loc.Get("hud.geology_zero")
+                    : _loc.Get("hud.geology", stats.GeologyCurrent, stats.GeologyMax, stats.GeologyText);
             }
 
             if (_basketPercentLabel != null)
             {
-                _basketPercentLabel.text = _isLoaded ? $"Груз: {stats.BasketMaxPercent}%" : "Груз: --%";
+                _basketPercentLabel.text = _isLoaded ? $"{stats.BasketMaxPercent}%" : "--%";
             }
 
-            for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
-            {
-                _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
-            }
-        }
-
-        private void RebuildCrystalRows()
-        {
-            if (_basketContainer == null)
-            {
-                return;
-            }
-
-            _basketContainer.Clear();
-            _basketCrystalLabels.Clear();
-
-            for (int i = 0; i < _crystalTextures.Count; i++)
-            {
-                var row = new VisualElement();
-                row.AddToClassList("hud-crystal-row");
-
-                var dot = new Image();
-                dot.AddToClassList("hud-crystal-dot");
-                if (_crystalTextures[i] != null)
-                {
-                    dot.style.backgroundImage = new StyleBackground(_crystalTextures[i]);
-                }
-
-                row.Add(dot);
-
-                var label = new Label("0/0");
-                label.AddToClassList("hud-crystal-label");
-                row.Add(label);
-
-                _basketCrystalLabels.Add(label);
-                _basketContainer.Add(row);
-            }
-        }
-
-        private static string FormatCompact(long val)
-        {
-            if (val >= 1_000_000)
-            {
-                return $"{val / 1_000_000f:F1}M";
-            }
-
-            if (val >= 10_000)
-            {
-                return $"{val / 1_000}K";
-            }
-
-            return val.ToString("N0");
+            _basketView.Refresh(stats);
         }
 
         private void OnSkillProgress(SkillType skill, long current, long max)
         {
-            Debug.Log($"[PlayerHUD] OnSkillProgress: skill={skill}, current={current}, max={max}");
-            if (!_skillIcons.TryGetValue(skill, out var icon))
-            {
-                var created = CreateSkillIcon(skill);
-                icon.arrow = created.arrow;
-                icon.barFill = created.barFill;
-            }
-
-            float progress = max > 0 ? (float)current / max : 0f;
-
-            icon.barFill.style.backgroundColor = Color.Lerp(Color.green, Color.red, Mathf.Clamp01(progress));
-
-            icon.arrow.text = progress >= 1f ? "up" : string.Empty;
-
-            if (progress >= 1f)
-            {
-                StopBarPulse(skill);
-                StartBounce(skill, icon.arrow);
-            }
-            else
-            {
-                StopBounce(skill, icon.arrow);
-                StartBarPulse(skill, icon.barFill, progress);
-            }
-        }
-
-        private void StartBounce(SkillType skill, Label arrow)
-        {
-            StopBounce(skill, arrow);
-
-            float t = 0f;
-            var item = arrow.schedule.Execute(() =>
-            {
-                t += Time.unscaledDeltaTime;
-                float offsetY = Mathf.Sin(t * 2f * Mathf.PI) * 3f;
-                arrow.style.translate = new Translate(0, offsetY);
-            });
-            item.Every(33);
-
-            _bounceSchedules[skill] = item;
-        }
-
-        private void StopBounce(SkillType skill, Label arrow)
-        {
-            if (_bounceSchedules.TryGetValue(skill, out var existing))
-            {
-                existing.Pause();
-                _bounceSchedules.Remove(skill);
-            }
-
-            arrow.style.translate = new Translate(0, 0);
-        }
-
-        private void StartBarPulse(SkillType skill, VisualElement barFill, float progress)
-        {
-            StopBarPulse(skill);
-
-            float baseSeg = Mathf.Floor(progress * 20f);
-            float baseH = baseSeg * (24f / 20f);
-            barFill.style.height = new Length(baseH, LengthUnit.Pixel);
-
-            float t = 0f;
-            var item = barFill.schedule.Execute(() =>
-            {
-                t += Time.unscaledDeltaTime;
-                float pulse = (Mathf.Sin(t * 2f * Mathf.PI * 0.5f) + 1f) * (24f / 20f);
-                barFill.style.height = new Length(Mathf.Min(baseH + pulse, 24f), LengthUnit.Pixel);
-            });
-            item.Every(33);
-            _pulseSchedules[skill] = item;
-        }
-
-        private void StopBarPulse(SkillType skill)
-        {
-            if (_pulseSchedules.TryGetValue(skill, out var existing))
-            {
-                existing.Pause();
-                _pulseSchedules.Remove(skill);
-            }
-        }
-
-        private void CreateChatButton(VisualElement root)
-        {
-            _chatButton = new Button(() => _globalChatUI.Toggle());
-            _chatButton.text = "Чат";
-            _chatButton.AddToClassList("hud-btn-action");
-            _chatButton.AddToClassList("hud-chat-button");
-            Tooltip.AttachTo(_chatButton, "Открыть чат", _tooltip);
-
-            root.Add(_chatButton);
-        }
-
-        private void CreateButtonsAndPopups(VisualElement root)
-        {
-            _respawnPopup = CreateRespawnPopup();
-            _buildingsPopup = CreatePopup("Мои здания");
-            _faqPopup = CreatePopup("FAQ");
-
-            // ProgrammatorGrid сам ретраит UIDocument-инъекцию из Update, поэтому
-            // ручной Inject здесь не обязателен и безопасен при любом состоянии
-            // текущего контейнера.
-            _programmatorGrid = gameObject.AddComponent<ProgrammatorGrid>();
-
-            root.Add(_respawnPopup);
-            root.Add(_buildingsPopup);
-            root.Add(_faqPopup);
-
-            CreateRespawnButton(root, () => _respawnPopup.style.display = DisplayStyle.Flex);
-            CreateMyBuildingsButton(root, () => _buildingsPopup.style.display = DisplayStyle.Flex);
-            CreateFaqButton(root, () => _faqPopup.style.display = DisplayStyle.Flex);
-            CreateProgrammatorButton(root, () => _programmatorGrid.Show());
-        }
-
-        private VisualElement CreatePopup(string title)
-        {
-            var popup = new VisualElement();
-            popup.AddToClassList("popup-overlay");
-            popup.style.display = DisplayStyle.None;
-
-            var dimmer = new VisualElement();
-            dimmer.pickingMode = PickingMode.Ignore;
-            dimmer.AddToClassList("popup-dimmer");
-            popup.Add(dimmer);
-
-            var panel = new VisualElement();
-            panel.AddToClassList("popup-panel");
-
-            var titleLabel = new Label(title);
-            titleLabel.AddToClassList("popup-title");
-            panel.Add(titleLabel);
-
-            var closeBtn = new Button(() => popup.style.display = DisplayStyle.None);
-            closeBtn.text = "Закрыть";
-            closeBtn.AddToClassList("popup-close-btn");
-
-            panel.Add(closeBtn);
-            popup.Add(panel);
-            return popup;
-        }
-
-        private VisualElement CreateRespawnPopup()
-        {
-            var popup = new VisualElement();
-            popup.AddToClassList("popup-overlay");
-            popup.style.display = DisplayStyle.None;
-
-            var dimmer = new VisualElement();
-            dimmer.pickingMode = PickingMode.Ignore;
-            dimmer.AddToClassList("popup-dimmer");
-            popup.Add(dimmer);
-
-            var panel = new VisualElement();
-            panel.AddToClassList("popup-panel");
-
-            var titleLabel = new Label("Респавн");
-            titleLabel.AddToClassList("popup-title");
-            panel.Add(titleLabel);
-
-            var btnRow = new VisualElement();
-            btnRow.AddToClassList("popup-btn-row");
-
-            var okBtn = new Button(() =>
-            {
-                var ns = _networkService;
-                ns?.SendAction(new SuicidePacket());
-                popup.style.display = DisplayStyle.None;
-            });
-            okBtn.text = "ОК";
-            okBtn.AddToClassList("popup-btn");
-            btnRow.Add(okBtn);
-
-            var backBtn = new Button(() => popup.style.display = DisplayStyle.None);
-            backBtn.text = "Назад";
-            backBtn.AddToClassList("popup-btn");
-            btnRow.Add(backBtn);
-
-            panel.Add(btnRow);
-            popup.Add(panel);
-            return popup;
-        }
-
-        private void CreateRespawnButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "Респавн";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.right = 10 + ((100 + 6) * 2);
-            root.Add(btn);
-        }
-
-        private void CreateMyBuildingsButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "Мои здания";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.right = 10 + (100 + 6);
-            root.Add(btn);
-        }
-
-        private void CreateFaqButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "FAQ";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-btn-top-row");
-            btn.style.right = 10;
-            root.Add(btn);
-        }
-
-        private void CreateMissionPanel(VisualElement root)
-        {
-            _missionPanel = new VisualElement();
-            _missionPanel.name = "MissionPanel";
-            _missionPanel.AddToClassList("hud-mission-panel");
-            _missionPanel.style.display = DisplayStyle.None;
-
-            _missionTitleLabel = new Label("---");
-            _missionTitleLabel.AddToClassList("hud-stat");
-            _missionTitleLabel.AddToClassList("hud-mission-title");
-            _missionPanel.Add(_missionTitleLabel);
-
-            _missionDescLabel = new Label(string.Empty);
-            _missionDescLabel.AddToClassList("hud-stat");
-            _missionDescLabel.AddToClassList("hud-stat-wrap");
-            _missionDescLabel.AddToClassList("hud-mission-desc");
-            _missionPanel.Add(_missionDescLabel);
-
-            var progressRow = new VisualElement();
-            progressRow.AddToClassList("hud-mission-progress-row");
-
-            _missionProgressLabel = new Label("0/0");
-            _missionProgressLabel.AddToClassList("hud-stat");
-            _missionProgressLabel.AddToClassList("hud-mission-progress-label");
-            progressRow.Add(_missionProgressLabel);
-
-            var barBg = new VisualElement();
-            barBg.AddToClassList("hud-mission-progress-bar");
-
-            _missionProgressFill = new VisualElement();
-            _missionProgressFill.AddToClassList("hud-mission-progress-fill");
-            barBg.Add(_missionProgressFill);
-
-            progressRow.Add(barBg);
-            _missionPanel.Add(progressRow);
-
-            root.Add(_missionPanel);
-        }
-
-        private void UpdateMissionPanel()
-        {
-            var stats = _model;
-            if (stats == null)
-            {
-                return;
-            }
-
-            if (stats.IsMissionActive)
-            {
-                _missionPanel!.style.display = DisplayStyle.Flex;
-            }
-            else
-            {
-                _missionPanel!.style.display = DisplayStyle.None;
-                return;
-            }
-
-            _missionTitleLabel!.text = stats.MissionTitle ?? "Миссия";
-            _missionDescLabel!.text = stats.MissionDescription ?? string.Empty;
-
-            float pct = stats.MissionMaxProgress > 0 ? (float)stats.MissionProgress / stats.MissionMaxProgress : 0f;
-            _missionProgressFill!.style.width = new Length(Mathf.Clamp01(pct) * 100, LengthUnit.Percent);
-            _missionProgressLabel!.text = $"{stats.MissionProgress:N0}/{stats.MissionMaxProgress:N0}";
-        }
-
-        private void CreateProgrammatorButton(VisualElement root, System.Action onClick)
-        {
-            var btn = new Button(onClick);
-            btn.text = "Программатор";
-            btn.AddToClassList("hud-btn-action");
-            btn.AddToClassList("hud-programmator-button");
-            root.Add(btn);
+            _skillGrid.UpdateSkillProgress(skill, current, max);
         }
     }
 }

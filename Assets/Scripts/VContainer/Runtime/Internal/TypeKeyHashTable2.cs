@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class TypeKeyHashTable2<TValue>
+    sealed class TypeKeyHashTable2<TValue>
     {
-        private struct Bucket
+        struct Bucket
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public static uint DistAndFingerPrintFromHash(int hash)
@@ -19,7 +19,7 @@ namespace VContainer.Internal
 
             /// <summary>
             /// upper 3 bytes: dist (distance of , also known PSL (probe sequence length))
-            /// lower 1 bytes: fingerprint (lower 1 byte of hash code).
+            /// lower 1 bytes: fingerprint (lower 1 byte of hash code)
             /// </summary>
             public uint DistAndFingerPrint;
 
@@ -29,9 +29,11 @@ namespace VContainer.Internal
             public int EntryIndex;
         }
 
-        private readonly Bucket[] buckets;
-        private readonly KeyValuePair<Type, TValue>[] entries;
-        private readonly int indexFor;
+        readonly Bucket[] buckets;
+        readonly KeyValuePair<Type, TValue>[] entries;
+        readonly int indexFor;
+
+        int insertedEntryLength;
 
         public TypeKeyHashTable2(KeyValuePair<Type, TValue>[] values, float loadFactor = 0.75f)
         {
@@ -81,14 +83,14 @@ namespace VContainer.Internal
                     value = default;
                     return false;
                 }
-
                 distAndFingerPrint += Bucket.DistOne;
                 bucketIndex = NextBucketIndex(bucketIndex);
                 bucket = buckets[bucketIndex];
             }
+
         }
 
-        private void Insert(KeyValuePair<Type, TValue> entry, int entryIndex)
+        void Insert(KeyValuePair<Type, TValue> entry, int entryIndex)
         {
             var hash = RuntimeHelpers.GetHashCode(entry.Key);
             var distAndFingerPrint = Bucket.DistAndFingerPrintFromHash(hash);
@@ -104,15 +106,16 @@ namespace VContainer.Internal
                     throw new InvalidOperationException($"The key already exists: {entry.Key}");
                 }
 
+                //
                 bucketIndex = NextBucketIndex(bucketIndex);
-                distAndFingerPrint += Bucket.DistOne;
+                distAndFingerPrint += Bucket.DistOne; //
             }
 
             entries[entryIndex] = entry;
             SetBucketAt(bucketIndex, new Bucket
             {
                 DistAndFingerPrint = distAndFingerPrint,
-                EntryIndex = entryIndex,
+                EntryIndex = entryIndex
             });
         }
 
@@ -122,7 +125,7 @@ namespace VContainer.Internal
         /// <param name="bucket"></param>
         /// <param name="i"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void SetBucketAt(int i, Bucket bucket)
+        void SetBucketAt(int i, Bucket bucket)
         {
             while (buckets[i].DistAndFingerPrint != 0)
             {
@@ -131,12 +134,11 @@ namespace VContainer.Internal
                 bucket.DistAndFingerPrint += Bucket.DistOne;
                 i = NextBucketIndex(i);
             }
-
             buckets[i] = bucket;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int NextBucketIndex(int i)
+        int NextBucketIndex(int i)
         {
             return i + 1 >= buckets.Length ? 0 : i + 1;
         }

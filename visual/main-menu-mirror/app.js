@@ -1,3 +1,118 @@
+
+/* ----------------------------------------------------
+   Тосты — короткий ответ системы
+
+   Заменили 8 вызовов alert(). alert() — окно операционной системы: его
+   нельзя оформить, нельзя перенести в UI Toolkit (там его нет вовсе) и он
+   останавливает страницу целиком. Восемь действий получали ответ, которого
+   у клиента быть не может.
+
+   Тон и голос задаются ОДНИМ вызовом, поэтому вид и звук ответа не могут
+   разойтись — тот же приём, что у data-sfx.
+   ---------------------------------------------------- */
+
+/* Текст тоста — по ключу, как весь остальной текст.
+
+   Дыра, которую я сам и проделал: заменяя alert(), вписал восемь русских
+   строк прямо в код — через час после того, как закрыл ровно эту дыру в
+   разметке. Проверка «текст без ключа» смотрела только в index.html, и
+   строка в JS не выглядела как интерфейс. Теперь смотрит и сюда.
+
+   {0} в значении подставляется позиционно — так же, как string.Format в
+   LocalizationService игры. Порядок подстановок переводчик менять вправе:
+   в другом языке дополнение может стоять перед подлежащим. */
+function t(key, ...args) {
+  const dict = window.i18nProbe && window.i18nProbe.DICT;
+  let value = key;
+  if (dict) {
+    const found = dict.game[key] !== undefined ? dict.game[key] : dict.mirror[key];
+    if (found !== undefined) value = found;
+  }
+  return value.replace(/\{(\d+)\}/g, (m, i) => (args[i] !== undefined ? args[i] : m));
+}
+
+const TOAST_TONE = {
+  ok:    { mark: '✓', voice: 'confirm' },
+  alert: { mark: '!', voice: 'alert' },
+  info:  { mark: '·', voice: 'click' },
+};
+
+function showToast(text, tone = 'info', ms = 3600) {
+  const layer = document.getElementById('toastLayer');
+  if (!layer) return;
+  const spec = TOAST_TONE[tone] || TOAST_TONE.info;
+
+  const el = document.createElement('div');
+  el.className = `toast toast--${tone} toast--enter`;
+  const mark = document.createElement('span');
+  mark.className = 'toast-mark';
+  mark.textContent = spec.mark;
+  // Значок — обозначение состояния, а не текст: переводу не подлежит.
+  mark.setAttribute('translate', 'no');
+  const body = document.createElement('span');
+  // Тост — коробка, которой разрешено расти вниз: текст ответа обязан
+  // читаться целиком, а обрезать его многоточием некуда — полного текста
+  // больше нигде нет. Объявление обязательно: необъявленных узлов в системе
+  // не бывает (см. css/text.css).
+  body.dataset.fit = 'wrap';
+  body.textContent = text;
+  el.append(mark, body);
+  layer.appendChild(el);
+
+  // Стартовое состояние нужно ЗАФИКСИРОВАТЬ до снятия класса, иначе браузер
+  // увидит только конечные значения и покажет тост рывком. Раньше здесь был
+  // requestAnimationFrame — и тост не появлялся вовсе, если вкладка в фоне:
+  // фоновым вкладкам браузер останавливает кадры, и класс не снимался никогда.
+  // Чтение offsetWidth заставляет пересчитать раскладку немедленно и от кадров
+  // не зависит. В UI Toolkit кадров тоже нет — там это schedule, — так что
+  // отвязка от rAF заодно приближает поведение к переносимому.
+  void el.offsetWidth;
+  el.classList.remove('toast--enter');
+  playSound(spec.voice);
+
+  setTimeout(() => {
+    el.classList.add('toast--enter');
+    el.addEventListener('transitionend', () => el.remove(), { once: true });
+  }, ms);
+  return el;
+}
+
+/* ============================================================================
+   ДЕТЕРМИНИРОВАННАЯ СЛУЧАЙНОСТЬ
+   ============================================================================
+
+   Сетка шахты раскрашивается случайно, и это правильно: макет показывает
+   породу, а не одну конкретную раскладку. Но пока источник случайности —
+   Math.random(), две загрузки страницы дают РАЗНЫЕ цвета у 267 плиток, и
+   значит никакая проверка вида через перезагрузку невозможна: любое сравнение
+   тонет в шуме, который не имеет отношения к правке.
+
+   Измерено: полный откат всех изменений давал 305 расхождений вычисленных
+   стилей против снимка до них — при нулевом расхождении между двумя снимками
+   внутри одной загрузки. То есть шумел не измеритель, а страница.
+
+   Отсюда: своё зерно вместо Math.random(). Раскладка остаётся произвольной на
+   вид, но воспроизводимой. Зерно меняется вызовом reseed() — тогда видно
+   другую породу, когда это нужно глазу, а не проверке.
+
+   Алгоритм — mulberry32: тридцать символов, равномерное распределение,
+   не требует библиотеки. Криптостойкость здесь не нужна и не заявляется.
+   ============================================================================ */
+let __seed = 20260830;
+
+function rand() {
+  __seed |= 0;
+  __seed = (__seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(__seed ^ (__seed >>> 15), 1 | __seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function reseed(seed) {
+  __seed = seed === undefined ? (Date.now() | 0) : seed;
+  if (typeof renderMineGrid === 'function') renderMineGrid();
+}
+
 // ----------------------------------------------------
 // FODINAE — Interactive Game Prototype & State Machine
 // ----------------------------------------------------
@@ -7,6 +122,45 @@ let isSfxOn = true;
 let isGameUpdated = false;
 
 // Состояние игрока и экспедиции
+/* ----------------------------------------------------------------------
+   ГЕОМЕТРИЯ ПО ДАННЫМ
+
+   Семь чисел жили в разметке как style="width:71%". Это единственный вид
+   инлайна, который системой допущен: значение считает программа. Но пока
+   оно набрано в разметке РУКАМИ, оно не считается — оно дублируется, и
+   дубль расходится. Так и вышло: полоса переподключения показывала 35%
+   при подписи «ПОПЫТКА 04 / 10», то есть 40%. Расхождение прожило до тех
+   пор, пока числа не свели к одному источнику.
+
+   Точки радара — тоже данные: положение объекта в секторе. Заглушка, но
+   честная, по образцу DummyConnection.
+   ---------------------------------------------------------------------- */
+
+const networkState = { attempt: 4, attemptLimit: 10 };
+
+const radarContacts = [
+  { top: 35, left: 42, tone: null },
+  { top: 60, left: 70, tone: 'danger' },
+  { top: 50, left: 50, tone: 'neutral' },
+];
+
+function renderDataGeometry() {
+  const pct = (a, b) => `${Math.round((a / b) * 100)}%`;
+
+  const mission = document.getElementById('missionFill');
+  if (mission) mission.style.width = pct(playerState.missionBlocks, playerState.missionTarget);
+
+  const retry = document.getElementById('reconnectFill');
+  if (retry) retry.style.width = pct(networkState.attempt, networkState.attemptLimit);
+
+  document.querySelectorAll('.radar-dot').forEach((dot, i) => {
+    const c = radarContacts[i];
+    if (!c) return;
+    dot.style.top = c.top + '%';
+    dot.style.left = c.left + '%';
+  });
+}
+
 const playerState = {
   nickname: 'ШАХТЁР-774 [DVM]',
   token: 'fdn_tok_9948a204e18',
@@ -39,7 +193,12 @@ function initAudio() {
 function toggleAudio() {
   isSfxOn = !isSfxOn;
   const el = document.getElementById('sfxStatus');
-  if (el) el.innerText = isSfxOn ? '🔊 ЗВУК' : '🔇 ВЫКЛ';
+  // innerText здесь стирал <svg> из разметки и подставлял эмодзи — то есть
+  // код молча отменял решение, ради которого спрайт и заводили.
+  if (el) {
+    el.innerHTML = '<svg class="fdn-icon" viewBox="0 0 24 24" aria-hidden="true">'
+      + '<use href="#i-scan"/></svg> ' + (isSfxOn ? 'ЗВУК' : 'ВЫКЛ');
+  }
   playSound('click');
 }
 
@@ -124,7 +283,6 @@ let descentInterval = null;
 
 function switchViewState(state) {
   currentMode = state;
-  playSound('click');
 
   // Подсветка dev-кнопок идёт по data-state, а не по разбору русского текста
   // кнопки: подпись — это контент, а не идентификатор.
@@ -184,7 +342,6 @@ function startExperienceFromSplash() {
 }
 
 function switchAuthTab(tab) {
-  playSound('click');
   currentAuthTab = tab;
   const tabLogin = document.getElementById('authTabLogin');
   const tabRegister = document.getElementById('authTabRegister');
@@ -195,20 +352,19 @@ function switchAuthTab(tab) {
   if (tab === 'login') {
     tabLogin?.classList.add('active');
     tabRegister?.classList.remove('active');
-    if (loginForm) loginForm.style.display = 'flex';
-    if (regForm) regForm.style.display = 'none';
+    loginForm?.classList.remove('is-hidden');
+    regForm?.classList.add('is-hidden');
     if (btnSubmit) btnSubmit.innerHTML = '<span>ВОЙТИ В МИР FODINAE</span><span>↗</span>';
   } else {
     tabLogin?.classList.remove('active');
     tabRegister?.classList.add('active');
-    if (loginForm) loginForm.style.display = 'none';
-    if (regForm) regForm.style.display = 'flex';
+    loginForm?.classList.add('is-hidden');
+    regForm?.classList.remove('is-hidden');
     if (btnSubmit) btnSubmit.innerHTML = '<span>ЗАРЕГИСТРИРОВАТЬСЯ В ЭКСПЕДИЦИИ</span><span>↗</span>';
   }
 }
 
 function togglePasswordVisibility(fieldId) {
-  playSound('click');
   const field = document.getElementById(fieldId);
   if (!field) return;
   field.type = field.type === 'password' ? 'text' : 'password';
@@ -246,7 +402,6 @@ function generateSeededCallsign() {
 }
 
 function submitAuthForm() {
-  playSound('confirm');
   let nick = '';
   let pass = '';
 
@@ -260,11 +415,11 @@ function submitAuthForm() {
     const acceptEula = document.getElementById('authAcceptEula')?.checked;
 
     if (!acceptEula) {
-      alert('Для входа необходимо принять Регламент Экспедиции и EULA.');
+      showToast(t('gateway.toast.eula_required'), 'alert');
       return;
     }
     if (pass !== confirmPass) {
-      alert('Внимание: Пароли не совпадают!');
+      showToast(t('gateway.toast.password_mismatch'), 'alert');
       return;
     }
   }
@@ -296,12 +451,11 @@ function switchAccountFromProfile() {
 }
 
 function copyTokenToClipboard() {
-  playSound('click');
   const tok = document.getElementById('profileTokenInput')?.value || playerState.token;
   navigator.clipboard.writeText(tok).then(() => {
-    alert(`Ключ доступа ${tok} скопирован в буфер обмена!`);
+    showToast(t('gateway.toast.token_copied', tok), 'ok');
   }).catch(() => {
-    alert(`Ключ доступа: ${tok}`);
+    showToast(t('gateway.toast.token_shown', tok), 'info');
   });
 }
 
@@ -326,7 +480,7 @@ function updateOnboardingStepUI() {
   const nextBtn = document.getElementById('btnObNext');
   const title = document.getElementById('onboardingTitle');
 
-  if (prevBtn) prevBtn.style.display = currentObStep > 1 ? 'block' : 'none';
+  prevBtn?.classList.toggle('is-hidden', currentObStep <= 1);
 
   if (currentObStep === 1) {
     if (title) title.innerText = 'Шаг 1: Доступность и визуальный комфорт';
@@ -341,7 +495,6 @@ function updateOnboardingStepUI() {
 }
 
 function nextOnboardingStep() {
-  playSound('click');
   if (currentObStep < 3) {
     currentObStep++;
     updateOnboardingStepUI();
@@ -352,7 +505,6 @@ function nextOnboardingStep() {
 }
 
 function prevOnboardingStep() {
-  playSound('click');
   if (currentObStep > 1) {
     currentObStep--;
     updateOnboardingStepUI();
@@ -360,22 +512,34 @@ function prevOnboardingStep() {
 }
 
 function applyUiScale(val) {
-  playSound('click');
   document.documentElement.style.setProperty('--ui-scale', val);
 }
 
 function applyColorblindTheme(val) {
-  playSound('click');
   document.body.classList.remove('theme-deuteranopia', 'theme-protanopia', 'theme-tritanopia', 'theme-high-contrast');
   if (val !== 'none') {
     document.body.classList.add(`theme-${val}`);
   }
 }
 
+/* Канонический контракт — атрибут на <html> (css/tokens.css §3, css/base.css).
+   Раньше здесь вешался класс .reduce-motion на <body>, которого не ловил никто:
+   тумблер в настройках не делал ничего. Три записи контракта сведены к одной. */
 function toggleReduceMotion(enabled) {
-  playSound('click');
-  if (enabled) document.body.classList.add('reduce-motion');
-  else document.body.classList.remove('reduce-motion');
+  document.documentElement.setAttribute('data-reduce-motion', enabled ? 'true' : 'false');
+}
+
+/* Системная настройка гасит шкалу длительностей (tokens.css §3), пользовательский
+   тумблер останавливает бесконечные циклы (base.css) — это разные средства, и
+   поэтому оба нужны. Но стартовать тумблер обязан из системного значения, иначе
+   при включённой настройке ОС он показывает «выключено» и на вид ничего не делает. */
+function initReduceMotion() {
+  const select = document.getElementById('reduceMotionSelect');
+  const system = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.documentElement.setAttribute('data-reduce-motion', system ? 'true' : 'false');
+  if (select) {
+    select.value = system ? 'yes' : 'no';
+  }
 }
 
 // ----------------------------------------------------
@@ -383,7 +547,6 @@ function toggleReduceMotion(enabled) {
 // ----------------------------------------------------
 function handleDeployClick() {
   if (!isGameUpdated) {
-    playSound('alert');
     openMandatoryUpdateModal();
   } else {
     startDescentSequence();
@@ -456,23 +619,25 @@ function initMineStrataGrid() {
     for (let c = 0; c < cols; c++) {
       const tile = document.createElement('div');
       tile.className = 'mine-tile';
+      tile.dataset.sfx = 'drill';
 
-      const rand = Math.random();
+      const roll = rand();
       if (r < 3) {
         tile.classList.add('basalt');
-        if (rand > 0.85) tile.classList.add('ore-titanium');
+        if (roll > 0.85) tile.classList.add('ore-titanium');
       } else if (r < 9) {
         tile.classList.add('redrock');
-        if (rand > 0.82) tile.classList.add('ore-titanium');
-        else if (rand > 0.74) tile.classList.add('ore-gold');
+        if (roll > 0.82) tile.classList.add('ore-titanium');
+        else if (roll > 0.74) tile.classList.add('ore-gold');
       } else {
         tile.classList.add('redrock');
-        if (rand > 0.88) tile.classList.add('lava-crack');
-        else if (rand > 0.76) tile.classList.add('ore-gold');
+        if (roll > 0.88) tile.classList.add('lava-crack');
+        else if (roll > 0.76) tile.classList.add('ore-gold');
       }
 
       if ((r === 6 || r === 7) && (c === 11 || c === 12)) {
         tile.className = 'mine-tile mined-empty';
+        delete tile.dataset.sfx;
       }
 
       tile.addEventListener('click', () => mineTileBlock(tile));
@@ -484,8 +649,6 @@ function initMineStrataGrid() {
 function mineTileBlock(tile) {
   if (tile.classList.contains('mined-empty')) return;
 
-  playSound('drill');
-
   let gainedOre = null;
   if (tile.classList.contains('ore-titanium')) gainedOre = 'Титан';
   else if (tile.classList.contains('ore-gold')) gainedOre = 'Золото';
@@ -495,6 +658,7 @@ function mineTileBlock(tile) {
   }
 
   tile.className = 'mine-tile mined-empty';
+  delete tile.dataset.sfx;
 
   if (playerState.missionBlocks < playerState.missionTarget) {
     playerState.missionBlocks++;
@@ -518,7 +682,6 @@ function updateBasketUI() {
 
 function toggleAutoDig() {
   playerState.isAutoDig = !playerState.isAutoDig;
-  playSound('click');
   const btn = document.getElementById('btnAutoDig');
   const led = document.getElementById('ledAutoDig');
   if (btn && led) {
@@ -537,7 +700,7 @@ function autoDigLoop() {
   if (!playerState.isAutoDig) return;
   const tiles = Array.from(document.querySelectorAll('.mine-tile:not(.mined-empty)'));
   if (tiles.length > 0) {
-    const target = tiles[Math.floor(Math.random() * tiles.length)];
+    const target = tiles[Math.floor(rand() * tiles.length)];
     mineTileBlock(target);
   }
   if (playerState.isAutoDig) setTimeout(autoDigLoop, 550);
@@ -545,7 +708,6 @@ function autoDigLoop() {
 
 function toggleAggression() {
   playerState.isAggression = !playerState.isAggression;
-  playSound('alert');
   const btn = document.getElementById('btnAggression');
   const led = document.getElementById('ledAggression');
   if (btn && led) {
@@ -561,7 +723,6 @@ function toggleAggression() {
 
 function selectHotbarSlot(idx) {
   playerState.activeHotbarIndex = idx;
-  playSound('click');
   document.querySelectorAll('#hotbarSlotsWrap .hotbar-slot').forEach((slot, i) => {
     if (i === idx) slot.classList.add('active');
     else slot.classList.remove('active');
@@ -592,7 +753,6 @@ function updateHpUI() {
 }
 
 function claimBonus() {
-  playSound('confirm');
   playerState.money += 500;
   playerState.crystals += 25;
   document.getElementById('hudMoney').innerText = playerState.money.toLocaleString();
@@ -607,9 +767,22 @@ const inventoryItems = [
   { name: 'Титановый слиток', icon: '◆', count: 18, rarity: 'rare', desc: 'Очищенный титан с глубин -2 400 м. Необходим для крафта дронов.' },
   { name: 'Самородок золота', icon: '★', count: 6, rarity: 'rare', desc: 'Высокопроводящий металл для схем программатора.' },
   { name: 'Кристалл кварца', icon: '⌬', count: 32, rarity: 'normal', desc: 'Базовый минерал верхних горизонтов.' },
-  { name: 'Энергоячейка M1', icon: '🔋', count: 4, rarity: 'normal', desc: 'Восстанавливает 100% энергии реактора.' },
+  { name: 'Энергоячейка M1', icon: '#i-cell', count: 4, rarity: 'normal', desc: 'Восстанавливает 100% энергии реактора.' },
   { name: 'Гео-динамит T1', icon: '⚑', count: 8, rarity: 'rare', desc: 'Взрывчатка для направленной расчистки рудных пластов.' }
 ];
+
+/* Значок предмета: геометрический глиф либо ссылка на спрайт (#i-*).
+
+   Правило проекта записано словами в index.html: цветные эмодзи убраны,
+   потому что рендерятся по-разному на разных платформах; моноширинные
+   геометрические глифы оставлены намеренно — они наследуют currentColor.
+   Записанное словами не соблюдалось: 🔋 пережил замену. Теперь у данных есть
+   способ сослаться на спрайт, и повода тянуть эмодзи не осталось. */
+function iconMarkup(icon) {
+  return icon.startsWith('#')
+    ? `<svg class="fdn-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="${icon}"/></svg>`
+    : icon;
+}
 
 function initFullInventoryGrid() {
   const container = document.getElementById('fullInventoryGrid');
@@ -621,12 +794,13 @@ function initFullInventoryGrid() {
   for (let i = 0; i < totalSlots; i++) {
     const cell = document.createElement('div');
     cell.className = 'inv-grid-cell';
+    cell.dataset.sfx = 'click';
 
     const item = inventoryItems[i];
     if (item) {
       cell.classList.add(item.rarity);
       cell.innerHTML = `
-        <span class="inv-cell-icon">${item.icon}</span>
+        <span class="inv-cell-icon">${iconMarkup(item.icon)}</span>
         <span class="inv-cell-count">${item.count}</span>
       `;
       cell.addEventListener('click', () => selectInventoryItem(item, cell));
@@ -654,7 +828,6 @@ function selectInventoryItem(item, cell) {
 }
 
 function useCurrentItem() {
-  playSound('confirm');
 }
 
 // ----------------------------------------------------
@@ -670,11 +843,12 @@ function initProgrammatorGrid() {
   for (let i = 0; i < totalCells; i++) {
     const cell = document.createElement('div');
     cell.className = 'prog-grid-cell';
+    cell.dataset.sfx = 'click';
     cell.innerText = '·';
     cell.addEventListener('click', () => {
       playSound('click');
       cell.innerText = playerState.activeProgCommand.split(' ')[0];
-      cell.style.color = 'var(--accent-cyan)';
+      cell.classList.add('prog-grid-cell--filled');
     });
     container.appendChild(cell);
   }
@@ -682,26 +856,22 @@ function initProgrammatorGrid() {
 
 function selectProgCommand(cmd) {
   playerState.activeProgCommand = cmd;
-  playSound('click');
 }
 
 function clearProgrammatorGrid() {
-  playSound('click');
   document.querySelectorAll('.prog-grid-cell').forEach(cell => {
     cell.innerText = '·';
-    cell.style.color = 'var(--text-tertiary)';
-    cell.classList.remove('active-step');
+    cell.classList.remove('prog-grid-cell--filled', 'active-step');
   });
 }
 
 function runProgrammatorExec() {
-  playSound('confirm');
   stopProgrammatorExec();
   playerState.isProgRunning = true;
   const status = document.getElementById('progStatus');
   if (status) {
     status.innerText = 'ВЫПОЛНЕНИЕ...';
-    status.style.color = 'var(--accent-gold)';
+    status.dataset.state = 'running';
   }
 
   const cells = Array.from(document.querySelectorAll('.prog-grid-cell'));
@@ -725,7 +895,7 @@ function stopProgrammatorExec() {
   const status = document.getElementById('progStatus');
   if (status) {
     status.innerText = 'ОСТАНОВЛЕН';
-    status.style.color = 'var(--state-ok)';
+    status.dataset.state = 'stopped';
   }
   document.querySelectorAll('.prog-grid-cell').forEach(c => c.classList.remove('active-step'));
 }
@@ -734,7 +904,6 @@ function stopProgrammatorExec() {
 // Чат
 // ----------------------------------------------------
 function switchChatTab(btn, tab) {
-  playSound('click');
   document.querySelectorAll('.chat-tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
@@ -782,7 +951,6 @@ function escapeHtml(text) {
 function buyItem(name, cost) {
   if (playerState.money >= cost) {
     playerState.money -= cost;
-    playSound('confirm');
     document.getElementById('hudMoney').innerText = playerState.money.toLocaleString();
   } else {
     playSound('alert');
@@ -802,7 +970,6 @@ function sellAllOre() {
 // Пауза и Реконнект
 // ----------------------------------------------------
 function resumeGameFromPause() {
-  playSound('confirm');
   switchViewState('ingame');
 }
 
@@ -822,14 +989,13 @@ function startReconnectCount() {
 }
 
 function startOfflineDummy() {
-  alert('Запущен Dummy Offline Transport: Локальный мир без подключения к сети.');
+  showToast(t('network.toast.dummy_transport'), 'info');
   switchViewState('ingame');
 }
 
 function confirmQuit() {
-  playSound('click');
   if (confirm('Выйти из игры на рабочий стол?')) {
-    alert('Клиент закрыт.');
+    showToast(t('mainmenu.toast.client_closed'), 'info');
   }
 }
 
@@ -847,7 +1013,6 @@ function getOpenModal() {
 }
 
 function openModal(id) {
-  playSound('click');
   const el = document.getElementById(id);
   if (!el) return;
 
@@ -866,7 +1031,6 @@ function openModal(id) {
 }
 
 function closeModal(id) {
-  playSound('click');
   const el = id ? document.getElementById(id) : getOpenModal();
   if (!el) return;
 
@@ -907,12 +1071,10 @@ document.addEventListener('click', event => {
 });
 
 function openMandatoryUpdateModal() {
-  playSound('alert');
   openModal('mandatoryUpdateModal');
 }
 
 function switchSettingsTab(tabId, trigger) {
-  playSound('hover');
   const container = trigger.closest('.fdn-settings-layout');
   if (!container) return;
   container.querySelectorAll('.fdn-settings-tab').forEach(b => b.classList.remove('active'));
@@ -924,7 +1086,6 @@ function switchSettingsTab(tabId, trigger) {
 }
 
 function selectServerDetail(row, name, region, online, ping, depth, seed, hazard) {
-  playSound('click');
   row.parentElement.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
   row.classList.add('selected');
 
@@ -936,7 +1097,6 @@ function selectServerDetail(row, name, region, online, ping, depth, seed, hazard
 }
 
 function runRepairLog() {
-  playSound('click');
   const log = document.getElementById('repairLogBox');
   if (!log) return;
   log.innerHTML = '<div class="term-row info">[00:00:01] Запуск глубокого сканирования кэша и диска...</div>';
@@ -947,19 +1107,18 @@ function runRepairLog() {
     log.innerHTML += '<div class="term-row ok">[00:00:03] FMOD Audio банки проверены: Синхронизированы с сервером.</div>';
   }, 800);
   setTimeout(() => {
-    log.innerHTML += '<div class="term-row ok" style="font-weight:700;">[00:00:04] КЛИЕНТ ПОЛНОСТЬЮ ГОТОВ К РАБОТЕ.</div>';
+    log.innerHTML += '<div class="term-row ok term-row--strong">[00:00:04] КЛИЕНТ ПОЛНОСТЬЮ ГОТОВ К РАБОТЕ.</div>';
     playSound('confirm');
   }, 1200);
 }
 
 function startUpdateDownloadProcess() {
-  playSound('click');
   const box = document.getElementById('updateDownloadBlock');
   const bar = document.getElementById('updateProgressBar');
   const percent = document.getElementById('updatePercent');
   const btn = document.getElementById('btnStartUpdate');
 
-  if (box) box.style.display = 'flex';
+  box?.classList.remove('is-hidden');
   if (btn) {
     btn.disabled = true;
     btn.innerText = 'СКАЧИВАНИЕ ПАТЧА...';
@@ -978,10 +1137,10 @@ function startUpdateDownloadProcess() {
         btn.innerText = 'ПЕРЕЗАПУСТИТЬ КЛИЕНТ';
         btn.disabled = false;
         btn.onclick = () => {
-          alert('Клиент успешно обновлен до версии v0.9.0! Доступ к шахтам открыт.');
+          showToast(t('mainmenu.toast.updated'), 'ok');
           closeModal('mandatoryUpdateModal');
           const banner = document.getElementById('updateAlertBanner');
-          if (banner) banner.style.display = 'none';
+          banner?.classList.add('is-hidden');
           const fLink = document.getElementById('footerVersionStatus');
           if (fLink) {
             fLink.innerText = 'ВЕРСИЯ КЛИЕНТА 0.9.0 (АКТУАЛЬНА)';
@@ -1028,16 +1187,74 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+
+/* ----------------------------------------------------
+   Причина и следствие: отклик на жест
+   ----------------------------------------------------
+   Раньше это был рукописный список из десяти селекторов, выполняемый один раз
+   на DOMContentLoaded, плюс полсотни вызовов playSound, разбросанных по
+   обработчикам. У такого устройства два изъяна, и оба уже сработали:
+
+     • Список — вторая, ручная копия ответа на вопрос «что является
+       интерактивом». Он молча расходился с разметкой: крестик модалки, строки
+       списка серверов и ползунки были немы, хотя нажимаются.
+     • Элементы, созданные позже (сетка шахты, инвентарь, программатор),
+       слушателя не получали вовсе — их не существовало в момент привязки.
+
+   Теперь причина объявлена там, где возникает: атрибут data-sfx на самом
+   элементе. Его читают ОБА потребителя — этот слой и CSS в components.css,
+   поэтому вид и звук состояния разойтись не могут. Слушателей два на весь
+   документ, они делегированные, и им безразлично, когда элемент появился.
+
+   Голос выбирается ролью действия, а не местом в коде:
+     click    обычное действие
+     confirm  принятие, после которого что-то произошло
+     alert    потеря, отключение, разрушение
+     drill    спуск в шахту — единственное событие своего рода
+   Наведение озвучивается одинаково для всего, что вообще отзывается. */
+
+function bindInteractionSound() {
+  const voiceOf = target => {
+    const el = target.closest?.('[data-sfx]');
+    return el && !isInert(el) ? el.dataset.sfx : null;
+  };
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest?.('[data-sfx]');
+    if (!el || isInert(el)) return;
+    // mouseover всплывает и внутри элемента; интересует только вход в него.
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return;
+    playSound('hover');
+  });
+
+  document.addEventListener('click', e => {
+    const voice = voiceOf(e.target);
+    if (voice) playSound(voice);
+  });
+}
+
+/** Выключенный элемент не отзывается ни видом, ни звуком. */
+function isInert(el) {
+  return el.disabled === true || el.getAttribute('aria-disabled') === 'true';
+}
+
 // ----------------------------------------------------
 // Инициализация
 // ----------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+  initReduceMotion();
   generateSeededCallsign();
   initMineStrataGrid();
   initFullInventoryGrid();
   initProgrammatorGrid();
+  renderDataGeometry();
 
-  document.querySelectorAll('button, .btn-secondary-action, .side-icon-btn, .footer-action-link, .tab-item-btn, .user-pill, .chronicle-item, .news-ticker-wrap, .hotbar-slot, .dev-btn').forEach(el => {
-    el.addEventListener('mouseenter', () => playSound('hover'));
-  });
+  bindInteractionSound();
 });
+
+/* Переключатель детектора переполнения. Живёт в app.js, а не в i18n.js,
+   потому что это связь дев-панели с инструментом, а не сам инструмент. */
+function toggleOverflowDetector(el) {
+  const on = el.classList.toggle('active');
+  window.i18nProbe.setDetector(on);
+}

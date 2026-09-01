@@ -49,19 +49,19 @@ namespace VContainer.Unity
         }
 
         [SerializeField]
-        public ParentReference ParentReference;
+        public ParentReference parentReference;
 
         [SerializeField]
-        public bool AutoRun = true;
+        public bool autoRun = true;
 
         [SerializeField]
         protected List<GameObject> autoInjectGameObjects;
 
-        private string scopeName;
+        string scopeName;
 
-        private static readonly Stack<LifetimeScope> GlobalOverrideParents = new Stack<LifetimeScope>();
-        private static readonly Stack<IInstaller> GlobalExtraInstallers = new Stack<IInstaller>();
-        private static readonly object SyncRoot = new object();
+        static readonly Stack<LifetimeScope> GlobalOverrideParents = new Stack<LifetimeScope>();
+        static readonly Stack<IInstaller> GlobalExtraInstallers = new Stack<IInstaller>();
+        static readonly object SyncRoot = new object();
 
         public static LifetimeScope Create(IInstaller installer = null, string name = null)
         {
@@ -72,7 +72,6 @@ namespace VContainer.Unity
             {
                 newScope.localExtraInstallers.Add(installer);
             }
-
             gameObject.SetActive(true);
             return newScope;
         }
@@ -98,14 +97,10 @@ namespace VContainer.Unity
         [Obsolete("LifetimeScope.Push is obsolete. Use LifetimeScope.Enqueue instead.", false)]
         public static ExtraInstallationScope Push(IInstaller installer) => Enqueue(installer);
 
-        public static LifetimeScope Find<T>(Scene scene)
-            where T : LifetimeScope
-            => Find(typeof(T), scene);
-        public static LifetimeScope Find<T>()
-            where T : LifetimeScope
-            => Find(typeof(T));
+        public static LifetimeScope Find<T>(Scene scene) where T : LifetimeScope => Find(typeof(T), scene);
+        public static LifetimeScope Find<T>() where T : LifetimeScope => Find(typeof(T));
 
-        private static LifetimeScope Find(Type type, Scene scene)
+        static LifetimeScope Find(Type type, Scene scene)
         {
             using (ListPool<GameObject>.Get(out var buffer))
             {
@@ -114,16 +109,13 @@ namespace VContainer.Unity
                 {
                     var found = gameObject.GetComponentInChildren(type) as LifetimeScope;
                     if (found != null)
-                    {
                         return found;
-                    }
                 }
             }
-
             return null;
         }
 
-        private static LifetimeScope Find(Type type)
+        static LifetimeScope Find(Type type)
         {
 #if UNITY_2022_1_OR_NEWER
             return (LifetimeScope)FindAnyObjectByType(type);
@@ -138,7 +130,7 @@ namespace VContainer.Unity
         public bool IsRoot => VContainerSettings.Instance != null &&
                               VContainerSettings.Instance.IsRootLifetimeScopeInstance(this);
 
-        private readonly List<IInstaller> localExtraInstallers = new List<IInstaller>();
+        readonly List<IInstaller> localExtraInstallers = new List<IInstaller>();
 
         protected virtual void Awake()
         {
@@ -150,21 +142,19 @@ namespace VContainer.Unity
                 scopeName = $"{name} ({gameObject.GetInstanceID()})";
 #endif
             }
-
             try
             {
-                if (AutoRun)
+                if (autoRun)
                 {
                     Build();
                 }
             }
-            catch (VContainerParentTypeReferenceNotFound) when (!IsRoot)
+            catch (VContainerParentTypeReferenceNotFound) when(!IsRoot)
             {
                 if (WaitingList.Contains(this))
                 {
                     throw;
                 }
-
                 EnqueueAwake(this);
             }
         }
@@ -174,9 +164,7 @@ namespace VContainer.Unity
             DisposeCore();
         }
 
-        protected virtual void Configure(IContainerBuilder builder)
-        {
-        }
+        protected virtual void Configure(IContainerBuilder builder) { }
 
         public void Dispose()
         {
@@ -201,18 +189,14 @@ namespace VContainer.Unity
         public void Build()
         {
             if (Parent == null)
-            {
                 Parent = GetRuntimeParent();
-            }
 
             if (Parent != null)
             {
                 if (VContainerSettings.Instance != null && Parent.IsRoot)
                 {
                     if (Parent.Container == null)
-                    {
                         Parent.Build();
-                    }
                 }
 
                 // ReSharper disable once PossibleNullReferenceException
@@ -239,7 +223,7 @@ namespace VContainer.Unity
             AwakeWaitingChildren(this);
         }
 
-        private void SetContainer(IObjectResolver container)
+        void SetContainer(IObjectResolver container)
         {
             Container = container;
             AutoInjectAll();
@@ -257,8 +241,7 @@ namespace VContainer.Unity
             {
                 child.localExtraInstallers.Add(installer);
             }
-
-            child.ParentReference.Object = this;
+            child.parentReference.Object = this;
             childGameObject.SetActive(true);
             return child;
         }
@@ -283,20 +266,17 @@ namespace VContainer.Unity
                 {
                     prefab.gameObject.SetActive(false);
                 }
-
                 var child = Instantiate(prefab, transform, false);
                 if (installer != null)
                 {
                     child.localExtraInstallers.Add(installer);
                 }
-
-                child.ParentReference.Object = this;
+                child.parentReference.Object = this;
                 if (wasActive)
                 {
                     prefab.gameObject.SetActive(true);
                     child.gameObject.SetActive(true);
                 }
-
                 return child;
             }
         }
@@ -305,7 +285,7 @@ namespace VContainer.Unity
             where TScope : LifetimeScope
             => CreateChildFromPrefab(prefab, new ActionInstaller(installation));
 
-        private void InstallTo(IContainerBuilder builder)
+        void InstallTo(IContainerBuilder builder)
         {
             Configure(builder);
 
@@ -313,7 +293,6 @@ namespace VContainer.Unity
             {
                 installer.Install(builder);
             }
-
             localExtraInstallers.Clear();
 
             lock (SyncRoot)
@@ -330,42 +309,34 @@ namespace VContainer.Unity
 
         protected virtual LifetimeScope FindParent() => null;
 
-        private LifetimeScope GetRuntimeParent()
+        LifetimeScope GetRuntimeParent()
         {
-            if (IsRoot)
-            {
-                return null;
-            }
+            if (IsRoot) return null;
 
-            if (ParentReference.Object != null)
-            {
-                return ParentReference.Object;
-            }
+            if (parentReference.Object != null)
+                return parentReference.Object;
 
             // Find via implementation
             var implParent = FindParent();
             if (implParent != null)
             {
-                if (ParentReference.Type != null && ParentReference.Type != implParent.GetType())
-                {
-                    UnityEngine.Debug.LogWarning($"FindParent returned {implParent.GetType()} but parent reference type is {ParentReference.Type}. This may be unintentional.");
+                if (parentReference.Type != null && parentReference.Type != implParent.GetType()) {
+                    UnityEngine.Debug.LogWarning($"FindParent returned {implParent.GetType()} but parent reference type is {parentReference.Type}. This may be unintentional.");
                 }
-
                 return implParent;
             }
 
             // Find in scene via type
-            if (ParentReference.Type != null && ParentReference.Type != GetType())
+            if (parentReference.Type != null && parentReference.Type != GetType())
             {
-                var found = Find(ParentReference.Type);
+                var found = Find(parentReference.Type);
                 if (found != null && found.Container != null)
                 {
                     return found;
                 }
-
                 throw new VContainerParentTypeReferenceNotFound(
-                    ParentReference.Type,
-                    $"{name} could not found parent reference of type : {ParentReference.Type}");
+                    parentReference.Type,
+                    $"{name} could not found parent reference of type : {parentReference.Type}");
             }
 
             lock (SyncRoot)
@@ -385,12 +356,10 @@ namespace VContainer.Unity
             return null;
         }
 
-        private void AutoInjectAll()
+        void AutoInjectAll()
         {
             if (autoInjectGameObjects == null)
-            {
                 return;
-            }
 
             foreach (var target in autoInjectGameObjects)
             {

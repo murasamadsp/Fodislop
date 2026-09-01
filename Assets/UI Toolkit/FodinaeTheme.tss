@@ -3,6 +3,7 @@
 @import url("../Resources/Styles/ThemeTokens.uss");
 @import url("../Resources/Styles/Animations.uss");
 @import url("../Resources/Styles/Theme.uss");
+@import url("../Resources/Styles/SciFi.uss");
 @import url("../Resources/Styles/Panel.uss");
 @import url("../Resources/Styles/Button.uss");
 @import url("../Resources/Styles/Input.uss");

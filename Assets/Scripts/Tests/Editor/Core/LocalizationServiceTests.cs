@@ -1,6 +1,10 @@
 #nullable enable
 
+using System;
+using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
+using Fodinae.Rendering;
 using NUnit.Framework;
 
 namespace Fodinae.Tests.Editor.Core
@@ -13,7 +17,7 @@ namespace Fodinae.Tests.Editor.Core
         [SetUp]
         public void SetUp()
         {
-            _locService = new LocalizationService(null);
+            _locService = new LocalizationService(new StubClientConfigManager());
         }
 
         [Test]
@@ -55,6 +59,20 @@ namespace Fodinae.Tests.Editor.Core
             const string template = "Online: {0}/{1}";
             string result = string.Format(template, 42, 100);
             Assert.That(result, Is.EqualTo("Online: 42/100"));
+        }
+        private sealed class StubClientConfigManager : IClientConfigManager
+        {
+            public ClientConfig Config { get; } = new();
+            public string ConfigFilePath => string.Empty;
+            public GraphicsPreset SelectedGraphicsPreset => GraphicsPreset.Custom;
+            public void EnsureInitialized() { }
+            public void MarkGraphicsAsCustom() { }
+            public void SelectGraphicsPreset(GraphicsPreset preset) { }
+            public void SetCustomGraphicsSettings(GraphicsQualitySettings settings) { }
+            public void UpdatePostProcessAndSave(Action<ClientConfig> update) => update(Config);
+            public void UpdateAndSave(Action<ClientConfig> update) => update(Config);
+            public void Load() { }
+            public void Save() { }
         }
     }
 }

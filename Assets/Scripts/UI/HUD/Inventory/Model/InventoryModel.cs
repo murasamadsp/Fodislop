@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core.Interfaces;
+using Fodinae.Core.Models;
 using Fodinae.Networking;
 using MinesServer.Networking.Client.Packets.Inventory;
 using UnityEngine;
@@ -10,7 +11,7 @@ using VContainer;
 
 namespace Fodinae.UI.HUD.Inventory.Model
 {
-    public class InventoryModel : Fodinae.UI.HUD.Inventory.Interfaces.IInventoryModel
+    public class InventoryModel : Fodinae.UI.HUD.Inventory.Interfaces.IInventoryModel, IInventoryState
     {
         public const int HOTBAR_SIZE = 9;
         public const int INVENTORY_SIZE = 6 * 9;
@@ -32,6 +33,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
         {
             if (index >= 0 && index < _slots.Length)
             {
+                if (AreEquivalent(_slots[index], item))
+                {
+                    return;
+                }
+
                 _slots[index] = item;
                 OnSlotChanged?.Invoke(index);
                 if (index == _selectedSlot)
@@ -53,6 +59,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public void SwapSlots(int from, int to)
         {
+            if (!IsValidSlot(from) || !IsValidSlot(to) || from == to)
+            {
+                return;
+            }
+
             var temp = _slots[from];
             _slots[from] = _slots[to];
             _slots[to] = temp;
@@ -62,6 +73,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public bool TryStackSlots(int from, int to)
         {
+            if (!IsValidSlot(from) || !IsValidSlot(to) || from == to)
+            {
+                return false;
+            }
+
             var fromItem = _slots[from];
             var toItem = _slots[to];
 
@@ -93,6 +109,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public void SelectSlot(int index)
         {
+            if (!IsValidSlot(index))
+            {
+                return;
+            }
+
             if (_selectedSlot == index)
             {
                 return;
@@ -107,7 +128,7 @@ namespace Fodinae.UI.HUD.Inventory.Model
                 return;
             }
 
-            var item = _slots[index];
+            ItemData? item = _slots[index];
             if (item != null)
             {
                 _networkService.Send(new SelectItemPacket(item.ItemType));
@@ -133,6 +154,11 @@ namespace Fodinae.UI.HUD.Inventory.Model
 
         public void ClearSelection()
         {
+            if (_selectedSlot < 0)
+            {
+                return;
+            }
+
             _selectedSlot = -1;
             OnSlotSelected?.Invoke(-1);
         }
@@ -145,6 +171,29 @@ namespace Fodinae.UI.HUD.Inventory.Model
             }
 
             _networkService.Send(new UseItemPacket());
+        }
+
+        private static bool AreEquivalent(ItemData? left, ItemData? right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            return string.Equals(left.Name, right.Name, StringComparison.Ordinal) &&
+                left.Quantity == right.Quantity &&
+                string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                left.ItemType == right.ItemType;
+        }
+
+        private static bool IsValidSlot(int index)
+        {
+            return index >= 0 && index < TOTALSLOTS;
         }
     }
 }

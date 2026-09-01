@@ -1,87 +1,72 @@
+#nullable enable
+
 #if UNITY_EDITOR
-using System;
 using System.IO;
-using UnityEditor;
+using System.Linq;
 using UnityEditor.Build;
-using UnityEditor.Build.Reporting;
-using UnityEngine;
 
 namespace Fodinae.Editor
 {
     /// <summary>
-    /// Copies Assets/Textures into the player's data folder so runtime texture
-    /// lookup (CellTextureCache / TextureStorageManager / ItemRegistry) finds
-    /// bundled assets in a standalone build. In the Editor Application.dataPath
-    /// points at the project's Assets folder, which masks this gap; a player
-    /// build must carry the same tree under &lt;game&gt;_Data/Textures.
+    /// Adds authored runtime textures to StreamingAssets while Unity is building
+    /// the player. A post-build filesystem copy cannot work for Android because
+    /// an APK/AAB is an archive rather than a writable player data directory.
     /// </summary>
-    public class BuildTextureStager : IPostprocessBuildWithReport
+    public sealed class BuildTextureStager : BuildPlayerProcessor
     {
-        public int callbackOrder => -100;
+        private const string StagingRoot = "Library/FodinaeBuild/StreamingAssets";
 
-        public void OnPostprocessBuild(BuildReport report)
+        public override void PrepareForBuild(BuildPlayerContext buildPlayerContext)
         {
-            string outputPath = report.summary.outputPath;
-            string source = Path.Combine(Application.dataPath, "Textures");
+            string source = Path.GetFullPath(Path.Combine("Assets", "Textures"));
             if (!Directory.Exists(source))
             {
-                Debug.LogError($"[BuildTextureStager] Bundled textures source not found: {source}");
-                return;
+                throw new BuildFailedException(
+                    $"Required runtime texture directory does not exist: {source}");
             }
 
-            string dataFolder = ResolveDataFolder(outputPath);
-            if (string.IsNullOrEmpty(dataFolder))
+            string stagingRoot = Path.GetFullPath(StagingRoot);
+            string stagedTextures = Path.Combine(stagingRoot, "Textures");
+            if (Directory.Exists(stagedTextures))
             {
-                Debug.LogError($"[BuildTextureStager] Cannot resolve data folder for build output: {outputPath}");
-                return;
+                Directory.Delete(stagedTextures, recursive: true);
             }
 
-            string target = Path.Combine(dataFolder, "Textures");
-            int copied = CopyDirectoryRecursive(source, target);
-            Debug.Log($"[BuildTextureStager] Copied {copied} texture file(s): {source} -> {target}");
+            CopyRuntimeFiles(source, stagedTextures);
+            string[] relativeFiles = Directory
+                .EnumerateFiles(stagedTextures, "*", SearchOption.AllDirectories)
+                .Select(path => Path.GetRelativePath(stagedTextures, path).Replace('\\', '/'))
+                .OrderBy(path => path, System.StringComparer.Ordinal)
+                .ToArray();
+            string manifestPath = Path.Combine(stagingRoot, "Textures.manifest");
+            File.WriteAllLines(manifestPath, relativeFiles);
+
+            buildPlayerContext.AddAdditionalPathToStreamingAssets(stagedTextures, "Textures");
+            buildPlayerContext.AddAdditionalPathToStreamingAssets(manifestPath, "Textures.manifest");
         }
 
-        private static string? ResolveDataFolder(string outputPath)
+        private static void CopyRuntimeFiles(string source, string destination)
         {
-            if (string.IsNullOrEmpty(outputPath))
+            Directory.CreateDirectory(destination);
+            foreach (string sourceFile in Directory.EnumerateFiles(source))
             {
-                return null;
+                if (sourceFile.EndsWith(".meta", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                File.Copy(
+                    sourceFile,
+                    Path.Combine(destination, Path.GetFileName(sourceFile)),
+                    overwrite: true);
             }
 
-            if (outputPath.EndsWith(".app", StringComparison.Ordinal))
+            foreach (string sourceDirectory in Directory.EnumerateDirectories(source))
             {
-                string macData = Path.Combine(outputPath, "Contents", "Resources", "Data");
-                return Directory.Exists(macData) ? macData : null;
+                CopyRuntimeFiles(
+                    sourceDirectory,
+                    Path.Combine(destination, Path.GetFileName(sourceDirectory)));
             }
-
-            string exeName = Path.GetFileName(outputPath);
-            string? directory = Path.GetDirectoryName(outputPath);
-            if (string.IsNullOrEmpty(exeName) || string.IsNullOrEmpty(directory))
-            {
-                return null;
-            }
-
-            string dataFolder = Path.Combine(directory, Path.GetFileNameWithoutExtension(exeName) + "_Data");
-            return Directory.Exists(dataFolder) ? dataFolder : null;
-        }
-
-        private static int CopyDirectoryRecursive(string sourceDir, string targetDir)
-        {
-            Directory.CreateDirectory(targetDir);
-            int copied = 0;
-
-            foreach (string file in Directory.GetFiles(sourceDir))
-            {
-                File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), overwrite: true);
-                copied++;
-            }
-
-            foreach (string subDir in Directory.GetDirectories(sourceDir))
-            {
-                copied += CopyDirectoryRecursive(subDir, Path.Combine(targetDir, Path.GetFileName(subDir)));
-            }
-
-            return copied;
         }
     }
 }

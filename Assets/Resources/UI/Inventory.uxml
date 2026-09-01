@@ -2,28 +2,33 @@
     <ui:VisualElement name="InventoryRoot" class="inv-root" picking-mode="Ignore">
 
         <!-- ════════════ ХОТБАР (9 СЛОТОВ) ════════════ -->
-        <ui:VisualElement name="HotbarContainer" class="sci-fi-panel sci-fi-panel--tech inv-hotbar">
-            <!-- 9 слотов генерируются динамически или через цикл -->
-            <ui:VisualElement name="HotbarSlots" class="inv-hotbar-slots" />
+        <!-- InventoryRoot стоит в picking-mode="Ignore", чтобы пустое поле
+             экрана не перехватывало клики мира; интерактивные элементы внутри
+             ОБЯЗАНЫ явно вернуть picking-mode="Position" (паттерн как в
+             ObserverJoystick.uxml) — иначе Ignore наследуется на всё поддерево
+             и хотбар/кнопки/слоты не получают мышь вовсе. -->
+        <ui:VisualElement name="HotbarContainer" class="sci-fi-panel sci-fi-panel--tech inv-hotbar" picking-mode="Position">
+            <!-- 9 слотов генерируются динамически (CreateCell, Position) -->
+            <ui:VisualElement name="HotbarSlots" class="inv-hotbar-slots" picking-mode="Position" />
 
-            <ui:Button name="InventoryToggleBtn" class="sci-fi-btn-cyan inv-toggle-btn" tooltip="Открыть инвентарь [TAB]">
-                <ui:Label text="ИНВЕНТАРЬ [TAB]" />
+            <ui:Button name="InventoryToggleBtn" class="sci-fi-btn-cyan inv-toggle-btn" tooltip="inventory.hotbar" picking-mode="Position">
+                <ui:Label text="" />
             </ui:Button>
         </ui:VisualElement>
 
         <!-- ════════════ ПОЛНЫЙ ИНВЕНТАРЬ (9x6) ════════════ -->
-        <ui:VisualElement name="FullInventoryPanel" class="sci-fi-panel sci-fi-panel--tech inv-full-panel sci-fi-window-anim" style="display: none;">
+        <ui:VisualElement name="FullInventoryPanel" class="sci-fi-panel sci-fi-panel--tech inv-full-panel sci-fi-window-anim" style="display: none;" picking-mode="Position">
             <!-- Хэдер -->
             <ui:VisualElement class="sci-fi-header">
                 <ui:VisualElement class="inv-header-left">
-                    <ui:Label class="sci-fi-header-title" text="ГРУЗОВОЙ ОТСЕК" />
-                    <ui:Label name="CapacityLabel" class="sci-fi-badge-mono" text="54 СЛОТА" />
+                    <ui:Label name="InventoryTitle" class="sci-fi-header-title"  text="" />
+                    <ui:Label name="CapacityLabel" class="sci-fi-badge-mono"  text="" />
                 </ui:VisualElement>
-                <ui:Button name="CloseInventoryBtn" class="sci-fi-btn-dark inv-close-btn" text="✕" />
+                <ui:Button name="CloseInventoryBtn" class="sci-fi-btn-dark inv-close-btn" text="✕" picking-mode="Position" />
             </ui:VisualElement>
 
             <!-- Сетка 9x6 -->
-            <ui:VisualElement name="InventoryGrid" class="inv-grid-container" />
+            <ui:VisualElement name="InventoryGrid" class="inv-grid-container" picking-mode="Position" />
         </ui:VisualElement>
 
         <!-- ════════════ КАРТОЧКА ТУЛТИПА ПРЕДМЕТА ════════════ -->
@@ -32,7 +37,7 @@
                 <ui:Image name="TooltipIcon" class="inv-tooltip-icon" />
                 <ui:VisualElement class="inv-tooltip-meta">
                     <ui:Label name="TooltipName" class="inv-tooltip-title" text="---" />
-                    <ui:Label name="TooltipType" class="sci-fi-badge-gold" text="МАТЕРИАЛ" />
+                    <ui:Label name="TooltipType" class="sci-fi-badge-gold" text="inventory.material" />
                 </ui:VisualElement>
             </ui:VisualElement>
             <ui:Label name="TooltipDesc" class="inv-tooltip-desc" text="---" />

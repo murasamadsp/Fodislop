@@ -1,68 +1,187 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
-    paths:
-      - 'Assets/**'
-      - 'Packages/**'
-      - 'ProjectSettings/**'
-      - 'scripts/**'
-      - '*.csproj'
-      - 'Directory.Build.props'
-  pull_request:
-    branches: [main, master]
-    paths:
-      - 'Assets/**'
-      - 'Packages/**'
-      - 'ProjectSettings/**'
-      - 'scripts/**'
-      - '*.csproj'
-      - 'Directory.Build.props'
+  # Temporarily manual-only while the client refactor is in progress.
+  # Restore push, pull_request, and schedule triggers to re-enable automation.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  UNITY_EDITOR_VERSION: 6000.5.0f1
+  UNITY_NO_CONSENT_PROMPT: '1'
+  UNITY_NO_UPDATE_CHECK: '1'
 
 jobs:
-  build-and-lint:
-    name: C# Build & Roslyn Analyzers
+  architecture:
+    name: Architecture and asset contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          dotnet-version: '8.0.x'
+          node-version: '24'
+      - name: Validate architecture, USS, and localization
+        run: node scripts/check-architecture.js
 
-      - name: Cache NuGet
-        uses: actions/cache@v5
+  macos-tests:
+    name: Unity tests (macOS ARM64)
+    needs: architecture
+    runs-on: [self-hosted, macOS, ARM64, fodinae-unity]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
         with:
-          path: ~/.nuget/packages
-          key: nuget-${{ hashFiles('**/*.csproj', '**/packages-lock.json') }}
-          restore-keys: nuget-
-
-      - name: Build dependencies
+          clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
         run: |
-          for csproj in MinesServer*.csproj Effekseer*.csproj UniTask*.csproj McpUnity*.csproj; do
-            [ -f "$csproj" ] && dotnet build "$csproj" -clp:NoSummary --nologo || true
-          done
-
-      - name: Build & analyze
-        id: lint
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
+      - name: Verify toolchain
         run: |
-          chmod +x scripts/pre-commit-lint.sh
-          ./scripts/pre-commit-lint.sh 2>&1 | tee /tmp/lint.log
-
-      - name: Upload log on failure
-        if: failure()
-        uses: actions/upload-artifact@v5
+          unity --version
+          unity editors --installed --format json
+      - name: EditMode tests
+        run: >-
+          unity test . --editor-version "$UNITY_EDITOR_VERSION"
+          --mode EditMode --report-format nunit,junit
+          --output TestResults/editmode.xml
+          --junit-output TestResults/editmode.junit.xml
+          --timeout 1200 --format github
+      - name: PlayMode tests
+        run: >-
+          unity test . --editor-version "$UNITY_EDITOR_VERSION"
+          --mode PlayMode --report-format nunit,junit
+          --output TestResults/playmode.xml
+          --junit-output TestResults/playmode.junit.xml
+          --timeout 1800 --format github
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: build-log
-          path: /tmp/lint.log
-          retention-days: 7
+          name: unity-test-results-macos
+          path: TestResults/
+          retention-days: 14
+          if-no-files-found: warn
+
+  windows-tests:
+    name: Unity tests (Windows x64)
+    needs: architecture
+    runs-on: [self-hosted, Windows, X64, fodinae-unity]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
+      - name: Verify toolchain
+        shell: pwsh
+        run: |
+          unity --version
+          unity editors --installed --format json
+      - name: EditMode tests
+        shell: pwsh
+        run: >-
+          unity test . --editor-version "$env:UNITY_EDITOR_VERSION"
+          --mode EditMode --report-format nunit,junit
+          --output TestResults/editmode.xml
+          --junit-output TestResults/editmode.junit.xml
+          --timeout 1200 --format github
+      - name: PlayMode tests
+        shell: pwsh
+        run: >-
+          unity test . --editor-version "$env:UNITY_EDITOR_VERSION"
+          --mode PlayMode --report-format nunit,junit
+          --output TestResults/playmode.xml
+          --junit-output TestResults/playmode.junit.xml
+          --timeout 1800 --format github
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unity-test-results-windows
+          path: TestResults/
+          retention-days: 14
+          if-no-files-found: warn
+
+  macos-player:
+    name: IL2CPP player (macOS ARM64)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: macos-tests
+    runs-on: [self-hosted, macOS, ARM64, fodinae-unity]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
+      - name: Build player
+        run: >-
+          unity run . --editor-version "$UNITY_EDITOR_VERSION"
+          --timeout 7000 --format github --
+          -nographics -executeMethod Fodinae.Editor.BuildScript.BuildMacOS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fodinae-macos-arm64
+          path: Build/macOS/
+          retention-days: 14
+          if-no-files-found: error
+
+  windows-player:
+    name: IL2CPP player (Windows x64)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: windows-tests
+    runs-on: [self-hosted, Windows, X64, fodinae-unity]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          clean: true
+      - name: Bake planet maps
+        # Карты планеты в репозитории не лежат: это детерминированный вывод
+        # генератора, и в 8K они весят под 150 МБ, которые осели бы в истории
+        # на каждой перепечке. Запекаем перед тем, как Unity тронет проект:
+        # если он импортирует .meta без самого файла, то удалит .meta, и
+        # ссылки из PlanetSurface.mat повиснут по GUID.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check numpy pillow
+          python3 scripts/generate_planet_maps.py
+      - name: Build player
+        shell: pwsh
+        run: >-
+          unity run . --editor-version "$env:UNITY_EDITOR_VERSION"
+          --timeout 7000 --format github --
+          -nographics -executeMethod Fodinae.Editor.BuildScript.BuildWindows
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fodinae-windows-x64
+          path: Build/Windows/
+          retention-days: 14
+          if-no-files-found: error

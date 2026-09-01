@@ -144,7 +144,7 @@ Camera:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 13368439}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 2
   m_ClearFlags: 2
   m_BackGroundColor: {r: 0.012, g: 0.018, b: 0.032, a: 1}
@@ -259,7 +259,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e7ee9e8630524226aecbf115a9824cba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _loaderTexture: {fileID: 2800000, guid: bb2d88d590a7c9241a54276262f96c47, type: 3}
   _shadeTexture: {fileID: 0}
   _spaceBgTexture: {fileID: 0}
 --- !u!1 &439439804
@@ -328,7 +327,6 @@ GameObject:
   m_Component:
   - component: {fileID: 497866169}
   - component: {fileID: 497866168}
-  - component: {fileID: 497866167}
   - component: {fileID: 497866170}
   m_Layer: 9
   m_Name: MenuSceneryCamera
@@ -337,14 +335,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!81 &497866167
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 497866166}
-  m_Enabled: 1
 --- !u!20 &497866168
 Camera:
   m_ObjectHideFlags: 0
@@ -378,7 +368,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 60
-  field of view: 34
+  field of view: 36
   orthographic: 0
   orthographic size: 5
   m_Depth: -101
@@ -386,10 +376,10 @@ Camera:
     serializedVersion: 2
     m_Bits: 512
   m_RenderingPath: -1
-  m_TargetTexture: {fileID: 0}
+  m_TargetTexture: {fileID: 1985508442}
   m_TargetDisplay: 0
   m_TargetEye: 3
-  m_HDR: 1
+  m_HDR: 0
   m_AllowMSAA: 1
   m_AllowDynamicResolution: 0
   m_ForceIntoRT: 0
@@ -404,8 +394,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 497866166}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -7.2}
+  m_LocalRotation: {x: 0.0015586563, y: -0.099218994, z: -0.015629793, w: 0.99494165}
+  m_LocalPosition: {x: 0, y: 0, z: -6.9}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1002,8 +992,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e373d156baf4b497488fad39b0798639, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuSceneryController
-  _renderTextureWidth: 1800
-  _renderTextureHeight: 1800
   _resolveMaterialAsset: {fileID: 2100000, guid: 9ca5fb8d939d345338f61c342bfc32cf, type: 2}
 --- !u!4 &1441824740
 Transform:
@@ -1039,7 +1027,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuStarfield
   _starfieldMaterial: {fileID: 2100000, guid: 748abc2cff5ea428e9296393edb5872b, type: 2}
-  _height: 900
 --- !u!1 &1464838116
 GameObject:
   m_ObjectHideFlags: 0
@@ -1087,7 +1074,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.OrbitalStationMotion
   _center: {fileID: 1761436221}
   _radius: 1.72
-  _degreesPerSecond: 3.5
   _startAngleDegrees: 30
   _orbitPlaneEulerAngles: {x: 72, y: 0, z: -19}
 --- !u!1 &1761436220
@@ -1101,7 +1087,6 @@ GameObject:
   - component: {fileID: 1761436221}
   - component: {fileID: 1761436223}
   - component: {fileID: 1761436222}
-  - component: {fileID: 1761436224}
   m_Layer: 9
   m_Name: PlanetSurface
   m_TagString: Untagged
@@ -1181,19 +1166,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1761436220}
   m_Mesh: {fileID: 4300000, guid: b2e7c395d03034d76bcbd38bf0cebf5f, type: 2}
---- !u!114 &1761436224
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1761436220}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9783f8857bf3b4170b936ef64a2352d4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuPlanetSpin
-  _degreesPerSecond: 0.35
 --- !u!1 &1796671799
 GameObject:
   m_ObjectHideFlags: 0
@@ -1205,7 +1177,6 @@ GameObject:
   - component: {fileID: 1796671800}
   - component: {fileID: 1796671802}
   - component: {fileID: 1796671801}
-  - component: {fileID: 1796671803}
   m_Layer: 9
   m_Name: PlanetAtmosphere
   m_TagString: Untagged
@@ -1223,7 +1194,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0.13831866, y: 0.2155256, z: 0.099837415, w: 0.9614829}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 3.28, y: 3.28, z: 3.28}
+  m_LocalScale: {x: 3.045, y: 3.045, z: 3.045}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1441824740}
@@ -1285,23 +1256,100 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1796671799}
   m_Mesh: {fileID: 4300000, guid: d9d419d8aeb21452db2918fa39602133, type: 2}
---- !u!114 &1796671803
+--- !u!84 &1985508442
+RenderTexture:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MenuSceneryRT_Premultiplied
+  m_ImageContentsHash:
+    serializedVersion: 2
+    Hash: 00000000000000000000000000000000
+  m_IsAlphaChannelOptional: 0
+  serializedVersion: 6
+  m_Width: 1024
+  m_Height: 1024
+  m_AntiAliasing: 1
+  m_MipCount: -1
+  m_DepthStencilFormat: 90
+  m_ColorFormat: 4
+  m_MipMap: 0
+  m_GenerateMips: 1
+  m_SRGB: 1
+  m_UseDynamicScale: 0
+  m_UseDynamicScaleExplicit: 0
+  m_BindMS: 0
+  m_EnableCompatibleFormat: 1
+  m_EnableRandomWrite: 0
+  m_TextureSettings:
+    serializedVersion: 2
+    m_FilterMode: 1
+    m_Aniso: 1
+    m_MipBias: 0
+    m_WrapU: 1
+    m_WrapV: 1
+    m_WrapW: 1
+  m_Dimension: 2
+  m_VolumeDepth: 1
+  m_ShadowSamplingMode: 2
+--- !u!1 &2035828728
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2035828730}
+  - component: {fileID: 2035828729}
+  m_Layer: 0
+  m_Name: MainMenuLifetimeScope
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2035828729
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1796671799}
+  m_GameObject: {fileID: 2035828728}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9783f8857bf3b4170b936ef64a2352d4, type: 3}
+  m_Script: {fileID: 11500000, guid: 5a91e3d7c2f84610b8d4e6a0f3c7295b, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.UI.MenuPlanetSpin
-  _degreesPerSecond: 0.03
+  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.Core.MainMenuLifetimeScope
+  parentReference:
+    TypeName: 
+  autoRun: 1
+  autoInjectGameObjects: []
+  _document: {fileID: 439439806}
+  _controller: {fileID: 439439803}
+  _starfield: {fileID: 1441824741}
+  _scenery: {fileID: 1441824739}
+--- !u!4 &2035828730
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2035828728}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 439439807}
-  - {fileID: 1441824740}
   - {fileID: 13368441}
+  - {fileID: 2035828730}
+  - {fileID: 1441824740}

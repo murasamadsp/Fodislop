@@ -2,10 +2,10 @@ using System;
 
 namespace VContainer.Internal
 {
-    internal sealed class ContainerLocalInstanceProvider : IInstanceProvider
+    sealed class ContainerLocalInstanceProvider : IInstanceProvider
     {
-        private readonly Type wrappedType;
-        private readonly Registration valueRegistration;
+        readonly Type wrappedType;
+        readonly Registration valueRegistration;
 
         public ContainerLocalInstanceProvider(Type wrappedType, Registration valueRegistration)
         {
@@ -30,7 +30,6 @@ namespace VContainer.Internal
             {
                 value = resolver.Resolve(valueRegistration);
             }
-
             var parameterValues = CappedArrayPool<object>.Shared8Limit.Rent(1);
             try
             {
@@ -42,5 +41,5 @@ namespace VContainer.Internal
                 CappedArrayPool<object>.Shared8Limit.Return(parameterValues);
             }
         }
-    }
+   }
 }

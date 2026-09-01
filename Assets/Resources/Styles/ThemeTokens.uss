@@ -1,91 +1,9 @@
-/* ═══════════════════════════════════════════════════════════
-   ThemeTokens.uss — токены дизайн-системы Fodinae
-
-   ВЫВЕДЕНО ИЗ visual/main-menu-mirror/css/tokens.css.
-   Источник истины — макет; этот файл его отражение. Меняя значение здесь,
-   поменяй его и там, иначе игра и макет разойдутся.
-
-   Отличия USS от CSS, из-за которых файл не является копией:
-     • нет rgb(var(--x) / N%) — все альфа-варианты записаны литералами;
-     • нет @media — тиры макета задаются классом на корневом элементе;
-     • нет box-shadow, radial-gradient, backdrop-filter, gap, z-index.
-   ═══════════════════════════════════════════════════════════ */
+/* ФАЙЛ МАШИННЫЙ. Правки будут затёрты.
+   Источник истины: visual/main-menu-mirror/css/tokens.css
+   Генератор:       visual/main-menu-mirror/tools/emit-uss-tokens.py
+   Расхождение ловит CI (scripts/check-architecture.js). */
 
 :root {
-    /* ═════ РАМПА ВЫСОТ ═════
-       Четыре ступени глубины: фон мира → корпус панели → карточка →
-       карточка поверх карточки. */
-    --surface-void: #030509;
-    --surface-abyss: #070d14;
-    --surface-slate: #0b141e;
-    --surface-shelf: #111e2e;
-
-    --surface-panel: rgba(7, 13, 20, 0.88);
-    --surface-dark: rgba(5, 10, 16, 0.94);
-    --surface-raised: rgba(11, 20, 30, 0.78);
-    --surface-solid: #081018;   /* панель без просвета: поле в фокусе, утопленный экран */
-    --surface-inset: rgba(3, 5, 9, 0.45);
-    --surface-sunken: rgba(3, 5, 9, 0.6);
-    --surface-scrim: rgba(3, 5, 9, 0.82);
-
-    /* Тонированные тёмные поверхности для заголовков тревожных окон. */
-    --surface-crisis: rgba(16, 3, 3, 0.96);
-    --surface-ember: rgba(26, 18, 6, 0.96);
-
-    /* ═════ АКЦЕНТЫ ═════
-       Золото — руда, ценность, действие игрока.
-       Циан — машина, телеметрия, состояние системы. */
-    --accent-gold: #f5c542;
-    --accent-gold-hover: #ffcf4d;
-    --accent-gold-wash: rgba(245, 197, 66, 0.12);
-    --accent-gold-glow: rgba(245, 197, 66, 0.35);
-
-    --accent-cyan: #56ddd4;
-    --accent-cyan-hover: #86ede6;
-    --accent-cyan-deep: #1e706a;
-    --accent-cyan-wash: rgba(86, 221, 212, 0.12);
-    --accent-cyan-glow: rgba(86, 221, 212, 0.4);
-
-    /* ═════ СОСТОЯНИЯ ═════
-       Магма — глубина и жар. Аномалия — редкое и странное. */
-    --state-ok: #4ade80;
-    --state-ok-wash: rgba(74, 222, 128, 0.14);
-    --state-warn: #ff7a36;
-    --state-warn-wash: rgba(255, 122, 54, 0.14);
-    --state-danger: #ff5555;
-    --state-danger-hover: #ff7b7b;
-    --state-danger-wash: rgba(255, 85, 85, 0.14);
-    --state-anomaly: #a855f7;
-    --state-anomaly-wash: rgba(168, 85, 247, 0.14);
-
-    /* ═════ РЕДКОСТЬ ПРЕДМЕТОВ ═════ */
-    --rarity-common: #8598a3;
-    --rarity-uncommon: #4ade80;
-    --rarity-rare: #56ddd4;
-    --rarity-epic: #a855f7;
-    --rarity-legendary: #f5c542;
-
-    /* ═════ ТЕКСТ ═════
-       Контраст против --surface-void. --text-disabled намеренно ниже AA:
-       только выключенные состояния и декоративные разделители. */
-    --text-primary: #f0f6f8;    /* 18.7:1 */
-    --text-secondary: #8598a3;  /*  6.8:1 */
-    --text-tertiary: #627b89;   /*  4.6:1 — минимум для читаемого текста */
-    --text-disabled: #4d6370;   /*  3.2:1 — не текст */
-    --text-on-gold: #04080e;    /* 12.4:1 на золоте */
-
-    /* ═════ ГРАНИЦЫ ═════ */
-    --border-subtle: rgba(140, 185, 205, 0.22);
-    --border-strong: rgba(140, 185, 205, 0.38);
-    --border-cyan: rgba(86, 221, 212, 0.45);
-    --border-gold: rgba(245, 197, 66, 0.45);
-    --border-danger: rgba(255, 85, 85, 0.45);
-
-    /* Приглушённые акцентные линии — разделители внутри акцентных блоков. */
-    --border-gold-soft: rgba(245, 197, 66, 0.25);
-    --border-cyan-soft: rgba(86, 221, 212, 0.25);
-
-    /* ═════ ПРОСТРАНСТВО ═════ Сетка 2px. */
     --space-1: 2px;
     --space-2: 4px;
     --space-3: 6px;
@@ -100,21 +18,17 @@
     --space-12: 32px;
     --space-13: 40px;
     --space-14: 48px;
-
-    /* ═════ РАДИУСЫ ═════ Острота углов — часть арт-дирекшена. */
     --radius-sharp: 2px;
     --radius-sm: 3px;
     --radius-md: 4px;
-
-    /* ═════ ГЕОМЕТРИЯ ЭКРАНОВ ═════ */
-    /* Общая ширина колонки действий в меню: баннер обновления и группа
-       кнопок — один визуальный столбец. Пока ширина задавалась в двух
-       местах, ограничение стояло только на кнопках, и баннер вылезал за
-       них. Источник истины — --menu-action-width из
-       visual/main-menu-mirror/css/tokens.css. */
-    --menu-action-width: 380px;
-
-    /* ═════ КЕГЛИ ═════ */
+    --radius-pill: 50%;
+    --modal-sm: 640px;
+    --modal-md: 700px;
+    --modal-lg: 800px;
+    --modal-xl: 920px;
+    --face-display: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
+    --face-body: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
+    --face-data: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
     --size-micro: 9px;
     --size-2xs: 10px;
     --size-xs: 11px;
@@ -125,412 +39,154 @@
     --size-xl: 24px;
     --size-2xl: 32px;
     --size-3xl: 42px;
-
-    /* ═════ ДВИЖЕНИЕ ═════ @keyframes в USS нет: только transition. */
+    --safe-screen: 48px;
+    --safe-panel: 24px;
+    --safe-box: 12px;
+    --safe-tight: 6px;
+    --leading-tight: 1.15;
+    --leading-base: 1.4;
+    --leading-loose: 1.6;
+    --tracking-tight: 0;
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-bold: 700;
+    --weight-black: 800;
     --dur-instant: 0.1s;
     --dur-fast: 0.12s;
     --dur-base: 0.15s;
     --dur-slow: 0.2s;
+    --dur-deliberate: 0.4s;
     --dur-cinematic: 0.8s;
-
-    /* USS не поддерживает cubic-bezier() — ни в токене, ни в самом правиле:
-       функция присутствует только в парсере ExCSS, но не в UIElements.
-       Доступны 23 именованные кривые. Сигнатурная кривая макета
-       cubic-bezier(0.2, 0.75, 0.2, 1) ближе всего к ease-out-circ. */
     --ease-standard: ease;
-    --ease-signature: ease-out-circ;
-
-    /* ═════ ФОКУС ═════
-       Клавиатурная навигация по UI в клиенте сейчас отключена (AGENTS.md §7),
-       но токены объявлены заранее: включить фокус потом будет дешевле, чем
-       дописывать его по каждому компоненту. */
+    --ease-linear: linear;
+    --ease-decelerate: ease-out-cubic;
+    --ease-signature: ease-out-circ;  /* подбор fit-easing.py, max-отклонение 0.129 */
+    --order-corona: 1;
+    --order-orbit: 2;
+    --order-planet: 3;
+    --order-beacon: 10;
+    --order-surface: 1;
+    --order-magma: 2;
+    --order-geogrid: 3;
+    --order-night: 4;
+    --order-atmosphere: 5;
+    --order-target: 6;
+    --order-mine-canvas: 1;
+    --order-mine-robot: 5;
+    --order-bead: 2;
+    --menu-column: 500px;
+    --planet-disc: 860px;
+    --menu-action-width: 380px;
+    --accent-cyan-dense: rgba(86, 221, 212, 0.85);
+    --accent-cyan-fill: rgba(86, 221, 212, 0.55);
+    --accent-cyan-glow: rgba(86, 221, 212, 0.3);
+    --accent-cyan-solid: rgb(86 221 212);
+    --accent-cyan-tint: rgba(86, 221, 212, 0.08);
+    --accent-cyan-wash: rgba(86, 221, 212, 0.12);
+    --accent-gold-fill: rgba(245, 197, 66, 0.55);
+    --accent-gold-glow: rgba(245, 197, 66, 0.3);
+    --accent-gold-tint: rgba(245, 197, 66, 0.08);
+    --accent-gold-wash: rgba(245, 197, 66, 0.12);
+    --state-anomaly-glow: rgba(168, 85, 247, 0.4);
+    --state-anomaly-wash: rgba(168, 85, 247, 0.15);
+    --state-danger-glow: rgba(255, 85, 85, 0.4);
+    --state-danger-wash: rgba(255, 85, 85, 0.15);
+    --state-magma-tint: rgba(255, 122, 54, 0.08);
+    --state-magma-glow: rgba(255, 122, 54, 0.4);
+    --state-ok-tint: rgba(74, 222, 128, 0.08);
+    --surface-abyss-dense: rgba(7, 13, 20, 0.9);
+    --surface-abyss-solid: rgb(7 13 20);
+    --surface-abyss-veil: rgba(7, 13, 20, 0.6);
+    --surface-crisis-dense: rgba(16, 3, 3, 0.9);
+    --surface-crisis-solid: rgb(16 3 3);
+    --surface-ember-solid: rgb(26 18 6);
+    --surface-shelf-dense: rgba(17, 30, 46, 0.9);
+    --surface-shelf-solid: rgb(17 30 46);
+    --surface-slate-dense: rgba(11, 20, 30, 0.9);
+    --surface-slate-solid: rgb(11 20 30);
+    --surface-slate-veil: rgba(11, 20, 30, 0.6);
+    --surface-void-dense: rgba(3, 5, 9, 0.9);
+    --surface-void-haze: rgba(3, 5, 9, 0.2);
+    --surface-void-shade: rgba(3, 5, 9, 0.5);
+    --surface-void-solid: rgb(3 5 9);
+    --surface-void-veil: rgba(3, 5, 9, 0.6);
+    --border-hairline: rgba(140, 185, 205, 0.08);
+    --border-line: rgba(140, 185, 205, 0.15);
+    --light-edge: rgba(255, 255, 255, 0.45);
+    --light-film: rgba(255, 255, 255, 0.06);
+    --light-gleam: rgba(255, 255, 255, 0.7);
+    --light-sheen: rgba(255, 255, 255, 0.12);
+    --light-solid: rgb(255 255 255);
+    --shadow-solid: rgb(0 0 0);
+    --surface-void: #030509;
+    --surface-solid: #081018;
+    --surface-panel: rgba(7, 13, 20, 0.9);
+    --surface-raised: rgba(11, 20, 30, 0.6);
+    --surface-sunken: rgba(3, 5, 9, 0.6);
+    --surface-inset: rgba(3, 5, 9, 0.5);
+    --surface-scrim: rgba(3, 5, 9, 0.9);
+    --border-subtle: rgba(140, 185, 205, 0.08);
+    --border-strong: rgba(140, 185, 205, 0.15);
+    --border-cyan: rgba(86, 221, 212, 0.55);
+    --border-gold: rgba(245, 197, 66, 0.55);
+    --border-danger: rgba(255, 85, 85, 0.4);
+    --text-primary: #f0f6f8;
+    --text-secondary: #8598a3;
+    --text-tertiary: #627b89;
+    --text-disabled: #4d6370;
+    --text-on-gold: #04080e;
+    --surface-on-accent: #04080e;
+    --accent-gold: #f5c542;
+    --accent-gold-hover: #ffcf4d;
+    --accent-cyan: #56ddd4;
+    --accent-cyan-hover: #86ede6;
+    --accent-cyan-deep: #1e706a;
+    --state-ok: #4ade80;
+    --state-warn: #ff7a36;
+    --state-danger: #ff5555;
+    --state-danger-hover: #ff7b7b;
+    --state-anomaly: #a855f7;
+    --state-ok-wash: rgba(74, 222, 128, 0.08);
+    --state-warn-wash: rgba(255, 122, 54, 0.08);
+    --rarity-common: #8598a3;
+    --rarity-uncommon: #4ade80;
+    --rarity-rare: #56ddd4;
+    --rarity-epic: #a855f7;
+    --rarity-legendary: #f5c542;
     --focus-ring-color: #86ede6;
     --focus-ring-width: 2px;
-
-    /* ═════ ШРИФТОВЫЕ АССЕТЫ ═════
-       Все три покрывают кириллицу полностью (проверено по cmap).
-       Orbitron и Rajdhani из макета удалены: 0 из 66 кириллических глифов. */
-    --face-display: url("project://database/Assets/Resources/Fonts/Unbounded_SDF.asset");
-    --face-body: url("project://database/Assets/Resources/Fonts/Exo2_SDF.asset");
-    --face-data: url("project://database/Assets/Resources/Fonts/JetBrainsMono_SDF.asset");
-
-    /* ═══════════════════════════════════════════════════════
-       РАНЕЕ НЕ ОБЪЯВЛЕННЫЕ ТОКЕНЫ
-
-       Эти одиннадцать использовались в Button.uss, Input.uss, Panel.uss,
-       Modal.uss и HUD.uss, но не были объявлены нигде — правила молча
-       резолвились в пустоту, из-за чего кнопки и поля оставались без
-       заливки, рамки, отступов и кегля.
-       ═══════════════════════════════════════════════════════ */
-    --btn-bg: rgba(11, 20, 30, 0.78);
-    --btn-border: rgba(140, 185, 205, 0.22);
-    --btn-hover: rgba(86, 221, 212, 0.12);
-    --btn-padding: 8px 16px;
-    --btn-min-width: 96px;
-    --btn-font-size: 13px;
-
-    --font-size-sm: 12px;
-    --font-size-md: 15px;
-    --font-size-lg: 18px;
-    --font-size-xl: 24px;
-    --font-size-title: 32px;
-
-    /* ═══════════════════════════════════════════════════════
-       АЛИАСЫ СОВМЕСТИМОСТИ
-
-       Имена --scifi-* и --font-* остаются, чтобы существующие таблицы
-       стилей продолжали работать без правки. Новый код должен обращаться
-       к семантическому слою выше.
-       ═══════════════════════════════════════════════════════ */
-    --scifi-void: var(--surface-void);
-    --scifi-bg-dark: var(--surface-dark);
-    --scifi-bg-panel: var(--surface-panel);
-    --scifi-bg-card: var(--surface-raised);
-
-    --scifi-gold: var(--accent-gold);
-    --scifi-gold-bright: var(--accent-gold-hover);
-    --scifi-gold-dim: var(--border-gold-soft);
-
-    --scifi-cyan: var(--accent-cyan);
-    --scifi-cyan-bright: var(--accent-cyan-hover);
-    --scifi-cyan-dim: var(--accent-cyan-wash);
-
-    --scifi-red: var(--state-danger);
-    --scifi-red-dim: rgba(255, 85, 85, 0.25);
-    --scifi-green: var(--state-ok);
-    --scifi-green-dim: rgba(74, 222, 128, 0.25);
-
-    --scifi-text-white: var(--text-primary);
-    --scifi-text-dim: var(--text-secondary);
-    --scifi-text-muted: var(--text-disabled);
-
-    --scifi-border-subtle: var(--border-subtle);
-    --scifi-border-tech: var(--border-cyan);
-    --scifi-border-gold: var(--border-gold);
-
-    --font-heading: var(--face-display);
-    --font-body: var(--face-body);
-    --font-mono: var(--face-data);
+    --focus-ring-offset: 2px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   Базовые Sci-Fi Компоненты и Контейнеры
-   ═══════════════════════════════════════════════════════════ */
-
-/* Панель из темного карбона с технологичной границей */
-.sci-fi-panel {
-    background-color: var(--scifi-bg-panel);
-    border-width: 1px;
-    border-color: var(--scifi-border-subtle);
-    border-radius: 4px;
-    padding: 12px;
-}
-
-.sci-fi-panel--tech {
-    border-color: var(--scifi-border-tech);
-    background-color: var(--scifi-bg-dark);
-}
-
-.sci-fi-panel--gold {
-    border-color: var(--scifi-border-gold);
-}
-
-/* Заголовок панели со статусной полосой */
-.sci-fi-header {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: 8px;
-    margin-bottom: 10px;
-    border-bottom-width: 1px;
-    border-bottom-color: var(--scifi-border-subtle);
-}
-
-.sci-fi-header-title {
-    -unity-font-definition: var(--font-heading);
-    color: var(--scifi-text-white);
-    font-size: 13px;
-    -unity-font-style: bold;
-    letter-spacing: 1px;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Кнопки
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-btn-gold {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    height: 38px;
-    padding: 0 16px;
-    background-color: var(--scifi-gold);
-    border-width: 1px;
-    border-color: var(--scifi-gold);
-    border-radius: 3px;
-    color: var(--scifi-void);
-    -unity-font-definition: var(--font-heading);
-    font-size: 12px;
-    -unity-font-style: bold;
-}
-
-.sci-fi-btn-gold:hover {
-    background-color: var(--scifi-gold-bright);
-    border-color: var(--scifi-gold-bright);
-}
-
-.sci-fi-btn-cyan {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    height: 36px;
-    padding: 0 14px;
-    background-color: var(--scifi-cyan-dim);
-    border-width: 1px;
-    border-color: var(--scifi-border-tech);
-    border-radius: 3px;
-    color: var(--scifi-cyan);
-    -unity-font-definition: var(--font-heading);
-    font-size: 12px;
-    -unity-font-style: bold;
-}
-
-.sci-fi-btn-cyan:hover {
-    background-color: rgba(38, 198, 218, 0.35);
-    border-color: var(--scifi-cyan-bright);
-    color: var(--scifi-cyan-bright);
-}
-
-.sci-fi-btn-dark {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    height: 34px;
-    padding: 0 12px;
-    background-color: rgba(14, 22, 32, 0.85);
-    border-width: 1px;
-    border-color: var(--scifi-border-subtle);
-    border-radius: 3px;
-    color: var(--scifi-text-dim);
-    -unity-font-definition: var(--font-body);
-    font-size: 12px;
-}
-
-.sci-fi-btn-dark:hover {
-    background-color: rgba(26, 40, 58, 0.95);
-    border-color: var(--scifi-border-tech);
-    color: var(--scifi-text-white);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Бейджи и Индикаторы
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-badge-mono {
-    -unity-font-definition: var(--font-mono);
-    background-color: var(--scifi-cyan-dim);
-    color: var(--scifi-cyan);
-    border-width: 1px;
-    border-color: var(--scifi-border-tech);
-    padding: 2px 6px;
-    border-radius: 2px;
-    font-size: 10px;
-    -unity-font-style: bold;
-}
-
-.sci-fi-badge-gold {
-    -unity-font-definition: var(--font-mono);
-    background-color: var(--scifi-gold-dim);
-    color: var(--scifi-gold);
-    border-width: 1px;
-    border-color: var(--scifi-border-gold);
-    padding: 2px 6px;
-    border-radius: 2px;
-    font-size: 10px;
-    -unity-font-style: bold;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Прогресс-бары
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-bar-track {
-    height: 8px;
-    background-color: rgba(0, 0, 0, 0.5);
-    border-width: 1px;
-    border-color: var(--scifi-border-subtle);
-    border-radius: 2px;
-    overflow: hidden;
-}
-
-.sci-fi-bar-fill-hp {
-    height: 100%;
-    background-color: var(--scifi-green);
-    border-radius: 1px;
-}
-
-.sci-fi-bar-fill-cyan {
-    height: 100%;
-    background-color: var(--scifi-cyan);
-    border-radius: 1px;
-}
-
-.sci-fi-bar-fill-gold {
-    height: 100%;
-    background-color: var(--scifi-gold);
-    border-radius: 1px;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Текстовые поля (Input)
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-input {
-    background-color: rgba(5, 8, 11, 0.85);
-    border-width: 1px;
-    border-color: var(--scifi-border-subtle);
-    border-radius: 3px;
-    color: var(--scifi-text-white);
-    -unity-font-definition: var(--font-body);
-    font-size: 13px;
-    padding: 6px 10px;
-    margin: 4px 0;
-}
-
-.sci-fi-input:focus {
-    border-color: var(--scifi-cyan-bright);
-    background-color: rgba(7, 14, 20, 0.95);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Кнопка опасности (Red/Danger)
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-btn-red {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    height: 36px;
-    padding: 0 14px;
-    background-color: var(--scifi-red-dim);
-    border-width: 1px;
-    border-color: rgba(231, 76, 60, 0.5);
-    border-radius: 3px;
-    color: #ff7675;
-    -unity-font-definition: var(--font-heading);
-    font-size: 12px;
-    -unity-font-style: bold;
-}
-
-.sci-fi-btn-red:hover {
-    background-color: rgba(231, 76, 60, 0.45);
-    border-color: #ff7675;
-    color: #ffffff;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Типографика (Тексты)
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-text-title {
-    -unity-font-definition: var(--font-heading);
-    color: var(--scifi-text-white);
-    font-size: 16px;
-    -unity-font-style: bold;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
-}
-
-.sci-fi-text-body {
-    -unity-font-definition: var(--font-body);
-    color: var(--scifi-text-white);
-    font-size: 13px;
-    white-space: normal;
-}
-
-.sci-fi-text-muted {
-    -unity-font-definition: var(--font-body);
-    color: var(--scifi-text-dim);
-    font-size: 12px;
-    white-space: normal;
-}
-
-.sci-fi-text-gold {
-    -unity-font-definition: var(--font-heading);
-    color: var(--scifi-gold-bright);
-    font-size: 13px;
-    -unity-font-style: bold;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   Sci-Fi Окно и Оверлей (Window & Overlay)
-   ═══════════════════════════════════════════════════════════ */
-
-.sci-fi-window-overlay {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(5, 8, 11, 0.75);
-    align-items: center;
-    justify-content: center;
-}
-
-.sci-fi-window {
-    background-color: var(--scifi-bg-panel);
-    border-width: 1px;
-    border-color: var(--scifi-border-tech);
-    border-radius: 4px;
-    padding: 16px;
-    min-width: 320px;
-    max-width: 800px;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   ТИРЫ РАСКЛАДКИ
-
-   Замена @media, которых в USS нет. Класс проставляется на корневой
-   элемент из UiLayoutTier по фактической ширине панели. Границы и
-   значения совпадают с visual/main-menu-mirror/css/tokens.css §3.
-
-   Переопределяются ТОЛЬКО токены, но не правила компонентов — поэтому
-   ни один компонент не нужно переписывать под тир.
-   ═══════════════════════════════════════════════════════════ */
-
+/* Тир задаётся классом на корневом элементе: @media в USS нет.
+   Класс ставит UILayoutTier.cs. */
 .tier--compact {
     --size-md: 14px;
     --size-lg: 16px;
     --size-xl: 20px;
     --size-2xl: 26px;
     --size-3xl: 32px;
-
     --space-10: 20px;
     --space-11: 22px;
     --space-12: 24px;
     --space-13: 28px;
     --space-14: 32px;
-
-    /* Легаси-имена: пока ими пользуются HUD, Chat, Modal и Input. */
-    --font-size-md: 14px;
-    --font-size-lg: 16px;
-    --font-size-xl: 20px;
-    --font-size-title: 26px;
+    --planet-disc: 520px;
 }
 
+/* Тир задаётся классом на корневом элементе: @media в USS нет.
+   Класс ставит UILayoutTier.cs. */
 .tier--wide {
     --size-md: 16px;
     --size-lg: 20px;
     --size-xl: 28px;
     --size-2xl: 38px;
     --size-3xl: 52px;
-
     --space-12: 36px;
     --space-13: 48px;
     --space-14: 60px;
-
-    --font-size-md: 16px;
-    --font-size-lg: 20px;
-    --font-size-xl: 28px;
-    --font-size-title: 38px;
+    --menu-column: 600px;
+    --planet-disc: 940px;
 }
+
+/* Не переносится в USS (71): blur-lg, blur-md, blur-sm, blur-xl, fit-lines, font-body, font-data, font-label, font-title, hex-abyss, hex-anomaly, hex-cyan, hex-cyan-deep, hex-cyan-lift, hex-danger, hex-danger-lift, hex-gold, hex-gold-lift, hex-ink-100, hex-ink-30, hex-ink-50, hex-ink-70, hex-magma, hex-ok, hex-slate, hex-void, layer-backdrop, layer-chrome, layer-content, layer-devtools, layer-gate, layer-modal, layer-overlay, layer-rail, layer-scene, layer-shade, layer-toast, mat-basalt-hi, mat-basalt-lo, mat-mined, mat-planet-hi, mat-planet-lo, mat-planet-mid, mat-planet-shadow, mat-redrock-hi, mat-redrock-lo, mat-space-hi, mat-space-lo, mat-space-mid, mat-strata-0, mat-strata-1, mat-strata-2, mat-strata-3, rgb-abyss, rgb-anomaly, rgb-crisis, rgb-cyan, rgb-danger, rgb-ember, rgb-gold, rgb-light, rgb-magma, rgb-ok, rgb-shadow, rgb-shelf, rgb-slate, rgb-steel, rgb-void, tracking-base, tracking-wide, tracking-widest */

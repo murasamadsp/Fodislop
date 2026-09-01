@@ -1,0 +1,35 @@
+{
+    "name": "Fodinae.Tests.Editor",
+    "rootNamespace": "Fodinae.Tests",
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "references": [
+        "Fodinae.Runtime",
+        "Fodinae.Bootstrap",
+        "Fodinae.UI",
+        "Fodinae.Editor",
+        "Fodinae.Contracts",
+        "Fodinae.Persistence",
+        "Fodinae.Networking",
+        "Fodinae.AssetPipeline",
+        "Fodinae.World",
+        "MinesServer.Data",
+        "MinesServer.Networking",
+        "MinesServer.Networking.Connection",
+        "MinesServer.Networking.Connection.Client",
+        "UniTask",
+        "VContainer"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

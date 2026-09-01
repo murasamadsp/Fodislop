@@ -4,9 +4,9 @@ using System.Runtime.CompilerServices;
 
 namespace VContainer.Internal
 {
-    internal sealed class CompositeDisposable : IDisposable
+    sealed class CompositeDisposable : IDisposable
     {
-        private readonly Stack<IDisposable> disposables = new Stack<IDisposable>();
+        readonly Stack<IDisposable> disposables = new Stack<IDisposable>();
 
         public void Dispose()
         {
@@ -19,10 +19,8 @@ namespace VContainer.Internal
                         ? disposables.Pop()
                         : null;
                 }
-
                 disposable?.Dispose();
-            }
-            while (disposable != null);
+            } while (disposable != null);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

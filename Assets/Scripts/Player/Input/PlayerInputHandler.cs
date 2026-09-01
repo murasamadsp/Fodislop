@@ -62,6 +62,9 @@ namespace Fodinae.Player.Input
             (Keyboard.current != null && Keyboard.current.ctrlKey.isPressed) ||
             (Gamepad.current != null && Gamepad.current.leftTrigger.isPressed);
 
+        [VContainer.Inject]
+        private Fodinae.Core.Interfaces.IClientConfigManager? _clientConfig;
+
         protected void OnEnable()
         {
             if (_moveActionReference != null && _moveActionReference.action != null)
@@ -122,6 +125,24 @@ namespace Fodinae.Player.Input
                     {
                         _moveInput.x += 1f;
                         _isGamepadActive = false;
+                    }
+                }
+
+                // Mouse pointer scheme: if enabled or right button held, move toward screen center offset
+                var cfg = _clientConfig != null ? _clientConfig.Config : null;
+                bool isMouseScheme = cfg != null && cfg.ControlScheme == 1;
+                bool useMousePointer = isMouseScheme || (Mouse.current != null && Mouse.current.rightButton.isPressed);
+                if (useMousePointer && Mouse.current != null)
+                {
+                    if (Mouse.current.rightButton.isPressed || (isMouseScheme && Mouse.current.leftButton.isPressed))
+                    {
+                        Vector2 mousePos = Mouse.current.position.ReadValue();
+                        Vector2 center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                        Vector2 dir = mousePos - center;
+                        if (dir.sqrMagnitude > 400f) // deadzone 20px
+                        {
+                            _moveInput = dir.normalized;
+                        }
                     }
                 }
 

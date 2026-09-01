@@ -26,7 +26,7 @@ namespace Fodinae.Tests.Core
         public void SnapshotIsStableAndVersioned()
         {
             ProjectDefaults asset = Resources.Load<ProjectDefaults>(
-                "Configuration/ProjectDefaults");
+                ProjectRuntimeContracts.ResourcePaths.ProjectDefaultsAsset);
             Assert.That(asset, Is.Not.Null);
 
             ProjectDefaultsSnapshot first = asset.CreateSnapshot();

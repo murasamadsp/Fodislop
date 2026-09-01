@@ -1,6 +1,5 @@
 #nullable enable
 
-using Fodinae.Core.DI;
 using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.Connection;
 
@@ -8,21 +7,21 @@ namespace Fodinae.Networking.Processors
 {
     public class ConnectionProcessor : IPacketProcessor<DisconnectPacket>, IPacketProcessor<ReconnectPacket>
     {
-        private readonly ISessionContainer _session;
+        private readonly IConnectionService _connection;
 
-        public ConnectionProcessor(ISessionContainer session)
+        public ConnectionProcessor(IConnectionService connection)
         {
-            _session = session;
+            _connection = connection;
         }
 
         public void Process(DisconnectPacket packet)
         {
-            _session.TryResolve<IConnectionService>()?.HandleServerDisconnect(packet.Reason);
+            _connection.HandleServerDisconnect(packet.Reason);
         }
 
         public void Process(ReconnectPacket packet)
         {
-            _session.TryResolve<IConnectionService>()?.HandleServerReconnect();
+            _connection.HandleServerReconnect();
         }
     }
 }

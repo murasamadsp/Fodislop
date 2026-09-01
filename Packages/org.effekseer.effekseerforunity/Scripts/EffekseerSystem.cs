@@ -140,6 +140,11 @@ namespace Effekseer
 			get { return Plugin.EffekseerGetRestInstancesCount(); }
 		}
 
+		public static int CameraCullingMaskToShowAllEffects
+		{
+			get { return Plugin.EffekseerGetCameraCullingMaskToShowAllEffects(); }
+		}
+
 		#region Network
 		/// <summary xml:lang="en">
 		/// start a server to edit effects from remote
