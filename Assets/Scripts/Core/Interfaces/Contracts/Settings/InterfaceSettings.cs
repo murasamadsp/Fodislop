@@ -9,7 +9,7 @@ namespace Fodinae.Core;
 public sealed class InterfaceSettings
 {
     public const float UIScaleMin = 0.5f;
-    public const float UIScaleMax = 2f;
+    public const float UIScaleMax = 2.5f;
 
     [SettingRange(UIScaleMin, UIScaleMax)]
     [SettingLabel("menu.settings.ui_scale")]

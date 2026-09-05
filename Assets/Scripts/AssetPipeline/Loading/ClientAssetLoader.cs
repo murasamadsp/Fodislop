@@ -205,26 +205,6 @@ namespace Fodinae
         {
             return Cache.GetAnimatedSpritesAsync(filename, cancellationToken);
         }
-
-        public async UniTaskVoid LoadAndApplyTexture(Action<Texture2D> applyTextureAction, string filename, CancellationToken cancellationToken)
-        {
-            Texture2D? texture = await GetTextureAsync(filename, cancellationToken);
-
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            if (texture == null)
-            {
-                throw new FileNotFoundException(
-                    $"Required texture '{filename}' could not be applied.",
-                    filename);
-            }
-
-            applyTextureAction(texture);
-        }
-
         public void ClearCache()
         {
             _cache?.Clear();
@@ -242,9 +222,10 @@ namespace Fodinae
 
             if (!isConnected)
             {
-                if (_persistentCache.HasAsset(filename))
+                byte[]? cached = await _persistentCache.GetAssetAsync(filename);
+                if (cached != null && cached.Length > 0)
                 {
-                    return await _persistentCache.GetAssetAsync(filename);
+                    return cached;
                 }
             }
 
@@ -268,7 +249,7 @@ namespace Fodinae
             // 3. Try server network request if connected
             if (isConnected)
             {
-                string? etag = _persistentCache.HasAsset(filename) ? await _persistentCache.GetETagAsync(filename) : null;
+                string? etag = await _persistentCache.GetETagAsync(filename);
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
@@ -309,15 +290,11 @@ namespace Fodinae
             }
 
             // 4. Fallback to cached asset
-            if (_persistentCache.HasAsset(filename))
+            byte[]? cachedFallback = await _persistentCache.GetAssetAsync(filename);
+            if (cachedFallback != null && cachedFallback.Length > 0)
             {
-                byte[]? cached = await _persistentCache.GetAssetAsync(filename);
-                if (cached != null && cached.Length > 0)
-                {
-                    _dispatcher.RemoveReportedFailure(filename);
-                }
-
-                return cached;
+                _dispatcher.RemoveReportedFailure(filename);
+                return cachedFallback;
             }
 
             if (AssetBatchDispatcher.IsTextureFile(filename))

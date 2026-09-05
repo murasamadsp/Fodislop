@@ -5,15 +5,13 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace Fodinae.Core.Interfaces
+namespace Fodinae.Core.Interfaces;
+public interface ITextureStorageService
 {
-    public interface ITextureStorageService
-    {
-        bool HasTexture(string filename);
-        UniTask<Texture2D?> GetTextureAsync(
-            string filename,
-            CancellationToken cancellationToken = default);
-        UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default);
-        event Action<string> OnTextureLoaded;
-    }
+    bool HasTexture(string filename);
+    UniTask<Texture2D?> GetTextureAsync(
+        string filename,
+        CancellationToken cancellationToken = default);
+    UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default);
+    event Action<string> OnTextureLoaded;
 }

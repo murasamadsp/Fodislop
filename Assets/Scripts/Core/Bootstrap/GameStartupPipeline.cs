@@ -17,6 +17,7 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Fodinae.Core;
 
@@ -36,6 +37,7 @@ internal sealed class GameStartupReport
 {
     private readonly List<StartupIssue> _issues = [];
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public IReadOnlyList<StartupIssue> Issues => _issues;
 
     public void Critical(string system, string message, Exception? exception = null)
@@ -132,6 +134,8 @@ public sealed class GamePresentationStartup
     private readonly GameManager _gameManager;
     private readonly PlayerHUDView _playerHud;
     private readonly InventoryView _inventory;
+    private readonly UIDocument _uiDocument;
+    private readonly IClientConfigManager _clientConfig;
 
     public GamePresentationStartup(
         IAudioSystem audioSystem,
@@ -141,7 +145,9 @@ public sealed class GamePresentationStartup
         SurfaceRenderer surface,
         GameManager gameManager,
         PlayerHUDView playerHud,
-        InventoryView inventory)
+        InventoryView inventory,
+        UIDocument uiDocument,
+        IClientConfigManager clientConfig)
     {
         _audioSystem = audioSystem;
         _terrain = terrain;
@@ -151,6 +157,8 @@ public sealed class GamePresentationStartup
         _gameManager = gameManager;
         _playerHud = playerHud;
         _inventory = inventory;
+        _uiDocument = uiDocument;
+        _clientConfig = clientConfig;
     }
 
     internal void Initialize(GameStartupReport report)
@@ -166,6 +174,15 @@ public sealed class GamePresentationStartup
         });
         report.RunCritical("lighting", () => _lighting.EnsureInitialized());
         report.RunCritical("surface_settings", () => _surface.ApplyClientConfig());
+        report.RunCritical("ui_scale", () =>
+        {
+            if (_uiDocument.panelSettings != null)
+            {
+                float effectiveScale = UIScaleUtility.ResolveEffectiveScale(
+                    _clientConfig.Config.Interface.UIScale);
+                _uiDocument.panelSettings.scale = effectiveScale;
+            }
+        });
         report.RunCritical("game_ui", _gameManager.EnsureUISetup);
         report.RunCritical("player_hud", _playerHud.EnsureInitialized);
         report.RunCritical("inventory", _inventory.EnsureInitialized);

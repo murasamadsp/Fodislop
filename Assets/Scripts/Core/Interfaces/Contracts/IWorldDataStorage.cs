@@ -4,8 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using MinesServer.Data;
 
-namespace Fodinae.Core.Interfaces
-{
+namespace Fodinae.Core.Interfaces;
     public interface IWorldDataStorage
     {
         event System.Action<int, int>? CellChanged;
@@ -36,5 +35,6 @@ namespace Fodinae.Core.Interfaces
         bool HasDirtyChunks { get; }
 
         void Flush(bool durable);
+
+        UniTask FlushAsync(bool durable, CancellationToken cancellationToken = default);
     }
-}

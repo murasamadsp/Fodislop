@@ -171,91 +171,6 @@ function checkOversizedProductionFiles() {
 
 // Each rule: { pattern, name, allow (path exemption, nullable), allowContent (line exemption, nullable) }.
 // "allow" and "allowContent" were the ALLOW_REGEX / ALLOW_CONTENT_REGEX arrays of the shell linter.
-const RULES = [
-    { pattern: /\b(?:StageAsync|CommitStagedAsync|DiscardStagedAsync|RestartCurrentAsync)\b/, name: "branching/staged scene lifecycle", allow: null, allowContent: null },
-    { pattern: /\b(?:ContentSceneRoot|SceneInjectionBridge|LifecycleGraph|LifecycleParticipant|WorldSessionLifecycle)\b/, name: "removed lifecycle infrastructure", allow: null, allowContent: null },
-    { pattern: /Transform\?\s+managerObject|_servicesRoot\.Find\(|transform\.Find\(/, name: "runtime composition-root name lookup (use serialized typed references)", allow: /^(Assets\/Scripts\/VContainer\/|Assets\/Scripts\/Tests\/|Assets\/Scripts\/Editor\/ManagerContractMigrator\.cs|Assets\/Scripts\/(Game|Rendering|UI|World)\/)/, allowContent: null },
-    // Запрет адресован ПОТРЕБИТЕЛЮ: класс не вправе прикрывать недостающую
-    // проводку запасным разрешением вместо явной зависимости. У корня композиции
-    // конструктора нет — разрешение и есть его работа, и правило ниже
-    // (Resolve в раннем жизненном цикле) само требует там TryResolve с проверкой
-    // на null. Без этого исключения два правила противоречат друг другу.
-    { pattern: /TryResolve<|TryResolve\s*\(/, name: "DI fallback resolution (use required constructor/explicit dependency)", allow: /^(Assets\/Scripts\/Tests\/|Assets\/Scripts\/VContainer\/|Assets\/Scripts\/Core\/Bootstrap\/\w+LifetimeScope\.cs$)/, allowContent: null },
-    { pattern: /using\s+Fodinae\.UI(?:\.|;)|using\s+Fodinae\.Game\.Managers;/, name: "networking layer references presentation/game manager namespaces", allow: /^(?!Assets\/Scripts\/Networking\/)/, allowContent: null },
-    { pattern: /\b(?:SceneCoordinator|ISceneCoordinator|SceneStartup|ISceneEntryPoint)\b/, name: "removed scene DI proxy", allow: null, allowContent: null },
-    { pattern: /\bRegisterComponentOnNewGameObject\b/, name: "runtime fallback manager construction", allow: /^Assets\/Scripts\/VContainer\//, allowContent: null },
-    { pattern: /\b(?:GlobalChatUI|InventoryView|PlayerHUDView|MinimapController|WorldMapController|PauseMenu|FloatingChatManager)\b/, name: "packet processor depends directly on UI", allow: /^(?!Assets\/Scripts\/Networking\/Processors\/)/, allowContent: null },
-    { pattern: /\bFindAnyObjectByType\s*</, name: "global runtime object lookup", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Editor\/|Assets\/Scripts\/VContainer\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /public\s+static\s+[A-Za-z0-9_<>?.]+\s+Instance\s*([({;=]|=>)/, name: "static Instance singleton", allow: null, allowContent: null },
-    { pattern: /ServiceLocator/, name: "ServiceLocator access", allow: null, allowContent: null },
-    { pattern: /(?:private|protected|public)\s+(?:readonly\s+)?IObjectResolver\s+_?[A-Za-z0-9_]+/, name: "IObjectResolver injected into runtime logic (use direct dependencies; resolver belongs to composition roots/factories)", allow: /^(Assets\/Scripts\/Core\/(?:BootstrapLifetimeScope|GameBootstrap|GameLifetimeScope)\.cs|Assets\/Scripts\/Core\/Lifecycle\/SceneObjectFactory\.cs)$/, allowContent: null },
-    { pattern: /new\s+InputAction\(/, name: "ad-hoc InputAction", allow: null, allowContent: null },
-    { pattern: /FitFieldDimensionsToAtlasBudget/, name: "fractional lighting-field fitting", allow: null, allowContent: null },
-    { pattern: /Mathf\.Approximately\([^,]*CameraOrthoSize/, name: "exact camera zoom cache comparison", allow: null, allowContent: null },
-    { pattern: /Camera\.main/, name: "Camera.main outside GameplayCamera", allow: /^Assets\/Scripts\/Core\/(?:Rendering\/)?GameplayCamera\.cs$/, allowContent: null },
-    { pattern: /Application\.targetFrameRate\s*=/, name: "FPS cap outside DisplayManager", allow: /^Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs$/, allowContent: null },
-    { pattern: /QualitySettings\.vSyncCount\s*=/, name: "VSync ownership outside DisplayManager", allow: /^Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs$/, allowContent: null },
-    { pattern: /new\s+Texture2D(Array)?\s*\(/, name: "runtime Texture2D construction outside RuntimeTextureFactory", allow: /^(Assets\/(?:Scripts\/)?Editor\/|Assets\/Scripts\/AssetPipeline\/(?:Loading\/)?RuntimeTextureFactory\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\.LoadImage\s*\(/, name: "runtime image decoding outside RuntimeTextureFactory", allow: /^(Assets\/(?:Scripts\/)?Editor\/|Assets\/Scripts\/AssetPipeline\/(?:Loading\/)?RuntimeTextureFactory\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\.styleSheets\.Add\s*\(/, name: "controller-local UI Toolkit stylesheet", allow: null, allowContent: null },
-    { pattern: /new\s+Vector2\s*\([^,]+,\s*Screen\.height\s*-/, name: "manual screen-to-panel Y flip", allow: null, allowContent: null },
-    { pattern: /\.style\.(width|height)\s*=[^;]*Screen\.(width|height)/, name: "UI root sized from Screen dimensions", allow: null, allowContent: null },
-    { pattern: /LightingCascadeAtlasLimit\s*<=\s*256\s*\?/, name: "duplicated radiance-cascade count policy", allow: null, allowContent: /return atlasDimension <= 256 \? 3 : 4;/ },
-    { pattern: /(FindAnyObjectByType|FindFirstObjectByType)<Camera>/, name: "ad-hoc gameplay camera lookup", allow: /^Assets\/Scripts\/Core\/(?:Rendering\/)?GameplayCamera\.cs$/, allowContent: null },
-    { pattern: /AddComponent<[A-Za-z0-9_]*(Manager|Service)>/, name: "manual manager/service construction", allow: null, allowContent: null },
-    { pattern: /(Config|config)\.GraphicsPreset\s*=/, name: "graphics preset mutation outside client config owners", allow: /^(Assets\/Scripts\/Core\/Configuration\/ClientConfig(?:Defaults|Manager|Migration)\.cs|Assets\/Scripts\/World\/Lighting\/(?:(?:Config|Core)\/)?Lighting(ConfigHolder|Engine)\.cs)$/, allowContent: null },
-    { pattern: /(Config|config)\.GraphicsQualitySettings\s*=/, name: "graphics quality snapshot mutation outside client config owners", allow: /^Assets\/Scripts\/Core\/Configuration\/ClientConfig(?:Defaults|Manager|Migration)\.cs$/, allowContent: null },
-    { pattern: /QualitySettings\.antiAliasing\s*=/, name: "MSAA ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
-    { pattern: /QualitySettings\.SetQualityLevel\s*\(/, name: "Unity quality-level ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
-    { pattern: /\.renderScale\s*=/, name: "URP render-scale ownership outside LightingEngine", allow: /^Assets\/Scripts\/World\/Lighting\/(?:Core\/)?LightingEngine\.cs$/, allowContent: null },
-    { pattern: /PlayerPrefs\.(Set|Delete|Save)/, name: "settings persistence in PlayerPrefs", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Networking\/Auth\/(AuthTokenManager|VkAuthService)\.cs|Assets\/Scripts\/UI\/(AuthGate\.cs|GatewayController\.cs|Gateway\/AuthGate\.cs|Gateway\/GatewayController\.cs))$/, allowContent: null },
-    { pattern: /(slider|toggle|dropdown|quality|preset)\.value\s*=/, name: "notifying UI settings refresh", allow: null, allowContent: null },
-    { pattern: /PauseMenuUIFactory\.CreateSlider\s*\(/, name: "unbound settings slider (use PauseMenuUIFactory.CreateBoundSlider)", allow: /^Assets\/Scripts\/UI\/Settings\/PauseMenuUIFactory\.cs$/, allowContent: null },
-    { pattern: /ServerConfig[^;]*(Master|Sfx|Music|Ambience|Voice|Ui)Volume/, name: "audio volume in ServerConfig", allow: null, allowContent: null },
-    { pattern: /_clientConfig\.Config\.[A-Za-z0-9_]+\s*=/, name: "direct ClientConfig field mutation", allow: null, allowContent: null },
-    { pattern: /_clientConfig\.Save\s*\(/, name: "unowned ClientConfig persistence", allow: /^(Assets\/Scripts\/Rendering\/(?:Settings\/)?GraphicsSettingsController\.cs|Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs|Assets\/Scripts\/World\/Lighting\/(?:(?:Config|Core)\/)?Lighting(ConfigHolder|Engine)\.cs|Assets\/Scripts\/Core\/Interfaces\/Contracts\/ConfigSaveScheduler\.cs)$/, allowContent: null },
-    { pattern: /(FindAnyObjectByType|FindFirstObjectByType|FindObjectsByType)<Canvas>/, name: "screen-space uGUI Canvas lookup", allow: null, allowContent: null },
-    { pattern: /using\s+UnityEngine\.UI;/, name: "screen-space uGUI namespace", allow: null, allowContent: null },
-    { pattern: /new\s+GameObject\(/, name: "runtime GameObject construction outside SceneObjectFactory", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Editor\/.*|Assets\/Scripts\/Tests\/.*|Assets\/Scripts\/Core\/Lifecycle\/SceneObjectFactory\.cs|Assets\/Scripts\/Game\/.*)$/, allowContent: null },
-    { pattern: /:\s*new\s+GameObject\(/, name: "fallback GameObject construction when DI is missing", allow: /^(Assets\/Editor\/.*|Assets\/Scripts\/Editor\/.*|Assets\/Scripts\/Tests\/.*|Assets\/Scripts\/Core\/Lifecycle\/SceneObjectFactory\.cs)$/, allowContent: null },
-    { pattern: /GameObject\.Find(GameObjectWithTag|GameObjectsWithTag)?\(/, name: "global unscoped GameObject lookup", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /SceneManager\.LoadScene\(/, name: "synchronous scene loading outside BootstrapLifetimeScope", allow: /^Assets\/Scripts\/Tests\//, allowContent: null },
-    { pattern: /FindObjects?OfType</, name: "deprecated FindObject(s)OfType call", allow: null, allowContent: null },
-    { pattern: /\bInput\.(GetKey|GetKeyDown|GetKeyUp|GetButton|GetButtonDown|GetMouseButton|mousePosition|GetAxis|anyKey)\b/, name: "legacy Input Manager call (use UnityEngine.InputSystem)", allow: null, allowContent: null },
-    { pattern: /\b(StartCoroutine|StopCoroutine)\s*\(/, name: "legacy MonoBehaviour coroutines (use UniTask)", allow: null, allowContent: null },
-    { pattern: /\bAudioSource\b/, name: "Unity AudioSource usage (FMOD Studio is the sole audio engine)", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\bDontDestroyOnLoad\s*\(/, name: "DontDestroyOnLoad outside BootstrapLifetimeScope", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Core\/Bootstrap\/BootstrapLifetimeScope\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\bScreen\.SetResolution\s*\(/, name: "Screen.SetResolution outside DisplayManager", allow: /^Assets\/Scripts\/Rendering\/(?:Settings\/)?DisplayManager\.cs$/, allowContent: null },
-    { pattern: /\bThread\.Sleep\s*\(/, name: "blocking Thread.Sleep in gameplay/async code", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\.Forget\s*\(/, name: "unsupervised async operation (use AsyncOperationSupervisor)", allow: LEGACY_UNSUPERVISED_ASYNC_FILES, allowContent: null },
-    { pattern: /\bclass\s+WorldLayer\s*</, name: "WorldLayer implementation outside persistence assembly", allow: /^Assets\/Scripts\/World\/Persistence\/WorldLayer\.cs$/, allowContent: null },
-    { pattern: /\b(?:FileStream|BinaryReader|BinaryWriter)\b/, name: "file persistence implementation inside Contracts", allow: /^(?!Assets\/Scripts\/Core\/Interfaces\/Contracts\/)/, allowContent: null },
-    { pattern: /\bclass\s+LocalChatPopup\b/, name: "disconnected legacy local-chat controller (use GlobalChatUI local channel)", allow: null, allowContent: null },
-    { pattern: /\.GetChunk\s*\(/, name: "ambiguous world-layer chunk access (use ReadChunk or GetOrCreateChunk)", allow: null, allowContent: null },
-    // UAC0009: Unity 6 объявила DEVELOPMENT_BUILD устаревшей в пользу директив
-    // варианта управляемого кода. Здесь это #if UNITY_EDITOR || UNITY_ENABLE_CHECKS.
-    //
-    // Не Debug.isDebugBuild: блоки закрывают поля и параметры конструкторов,
-    // а рантайм-проверка объявление не вырезает.
-    // Не DEBUG: по документации редактора это САМЫЙ УЗКИЙ вариант —
-    // неоптимизированная сборка под отладчик. UNITY_ENABLE_CHECKS определён и в
-    // Checked, и в Debug (Debug наследует все определения Checked), а закрывают
-    // эти блоки именно проверки и отладочные органы управления.
-    { pattern: /\bDEVELOPMENT_BUILD\b/, name: "устаревшая директива DEVELOPMENT_BUILD (UAC0009) — используйте UNITY_ENABLE_CHECKS", allow: null, allowContent: null },
-    { pattern: /\bGC\.Collect\s*\(/, name: "manual GC.Collect in runtime gameplay", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /\bCamera\.(allCameras|current)\b/, name: "unmanaged camera lookup (use explicit gameplay camera contract)", allow: null, allowContent: null },
-    { pattern: /\bTime\.timeScale\s*=/, name: "unowned Time.timeScale mutation", allow: /^(Assets\/Scripts\/UI\/(PauseMenu\.cs|Settings\/PauseMenu\.cs)|Assets\/Scripts\/Game\/Managers\/GameManager\.cs|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /new\s+(WebClient|HttpClient)\s*\(/, name: "ad-hoc HTTP client (use ClientAssetLoader or UnityWebRequest)", allow: /^(Assets\/Editor\/|Assets\/Scripts\/Tests\/)/, allowContent: null },
-    { pattern: /Shader\.WarmupAllShaders/, name: "Shader.WarmupAllShaders in URP (throws keyword space assert)", allow: null, allowContent: null },
-    { pattern: /_starfieldMaterial\.(?:SetFloat|SetVector|SetColor|SetTexture|SetInt|SetMatrix)\s*\(/, name: "mutation of the serialized Starfield material asset (use the HideAndDontSave runtime clone)", allow: null, allowContent: null },
-    { pattern: /\.sharedMaterial\.(?:SetFloat|SetVector|SetColor|SetTexture|SetInt|SetMatrix)\s*\(/, name: "mutation through Renderer.sharedMaterial (clone the material or use MaterialPropertyBlock)", allow: null, allowContent: null },
-    { pattern: /GameStartupServices/, name: "deleted GameStartupServices aggregate (inject startup dependencies directly into GameBootstrap)", allow: /^Assets\/Scripts\/Tests\//, allowContent: null },
-    { pattern: /SceneScopeAuthoring|SceneContractMigration/, name: "scene auto-fixing editor tools are deleted (use the read-only ProductionSceneContractValidator)", allow: null, allowContent: null },
-    { pattern: /PlayerMovementController\.(LocalPlayer|OnLocalPlayerSpawned)/, name: "static local-player access (resolve ILocalPlayerState)", allow: /^Assets\/Scripts\/Core\/Interfaces\/ILocalPlayerState\.cs$/, allowContent: null },
-    { pattern: /\b(MenuStarfield|MenuSceneryController)\.Current\b/, name: "static menu-scenery access (use the MainMenuLifetimeScope serialized contract)", allow: null, allowContent: null },
-    { pattern: /\b(PauseMenu\.IsMenuOpen|ChatInput\.IsFocused|ProgrammatorGrid\.IsOpen)\b/, name: "static UI state access outside the UI layer (compose IInputBlocker)", allow: /^(Assets\/Scripts\/UI\/|Assets\/Scripts\/DiagnosticRunner\.cs|Assets\/Scripts\/Core\/Bootstrap\/DiagnosticRunner\.cs)/, allowContent: null },
-];
-
 const STANDARDS_LIST = [
     "  - static 'Instance' singletons              -> use VContainer DI",
     "  - ServiceLocator                            -> constructor / DI injection",
@@ -282,46 +197,6 @@ const STANDARDS_LIST = [
     "  - Unity classes namespace syntax            -> use block namespace { } for MonoBehaviour/ScriptableObject",
 ];
 
-function checkPatterns(files) {
-    const cache = new Map();
-    const contentOf = (file) => {
-        if (!cache.has(file)) {
-            cache.set(file, readFile(file));
-        }
-        return cache.get(file);
-    };
-
-    for (const rule of RULES) {
-        for (const file of files) {
-            if (rule.allow && rule.allow.test(file)) {
-                continue;
-            }
-            const content = contentOf(file);
-            if (content === null) {
-                continue;
-            }
-            const lines = content.split("\n");
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].replace(/\r$/, "");
-                if (!rule.pattern.test(line)) {
-                    continue;
-                }
-                if (COMMENT_LINE_REGEX.test(line)) {
-                    continue;
-                }
-                if (rule.allowContent && rule.allowContent.test(line)) {
-                    continue;
-                }
-                violations.push({
-                    category: "Architecture",
-                    loc: `${file}:${i + 1}`,
-                    message: `${BOLD}${rule.name}${NC}\n  File: ${BOLD}${file}:${i + 1}${NC}\n  Code: ${CYAN}${line}${NC}`,
-                    kind: "pattern",
-                });
-            }
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Part 2: deep semantic DI and lifecycle analyzer
@@ -915,7 +790,7 @@ const SCENE_CONTRACTS = {
             World: ["MapManager", "WorldBackgroundSetup", "WorldTextureManager"],
             Rendering: ["TerrainRenderer", "WorldEntityBatchRenderer", "PostProcessController", "LightingEngine", "SurfaceRenderer", "CameraFollow", "VFXPool"],
             Gameplay: ["GameManager", "BuildingManager", "RobotManager", "ServerConfig"],
-            UI: ["GlobalChatUI", "UIInputManager", "FPSCounter", "FloatingChatManager", "ReconnectUI", "AssetLoadingIndicator", "MissionArrowUI", "DiagnosticRunner", "PlayerHUDView", "InventoryView", "PauseMenu", "MinimapController", "WorldMapController", "WorldMapRenderer", "DisplayManager", "InGameDebugOverlay"],
+            UI: ["GlobalChatUI", "UIInputManager", "FPSCounter", "FloatingChatManager", "ReconnectUI", "AssetLoadingIndicator", "MissionArrowUI", "PlayerHUDView", "InventoryView", "PauseMenu", "MinimapController", "WorldMapController", "WorldMapRenderer", "DisplayManager", "InGameDebugOverlay"],
             Audio: ["ServerAudioEventManager"],
         },
     },
@@ -1568,7 +1443,11 @@ function checkRenderPassInvariants() {
     let bypassBraceDepth = 0;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        if (line.includes("if (BypassPostProcessEffects)")) {
+        // Флаг переехал в PostProcessRuntimeState вместе со всем состоянием,
+        // которое в проход толкают снаружи. Проверять надо по имени члена,
+        // а не по строке целиком: иначе правило молча перестаёт работать
+        // ровно тогда, когда файл разделили по ответственностям.
+        if (/if \(\s*(?:PostProcessRuntimeState\.)?BypassPostProcessEffects\s*\)/.test(line)) {
             inBypassBlock = true;
             bypassBraceDepth = 0;
         }
@@ -2453,6 +2332,7 @@ function checkNamespaceVisibility(sources) {
     }
 
     let violations = 0;
+
     for (const file of sources) {
         const entry = cache.get(file);
         if (!entry) {
@@ -2491,31 +2371,6 @@ function checkNamespaceVisibility(sources) {
     }
     return violations;
 }
-
-// ---------------------------------------------------------------------------
-// Part 4c: неоднозначный конструктор у типа, который собирает контейнер
-// ---------------------------------------------------------------------------
-//
-// VContainer без атрибута [Inject] берёт конструктор с НАИБОЛЬШИМ числом
-// параметров и смотрит в том числе непубличные (TypeAnalyzer.cs:237-245).
-// Живой случай: у PersistentAssetCache рядом с public ctor() лежал
-// internal ctor(string) для тестов — контейнер выбрал его, не нашёл
-// регистрации System.String и уронил сборку целиком в Awake бутстрапа.
-// Ошибка молчит до запуска, поэтому ловится тут.
-//
-// Форма Register<T>(resolver => ...) не при чём: там конструктор зовёт
-// фабрика, а не анализатор типов.
-// ---------------------------------------------------------------------------
-// Part 4d: здесь жили проверки тонмапа AgX
-// ---------------------------------------------------------------------------
-//
-// Проверялись сумма строк матриц (транспонированная матрица красит нейтрали),
-// возврат в линейное после кривой и наличие полинома S-кривой. Всё это
-// удалено вместе с самим тонмаппингом: правило, сторожащее несуществующий
-// код, либо падает вечно, либо его отключают — и тогда оно не сторожит
-// ничего. Если сжатие динамического диапазона вернётся, проверки надо
-// восстановить из истории: они ловили ошибку, невидимую ни компиляцией, ни
-// глазами на цветном кадре.
 
 const SHADER_COLOR_FUNCTIONS = [
     "SRGBToLinear", "LinearToSRGB", "FastSRGBToLinear", "FastLinearToSRGB",
@@ -2574,6 +2429,19 @@ function checkShaderColorLibraryIncludes() {
     return violations;
 }
 
+// ---------------------------------------------------------------------------
+// Part 4c: неоднозначный конструктор у типа, который собирает контейнер
+// ---------------------------------------------------------------------------
+//
+// VContainer без атрибута [Inject] берёт конструктор с НАИБОЛЬШИМ числом
+// параметров и смотрит в том числе непубличные (TypeAnalyzer.cs:237-245).
+// Живой случай: у PersistentAssetCache рядом с public ctor() лежал
+// internal ctor(string) для тестов — контейнер выбрал его, не нашёл
+// регистрации System.String и уронил сборку целиком в Awake бутстрапа.
+// Ошибка молчит до запуска, поэтому ловится тут.
+//
+// Форма Register<T>(resolver => ...) не при чём: там конструктор зовёт
+// фабрика, а не анализатор типов.
 function checkContainerConstructorChoice() {
     const registered = new Map();
     const REGISTER = /builder\s*\.\s*Register<\s*([A-Za-z_][\w]*)\s*>\s*\(\s*Lifetime\./g;
@@ -3112,7 +2980,6 @@ function checkHiddenClassNotOverridden() {
 // чтобы число не читалось как «недоделка»: всё, что здесь осталось, законно,
 // и попытка довести его до нуля сломает работающее.
 //
-//   17  Common/Animation/UIAnimator.cs        твины: opacity и translate в кадре
 //   17  Common/Interaction/StyleApplicator.cs исполнение GUIStylePacket — это
 //                                             и есть соблюдение протокола
 //    9  Menu/Scenery/MenuSceneryMarkers.cs    проекция 3D-точки на кадр планеты
@@ -3134,8 +3001,15 @@ function checkHiddenClassNotOverridden() {
 // checkNoInlineDisplayOutsideMainGame.
 
 const DEBT_BUDGET = {
-    "inline вне main game": 59,
-    "inline в main game": 286,
+    // 42 на 04.09.2026 — после чистки инлайновых стилей в UI. Снимок, а не норма.
+    // Число заморожено, чтобы долг не накапливался: расти нельзя, падать можно,
+    // упадшее вписать сюда.
+    "inline вне main game": 42,
+    // 207, а не 286: отладочные оверлеи переехали на IMGUI, и вместе с UI
+    // Toolkit из них ушли 79 записей element.style.* — геометрия колонок,
+    // скругления и отступы двух Label, ряд графиков. Инлайна там больше нет
+    // вовсе: у IMGUI нет USS, который он мог бы перебить.
+    "inline в main game": 206,
     // 210, а не 205: сверка компонентов (compare-components.py) перенесла в
     // игру значения макета, и часть из них там тоже литералы — 22px отступа
     // под подзаголовком, 3px скругления тикера, 19px и -30px в ленте хроники.
@@ -3150,8 +3024,8 @@ const DEBT_BUDGET = {
     // 218: плюс 14x2 золотой чёрточки надзаголовка. В макете эти два числа тоже
     // литералы: чёрточка намеренно не тир-зависимая, иначе на компактном тире
     // она мельчает вместе с отступами и перестаёт читаться как акцент.
-    "литерал в общем слое": 218,
-    "литерал в main game": 324,
+    "литерал в общем слое": 216,
+    "литерал в main game": 321,
 };
 
 // Папки Assets/Scripts/UI, принадлежащие main game.
@@ -3232,236 +3106,6 @@ function checkDesignSystemRatchet() {
 // Part 5: localization linter
 // ---------------------------------------------------------------------------
 
-const LOCALIZATION_DIR = path.join(__dirname, "..", "Assets", "Resources", "Localization");
-
-// Localization-key usages in production C#. Two sources, both excluding
-// tests via collectWiringFiles:
-//   1. Literal lookups: .Get("menu.play") / .HasKey("menu.play").
-//   2. Keys referenced as data: a "dotted" string literal that exactly
-//      matches a dictionary key counts as usage too (e.g. MenuLoaderProgress
-//      stores phase keys in an array and resolves them through Get() at
-//      runtime). Filenames like "client_config.json" never equal a key.
-const LOC_KEY_USAGE_RE = /\.(?:Get|HasKey)\(\\?"([a-z][a-z0-9_.-]*\.[a-z0-9_.-]+)"/g;
-
-// Render a set of placeholder indices as "{0},{1}" for diagnostics.
-function placeholderList(indices) {
-    return indices.map((i) => "{" + i + "}").join(",");
-}
-
-function checkLocalization() {
-    // 1. Load all language files as flat string->string dictionaries.
-    let names;
-    try {
-        names = fs.readdirSync(LOCALIZATION_DIR).filter((n) => n.endsWith(".json")).sort();
-    } catch {
-        recordViolation("Localization", LOCALIZATION_DIR, `Не найден каталог локализации ${LOCALIZATION_DIR}.`);
-        return;
-    }
-    if (names.length === 0) {
-        recordViolation("Localization", LOCALIZATION_DIR, "В Assets/Resources/Localization нет ни одного .json — словаря локализации нет вовсе.");
-        return;
-    }
-
-    let problemCount = 0;
-    const dictionaries = new Map(); // lang -> Map(key -> value)
-    for (const name of names) {
-        const full = path.join(LOCALIZATION_DIR, name);
-        const src = readFile(full);
-        if (src === null) {
-            recordViolation("Localization (file)", full, `${name}: не удалось прочитать файл.`);
-            problemCount++;
-            continue;
-        }
-        let parsed;
-        try {
-            parsed = JSON.parse(src);
-        } catch (ex) {
-            recordViolation("Localization (invalid JSON)", full, `${name}: файл не парсится как JSON (${ex.message}).`);
-            problemCount++;
-            continue;
-        }
-        // JSON.parse silently collapses duplicate keys (last wins), so detect
-        // them on the raw text: keys in these files sit on their own lines.
-        const seenRaw = new Set();
-        for (const m of src.matchAll(/^\s*"([^"]+)"\s*:/gm)) {
-            if (seenRaw.has(m[1])) {
-                recordViolation("Localization (duplicate key)", full, `${name}: ключ '${m[1]}' объявлен несколько раз — побеждает последний, остальные потеряны.`);
-                problemCount++;
-            }
-            seenRaw.add(m[1]);
-        }
-        const dict = new Map();
-        for (const [key, value] of Object.entries(parsed)) {
-            if (typeof value !== "string") {
-                recordViolation("Localization (value type)", full, `${name}: значение ключа '${key}' — не строка (${typeof value}).`);
-                problemCount++;
-                continue;
-            }
-            dict.set(key, value);
-        }
-        dictionaries.set(name.replace(/\.json$/, ""), dict);
-    }
-    if (dictionaries.size === 0) {
-        return;
-    }
-
-    const allKeys = new Set();
-    for (const dict of dictionaries.values()) {
-        for (const key of dict.keys()) {
-            allKeys.add(key);
-        }
-    }
-    const langs = [...dictionaries.keys()];
-
-    // 2. Key-set parity: en is the runtime fallback, so a key missing in any
-    //    language either shows the raw key (en) or silently falls back to en.
-    for (const key of [...allKeys].sort()) {
-        const missing = langs.filter((lang) => !dictionaries.get(lang).has(key));
-        if (missing.length > 0) {
-            recordViolation(
-                "Localization (key parity)",
-                LOCALIZATION_DIR,
-                `Ключ '${key}' есть не во всех языках: отсутствует в ${missing.join(", ")}. В игре покажется сырой ключ или сработает неявный fallback на en.`,
-            );
-            problemCount++;
-        }
-    }
-
-    // 2b. Translated languages must not carry source-language (Cyrillic) text:
-    //     the ru dictionary is the source, every other language is a translation.
-    for (const lang of langs) {
-        if (lang === "ru") {
-            continue;
-        }
-        for (const [key, value] of dictionaries.get(lang)) {
-            if (/[А-Яа-яЁё]/.test(value)) {
-                recordViolation(
-                    "Localization (translation has Cyrillic)",
-                    path.join(LOCALIZATION_DIR, lang + ".json"),
-                    `Ключ '${key}': значение содержит кириллицу — похоже, перевод не сделан и остался русский текст.`,
-                );
-                problemCount++;
-            }
-        }
-    }
-
-    // 3. Placeholder sanity: {N} indices must be a contiguous prefix from {0}
-    //    (string.Format throws FormatException and Get() returns the raw
-    //    string otherwise), and identical across languages for the same key.
-    for (const [lang, dict] of dictionaries) {
-        for (const [key, value] of dict) {
-            const indices = [...value.matchAll(/\{(\d+)\}/g)].map((m) => parseInt(m[1], 10));
-            const sorted = [...new Set(indices)].sort((a, b) => a - b);
-            if (sorted.length > 0 && sorted.some((v, i) => v !== i)) {
-                recordViolation(
-                    "Localization (placeholders)",
-                    path.join(LOCALIZATION_DIR, lang + ".json"),
-                    `'${key}' в '${lang}': плейсхолдеры {${placeholderList(sorted)}} — должны идти подряд, начиная с {0}.`,
-                );
-                problemCount++;
-            }
-        }
-    }
-    for (const key of allKeys) {
-        const perLang = [];
-        let complete = true;
-        for (const lang of langs) {
-            const dict = dictionaries.get(lang);
-            if (!dict.has(key)) {
-                complete = false; // parity check already reported the gap
-                break;
-            }
-            perLang.push([lang, new Set([...(dict.get(key) ?? "").matchAll(/\{(\d+)\}/g)].map((m) => m[1]))]);
-        }
-        if (!complete) {
-            continue;
-        }
-        const [firstLang, firstSet] = perLang[0];
-        for (const [lang, set] of perLang.slice(1)) {
-            if (firstSet.size !== set.size || [...firstSet].some((i) => !set.has(i))) {
-                recordViolation(
-                    "Localization (placeholders)",
-                    LOCALIZATION_DIR,
-                    `Ключ '${key}': набор плейсхолдеров в '${firstLang}' ({${placeholderList([...firstSet].sort())}}) отличается от '${lang}' ({${placeholderList([...set].sort())}}) — string.Format упадёт на одном из языков.`,
-                );
-                problemCount++;
-            }
-        }
-    }
-
-    // 4. Usage wiring: every key used in production C# must exist in every
-    //    language; dictionary keys never used are dead. Keys also count as
-    //    used when they appear as UXML text attributes (text="hud.mission"):
-    //    UILocalizer resolves them at runtime, so UXML is a legitimate reader.
-    const usedKeys = new Set();
-    for (const file of collectWiringFiles()) {
-        const content = readFile(file);
-        if (content === null) {
-            continue;
-        }
-        for (const m of content.matchAll(LOC_KEY_USAGE_RE)) {
-            usedKeys.add(m[1]);
-        }
-        for (const key of allKeys) {
-            // Plain "key" or escaped \"key\" (inside interpolated strings).
-            if (content.includes('"' + key + '"') || content.includes('\\"' + key + '\\"')) {
-                usedKeys.add(key);
-            }
-        }
-    }
-    {
-        const UI_DIR = path.join(__dirname, "..", "Assets", "Resources", "UI");
-        for (const name of fs.readdirSync(UI_DIR)) {
-            if (!name.endsWith(".uxml")) {
-                continue;
-            }
-            const content = readFile(path.join(UI_DIR, name));
-            if (content === null) {
-                continue;
-            }
-            for (const m of content.matchAll(/(?:text|tooltip)="([^"]*)"/g)) {
-                // Dotted lowercase values are localization keys: count them as
-                // used (the missing-key check then catches typos that would
-                // otherwise render as raw keys at runtime). Tooltips count too:
-                // UILocalizer resolves them the same way as text.
-                if (/^[a-z][a-z0-9_.-]*\.[a-z0-9_.-]+$/.test(m[1])) {
-                    usedKeys.add(m[1]);
-                }
-            }
-        }
-    }
-
-    if (usedKeys.size === 0) {
-        recordViolation(
-            "Localization (unwired)",
-            LOCALIZATION_DIR,
-            `Локализация не подключена: в словарях объявлено ${allKeys.size} ключей (${langs.join(", ")}), но ни один не используется в production-коде — UI показывает захардкоженные строки. Переведите строки на .Get("...") или удалите словарь.`,
-        );
-        problemCount++;
-    } else {
-        for (const key of [...usedKeys].sort()) {
-            const missing = langs.filter((lang) => !dictionaries.get(lang).has(key));
-            if (missing.length > 0) {
-                recordViolation(
-                    "Localization (missing key)",
-                    LOCALIZATION_DIR,
-                    `Ключ '${key}' используется в коде, но отсутствует в ${missing.join(", ")} — в игре покажется сырой ключ.`,
-                );
-                problemCount++;
-            }
-        }
-        for (const key of [...allKeys].filter((k) => !usedKeys.has(k)).sort()) {
-            recordViolation(
-                "Localization (dead key)",
-                LOCALIZATION_DIR,
-                `Ключ '${key}' объявлен в словаре, но нигде не используется — строка либо захардкожена, либо ключ потерян.`,
-            );
-            problemCount++;
-        }
-    }
-
-    console.log(`${CYAN}${BOLD}Localization:${NC} ${dictionaries.size} language(s), ${allKeys.size} key(s), ${problemCount} violation(s)`);
-}
 
 // Hardcoded-text bans: the localization dictionary is the single source of
 // truth for displayed text, so UXML must not carry Cyrillic literals and UI
@@ -3838,20 +3482,12 @@ function checkSingleRoadInit() {
 // ---------------------------------------------------------------------------
 
 function printViolations() {
-    let patternCount = 0;
     for (const v of violations) {
-        if (v.kind === "pattern") {
-            patternCount++;
-            console.log(`${RED}${BOLD}[VIOLATION]${NC} ${YELLOW}${v.message}${NC}`);
-            console.log("");
-        } else {
-            console.log(`${RED}${BOLD}[${v.category.toUpperCase()} VIOLATION]${NC} ${YELLOW}${v.category}${NC}`);
-            console.log(`  Location: ${BOLD}${v.loc}${NC}`);
-            console.log(`  Details:  ${CYAN}${v.message}${NC}`);
-            console.log("");
-        }
+        console.log(`${RED}${BOLD}[${v.category.toUpperCase()} VIOLATION]${NC} ${YELLOW}${v.category}${NC}`);
+        console.log(`  Location: ${BOLD}${v.loc}${NC}`);
+        console.log(`  Details:  ${CYAN}${v.message}${NC}`);
+        console.log("");
     }
-    return patternCount;
 }
 
 function main() {
@@ -3863,11 +3499,10 @@ function main() {
         (file) => fs.existsSync(file) && !EXCLUDE_REGEX.test(file),
     );
 
-    console.log(`${CYAN}${BOLD}=== Fodinae Architectural Pattern Linter ===${NC}`);
-    console.log(`Scanning ${BOLD}${productionFiles.length}${NC} files against ${BOLD}${RULES.length}${NC} architectural rules...`);
+    console.log(`${CYAN}${BOLD}=== Fodinae Specialized Source Checks ===${NC}`);
+    console.log(`Scanning ${BOLD}${productionFiles.length}${NC} production files...`);
     console.log("");
 
-    checkPatterns(productionFiles);
     checkOversizedProductionFiles();
     checkExecutionOrders();
     checkLifetimeScopeConfigure();
@@ -3901,7 +3536,6 @@ function main() {
     checkSettingConsumerTargetMembers();
     checkStartupApplicationContract();
     checkUssStyles();
-    checkLocalization();
     checkHardcodedText();
     checkLocalizationWiring();
     checkLocalizationRegistry();
@@ -3910,10 +3544,8 @@ function main() {
 
     const duration = ((Date.now() - startedAt) / 1000).toFixed(0);
     if (violations.length > 0) {
-        const patternCount = printViolations();
-        const otherCount = violations.length - patternCount;
+        printViolations();
         console.log(`${RED}${BOLD}✖ FAILED:${NC} Found ${BOLD}${violations.length}${NC} violation(s) ` +
-            `(${BOLD}${patternCount}${NC} architectural, ${BOLD}${otherCount}${NC} DI/lifecycle + settings wiring + USS + localization) ` +
             `across ${BOLD}${productionFiles.length}${NC} files (${duration}s).`);
         console.log("");
         console.log(`${BOLD}Architectural Standards & Replacements:${NC}`);
@@ -3945,8 +3577,8 @@ function main() {
         process.exit(1);
     }
 
-    console.log(`${GREEN}${BOLD}✔ PASSED:${NC} All ${BOLD}${productionFiles.length}${NC} production files conform to ` +
-        `${BOLD}${RULES.length}${NC} architectural rules; DI/lifecycle, settings-wiring, USS and localization checks passed (${duration}s).`);
+    console.log(`${GREEN}${BOLD}✔ PASSED:${NC} Specialized DI/lifecycle, settings-wiring, ` +
+        `USS and localization checks passed across ${BOLD}${productionFiles.length}${NC} files (${duration}s).`);
     process.exit(0);
 }
 

@@ -37,9 +37,6 @@ internal sealed class DummyBuffManager
         _operations = operations;
         _loopAlive = loopAlive;
     }
-
-    public bool HasActiveBuffs => _activeBuffs.Count > 0;
-
     public void StartBuffLoop(int lifecycleVersion)
     {
         if (_buffLoopStarted)

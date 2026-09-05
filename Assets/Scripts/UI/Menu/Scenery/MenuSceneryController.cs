@@ -366,10 +366,6 @@ namespace Fodinae.UI
             _sceneryCamera.ResetProjectionMatrix();
             _renderDirty = true;
         }
-
-        /// <summary>Возвращает камеру в обзорное положение меню.</summary>
-        public void ResetFraming() => SetDescentFraming(0f, Vector3.back);
-
         // Reports the orbiting station's on-screen position as a 0..1 viewport
         // fraction (origin bottom-left, matching Camera.WorldToViewportPoint),
         // so UI Toolkit callers can convert it into their own panel space.

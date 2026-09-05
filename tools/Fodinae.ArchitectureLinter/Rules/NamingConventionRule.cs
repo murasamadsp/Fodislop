@@ -48,7 +48,10 @@ public sealed class NamingConventionRule : IRule
 
         foreach (var field in type.Fields)
         {
-            if (field.IsPrivate && !field.Name.StartsWith("_") && !IsCompilerGenerated(field))
+            if (field.IsPrivate &&
+                !field.IsLiteral &&
+                !field.Name.StartsWith("_", StringComparison.Ordinal) &&
+                !IsCompilerGenerated(field))
             {
                 violations.Add(new RuleViolation
                 {

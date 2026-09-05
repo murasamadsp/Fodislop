@@ -3,6 +3,8 @@
 #pragma kernel BloomUpsample
 #pragma kernel CompositeFinal
 
+#include "ColorGrading.hlsl"
+
 Texture2D<float4> _InputTex;
 Texture2D<float4> _SourceTex;
 Texture2D<float4> _BaseTex;
@@ -37,6 +39,28 @@ float _Contrast;
 float _Saturation;
 float _Gamma;
 float _HdrPaperWhiteScale;
+float _HdrPeakBrightnessScale;
+
+// Слой вывода: 0 — без кривой (сверка), 1 — своя кривая. Значение авторское и
+// живёт в PostProcessLook, а не в настройках игрока.
+int _DisplayTransform;
+float _ToneMappingWhitePoint;
+float4 _CurveShape;  // x=greyOut, y=slope, z=shoulderPower, w=toePower
+float4 _CurveRange;  // x=toeStops, y=pathToWhiteAmount, z=pathToWhitePower
+
+// Отладочный вид кадра: 0 обычный, 1 ложный цвет по зонам, 2 отсечка.
+// Устроен как _DebugView в WorldLighting.compute — ранним выходом.
+int _PostDebugView;
+
+// Шторка сравнения: доля ширины кадра, левее которой кривая не применяется.
+// Ноль — выключено. Главный инструмент сравнения: разница видна на одном
+// кадре в одну секунду, а не по памяти между двумя запусками.
+float _CompareSplit;
+float2 _WhiteBalance;   // x=температура, y=оттенок, оба в [-100, 100]
+int _OutputGamut;       // 0=Rec.709, 1=Display P3, 2=Rec.2020
+float4 _CdlSlope;       // ASC CDL, применяется в логарифмическом пространстве
+float4 _CdlOffset;
+float4 _CdlPower;
 
 float _EigengrauIntensity;
 float4 _EigengrauColor;
@@ -182,11 +206,17 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     }
 
     // 1. Chromatic Aberration
-    // Alpha was previously discarded here and the final write below hardcoded
-    // 1.0 - harmless for the opaque gameplay camera, but it meant any camera
-    // relying on this pass for a transparent composite (e.g. an offscreen UI
-    // render) always came out as a solid opaque block regardless of its own
-    // clear settings.
+    //
+    // Альфа переносится из источника, а не прибивается единицей. Оправдание,
+    // стоявшее здесь раньше, было неверным: оно ссылалось на камеру, рисующую
+    // в текстуру ради прозрачной композиции, а такая камера сюда не попадает
+    // вовсе — PostProcessRendererFeature выходит, если targetTexture задан.
+    //
+    // Сегодня перенос вообще ни на что не влияет: при m_HDRColorBufferPrecision
+    // 32 бита URP выбирает B10G11R11_UFloatPack32, где канала альфы нет
+    // физически. Оставлено потому, что прибитая единица — это молчаливая
+    // потеря данных, которая всплывёт ровно в тот день, когда буфер станет
+    // 64-битным, и искать её будут долго.
     float3 color;
     float srcAlpha = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).a;
     if (_ChromaticAberrationIntensity > 0.001)
@@ -278,26 +308,81 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         color += dust * _Advanced2.z * float3(0.8, 0.9, 1.0);
     }
 
-    // 4. Color Grading. Every neutral value is an exact no-op.
+    // ------------------------------------------------------------------
+    // 4. Цвет. Порядок слоёв объяснён в ColorGrading.hlsl и не произволен:
+    // физика в линейном, вкус в логарифмическом, кривая последней.
+    // ------------------------------------------------------------------
+
+    // Слой 4a: линейный. Экспозиция и баланс белого описывают съёмку, а не
+    // вкус, и потому применяются к сцен-линейным величинам.
     color *= exp2(_Exposure) * _ColorFilter.rgb;
 
-    // Contrast. Опорная точка — 0.18, средне-серый в ЛИНЕЙНОМ пространстве,
-    // а не 0.5: до тонмапа кадр линейный и сцен-референсный, и 0.5 в нём не
-    // середина ничего. С опорой на 0.5 любой ненулевой контраст утягивал всю
-    // картинку в тень, потому что почти вся сцена лежит ниже опоры.
-    if (abs(_Contrast) > 0.001)
+    if (abs(_WhiteBalance.x) > 0.001 || abs(_WhiteBalance.y) > 0.001)
     {
-        const float contrastPivot = 0.18;
-        color = (color - contrastPivot) * (1.0 + _Contrast) + contrastPivot;
+        color = ApplyWhiteBalance(
+            color, WhiteBalanceCoefficients(_WhiteBalance.x, _WhiteBalance.y));
     }
 
-    // Saturation
+    color = max(0.0, color);
+
+    const float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
+
+    // Слой 4b: логарифмический. Творческий грейд живёт здесь, потому что шаг
+    // в логе равномерен по восприятию, а в линейном — нет: одна и та же
+    // прибавка контраста означала бы разное в тенях и в светах.
+    //
+    // Опорная точка контраста 0.5 — средне-серый собственной лог-шкалы. В неё
+    // 0.18 сцены попадает примерно в середину; в прежнем линейном
+    // варианте почти вся сцена лежала ниже неё, и любой контраст утягивал
+    // картинку в тень.
+    // Экранная координата берётся заново: uv выше могло сдвинуть тепловое
+    // искажение, а шторка обязана стоять ровно.
+    float2 screenUv = (id.xy + 0.5) * _ScreenSize.zw;
+    bool leftOfSplit = _CompareSplit > 0.0 && screenUv.x < _CompareSplit;
+
+    // The creative grade is independent from the display curve. Previously
+    // bypassing/soloing the curve also bypassed CDL, and the comparison split
+    // compared two different grades instead of only showing curve before/after.
+    float3 logColor = FodinaeLogEncode(color);
+    logColor = ApplyCdl(logColor, _CdlSlope.rgb, _CdlOffset.rgb, _CdlPower.rgb);
+
+    if (abs(_Contrast) > 0.001)
+    {
+        const float contrastPivot = 0.5;
+        logColor = ApplyContrast(logColor, _Contrast, contrastPivot);
+    }
+
+    float3 gradedLinear = FodinaeLogDecode(logColor);
     if (abs(_Saturation - 1.0) > 0.001)
     {
-        float lum = Luminance(color);
-        color = lerp(float3(lum, lum, lum), color, _Saturation);
+        gradedLinear = ApplySaturation(max(0.0, gradedLinear), _Saturation, lumaWeights);
     }
+
+    if (_DisplayTransform != 0 && !leftOfSplit)
+    {
+        color = FodinaeDisplayTransform(
+            gradedLinear,
+            _ToneMappingWhitePoint,
+            _CurveShape.x,
+            _CurveShape.y,
+            _CurveShape.z,
+            _CurveShape.w,
+            _CurveRange.x,
+            _CurveRange.y,
+            _CurveRange.z);
+    }
+    else
+    {
+        color = gradedLinear;
+    }
+
     color = max(0.0, color);
+
+    // Сама шторка: тонкая линия, иначе граница читается как деталь кадра.
+    if (_CompareSplit > 0.0 && abs(screenUv.x - _CompareSplit) < _ScreenSize.z)
+    {
+        color = float3(1.0, 0.25, 0.0);
+    }
 
     // HDR Paper White scaling
     if (abs(_HdrPaperWhiteScale - 1.0) > 0.001 && _HdrPaperWhiteScale > 0.01)
@@ -309,16 +394,18 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     if (_VignetteIntensity > 0.001)
     {
         float aspect = _ScreenSize.x / max(_ScreenSize.y, 1.0);
-        float2 centeredUv = (uv - _VignetteCenter) * float2(aspect, 1.0);
+        // Vignette belongs to the display, not to the refracted scene sample.
+        // Using heat-distorted `uv` here made the frame edges visibly breathe.
+        float2 centeredUv = (screenUv - _VignetteCenter) * float2(aspect, 1.0);
         float distanceFromCenter = length(centeredUv);
         float feather = max(_VignetteSmoothness, 0.001);
         float edgeMask = smoothstep(0.5 - feather * 0.5, 0.5 + feather * 0.5, distanceFromCenter);
         color = lerp(color, _VignetteColor.rgb, saturate(edgeMask * _VignetteIntensity));
     }
 
-    // Сжатия динамического диапазона здесь больше нет: кривая AgX удалена
-    // целиком по требованию. Кадр уходит на вывод в линейном виде, и всё,
-    // что ярче белой точки, срезается при финальном кодировании.
+    // В SDR сжатие диапазона выполнено выше кривой слоя 4c, поэтому зерно
+    // ложится на готовые тона. В HDR окончательное peak-плечо стоит ниже,
+    // после экранных эффектов и перед temporal history.
 
     // 6. Eigengrau: fine, zero-mean film grain in dark areas. This is not a
     // bright overlay and contains no low-frequency or scrolling texture.
@@ -364,6 +451,37 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         color = pow(max(encoded, 0.0), displayGamma);
     }
 
+    // Примары и диапазон вывода применяются ДО temporal. History хранит
+    // готовый _OutputTex; смешивать её с текущим кадром до gamut/shoulder
+    // означало смешивать разные пространства и повторно сжимать прошлый HDR.
+    color = ConvertOutputGamut(color, _OutputGamut);
+
+    // Пользовательская gamma — калибровка SDR-дисплея, а не часть кривой.
+    // FinalBlit кодирует linear -> sRGB (~2.2), поэтому предварительная степень
+    // 2.2/gamma даёт требуемую итоговую степень 1/gamma без двойного encoding.
+    if (_HdrPeakBrightnessScale <= 0.01 && abs(_Gamma - 2.2) > 0.001)
+    {
+        color = pow(max(color, 0.0), 2.2 / max(_Gamma, 0.1));
+    }
+
+    // HDR buffer values are relative to the native paper white. The user's
+    // peak setting becomes an asymptote in the same space. Preserve everything
+    // through paper white, then compress only the excess with a rational
+    // shoulder. One scale for all channels preserves hue in highlights.
+    if (_HdrPeakBrightnessScale > 0.01)
+    {
+        float shoulderStart = max(_HdrPaperWhiteScale, 0.01);
+        float peak = max(_HdrPeakBrightnessScale, shoulderStart + 0.01);
+        float norm = max(max(color.r, color.g), color.b);
+        if (norm > shoulderStart)
+        {
+            float headroom = peak - shoulderStart;
+            float excess = norm - shoulderStart;
+            float mapped = shoulderStart + headroom * excess / (headroom + excess);
+            color *= mapped / max(norm, 1e-5);
+        }
+    }
+
     if (_Temporal.x > 0.001 || _Temporal.z > 0.001 || _Temporal.w > 0.001)
     {
         float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
@@ -404,6 +522,88 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         float motionWeight = saturate(temporalDifference * 4.0) *
             saturate(_Temporal.w) * 0.5;
         color = lerp(color, stableHistory, motionWeight);
+    }
+
+    // ------------------------------------------------------------------
+    // Отладочные виды. Ранним выходом в самом конце: показывают то, что
+    // ушло бы на экран, а не промежуточное состояние.
+    //
+    // Устройство повторяет _DebugView в WorldLighting.compute намеренно —
+    // это уже принятый в проекте способ смотреть на кадр числами, и второй
+    // способ означал бы, что их надо помнить оба.
+    // ------------------------------------------------------------------
+    if (_PostDebugView != 0)
+    {
+        // Считаем в перцептивном кодировании: зоны экспозиции — понятие
+        // перцептивное, и по линейной яркости они легли бы неравномерно.
+        float encoded = LinearToPerceptual(Luminance(max(color, 0.0)));
+
+        if (_PostDebugView == 1)
+        {
+            // Ложный цвет по зонам. Границы совпадают с тем, что читают на
+            // площадке: чёрное, тени, ключевой тон (18% серого приходится на
+            // 0.46 в перцептивном), света, пересвет.
+            float3 falseColor;
+            if (encoded < 0.02)
+            {
+                falseColor = float3(0.0, 0.0, 0.45);          // провал в чёрное
+            }
+            else if (encoded < 0.20)
+            {
+                falseColor = float3(0.0, 0.45, 0.75);         // тени
+            }
+            else if (encoded < 0.42)
+            {
+                falseColor = float3(0.15, 0.15, 0.15);        // низ середины
+            }
+            else if (encoded < 0.50)
+            {
+                falseColor = float3(0.0, 0.85, 0.2);          // ключевой тон
+            }
+            else if (encoded < 0.78)
+            {
+                falseColor = float3(0.55, 0.55, 0.55);        // верх середины
+            }
+            else if (encoded < 0.95)
+            {
+                falseColor = float3(0.95, 0.75, 0.0);         // света
+            }
+            else if (encoded < 0.995)
+            {
+                falseColor = float3(1.0, 0.4, 0.0);           // край
+            }
+            else
+            {
+                falseColor = float3(1.0, 0.0, 0.0);           // пересвет
+            }
+
+            _OutputTex[id.xy] = float4(falseColor, srcAlpha);
+            return;
+        }
+
+        // Отсечка. Кадр уходит в монохром, и на нём горят только те пиксели,
+        // где потеряна информация: красным упёршиеся в потолок, синим
+        // севшие в пол. Монохром здесь не украшение — на цветном кадре
+        // красная метка на красном объекте не видна.
+        float mono = encoded * 0.35;
+        float3 result = float3(mono, mono, mono);
+
+        float maxChannel = max(color.r, max(color.g, color.b));
+        float minChannel = min(color.r, min(color.g, color.b));
+        float clippingCeiling = _HdrPeakBrightnessScale > 0.01
+            ? _HdrPeakBrightnessScale * 0.995
+            : 0.999;
+        if (maxChannel >= clippingCeiling)
+        {
+            result = float3(1.0, 0.0, 0.0);
+        }
+        else if (minChannel <= 0.0005)
+        {
+            result = float3(0.0, 0.3, 1.0);
+        }
+
+        _OutputTex[id.xy] = float4(result, srcAlpha);
+        return;
     }
 
     _OutputTex[id.xy] = float4(color, srcAlpha);

@@ -37,6 +37,18 @@ internal static class PostProcessShaderConstants
     public static readonly int SaturationID = Shader.PropertyToID("_Saturation");
     public static readonly int GammaID = Shader.PropertyToID("_Gamma");
     public static readonly int HdrPaperWhiteScaleID = Shader.PropertyToID("_HdrPaperWhiteScale");
+    public static readonly int HdrPeakBrightnessScaleID = Shader.PropertyToID("_HdrPeakBrightnessScale");
+    public static readonly int DisplayTransformID = Shader.PropertyToID("_DisplayTransform");
+    public static readonly int ToneMappingWhitePointID = Shader.PropertyToID("_ToneMappingWhitePoint");
+    public static readonly int CurveShapeID = Shader.PropertyToID("_CurveShape");
+    public static readonly int CurveRangeID = Shader.PropertyToID("_CurveRange");
+    public static readonly int PostDebugViewID = Shader.PropertyToID("_PostDebugView");
+    public static readonly int CompareSplitID = Shader.PropertyToID("_CompareSplit");
+    public static readonly int WhiteBalanceID = Shader.PropertyToID("_WhiteBalance");
+    public static readonly int OutputGamutID = Shader.PropertyToID("_OutputGamut");
+    public static readonly int CdlSlopeID = Shader.PropertyToID("_CdlSlope");
+    public static readonly int CdlOffsetID = Shader.PropertyToID("_CdlOffset");
+    public static readonly int CdlPowerID = Shader.PropertyToID("_CdlPower");
 
     public static readonly int EigengrauIntensityID = Shader.PropertyToID("_EigengrauIntensity");
     public static readonly int EigengrauColorID = Shader.PropertyToID("_EigengrauColor");

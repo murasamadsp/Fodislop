@@ -7,218 +7,147 @@ using System.Linq;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.World
+namespace Fodinae.World;
+
+/// <summary>
+/// Manages caching of cell textures for efficient loading and memory management.
+/// </summary>
+public class CellTextureCache
 {
+    private readonly ConcurrentDictionary<CellType, CellTextureInfo> _textureCache = new();
+    private readonly ConcurrentDictionary<CellType, Texture2D> _loadedTextures = new();
+    private readonly ConcurrentDictionary<string, CellType> _filenameCache = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Manages caching of cell textures for efficient loading and memory management.
+    /// Add a texture to the cache.
     /// </summary>
-    public class CellTextureCache
+    /// <param name="cellType">The cell type.</param>
+    /// <param name="textureInfo">Texture information.</param>
+    public void AddTexture(CellType cellType, CellTextureInfo textureInfo)
     {
-        private readonly ConcurrentDictionary<CellType, CellTextureInfo> _textureCache = new();
-        private readonly ConcurrentDictionary<CellType, Texture2D> _loadedTextures = new();
-        private readonly ConcurrentDictionary<string, CellType> _filenameCache = new(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// Get the number of cached textures.
-        /// </summary>
-        public int CacheCount => _textureCache.Count;
-
-        /// <summary>
-        /// Add a texture to the cache.
-        /// </summary>
-        /// <param name="cellType">The cell type.</param>
-        /// <param name="textureInfo">Texture information.</param>
-        public void AddTexture(CellType cellType, CellTextureInfo textureInfo)
+        if (_textureCache.TryGetValue(cellType, out CellTextureInfo previous) &&
+            previous.OwnsBaseTexture &&
+            previous.BaseTexture != textureInfo.BaseTexture)
         {
-            if (_textureCache.TryGetValue(cellType, out CellTextureInfo previous) &&
-                previous.OwnsBaseTexture &&
-                previous.BaseTexture != textureInfo.BaseTexture)
+            DestroyTexture(previous.BaseTexture);
+        }
+
+        _textureCache.AddOrUpdate(cellType, textureInfo, (key, oldValue) => textureInfo);
+        _loadedTextures.AddOrUpdate(cellType, textureInfo.BaseTexture, (key, oldValue) => textureInfo.BaseTexture);
+
+        // Cache filename mapping
+        var filename = $"Cells/{(int)cellType}";
+        _filenameCache.TryAdd(filename, cellType);
+    }
+
+    /// <summary>
+    /// Try to get texture information from cache.
+    /// </summary>
+    /// <param name="cellType">The cell type.</param>
+    /// <param name="textureInfo">Output texture information.</param>
+    /// <returns>True if found, false otherwise.</returns>
+    public bool TryGetTexture(CellType cellType, out CellTextureInfo textureInfo) =>
+        _textureCache.TryGetValue(cellType, out textureInfo);
+
+    /// <summary>
+    /// Get a cached texture for a cell type.
+    /// </summary>
+    /// <param name="cellType">The cell type.</param>
+    /// <returns>The cached texture or null if not found.</returns>
+    public Texture2D? GetCachedTexture(CellType cellType) =>
+        _loadedTextures.TryGetValue(cellType, out var texture) ? texture : null;
+
+    /// <summary>
+    /// Clear all cached textures.
+    /// </summary>
+    public void Clear()
+    {
+        HashSet<Texture2D> ownedTextures = [];
+        foreach (CellTextureInfo textureInfo in _textureCache.Values)
+        {
+            if (textureInfo.OwnsBaseTexture && textureInfo.BaseTexture != null)
             {
-                DestroyTexture(previous.BaseTexture);
-            }
-
-            _textureCache.AddOrUpdate(cellType, textureInfo, (key, oldValue) => textureInfo);
-            _loadedTextures.AddOrUpdate(cellType, textureInfo.BaseTexture, (key, oldValue) => textureInfo.BaseTexture);
-
-            // Cache filename mapping
-            var filename = $"Cells/{(int)cellType}";
-            _filenameCache.TryAdd(filename, cellType);
-        }
-
-        /// <summary>
-        /// Try to get texture information from cache.
-        /// </summary>
-        /// <param name="cellType">The cell type.</param>
-        /// <param name="textureInfo">Output texture information.</param>
-        /// <returns>True if found, false otherwise.</returns>
-        public bool TryGetTexture(CellType cellType, out CellTextureInfo textureInfo)
-        {
-            return _textureCache.TryGetValue(cellType, out textureInfo);
-        }
-
-        /// <summary>
-        /// Get a cached texture for a cell type.
-        /// </summary>
-        /// <param name="cellType">The cell type.</param>
-        /// <returns>The cached texture or null if not found.</returns>
-        public Texture2D? GetCachedTexture(CellType cellType)
-        {
-            _loadedTextures.TryGetValue(cellType, out var texture);
-            return texture;
-        }
-
-        /// <summary>
-        /// Check if a texture is cached.
-        /// </summary>
-        /// <param name="cellType">The cell type.</param>
-        /// <returns>True if cached, false otherwise.</returns>
-        public bool IsCached(CellType cellType)
-        {
-            return _textureCache.ContainsKey(cellType);
-        }
-
-        /// <summary>
-        /// Remove a texture from cache.
-        /// </summary>
-        /// <param name="cellType">The cell type.</param>
-        public void RemoveTexture(CellType cellType)
-        {
-            if (_textureCache.TryRemove(cellType, out CellTextureInfo textureInfo) &&
-                textureInfo.OwnsBaseTexture)
-            {
-                DestroyTexture(textureInfo.BaseTexture);
-            }
-
-            _loadedTextures.TryRemove(cellType, out _);
-
-            var filename = $"Cells/{(int)cellType}";
-            _filenameCache.TryRemove(filename, out _);
-        }
-
-        /// <summary>
-        /// Clear all cached textures.
-        /// </summary>
-        public void Clear()
-        {
-            var ownedTextures = new HashSet<Texture2D>();
-            foreach (CellTextureInfo textureInfo in _textureCache.Values)
-            {
-                if (textureInfo.OwnsBaseTexture && textureInfo.BaseTexture != null)
-                {
-                    ownedTextures.Add(textureInfo.BaseTexture);
-                }
-            }
-
-            _textureCache.Clear();
-            _loadedTextures.Clear();
-            _filenameCache.Clear();
-            foreach (Texture2D texture in ownedTextures)
-            {
-                DestroyTexture(texture);
+                ownedTextures.Add(textureInfo.BaseTexture);
             }
         }
 
-        /// <summary>
-        /// Get all cached cell types.
-        /// </summary>
-        public CellType[] GetCachedCellTypes()
+        _textureCache.Clear();
+        _loadedTextures.Clear();
+        _filenameCache.Clear();
+        foreach (Texture2D texture in ownedTextures)
         {
-            return _textureCache.Keys.ToArray();
+            DestroyTexture(texture);
+        }
+    }
+
+    /// <summary>
+    /// Get memory usage of cached textures.
+    /// </summary>
+    /// <returns>Approximate memory usage in bytes.</returns>
+    public long GetMemoryUsage()
+    {
+        long totalSize = 0;
+
+        foreach (var texture in _loadedTextures.Values)
+        {
+            if (texture != null)
+            {
+                // Approximate texture memory usage (width * height * bytes per pixel)
+                totalSize += texture.width * texture.height * 4; // RGBA32 = 4 bytes per pixel
+            }
         }
 
-        /// <summary>
-        /// Get texture info for a filename.
-        /// </summary>
-        /// <param name="filename">The texture filename.</param>
-        /// <returns>The cell type if found, otherwise CellType.Unloaded.</returns>
-        public CellType GetCellTypeFromFilename(string filename)
+        return totalSize;
+    }
+
+    /// <summary>
+    /// Get cache statistics.
+    /// </summary>
+    /// <returns>Cache statistics string.</returns>
+    public string GetCacheStats() =>
+        $"Cache: {_textureCache.Count} textures, {GetMemoryUsage() / 1024} KB";
+
+    /// <summary>
+    /// Try to parse cell type from filename.
+    /// </summary>
+    /// <param name="filename">The filename to parse.</param>
+    /// <param name="cellType">Output cell type.</param>
+    /// <returns>True if successfully parsed, false otherwise.</returns>
+    private static bool TryParseCellTypeFromFilename(string filename, out CellType cellType)
+    {
+        cellType = CellType.Unloaded;
+
+        // Extract cell ID from filenames such as "Cells/50".
+        if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
         {
-            if (_filenameCache.TryGetValue(filename, out var cellType))
+            string idStr = filename.Substring(6);
+
+            int dotIndex = idStr.LastIndexOf('.');
+            if (dotIndex > 0)
             {
-                return cellType;
+                idStr = idStr.Substring(0, dotIndex);
             }
 
-            // Try to parse cell type from filename
-            if (TryParseCellTypeFromFilename(filename, out cellType))
+            if (int.TryParse(idStr, out int cellId) &&
+                Enum.IsDefined(typeof(CellType), cellId))
             {
-                _filenameCache.TryAdd(filename, cellType);
-                return cellType;
+                cellType = (CellType)cellId;
+                return true;
             }
-
-            return CellType.Unloaded;
         }
 
-        /// <summary>
-        /// Get memory usage of cached textures.
-        /// </summary>
-        /// <returns>Approximate memory usage in bytes.</returns>
-        public long GetMemoryUsage()
+        return false;
+    }
+
+    private static void DestroyTexture(Texture2D texture)
+    {
+        if (Application.isPlaying)
         {
-            long totalSize = 0;
-
-            foreach (var texture in _loadedTextures.Values)
-            {
-                if (texture != null)
-                {
-                    // Approximate texture memory usage (width * height * bytes per pixel)
-                    totalSize += texture.width * texture.height * 4; // RGBA32 = 4 bytes per pixel
-                }
-            }
-
-            return totalSize;
+            UnityEngine.Object.Destroy(texture);
         }
-
-        /// <summary>
-        /// Get cache statistics.
-        /// </summary>
-        /// <returns>Cache statistics string.</returns>
-        public string GetCacheStats()
+        else
         {
-            return $"Cache: {_textureCache.Count} textures, {GetMemoryUsage() / 1024} KB";
-        }
-
-        /// <summary>
-        /// Try to parse cell type from filename.
-        /// </summary>
-        /// <param name="filename">The filename to parse.</param>
-        /// <param name="cellType">Output cell type.</param>
-        /// <returns>True if successfully parsed, false otherwise.</returns>
-        private static bool TryParseCellTypeFromFilename(string filename, out CellType cellType)
-        {
-            cellType = CellType.Unloaded;
-
-            // Extract cell ID from filenames such as "Cells/50".
-            if (filename.StartsWith("Cells/", StringComparison.OrdinalIgnoreCase))
-            {
-                string idStr = filename.Substring(6);
-
-                int dotIndex = idStr.LastIndexOf('.');
-                if (dotIndex > 0)
-                {
-                    idStr = idStr.Substring(0, dotIndex);
-                }
-
-                if (int.TryParse(idStr, out int cellId) &&
-                    Enum.IsDefined(typeof(CellType), cellId))
-                {
-                    cellType = (CellType)cellId;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static void DestroyTexture(Texture2D texture)
-        {
-            if (Application.isPlaying)
-            {
-                UnityEngine.Object.Destroy(texture);
-            }
-            else
-            {
-                UnityEngine.Object.DestroyImmediate(texture);
-            }
+            UnityEngine.Object.DestroyImmediate(texture);
         }
     }
 }

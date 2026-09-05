@@ -62,8 +62,7 @@ namespace Fodinae.Core
         /// graph and wondering about unexplained spikes.
         ///
         /// Warning, Error, Assert and Exception are deliberately untouched:
-        /// their stack traces are the whole point, and FailFastLogHandler acts
-        /// on them.
+        /// their stack traces are the whole point for diagnostics.
         ///
         /// Runs before the first scene loads so no log beats it to the punch.
         /// </remarks>

@@ -6,15 +6,21 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        var context = ParseArguments(args);
-        if (context == null)
+        if (args.Any(arg => arg is "--help" or "-h"))
         {
             PrintUsage();
-            return 2;
+            return 0;
         }
 
         try
         {
+            var context = ParseArguments(args);
+            if (context == null)
+            {
+                PrintUsage();
+                return 2;
+            }
+
             var linter = new ArchitectureLinter(context);
             return await linter.RunAsync();
         }
@@ -30,9 +36,10 @@ public static class Program
         var projectRoot = Environment.CurrentDirectory;
         var assemblyPaths = new List<string>();
         var excludePatterns = new List<string>();
+        var includedRuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? sarifPath = null;
         bool sarif = false;
-        int failOn = (int)RuleSeverity.Error;
+        RuleSeverity failOn = RuleSeverity.Error;
         bool strict = false;
 
         for (var i = 0; i < args.Length; i++)
@@ -42,44 +49,76 @@ public static class Program
             {
                 case "--project-root":
                 case "-p":
-                    if (++i < args.Length) projectRoot = args[i];
+                    if (!TryReadValue(args, ref i, arg, out projectRoot))
+                    {
+                        return null;
+                    }
+
                     break;
                 case "--exclude":
                 case "-e":
-                    if (++i < args.Length) excludePatterns.Add(args[i]);
+                    if (!TryReadValue(args, ref i, arg, out string excludePattern))
+                    {
+                        return null;
+                    }
+
+                    excludePatterns.Add(excludePattern);
+                    break;
+                case "--rule":
+                case "-r":
+                    if (!TryReadValue(args, ref i, arg, out string ruleId))
+                    {
+                        return null;
+                    }
+
+                    includedRuleIds.Add(ruleId);
                     break;
                 case "--sarif":
                     sarif = true;
-                    if (++i < args.Length) sarifPath = args[i];
+                    if (i + 1 < args.Length && !args[i + 1].StartsWith("-", StringComparison.Ordinal))
+                    {
+                        sarifPath = args[++i];
+                    }
+
                     break;
                 case "--fail-on":
-                    if (++i < args.Length && Enum.TryParse<RuleSeverity>(args[i], true, out var sev)) failOn = (int)sev;
+                    if (!TryReadValue(args, ref i, arg, out string severity) ||
+                        !Enum.TryParse(severity, true, out RuleSeverity parsedSeverity))
+                    {
+                        Console.Error.WriteLine($"Invalid severity for {arg}: '{severity}'.");
+                        return null;
+                    }
+
+                    failOn = parsedSeverity;
                     break;
                 case "--strict":
                     strict = true;
                     break;
-                case "--help":
-                case "-h":
-                    PrintUsage();
-                    return null;
                 default:
+                    if (arg.StartsWith("-", StringComparison.Ordinal))
+                    {
+                        Console.Error.WriteLine($"Unknown option: {arg}");
+                        return null;
+                    }
+
                     assemblyPaths.Add(arg);
                     break;
             }
         }
 
-        if (assemblyPaths.Count == 0)
+        projectRoot = Path.GetFullPath(projectRoot);
+        if (strict && failOn == RuleSeverity.Error)
+        {
+            failOn = RuleSeverity.Warning;
+        }
+
+        bool requiresAssemblies = ArchitectureLinter.SelectedRulesRequireAssemblies(includedRuleIds);
+        if (requiresAssemblies && assemblyPaths.Count == 0)
         {
             assemblyPaths.AddRange(DiscoverAssemblies(projectRoot));
         }
 
-        if (assemblyPaths.Count == 0)
-        {
-            Console.Error.WriteLine("No assemblies found. Specify assembly paths as arguments.");
-            return null;
-        }
-
-        var unityPaths = DiscoverUnityPaths(projectRoot);
+        var unityPaths = requiresAssemblies && assemblyPaths.Count > 0 ? DiscoverUnityPaths() : [];
 
         return new LinterContext
         {
@@ -87,6 +126,7 @@ public static class Program
             AssemblyPaths = assemblyPaths,
             UnityAssemblyPaths = unityPaths,
             ExcludePatterns = excludePatterns,
+            IncludedRuleIds = includedRuleIds,
             EnableSarif = sarif,
             SarifOutputPath = sarifPath ?? Path.Combine(projectRoot, "architecture-lint.sarif"),
             FailOnSeverity = failOn,
@@ -94,9 +134,26 @@ public static class Program
         };
     }
 
+    private static bool TryReadValue(
+        IReadOnlyList<string> args,
+        ref int index,
+        string option,
+        out string value)
+    {
+        if (index + 1 < args.Count && !args[index + 1].StartsWith("-", StringComparison.Ordinal))
+        {
+            value = args[++index];
+            return true;
+        }
+
+        Console.Error.WriteLine($"Missing value for {option}.");
+        value = string.Empty;
+        return false;
+    }
+
     private static List<string> DiscoverAssemblies(string projectRoot)
     {
-        var assemblies = new List<string>();
+        var assembliesByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var searchPaths = new[]
         {
             Path.Combine(projectRoot, "Temp", "bin"),
@@ -109,18 +166,38 @@ public static class Program
             if (!Directory.Exists(dir))
                 continue;
 
-            foreach (var dll in Directory.EnumerateFiles(dir, "*.dll", SearchOption.AllDirectories))
+            IEnumerable<string> candidates = Directory
+                .EnumerateFiles(dir, "*.dll", SearchOption.AllDirectories)
+                .Where(dll =>
+                {
+                    string name = Path.GetFileNameWithoutExtension(dll);
+                    return name.StartsWith("Fodinae", StringComparison.Ordinal) ||
+                           name is "Assembly-CSharp" or "Assembly-CSharp-Editor";
+                })
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .ThenBy(path => path, StringComparer.Ordinal);
+
+            foreach (string dll in candidates)
             {
-                var name = Path.GetFileNameWithoutExtension(dll);
-                if (name.StartsWith("Fodinae") || name is "Assembly-CSharp" or "Assembly-CSharp-Editor")
-                    assemblies.Add(dll);
+                string name = Path.GetFileNameWithoutExtension(dll);
+                assembliesByName.TryAdd(name, dll);
             }
         }
 
-        return assemblies;
+        bool hasModularRuntime = assembliesByName.Keys.Any(name =>
+            name.StartsWith("Fodinae.", StringComparison.Ordinal));
+        if (hasModularRuntime)
+        {
+            assembliesByName.Remove("Assembly-CSharp");
+        }
+
+        return assembliesByName
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => pair.Value)
+            .ToList();
     }
 
-    private static List<string> DiscoverUnityPaths(string projectRoot)
+    private static List<string> DiscoverUnityPaths()
     {
         var paths = new List<string>();
 
@@ -154,6 +231,7 @@ public static class Program
         Console.WriteLine("Options:");
         Console.WriteLine("  -p, --project-root <path>    Project root directory (default: current)");
         Console.WriteLine("  -e, --exclude <pattern>      Exclude assemblies matching pattern");
+        Console.WriteLine("  -r, --rule <id>              Run only this rule (repeatable; default: all)");
         Console.WriteLine("  --sarif [path]               Output SARIF report (default: architecture-lint.sarif)");
         Console.WriteLine("  --fail-on <severity>         Exit code 1 on this severity (Error, Warning, Info)");
         Console.WriteLine("  --strict                     Treat warnings as errors");

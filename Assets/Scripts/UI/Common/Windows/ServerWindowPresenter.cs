@@ -79,6 +79,10 @@ public sealed class ServerWindowPresenter : IDisposable
         element.AddToClassList("sci-fi-panel--tech");
         element.AddToClassList("sci-fi-window-anim");
         _document.rootVisualElement.Add(element);
+        // Только появление. Закрытие остаётся мгновенным: окно модальное, и
+        // отложенное снятие пустило бы клики мимо него, а протокол окон
+        // исполняется буквально — задержки в нём нет.
+        UIVisibilityAnimator.Show(element);
         UILayoutTier.Attach(element);
         _uiInputManager.PushModal(element);
 

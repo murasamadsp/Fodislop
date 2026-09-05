@@ -66,7 +66,9 @@ public sealed class ExecutionOrderRule : IRule
         found.Add(type.FullName);
 
         var customAttr = type.CustomAttributes.FirstOrDefault(a =>
-            a.AttributeType.FullName == "UnityEngine.DefaultExecutionOrderAttribute");
+            a.AttributeType.FullName is
+                "UnityEngine.DefaultExecutionOrder" or
+                "UnityEngine.DefaultExecutionOrderAttribute");
 
         if (customAttr == null)
         {
@@ -75,21 +77,35 @@ public sealed class ExecutionOrderRule : IRule
                 RuleId = Id,
                 Message = $"Type '{type.FullName}' is missing DefaultExecutionOrderAttribute (expected {RequiredExecutionOrders[type.FullName]}).",
                 Severity = Severity,
+                AssemblyName = type.Module.Assembly.Name.Name,
                 TypeName = type.FullName
             });
             return;
         }
 
-        if (customAttr.ConstructorArguments.Count > 0 &&
-            customAttr.ConstructorArguments[0].Value is int order &&
-            order != RequiredExecutionOrders[type.FullName])
+        if (customAttr.ConstructorArguments.Count == 0 ||
+            customAttr.ConstructorArguments[0].Value is not int order)
+        {
+            violations.Add(new RuleViolation
+            {
+                RuleId = Id,
+                Message = $"Type '{type.FullName}' has an unreadable DefaultExecutionOrder value.",
+                Severity = Severity,
+                AssemblyName = type.Module.Assembly.Name.Name,
+                TypeName = type.FullName,
+            });
+            return;
+        }
+
+        if (order != RequiredExecutionOrders[type.FullName])
         {
             violations.Add(new RuleViolation
             {
                 RuleId = Id,
                 Message = $"Type '{type.FullName}' has DefaultExecutionOrder={order}, expected {RequiredExecutionOrders[type.FullName]}.",
                 Severity = Severity,
-                TypeName = type.FullName
+                AssemblyName = type.Module.Assembly.Name.Name,
+                TypeName = type.FullName,
             });
         }
 

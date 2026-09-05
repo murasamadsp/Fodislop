@@ -79,6 +79,7 @@ namespace Fodinae.World.Terrain
         private bool _isInitialized = false;
         private bool _hasMissingTextures;
         private bool _needsRefresh = false;
+        private bool _wasCpuMeshRebuildBypassed;
         private readonly HashSet<CellType> _pendingTextureCellTypes = [];
         private readonly DirtyRectSet _dirtyRects = new();
         private bool _useColorLod = false;
@@ -574,7 +575,19 @@ namespace Fodinae.World.Terrain
 
         private void RebuildOrPatchTerrain(Vector2Int currentGridPos, bool dimensionsChanged)
         {
-            bool terrainWasRebuilt = (currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged) && !BypassCpuMeshRebuild;
+            if (BypassCpuMeshRebuild)
+            {
+                _wasCpuMeshRebuildBypassed = true;
+                return;
+            }
+
+            if (_wasCpuMeshRebuildBypassed)
+            {
+                _wasCpuMeshRebuildBypassed = false;
+                _needsRefresh = true;
+            }
+
+            bool terrainWasRebuilt = currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged;
             if (terrainWasRebuilt)
             {
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
@@ -584,7 +597,7 @@ namespace Fodinae.World.Terrain
                 _lightingGeometryRevision++;
                 _dirtyRects.Clear();
             }
-            else if (!_dirtyRects.IsEmpty && !BypassCpuMeshRebuild)
+            else if (!_dirtyRects.IsEmpty)
             {
                 UpdateDirtyCells(currentGridPos.x, currentGridPos.y);
                 _lightingGeometryRevision++;

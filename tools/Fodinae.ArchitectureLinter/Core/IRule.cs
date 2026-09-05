@@ -7,6 +7,7 @@ public interface IRule
     string Id { get; }
     string Description { get; }
     RuleSeverity Severity { get; }
+    bool RequiresAssemblies => true;
 
     Task<IReadOnlyList<RuleViolation>> EvaluateAsync(
         IReadOnlyList<AssemblyDefinition> assemblies,

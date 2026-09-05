@@ -6,12 +6,10 @@ using MinesServer.Data;
 // наш домен говорит Building, провод остаётся Pack.
 using BuildingType = MinesServer.Data.PackType;
 
-namespace Fodinae.Core.Interfaces
+namespace Fodinae.Core.Interfaces;
+public interface IBuildingService
 {
-    public interface IBuildingService
-    {
-        void AddOrUpdateBuilding(ushort x, ushort y, BuildingType buildingType, byte variant, byte linkedClan);
-        void RemoveBuilding(ushort x, ushort y);
-        void ClearAllBuildings();
-    }
+    void AddOrUpdateBuilding(ushort x, ushort y, BuildingType buildingType, byte variant, byte linkedClan);
+    void RemoveBuilding(ushort x, ushort y);
+    void ClearAllBuildings();
 }

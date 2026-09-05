@@ -78,20 +78,6 @@ namespace Fodinae.Game
             _poolList.Clear();
             _totalActiveVfxCount = 0;
         }
-
-        public void ResetForNewGeneration()
-        {
-            for (int i = 0; i < _poolList.Count; i++)
-            {
-                TeardownSubPool(_poolList[i]);
-            }
-
-            _pools.Clear();
-            _poolList.Clear();
-            _totalActiveVfxCount = 0;
-            InitializePools();
-        }
-
         protected void Update()
         {
             if (_totalActiveVfxCount == 0)

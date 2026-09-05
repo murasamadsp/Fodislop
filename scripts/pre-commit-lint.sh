@@ -28,6 +28,21 @@ else
     echo "Notice: dotnet not found; settings probe skipped."
 fi
 
+# Shader contracts live in the reflection-discovered C# architecture linter.
+# This source-based rule is safe to run locally without a fresh Unity assembly.
+echo "--- Step 0.2: Executing migrated C# architecture rules ---"
+if command -v dotnet >/dev/null 2>&1; then
+    DOTNET_NOLOGO=1 dotnet run \
+        --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+        --verbosity quiet -- \
+        --project-root "$(dirname "$0")/.." \
+        --rule FOD-DISPLAY-TRANSFORM \
+        --rule FOD-LOCALIZATION \
+        --rule FOD-PATTERN
+else
+    echo "Notice: dotnet not found; C# architecture linter skipped."
+fi
+
 if [ "$CI" != "true" ]; then
     echo "Notice: local hooks run fast static checks only."
     echo "Unity compile, EditMode, PlayMode, and IL2CPP validation are mandatory CI jobs."
@@ -185,6 +200,18 @@ if [ "$HAS_WARNINGS" -eq 1 ]; then
     echo -e "\n\033[0;31mPlease fix all compilation errors and analyzer warnings before committing.\033[0m"
     exit 1
 fi
+
+# IL contracts require the current assemblies produced by the successful builds
+# above. Running them earlier would inspect stale Library/ScriptAssemblies output.
+echo "--- Step 3: Executing C# runtime architecture rules ---"
+DOTNET_NOLOGO=1 dotnet run \
+    --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+    --verbosity quiet -- \
+    --project-root "$(dirname "$0")/.." \
+    --rule FOD-BLOCK-NAMESPACE \
+    --rule FOD-EXECUTION-ORDER \
+    --rule FOD-FORBIDDEN-API \
+    --rule FOD-POSTPROCESS-RUNTIME
 
 echo "All C# Roslyn analyzer checks passed successfully!"
 exit 0

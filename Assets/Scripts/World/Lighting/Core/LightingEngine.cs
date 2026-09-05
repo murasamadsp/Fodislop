@@ -35,60 +35,6 @@ namespace Fodinae.World.Lighting
         private const int RadianceStride = sizeof(uint) * 3;
         private const int MaximumDispatchGroupsPerDimension = 65535;
         private const string WorldLightingKeyword = "FODINAE_WORLD_LIGHTING";
-        public const float DynamicLightInfluenceRadiusCells = 32f;
-
-        private static readonly int MaterialFieldId = Shader.PropertyToID("_MaterialField");
-        private static readonly int EmissionFieldId = Shader.PropertyToID("_EmissionField");
-        private static readonly int AutomaticNormalInputId =
-            Shader.PropertyToID("_AutomaticNormalInput");
-        // _DynamicLightCount is gone from the compute shader along with its light
-        // loop; the count now only decides how many instances the emission pass
-        // draws, which DrawProcedural takes directly.
-        private static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
-        private static readonly int DirectTextureId = Shader.PropertyToID("_DirectTexture");
-        private static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
-        private static readonly int StaticDirectInputId =
-            Shader.PropertyToID("_StaticDirectInput");
-        private static readonly int BounceTextureId = Shader.PropertyToID("_BounceTexture");
-        private static readonly int BounceInputId = Shader.PropertyToID("_BounceInput");
-        private static readonly int ResultId = Shader.PropertyToID("_Result");
-        private static readonly int FieldSizeId = Shader.PropertyToID("_FieldSize");
-        private static readonly int BounceSizeId = Shader.PropertyToID("_BounceSize");
-        private static readonly int WorldRectId = Shader.PropertyToID("_WorldRect");
-        private static readonly int AmbientColorId = Shader.PropertyToID("_AmbientColor");
-        private static readonly int EmptyExtinctionRgbId = Shader.PropertyToID("_EmptyExtinctionRgb");
-        private static readonly int SolidExtinctionRgbId = Shader.PropertyToID("_SolidExtinctionRgb");
-        private static readonly int MinimumTransmissionId = Shader.PropertyToID("_MinimumTransmission");
-        private static readonly int BounceStrengthId = Shader.PropertyToID("_BounceStrength");
-        private static readonly int EmissionScaleId = Shader.PropertyToID("_EmissionScale");
-        private static readonly int MaximumLightMultiplierId =
-            Shader.PropertyToID("_MaximumLightMultiplier");
-        private static readonly int EnableFinalLightingClampId =
-            Shader.PropertyToID("_EnableFinalLightingClamp");
-        private static readonly int CellSizeId = Shader.PropertyToID("_CellSize");
-        private static readonly int TransmittanceDebugDistanceCellsId =
-            Shader.PropertyToID("_TransmittanceDebugDistanceCells");
-        private static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
-        private static readonly int MaterialYFlipId = Shader.PropertyToID("_MaterialYFlip");
-        private static readonly int MaximumIntervalStepsId =
-            Shader.PropertyToID("_MaximumIntervalSteps");
-        private static readonly int EnableDiffuseBounceId =
-            Shader.PropertyToID("_EnableDiffuseBounce");
-        private static readonly int CascadeOffsetId = Shader.PropertyToID("_CascadeOffset");
-        private static readonly int CascadeProbeSizeId = Shader.PropertyToID("_CascadeProbeSize");
-        private static readonly int CascadeProbeSpacingId = Shader.PropertyToID("_CascadeProbeSpacing");
-        private static readonly int CascadeDirectionCountId = Shader.PropertyToID("_CascadeDirectionCount");
-        private static readonly int CascadeIntervalId = Shader.PropertyToID("_CascadeInterval");
-        private static readonly int FarCascadeIntervalId = Shader.PropertyToID("_FarCascadeInterval");
-        private static readonly int FarCascadeOffsetId = Shader.PropertyToID("_FarCascadeOffset");
-        private static readonly int FarCascadeProbeSizeId = Shader.PropertyToID("_FarCascadeProbeSize");
-        private static readonly int FarCascadeProbeSpacingId = Shader.PropertyToID("_FarCascadeProbeSpacing");
-        private static readonly int FarCascadeDirectionCountId = Shader.PropertyToID("_FarCascadeDirectionCount");
-        private static readonly int HasFarCascadeId = Shader.PropertyToID("_HasFarCascade");
-        private static readonly int EnableBilinearFixId = Shader.PropertyToID("_EnableBilinearFix");
-        private static readonly int CascadeEntryCountId = Shader.PropertyToID("_CascadeEntryCount");
-        private static readonly int CascadeDispatchRowWidthId =
-            Shader.PropertyToID("_CascadeDispatchRowWidth");
         private static readonly int WorldLightTextureId = Shader.PropertyToID("_WorldLightTexture");
         private static readonly int WorldLightRectId = Shader.PropertyToID("_WorldLightRect");
         private static readonly int WorldLightDebugViewId =
@@ -97,7 +43,6 @@ namespace Fodinae.World.Lighting
             Shader.PropertyToID("_WorldLightTextureSize");
         private static readonly int WorldEmissionScaleId =
             Shader.PropertyToID("_WorldEmissionScale");
-        private static readonly int BlockAveragedId = Shader.PropertyToID("_BlockAveraged");
         private static readonly ProfilerMarker LightingUpdateMarker =
             new("Fodinae.Lighting.UpdateLighting.CPU");
         private static readonly ProfilerMarker BuildCommandsMarker =
@@ -176,6 +121,7 @@ namespace Fodinae.World.Lighting
         private bool _fieldDirty = true;
         private bool _compositeDirty = true;
         private bool _bounceDirty = true;
+        private bool _wasLightingBypassed;
 
 
         private float _nextLightingUpdateTime;
@@ -315,16 +261,6 @@ namespace Fodinae.World.Lighting
         {
             CascadeCostCalculator.CollectCascadeCosts(_cascades, MaximumIntervalSteps, destination);
         }
-
-        /// <summary>
-        /// Entries the configured atlas limit allows. The field resolution is
-        /// fitted down to this, so it — not pixels-per-cell — is what caps
-        /// lighting resolution once the requested density exceeds it.
-        /// </summary>
-        public long CascadeAtlasBudgetEntries =>
-            (long)_qualitySettings.LightingCascadeAtlasLimit *
-            _qualitySettings.LightingCascadeAtlasLimit * 4;
-
         public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
         public float CellSize => ProjectRuntimeContracts.World.CellSize;
@@ -498,12 +434,6 @@ namespace Fodinae.World.Lighting
                 _fieldDirty = true;
             }
         }
-
-        public void InvalidateCell(int worldX, int worldY)
-        {
-            InvalidateRegion(worldX, worldY, 1, 1);
-        }
-
         public void ApplyClientConfig()
         {
             ApplyQualitySettings(
@@ -728,6 +658,16 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
+            if (_lightingDisabledStatePublished)
+            {
+                _lightingDisabledStatePublished = false;
+                Shader.EnableKeyword(WorldLightingKeyword);
+                _fieldDirty = true;
+                _compositeDirty = true;
+                _bounceDirty = true;
+                _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
+            }
+
             // The MUTE toggle must short-circuit before any region tracking or
             // resource allocation. GetStableLightingRegion + EnsureResources
             // run every frame even when the solve is bypassed, so crossing a
@@ -737,8 +677,28 @@ namespace Fodinae.World.Lighting
             // stale, but do none of the per-frame field work.
             if (BypassLightingCompute)
             {
-                Shader.SetGlobalTexture(WorldLightTextureId, Texture2D.whiteTexture);
+                _wasLightingBypassed = true;
+                PublishLightingDisabledState();
                 return;
+            }
+
+            if (_wasLightingBypassed)
+            {
+                _wasLightingBypassed = false;
+                _lightingDisabledStatePublished = false;
+                Shader.EnableKeyword(WorldLightingKeyword);
+                Shader.SetGlobalInteger(WorldLightDebugViewId, (int)_debugView);
+                _fieldDirty = true;
+                _compositeDirty = true;
+                _bounceDirty = true;
+                _hasRenderedLightState = false;
+                _hasStaticRadianceState = false;
+                _hasDynamicRadianceState = false;
+                _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
+                if (_lightmapTexture != null)
+                {
+                    Shader.SetGlobalTexture(WorldLightTextureId, _lightmapTexture);
+                }
             }
 
             EnsureGpuPipelineInitialized();
@@ -1005,73 +965,27 @@ namespace Fodinae.World.Lighting
             float cellSize,
             RenderTexture emissionField)
         {
-            ComputeShader compute = _lightingCompute!;
-            commandBuffer.SetComputeIntParams(compute, FieldSizeId, _fieldWidth, _fieldHeight);
-            commandBuffer.SetComputeIntParams(compute, BounceSizeId, _bounceWidth, _bounceHeight);
-            commandBuffer.SetComputeVectorParam(compute, WorldRectId, worldRect);
-            commandBuffer.SetComputeVectorParam(
-                compute,
-                AmbientColorId,
-                _configHolder.AmbientColor * _configHolder.AmbientIntensity);
-            commandBuffer.SetComputeVectorParam(
-                compute,
-                EmptyExtinctionRgbId,
-                _configHolder.EmptyExtinctionRgb * _configHolder.EmptyExtinctionMultiplier);
-            commandBuffer.SetComputeVectorParam(
-                compute,
-                SolidExtinctionRgbId,
-                _configHolder.SolidExtinctionRgb * _configHolder.SolidExtinctionMultiplier);
-            commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionId, _configHolder.MinimumTransmission);
-            commandBuffer.SetComputeFloatParam(
-                compute,
-                BounceStrengthId,
-                _configHolder.BounceStrength);
-            commandBuffer.SetComputeFloatParam(compute, EmissionScaleId, _configHolder.EmissionScale);
-            commandBuffer.SetComputeFloatParam(
-                compute,
-                MaximumLightMultiplierId,
-                _configHolder.MaximumLightMultiplier);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                EnableFinalLightingClampId,
-                _configHolder.EnableFinalLightingClamp ? 1 : 0);
-            commandBuffer.SetComputeFloatParam(compute, CellSizeId, cellSize);
-            commandBuffer.SetComputeFloatParam(
-                compute,
-                TransmittanceDebugDistanceCellsId,
-                _configHolder.TransmittanceDebugDistanceCells);
-            commandBuffer.SetComputeIntParam(compute, DebugViewId, (int)_debugView);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                MaterialYFlipId,
-                SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                MaximumIntervalStepsId,
-                Mathf.Clamp(_qualitySettings.LightingMaximumRaySteps, 1, 64));
-            commandBuffer.SetComputeIntParam(
-                compute,
-                EnableDiffuseBounceId,
-                _configHolder.DiffuseBounceEnabled ? 1 : 0);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                BlockAveragedId,
-                _lightingQualityMode == LightingQualityMode.PerBlock ? 1 : 0);
-            BindFieldTextures(commandBuffer, _solveCascadeKernel, emissionField);
-            commandBuffer.SetComputeTextureParam(
+            LightingComputeBinder.BindSharedParameters(
+                commandBuffer,
                 _lightingCompute!,
+                _fieldWidth,
+                _fieldHeight,
+                _bounceWidth,
+                _bounceHeight,
+                worldRect,
+                cellSize,
+                _configHolder,
+                _qualitySettings,
+                _lightingQualityMode,
+                _debugView,
+                _materialField!,
+                emissionField,
+                _automaticNormalField!,
+                _solveCascadeKernel,
                 _solveAutomaticNormalsKernel,
-                MaterialFieldId,
-                _materialField!);
-            BindFieldTextures(commandBuffer, _resolveDirectKernel, emissionField);
-            BindFieldTextures(commandBuffer, _solveDiffuseBounceKernel, emissionField);
-            BindFieldTextures(commandBuffer, _compositeLightingKernel, emissionField);
-            BindAutomaticNormalInput(commandBuffer, _resolveDirectKernel);
-            BindAutomaticNormalInput(commandBuffer, _solveDiffuseBounceKernel);
-            // The dynamic light buffer is no longer bound to the compute shader.
-            // It is consumed once per solve by ComposeEmissionField, which
-            // rasterizes the sources into the emission field; the ray march then
-            // reads them as ordinary emission like any other emitter.
+                _resolveDirectKernel,
+                _solveDiffuseBounceKernel,
+                _compositeLightingKernel);
         }
 
         private void BindFieldTextures(
@@ -1079,24 +993,20 @@ namespace Fodinae.World.Lighting
             int kernel,
             RenderTexture emissionField)
         {
-            commandBuffer.SetComputeTextureParam(
+            LightingComputeBinder.BindFieldTextures(
+                commandBuffer,
                 _lightingCompute!,
                 kernel,
-                MaterialFieldId,
-                _materialField!);
-            commandBuffer.SetComputeTextureParam(
-                _lightingCompute!,
-                kernel,
-                EmissionFieldId,
+                _materialField!,
                 emissionField);
         }
 
         private void BindAutomaticNormalInput(CommandBuffer commandBuffer, int kernel)
         {
-            commandBuffer.SetComputeTextureParam(
+            LightingComputeBinder.BindAutomaticNormalInput(
+                commandBuffer,
                 _lightingCompute!,
                 kernel,
-                AutomaticNormalInputId,
                 _automaticNormalField!);
         }
 
@@ -1159,7 +1069,7 @@ namespace Fodinae.World.Lighting
             commandBuffer.SetComputeBufferParam(
                 compute,
                 _solveCascadeKernel,
-                RadianceAtlasId,
+                LightingComputeBinder.RadianceAtlasId,
                 _radianceAtlas!);
             int cascadeCount = (maxCascades > 0 && maxCascades <= _cascades.Count)
                 ? maxCascades
@@ -1193,57 +1103,15 @@ namespace Fodinae.World.Lighting
             commandBuffer.SetComputeBufferParam(
                 compute,
                 _solveCascadeKernel,
-                RadianceAtlasId,
+                LightingComputeBinder.RadianceAtlasId,
                 _radianceAtlas!);
-            commandBuffer.SetComputeIntParam(compute, CascadeOffsetId, cascade.Offset);
-            commandBuffer.SetComputeIntParams(
+            LightingComputeBinder.BindCascadeParameters(
+                commandBuffer,
                 compute,
-                CascadeProbeSizeId,
-                cascade.ProbeWidth,
-                cascade.ProbeHeight);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                CascadeProbeSpacingId,
-                cascade.ProbeSpacing);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                CascadeDirectionCountId,
-                cascade.DirectionCount);
-            commandBuffer.SetComputeVectorParam(
-                compute,
-                CascadeIntervalId,
-                new Vector4(cascade.IntervalStart, cascade.IntervalEnd, 0f, 0f));
-            commandBuffer.SetComputeIntParam(compute, FarCascadeOffsetId, farCascade.Offset);
-            commandBuffer.SetComputeIntParams(
-                compute,
-                FarCascadeProbeSizeId,
-                farCascade.ProbeWidth,
-                farCascade.ProbeHeight);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                FarCascadeProbeSpacingId,
-                farCascade.ProbeSpacing);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                FarCascadeDirectionCountId,
-                farCascade.DirectionCount);
-            commandBuffer.SetComputeVectorParam(
-                compute,
-                FarCascadeIntervalId,
-                new Vector4(
-                    farCascade.IntervalStart,
-                    farCascade.IntervalEnd,
-                    0f,
-                    0f));
-            commandBuffer.SetComputeIntParam(compute, HasFarCascadeId, hasFarCascade ? 1 : 0);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                EnableBilinearFixId,
-                _lightingQualityMode == LightingQualityMode.PerPixelBilinearFix ? 1 : 0);
-            commandBuffer.SetComputeIntParam(
-                compute,
-                CascadeEntryCountId,
-                cascade.EntryCount);
+                cascade,
+                farCascade,
+                hasFarCascade,
+                _lightingQualityMode == LightingQualityMode.PerPixelBilinearFix);
             int totalGroupCount = Mathf.CeilToInt(cascade.EntryCount / 64f);
             int groupCountX = Mathf.Min(
                 MaximumDispatchGroupsPerDimension,
@@ -1251,7 +1119,7 @@ namespace Fodinae.World.Lighting
             int groupCountY = Mathf.CeilToInt(totalGroupCount / (float)groupCountX);
             commandBuffer.SetComputeIntParam(
                 compute,
-                CascadeDispatchRowWidthId,
+                LightingComputeBinder.CascadeDispatchRowWidthId,
                 groupCountX * 64);
             commandBuffer.DispatchCompute(
                 compute,
@@ -1294,16 +1162,16 @@ namespace Fodinae.World.Lighting
         {
             using var resolveMarker = ResolveMarker.Auto();
             ComputeShader compute = _lightingCompute!;
-            commandBuffer.SetComputeIntParam(compute, CascadeOffsetId, _cascades[0].Offset);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.CascadeOffsetId, _cascades[0].Offset);
             commandBuffer.SetComputeBufferParam(
                 compute,
                 _resolveDirectKernel,
-                RadianceAtlasId,
+                LightingComputeBinder.RadianceAtlasId,
                 _radianceAtlas!);
             commandBuffer.SetComputeTextureParam(
                 compute,
                 _resolveDirectKernel,
-                DirectTextureId,
+                LightingComputeBinder.DirectTextureId,
                 directTarget);
             commandBuffer.DispatchCompute(
                 compute,

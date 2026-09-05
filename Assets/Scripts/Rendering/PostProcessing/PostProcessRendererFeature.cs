@@ -2,6 +2,7 @@
 
 using System;
 using Fodinae.Core;
+using Fodinae.Rendering.PostProcessing.Scopes;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -19,27 +20,27 @@ namespace Fodinae.Rendering.PostProcessing
             [Tooltip("Optional override. If empty, the feature loads Resources/Shaders/PostProcessing/PostProcess.compute.")]
             private ComputeShader? _computeShader;
 
-            [SerializeField]
-            private bool _runInSceneView = true;
-
-            [SerializeField]
-            private bool _runInPreviewCameras;
-
             public ComputeShader? ComputeShader => _computeShader;
-            public bool RunInSceneView => _runInSceneView;
-            public bool RunInPreviewCameras => _runInPreviewCameras;
         }
 
         [SerializeField]
         private Settings _settings = new();
 
         private PostProcessRenderPass? _pass;
+        private ScopesRenderPass? _scopesPass;
         private Camera? _mainCamera;
 
         public override void Create()
         {
             _pass?.Dispose();
             _pass = null;
+            _scopesPass?.Dispose();
+            _scopesPass = null;
+            if (PostProcessRuntimeState.MainCamera == _mainCamera)
+            {
+                PostProcessRuntimeState.SetMainCamera(null);
+            }
+
             _mainCamera = null;
         }
 
@@ -63,8 +64,34 @@ namespace Fodinae.Rendering.PostProcessing
 
             _pass = new PostProcessRenderPass(computeShader);
             _pass.ConfigureInput(ScriptableRenderPassInput.Color);
+
+            ComputeShader? scopesShader = Resources.Load<ComputeShader>(
+                ProjectRuntimeContracts.ResourcePaths.ScopesCompute);
+            if (scopesShader != null)
+            {
+                try
+                {
+                    _scopesPass = new ScopesRenderPass(scopesShader);
+                    _scopesPass.ConfigureInput(ScriptableRenderPassInput.Color);
+                }
+                catch (Exception exception)
+                {
+                    _scopesPass?.Dispose();
+                    _scopesPass = null;
+                    Debug.LogError(
+                        "[PostProcessRendererFeature] Scopes отключены, основной " +
+                        $"постпроцесс продолжает работать: {exception.Message}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "[PostProcessRendererFeature] Scopes.compute is missing; " +
+                    "the grading scopes will remain unavailable.");
+            }
+
             _mainCamera = gameplayCamera;
-            PostProcessRenderPass.SetMainCamera(_mainCamera);
+            PostProcessRuntimeState.SetMainCamera(_mainCamera);
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -89,31 +116,32 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            if (_mainCamera != cameraData.camera)
+            if (_mainCamera != cameraData.camera ||
+                PostProcessRuntimeState.MainCamera != cameraData.camera)
             {
                 _mainCamera = cameraData.camera;
-                PostProcessRenderPass.SetMainCamera(_mainCamera);
-            }
-
-            PostProcessRenderPass.SetMainCamera(_mainCamera);
-
-            if (!_settings.RunInSceneView && cameraData.isSceneViewCamera)
-            {
-                return;
-            }
-
-            if (!_settings.RunInPreviewCameras && cameraData.isPreviewCamera)
-            {
-                return;
+                PostProcessRuntimeState.SetMainCamera(_mainCamera);
             }
 
             renderer.EnqueuePass(_pass);
+            if (_scopesPass != null && ScopesRenderPass.Enabled)
+            {
+                renderer.EnqueuePass(_scopesPass);
+            }
         }
 
         protected override void Dispose(bool disposing)
         {
             _pass?.Dispose();
             _pass = null;
+            _scopesPass?.Dispose();
+            _scopesPass = null;
+            if (PostProcessRuntimeState.MainCamera == _mainCamera)
+            {
+                PostProcessRuntimeState.SetMainCamera(null);
+            }
+
+            _mainCamera = null;
         }
     }
 }

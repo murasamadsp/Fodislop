@@ -8,8 +8,6 @@ public static class ProjectRuntimeContracts
     {
         public const float CellSize = 1f;
         public const int ChunkSize = 32;
-        public const int MaximumWidth = ushort.MaxValue;
-        public const int MaximumHeight = ushort.MaxValue;
     }
 
     public static class Gameplay
@@ -67,11 +65,11 @@ public static class ProjectRuntimeContracts
         public const string GraphicsQualityProfile = "GraphicsQualityProfile";
         public const string WorldLightingCompute = "Shaders/Lighting/WorldLighting";
         public const string PostProcessCompute = "Shaders/PostProcessing/PostProcess";
+        public const string ScopesCompute = "Shaders/PostProcessing/Scopes";
         public const string GatewayUxml = "UI/Gateway";
         public const string MainMenuUxml = "UI/MainMenu";
         public const string AssetLoadingIndicatorUxml = "UI/AssetLoadingIndicator";
         public const string GlobalChatUxml = "UI/GlobalChat";
-        public const string LocalChatUxml = "UI/LocalChat";
         public const string PlayerHudUxml = "UI/PlayerHUD";
         public const string ReconnectUxml = "UI/Reconnect";
         public const string InventoryUxml = "UI/Inventory";
@@ -135,9 +133,6 @@ public static class ProjectRuntimeContracts
     public static class RuntimeLimits
     {
         public const int MaximumPacketBatchPerFrame = 250;
-        public const int MaximumWorldWidth = World.MaximumWidth;
-        public const int MaximumWorldHeight = World.MaximumHeight;
-        public const int WorldChunkSize = World.ChunkSize;
         public const int MaximumLightingUpdatesPerSecond = 60;
     }
 }

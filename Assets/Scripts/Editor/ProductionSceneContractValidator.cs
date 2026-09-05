@@ -122,11 +122,11 @@ namespace Fodinae.Editor
             }
         }
 
-        internal static void ValidateAllLoadedScenes(List<string> errors)
+        public static void ValidateAllLoadedScenes(List<string> errors)
         {
-            for (int index = 0; index < SceneManager.sceneCount; index++)
+            for (int i = 0; i < SceneManager.sceneCount; i++)
             {
-                Scene scene = SceneManager.GetSceneAt(index);
+                Scene scene = SceneManager.GetSceneAt(i);
                 if (scene.isLoaded)
                 {
                     ValidateScene(scene, errors);

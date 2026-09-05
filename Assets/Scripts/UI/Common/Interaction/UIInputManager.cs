@@ -12,12 +12,23 @@ namespace Fodinae.UI
     /// </summary>
     public class UIInputManager : MonoBehaviour
     {
-        private readonly Stack<VisualElement> _modalStack = new();
+        private readonly List<VisualElement> _modalStack = [];
+
         public bool IsChatFocused { get; set; }
+
         public bool IsPauseMenuOpen { get; set; }
+
         public bool IsProgrammatorOpen { get; set; }
 
-        public bool IsModalOpen => _modalStack.Count > 0;
+        public bool IsModalOpen
+        {
+            get
+            {
+                PruneDetachedModals();
+                return _modalStack.Count > 0;
+            }
+        }
+
         public bool IsInputBlocked =>
             IsModalOpen || IsChatFocused || IsPauseMenuOpen || IsProgrammatorOpen;
 
@@ -25,31 +36,30 @@ namespace Fodinae.UI
         {
             if (modalElement != null && !_modalStack.Contains(modalElement))
             {
-                _modalStack.Push(modalElement);
+                _modalStack.Add(modalElement);
             }
         }
 
         public void PopModal(VisualElement modalElement)
         {
-            if (_modalStack.Count > 0 && _modalStack.Peek() == modalElement)
+            if (modalElement != null)
             {
-                _modalStack.Pop();
+                _modalStack.Remove(modalElement);
             }
+
+            PruneDetachedModals();
         }
 
-        public bool TryPopTopModal()
+        private void PruneDetachedModals()
         {
-            if (_modalStack.Count > 0)
+            for (int i = _modalStack.Count - 1; i >= 0; i--)
             {
-                var top = _modalStack.Pop();
-                if (top != null && top.parent != null)
+                VisualElement el = _modalStack[i];
+                if (el == null || el.panel == null)
                 {
-                    top.parent.Remove(top);
-                    return true;
+                    _modalStack.RemoveAt(i);
                 }
             }
-
-            return false;
         }
     }
 }

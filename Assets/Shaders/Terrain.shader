@@ -532,11 +532,10 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 int solidBoundaryMask,
                 int solidDiagonalMask)
             {
-                float4 connected = frac(solidBoundaryMask * float4(0.5, 0.25, 0.125, 0.0625));
-                bool top = connected.x >= 0.5;
-                bool left = connected.y >= 0.5;
-                bool bottom = connected.z >= 0.5;
-                bool right = connected.w >= 0.5;
+                bool top = (solidBoundaryMask & 1) != 0;
+                bool left = (solidBoundaryMask & 2) != 0;
+                bool bottom = (solidBoundaryMask & 4) != 0;
+                bool right = (solidBoundaryMask & 8) != 0;
                 float2 p = uv - 0.5;
                 float antialias = min(fwidth(length(p)), 1.0 / 16.0);
                 float contour = 1.0 - smoothstep(0.5 - antialias, 0.5 + antialias, length(p));
@@ -544,20 +543,14 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 contour = (top || right) && p.x >= 0.0 && p.y >= 0.0 ? 1.0 : contour;
                 contour = (bottom || left) && p.x <= 0.0 && p.y <= 0.0 ? 1.0 : contour;
                 contour = (bottom || right) && p.x >= 0.0 && p.y <= 0.0 ? 1.0 : contour;
-                float4 diagonal = frac(
-                    solidDiagonalMask * float4(0.5, 0.25, 0.125, 0.0625));
-                contour = diagonal.x >= 0.5 && p.x <= 0.0 && p.y >= 0.0
-                    ? 1.0
-                    : contour;
-                contour = diagonal.y >= 0.5 && p.x >= 0.0 && p.y >= 0.0
-                    ? 1.0
-                    : contour;
-                contour = diagonal.z >= 0.5 && p.x <= 0.0 && p.y <= 0.0
-                    ? 1.0
-                    : contour;
-                contour = diagonal.w >= 0.5 && p.x >= 0.0 && p.y <= 0.0
-                    ? 1.0
-                    : contour;
+                bool diagTL = (solidDiagonalMask & 1) != 0;
+                bool diagTR = (solidDiagonalMask & 2) != 0;
+                bool diagBL = (solidDiagonalMask & 4) != 0;
+                bool diagBR = (solidDiagonalMask & 8) != 0;
+                contour = diagTL && p.x <= 0.0 && p.y >= 0.0 ? 1.0 : contour;
+                contour = diagTR && p.x >= 0.0 && p.y >= 0.0 ? 1.0 : contour;
+                contour = diagBL && p.x <= 0.0 && p.y <= 0.0 ? 1.0 : contour;
+                contour = diagBR && p.x >= 0.0 && p.y <= 0.0 ? 1.0 : contour;
                 return contour;
             }
 

@@ -202,14 +202,6 @@ namespace Fodinae.UI.HUD.Player.View
         private void OnDailyBonusChanged() => _bonusController.UpdateDailyBonusPanel(_model);
         private void OnStatusLinesChanged() => _statusPanel.Rebuild(_model);
         private void OnMissionChanged() => _missionPanel.Update(_model);
-
-        public void InitializeEditorPreview(UIDocument doc)
-        {
-            _doc = doc;
-            _model = new PlayerStatsModel();
-            InitializeHUD();
-        }
-
         private void InitializeHUD()
         {
             _programmatorData ??= new ProgrammatorData();

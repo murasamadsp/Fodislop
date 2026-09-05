@@ -227,7 +227,7 @@ namespace Fodinae.UI
 
             // Ноль означает «в конфиге ничего нет» — множитель ноль погасил бы
             // весь интерфейс, поэтому такое значение трактуем как штатное.
-            ApplyUIScale(saved <= 0f ? 1f : saved);
+            ApplyUIScale(UIScaleUtility.ResolveEffectiveScale(saved));
         }
 
         private void ApplyUIScale(float scale)
@@ -239,7 +239,7 @@ namespace Fodinae.UI
             }
 
             // Диапазон тот же, что проверяет ClientConfigManager.
-            panel.scale = Mathf.Clamp(scale, 0.5f, 2f);
+            panel.scale = UIScaleUtility.Clamp(scale);
         }
 
         // ─────────────────────────────────────────────────────────────

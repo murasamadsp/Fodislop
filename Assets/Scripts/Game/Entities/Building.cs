@@ -53,11 +53,6 @@ namespace Fodinae.Game
 
         protected void Awake()
         {
-            if (TryGetComponent<SpriteRenderer>(out var obsoleteRenderer))
-            {
-                obsoleteRenderer.enabled = false;
-            }
-
             Transform? existingVisual = transform.Find("BuildingVisual");
             GameObject visualObject = existingVisual != null
                 ? existingVisual.gameObject

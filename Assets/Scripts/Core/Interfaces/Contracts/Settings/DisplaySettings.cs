@@ -61,16 +61,16 @@ public sealed class DisplaySettings
 
     [SettingRange(GammaMin, GammaMax)]
     [SettingLabel("settings.display.gamma")]
-    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetGamma / PostProcessRenderPass.SetDisplayCalibration")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetGamma / PostProcessRuntimeState.SetDisplayCalibration")]
     public float Gamma = DefaultGamma;
 
     [SettingRange(PaperWhiteMin, PaperWhiteMax)]
     [SettingLabel("settings.display.paper_white")]
-    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPaperWhiteNits / PostProcessRenderPass.SetDisplayCalibration")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPaperWhiteNits / PostProcessRuntimeState.SetDisplayCalibration")]
     public float PaperWhiteNits = DefaultPaperWhite;
 
     [SettingRange(PeakBrightnessMin, PeakBrightnessMax)]
     [SettingLabel("settings.display.peak_brightness")]
-    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPeakBrightnessNits / PostProcessRenderPass.SetDisplayCalibration")]
+    [SettingConsumer(SettingConsumerTarget.DisplayManager, "DisplayManager.SetPeakBrightnessNits / PostProcessRuntimeState.SetDisplayCalibration")]
     public float PeakBrightnessNits = DefaultPeakBrightness;
 }
