@@ -32,8 +32,9 @@ namespace Fodinae.Rendering
             }
 
             AutoDetectDisplayCapabilities(display);
+            SanitizeCalibration(display);
             HDROutput.SetEnabled(display.HDREnabled);
-            PostProcessRenderPass.SetDisplayCalibration(
+            PostProcessRuntimeState.SetDisplayCalibration(
                 display.Gamma,
                 display.PaperWhiteNits,
                 display.PeakBrightnessNits);
@@ -158,6 +159,8 @@ namespace Fodinae.Rendering
             if (result == HDROutput.ApplyRequestResult.RejectedNotSwitchable)
             {
                 _clientConfig.UpdateSection(config => config.Display, display => display.HDREnabled = previous);
+                HDROutput.SetEnabled(previous);
+                HDROutput.ConfigureCamera(_gameplayCamera.Camera);
                 Debug.LogWarning(
                     "[HDR] Display is HDR-capable but not runtime-switchable; " +
                     $"the preference stays at {previous}. Switch HDR in the OS display settings.");
@@ -176,11 +179,6 @@ namespace Fodinae.Rendering
             return result;
         }
 
-        public IReadOnlyList<Resolution> GetSupportedResolutions()
-        {
-            return Screen.resolutions;
-        }
-
         public void SetGamma(float gamma)
         {
             if (_clientConfig?.Config == null)
@@ -188,12 +186,17 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.UpdateSection(config => config.Display, display => display.Gamma = gamma);
-            PostProcessRenderPass.SetDisplayCalibration(
+            float sanitized = FiniteClamp(
                 gamma,
+                DisplaySettings.GammaMin,
+                DisplaySettings.GammaMax,
+                DisplaySettings.DefaultGamma);
+            _clientConfig.UpdateSection(config => config.Display, display => display.Gamma = sanitized);
+            PostProcessRuntimeState.SetDisplayCalibration(
+                sanitized,
                 _clientConfig.Config.Display.PaperWhiteNits,
                 _clientConfig.Config.Display.PeakBrightnessNits);
-            Debug.Log($"[DisplayManager] SetGamma: {gamma}");
+            Debug.Log($"[DisplayManager] SetGamma: {sanitized}");
         }
 
         public void SetPaperWhiteNits(float paperWhiteNits)
@@ -203,12 +206,30 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.UpdateSection(config => config.Display, display => display.PaperWhiteNits = paperWhiteNits);
-            PostProcessRenderPass.SetDisplayCalibration(
-                _clientConfig.Config.Display.Gamma,
+            float sanitizedPaperWhite = FiniteClamp(
                 paperWhiteNits,
-                _clientConfig.Config.Display.PeakBrightnessNits);
-            Debug.Log($"[DisplayManager] SetPaperWhiteNits: {paperWhiteNits}");
+                DisplaySettings.PaperWhiteMin,
+                DisplaySettings.PaperWhiteMax,
+                DisplaySettings.DefaultPaperWhite);
+            float sanitizedPeak = Mathf.Max(
+                sanitizedPaperWhite,
+                FiniteClamp(
+                    _clientConfig.Config.Display.PeakBrightnessNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax,
+                    DisplaySettings.DefaultPeakBrightness));
+            _clientConfig.UpdateSection(config => config.Display, display =>
+            {
+                display.PaperWhiteNits = sanitizedPaperWhite;
+                display.PeakBrightnessNits = sanitizedPeak;
+            });
+            PostProcessRuntimeState.SetDisplayCalibration(
+                _clientConfig.Config.Display.Gamma,
+                sanitizedPaperWhite,
+                sanitizedPeak);
+            Debug.Log(
+                $"[DisplayManager] SetPaperWhiteNits: {sanitizedPaperWhite} " +
+                $"(Peak={sanitizedPeak})");
         }
 
         public void SetPeakBrightnessNits(float peakBrightnessNits)
@@ -218,30 +239,64 @@ namespace Fodinae.Rendering
                 return;
             }
 
-            _clientConfig.UpdateSection(config => config.Display, display => display.PeakBrightnessNits = peakBrightnessNits);
-            PostProcessRenderPass.SetDisplayCalibration(
-                _clientConfig.Config.Display.Gamma,
+            float paperWhite = FiniteClamp(
                 _clientConfig.Config.Display.PaperWhiteNits,
-                peakBrightnessNits);
-            Debug.Log($"[DisplayManager] SetPeakBrightnessNits: {peakBrightnessNits}");
+                DisplaySettings.PaperWhiteMin,
+                DisplaySettings.PaperWhiteMax,
+                DisplaySettings.DefaultPaperWhite);
+            float sanitizedPeak = Mathf.Max(
+                paperWhite,
+                FiniteClamp(
+                    peakBrightnessNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax,
+                    DisplaySettings.DefaultPeakBrightness));
+            _clientConfig.UpdateSection(config => config.Display, display =>
+            {
+                display.PaperWhiteNits = paperWhite;
+                display.PeakBrightnessNits = sanitizedPeak;
+            });
+            PostProcessRuntimeState.SetDisplayCalibration(
+                _clientConfig.Config.Display.Gamma,
+                paperWhite,
+                sanitizedPeak);
+            Debug.Log($"[DisplayManager] SetPeakBrightnessNits: {sanitizedPeak}");
         }
 
         public static void AutoDetectDisplayCapabilities(DisplaySettings display)
         {
-            HDROutputSettings output = HDROutputSettings.main;
-            if (output.available)
-            {
-                if (display.PaperWhiteNits <= 10f && output.paperWhiteNits > 10f)
-                {
-                    display.PaperWhiteNits = output.paperWhiteNits;
-                }
-
-                if (display.PeakBrightnessNits <= 100f && output.maxToneMapLuminance > 100)
-                {
-                    display.PeakBrightnessNits = (float)output.maxToneMapLuminance;
-                }
-            }
+            HDROutput.AutoDetectDisplayCapabilities(display);
         }
+
+        private static void SanitizeCalibration(DisplaySettings display)
+        {
+            display.Gamma = FiniteClamp(
+                display.Gamma,
+                DisplaySettings.GammaMin,
+                DisplaySettings.GammaMax,
+                DisplaySettings.DefaultGamma);
+            display.PaperWhiteNits = FiniteClamp(
+                display.PaperWhiteNits,
+                DisplaySettings.PaperWhiteMin,
+                DisplaySettings.PaperWhiteMax,
+                DisplaySettings.DefaultPaperWhite);
+            display.PeakBrightnessNits = Mathf.Max(
+                display.PaperWhiteNits,
+                FiniteClamp(
+                    display.PeakBrightnessNits,
+                    DisplaySettings.PeakBrightnessMin,
+                    DisplaySettings.PeakBrightnessMax,
+                    DisplaySettings.DefaultPeakBrightness));
+        }
+
+        private static float FiniteClamp(
+            float value,
+            float minimum,
+            float maximum,
+            float fallback) =>
+            float.IsNaN(value) || float.IsInfinity(value)
+                ? fallback
+                : Mathf.Clamp(value, minimum, maximum);
 
         /// <summary>
         /// Unity на macOS не поддерживает ExclusiveFullScreen — единственный
@@ -257,230 +312,6 @@ namespace Fodinae.Rendering
 #else
             return mode;
 #endif
-        }
-
-        /// <summary>
-        /// Owns the boundary between the scene-linear HDR render and the operating
-        /// system's HDR display surface.
-        /// </summary>
-        public static class HDROutput
-        {
-            private static HDRDiagnosticState _lastDiagnosticState;
-            private static bool _hasDiagnosticState;
-            private static bool _enabled;
-            private static bool _preferenceInitialized;
-
-            public static bool Enabled => _preferenceInitialized && _enabled;
-
-            private readonly record struct HDRDiagnosticState(
-                bool Available,
-                bool Active,
-                bool ChangeRequested,
-                HDRDisplaySupportFlags SupportFlags,
-                ColorGamut Gamut,
-                float PaperWhiteNits,
-                int MinToneMapLuminance,
-                int MaxToneMapLuminance);
-
-            [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-            private static void ResetDiagnostics()
-            {
-                _lastDiagnosticState = default;
-                _hasDiagnosticState = false;
-                _enabled = false;
-                _preferenceInitialized = false;
-            }
-
-            public enum ApplyRequestResult
-            {
-                /// <summary>Запрос применён, дисплей поставлен в режим <c>enabled</c>.</summary>
-                Applied,
-                /// <summary>Запрос отправлен ранее и ещё в полёте; повторный вызов проигнорирован.</summary>
-                AlreadyPending,
-                /// <summary>Дисплей не HDR-capable в принципе (нет <c>HDROutputSettings.available</c>).</summary>
-                RejectedUnsupported,
-                /// <summary>Дисплей HDR-capable, но без <c>RuntimeSwitchable</c> флага — переключение невозможно.</summary>
-                RejectedNotSwitchable,
-            }
-
-            public static ApplyRequestResult SetEnabled(bool enabled)
-            {
-                // Store intent before probing the display. Availability can be
-                // reported late (for example after a scene or display change),
-                // and Refresh must still be able to complete the request.
-                _enabled = enabled;
-                _preferenceInitialized = true;
-
-                HDROutputSettings output = HDROutputSettings.main;
-                if (!output.available)
-                {
-                    LogDiagnostics(output);
-                    return ApplyRequestResult.RejectedUnsupported;
-                }
-
-                if (!output.HDRModeChangeRequested && enabled == output.active)
-                {
-                    LogDiagnostics(output);
-                    return ApplyRequestResult.Applied;
-                }
-
-                bool runtimeSwitchable =
-                    (SystemInfo.hdrDisplaySupportFlags &
-                        HDRDisplaySupportFlags.RuntimeSwitchable) != 0;
-                if (!runtimeSwitchable)
-                {
-                    LogDiagnostics(output);
-                    return ApplyRequestResult.RejectedNotSwitchable;
-                }
-
-                if (output.HDRModeChangeRequested)
-                {
-                    LogDiagnostics(output);
-                    return ApplyRequestResult.AlreadyPending;
-                }
-
-                // Request a switch only when the current state differs from
-                // the user request, otherwise we keep spamming
-                // RequestHDRModeChange every toggle reset.
-                if (enabled != output.active)
-                {
-                    output.RequestHDRModeChange(enabled);
-                }
-
-                LogDiagnostics(output);
-                return ApplyRequestResult.Applied;
-            }
-
-            public static void Reconcile()
-            {
-                HDROutputSettings output = HDROutputSettings.main;
-                if (!output.available)
-                {
-                    LogDiagnostics(output);
-                    return;
-                }
-
-                if (_preferenceInitialized && Enabled != output.active &&
-                    (SystemInfo.hdrDisplaySupportFlags &
-                        HDRDisplaySupportFlags.RuntimeSwitchable) != 0 &&
-                    !output.HDRModeChangeRequested)
-                {
-                    output.RequestHDRModeChange(Enabled);
-                }
-
-                LogDiagnostics(output);
-            }
-
-            private static void LogDiagnostics(HDROutputSettings output)
-            {
-                bool available = output.available;
-                var state = new HDRDiagnosticState(
-                    available,
-                    available && output.active,
-                    available && output.HDRModeChangeRequested,
-                    SystemInfo.hdrDisplaySupportFlags,
-                    available ? output.displayColorGamut : default,
-                    available ? output.paperWhiteNits : 0f,
-                    available ? output.minToneMapLuminance : 0,
-                    available ? output.maxToneMapLuminance : 0);
-                if (_hasDiagnosticState && state == _lastDiagnosticState)
-                {
-                    return;
-                }
-
-                _lastDiagnosticState = state;
-                _hasDiagnosticState = true;
-                Debug.Log(
-                    "[HDR] " +
-                    $"available={state.Available}, active={state.Active}, " +
-                    $"changeRequested={state.ChangeRequested}, " +
-                    $"supportFlags={state.SupportFlags}, gamut={state.Gamut}, " +
-                    $"paperWhite={state.PaperWhiteNits:F1} nits, " +
-                    $"min={state.MinToneMapLuminance} nits, " +
-                    $"max={state.MaxToneMapLuminance} nits.");
-            }
-
-            public static void AppendDebugInfo(StringBuilder builder, Camera? camera)
-            {
-                if (builder == null)
-                {
-                    throw new ArgumentNullException(nameof(builder));
-                }
-
-                HDROutputSettings output = HDROutputSettings.main;
-                bool available = output.available;
-                bool active = available && output.active;
-                bool changeRequested = available && output.HDRModeChangeRequested;
-                ColorGamut gamut = available ? output.displayColorGamut : default;
-                float paperWhiteNits = available ? output.paperWhiteNits : 0f;
-                int minNits = available ? output.minToneMapLuminance : 0;
-                int maxNits = available ? output.maxToneMapLuminance : 0;
-                string status = !Enabled
-                    ? "DISABLED"
-                    : active
-                        ? "ACTIVE"
-                        : available ? "AVAILABLE / INACTIVE" : "UNAVAILABLE";
-                builder.Append("<b>[HDR: ").Append(status).Append("]</b>\n")
-                    .Append("Enabled in settings: ").Append(Enabled).Append('\n')
-                    .Append("Available: ").Append(available)
-                    .Append(" | Active: ").Append(active)
-                    .Append(" | Requested: ").Append(changeRequested).Append('\n')
-                    .Append("Support: ").Append(SystemInfo.hdrDisplaySupportFlags)
-                    .Append(" | Gamut: ").Append(gamut).Append('\n')
-                    .Append("Luminance: ").Append(minNits)
-                    .Append(" / ").Append(paperWhiteNits.ToString("F1"))
-                    .Append(" / ").Append(maxNits)
-                    .Append(" nits (min / paper / OS max)\n");
-
-                if (camera == null)
-                {
-                    builder.Append("Display camera: MISSING\n\n");
-                    return;
-                }
-
-                builder.Append("Camera HDR buffer: ").Append(camera.allowHDR);
-                if (camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
-                {
-                    builder.Append(" | HDR output: ").Append(cameraData.allowHDROutput)
-                        .Append(" | Unity PP: ")
-                        .Append(cameraData.renderPostProcessing ? "ON (!)" : "OFF (custom only)");
-                }
-                else
-                {
-                    builder.Append(" | URP camera data: MISSING");
-                }
-
-                builder.Append("\n\n");
-            }
-
-            public static void ConfigureCamera(Camera camera)
-            {
-                // HDR output belongs only to cameras resolving to a
-                // display. Enabling it on an offscreen RenderTexture camera can
-                // invalidate that camera's explicitly authored LDR target path.
-                if (camera.targetTexture != null)
-                {
-                    return;
-                }
-
-                camera.allowHDR = true;
-                if (camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
-                {
-                    HDROutputSettings output = HDROutputSettings.main;
-
-                    // Only enable HDR on the camera if the user enabled it in settings
-                    // AND the connected display actually supports and runs HDR.
-                    cameraData.allowHDROutput = Enabled &&
-                        output.available && output.active;
-
-                    // Fodinae has one post-processing chain: the custom
-                    // renderer feature. URP FinalBlit still performs the
-                    // mandatory display color-space conversion and transfer
-                    // encoding; that output step is not a second PP stack.
-                    cameraData.renderPostProcessing = false;
-                }
-            }
-
         }
     }
 }

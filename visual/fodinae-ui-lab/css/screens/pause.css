@@ -18,8 +18,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  background: var(--surface-scrim);
-  backdrop-filter: blur(var(--blur-lg));
+  background: transparent;
 }
 .pause-overlay-view.active { display: flex; }
 .pause-menu-card {

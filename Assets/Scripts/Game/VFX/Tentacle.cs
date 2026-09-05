@@ -56,12 +56,6 @@ public class Tentacle
 
         _renderer.Register(this, _texture);
     }
-
-    public Vector3 GetRenderPoint(int index)
-    {
-        return _renderPoints[index];
-    }
-
     public bool IsActive => _isActive;
 
     internal Texture2D Texture => _texture;

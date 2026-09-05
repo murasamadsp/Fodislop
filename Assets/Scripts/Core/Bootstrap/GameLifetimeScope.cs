@@ -226,7 +226,6 @@ namespace Fodinae.Core
             RegisterManager<ReconnectUI>(builder, "UI");
             RegisterManager<AssetLoadingIndicator>(builder, "UI");
             RegisterManager<MissionArrowUI>(builder, "UI");
-            RegisterManager<DiagnosticRunner>(builder, "UI");
 
             if (_postProcessVolume == null)
             {

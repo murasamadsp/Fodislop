@@ -3,20 +3,9 @@
 using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.World;
 
-namespace Fodinae.Networking.Processors
+namespace Fodinae.Networking.Processors;
+
+public sealed class AudioPacketProcessor(IServerAudioService audio) : IPacketProcessor<AudioPacket>
 {
-    public class AudioPacketProcessor : IPacketProcessor<AudioPacket>
-    {
-        private readonly IServerAudioService _audio;
-
-        public AudioPacketProcessor(IServerAudioService audio)
-        {
-            _audio = audio;
-        }
-
-        public void Process(AudioPacket packet)
-        {
-            _audio.PlayEffect(packet);
-        }
-    }
+    public void Process(AudioPacket packet) => audio.PlayEffect(packet);
 }

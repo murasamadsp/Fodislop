@@ -369,50 +369,7 @@ namespace Fodinae.Player
                 _followVelocity = Vector3.zero;
             }
         }
-
-        public void SetGameplayReady()
-        {
-            if (_localPlayer?.Current is not { HasServerPosition: true })
-            {
-                throw new InvalidOperationException(
-                    "[CameraFollow] Cannot enable camera before the local server position is synchronized.");
-            }
-
-            SnapToTarget();
-            _hasSnappedToServerPosition = true;
-        }
-
-        public void SetTarget(Transform newTarget)
-        {
-            _target = newTarget;
-            SnapToTarget();
-        }
-
-        public void SetZoom(float zoomLevel)
-        {
-            if (_camera != null)
-            {
-                _targetZoom = Mathf.Clamp(zoomLevel, _minZoom, _maxZoom);
-            }
-            else
-            {
-                if (!_cameraNullLogged)
-                {
-                    Debug.LogWarning("[CameraFollow] Ignoring zoom request until the camera is initialized.");
-                    _cameraNullLogged = true;
-                }
-            }
-        }
-
-        public float GetCurrentZoom() => _currentZoom;
         public void SetScrollEnabled(bool enabled) => _scrollEnabled = enabled;
-        public void Reinitialize()
-        {
-            DisposeScrollAction();
-            _hasSnappedToServerPosition = false;
-            InitializeRuntime();
-        }
-
 #if UNITY_EDITOR
         protected void OnDrawGizmosSelected()
         {

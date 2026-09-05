@@ -14,28 +14,15 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyTeleportManager
+internal sealed class DummyTeleportManager(Action<ServerPacket> onReceived, List<(ushort X, ushort Y)> teleportPositions)
 {
-    private readonly Action<ServerPacket> _onReceived;
-    private readonly List<(ushort X, ushort Y)> _teleportPositions;
     private List<(ushort X, ushort Y)>? _teleportDestinations;
-    private bool _windowOpen;
 
-    public DummyTeleportManager(Action<ServerPacket> onReceived, List<(ushort X, ushort Y)> teleportPositions)
-    {
-        _onReceived = onReceived;
-        _teleportPositions = teleportPositions;
-    }
-
-    public bool WindowOpen
-    {
-        get => _windowOpen;
-        set => _windowOpen = value;
-    }
+    public bool WindowOpen { get; set; }
 
     public void CheckTeleportEntry(ushort x, ushort y)
     {
-        if (!_teleportPositions.Contains((x, y)))
+        if (!teleportPositions.Contains((x, y)))
         {
             return;
         }
@@ -45,7 +32,7 @@ internal sealed class DummyTeleportManager
 
     public void SendTeleportWindow(ushort x, ushort y)
     {
-        _teleportDestinations = _teleportPositions
+        _teleportDestinations = teleportPositions
             .Where(tp => tp.X != x || tp.Y != y)
             .ToList();
 
@@ -90,46 +77,37 @@ internal sealed class DummyTeleportManager
                 BorderWidth = 2,
                 Padding = new Margins(2, 8, 2, 8),
             },
-            Children = new List<IGUIComponentPacket>
-            {
+            Children =
+            [
                 new DockPanelPacket
                 {
-                    AttachedProperties = new StringPairPacket[]
-                    {
-                        new("DockPanel.Dock", "Top"),
-                    },
+                    AttachedProperties = [new("DockPanel.Dock", "Top")],
                     Style = new GUIStylePacket
                     {
                         Margin = new Margins(0, 0, 10, 0),
                         Padding = new Margins(0, 0, 0, 0),
                     },
-                    Children = new List<IGUIComponentPacket>
-                    {
+                    Children =
+                    [
                         new TextPacket
                         {
                             Text = "<color=#B2A680>Телепорты</color>",
-                            AttachedProperties = new StringPairPacket[]
-                            {
-                                new("DockPanel.Dock", "Left"),
-                            },
+                            AttachedProperties = [new("DockPanel.Dock", "Left")],
                         },
                         new TextPacket
                         {
                             Text = "<color=#B3B3B3>×</color>",
                             OnClickContext = "teleport_close",
-                            AttachedProperties = new StringPairPacket[]
-                            {
-                                new("DockPanel.Dock", "Right"),
-                            },
+                            AttachedProperties = [new("DockPanel.Dock", "Right")],
                         },
-                    },
+                    ],
                 },
                 scrollViewer,
-            },
+            ],
         };
 
-        _onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
-        _windowOpen = true;
+        onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 300, root)));
+        WindowOpen = true;
     }
 
     public void SendTeleportWindowNoDestinations()
@@ -148,46 +126,37 @@ internal sealed class DummyTeleportManager
                 BorderWidth = 2,
                 Padding = new Margins(0, 0, 0, 0),
             },
-            Children = new List<IGUIComponentPacket>
-            {
+            Children =
+            [
                 new DockPanelPacket
                 {
-                    AttachedProperties = new StringPairPacket[]
-                    {
-                        new("DockPanel.Dock", "Top"),
-                    },
+                    AttachedProperties = [new("DockPanel.Dock", "Top")],
                     Style = new GUIStylePacket
                     {
                         Margin = new Margins(0, 0, 0, 0),
                         Padding = new Margins(0, 0, 0, 0),
                     },
-                    Children = new List<IGUIComponentPacket>
-                    {
+                    Children =
+                    [
                         new TextPacket
                         {
                             Text = "<color=#B2A680>Телепорты</color>",
-                            AttachedProperties = new StringPairPacket[]
-                            {
-                                new("DockPanel.Dock", "Left"),
-                            },
+                            AttachedProperties = [new("DockPanel.Dock", "Left")],
                         },
                         new TextPacket
                         {
                             Text = "<color=#B3B3B3>×</color>",
                             OnClickContext = "teleport_close",
-                            AttachedProperties = new StringPairPacket[]
-                            {
-                                new("DockPanel.Dock", "Right"),
-                            },
+                            AttachedProperties = [new("DockPanel.Dock", "Right")],
                         },
-                    },
+                    ],
                 },
                 text,
-            },
+            ],
         };
 
-        _onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
-        _windowOpen = true;
+        onReceived.Invoke(new ServerPacket(new OpenWindowPacket("teleport", 400, 200, root)));
+        WindowOpen = true;
     }
 
     public void HandleTeleportClick(int index)
@@ -198,8 +167,8 @@ internal sealed class DummyTeleportManager
         }
 
         var (destX, destY) = _teleportDestinations[index];
-        _windowOpen = false;
-        _onReceived.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
-        _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
+        WindowOpen = false;
+        onReceived.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
+        onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
     }
 }

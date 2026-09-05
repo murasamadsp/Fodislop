@@ -5,13 +5,11 @@ using MinesServer.Networking.Client;
 using MinesServer.Networking.Client.Packets;
 using MinesServer.Networking.Client.Packets.Actions;
 
-namespace Fodinae.Core.Interfaces
+namespace Fodinae.Core.Interfaces;
+public interface INetworkService
 {
-    public interface INetworkService
-    {
-        void Subscribe<T>(Action<T> handler);
-        void Unsubscribe<T>(Action<T> handler);
-        void SendAction(IActionClientPacket action);
-        void Send(IRootClientPacket packet);
-    }
+    void Subscribe<T>(Action<T> handler);
+    void Unsubscribe<T>(Action<T> handler);
+    void SendAction(IActionClientPacket action);
+    void Send(IRootClientPacket packet);
 }

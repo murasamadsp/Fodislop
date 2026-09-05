@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fodinae Architecture Rules</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #11151c; color: #dce5f2; }
+    body { max-width: 1100px; margin: 0 auto; padding: 36px 24px 72px; line-height: 1.55; }
+    h1, h2, h3 { color: #fff; line-height: 1.2; }
+    h2 { margin-top: 42px; border-bottom: 1px solid #30394a; padding-bottom: 8px; }
+    code { background: #1c2430; border-radius: 4px; padding: 2px 5px; color: #b9dcff; }
+    pre { overflow: auto; background: #0b0f15; border: 1px solid #30394a; border-radius: 8px; padding: 16px; }
+    pre code { background: none; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+    th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid #30394a; }
+    th { color: #9fb5ce; }
+    .note { border-left: 4px solid #55a7ff; background: #172232; padding: 12px 16px; }
+    .error { color: #ff9c9c; }
+    .warning { color: #ffd487; }
+  </style>
+</head>
+<body>
+  <h1>Fodinae architecture rules</h1>
+  <p>The project currently uses two complementary linters. The C# runner in
+    <code>tools/Fodinae.ArchitectureLinter</code> owns migrated source and IL contracts.
+    <code>scripts/check-architecture.js</code> still owns non-migrated scene, design-system,
+    localization, and debt-budget checks. Neither runner is described as a full replacement
+    until the remaining checks have actually moved.</p>
+
+  <h2>Running</h2>
+  <pre><code>dotnet run --project tools/Fodinae.ArchitectureLinter -- -p .
+dotnet run --project tools/Fodinae.ArchitectureLinter -- -p . --rule FOD-DISPLAY-TRANSFORM
+dotnet run --project tools/Fodinae.ArchitectureLinter -- -p . \
+  --rule FOD-DISPLAY-TRANSFORM --rule FOD-POSTPROCESS-RUNTIME</code></pre>
+  <p><code>--rule</code> is repeatable and rejects unknown IDs. With no selector, every discovered
+    rule runs. Source-only selections do not load compiled assemblies. IL selections discover
+    assemblies by simple name, prefer <code>Temp/bin</code> over
+    <code>Library/ScriptAssemblies</code> and <code>build</code>, and avoid scanning a stale
+    monolithic <code>Assembly-CSharp.dll</code> beside modular <code>Fodinae.*</code> assemblies.</p>
+  <p class="note">The local pre-commit hook runs the migrated source-based display,
+    localization, and architecture-pattern rules. Runtime IL rules run in CI only after a
+    successful current C# build, so stale Editor output cannot decide the result.</p>
+
+  <h2>C# rule index</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Severity</th><th>Input</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>FOD-ASSEMBLY-GRAPH</code></td><td class="error">Error</td><td>IL/source</td><td>Assembly graph and namespace visibility</td></tr>
+      <tr><td><code>FOD-ASYNC-VOID</code></td><td class="warning">Warning</td><td>IL</td><td>Unsafe async-void lifecycle methods</td></tr>
+      <tr><td><code>FOD-BLOCK-NAMESPACE</code></td><td class="warning">Warning</td><td>IL</td><td>Unity component namespace contract</td></tr>
+      <tr><td><code>FOD-DEAD-MEMBERS</code></td><td class="warning">Warning</td><td>Source</td><td>Unreferenced member detection</td></tr>
+      <tr><td><code>FOD-DEP-CYCLE</code></td><td class="error">Error</td><td>IL</td><td>Assembly dependency cycles</td></tr>
+      <tr><td><code>FOD-DISPLAY-TRANSFORM</code></td><td class="error">Error</td><td>Source</td><td>Color pipeline, scopes, and Render Graph invariants</td></tr>
+      <tr><td><code>FOD-EXECUTION-ORDER</code></td><td class="error">Error</td><td>IL</td><td>Required execution-order attributes</td></tr>
+      <tr><td><code>FOD-FORBIDDEN-API</code></td><td class="error">Error</td><td>IL</td><td>Forbidden framework and project APIs</td></tr>
+      <tr><td><code>FOD-INJECT-ATTRIBUTE</code></td><td class="error">Error</td><td>IL</td><td>Invalid static injection</td></tr>
+      <tr><td><code>FOD-LOCALIZATION</code></td><td class="error">Error</td><td>Source</td><td>Locale parity and key wiring</td></tr>
+      <tr><td><code>FOD-MONO-ACCESS</code></td><td class="warning">Warning</td><td>IL</td><td>Lifecycle method accessibility</td></tr>
+      <tr><td><code>FOD-NAMING</code></td><td class="warning">Warning</td><td>IL</td><td>Naming conventions</td></tr>
+      <tr><td><code>FOD-PATTERN</code></td><td class="error">Error</td><td>Source</td><td>Forbidden architecture patterns</td></tr>
+      <tr><td><code>FOD-POSTPROCESS-RUNTIME</code></td><td class="error">Error</td><td>IL</td><td>IMGUI capture and post-process lifecycle contracts</td></tr>
+      <tr><td><code>FOD-RESOURCE-PATHS</code></td><td class="error">Error</td><td>Source</td><td>Resource path existence</td></tr>
+      <tr><td><code>FOD-SCRIPT-META</code></td><td class="error">Error</td><td>Source</td><td>Script meta GUID integrity</td></tr>
+      <tr><td><code>FOD-SETTINGS-WIRING</code></td><td class="error">Error</td><td>Source</td><td>Settings consumers and application paths</td></tr>
+      <tr><td><code>FOD-SHADER-COLOR</code></td><td class="error">Error</td><td>Source</td><td>Shared shader color-library usage</td></tr>
+      <tr><td><code>FOD-SWITCH-DEFAULT</code></td><td class="error">Error</td><td>Source</td><td>Default branches in non-trivial switches</td></tr>
+      <tr><td><code>FOD-USS-STYLESHEET</code></td><td class="error">Error</td><td>Source</td><td>USS syntax, tokens, and supported properties</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Display and IMGUI contracts</h2>
+  <h3>FOD-DISPLAY-TRANSFORM</h3>
+  <ul>
+    <li>D65-preserving output-gamut matrices and inverse LMS transforms.</li>
+    <li>Norm-based tone curve, neutral ASC CDL behavior, HDR headroom and hue preservation.</li>
+    <li>Output-gamut conversion before temporal history and explicit SDR gamma.</li>
+    <li>Vignette coordinates, scopes signal scaling, active-color texture descriptors, and debug temporal bypass.</li>
+  </ul>
+  <h3>FOD-POSTPROCESS-RUNTIME</h3>
+  <ul>
+    <li><code>ToolWindows.Unregister</code> releases IMGUI input capture.</li>
+    <li><code>PostProcessController.OnDisable</code> resets bypass and advanced runtime settings.</li>
+    <li>Render feature and scopes pass use the explicitly tracked main camera.</li>
+    <li>HDR enablement updates the platform output in both state branches.</li>
+  </ul>
+
+  <h2>Adding a C# rule</h2>
+  <ol>
+    <li>Add a public, non-abstract class implementing <code>IRule</code> under the rules directory.</li>
+    <li>Give it a public parameterless constructor and a unique stable ID.</li>
+    <li>Override <code>RequiresAssemblies</code> with <code>false</code> when it reads only source files.</li>
+    <li>Add the rule to this index and wire a selective pre-commit or CI invocation only after its existing violations are understood.</li>
+  </ol>
+  <p>Rules are discovered from the linter assembly through reflection. There is no manual registry
+    in <code>CreateDefaultRules()</code>.</p>
+
+  <h2>Transition boundary</h2>
+  <p>The JavaScript runner remains authoritative for checks that have not been migrated. A check must
+    have one owner: once a contract is represented in a C# rule and invoked by the hook, its duplicate
+    JavaScript implementation is removed. The entire legacy C# suite is not enabled as a blocking hook
+    in one step because existing false positives and debt first need rule-by-rule correction.</p>
+</body>
+</html>

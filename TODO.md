@@ -4,6 +4,18 @@
 - [ ] добавить пимпочку справа снизу которое показывает состояние загрузки ассетов и туда вынести и версию билда и фпс и пинг и т.п.
 - [x] Восстановить полноценный локальный чат в активном `GlobalChatUI`: отдельный local-tab, открытие клавишей T, общий lifecycle/input blocking, отправка `SendLocalChatMessagePacket`, приём `LocalMessageReceived` и отдельная история канала. Старый неподключённый `LocalChatPopup` не возвращать.
 - физику вырезать, матрицы коллизий??? чо это?? тоже вырезать.... слои юнити сделать
+- [x] анимация появления окон: `UIVisibilityAnimator` сшивает класс видимости `is-hidden` (`display: none`, не анимируется) с анимируемой парой `sci-fi-window-anim--hidden` / `--shown` из `Animations.uss`; подключён к панели инвентаря и к серверным окнам. Инлайновый `style="display: none;"` снят с `Inventory.uxml`. Закрытие серверного окна намеренно осталось мгновенным — окно модальное, задержка пускала бы клики мимо него.
+- [x] удалить `UI/Common/Animation/UIAnimator.cs` вместе с `.meta`: пустой класс удалён, его регистрация снята со сборок.
+- [x] решить судьбу `.sci-fi-slot` и `.sci-fi-clickable` — неиспользуемые селекторы и правила удалены из `Animations.uss`.
+- [x] ликвидировать все мёртвые члены (бюджет в `scripts/check-architecture.js` сведён к 0):
+  - `ProjectRuntimeContracts.LocalChatUxml` — константа удалена, заброшенный `LocalChat.uxml` и `.lchat-*` стили удалены.
+  - `Robot.ClearClanBadge` + `RobotAssetLoader.LoadClanBadge` — мёртвые обрубки удалены.
+  - `MaximumWorldWidth` / `MaximumWorldHeight` / `WorldChunkSize` (дубликаты в `RuntimeLimits`) и неиспользуемые `World.MaximumWidth` / `World.MaximumHeight` — удалены.
+  - `DummyConnection.UsePrebakedMap` — неиспользуемый тумблер удален.
+  - `Core/Diagnostics/FailFastLogHandler.cs` — мёртвый legacy diagnostic hook удален вместе с `.meta`.
+- [x] грейд по местам: `ColorGradeZone` / `ColorGradeZones` — зоны по мировой высоте с кубической растушёвкой, накладываются поверх авторского грейда по весам, поэтому дыра между зонами не оставляет кадр без кривой. Кривая вывода не смешивается (половина сжатия диапазона — не мягкий переход, а неверный кадр), остальное линейно. Применяет `ColorGradeZoneDriver` по камере прохода; окно `GradingZonesWindow` работает от камеры, а не от чисел: привёл камеру, покрутил грейд, нажал «снять сюда». Сохраняется вместе с грейдом, схема файла 2.
+- [ ] движок цветокоррекции: оставшиеся дыры. Вывоз `.cube` — `.cdl` несёт slope/offset/power и насыщенность, но НЕ несёт кривую, то есть в DaVinci уедет половина вида; печатать LUT надо на GPU и читать обратно, повторять математику шейдера на CPU нельзя — это второй источник истины. Кривые как инструмент (RGB, hue-vs-hue, hue-vs-sat). Вторичные коррекции — ключи по оттенку, маски, окна: для стилизованной 2D-картинки дают мало, а сложности много, браться последними.
+- [ ] откалибровать пороги `PostProcessLook.Bloom.Threshold` (1.1) и `Lens.GlintThreshold` (1.2) под собственную кривую вывода. Числа настроены под AgX, удалённый в `c653ee65`, и в нынешней шкале гасят пять эффектов разом: из `_BloomTex` питаются ещё грязь на линзе, анаморфные лучи и дифракция. Шкала теперь определена (серединный серый 0.18, то есть 1.1 — примерно 2.6 стопа над ним), но верное число видно только на кадре: смотреть глазами через F5, слой `Curve` в обход и обратно, ложный цвет для отсечки. Расчётом не подбирать — именно так и появились нынешние числа.
 - [ ] реализовать Render Governor / Frame Budget Coordinator (кадрирование и разделение тяжелых задач рендера: terrain remesh, batch sprite rebuild, minimap/worldmap pixel sampling и UI painter во избежание микро-статтеров в одном кадре)
 
 ## Реестр огромных production C# файлов
@@ -16,7 +28,7 @@
 - [ ] `World/Persistence/WorldLayer.cs` (1081): format/index/cache/IO/compaction.
 - [x] `Networking/Connection/Client/DummyConnection.cs` (393, было 1154): разделён на session/auth/player+world simulation/movement/gameplay+chat+inventory+window+asset responders.
 - [ ] `World/Terrain/Core/TerrainRenderer.cs` (874): lifecycle/coverage/mesh/material updates.
-- [ ] `UI/Overlays/InGameDebugOverlay.cs` (837): state/sampling/presenter/view binding.
+- [x] `UI/Overlays/InGameDebugOverlay.cs` (218, было 837): перевод отладки на IMGUI; окна инструментов вынесены в `Tools/Imgui/Windows/`, реестр — `ToolWindows`, текст — `DebugOverlayTextFormatter`, гизмо — `DebugOverlayGizmos`.
 - [ ] `AssetPipeline/Animation/GifAnimationDecoder.cs` (774): parser/LZW/compositing/output.
 - [ ] `UI/Chat/GlobalChatUI.cs` (727): state/presenter/view binding.
 - [ ] `Rendering/PostProcessing/PostProcessRenderPass.cs` (708): resources/scheduling/effect passes.

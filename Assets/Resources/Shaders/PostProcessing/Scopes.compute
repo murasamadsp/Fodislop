@@ -1,0 +1,216 @@
+#pragma kernel ScopesClear
+#pragma kernel ScopesGather
+#pragma kernel HistogramResolve
+#pragma kernel WaveformResolve
+#pragma kernel VectorscopeResolve
+
+// ============================================================================
+// Приборы разбора кадра: гистограмма, waveform, вектороскоп.
+// ============================================================================
+//
+// ЗАЧЕМ. Кривую нельзя настраивать «на глаз»: глаз адаптируется, а отсечка в
+// светах и подъём в тенях на глаз не видны вовсе, пока не станут грубыми.
+// Колорист смотрит на приборы, а не на картинку, — и здесь то же самое.
+//
+// ГДЕ СНИМАЕТСЯ. После всего постпроцесса, с готового кадра. Смысл прибора в
+// том, чтобы показать, что уходит на экран, а не что было в середине
+// конвейера.
+//
+// ПОЧЕМУ БУФЕРЫ, А НЕ АТОМАРНЫЕ ТЕКСТУРЫ. Накопление идёт через
+// InterlockedAdd по RWStructuredBuffer. Атомарные операции над RWTexture2D
+// поддержаны не везде — на Metal, где проект и разрабатывается, их применимость
+// ограничена, и прибор молча считал бы мусор. Буфер работает всюду одинаково.
+//
+// ЦЕНА. Три буфера: 1024, 65536 и 65536 uint — вместе полмегабайта. Разбор
+// живёт только пока открыто рабочее место, и вне его ядра не запускаются.
+
+#define SCOPE_BINS 256
+#define SCOPE_SIZE 256
+#define SCOPE_PLANE (SCOPE_SIZE * SCOPE_SIZE)
+
+RWStructuredBuffer<uint> _HistogramBuffer;    // 4 * 256: R, G, B, яркость
+RWStructuredBuffer<uint> _WaveformBuffer;     // 3 * 256 * 256: R, G, B — столбец кадра x уровень
+RWStructuredBuffer<uint> _VectorscopeBuffer;  // 256 * 256, плоскость Cb/Cr
+
+Texture2D<float4> _ScopeSource;
+RWTexture2D<float4> _ScopeOutput;
+SamplerState sampler_LinearClamp;
+
+float4 _ScopeSourceSize;  // xy = размер источника, zw = 1/размер
+float4 _ScopeParams;      // x = histogram norm, y = шаг, z/w = waveform/vector norm
+float _ScopeSignalScale;  // HDR: configured peak -> 1; SDR: 1
+
+float ScopeLuminance(float3 color)
+{
+    return dot(color, float3(0.2126, 0.7152, 0.0722));
+}
+
+// Перцептивное кодирование перед раскладкой по корзинам. Прибор в линейном
+// свете бесполезен: девять десятых корзин пришлись бы на света, а тени, где и
+// живут интересные решения, слиплись бы в первую корзину.
+float ScopeEncode(float linearValue)
+{
+    linearValue = saturate(linearValue);
+    return linearValue <= 0.0031308
+        ? linearValue * 12.92
+        : 1.055 * pow(linearValue, 1.0 / 2.4) - 0.055;
+}
+
+uint ScopeBin(float encoded)
+{
+    return (uint)clamp(encoded * (SCOPE_BINS - 1), 0.0, SCOPE_BINS - 1);
+}
+
+[numthreads(8, 8, 1)]
+void ScopesClear(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= SCOPE_SIZE || id.y >= SCOPE_SIZE)
+    {
+        return;
+    }
+
+    uint index = id.y * SCOPE_SIZE + id.x;
+    _WaveformBuffer[0 * SCOPE_PLANE + index] = 0;
+    _WaveformBuffer[1 * SCOPE_PLANE + index] = 0;
+    _WaveformBuffer[2 * SCOPE_PLANE + index] = 0;
+    _VectorscopeBuffer[index] = 0;
+
+    // Первые четыре строки сетки заодно накрывают все 4*256 корзин
+    // гистограммы — отдельное ядро ради тысячи обнулений не нужно.
+    if (id.y < 4)
+    {
+        _HistogramBuffer[id.y * SCOPE_BINS + id.x] = 0;
+    }
+}
+
+[numthreads(8, 8, 1)]
+void ScopesGather(uint3 id : SV_DispatchThreadID)
+{
+    uint step = (uint)max(_ScopeParams.y, 1.0);
+    uint2 pixel = id.xy * step;
+    if (pixel.x >= (uint)_ScopeSourceSize.x || pixel.y >= (uint)_ScopeSourceSize.y)
+    {
+        return;
+    }
+
+    float3 color = max(_ScopeSource[pixel].rgb, 0.0) * _ScopeSignalScale;
+    float3 encoded = float3(
+        ScopeEncode(color.r), ScopeEncode(color.g), ScopeEncode(color.b));
+    float luma = ScopeEncode(ScopeLuminance(color));
+
+    InterlockedAdd(_HistogramBuffer[0 * SCOPE_BINS + ScopeBin(encoded.r)], 1);
+    InterlockedAdd(_HistogramBuffer[1 * SCOPE_BINS + ScopeBin(encoded.g)], 1);
+    InterlockedAdd(_HistogramBuffer[2 * SCOPE_BINS + ScopeBin(encoded.b)], 1);
+    InterlockedAdd(_HistogramBuffer[3 * SCOPE_BINS + ScopeBin(luma)], 1);
+
+    // Waveform: горизонталь прибора — горизонталь кадра. Именно это отличает
+    // его от гистограммы: видно не только что пересвет есть, но и где он.
+    // Парад RGB, а не одна яркость: по яркостному waveform не увидеть, какой
+    // канал упёрся в потолок первым, — а это и есть первый вопрос при разборе
+    // пересвета и единственный способ поймать цветной сдвиг в светах.
+    uint column = (uint)clamp(
+        (pixel.x / max(_ScopeSourceSize.x, 1.0)) * (SCOPE_SIZE - 1), 0.0, SCOPE_SIZE - 1);
+    InterlockedAdd(_WaveformBuffer[0 * SCOPE_PLANE + ScopeBin(encoded.r) * SCOPE_SIZE + column], 1);
+    InterlockedAdd(_WaveformBuffer[1 * SCOPE_PLANE + ScopeBin(encoded.g) * SCOPE_SIZE + column], 1);
+    InterlockedAdd(_WaveformBuffer[2 * SCOPE_PLANE + ScopeBin(encoded.b) * SCOPE_SIZE + column], 1);
+
+    // Вектороскоп: плоскость цветности Cb/Cr по BT.709. Радиус — насыщенность,
+    // угол — оттенок. На нём и видно, уводит ли кривая света по цвету.
+    float y = ScopeLuminance(color);
+    float cb = (color.b - y) * 0.5389;
+    float cr = (color.r - y) * 0.6350;
+    uint2 scopePixel = (uint2)clamp(
+        float2(cb, cr) * (SCOPE_SIZE * 0.5) + (SCOPE_SIZE * 0.5),
+        0.0,
+        SCOPE_SIZE - 1);
+    InterlockedAdd(_VectorscopeBuffer[scopePixel.y * SCOPE_SIZE + scopePixel.x], 1);
+}
+
+// Логарифмическая шкала отклика: в кадре почти всегда есть несколько корзин на
+// порядки выше прочих (небо, фон), и по линейной шкале всё остальное легло бы
+// в неразличимую полоску у нуля.
+float ScopeResponse(uint count, float normalization)
+{
+    return saturate(log2(1.0 + count * normalization) / 8.0);
+}
+
+[numthreads(8, 8, 1)]
+void HistogramResolve(uint3 id : SV_DispatchThreadID)
+{
+    uint2 size;
+    _ScopeOutput.GetDimensions(size.x, size.y);
+    if (id.x >= size.x || id.y >= size.y)
+    {
+        return;
+    }
+
+    uint bin = (uint)clamp(
+        (id.x / max((float)size.x, 1.0)) * SCOPE_BINS, 0.0, SCOPE_BINS - 1);
+    // Ноль строки — низ прибора: в текстуре начало координат сверху.
+    float height = 1.0 - (id.y / max((float)size.y - 1.0, 1.0));
+
+    float3 bars = float3(
+        ScopeResponse(_HistogramBuffer[0 * SCOPE_BINS + bin], _ScopeParams.x),
+        ScopeResponse(_HistogramBuffer[1 * SCOPE_BINS + bin], _ScopeParams.x),
+        ScopeResponse(_HistogramBuffer[2 * SCOPE_BINS + bin], _ScopeParams.x));
+    float luma = ScopeResponse(_HistogramBuffer[3 * SCOPE_BINS + bin], _ScopeParams.x);
+
+    float3 rgb = step(height, bars);
+    float grey = step(height, luma) * 0.35;
+    _ScopeOutput[id.xy] = float4(max(rgb, grey), 1.0);
+}
+
+[numthreads(8, 8, 1)]
+void WaveformResolve(uint3 id : SV_DispatchThreadID)
+{
+    uint2 size;
+    _ScopeOutput.GetDimensions(size.x, size.y);
+    if (id.x >= size.x || id.y >= size.y)
+    {
+        return;
+    }
+
+    uint column = (uint)clamp(
+        (id.x / max((float)size.x, 1.0)) * SCOPE_SIZE, 0.0, SCOPE_SIZE - 1);
+    uint level = (uint)clamp(
+        (1.0 - id.y / max((float)size.y - 1.0, 1.0)) * (SCOPE_SIZE - 1),
+        0.0,
+        SCOPE_SIZE - 1);
+
+    uint cell = level * SCOPE_SIZE + column;
+    float3 parade = float3(
+        ScopeResponse(_WaveformBuffer[0 * SCOPE_PLANE + cell], _ScopeParams.z),
+        ScopeResponse(_WaveformBuffer[1 * SCOPE_PLANE + cell], _ScopeParams.z),
+        ScopeResponse(_WaveformBuffer[2 * SCOPE_PLANE + cell], _ScopeParams.z));
+    // Наложением, а не тремя панелями рядом: при наложении серое пятно прямо
+    // означает сведённые каналы, а любой цветной отлив — что они разошлись.
+    _ScopeOutput[id.xy] = float4(parade, 1.0);
+}
+
+[numthreads(8, 8, 1)]
+void VectorscopeResolve(uint3 id : SV_DispatchThreadID)
+{
+    uint2 size;
+    _ScopeOutput.GetDimensions(size.x, size.y);
+    if (id.x >= size.x || id.y >= size.y)
+    {
+        return;
+    }
+
+    float2 uv = float2(id.x / max((float)size.x - 1.0, 1.0),
+                       1.0 - id.y / max((float)size.y - 1.0, 1.0));
+    uint2 sourcePixel = (uint2)clamp(uv * (SCOPE_SIZE - 1), 0.0, SCOPE_SIZE - 1);
+    float value = ScopeResponse(
+        _VectorscopeBuffer[sourcePixel.y * SCOPE_SIZE + sourcePixel.x], _ScopeParams.w);
+
+    // Подложка окрашена по тому же Cb/Cr, что и накопление: точка, попавшая в
+    // жёлтый сектор, светится на жёлтом фоне, и читать оттенок можно без
+    // легенды.
+    float2 centered = uv * 2.0 - 1.0;
+    float3 tint = saturate(float3(
+        0.5 + centered.y / 0.6350,
+        0.5 - (centered.x * 0.1146 / 0.5389 + centered.y * 0.2989 / 0.6350) / 0.7152,
+        0.5 + centered.x / 0.5389));
+
+    _ScopeOutput[id.xy] = float4(tint * value, 1.0);
+}

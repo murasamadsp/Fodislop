@@ -4,6 +4,7 @@ using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
+using Fodinae.Rendering.PostProcessing.Workbench;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -31,6 +32,7 @@ namespace Fodinae.Rendering.PostProcessing
         private ColorGradingComponent? _colorGrading;
         private EigengrauComponent? _eigengrau;
         private MotionBlurComponent? _motionBlur;
+        private readonly GradingWorkbench _gradingWorkbench = new();
 
         [Inject]
         private IClientConfigManager _clientConfigManager = null!;
@@ -87,9 +89,13 @@ namespace Fodinae.Rendering.PostProcessing
             set
             {
                 ColorGradingComponent colorGrading = GetRequired(_colorGrading, nameof(_colorGrading));
-                colorGrading.exposure.overrideState = true;
-                colorGrading.exposure.value = Mathf.Clamp(value, -4f, 4f);
-                UpdateColorGradingActiveState();
+                float sanitized = Mathf.Clamp(value, -4f, 4f);
+                if (!Mathf.Approximately(colorGrading.exposure.value, sanitized))
+                {
+                    colorGrading.exposure.overrideState = true;
+                    colorGrading.exposure.value = sanitized;
+                    UpdateColorGradingActiveState();
+                }
             }
         }
 
@@ -99,9 +105,13 @@ namespace Fodinae.Rendering.PostProcessing
             set
             {
                 ColorGradingComponent colorGrading = GetRequired(_colorGrading, nameof(_colorGrading));
-                colorGrading.contrast.overrideState = true;
-                colorGrading.contrast.value = Mathf.Clamp(value, -1f, 1f);
-                UpdateColorGradingActiveState();
+                float sanitized = Mathf.Clamp(value, -1f, 1f);
+                if (!Mathf.Approximately(colorGrading.contrast.value, sanitized))
+                {
+                    colorGrading.contrast.overrideState = true;
+                    colorGrading.contrast.value = sanitized;
+                    UpdateColorGradingActiveState();
+                }
             }
         }
 
@@ -111,9 +121,13 @@ namespace Fodinae.Rendering.PostProcessing
             set
             {
                 ColorGradingComponent colorGrading = GetRequired(_colorGrading, nameof(_colorGrading));
-                colorGrading.saturation.overrideState = true;
-                colorGrading.saturation.value = Mathf.Clamp(value, 0f, 2f);
-                UpdateColorGradingActiveState();
+                float sanitized = Mathf.Clamp(value, 0f, 2f);
+                if (!Mathf.Approximately(colorGrading.saturation.value, sanitized))
+                {
+                    colorGrading.saturation.overrideState = true;
+                    colorGrading.saturation.value = sanitized;
+                    UpdateColorGradingActiveState();
+                }
             }
         }
 
@@ -159,15 +173,31 @@ namespace Fodinae.Rendering.PostProcessing
                 _clientConfigManager != null &&
                 _clientConfigManager.Config != null)
             {
+                bool alreadySetup = _volumeSetupCompleted;
                 EnsureVolumeSetup();
+                if (alreadySetup)
+                {
+                    ApplyClientConfig();
+                }
             }
         }
 
         private void OnDisable()
         {
-            PostProcessRenderPass.SetMainCamera(null);
+            _gradingWorkbench.Deactivate();
+            PostProcessRuntimeState.BypassPostProcessEffects = false;
+            PostProcessRuntimeState.SetAdvancedSettings(default);
+            PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
+            PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
+            PostProcessRuntimeState.CompareSplit = 0f;
+            PostProcessRuntimeState.SetMainCamera(null);
             _cameraRig?.DisableOverlay();
             _cameraRig?.ReleaseWorldUILayer();
+        }
+
+        private void OnDestroy()
+        {
+            _gradingWorkbench.Dispose();
         }
 
         public void Start()
@@ -274,12 +304,11 @@ namespace Fodinae.Rendering.PostProcessing
             // switched off, because the two subsystems are unrelated.
             // Продвинутые эффекты собираются из вида и тумблеров: величины
             // задаёт PostProcessLook, конфиг говорит только «платим или нет».
-            PostProcessRenderPass.SetAdvancedSettings(
+            PostProcessRuntimeState.SetAdvancedSettings(
                 AdvancedPostProcessComposer.From(config));
+            PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
 
             bool photosensitive = config.Accessibility.ReducePhotosensitivity;
-            PostProcessSettings postProcess = config.PostProcess ??
-                throw new InvalidOperationException("PostProcessController requires post-process settings in ClientConfig.");
 
             Debug.Log($"[PostProcessController] ApplyClientConfig: Bloom={config.Effects.BloomEnabled}, Vignette={config.Effects.VignetteEnabled}, MotionBlur={config.Effects.MotionBlurEnabled}");
 
@@ -311,38 +340,10 @@ namespace Fodinae.Rendering.PostProcessing
                 ? PostProcessLook.ChromaticAberration.Intensity
                 : 0f;
 
-            ColorGradingComponent colorGrading = GetRequired(_colorGrading, nameof(_colorGrading));
-            Exposure = postProcess.Exposure;
-            Color baseFilter = PostProcessLook.ColorGrading.Filter;
-            float contrast = postProcess.Contrast;
-            float saturation = postProcess.Saturation;
-
-            switch (config.Accessibility.ColorblindMode)
-            {
-                case 1:
-                    baseFilter = new Color(baseFilter.r * 0.8f + baseFilter.g * 0.2f, baseFilter.g * 0.7f + baseFilter.b * 0.3f, baseFilter.b);
-                    break;
-                case 2:
-                    baseFilter = new Color(baseFilter.r * 0.6f + baseFilter.g * 0.4f, baseFilter.g * 0.9f, baseFilter.b * 1.1f);
-                    break;
-                case 3:
-                    baseFilter = new Color(baseFilter.r * 0.95f, baseFilter.g * 0.85f + baseFilter.b * 0.15f, baseFilter.b * 0.5f + baseFilter.r * 0.5f);
-                    break;
-                case 4:
-                    contrast = Mathf.Min(contrast + 0.35f, 1f);
-                    saturation = Mathf.Min(saturation + 0.2f, 2f);
-                    break;
-                case 0:
-                    break;
-                default:
-                    Debug.LogError($"[PostProcessController] Неизвестный режим цветокоррекции {config.Accessibility.ColorblindMode}; коррекция не применена.");
-                    break;
-            }
-
-            colorGrading.colorFilter.overrideState = true;
-            colorGrading.colorFilter.value = baseFilter;
-            Contrast = contrast;
-            Saturation = saturation;
+            ApplyColorGrading(
+                PostProcessLook.ColorGrading.Exposure,
+                PostProcessLook.ColorGrading.Contrast,
+                PostProcessLook.ColorGrading.Saturation);
 
             EigengrauComponent eigengrau = GetRequired(_eigengrau, nameof(_eigengrau));
             eigengrau.color.overrideState = true;
@@ -370,11 +371,87 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 _cameraRig!.EnsureCameraSetup(configured, RequireVolume());
             }
+
+            PostProcessRuntimeState.InvalidateTemporalHistory();
         }
 
-        public void EnsureEditorVolume()
+        private void ApplyColorGrading(
+            float authoredExposure,
+            float authoredContrast,
+            float authoredSaturation)
         {
-            EnsureVolumeSetup();
+            IClientConfigManager clientConfigManager = _clientConfigManager ??
+                throw new InvalidOperationException(
+                    "PostProcessController requires IClientConfigManager injection.");
+            ClientConfig config = clientConfigManager.Config ??
+                throw new InvalidOperationException(
+                    "PostProcessController requires an initialized ClientConfig.");
+            PostProcessSettings settings = config.PostProcess ??
+                throw new InvalidOperationException(
+                    "PostProcessController requires post-process settings in ClientConfig.");
+
+            Exposure = settings.Exposure + authoredExposure;
+            Color filter = PostProcessLook.ColorGrading.Filter;
+            float contrast = settings.Contrast + authoredContrast;
+            float saturation = settings.Saturation * authoredSaturation;
+
+            if (!ColorblindAdaptation.TryApply(
+                    config.Accessibility.ColorblindMode, ref filter, ref contrast, ref saturation))
+            {
+                Debug.LogError(
+                    "[PostProcessController] Неизвестный режим цветокоррекции " +
+                    $"{config.Accessibility.ColorblindMode}; коррекция не применена.");
+            }
+
+            ColorGradingComponent colorGrading = GetRequired(
+                _colorGrading,
+                nameof(_colorGrading));
+            colorGrading.colorFilter.overrideState = true;
+            if (colorGrading.colorFilter.value != filter)
+            {
+                PostProcessRuntimeState.InvalidateTemporalHistory();
+            }
+
+            colorGrading.colorFilter.value = filter;
+            Contrast = contrast;
+            Saturation = saturation;
+        }
+
+        private void Update()
+        {
+            _gradingWorkbench.Tick();
+            if (!_volumeSetupCompleted)
+            {
+                return;
+            }
+
+            if (_gradingWorkbench.IsApplying)
+            {
+                ColorGradeState state = _gradingWorkbench.State;
+                state.Sanitize();
+                PostProcessRuntimeState.SetColorGrade(state.ToSnapshot());
+                ApplyColorGrading(
+                    state.EffectiveExposure,
+                    state.EffectiveContrast,
+                    state.EffectiveSaturation);
+            }
+            else
+            {
+                if (_gradingWorkbench.StoppedApplying)
+                {
+                    ApplyClientConfig();
+                }
+
+                // Только когда рабочее место НЕ применяет свой грейд: пока
+                // автор крутит ползунки, он обязан видеть ровно то, что крутит,
+                // а не сумму своей правки и зоны, где стоит камера.
+                ColorGradeZones.Resolution resolution = ColorGradeZoneDriver.Push(
+                    _gradingWorkbench.Zones, _mainCamera ??= _gameplayCamera?.Camera);
+                ApplyColorGrading(
+                    resolution.Exposure,
+                    resolution.Contrast,
+                    resolution.Saturation);
+            }
         }
 
         private void LateUpdate()

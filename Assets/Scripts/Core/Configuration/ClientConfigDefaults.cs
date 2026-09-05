@@ -35,6 +35,7 @@ internal static class ClientConfigDefaults
             SchemaVersion = ClientConfig.CurrentSchemaVersion,
         };
         config.GraphicsQualitySettings = graphicsQualityProfile.Get(config.GraphicsPreset);
+        config.Interface.UIScale = UIScaleUtility.RecommendedDefaultScale;
         return config;
     }
 

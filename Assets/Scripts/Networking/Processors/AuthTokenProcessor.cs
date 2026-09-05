@@ -13,17 +13,9 @@ namespace Fodinae.Networking.Processors;
 /// invariant failure: the auth window/reconnect flow stays alive without
 /// tripping the editor fail-fast logger.
 /// </summary>
-public sealed class AuthTokenProcessor
+public sealed class AuthTokenProcessor(ILocalPlayerState localPlayer, IGameTokenStore tokens)
 {
-    private readonly ILocalPlayerState _localPlayer;
-    private readonly IGameTokenStore _tokens;
     private bool _emptyAuthTokenWarningLogged;
-
-    public AuthTokenProcessor(ILocalPlayerState localPlayer, IGameTokenStore tokens)
-    {
-        _localPlayer = localPlayer;
-        _tokens = tokens;
-    }
 
     public void Process(AuthTokenPacket packet)
     {
@@ -40,7 +32,7 @@ public sealed class AuthTokenProcessor
         }
 
         _emptyAuthTokenWarningLogged = false;
-        _tokens.Save(newToken);
-        _localPlayer.SetAuthenticated(true);
+        tokens.Save(newToken);
+        localPlayer.SetAuthenticated(true);
     }
 }

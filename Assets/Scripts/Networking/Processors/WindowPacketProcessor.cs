@@ -5,29 +5,13 @@ using MinesServer.Networking.Server.Packets.GUI;
 
 namespace Fodinae.Networking.Processors;
 
-public sealed class WindowPacketProcessor :
+public sealed class WindowPacketProcessor(WindowCommandStream commands) :
     IPacketProcessor<OpenWindowPacket>,
     IPacketProcessor<CloseWindowPacket>
 {
-    private readonly WindowCommandStream _commands;
+    public void Process(OpenWindowPacket packet) => commands.PublishOpen(packet);
 
-    public WindowPacketProcessor(WindowCommandStream commands)
-    {
-        _commands = commands;
-    }
+    public void Process(CloseWindowPacket packet) => commands.PublishClose(packet);
 
-    public void Process(OpenWindowPacket packet)
-    {
-        _commands.PublishOpen(packet);
-    }
-
-    public void Process(CloseWindowPacket packet)
-    {
-        _commands.PublishClose(packet);
-    }
-
-    public void Process(ModalWindowPacket packet)
-    {
-        _commands.PublishModal(packet);
-    }
+    public void Process(ModalWindowPacket packet) => commands.PublishModal(packet);
 }

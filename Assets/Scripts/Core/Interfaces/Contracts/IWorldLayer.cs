@@ -38,6 +38,7 @@ public interface IWorldLayer<T> : IDisposable
     int GetDirtyCount();
     T GetCell(int x, int y, bool touchLru = true);
     T GetCellSync(int x, int y, bool touchLru = true);
+    bool TryGetCell(int x, int y, out T value);
     void SetCell(int x, int y, T value);
     int SetRegion(
         int startX,

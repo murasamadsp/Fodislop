@@ -4,25 +4,23 @@ using Fodinae.UI.Controls;
 using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Builders
+namespace Fodinae.UI.Builders;
+public class TextBoxPacketBuilder : PacketUIBuilderBase<TextBoxPacket>
 {
-    public class TextBoxPacketBuilder : PacketUIBuilderBase<TextBoxPacket>
+    protected override VisualElement BuildTyped(TextBoxPacket packet, PacketUIBuilder builder)
     {
-        protected override VisualElement BuildTyped(TextBoxPacket packet, PacketUIBuilder builder)
+        var textField = new RegexTextField
         {
-            var textField = new RegexTextField
-            {
-                value = packet.DefaultValue,
-                isReadOnly = !packet.IsEnabled,
-                Regex = packet.Regex,
-            };
-            textField.AddToClassList("sci-fi-input");
-            if (!string.IsNullOrEmpty(packet.Name))
-            {
-                textField.name = packet.Name;
-            }
-
-            return textField;
+            value = packet.DefaultValue,
+            isReadOnly = !packet.IsEnabled,
+            Regex = packet.Regex,
+        };
+        textField.AddToClassList("sci-fi-input");
+        if (!string.IsNullOrEmpty(packet.Name))
+        {
+            textField.name = packet.Name;
         }
+
+        return textField;
     }
 }

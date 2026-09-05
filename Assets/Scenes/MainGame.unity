@@ -716,7 +716,6 @@ Transform:
   - {fileID: 1812687273}
   - {fileID: 2017390605}
   - {fileID: 32888239}
-  - {fileID: 1958487289}
   - {fileID: 857961947}
   - {fileID: 378316188}
   - {fileID: 1920060538}
@@ -2110,50 +2109,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c04865ae1e3c7d41b3a3422f715a1cc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.UI.PauseMenu
---- !u!1 &1958487288
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1958487289}
-  - component: {fileID: 1958487290}
-  m_Layer: 0
-  m_Name: DiagnosticRunner
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1958487289
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1958487288}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 893091724}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1958487290
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1958487288}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9aa7082fa892940cea5aca6cbd84691f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Fodinae.Runtime::Fodinae.DiagnosticRunner
 --- !u!1 &2000000000
 GameObject:
   m_ObjectHideFlags: 0
@@ -2274,10 +2229,6 @@ MonoBehaviour:
       PublicKeyToken=null
     _serviceGroup: UI
     _target: {fileID: 32888240}
-  - _managerType: Fodinae.DiagnosticRunner, Fodinae.Bootstrap, Version=0.0.0.0, Culture=neutral,
-      PublicKeyToken=null
-    _serviceGroup: UI
-    _target: {fileID: 1958487290}
   - _managerType: Fodinae.Rendering.PostProcessing.PostProcessController, Fodinae.Runtime,
       Version=0.0.0.0, Culture=neutral, PublicKeyToken=null
     _serviceGroup: Rendering

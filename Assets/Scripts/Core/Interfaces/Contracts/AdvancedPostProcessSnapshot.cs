@@ -32,22 +32,6 @@ public readonly record struct AdvancedPostProcessSnapshot(
     float TemporalPersistenceDecay,
     float LightStability)
 {
-    public bool HasCurrentFrameEffects =>
-        LocalContrastIntensity > 0f ||
-        LensDirtIntensity > 0f ||
-        AnamorphicIntensity > 0f ||
-        ChromaticDiffractionIntensity > 0f ||
-        HeatRefractionIntensity > 0f ||
-        GlintIntensity > 0f ||
-        VolumetricDustIntensity > 0f ||
-        PhosphorMaskIntensity > 0f ||
-        DitheringIntensity > 0f;
-
-    public bool HasAnyEffects =>
-        HasCurrentFrameEffects ||
-        TemporalPersistenceIntensity > 0f ||
-        LightStability > 0f;
-
     public bool RequiresBloomTexture =>
         LensDirtIntensity > 0f ||
         AnamorphicIntensity > 0f ||

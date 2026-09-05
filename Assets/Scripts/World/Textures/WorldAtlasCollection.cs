@@ -24,9 +24,6 @@ public sealed class WorldAtlasCollection : IDisposable
     private TextureAtlas _currentAtlas = null!;
 
     public TextureAtlas CurrentAtlas => _currentAtlas;
-
-    public IReadOnlyList<TextureAtlas> Atlases => _atlases;
-
     public WorldAtlasCollection(
         int initialAtlasSize,
         int maxAtlasSize,

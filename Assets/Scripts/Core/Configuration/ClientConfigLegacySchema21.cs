@@ -27,8 +27,6 @@ namespace Fodinae.Core;
 internal sealed class ClientConfigLegacySchema21
 {
     public int SchemaVersion;
-
-    public bool AmbientOcclusionEnabled;
     public bool DiffuseBounceEnabled;
     public float AmbientIntensity;
     public float EmissionScale;
@@ -38,8 +36,6 @@ internal sealed class ClientConfigLegacySchema21
     public float EmptyExtinctionMultiplier;
     public float SolidExtinctionMultiplier;
     public float BounceStrength;
-    public float AmbientOcclusionRadiusCells;
-    public float AmbientOcclusionStrength;
     public float MaximumLightMultiplier;
     public bool EnableFinalLightingClamp;
     public float TransmittanceDebugDistanceCells;

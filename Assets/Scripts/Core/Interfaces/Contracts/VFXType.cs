@@ -1,13 +1,11 @@
 #nullable enable
 
-namespace Fodinae.Game
+namespace Fodinae.Game;
+public enum VFXType
 {
-    public enum VFXType
-    {
-        None = 0,
-        Bz,
-        Destroy,
-        Death,
-        Custom,
-    }
+    None = 0,
+    Bz,
+    Destroy,
+    Death,
+    Custom,
 }

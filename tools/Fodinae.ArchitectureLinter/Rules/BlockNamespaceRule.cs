@@ -1,19 +1,19 @@
-using Mono.Cecil;
+using System.Text.RegularExpressions;
 using Fodinae.ArchitectureLinter.Core;
 using Fodinae.ArchitectureLinter.Scanning;
+using Mono.Cecil;
 
 namespace Fodinae.ArchitectureLinter.Rules;
 
 public sealed class BlockNamespaceRule : IRule
 {
     private static readonly string[] UnityBaseTypes =
-    {
+    [
         "UnityEngine.MonoBehaviour",
         "UnityEngine.ScriptableObject",
-        "UnityEngine.ScriptableRendererFeature",
-        "UnityEngine.VolumeComponent",
-        "UnityEngine.Object"
-    };
+        "UnityEngine.Rendering.Universal.ScriptableRendererFeature",
+        "UnityEngine.Rendering.VolumeComponent",
+    ];
 
     public string Id => "FOD-BLOCK-NAMESPACE";
     public string Description => "Unity-inheriting types must use block namespace (not file-scoped)";
@@ -24,75 +24,110 @@ public sealed class BlockNamespaceRule : IRule
         LinterContext context,
         CancellationToken cancellationToken = default)
     {
-        var allCandidates = new List<TypeDefinition>();
-        var namespaceTypes = new Dictionary<string, List<TypeDefinition>>(StringComparer.Ordinal);
-
-        foreach (var assembly in assemblies)
-        {
-            if (context.ShouldExclude(assembly.Name.Name))
-                continue;
-
-            foreach (var type in assembly.MainModule.Types)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                CollectCandidates(type, allCandidates);
-            }
-        }
-
-        foreach (var candidate in allCandidates)
-        {
-            var ns = candidate.Namespace ?? string.Empty;
-            if (!namespaceTypes.TryGetValue(ns, out var list))
-            {
-                list = new List<TypeDefinition>();
-                namespaceTypes[ns] = list;
-            }
-            list.Add(candidate);
-        }
-
+        Dictionary<string, string[]> sourcesByTypeName = SourceScanner
+            .EnumerateAllCsFiles(
+                Path.Combine(context.ProjectRoot, "Assets", "Scripts"),
+                Path.Combine(context.ProjectRoot, "Assets", "Editor"))
+            .Select(path => (Path: path, TypeName: Path.GetFileNameWithoutExtension(path)))
+            .Where(entry => !string.IsNullOrEmpty(entry.TypeName))
+            .GroupBy(entry => entry.TypeName!, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Select(entry => entry.Path)
+                    .OrderBy(path => path, StringComparer.Ordinal)
+                    .ToArray(),
+                StringComparer.Ordinal);
         var violations = new List<RuleViolation>();
 
-        foreach (var (ns, types) in namespaceTypes)
+        foreach (AssemblyDefinition assembly in assemblies)
         {
-            if (types.Count > 1)
-                continue;
-
-            var type = types[0];
-            violations.Add(new RuleViolation
+            if (context.ShouldExclude(assembly.Name.Name))
             {
-                RuleId = Id,
-                Message = $"Type '{type.FullName}' inherits from a Unity type but is the only type in namespace " +
-                          $"'{ns}'. It is likely declared with a file-scoped namespace. " +
-                          "Unity-inheriting types must use a block namespace; otherwise MonoScript.GetClass() may return null.",
-                Severity = Severity,
-                AssemblyName = type.Module.Assembly.Name.Name,
-                TypeName = type.FullName
-            });
+                continue;
+            }
+
+            foreach (TypeDefinition type in EnumerateTypes(assembly.MainModule.Types))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!IsUnityInheritingType(type) || type.IsNested)
+                {
+                    continue;
+                }
+
+                string typeName = RemoveGenericArity(type.Name);
+                if (!sourcesByTypeName.TryGetValue(typeName, out string[]? sourcePaths))
+                {
+                    continue;
+                }
+
+                string? sourcePath = sourcePaths.FirstOrDefault(path => DeclaresType(path, typeName));
+                if (sourcePath == null)
+                {
+                    continue;
+                }
+
+                string source = SourceScanner.StripComments(File.ReadAllText(sourcePath));
+                Match namespaceDeclaration = Regex.Match(
+                    source,
+                    $@"^\s*namespace\s+{Regex.Escape(type.Namespace)}\s*(?<delimiter>[;{{])",
+                    RegexOptions.Multiline | RegexOptions.CultureInvariant);
+                if (!namespaceDeclaration.Success ||
+                    namespaceDeclaration.Groups["delimiter"].Value != ";")
+                {
+                    continue;
+                }
+
+                violations.Add(new RuleViolation
+                {
+                    RuleId = Id,
+                    Message = $"Type '{type.FullName}' inherits from a Unity type and uses a " +
+                              "file-scoped namespace. Use a block namespace so MonoScript.GetClass() remains valid.",
+                    Severity = Severity,
+                    AssemblyName = SourceScanner.GetProjectRelativePath(context.ProjectRoot, sourcePath),
+                    TypeName = type.FullName,
+                    Line = CountLine(source, namespaceDeclaration.Index),
+                });
+            }
         }
 
         return Task.FromResult<IReadOnlyList<RuleViolation>>(violations);
     }
 
-    private static void CollectCandidates(TypeDefinition type, List<TypeDefinition> candidates)
+    private static IEnumerable<TypeDefinition> EnumerateTypes(IEnumerable<TypeDefinition> types)
     {
-        if (IsUnityInheritingType(type))
+        foreach (TypeDefinition type in types)
         {
-            candidates.Add(type);
-        }
-
-        foreach (var nested in type.NestedTypes)
-        {
-            CollectCandidates(nested, candidates);
+            yield return type;
+            foreach (TypeDefinition nestedType in EnumerateTypes(type.NestedTypes))
+            {
+                yield return nestedType;
+            }
         }
     }
 
     private static bool IsUnityInheritingType(TypeDefinition type)
     {
-        foreach (var unityBase in UnityBaseTypes)
-        {
-            if (CecilAssemblyScanner.DerivesFrom(type, unityBase))
-                return true;
-        }
-        return false;
+        return UnityBaseTypes.Any(unityBase => CecilAssemblyScanner.DerivesFrom(type, unityBase));
+    }
+
+    private static bool DeclaresType(string path, string typeName)
+    {
+        string source = SourceScanner.StripComments(File.ReadAllText(path));
+        return Regex.IsMatch(
+            source,
+            $@"\b(?:class|record\s+class)\s+{Regex.Escape(typeName)}\b",
+            RegexOptions.CultureInvariant);
+    }
+
+    private static string RemoveGenericArity(string typeName)
+    {
+        int separator = typeName.IndexOf('`');
+        return separator < 0 ? typeName : typeName[..separator];
+    }
+
+    private static int CountLine(string source, int index)
+    {
+        return source.AsSpan(0, index).Count('\n') + 1;
     }
 }

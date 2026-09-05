@@ -3,56 +3,54 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace Fodinae.UI.Controls
+namespace Fodinae.UI.Controls;
+public class ChatInputBlinker
 {
-    public class ChatInputBlinker
-    {
-        private IVisualElementScheduledItem? _blinkItem;
-        private bool _cursorVisible = true;
-        private readonly TextField _inputField;
-        private readonly VisualElement _internalInput;
+    private IVisualElementScheduledItem? _blinkItem;
+    private bool _cursorVisible = true;
+    private readonly TextField _inputField;
+    private readonly VisualElement _internalInput;
 
-        public ChatInputBlinker(TextField inputField, VisualElement internalInput)
+    public ChatInputBlinker(TextField inputField, VisualElement internalInput)
+    {
+        _inputField = inputField;
+        _internalInput = internalInput;
+    }
+
+    public void StartBlink()
+    {
+        StopBlink();
+        _cursorVisible = true;
+        _internalInput?.RemoveFromClassList("cursor-hidden");
+
+        if (_inputField == null)
         {
-            _inputField = inputField;
-            _internalInput = internalInput;
+            return;
         }
 
-        public void StartBlink()
+        _blinkItem = _inputField.schedule.Execute(() =>
         {
-            StopBlink();
-            _cursorVisible = true;
-            _internalInput?.RemoveFromClassList("cursor-hidden");
-
-            if (_inputField == null)
+            _cursorVisible = !_cursorVisible;
+            if (_internalInput == null)
             {
                 return;
             }
 
-            _blinkItem = _inputField.schedule.Execute(() =>
+            if (_cursorVisible)
             {
-                _cursorVisible = !_cursorVisible;
-                if (_internalInput == null)
-                {
-                    return;
-                }
+                _internalInput.RemoveFromClassList("cursor-hidden");
+            }
+            else
+            {
+                _internalInput.AddToClassList("cursor-hidden");
+            }
+        }).StartingIn(530).Every(530);
+    }
 
-                if (_cursorVisible)
-                {
-                    _internalInput.RemoveFromClassList("cursor-hidden");
-                }
-                else
-                {
-                    _internalInput.AddToClassList("cursor-hidden");
-                }
-            }).StartingIn(530).Every(530);
-        }
-
-        public void StopBlink()
-        {
-            _blinkItem?.Pause();
-            _blinkItem = null;
-            _internalInput?.RemoveFromClassList("cursor-hidden");
-        }
+    public void StopBlink()
+    {
+        _blinkItem?.Pause();
+        _blinkItem = null;
+        _internalInput?.RemoveFromClassList("cursor-hidden");
     }
 }

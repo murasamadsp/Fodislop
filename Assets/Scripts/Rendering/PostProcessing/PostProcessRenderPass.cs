@@ -33,54 +33,9 @@ namespace Fodinae.Rendering.PostProcessing
         private bool _historyValid;
         private bool _temporalWasActive;
         private uint _observedCameraGeneration;
+        private uint _observedPipelineGeneration;
         private Matrix4x4 _lastViewProjection;
         private bool _hasViewProjection;
-
-        private static Camera? _mainCamera;
-        private static uint _cameraGeneration;
-
-        // Set by PostProcessController from the active graphics preset. Static
-        // for the same reason _mainCamera is: a ScriptableRenderPass is owned by
-        // the renderer asset, not by the scene, so there is no injection path
-        // into it - the controller pushes, the pass reads.
-        //
-        // Выключить постпроцесс нельзя ничем: ни настройкой, ни отладочным
-        // байпасом, ни ожиданием конфига. Тонмап сжимает HDR каскадного света
-        private static AdvancedPostProcessSnapshot _advanced;
-
-        private static float _displayGamma = DisplaySettings.DefaultGamma;
-        private static float _displayPaperWhiteNits = DisplaySettings.DefaultPaperWhite;
-        private static float _displayPeakBrightnessNits = DisplaySettings.DefaultPeakBrightness;
-
-        /// <summary>
-        /// Флаг полного отключения эффектов конвейера для бисекции/отладки через GUI.
-        /// По умолчанию выключен, чтобы все настройки графики и эффектов действовали.
-        /// </summary>
-        public static bool BypassPostProcessEffects { get; set; }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForDomainReload()
-        {
-            _mainCamera = null;
-            _cameraGeneration = 0;
-            _advanced = default;
-            _displayGamma = DisplaySettings.DefaultGamma;
-            _displayPaperWhiteNits = DisplaySettings.DefaultPaperWhite;
-            _displayPeakBrightnessNits = DisplaySettings.DefaultPeakBrightness;
-            BypassPostProcessEffects = false;
-        }
-
-        public static void SetDisplayCalibration(float gamma, float paperWhiteNits, float peakBrightnessNits)
-        {
-            _displayGamma = gamma > 0.1f ? gamma : DisplaySettings.DefaultGamma;
-            _displayPaperWhiteNits = paperWhiteNits > 10f ? paperWhiteNits : DisplaySettings.DefaultPaperWhite;
-            _displayPeakBrightnessNits = peakBrightnessNits > 100f ? peakBrightnessNits : DisplaySettings.DefaultPeakBrightness;
-        }
-
-        public static void SetAdvancedSettings(AdvancedPostProcessSnapshot settings)
-        {
-            _advanced = settings;
-        }
 
         private void RefreshVolumeComponents(VolumeStack stack)
         {
@@ -105,19 +60,6 @@ namespace Fodinae.Rendering.PostProcessing
                 $"Post-process VolumeStack is missing required component '{componentName}'.");
         }
 
-        public static void SetMainCamera(Camera? camera)
-        {
-            if (_mainCamera != camera)
-            {
-                // Смена камеры обесценивает историю временных эффектов: она
-                // снята с другого ракурса. Поколение сбрасывает её, не трогая
-                // сам проход.
-                _cameraGeneration++;
-            }
-
-            _mainCamera = camera;
-        }
-
         public PostProcessRenderPass(ComputeShader postProcessCS)
         {
             renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
@@ -131,16 +73,22 @@ namespace Fodinae.Rendering.PostProcessing
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
-            if (_observedCameraGeneration != _cameraGeneration)
+            if (_observedPipelineGeneration != PostProcessRuntimeState.PipelineGeneration)
             {
-                _observedCameraGeneration = _cameraGeneration;
+                _observedPipelineGeneration = PostProcessRuntimeState.PipelineGeneration;
+                _historyValid = false;
+            }
+
+            if (_observedCameraGeneration != PostProcessRuntimeState.CameraGeneration)
+            {
+                _observedCameraGeneration = PostProcessRuntimeState.CameraGeneration;
                 _historyValid = false;
             }
 
             UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
             if (cameraData.renderType != CameraRenderType.Base ||
                 cameraData.camera.cameraType != CameraType.Game ||
-                cameraData.camera != _mainCamera)
+                cameraData.camera != PostProcessRuntimeState.MainCamera)
             {
                 return;
             }
@@ -174,15 +122,15 @@ namespace Fodinae.Rendering.PostProcessing
             MotionBlurComponent mb = RequireComponent(_motionBlur, nameof(MotionBlurComponent));
 
             // Обход не трогает статики: правится только то, что уходит в кадр.
-            // Раньше здесь стояло `_advanced = default` и сброс гаммы, то есть
+            // Раньше здесь стояло `PostProcessRuntimeState.Advanced = default` и сброс гаммы, то есть
             // включение тумблера стирало снимок продвинутых эффектов и
             // калибровку дисплея навсегда — выключение обратно возвращало не
             // настройки игрока, а значения по умолчанию, и разница списывалась
             // на «постпроцесс что-то сломал».
             AdvancedPostProcessSnapshot advanced =
-                BypassPostProcessEffects ? default : _advanced;
+                PostProcessRuntimeState.BypassPostProcessEffects ? default : PostProcessRuntimeState.Advanced;
             float displayGamma =
-                BypassPostProcessEffects ? DisplaySettings.DefaultGamma : _displayGamma;
+                PostProcessRuntimeState.BypassPostProcessEffects ? DisplaySettings.DefaultGamma : PostProcessRuntimeState.DisplayGamma;
 
             bool bloomActive =
                 (bloom.active && bloom.IsActive()) ||
@@ -193,7 +141,7 @@ namespace Fodinae.Rendering.PostProcessing
             bool eigengrauActive = eigengrau.active && eigengrau.IsActive();
             bool mbActive = mb.active && mb.IsActive();
 
-            if (BypassPostProcessEffects)
+            if (PostProcessRuntimeState.BypassPostProcessEffects)
             {
                 bloomActive = false;
                 vignetteActive = false;
@@ -218,18 +166,45 @@ namespace Fodinae.Rendering.PostProcessing
                 return;
             }
 
-            var activeColorDesc = resourceData.activeColorTexture.GetDescriptor(renderGraph);
-            var desc = cameraData.cameraTargetDescriptor;
-            desc.graphicsFormat = activeColorDesc.colorFormat;
-            desc.depthBufferBits = 0;
-            desc.msaaSamples = 1;
-            desc.bindMS = false;
-            desc.enableRandomWrite = true;
+            TextureDesc activeColorDesc = activeColor.GetDescriptor(renderGraph);
+            RenderTextureDescriptor historyDesc = cameraData.cameraTargetDescriptor;
+            int width = activeColorDesc.sizeMode == TextureSizeMode.Explicit
+                ? activeColorDesc.width
+                : historyDesc.width;
+            int height = activeColorDesc.sizeMode == TextureSizeMode.Explicit
+                ? activeColorDesc.height
+                : historyDesc.height;
+            width = Mathf.Max(1, width);
+            height = Mathf.Max(1, height);
 
-            bool temporalActive =
-                advanced.TemporalPersistenceIntensity > 0f ||
-                advanced.LightStability > 0f ||
-                mbActive;
+            // Все временные текстуры наследуют формат, dimension, slices и
+            // dynamic-scale флаги настоящего graph-ресурса. Ручная сборка из
+            // cameraTargetDescriptor теряла эти свойства и могла дать проходу
+            // размер/формат, отличный от реально активного color target.
+            TextureDesc desc = activeColorDesc;
+            desc.sizeMode = TextureSizeMode.Explicit;
+            desc.width = width;
+            desc.height = height;
+            desc.depthBufferBits = DepthBits.None;
+            desc.msaaSamples = MSAASamples.None;
+            desc.bindTextureMS = false;
+            desc.enableRandomWrite = true;
+            desc.useMipMap = false;
+            desc.autoGenerateMips = false;
+            desc.clearBuffer = false;
+
+            historyDesc.width = width;
+            historyDesc.height = height;
+            historyDesc.graphicsFormat = activeColorDesc.colorFormat;
+            historyDesc.depthBufferBits = 0;
+            historyDesc.msaaSamples = 1;
+            historyDesc.bindMS = false;
+            historyDesc.enableRandomWrite = true;
+
+            bool temporalActive = PostProcessRuntimeState.DebugView == PostProcessDebugView.None &&
+                (advanced.TemporalPersistenceIntensity > 0f ||
+                 advanced.LightStability > 0f ||
+                 mbActive);
             if (temporalActive && !_temporalWasActive)
             {
                 _historyValid = false;
@@ -239,18 +214,15 @@ namespace Fodinae.Rendering.PostProcessing
             TextureHandle historyTexture = default;
             if (temporalActive)
             {
-                EnsureHistoryTexture(desc);
+                EnsureHistoryTexture(historyDesc);
                 historyTexture = renderGraph.ImportTexture(
                     _historyTexture ?? throw new InvalidOperationException(
                         "Post-process history texture allocation failed."));
             }
 
-            TextureHandle intermediateTexture = UniversalRenderer.CreateRenderGraphTexture(
-                renderGraph,
-                desc,
-                "_PPIntermediateColor",
-                false,
-                FilterMode.Point);
+            desc.name = "_PPIntermediateColor";
+            desc.filterMode = FilterMode.Point;
+            TextureHandle intermediateTexture = renderGraph.CreateTexture(desc);
 
             TextureHandle bloomPrefilterTexture = default;
             if (bloomActive)
@@ -258,23 +230,16 @@ namespace Fodinae.Rendering.PostProcessing
                 var bloomDesc = desc;
                 bloomDesc.width = Mathf.Max(1, bloomDesc.width / 2);
                 bloomDesc.height = Mathf.Max(1, bloomDesc.height / 2);
-                bloomPrefilterTexture = UniversalRenderer.CreateRenderGraphTexture(
-                    renderGraph,
-                    bloomDesc,
-                    "_PPBloomPrefilter",
-                    false,
-                    FilterMode.Bilinear);
+                bloomDesc.name = "_PPBloomPrefilter";
+                bloomDesc.filterMode = FilterMode.Bilinear;
+                bloomPrefilterTexture = renderGraph.CreateTexture(bloomDesc);
 
                 for (int i = 0; i < _bloomDownTextures.Length; i++)
                 {
                     bloomDesc.width = Mathf.Max(1, bloomDesc.width / 2);
                     bloomDesc.height = Mathf.Max(1, bloomDesc.height / 2);
-                    _bloomDownTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
-                        renderGraph,
-                        bloomDesc,
-                        BloomDownNames[i],
-                        false,
-                        FilterMode.Bilinear);
+                    bloomDesc.name = BloomDownNames[i];
+                    _bloomDownTextures[i] = renderGraph.CreateTexture(bloomDesc);
                 }
 
                 for (int i = 0; i < _bloomUpTextures.Length; i++)
@@ -282,12 +247,9 @@ namespace Fodinae.Rendering.PostProcessing
                     var bloomUpDesc = desc;
                     bloomUpDesc.width = Mathf.Max(1, bloomUpDesc.width >> (i + 1));
                     bloomUpDesc.height = Mathf.Max(1, bloomUpDesc.height >> (i + 1));
-                    _bloomUpTextures[i] = UniversalRenderer.CreateRenderGraphTexture(
-                        renderGraph,
-                        bloomUpDesc,
-                        BloomUpNames[i],
-                        false,
-                        FilterMode.Bilinear);
+                    bloomUpDesc.name = BloomUpNames[i];
+                    bloomUpDesc.filterMode = FilterMode.Bilinear;
+                    _bloomUpTextures[i] = renderGraph.CreateTexture(bloomUpDesc);
                 }
             }
 
@@ -304,7 +266,8 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.BloomPrefilterTexture = bloomPrefilterTexture;
                 passData.BloomDownTextures = _bloomDownTextures;
                 passData.BloomUpTextures = _bloomUpTextures;
-                passData.Descriptor = desc;
+                passData.Width = width;
+                passData.Height = height;
                 passData.HistoryTexture = historyTexture;
 
                 passData.BloomActive = bloomActive;
@@ -330,6 +293,35 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.Contrast = cg.contrast.value;
                 passData.Saturation = cg.saturation.value;
                 passData.Gamma = displayGamma;
+                ColorGradeSnapshot grade = PostProcessRuntimeState.ColorGrade;
+                passData.DisplayTransform = cameraData.isHDROutputActive
+                    ? (int)DisplayTransform.None
+                    : (int)grade.Transform;
+                passData.ToneMappingWhitePoint = grade.WhitePoint;
+                passData.CurveShape = new Vector4(
+                    grade.GreyOut,
+                    grade.CurveSlope,
+                    grade.ShoulderPower,
+                    grade.ToePower);
+                passData.CurveRange = new Vector4(
+                    grade.ToeStops,
+                    grade.PathToWhiteAmount,
+                    grade.PathToWhitePower,
+                    0f);
+                passData.PostDebugView = (int)PostProcessRuntimeState.DebugView;
+                passData.CompareSplit = PostProcessRuntimeState.CompareSplit;
+                passData.WhiteBalance = new Vector2(grade.Temperature, grade.Tint);
+                // HDR FinalBlit сам делает Rec.709 -> hdrDisplayColorGamut,
+                // когда cameraData.postProcessEnabled == false (наш контракт).
+                // Повторная матрица здесь дважды сжимала цветность. В SDR у
+                // FinalBlit такой ветки нет, поэтому wide-color перевод остаётся
+                // ответственностью этого прохода.
+                passData.OutputGamut = cameraData.isHDROutputActive
+                    ? (int)DisplayGamutKind.Rec709
+                    : (int)DisplayGamut.Current;
+                passData.CdlSlope = grade.Slope;
+                passData.CdlOffset = grade.Offset;
+                passData.CdlPower = grade.Power;
 
                 if (cameraData.isHDROutputActive)
                 {
@@ -337,11 +329,14 @@ namespace Fodinae.Rendering.PostProcessing
                     float nativePaperWhite = output.available && output.paperWhiteNits > 10f
                         ? output.paperWhiteNits
                         : DisplaySettings.DefaultPaperWhite;
-                    passData.HdrPaperWhiteScale = _displayPaperWhiteNits / nativePaperWhite;
+                    passData.HdrPaperWhiteScale = PostProcessRuntimeState.DisplayPaperWhiteNits / nativePaperWhite;
+                    passData.HdrPeakBrightnessScale =
+                        PostProcessRuntimeState.DisplayPeakBrightnessNits / nativePaperWhite;
                 }
                 else
                 {
                     passData.HdrPaperWhiteScale = 1f;
+                    passData.HdrPeakBrightnessScale = 0f;
                 }
 
                 passData.EigengrauActive = eigengrauActive;

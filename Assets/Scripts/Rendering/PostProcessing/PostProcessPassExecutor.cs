@@ -12,8 +12,8 @@ internal static class PostProcessPassExecutor
     public static void Render(PostProcessPassData data, UnsafeGraphContext context)
     {
         var cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
-        int width = data.Descriptor.width;
-        int height = data.Descriptor.height;
+        int width = data.Width;
+        int height = data.Height;
 
         cmd.SetComputeVectorParam(data.PostProcessCS, ScreenSizeID, new Vector4(width, height, 1f / width, 1f / height));
 
@@ -170,6 +170,21 @@ internal static class PostProcessPassExecutor
         cmd.SetComputeFloatParam(data.PostProcessCS, SaturationID, data.CgActive ? data.Saturation : 1f);
         cmd.SetComputeFloatParam(data.PostProcessCS, GammaID, data.Gamma);
         cmd.SetComputeFloatParam(data.PostProcessCS, HdrPaperWhiteScaleID, data.HdrPaperWhiteScale);
+        cmd.SetComputeFloatParam(
+            data.PostProcessCS,
+            HdrPeakBrightnessScaleID,
+            data.HdrPeakBrightnessScale);
+        cmd.SetComputeIntParam(data.PostProcessCS, DisplayTransformID, data.DisplayTransform);
+        cmd.SetComputeFloatParam(data.PostProcessCS, ToneMappingWhitePointID, data.ToneMappingWhitePoint);
+        cmd.SetComputeVectorParam(data.PostProcessCS, CurveShapeID, data.CurveShape);
+        cmd.SetComputeVectorParam(data.PostProcessCS, CurveRangeID, data.CurveRange);
+        cmd.SetComputeIntParam(data.PostProcessCS, PostDebugViewID, data.PostDebugView);
+        cmd.SetComputeFloatParam(data.PostProcessCS, CompareSplitID, data.CompareSplit);
+        cmd.SetComputeVectorParam(data.PostProcessCS, WhiteBalanceID, data.WhiteBalance);
+        cmd.SetComputeIntParam(data.PostProcessCS, OutputGamutID, data.OutputGamut);
+        cmd.SetComputeVectorParam(data.PostProcessCS, CdlSlopeID, data.CdlSlope);
+        cmd.SetComputeVectorParam(data.PostProcessCS, CdlOffsetID, data.CdlOffset);
+        cmd.SetComputeVectorParam(data.PostProcessCS, CdlPowerID, data.CdlPower);
         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauIntensityID, data.EigengrauActive ? data.EigengrauIntensity : 0f);
         if (data.EigengrauActive)
         {

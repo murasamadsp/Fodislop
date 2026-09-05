@@ -145,6 +145,51 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
             migrated = true;
         }
 
+        if (config.SchemaVersion < 28)
+        {
+            // Схема 28: адаптация масштаба интерфейса к экранам Retina / High-DPI.
+            // Если масштаб оставался в неадаптированном значении по умолчанию (1.0)
+            // на Retina-дисплее (MacBook и др.), поднимаем его до рекомендуемого (1.35x).
+            if (config.Interface != null &&
+                Mathf.Approximately(config.Interface.UIScale, 1f) &&
+                UIScaleUtility.IsRetinaOrHighDpi)
+            {
+                config.Interface.UIScale = UIScaleUtility.RetinaDefaultScale;
+            }
+
+            config.SchemaVersion = 28;
+            migrated = true;
+        }
+
+        if (config.SchemaVersion > ClientConfig.CurrentSchemaVersion)
+        {
+            // Конфиг из более новой схемы (например, переключение ветки Git, откат
+            // или экспериментальный билд). Приводим версию схемы к текущей и
+            // гарантируем допустимость значений полей через SettingSchema.Clamp.
+            config.Audio ??= new AudioSettings();
+            config.Display ??= new DisplaySettings();
+            config.Interface ??= new InterfaceSettings();
+            config.Accessibility ??= new AccessibilitySettings();
+            config.Connection ??= new ConnectionSettings();
+            config.PostProcess ??= new PostProcessSettings();
+            config.Lighting ??= new WorldLightingSettings();
+            config.Terrain ??= new TerrainSettings();
+            config.Effects ??= new EffectSettings();
+
+            SettingSchema.Clamp(config.Audio);
+            SettingSchema.Clamp(config.Display);
+            SettingSchema.Clamp(config.Interface);
+            SettingSchema.Clamp(config.Accessibility);
+            SettingSchema.Clamp(config.Connection);
+            SettingSchema.Clamp(config.PostProcess);
+            SettingSchema.Clamp(config.Lighting);
+            SettingSchema.Clamp(config.Terrain);
+            SettingSchema.Clamp(config.Effects);
+
+            config.SchemaVersion = ClientConfig.CurrentSchemaVersion;
+            migrated = true;
+        }
+
         if (GraphicsQualityProfile.IsStandard(config.GraphicsPreset))
         {
             GraphicsQualitySettings standardSettings =
@@ -152,6 +197,15 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
             if (config.GraphicsQualitySettings != standardSettings)
             {
                 config.GraphicsQualitySettings = standardSettings;
+                migrated = true;
+            }
+
+            if (!SettingSchema.MatchesDefaults(config.Lighting) ||
+                !SettingSchema.MatchesDefaults(config.Terrain) ||
+                !SettingSchema.MatchesDefaults(config.Effects) ||
+                !SettingSchema.MatchesDefaults(config.PostProcess))
+            {
+                config.GraphicsPreset = GraphicsPreset.Custom;
                 migrated = true;
             }
         }

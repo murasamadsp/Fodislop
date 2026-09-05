@@ -45,10 +45,5 @@ namespace Fodinae.World
                 trans.position = pos;
             }
         }
-
-        public TerrainRenderer GetBackgroundRenderer()
-        {
-            return _backgroundRenderer;
-        }
     }
 }

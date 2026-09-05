@@ -69,6 +69,29 @@ public static class PostProcessLook
         public static Color Filter => Color.white;
     }
 
+    /// <summary>Авторский цветовой конвейер и кривая вывода.</summary>
+    public static class Grade
+    {
+        public const DisplayTransform Transform = DisplayTransform.Fodinae;
+        public const float WhitePoint = 1f;
+        public const float Temperature = 0f;
+        public const float Tint = 0f;
+
+        public static Vector3 Slope => Vector3.one;
+
+        public static Vector3 Offset => Vector3.zero;
+
+        public static Vector3 Power => Vector3.one;
+
+        public const float GreyOut = 0.18f;
+        public const float CurveSlope = 1.1f;
+        public const float ShoulderPower = 4f;
+        public const float ToePower = 1.6f;
+        public const float ToeStops = 12f;
+        public const float PathToWhiteAmount = 0.6f;
+        public const float PathToWhitePower = 3f;
+    }
+
     /// <summary>Плёночное зерно в тёмных участках.</summary>
     public static class FilmGrain
     {

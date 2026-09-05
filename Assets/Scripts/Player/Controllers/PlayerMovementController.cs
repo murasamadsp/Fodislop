@@ -236,9 +236,6 @@ namespace Fodinae.Player.Logic
             _networkService?.SendAction(new ToggleAgressionPacket());
             OnAggressionChanged?.Invoke(_aggression);
         }
-
-        public bool IsMoving => _input != null && _input.MoveInput != Vector2.zero;
-
         public bool IgnoreCollision
         {
             get => _ignoreCollision;
@@ -254,9 +251,7 @@ namespace Fodinae.Player.Logic
 
         public static bool IsWithinWorldBounds(Vector2Int position, int worldWidth, int worldHeight)
         {
-            return worldWidth > 0 && worldHeight > 0 &&
-                   position.x >= 0 && position.x < worldWidth &&
-                   position.y >= 0 && position.y < worldHeight;
+            return PlayerMovementValidator.IsWithinWorldBounds(position, worldWidth, worldHeight);
         }
 
         public void UpdateServerPosition(Vector2Int position)
@@ -357,16 +352,11 @@ namespace Fodinae.Player.Logic
             var currentCellType = storage.GetCell(currentX, currentServerY);
             var mapDataProvider = _mapDataProvider ?? throw new InvalidOperationException(
                 "[PlayerMovementController] IMapDataProvider is required for movement validation.");
-            float cooldown = mapDataProvider.GetMoveCooldown(currentCellType);
-            if (_input.IsCtrlPressed)
-            {
-                cooldown = mapDataProvider.GetMoveCooldown(CellType.Empty);
-            }
-
-            if (_ignoreCollision)
-            {
-                cooldown = Mathf.Max(0.01f, cooldown / 10f);
-            }
+            float cooldown = PlayerMovementValidator.CalculateMoveCooldown(
+                mapDataProvider,
+                currentCellType,
+                _input.IsCtrlPressed,
+                _ignoreCollision);
 
             if (cooldown > 0)
             {
@@ -392,33 +382,26 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
-            Vector2Int deltaServer = PlayerMovementMath.MovementToDeltaServer(direction);
-            int targetServerXInt = Position.x + deltaServer.x;
-            int targetServerYInt = Position.y + deltaServer.y;
-
-            if (storage.CellLayer == null)
+            if (!PlayerMovementValidator.TryEvaluateStep(
+                Position,
+                direction,
+                mapDataProvider,
+                storage,
+                out Vector2Int targetPosition,
+                out CellType targetCellType,
+                out bool isPassable))
             {
                 return;
             }
 
-            if (!IsWithinWorldBounds(new Vector2Int(targetServerXInt, targetServerYInt), mapDataProvider.WorldWidth, mapDataProvider.WorldHeight))
-            {
-                return;
-            }
-
-            ushort targetServerX = (ushort)targetServerXInt;
-            ushort targetServerY = (ushort)targetServerYInt;
-
-            var cellType = storage.GetCell(targetServerX, targetServerY);
-            var cellConfig = mapDataProvider.GetCellConfig(cellType);
-
-            bool isPassable = cellType == CellType.Empty || ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
+            ushort targetServerX = (ushort)targetPosition.x;
+            ushort targetServerY = (ushort)targetPosition.y;
 
             if (isPassable || _ignoreCollision)
             {
                 _robot.TargetPosition = CoordinateUtils.ServerToUnityPos(targetServerX, targetServerY, mapDataProvider.WorldHeight, transform.position.z);
                 Vector2Int oldPos = Position;
-                Position = new Vector2Int(targetServerX, targetServerY);
+                Position = targetPosition;
                 OnPlayerMoved?.Invoke(oldPos, Position);
                 _lastMoveTime = Time.time;
                 _networkService?.SendAction(new MovePacket(targetServerX, targetServerY));

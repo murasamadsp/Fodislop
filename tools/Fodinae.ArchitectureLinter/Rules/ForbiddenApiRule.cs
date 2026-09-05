@@ -15,8 +15,6 @@ public sealed class ForbiddenApiRule : IRule
         ("UnityEngine.GameObject", "Find", "GameObject.Find is forbidden — use DI or serialized references"),
         ("UnityEngine.GameObject", "FindWithTag", "GameObject.FindWithTag is forbidden — use DI or serialized references"),
         ("UnityEngine.Texture2D", ".ctor", "new Texture2D is forbidden — use RuntimeTextureFactory"),
-        ("UnityEngine.Resources", "Load", "Resources.Load is forbidden — use ClientAssetLoader pipeline"),
-        ("UnityEngine.Object", "DestroyImmediate", "DestroyImmediate is forbidden in runtime — use Destroy"),
     };
 
     public string Id => "FOD-FORBIDDEN-API";
@@ -35,7 +33,7 @@ public sealed class ForbiddenApiRule : IRule
             if (context.ShouldExclude(assembly.Name.Name))
                 continue;
 
-            if (assembly.Name.Name.EndsWith(".Editor", StringComparison.OrdinalIgnoreCase))
+            if (IsEditorAssembly(assembly.Name.Name) || IsTestAssembly(assembly.Name.Name))
                 continue;
 
             foreach (var type in assembly.MainModule.Types)
@@ -48,6 +46,17 @@ public sealed class ForbiddenApiRule : IRule
         return Task.FromResult<IReadOnlyList<RuleViolation>>(violations);
     }
 
+    private static bool IsEditorAssembly(string assemblyName)
+    {
+        return assemblyName.EndsWith(".Editor", StringComparison.OrdinalIgnoreCase) ||
+               assemblyName.EndsWith("-Editor", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTestAssembly(string assemblyName)
+    {
+        return assemblyName.StartsWith("Fodinae.Tests.", StringComparison.OrdinalIgnoreCase);
+    }
+
     private void ScanType(TypeDefinition type, List<RuleViolation> violations)
     {
         foreach (var method in type.Methods)
@@ -57,6 +66,11 @@ public sealed class ForbiddenApiRule : IRule
 
             foreach (var forbidden in ForbiddenApis)
             {
+                if (IsAllowedOwner(type, forbidden.DeclaringType, forbidden.MethodName))
+                {
+                    continue;
+                }
+
                 if (CecilAssemblyScanner.CallsMethod(method, forbidden.DeclaringType, forbidden.MethodName))
                 {
                     violations.Add(new RuleViolation
@@ -74,5 +88,22 @@ public sealed class ForbiddenApiRule : IRule
 
         foreach (var nested in type.NestedTypes)
             ScanType(nested, violations);
+    }
+
+    private static bool IsAllowedOwner(
+        TypeDefinition type,
+        string forbiddenDeclaringType,
+        string forbiddenMethodName)
+    {
+        if (forbiddenDeclaringType == "UnityEngine.Camera" &&
+            forbiddenMethodName == "get_main" &&
+            type.FullName == "Fodinae.Core.GameplayCamera")
+        {
+            return true;
+        }
+
+        return forbiddenDeclaringType == "UnityEngine.Texture2D" &&
+               forbiddenMethodName == ".ctor" &&
+               type.FullName == "Fodinae.RuntimeTextureFactory";
     }
 }

@@ -6,6 +6,7 @@
 
 #pragma target 5.0
 
+#define PI 3.14159265359
 #define PI2 6.28318530718
 #define MAX_INTERVAL_STEPS 64
 
@@ -109,15 +110,16 @@ float3 TransmissionFromPath(float2 pathLength)
 {
     float3 opticalDepth =
         _EmptyExtinctionRgb.rgb * pathLength.x +
-        _SolidExtinctionRgb.rgb * pathLength.y;
+        (_SolidExtinctionRgb.rgb * 8.0) * pathLength.y;
     return exp(-opticalDepth);
 }
 
 float3 SegmentTransmission(float solid, float physicalLength)
 {
+    float3 solidExtinction = _SolidExtinctionRgb.rgb * 8.0;
     float3 extinction = lerp(
         _EmptyExtinctionRgb.rgb,
-        _SolidExtinctionRgb.rgb,
+        solidExtinction,
         solid);
     return exp(-extinction * physicalLength);
 }
@@ -141,6 +143,44 @@ float2 OutputUv(float2 pixelPosition)
 {
     return saturate(pixelPosition / float2(_FieldSize));
 }
+
+float InterleavedGradientNoise(float2 pixelCoord)
+{
+    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+    return frac(magic.z * frac(dot(pixelCoord, magic.xy)));
+}
+
+float3 SampleBounceFiltered(float2 uv)
+{
+    float2 ts = 1.0 / float2(_BounceSize);
+
+    // 13-tap spatial reconstruction filter:
+    // Blurs high-frequency angular jitter into smooth continuous diffuse irradiance.
+    float3 col = _BounceInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb * 4.0;
+
+    // Near cross taps (distance 1.25 texels)
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(ts.x * 1.25, 0.0), 0).rgb * 2.0;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv - float2(ts.x * 1.25, 0.0), 0).rgb * 2.0;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(0.0, ts.y * 1.25), 0).rgb * 2.0;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv - float2(0.0, ts.y * 1.25), 0).rgb * 2.0;
+
+    // Diagonal taps (distance 1.25 texels)
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(ts.x * 1.25, ts.y * 1.25), 0).rgb;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(-ts.x * 1.25, ts.y * 1.25), 0).rgb;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(ts.x * 1.25, -ts.y * 1.25), 0).rgb;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(-ts.x * 1.25, -ts.y * 1.25), 0).rgb;
+
+    // Far cross taps (distance 2.5 texels)
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(ts.x * 2.5, 0.0), 0).rgb;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv - float2(ts.x * 2.5, 0.0), 0).rgb;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv + float2(0.0, ts.y * 2.5), 0).rgb;
+    col += _BounceInput.SampleLevel(sampler_LinearClamp, uv - float2(0.0, ts.y * 2.5), 0).rgb;
+
+    return col * (1.0 / 20.0);
+}
+
+
+
 
 // Nearest field pixel to the center of the world cell containing `pixel`.
 // Used by the PerBlock tier so every pixel inside one cell reads the same
@@ -207,6 +247,54 @@ float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
     return length(rayDirection * cellsPerPixel * pathLengthInPixels);
 }
+
+void CheckCellSolid(int2 cellCoord, float2 cellsPerPixel, out bool isSolid)
+{
+    isSolid = false;
+    float2 centerPixel = (float2(cellCoord) + 0.5) / cellsPerPixel;
+    if (all(centerPixel >= 0.0) && all(centerPixel < float2(_FieldSize)))
+    {
+        isSolid = (SampleOccupancy(centerPixel, 0.0) >= 0.4);
+    }
+}
+
+// Blocks sharing a single common vertex (touching diagonally) must not transmit light between them.
+void CheckDiagonalStepOccluded(int2 prevCell, int2 currentCell, float2 cellsPerPixel, out bool isOccluded)
+{
+    isOccluded = false;
+    int dx = currentCell.x - prevCell.x;
+    int dy = currentCell.y - prevCell.y;
+    if (dx != 0 && dy != 0)
+    {
+        int stepX = clamp(dx, -1, 1);
+        int stepY = clamp(dy, -1, 1);
+        int2 cornerA = int2(prevCell.x + stepX, prevCell.y);
+        int2 cornerB = int2(prevCell.x, prevCell.y + stepY);
+        bool solidA = false;
+        bool solidB = false;
+        CheckCellSolid(cornerA, cellsPerPixel, solidA);
+        CheckCellSolid(cornerB, cellsPerPixel, solidB);
+
+        if (solidA && solidB)
+        {
+            isOccluded = true;
+        }
+        else if (abs(dx) > 1 || abs(dy) > 1)
+        {
+            int2 cornerA2 = int2(currentCell.x - stepX, currentCell.y);
+            int2 cornerB2 = int2(currentCell.x, currentCell.y - stepY);
+            bool solidA2 = false;
+            bool solidB2 = false;
+            CheckCellSolid(cornerA2, cellsPerPixel, solidA2);
+            CheckCellSolid(cornerB2, cellsPerPixel, solidB2);
+            if (solidA2 && solidB2)
+            {
+                isOccluded = true;
+            }
+        }
+    }
+}
+
 
 // Reads the emission field, which already contains the dynamic sources.
 //
@@ -291,10 +379,8 @@ void TraceRadianceSegment(
     float stepLength = intervalLength / float(stepCount);
     float physicalStepLength = PathLengthInCells(rayDirection, stepLength);
     float samplingMip = max(0.0, log2(max(stepLength, 1.0)));
-    float2 regionCellCount = _WorldRect.zw / _CellSize;
-    int2 receiverCell = int2(floor(
-        receiverOrigin * regionCellCount / float2(_FieldSize)));
-    bool startsInSolid = SampleOccupancy(receiverOrigin, 0.0) >= 0.5;
+    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
+    int2 prevCell = int2(floor(segmentStart * cellsPerPixel));
     radiance = 0.0;
     transmittance = 1.0;
 
@@ -321,14 +407,19 @@ void TraceRadianceSegment(
             continue;
         }
 
-        int2 sampleCell = int2(floor(
-            samplePosition * regionCellCount / float2(_FieldSize)));
-        bool insideReceiverCell =
-            startsInSolid && all(sampleCell == receiverCell);
-        float occupancy = insideReceiverCell
-            ? 0.0
-            : saturate(SampleOccupancy(samplePosition, samplingMip));
-        float solid = step(0.5, occupancy);
+        int2 currentCell = int2(floor(samplePosition * cellsPerPixel));
+        bool diagonalOccluded = false;
+        CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
+        if (diagonalOccluded)
+        {
+            transmittance = 0.0;
+            break;
+        }
+
+        prevCell = currentCell;
+
+        float occupancy = saturate(SampleOccupancy(samplePosition, samplingMip));
+        float solid = occupancy;
         float4 emission = SampleEmission(samplePosition, 0.0);
         float3 emittedRadiance =
             max(emission.rgb, 0.0) * physicalStepLength * _EmissionScale;
@@ -503,13 +594,13 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
     float3 radiance = 0.0;
     float4 normalData = SampleAutomaticSurfaceNormal(float2(samplePixel) + 0.5);
 
-    if (_DebugView == 4)
+    if (_DebugView == 5)
     {
         float3 localTransmission = 0.0;
         float2 origin = float2(pixel) + 0.5;
         float2 regionCellCount = _WorldRect.zw / _CellSize;
-        int2 receiverCell = int2(floor(
-            origin * regionCellCount / float2(_FieldSize)));
+        float2 cellsPerPixel = regionCellCount / float2(_FieldSize);
+        int2 receiverCell = int2(floor(origin * cellsPerPixel));
         bool startsInSolid = SampleOccupancy(origin, 0.0) >= 0.5;
 
         [loop]
@@ -525,6 +616,7 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
                 (_TransmittanceDebugDistanceCells * pixelsPerCell) / 16.0;
             float debugStepCells = PathLengthInCells(debugRay, debugStepPixels);
             float2 debugPath = 0.0;
+            int2 prevCell = receiverCell;
 
             [unroll]
             for (int debugStep = 0; debugStep < 16; debugStep++)
@@ -538,13 +630,18 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
                     continue;
                 }
 
-                int2 sampleCell = int2(floor(
-                    samplePosition * regionCellCount / float2(_FieldSize)));
-                bool insideReceiverCell =
-                    startsInSolid && all(sampleCell == receiverCell);
-                float occupancy = insideReceiverCell
-                    ? 0.0
-                    : saturate(SampleOccupancy(samplePosition, 0.0));
+                int2 currentCell = int2(floor(samplePosition * cellsPerPixel));
+                bool diagonalOccluded = false;
+                CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
+                if (diagonalOccluded)
+                {
+                    debugPath.y += float(16 - debugStep) * debugStepCells;
+                    break;
+                }
+
+                prevCell = currentCell;
+
+                float occupancy = saturate(SampleOccupancy(samplePosition, 0.0));
                 debugPath += float2(1.0 - occupancy, occupancy) * debugStepCells;
             }
 
@@ -578,71 +675,131 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     int2 pixel = int2(dispatchId.xy);
-    if (_EnableDiffuseBounce == 0)
+    float bounceStrength = (_DebugView == 9) ? max(_BounceStrength, 1.0) : _BounceStrength;
+    if (_EnableDiffuseBounce == 0 && _DebugView != 9)
+    {
+        _BounceTexture[pixel] = 0.0;
+        return;
+    }
+
+    if (bounceStrength <= 0.0001)
     {
         _BounceTexture[pixel] = 0.0;
         return;
     }
 
     float2 fieldPosition = (float2(pixel) + 0.5) * float2(_FieldSize) / float2(_BounceSize);
-    float3 bounced = 0.0;
-    float4 normalData = SampleAutomaticSurfaceNormal(fieldPosition);
-    const float directionWeight = 1.0 / 16.0;
+
+    float4 centerMat = _MaterialField.SampleLevel(sampler_LinearClamp, MaterialUv(fieldPosition), 0);
+    float centerSolid = saturate(centerMat.a);
+
+    float centerMax = max(centerMat.r, max(centerMat.g, centerMat.b));
+    float3 centerAlbedo = centerMax > 0.04
+        ? (centerMat.rgb / centerMax) * max(centerMax, 0.4)
+        : float3(0.4, 0.38, 0.36);
+    centerAlbedo = min(centerAlbedo, 0.75);
+
+    float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
+    float pixelsPerCell = 1.0 / max(cellsPerPixel.x, 0.0001);
+
+    // Screen-space angular jitter: eliminates discrete directional banding by rotating
+    // the 8 directions per-pixel. The 13-tap reconstruction filter smooths this into continuous GI.
+    float jitter = InterleavedGradientNoise(float2(pixel));
+    float baseAngle = jitter * (PI2 / 8.0);
+
+    float3 gatheredBounce = 0.0;
+    float totalWeight = 0.0;
 
     [unroll]
-    for (int direction = 0; direction < 16; direction++)
+    for (int d = 0; d < 8; d++)
     {
-        float angle =
-            (float(direction) + 0.5) * PI2 / 16.0;
-        float raySine;
-        float rayCosine;
-        sincos(angle, raySine, rayCosine);
-        float2 rayDirection = float2(rayCosine, raySine);
-        float2 pathLength = 0.0;
-        float physicalStepLength = PathLengthInCells(rayDirection, 2.0);
+        float angle = baseAngle + float(d) * (PI2 / 8.0);
+        float raySin;
+        float rayCos;
+        sincos(angle, raySin, rayCos);
+        float2 rayDir = float2(rayCos, raySin);
+
+        float2 prevPos = fieldPosition;
+        int2 prevCell = int2(floor(fieldPosition * cellsPerPixel));
 
         [unroll]
-        for (int stepIndex = 1; stepIndex <= 8; stepIndex++)
+        for (int stepIdx = 1; stepIdx <= 3; stepIdx++)
         {
-            float2 samplePosition = fieldPosition + rayDirection * (float(stepIndex) * 2.0);
-            if (any(samplePosition < 0.0) || any(samplePosition >= float2(_FieldSize)))
+            float distCells = float(stepIdx) * 1.35;
+            float2 samplePos = fieldPosition + rayDir * (distCells * pixelsPerCell);
+            if (any(samplePos < 0.0) || any(samplePos >= float2(_FieldSize)))
             {
                 break;
             }
 
-            float4 material = _MaterialField.SampleLevel(sampler_LinearClamp, MaterialUv(samplePosition), 0);
-            // Incident = статический + динамический direct (то же, что в композиции),
-            // иначе bounce видел только лампы, а лава/светящиеся блоки не отражались.
-            float3 incident = _DirectInput.SampleLevel(
-                sampler_LinearClamp,
-                OutputUv(samplePosition),
-                0).rgb +
-                _StaticDirectInput.SampleLevel(
-                    sampler_LinearClamp,
-                    OutputUv(samplePosition),
-                    0).rgb;
-            // This is diffuse interreflection: direct radiance arriving at a
-            // surface is scattered by its albedo into the receiver hemisphere.
-            // It is not mirror reflection because this pipeline has no normal
-            // or view direction.
-            float distanceWeight = 1.0 / pow(float(stepIndex), 1.5);
-            float sampleSolid = step(0.5, material.a);
-            float sampleWeight = sampleSolid * physicalStepLength *
-                distanceWeight * directionWeight;
-            float receiverLambert = SurfaceLambert(
-                normalData,
-                -rayDirection);
-            bounced += TransmissionFromPath(pathLength) * incident * material.rgb *
-                sampleWeight * receiverLambert;
-            pathLength += float2(1.0 - sampleSolid, sampleSolid) * physicalStepLength;
-            if (sampleSolid > 0.5)
+            int2 currentCell = int2(floor(samplePos * cellsPerPixel));
+            bool diagonalOccluded = false;
+            CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
+            if (diagonalOccluded)
             {
                 break;
             }
+
+            prevCell = currentCell;
+
+            float4 mat = _MaterialField.SampleLevel(sampler_LinearClamp, MaterialUv(samplePos), 0);
+            float solid = saturate(mat.a);
+
+            if (solid > 0.2) // Struck an illuminated solid surface
+            {
+                // Robust direct sampling: max between surface and air immediately in front of it
+                float2 uvSample = OutputUv(samplePos);
+                float2 uvPrev = OutputUv(prevPos);
+                float3 incident = max(
+                    _DirectInput.SampleLevel(sampler_LinearClamp, uvSample, 0).rgb +
+                    _StaticDirectInput.SampleLevel(sampler_LinearClamp, uvSample, 0).rgb,
+                    _DirectInput.SampleLevel(sampler_LinearClamp, uvPrev, 0).rgb +
+                    _StaticDirectInput.SampleLevel(sampler_LinearClamp, uvPrev, 0).rgb);
+
+                float mCh = max(mat.r, max(mat.g, mat.b));
+                float3 albedo = mCh > 0.04
+                    ? (mat.rgb / mCh) * max(mCh, 0.4)
+                    : float3(0.4, 0.38, 0.36);
+                albedo = min(albedo, 0.75);
+
+                float distanceFalloff = 1.0 / (1.0 + distCells * 0.4);
+                float w = solid * distanceFalloff;
+                gatheredBounce += incident * albedo * w;
+                totalWeight += w;
+                break; // Opaque surface occludes further ray travel
+            }
+
+            prevPos = samplePos;
         }
     }
 
-    _BounceTexture[pixel] = float4(bounced * _BounceStrength, 1.0);
+    // Direct surface reflection at receiver (if on or near a solid boundary)
+    float2 uvCenter = OutputUv(fieldPosition);
+    float3 directCenter = _DirectInput.SampleLevel(sampler_LinearClamp, uvCenter, 0).rgb +
+                          _StaticDirectInput.SampleLevel(sampler_LinearClamp, uvCenter, 0).rgb;
+
+    // Find brightest direct light among immediate neighbors (air in front of block)
+    float3 directAdjacent = max(
+        max(
+            _DirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition + float2(pixelsPerCell, 0.0)), 0).rgb +
+            _StaticDirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition + float2(pixelsPerCell, 0.0)), 0).rgb,
+            _DirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition - float2(pixelsPerCell, 0.0)), 0).rgb +
+            _StaticDirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition - float2(pixelsPerCell, 0.0)), 0).rgb),
+        max(
+            _DirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition + float2(0.0, pixelsPerCell)), 0).rgb +
+            _StaticDirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition + float2(0.0, pixelsPerCell)), 0).rgb,
+            _DirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition - float2(0.0, pixelsPerCell)), 0).rgb +
+            _StaticDirectInput.SampleLevel(sampler_LinearClamp, OutputUv(fieldPosition - float2(0.0, pixelsPerCell)), 0).rgb));
+
+    float3 directOnSurface = max(directCenter, directAdjacent);
+    float3 surfaceGlow = directOnSurface * centerAlbedo;
+
+    float3 scatteredInAir = (totalWeight > 0.001)
+        ? (gatheredBounce / max(totalWeight, 1.0)) * 2.0
+        : 0.0;
+
+    float3 finalBounce = lerp(scatteredInAir, surfaceGlow, centerSolid) * bounceStrength;
+    _BounceTexture[pixel] = float4(finalBounce, 1.0);
 }
 
 [numthreads(8, 8, 1)]
@@ -663,36 +820,105 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 
     float4 material = _MaterialField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
     float4 emission = _EmissionField.Load(int3(materialPixel.x, materialPixel.y, 0)).rgba;
-    if (_DebugView == 1)
+    if (_DebugView == 1) // Occupancy
     {
         _Result[pixel] = float4(material.aaa, 1.0);
         return;
     }
 
-    if (_DebugView == 2)
+    if (_DebugView == 2) // Albedo
     {
         _Result[pixel] = float4(material.rgb, 1.0);
         return;
     }
 
-    if (_DebugView == 3)
+    if (_DebugView == 3) // Emission
     {
         _Result[pixel] = float4(emission.rgb, 1.0);
         return;
     }
 
-    // The two halves of the solve, summed. See _StaticDirectInput for why this
-    // sum is exact rather than an approximation.
-    float4 direct = _DirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba +
-        _StaticDirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
-    float3 bounce = _EnableDiffuseBounce != 0
-        ? _BounceInput.SampleLevel(sampler_LinearClamp, uv, 0).rgb
-        : 0.0;
-    float3 result = _AmbientColor.rgb + bounce + direct.rgb;
-
-    if (_DebugView == 4 || _DebugView == 5 || _DebugView == 6)
+    if (_DebugView == 4) // Normals
     {
-        result = direct.rgb;
+        float4 normalData = SampleAutomaticSurfaceNormal(float2(pixel) + 0.5);
+        float3 normalVisual = normalData.w > 0.05
+            ? (normalData.xyz * 0.5 + 0.5)
+            : 0.0;
+        _Result[pixel] = float4(normalVisual, 1.0);
+        return;
+    }
+
+    float4 dynamicDirect = _DirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
+    float4 staticDirect = _StaticDirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
+
+    if (_DebugView == 5) // Transmission (pure transmittance without static contamination)
+    {
+        _Result[pixel] = float4(dynamicDirect.rgb, 1.0);
+        return;
+    }
+
+    if (_DebugView == 6) // StaticDirect
+    {
+        _Result[pixel] = float4(staticDirect.rgb, 1.0);
+        return;
+    }
+
+    if (_DebugView == 7) // DynamicDirect
+    {
+        _Result[pixel] = float4(dynamicDirect.rgb, 1.0);
+        return;
+    }
+
+    float4 combinedDirect = dynamicDirect + staticDirect;
+
+    if (_DebugView == 8) // DirectRadiance (combined)
+    {
+        _Result[pixel] = float4(combinedDirect.rgb, 1.0);
+        return;
+    }
+
+    float3 bounce = SampleBounceFiltered(uv);
+
+    if (_DebugView == 9) // DiffuseBounce
+    {
+        _Result[pixel] = float4(bounce, 1.0);
+        return;
+    }
+
+    float3 bounceTerm = _EnableDiffuseBounce != 0 ? bounce : 0.0;
+    float3 result = _AmbientColor.rgb + bounceTerm + combinedDirect.rgb;
+
+    if (_DebugView == 10) // Exposure (false-color zebras)
+    {
+        float maximumLight = max(_MaximumLightMultiplier, 0.0001);
+        float peak = Max3(result);
+        float3 falseColor = float3(0.0, 0.0, 0.0);
+        if (peak > maximumLight)
+        {
+            // Overexposed / clipped -> bright red
+            falseColor = float3(1.0, 0.1, 0.1);
+        }
+        else if (peak > 1.0)
+        {
+            // High dynamic range (1.0 to maximumLight) -> yellow-orange
+            float t = (peak - 1.0) / max(maximumLight - 1.0, 0.0001);
+            falseColor = lerp(float3(0.3, 0.9, 0.2), float3(1.0, 0.7, 0.0), saturate(t));
+        }
+        else if (peak > 0.05)
+        {
+            // Well-exposed (< 1.0) -> green gradient
+            float t = (peak - 0.05) / 0.95;
+            falseColor = lerp(float3(0.05, 0.3, 0.1), float3(0.3, 0.9, 0.2), saturate(t));
+        }
+        else
+        {
+            // Deep shadow (< 0.05) -> dark blue
+            float t = peak / 0.05;
+            falseColor = lerp(float3(0.02, 0.04, 0.15), float3(0.05, 0.3, 0.1), saturate(t));
+        }
+
+        _Result[pixel] = float4(falseColor, 1.0);
+        return;
     }
 
     float3 output = max(result, 0.0);

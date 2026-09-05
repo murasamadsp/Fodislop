@@ -150,6 +150,60 @@ public sealed class ClientConfigMigrationTests
     }
 
     [Test]
+    public void Migrate_Schema27Config_MigratesToSchema28()
+    {
+        var migration = new ClientConfigMigration(_profile);
+        var config = new ClientConfig
+        {
+            SchemaVersion = 27,
+            GraphicsPreset = GraphicsPreset.High,
+            Interface = new InterfaceSettings
+            {
+                UIScale = 1f,
+            },
+        };
+
+        bool migrated = migration.Migrate(config, "{}");
+
+        Assert.That(migrated, Is.True);
+        Assert.That(config.SchemaVersion, Is.EqualTo(28));
+        if (UIScaleUtility.IsRetinaOrHighDpi)
+        {
+            Assert.That(config.Interface.UIScale, Is.EqualTo(UIScaleUtility.RetinaDefaultScale));
+        }
+        else
+        {
+            Assert.That(config.Interface.UIScale, Is.EqualTo(1f));
+        }
+    }
+
+    [Test]
+    public void UIScaleUtility_Clamp_EnforcesSafeRange()
+    {
+        Assert.That(UIScaleUtility.Clamp(0.1f), Is.EqualTo(UIScaleUtility.UIScaleMin));
+        Assert.That(UIScaleUtility.Clamp(5.0f), Is.EqualTo(UIScaleUtility.UIScaleMax));
+        Assert.That(UIScaleUtility.Clamp(1.25f), Is.EqualTo(1.25f));
+    }
+
+    [Test]
+    public void Migrate_FutureSchemaConfig_ClampsAndReachesCurrentSchema()
+    {
+        var migration = new ClientConfigMigration(_profile);
+        string json = @"{
+            ""SchemaVersion"": 29,
+            ""GraphicsPreset"": 6,
+            ""Lighting"": { ""AmbientIntensity"": 0.42 }
+        }";
+        ClientConfig config = JsonUtility.FromJson<ClientConfig>(json);
+
+        bool migrated = migration.Migrate(config, json);
+
+        Assert.That(migrated, Is.True);
+        Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(config.Lighting.AmbientIntensity, Is.EqualTo(0.42f).Within(1e-5f));
+    }
+
+    [Test]
     public void Validator_RejectsNonFiniteRuntimeSetting()
     {
         var validator = new ClientConfigValidator(_profile);

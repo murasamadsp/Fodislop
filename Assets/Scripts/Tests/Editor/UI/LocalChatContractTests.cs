@@ -32,7 +32,11 @@ public sealed class LocalChatContractTests
         string legacyController = Path.Combine(
             Application.dataPath,
             "Scripts/UI/Chat/LocalChatPopup.cs");
+        string legacyUxml = Path.Combine(
+            Application.dataPath,
+            "Resources/UI/LocalChat.uxml");
 
         Assert.That(File.Exists(legacyController), Is.False);
+        Assert.That(File.Exists(legacyUxml), Is.False);
     }
 }

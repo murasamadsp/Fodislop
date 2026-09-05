@@ -63,13 +63,6 @@ public sealed class RobotVisuals
         EnsureBatchHandles();
         _bodyBatchHandle?.SetEnabled(visible);
     }
-
-    public void SetClanVisible(bool visible)
-    {
-        EnsureBatchHandles();
-        _clanBatchHandle?.SetEnabled(visible);
-    }
-
     public void SetColor(Color color)
     {
         _bodyBatchHandle?.SetColor(color);

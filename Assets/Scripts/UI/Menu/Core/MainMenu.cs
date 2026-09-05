@@ -154,6 +154,8 @@ namespace Fodinae.UI
             _root.Add(tree);
 
             _doc.panelSettings = panelSettings;
+            panelSettings.scale = UIScaleUtility.ResolveEffectiveScale(
+                _clientConfig?.Config.Interface.UIScale ?? 0f);
             _tree = tree;
 
             UILayoutTier.Attach(tree);

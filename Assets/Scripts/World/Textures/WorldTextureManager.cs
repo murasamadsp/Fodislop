@@ -455,11 +455,5 @@ namespace Fodinae.World
             EnsureInitialized();
             return _textureCache != null ? _textureCache.GetCacheStats() : string.Empty;
         }
-
-        public Texture2D? GetEmptyTexture()
-        {
-            EnsureInitialized();
-            return _cachedEmptyTexture;
-        }
     }
 }

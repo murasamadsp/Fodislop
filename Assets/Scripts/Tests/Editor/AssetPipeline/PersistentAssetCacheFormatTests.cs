@@ -39,7 +39,6 @@ public sealed class PersistentAssetCacheFormatTests
         string assetPath = Path.Combine(_cachePath, relativeAsset);
         Directory.CreateDirectory(Path.GetDirectoryName(assetPath)!);
         File.WriteAllBytes(assetPath, [1, 2, 3, 4]);
-        File.WriteAllText(assetPath + ".etag", "legacy-etag");
 
         PersistentAssetCacheFormat.EnsureCurrent(_cachePath);
 
@@ -52,7 +51,6 @@ public sealed class PersistentAssetCacheFormatTests
                 PersistentAssetCacheFormat.MarkerFileName)).Trim(),
             Is.EqualTo(PersistentAssetCacheFormat.CurrentSchemaVersion.ToString()));
         Assert.That(File.ReadAllBytes(Path.Combine(_cachePath, relativeAsset)), Is.EqualTo(new byte[] { 1, 2, 3, 4 }));
-        Assert.That(File.ReadAllText(Path.Combine(_cachePath, relativeAsset) + ".etag"), Is.EqualTo("legacy-etag"));
         Assert.That(File.ReadAllText(backupPath).Trim(), Is.EqualTo("0"));
     }
 
@@ -112,14 +110,12 @@ public sealed class PersistentAssetCacheFormatTests
             "1");
         string payloadPath = Path.Combine(_cachePath, "legacy.bin");
         File.WriteAllBytes(payloadPath, [1, 2, 3]);
-        File.WriteAllText(payloadPath + ".etag", "legacy-etag");
         var cache = new PersistentAssetCache(_cachePath);
 
         byte[]? payload = cache.GetAsset("legacy.bin");
 
         Assert.That(payload, Is.Null);
         Assert.That(File.Exists(payloadPath), Is.False);
-        Assert.That(File.Exists(payloadPath + ".etag"), Is.False);
         Assert.That(
             File.ReadAllText(Path.Combine(
                 _cachePath,

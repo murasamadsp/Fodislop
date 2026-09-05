@@ -329,7 +329,7 @@ public static class SettingSchema
     /// нужно было дописывать при каждом новом поле, и забытое поле означало
     /// дыру в инварианте, которую ничто не показывало.
     /// </remarks>
-    public static bool MatchesDefaults<TSection>(TSection section)
+    public static bool MatchesDefaults<TSection>(TSection? section)
         where TSection : class, new()
     {
         if (section == null)

@@ -52,8 +52,6 @@ namespace Fodinae.UI
         private VisualElement? _mainPage;
         private VisualElement? _settingsPage;
         private bool _isOpen;
-        private float _originalScale;
-        private bool _originalScaleCaptured;
         private readonly List<Action> _settingsRefreshers = [];
         private bool _initialized;
         private bool _initializationFailed;
@@ -161,9 +159,6 @@ namespace Fodinae.UI
                 return;
             }
 
-            _originalScale = _doc.panelSettings.scale;
-            _originalScaleCaptured = true;
-
             try
             {
                 CreateMenu(_doc.rootVisualElement);
@@ -178,9 +173,10 @@ namespace Fodinae.UI
             HideMenu();
 
             var savedScale = _clientConfig.Config.Interface.UIScale;
-            if (Mathf.Abs(_doc.panelSettings.scale - savedScale) > 0.0001f)
+            float effectiveScale = UIScaleUtility.ResolveEffectiveScale(savedScale);
+            if (Mathf.Abs(_doc.panelSettings.scale - effectiveScale) > 0.0001f)
             {
-                _doc.panelSettings.scale = savedScale;
+                _doc.panelSettings.scale = effectiveScale;
             }
 
             // Реестр применяет текст сразу и на каждой смене языка — подписка
@@ -207,14 +203,6 @@ namespace Fodinae.UI
             if (_menuTree != null && _menuTree.parent != null)
             {
                 _menuTree.parent.Remove(_menuTree);
-            }
-
-            if (_originalScaleCaptured && _doc != null && _doc.panelSettings != null)
-            {
-                if (Mathf.Abs(_doc.panelSettings.scale - _originalScale) > 0.0001f)
-                {
-                    _doc.panelSettings.scale = _originalScale;
-                }
             }
         }
 

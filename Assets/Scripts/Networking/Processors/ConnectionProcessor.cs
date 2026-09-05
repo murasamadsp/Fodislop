@@ -3,25 +3,15 @@
 using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.Connection;
 
-namespace Fodinae.Networking.Processors
+namespace Fodinae.Networking.Processors;
+
+public sealed class ConnectionProcessor(IConnectionService connection) :
+    IPacketProcessor<DisconnectPacket>,
+    IPacketProcessor<ReconnectPacket>
 {
-    public class ConnectionProcessor : IPacketProcessor<DisconnectPacket>, IPacketProcessor<ReconnectPacket>
-    {
-        private readonly IConnectionService _connection;
+    public void Process(DisconnectPacket packet) =>
+        connection.HandleServerDisconnect(packet.Reason);
 
-        public ConnectionProcessor(IConnectionService connection)
-        {
-            _connection = connection;
-        }
-
-        public void Process(DisconnectPacket packet)
-        {
-            _connection.HandleServerDisconnect(packet.Reason);
-        }
-
-        public void Process(ReconnectPacket packet)
-        {
-            _connection.HandleServerReconnect();
-        }
-    }
+    public void Process(ReconnectPacket packet) =>
+        connection.HandleServerReconnect();
 }

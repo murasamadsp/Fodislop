@@ -39,8 +39,6 @@ public sealed class RobotMovement
         get => _targetAngle;
         set => _targetAngle = value;
     }
-
-    public float SmoothAngle => _smoothAngle;
     public float MoveSpeed
     {
         get => _moveSpeed;

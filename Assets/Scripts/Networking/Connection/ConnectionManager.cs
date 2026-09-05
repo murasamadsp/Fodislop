@@ -290,16 +290,6 @@ namespace Fodinae.Networking.Connection
             Disconnect();
             OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
-
-        public void StartManualReconnect()
-        {
-            _restartWorldOnConnect = true;
-            _shouldAutoReconnect = true;
-            _reconnectBackoff.Reset();
-            _reconnectCountdown = _reconnectBackoff.CurrentDelay;
-            OnReconnectStatusChanged?.Invoke(_reconnectStatus);
-        }
-
         private void OnConnected()
         {
             _operations.Run("complete_connection", CompleteConnectionAsync);
@@ -411,9 +401,6 @@ namespace Fodinae.Networking.Connection
             private static readonly float[] Steps = [1f, 2f, 4f, 8f, 16f, 30f];
 
             private int _attempt;
-
-            public int AttemptCount => _attempt;
-
             public float CurrentDelay => Steps[Math.Min(_attempt, Steps.Length - 1)];
 
             public void RecordFailure()

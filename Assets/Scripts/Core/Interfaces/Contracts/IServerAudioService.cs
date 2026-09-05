@@ -2,11 +2,9 @@
 
 using MinesServer.Networking.Server.Packets.World;
 
-namespace Fodinae.Core.Interfaces
+namespace Fodinae.Core.Interfaces;
+public interface IServerAudioService
 {
-    public interface IServerAudioService
-    {
-        void PlayEffect(AudioPacket packet);
-        void ClearAllEffects();
-    }
+    void PlayEffect(AudioPacket packet);
+    void ClearAllEffects();
 }

@@ -41,6 +41,8 @@ public sealed class GatewayOnboarding
         ("gateway.onb.ui_scale.100", 1.00f),
         ("gateway.onb.ui_scale.115", 1.15f),
         ("gateway.onb.ui_scale.130", 1.30f),
+        ("gateway.onb.ui_scale.150", 1.50f),
+        ("gateway.onb.ui_scale.175", 1.75f),
     };
 
     private readonly VisualElement _root;
@@ -392,15 +394,19 @@ public sealed class GatewayOnboarding
 
     private static int IndexOfUIScale(float value)
     {
+        int bestIndex = 0;
+        float minDiff = float.MaxValue;
         for (int i = 0; i < UIScales.Length; i++)
         {
-            if (Mathf.Abs(UIScales[i].Value - value) < 0.001f)
+            float diff = Mathf.Abs(UIScales[i].Value - value);
+            if (diff < minDiff)
             {
-                return i;
+                minDiff = diff;
+                bestIndex = i;
             }
         }
 
-        return 0;
+        return bestIndex;
     }
 
     private static int IndexOfFrameRate(int value)

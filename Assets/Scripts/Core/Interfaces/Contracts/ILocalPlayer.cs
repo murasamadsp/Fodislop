@@ -4,56 +4,54 @@ using System;
 using MinesServer.Data;
 using UnityEngine;
 
-namespace Fodinae.Core.Interfaces
+namespace Fodinae.Core.Interfaces;
+/// <summary>
+/// Локально управляемый игрок, публикуемый через <see cref="ILocalPlayerState"/>.
+/// Реализуется <c>PlayerMovementController</c>; контракт держит только ту
+/// поверхность, которую потребляют UI/rendering/networking, чтобы
+/// presentation-типы не протекали в contracts-слой.
+/// </summary>
+public interface ILocalPlayer
 {
-    /// <summary>
-    /// Локально управляемый игрок, публикуемый через <see cref="ILocalPlayerState"/>.
-    /// Реализуется <c>PlayerMovementController</c>; контракт держит только ту
-    /// поверхность, которую потребляют UI/rendering/networking, чтобы
-    /// presentation-типы не протекали в contracts-слой.
-    /// </summary>
-    public interface ILocalPlayer
-    {
-        GameObject gameObject { get; }
+    GameObject gameObject { get; }
 
-        Transform transform { get; }
+    Transform transform { get; }
 
-        bool isActiveAndEnabled { get; }
+    bool isActiveAndEnabled { get; }
 
-        uint BotId { get; }
+    uint BotId { get; }
 
-        Vector2Int Position { get; }
+    Vector2Int Position { get; }
 
-        bool HasServerPosition { get; }
+    bool HasServerPosition { get; }
 
-        bool IsGameplayVisible { get; }
+    bool IsGameplayVisible { get; }
 
-        Direction LastDirection { get; }
+    Direction LastDirection { get; }
 
-        bool IgnoreCollision { get; set; }
+    bool IgnoreCollision { get; set; }
 
-        bool AutoDig { get; set; }
+    bool AutoDig { get; set; }
 
-        bool Aggression { get; set; }
+    bool Aggression { get; set; }
 
-        event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
+    event Action<Vector2Int, Vector2Int>? OnPlayerMoved;
 
-        event Action<bool>? OnAutoDigChanged;
+    event Action<bool>? OnAutoDigChanged;
 
-        event Action<bool>? OnAggressionChanged;
+    event Action<bool>? OnAggressionChanged;
 
-        void UpdateServerPosition(Vector2Int position);
+    void UpdateServerPosition(Vector2Int position);
 
-        void ResetDirection();
+    void ResetDirection();
 
-        void Initialize(uint botId);
+    void Initialize(uint botId);
 
-        void SetGameplayVisible();
+    void SetGameplayVisible();
 
-        void ToggleAggression();
+    void ToggleAggression();
 
-        T GetComponent<T>();
+    T GetComponent<T>();
 
-        bool TryGetComponent<T>(out T component);
-    }
+    bool TryGetComponent<T>(out T component);
 }

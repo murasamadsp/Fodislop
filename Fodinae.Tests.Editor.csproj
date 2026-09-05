@@ -53,6 +53,11 @@
     <Analyzer Include="/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/BCLExtensions/TargetingPacks/netstandard2.1/analyzers/dotnet/roslyn4.0/cs/System.Text.Json.SourceGeneration.dll" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets/Scripts/Tests/Editor/World/MapCellConfigCatalogTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/UI/MinimapRefreshPolicyTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/Player/PlayerMovementValidatorTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/World/TerrainVertexDistortionCalculatorTests.cs" />
+    <Compile Include="Assets/Scripts/Tests/Editor/World/TerrainCellMaskCalculatorTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/World/DirtyRectSetFuzzTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Networking/ClanProcessorTests.cs" />
     <Compile Include="Assets/Scripts/Tests/Editor/Core/LocalizationServiceTests.cs" />

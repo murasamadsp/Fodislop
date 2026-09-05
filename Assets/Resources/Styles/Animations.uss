@@ -5,21 +5,17 @@
 /* Плавный отклик кнопок при наведении */
 .sci-fi-btn-gold,
 .sci-fi-btn-cyan,
-.sci-fi-btn-dark,
-.sci-fi-slot,
-.sci-fi-clickable {
+.sci-fi-btn-dark {
     transition: background-color var(--dur-base) ease-out, border-color var(--dur-base) ease-out, translate var(--dur-base) ease-out, scale var(--dur-base) ease-out;
 }
 
 .sci-fi-btn-gold:hover,
-.sci-fi-btn-cyan:hover,
-.sci-fi-clickable:hover {
+.sci-fi-btn-cyan:hover {
     translate: 0 -1px;
 }
 
 .sci-fi-btn-gold:active,
-.sci-fi-btn-cyan:active,
-.sci-fi-clickable:active {
+.sci-fi-btn-cyan:active {
     translate: 0 1px;
     scale: 0.98 0.98;
 }
@@ -37,23 +33,4 @@
 .sci-fi-window-anim--shown {
     opacity: 1;
     scale: 1 1;
-}
-
-/* Слоты инвентаря */
-.sci-fi-slot {
-    background-color: var(--surface-slate-dense);
-    border-width: 1px;
-    border-color: var(--border-subtle);
-    border-radius: var(--radius-sm);
-}
-
-.sci-fi-slot:hover {
-    background-color: var(--surface-shelf-dense);
-    border-color: var(--border-cyan);
-}
-
-.sci-fi-slot--selected {
-    border-color: var(--accent-gold);
-    border-width: 2px;
-    background-color: var(--accent-gold-wash);
 }

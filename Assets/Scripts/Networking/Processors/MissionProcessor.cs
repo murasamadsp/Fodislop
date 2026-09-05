@@ -3,35 +3,29 @@
 using Fodinae.Core.Interfaces;
 using MinesServer.Networking.Server.Packets.Mission;
 
-namespace Fodinae.Networking.Processors
+namespace Fodinae.Networking.Processors;
+
+public sealed class MissionProcessor(IPlayerStats playerStats) :
+    IPacketProcessor<MissionInitPacket>,
+    IPacketProcessor<MissionProgressPacket>
 {
-    public class MissionProcessor : IPacketProcessor<MissionInitPacket>, IPacketProcessor<MissionProgressPacket>
+    public void Process(MissionInitPacket packet)
     {
-        private readonly IPlayerStats _playerStats;
-
-        public MissionProcessor(IPlayerStats playerStats)
+        if (string.IsNullOrEmpty(packet.Title))
         {
-            _playerStats = playerStats;
+            playerStats.ClearMission();
+            return;
         }
 
-        public void Process(MissionInitPacket packet)
-        {
-            if (string.IsNullOrEmpty(packet.Title))
-            {
-                _playerStats.ClearMission();
-                return;
-            }
+        playerStats.SetMission(packet.Title, packet.Description, 0);
+    }
 
-            _playerStats.SetMission(packet.Title, packet.Description, 0);
-        }
-
-        public void Process(MissionProgressPacket packet)
+    public void Process(MissionProgressPacket packet)
+    {
+        playerStats.SetMissionProgress(packet.Current);
+        if (packet.Max > 0)
         {
-            _playerStats.SetMissionProgress(packet.Current);
-            if (packet.Max > 0)
-            {
-                _playerStats.SetMissionMaxProgress(packet.Max);
-            }
+            playerStats.SetMissionMaxProgress(packet.Max);
         }
     }
 }

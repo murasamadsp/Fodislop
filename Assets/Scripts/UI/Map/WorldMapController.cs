@@ -31,9 +31,6 @@ namespace Fodinae.UI
 
         private bool _isInMapMode;
         private bool _playerSpawnSubscription;
-
-        public bool IsInMapMode => _isInMapMode;
-
         [Inject]
         private MapModeState _mapModeState = null!;
         [Inject]
@@ -77,6 +74,12 @@ namespace Fodinae.UI
 
         protected void OnDisable()
         {
+            if (_isInMapMode)
+            {
+                ExitMapMode();
+                _mapModeState.SetOpen(false);
+            }
+
             UnsubscribeFromPlayerSpawn();
         }
 
@@ -109,30 +112,7 @@ namespace Fodinae.UI
                 return;
             }
 
-            if (_isInMapMode)
-            {
-                _mapModeState.SetOpen(false);
-            }
-            else
-            {
-                _mapModeState.SetOpen(true);
-            }
-        }
-
-        public void OpenMap()
-        {
-            if (!_isInMapMode)
-            {
-                _mapModeState.SetOpen(true);
-            }
-        }
-
-        public void CloseMap()
-        {
-            if (_isInMapMode)
-            {
-                _mapModeState.SetOpen(false);
-            }
+            _mapModeState.SetOpen(!_mapModeState.IsOpen);
         }
 
         private void OnMapModeChanged(bool open)
@@ -155,17 +135,13 @@ namespace Fodinae.UI
             }
 
             ILocalPlayer? player = _player ?? _localPlayer.Current;
-            if (player == null || !player.HasServerPosition)
+            if (player == null || !player.HasServerPosition || !_mapStorage.IsReady)
             {
+                _mapModeState.SetOpen(false);
                 return;
             }
 
             _player = player;
-
-            if (!_mapStorage.IsReady)
-            {
-                return;
-            }
 
             _isInMapMode = true;
             _cameraFollow.SetScrollEnabled(false);

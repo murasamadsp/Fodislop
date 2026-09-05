@@ -286,17 +286,6 @@ namespace Fodinae.AssetPipeline
         {
             ClearCache();
         }
-
-        public string? GetTextureFolderPath()
-        {
-            if (!_folderInitialized)
-            {
-                InitializeTextureFolderPath();
-            }
-
-            return _textureFolderPath;
-        }
-
         public bool HasTexture(string filename)
         {
             if (!_folderInitialized)

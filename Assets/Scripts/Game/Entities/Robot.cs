@@ -138,30 +138,6 @@ namespace Fodinae.Game
             set => _movement.TargetPosition = value;
         }
 
-        public void SetClanBadge(ushort clanId)
-        {
-            _clanId = (byte)clanId;
-            if (_clanId == 0)
-            {
-                ClearClanBadge();
-                return;
-            }
-
-            _assetLoaderHelper?.LoadClanBadge(_clanId, clanSprite =>
-            {
-                if (clanSprite != null)
-                {
-                    _visuals.SetClanSprite(clanSprite);
-                }
-            });
-        }
-
-        public void ClearClanBadge()
-        {
-            _clanId = 0;
-            _visuals.SetClanSprite(null);
-        }
-
         public float MoveSpeed
         {
             get => _moveSpeed;
@@ -415,6 +391,11 @@ namespace Fodinae.Game
 
         private void LoadMetadataAssets()
         {
+            if (_assetLoader == null || _operations == null)
+            {
+                return;
+            }
+
             AssetLoader.LoadMetadataAssets(
                 _skinPath,
                 _tailPath,

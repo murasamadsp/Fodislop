@@ -22,13 +22,18 @@ namespace Fodinae.World
         private Camera? _mainCamera;
         private IWorldDataStorage _worldStorage = null!;
         private IWorldPersistence _worldPersistence = null!;
+        private IAsyncOperationSupervisor? _operations;
         private bool _hasWorldStorage;
 
         [Inject]
-        public void Construct(IWorldDataStorage worldStorage, IWorldPersistence worldPersistence)
+        public void Construct(
+            IWorldDataStorage worldStorage,
+            IWorldPersistence worldPersistence,
+            IAsyncOperationSupervisor? operations = null)
         {
             _worldStorage = worldStorage;
             _worldPersistence = worldPersistence;
+            _operations = operations;
             _hasWorldStorage = true;
         }
 
@@ -51,9 +56,7 @@ namespace Fodinae.World
         public Action? OnWorldInitialized { get; set; }
         public Action? OnWorldDataLoaded { get; set; }
 
-        private CellConfigurationPacket[]? _cellConfigurations;
-        private Dictionary<CellType, int> _cellToTileGroup = new();
-        private Dictionary<CellType, ushort> _cellMoveSpeeds = new();
+        private readonly MapCellConfigCatalog _cellCatalog = new();
         private string _worldCodeName = string.Empty;
         private string _worldDisplayName = string.Empty;
         private ushort _width;
@@ -68,9 +71,7 @@ namespace Fodinae.World
         public void ResetWorldState()
         {
             IsWorldInitialized = false;
-            _cellConfigurations = null;
-            _cellToTileGroup.Clear();
-            _cellMoveSpeeds.Clear();
+            _cellCatalog.Reset();
             _worldCodeName = string.Empty;
             _worldDisplayName = string.Empty;
             _width = 0;
@@ -141,6 +142,8 @@ namespace Fodinae.World
             }
         }
 
+        private bool _isFlushing;
+
         protected void Update()
         {
             if (!IsWorldInitialized || Time.unscaledTime < _nextMapFlushTime)
@@ -149,12 +152,31 @@ namespace Fodinae.World
             }
 
             _nextMapFlushTime = Time.unscaledTime + DurableMapFlushInterval;
-            if (_worldPersistence.HasDirtyChunks)
+            if (_worldPersistence.HasDirtyChunks && !_isFlushing)
             {
-                // Not durable: see MapStorage.Flush. The fsync belongs to
-                // OnApplicationQuit/Pause/LowMemory above, which still pass the
-                // default. Here it only bought a periodic main-thread stall.
-                _worldPersistence.Flush(durable: false);
+                if (_operations != null)
+                {
+                    _isFlushing = true;
+                    _operations.Run("flush_dirty_chunks", async ct =>
+                    {
+                        try
+                        {
+                            await _worldPersistence.FlushAsync(durable: false, ct);
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            Debug.LogError($"[MapManager] Async flush failed: {ex.Message}");
+                        }
+                        finally
+                        {
+                            _isFlushing = false;
+                        }
+                    });
+                }
+                else
+                {
+                    _worldPersistence.Flush(durable: false);
+                }
             }
         }
 
@@ -178,30 +200,12 @@ namespace Fodinae.World
                     $"WorldInitPacket dimensions are invalid: {packet.Width}x{packet.Height}.");
             }
 
-            ValidateCellConfigurations(packet.Cells);
+            _cellCatalog.LoadConfigurations(packet.Cells, packet.TileGroups);
 
             _worldCodeName = packet.CodeName;
             _worldDisplayName = packet.DisplayName;
             _width = packet.Width;
             _height = packet.Height;
-            _cellConfigurations = packet.Cells;
-
-            _cellToTileGroup.Clear();
-            if (packet.TileGroups != null)
-            {
-                for (int i = 0; i < packet.TileGroups.Length; i++)
-                {
-                    if (packet.TileGroups[i] == null)
-                    {
-                        continue;
-                    }
-
-                    foreach (byte cellId in packet.TileGroups[i])
-                    {
-                        _cellToTileGroup[(CellType)cellId] = i;
-                    }
-                }
-            }
 
             Debug.Log($"[MapManager] World: {packet.DisplayName} ({packet.CodeName}) [{_width}x{_height}]");
 
@@ -238,167 +242,25 @@ namespace Fodinae.World
             Debug.Assert(IsWorldInitialized, "[MapManager] IsWorldInitialized must be true at the end of LoadWorldInit");
         }
 
-        private static void ValidateCellConfigurations(CellConfigurationPacket[]? configurations)
-        {
-            if (configurations == null || configurations.Length == 0)
-            {
-                throw new InvalidDataException(
-                    "WorldInitPacket.Cells is missing or empty; terrain cannot be initialized.");
-            }
+        public void UpdateMovementSpeeds(MovementSpeedPacket packet) => _cellCatalog.UpdateMovementSpeeds(packet);
 
-            for (int index = 0; index < configurations.Length; index++)
-            {
-                CellConfigurationPacket configuration = configurations[index];
-                if (configuration.Animation == CellAnimationType.None)
-                {
-                    continue;
-                }
+        public float GetMoveCooldown(CellType cellType) => _cellCatalog.GetMoveCooldown(cellType);
 
-                if (configuration.AnimationSpeed == 0)
-                {
-                    throw new InvalidDataException(
-                        $"WorldInitPacket.Cells[{index}] ({(CellType)index}) declares " +
-                        "an animated texture with AnimationSpeed=0.");
-                }
-            }
-        }
+        public CellConfigurationPacket GetCellConfig(CellType type) => _cellCatalog.GetCellConfig(type);
 
-        public void UpdateMovementSpeeds(MovementSpeedPacket packet)
-        {
-            foreach (var entry in packet.CooldownMap)
-            {
-                _cellMoveSpeeds[entry.Key] = entry.Value;
-            }
-        }
+        public static bool IsRoundableLoose(CellType type) => MapCellConfigCatalog.IsRoundableLoose(type);
 
-        public float GetMoveCooldown(CellType cellType)
-        {
-            if (!_cellMoveSpeeds.TryGetValue(cellType, out ushort speed))
-            {
-                throw new InvalidOperationException(
-                    $"Movement cooldown for cell type '{cellType}' was not received from the server.");
-            }
+        public bool TryGetTileGroup(CellType type, out int groupId) => _cellCatalog.TryGetTileGroup(type, out groupId);
 
-            if (speed == 0)
-            {
-                throw new InvalidDataException(
-                    $"Movement cooldown for cell type '{cellType}' must be greater than zero.");
-            }
+        public Color GetCellMinimapColor(CellType type) => _cellCatalog.GetCellMinimapColor(type);
 
-            return speed / 1000f;
-        }
+        public int GetAnimationFrameHeight(CellType cellType) => _cellCatalog.GetAnimationFrameHeight(cellType);
 
-        public CellConfigurationPacket GetCellConfig(CellType type)
-        {
-            if (_cellConfigurations == null)
-            {
-                throw new InvalidOperationException(
-                    $"Cell configuration requested for '{type}' before WorldInitPacket was loaded.");
-            }
+        public byte GetAnimationSpeed(CellType cellType) => _cellCatalog.GetAnimationSpeed(cellType);
 
-            if ((int)type < 0 || (int)type >= _cellConfigurations.Length)
-            {
-                throw new InvalidOperationException(
-                    $"Cell type '{type}' has no server configuration. Config count: {_cellConfigurations.Length}.");
-            }
-
-            return _cellConfigurations[(int)type];
-        }
-
-        public int GetConfigLength()
-        {
-            if (_cellConfigurations == null)
-            {
-                throw new InvalidOperationException(
-                    "Cell configuration count requested before WorldInitPacket was loaded.");
-            }
-
-            return _cellConfigurations.Length;
-        }
-
-        private static readonly HashSet<CellType> LooseRockTypes = new()
-        {
-            CellType.BlackBoulder1, CellType.BlackBoulder2, CellType.BlackBoulder3,
-            CellType.MetalBoulder1, CellType.MetalBoulder2, CellType.MetalBoulder3,
-            CellType.WhiteSand, CellType.DarkWhiteSand,
-            CellType.RustySand, CellType.DarkRustySand,
-            CellType.BlackSand, CellType.DarkBlackSand,
-            CellType.BlueSand, CellType.DarkBlueSand,
-            CellType.YellowSand, CellType.DarkYellowSand,
-            CellType.DeepMagmaBoulder, CellType.MilitaryBlockSand,
-            CellType.Lava, CellType.Boulder1, CellType.Boulder2, CellType.Boulder3,
-            CellType.GrayAcid, CellType.PurpleAcid,
-        };
-
-        private static readonly HashSet<CellType> RoundableLooseTypes = new()
-        {
-            CellType.WhiteSand, CellType.DarkWhiteSand,
-            CellType.RustySand, CellType.DarkRustySand,
-            CellType.BlackSand, CellType.DarkBlackSand,
-            CellType.BlueSand, CellType.DarkBlueSand,
-            CellType.YellowSand, CellType.DarkYellowSand,
-            CellType.MilitaryBlockSand,
-            CellType.Lava,
-            CellType.GrayAcid, CellType.PurpleAcid,
-        };
-
-        public static bool IsLooseRockType(CellType type) => LooseRockTypes.Contains(type);
-
-        public static bool IsRoundableLoose(CellType type) => RoundableLooseTypes.Contains(type);
-
-        public bool TryGetTileGroup(CellType type, out int groupId)
-        {
-            return _cellToTileGroup.TryGetValue(type, out groupId);
-        }
-
-        public Color GetCellMinimapColor(CellType type)
-        {
-            var config = GetCellConfig(type);
-            if (config.Color != 0)
-            {
-                int argb = config.Color;
-                byte a = (byte)((argb >> 24) & 0xFF);
-                if (a == 0)
-                {
-                    a = 255;
-                }
-
-                byte r = (byte)((argb >> 16) & 0xFF);
-                byte g = (byte)((argb >> 8) & 0xFF);
-                byte b = (byte)(argb & 0xFF);
-
-                return new Color(r / 255f, g / 255f, b / 255f, a / 255f);
-            }
-
-            return MapBlockColors.GetColor(type);
-        }
-
-        public int GetAnimationFrameHeight(CellType cellType)
-        {
-            var config = GetCellConfig(cellType);
-            return (int)config.FrameOffset * RenderingConstants.CELL_SIZE;
-        }
-
-        public byte GetAnimationSpeed(CellType cellType)
-        {
-            var config = GetCellConfig(cellType);
-            return config.AnimationSpeed;
-        }
-
-        public byte GetFrameOffset(CellType cellType)
-        {
-            var config = GetCellConfig(cellType);
-            return config.FrameOffset;
-        }
-
-        public bool HasAnimation(CellType cellType)
-        {
-            var config = GetCellConfig(cellType);
-            return config.Animation != CellAnimationType.None;
-        }
+        public bool HasAnimation(CellType cellType) => _cellCatalog.HasAnimation(cellType);
 
         public string WorldCodeName => _worldCodeName;
-        public string WorldDisplayName => _worldDisplayName;
         public ushort WorldWidth => _width;
         public ushort WorldHeight => _height;
 

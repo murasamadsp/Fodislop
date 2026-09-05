@@ -11,140 +11,139 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
-namespace Fodinae.Tests.Core
+namespace Fodinae.Tests.Core;
+
+[TestFixture]
+public sealed class ProductionSceneContractValidatorTests
 {
-    [TestFixture]
-    public sealed class ProductionSceneContractValidatorTests
+    private SceneSetup[] _originalSetup = null!;
+    private EditorBuildSettingsScene[] _originalBuildScenes = null!;
+
+    [SetUp]
+    public void SetUp()
     {
-        private SceneSetup[] _originalSetup = null!;
-        private EditorBuildSettingsScene[] _originalBuildScenes = null!;
+        _originalSetup = EditorSceneManager.GetSceneManagerSetup();
+        _originalBuildScenes = EditorBuildSettings.scenes;
+    }
 
-        [SetUp]
-        public void SetUp()
+    [TearDown]
+    public void TearDown()
+    {
+        if (_originalSetup.Length > 0)
         {
-            _originalSetup = EditorSceneManager.GetSceneManagerSetup();
-            _originalBuildScenes = EditorBuildSettings.scenes;
+            EditorSceneManager.RestoreSceneManagerSetup(_originalSetup);
         }
 
-        [TearDown]
-        public void TearDown()
+        EditorBuildSettings.scenes = _originalBuildScenes;
+    }
+
+    [Test]
+    public void EmptyContentScene_ReportsScopeAndDocumentViolations()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var errors = new List<string>();
+
+        ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
+
+        Assert.That(errors.Any(error => error.Contains("exactly one LifetimeScope")), Is.True);
+        Assert.That(errors.Any(error => error.Contains("exactly one UIDocument")), Is.True);
+    }
+
+    [Test]
+    public void EnabledContentCamera_IsRejected()
+    {
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var documentObject = new GameObject("Document");
+        documentObject.AddComponent<UIDocument>();
+        var cameraObject = new GameObject("DisplayCamera");
+        cameraObject.AddComponent<Camera>().enabled = true;
+        SceneManager.MoveGameObjectToScene(documentObject, scene);
+        SceneManager.MoveGameObjectToScene(cameraObject, scene);
+        var errors = new List<string>();
+
+        ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
+
+        Assert.That(errors.Any(error => error.Contains("enabled display camera 'DisplayCamera'")), Is.True);
+    }
+
+    [Test]
+    public void ProductionScenes_AreValid_AndOriginalEditorSetupIsRestored()
+    {
+        SceneSetup[] before = EditorSceneManager.GetSceneManagerSetup();
+        var errors = new List<string>();
+
+        try
         {
-            if (_originalSetup.Length > 0)
+            foreach (EditorBuildSettingsScene buildScene in EditorBuildSettings.scenes.Where(scene => scene.enabled))
             {
-                EditorSceneManager.RestoreSceneManagerSetup(_originalSetup);
-            }
-
-            EditorBuildSettings.scenes = _originalBuildScenes;
-        }
-
-        [Test]
-        public void EmptyContentScene_ReportsScopeAndDocumentViolations()
-        {
-            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            var errors = new List<string>();
-
-            ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
-
-            Assert.That(errors.Any(error => error.Contains("exactly one LifetimeScope")), Is.True);
-            Assert.That(errors.Any(error => error.Contains("exactly one UIDocument")), Is.True);
-        }
-
-        [Test]
-        public void EnabledContentCamera_IsRejected()
-        {
-            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            var documentObject = new GameObject("Document");
-            documentObject.AddComponent<UIDocument>();
-            var cameraObject = new GameObject("DisplayCamera");
-            cameraObject.AddComponent<Camera>().enabled = true;
-            SceneManager.MoveGameObjectToScene(documentObject, scene);
-            SceneManager.MoveGameObjectToScene(cameraObject, scene);
-            var errors = new List<string>();
-
-            ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
-
-            Assert.That(errors.Any(error => error.Contains("enabled display camera 'DisplayCamera'")), Is.True);
-        }
-
-        [Test]
-        public void ProductionScenes_AreValid_AndOriginalEditorSetupIsRestored()
-        {
-            SceneSetup[] before = EditorSceneManager.GetSceneManagerSetup();
-            var errors = new List<string>();
-
-            try
-            {
-                foreach (EditorBuildSettingsScene buildScene in EditorBuildSettings.scenes.Where(scene => scene.enabled))
-                {
-                    EditorSceneManager.OpenScene(buildScene.path, OpenSceneMode.Single);
-                    errors.Clear();
-                    ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
-                    Assert.That(errors, Is.Empty, buildScene.path);
-                }
-            }
-            finally
-            {
-                EditorSceneManager.RestoreSceneManagerSetup(before);
-            }
-
-            SceneSetup[] after = EditorSceneManager.GetSceneManagerSetup();
-            Assert.That(after.Select(item => item.path), Is.EqualTo(before.Select(item => item.path)));
-            Assert.That(after.Select(item => item.isLoaded), Is.EqualTo(before.Select(item => item.isLoaded)));
-            Assert.That(after.Select(item => item.isActive), Is.EqualTo(before.Select(item => item.isActive)));
-        }
-
-        [Test]
-        public void BuildSettingsValidation_AcceptsAuthoredProductionOrder()
-        {
-            Assert.DoesNotThrow(BuildSettingsFix.ValidateScenesInBuildSettings);
-        }
-
-        [Test]
-        public void BuildSettingsValidation_RejectsWrongOrderWithoutRepairingAuthoringData()
-        {
-            EditorBuildSettingsScene[] invalid = EditorBuildSettings.scenes.ToArray();
-            Assert.That(invalid.Length, Is.GreaterThanOrEqualTo(2));
-            (invalid[0], invalid[1]) = (invalid[1], invalid[0]);
-            EditorBuildSettings.scenes = invalid;
-
-            Assert.Throws<System.InvalidOperationException>(
-                BuildSettingsFix.ValidateScenesInBuildSettings);
-            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(invalid[0].path));
-            Assert.That(EditorBuildSettings.scenes[1].path, Is.EqualTo(invalid[1].path));
-        }
-
-        [Test]
-        public void BootstrapMissingAuthoredReference_IsReportedWithoutSavingScene()
-        {
-            Scene bootstrapScene = EditorSceneManager.OpenScene(
-                "Assets/Scenes/Bootstrap.unity",
-                OpenSceneMode.Single);
-            BootstrapLifetimeScope scope = bootstrapScene.GetRootGameObjects()
-                .SelectMany(root => root.GetComponentsInChildren<BootstrapLifetimeScope>(true))
-                .Single();
-            SerializedObject serialized = new(scope);
-            SerializedProperty connection = serialized.FindProperty("_connectionManager");
-            Assert.That(connection, Is.Not.Null);
-            UnityEngine.Object? original = connection.objectReferenceValue;
-
-            try
-            {
-                connection.objectReferenceValue = null;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-                var errors = new List<string>();
-
+                EditorSceneManager.OpenScene(buildScene.path, OpenSceneMode.Single);
+                errors.Clear();
                 ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
+                Assert.That(errors, Is.Empty, buildScene.path);
+            }
+        }
+        finally
+        {
+            EditorSceneManager.RestoreSceneManagerSetup(before);
+        }
 
-                Assert.That(
-                    errors,
-                    Has.Some.Contains("BootstrapLifetimeScope._connectionManager is not assigned"));
-            }
-            finally
-            {
-                connection.objectReferenceValue = original;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
-                EditorSceneManager.MarkSceneDirty(bootstrapScene);
-            }
+        SceneSetup[] after = EditorSceneManager.GetSceneManagerSetup();
+        Assert.That(after.Select(item => item.path), Is.EqualTo(before.Select(item => item.path)));
+        Assert.That(after.Select(item => item.isLoaded), Is.EqualTo(before.Select(item => item.isLoaded)));
+        Assert.That(after.Select(item => item.isActive), Is.EqualTo(before.Select(item => item.isActive)));
+    }
+
+    [Test]
+    public void BuildSettingsValidation_AcceptsAuthoredProductionOrder()
+    {
+        Assert.DoesNotThrow(BuildSettingsFix.ValidateScenesInBuildSettings);
+    }
+
+    [Test]
+    public void BuildSettingsValidation_RejectsWrongOrderWithoutRepairingAuthoringData()
+    {
+        EditorBuildSettingsScene[] invalid = EditorBuildSettings.scenes.ToArray();
+        Assert.That(invalid.Length, Is.GreaterThanOrEqualTo(2));
+        (invalid[0], invalid[1]) = (invalid[1], invalid[0]);
+        EditorBuildSettings.scenes = invalid;
+
+        Assert.Throws<System.InvalidOperationException>(
+            BuildSettingsFix.ValidateScenesInBuildSettings);
+        Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(invalid[0].path));
+        Assert.That(EditorBuildSettings.scenes[1].path, Is.EqualTo(invalid[1].path));
+    }
+
+    [Test]
+    public void BootstrapMissingAuthoredReference_IsReportedWithoutSavingScene()
+    {
+        Scene bootstrapScene = EditorSceneManager.OpenScene(
+            "Assets/Scenes/Bootstrap.unity",
+            OpenSceneMode.Single);
+        BootstrapLifetimeScope scope = bootstrapScene.GetRootGameObjects()
+            .SelectMany(root => root.GetComponentsInChildren<BootstrapLifetimeScope>(true))
+            .Single();
+        SerializedObject serialized = new(scope);
+        SerializedProperty connection = serialized.FindProperty("_connectionManager");
+        Assert.That(connection, Is.Not.Null);
+        UnityEngine.Object? original = connection.objectReferenceValue;
+
+        try
+        {
+            connection.objectReferenceValue = null;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            var errors = new List<string>();
+
+            ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
+
+            Assert.That(
+                errors,
+                Has.Some.Contains("BootstrapLifetimeScope._connectionManager is not assigned"));
+        }
+        finally
+        {
+            connection.objectReferenceValue = original;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorSceneManager.MarkSceneDirty(bootstrapScene);
         }
     }
 }

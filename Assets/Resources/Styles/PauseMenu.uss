@@ -10,15 +10,11 @@
     bottom: 0;
     justify-content: center;
     align-items: center;
+    background-color: transparent;
 }
 
 .pause-dimmer {
-    position: absolute;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--surface-inset);
+    display: none;
 }
 
 .pause-panel {

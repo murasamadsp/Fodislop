@@ -1,7 +1,5 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements">
-    <ui:VisualElement name="PauseOverlay" class="pause-overlay ui-overlay ui-overlay--modal">
-        <ui:VisualElement name="Dimmer" class="pause-dimmer" />
-
+    <ui:VisualElement name="PauseOverlay" class="pause-overlay ui-overlay">
         <ui:VisualElement name="MainPage" class="pause-panel pause-page">
             <ui:Label name="PauseTitle"  text="" class="pause-title" />
             <ui:ScrollView name="MainPageScroll" class="pause-scroll" mode="Vertical" horizontal-scroller-visibility="Hidden" vertical-scroller-visibility="Auto">

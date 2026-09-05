@@ -11,16 +11,12 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
 {
-    private readonly Action<ServerPacket> _sendPacket = sendPacket ??
-        throw new ArgumentNullException(nameof(sendPacket));
     private readonly ChatMessagePacket[] _seedMessages = CreateSeedMessages();
     private System.Drawing.Color _chatColor =
         System.Drawing.Color.FromArgb(255, 200, 180, 100);
 
-    public void ChangeColor(ChangeChatColorPacket packet)
-    {
+    public void ChangeColor(ChangeChatColorPacket packet) =>
         _chatColor = packet.Color;
-    }
 
     public void SendHistory(QueryChatHistoryPacket packet)
     {
@@ -28,17 +24,15 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
         ChatMessagePacket[] filtered = _seedMessages
             .Where(message => startFrom == 0 || message.Timestamp >= startFrom)
             .ToArray();
-        _sendPacket(new ServerPacket(new ChatMessageListPacket(packet.Tag, filtered)));
+        sendPacket(new ServerPacket(new ChatMessageListPacket(packet.Tag, filtered)));
     }
 
     public void SendLocal(
         SendLocalChatMessagePacket packet,
         ushort botId,
         ushort x,
-        ushort y)
-    {
-        _sendPacket(new ServerPacket(new LocalChatMessagePacket(botId, x, y, packet.Message)));
-    }
+        ushort y) =>
+        sendPacket(new ServerPacket(new LocalChatMessagePacket(botId, x, y, packet.Message)));
 
     public void SendGlobal(SendChatMessagePacket packet)
     {
@@ -51,7 +45,7 @@ internal sealed class DummyChatResponder(Action<ServerPacket> sendPacket)
             "You",
             _chatColor,
             packet.Message);
-        _sendPacket(new ServerPacket(new ChatMessageListPacket("global", new[] { message })));
+        sendPacket(new ServerPacket(new ChatMessageListPacket("global", [message])));
     }
 
     private static ChatMessagePacket[] CreateSeedMessages()

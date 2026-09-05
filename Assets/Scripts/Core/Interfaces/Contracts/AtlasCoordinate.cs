@@ -24,9 +24,6 @@ namespace Fodinae.World;
         public float V1 => (float)AtlasY / AtlasHeight;
         public float U2 => (float)(AtlasX + Width) / AtlasWidth;
         public float V2 => (float)(AtlasY + Height) / AtlasHeight;
-
-        public Rect UVRect => new Rect(U1, V1, (float)Width / AtlasWidth, (float)Height / AtlasHeight);
-
         public AtlasCoordinate(int atlasX, int atlasY, int width, int height, int atlasWidth, int atlasHeight)
         {
             AtlasX = atlasX;
@@ -66,75 +63,6 @@ namespace Fodinae.World;
         {
             return !left.Equals(right);
         }
-
-        /// <summary>
-        /// Get UV coordinates for a specific variation.
-        /// </summary>
-        /// <param name="variation">The cell variation.</param>
-        /// <param name="variationSize">Size of each variation in pixels.</param>
-        /// <returns>UV coordinates for the variation.</returns>
-        public AtlasCoordinate WithVariation(CellVariation variation, int variationSize)
-        {
-            if (!variation.HasVariations)
-            {
-                return this;
-            }
-
-            int variationX = variation.Horizontal ? variationSize : 0;
-            int variationY = variation.Vertical ? variationSize : 0;
-
-            return new AtlasCoordinate(
-                AtlasX + variationX,
-                AtlasY + variationY,
-                Width,
-                Height,
-                AtlasWidth,
-                AtlasHeight);
-        }
-
-        /// <summary>
-        /// Get UV coordinates for a specific animation frame.
-        /// </summary>
-        /// <param name="frameIndex">The animation frame index.</param>
-        /// <param name="framesPerRow">Number of frames per row in the texture.</param>
-        /// <param name="frameSize">Size of each frame.</param>
-        /// <returns>UV coordinates for the animation frame.</returns>
-        public AtlasCoordinate WithAnimationFrame(int frameIndex, int framesPerRow, int frameSize)
-        {
-            int frameX = (frameIndex % framesPerRow) * frameSize;
-            int frameY = (frameIndex / framesPerRow) * frameSize;
-
-            return new AtlasCoordinate(
-                AtlasX + frameX,
-                AtlasY + frameY,
-                Width,
-                Height,
-                AtlasWidth,
-                AtlasHeight);
-        }
-
-        /// <summary>
-        /// Get UV coordinates for a specific animation frame using server-provided frame height.
-        /// </summary>
-        /// <param name="frameIndex">The animation frame index.</param>
-        /// <param name="frameHeightInTiles">Frame height in tiles (each tile is CELL_SIZE pixels).</param>
-        /// <returns>UV coordinates for the animation frame.</returns>
-        public AtlasCoordinate WithAnimationFrameFromServer(int frameIndex, int frameHeightInTiles)
-        {
-            int frameHeightInPixels = frameHeightInTiles * RenderingConstants.CELL_SIZE;
-
-            // Calculate frame position (assuming frames are stacked vertically)
-            int frameY = frameIndex * frameHeightInPixels;
-
-            return new AtlasCoordinate(
-                AtlasX,
-                AtlasY + frameY,
-                Width,
-                frameHeightInPixels,
-                AtlasWidth,
-                AtlasHeight);
-        }
-
         public override string ToString()
         {
             return $"AtlasCoord(X:{AtlasX}, Y:{AtlasY}, W:{Width}, H:{Height}, Atlas:{AtlasWidth}x{AtlasHeight})";

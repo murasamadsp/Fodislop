@@ -2,27 +2,25 @@
 
 using System;
 
-namespace Fodinae.Core.Localization
+namespace Fodinae.Core.Localization;
+public interface ILocalizationService
 {
-    public interface ILocalizationService
-    {
-        string CurrentLanguage { get; }
+    string CurrentLanguage { get; }
 
-        event Action? OnLanguageChanged;
+    event Action? OnLanguageChanged;
 
-        /// <summary>
-        /// Регистрирует локализуемую UI-сущность: сервис сразу применяет её
-        /// текст и переприменяет при каждой смене языка. Вьюха не подписывается
-        /// на OnLanguageChanged сама — это обязанность сервиса.
-        /// </summary>
-        void RegisterLocalizable(ILocalizableUI target);
+    /// <summary>
+    /// Регистрирует локализуемую UI-сущность: сервис сразу применяет её
+    /// текст и переприменяет при каждой смене языка. Вьюха не подписывается
+    /// на OnLanguageChanged сама — это обязанность сервиса.
+    /// </summary>
+    void RegisterLocalizable(ILocalizableUI target);
 
-        void UnregisterLocalizable(ILocalizableUI target);
+    void UnregisterLocalizable(ILocalizableUI target);
 
-        void SetLanguage(string languageCode);
+    void SetLanguage(string languageCode);
 
-        string Get(string key, params object[] args);
+    string Get(string key, params object[] args);
 
-        bool HasKey(string key);
-    }
+    bool HasKey(string key);
 }

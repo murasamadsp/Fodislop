@@ -64,22 +64,6 @@ public sealed class RobotAssetLoader
                 supervisorToken));
     }
 
-    public void LoadClanBadge(byte clanId, Action<Sprite?> onClanLoaded)
-    {
-        if (_cts == null)
-        {
-            return;
-        }
-
-        CancellationToken entityToken = _cts.Token;
-        _operations.Run(
-            "load_robot_clan_badge",
-            supervisorToken => RunWithLinkedCancellationAsync(
-                token => LoadClanAsync(clanId, onClanLoaded, token),
-                entityToken,
-                supervisorToken));
-    }
-
     private async UniTask LoadMetadataAssetsAsync(
         string skinPath,
         string tailPath,

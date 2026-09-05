@@ -17,7 +17,7 @@
         </ui:VisualElement>
 
         <!-- ════════════ ПОЛНЫЙ ИНВЕНТАРЬ (9x6) ════════════ -->
-        <ui:VisualElement name="FullInventoryPanel" class="sci-fi-panel sci-fi-panel--tech inv-full-panel sci-fi-window-anim" style="display: none;" picking-mode="Position">
+        <ui:VisualElement name="FullInventoryPanel" class="sci-fi-panel sci-fi-panel--tech inv-full-panel sci-fi-window-anim is-hidden" picking-mode="Position">
             <!-- Хэдер -->
             <ui:VisualElement class="sci-fi-header">
                 <ui:VisualElement class="inv-header-left">

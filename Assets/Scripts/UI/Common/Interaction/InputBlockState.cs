@@ -1,6 +1,9 @@
 #nullable enable
 
 using Fodinae.Core.Interfaces;
+using Fodinae.Tools.Imgui;
+using UnityEngine.InputSystem;
+
 namespace Fodinae.UI;
 
 public sealed class InputBlockState : IInputBlocker
@@ -23,7 +26,19 @@ public sealed class InputBlockState : IInputBlocker
         _uiInput.IsInputBlocked ||
         _windows.HasOpenWindows ||
         _windows.IsModalShowing ||
-        _mapMode.IsOpen;
+        _mapMode.IsOpen ||
+        IsToolInputCaptured();
 
     public string? TopWindowTag => _windows.TopWindowTag;
+
+    private static bool IsToolInputCaptured()
+    {
+        if (ToolWindows.HasKeyboardCapture || ToolWindows.HasPointerCapture)
+        {
+            return true;
+        }
+
+        Pointer? pointer = Pointer.current;
+        return pointer != null && ToolWindows.ContainsScreenPoint(pointer.position.ReadValue());
+    }
 }

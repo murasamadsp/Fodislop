@@ -50,13 +50,6 @@ public sealed class AssetBatchDispatcher : IDisposable
         string clean = filename.TrimStart('/').ToLowerInvariant();
         _missingAssets.TryAdd(clean, 0);
     }
-
-    public void RemoveMissing(string filename)
-    {
-        string clean = filename.TrimStart('/').ToLowerInvariant();
-        _missingAssets.TryRemove(clean, out _);
-    }
-
     public void ClearMissing() => _missingAssets.Clear();
 
     public bool TryReportFailure(string filename) =>

@@ -479,14 +479,8 @@ namespace Fodinae.UI.HUD.Inventory.View
         private void ToggleInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
-            if (_fullInventoryPanel != null)
-            {
-                _fullInventoryPanel.style.display = _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            }
+            UIVisibilityAnimator.SetHidden(_fullInventoryPanel, !_isInventoryOpen);
         }
-
-        public IInventoryModel? GetModel() => _model;
-
         private void ShowItemInfo(ItemData item)
         {
             _tooltipName.text = _loc!.Get("inventory.tooltip_item", item.Name ?? item.ItemType.ToString(), item.ItemType, item.Quantity);

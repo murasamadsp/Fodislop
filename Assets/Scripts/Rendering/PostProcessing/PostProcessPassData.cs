@@ -20,7 +20,8 @@ internal sealed class PostProcessPassData
     public TextureHandle[] BloomDownTextures = null!;
     public TextureHandle[] BloomUpTextures = null!;
     public TextureHandle HistoryTexture;
-    public RenderTextureDescriptor Descriptor;
+    public int Width;
+    public int Height;
 
     public bool BloomActive;
     public float BloomThreshold;
@@ -46,6 +47,19 @@ internal sealed class PostProcessPassData
     public float Saturation;
     public float Gamma;
     public float HdrPaperWhiteScale;
+    public float HdrPeakBrightnessScale;
+    public int DisplayTransform;
+    public float ToneMappingWhitePoint;
+    public Vector4 CurveShape;
+    public Vector4 CurveRange;
+    public int PostDebugView;
+    public float CompareSplit;
+    public Vector2 WhiteBalance;
+
+    public int OutputGamut;
+    public Vector4 CdlSlope;
+    public Vector4 CdlOffset;
+    public Vector4 CdlPower;
 
     public bool EigengrauActive;
     public float EigengrauIntensity;

@@ -14,9 +14,6 @@ public sealed class RobotCuller
     private const float OffscreenCullSqrDistance = OffscreenCullDistance * OffscreenCullDistance;
 
     private bool _isCulled;
-
-    public bool IsCulled => _isCulled;
-
     public bool CheckAndApply(
         Transform transform,
         Camera? camera,

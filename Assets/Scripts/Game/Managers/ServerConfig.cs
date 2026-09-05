@@ -24,20 +24,14 @@ namespace Fodinae.Game.Managers
 
         public bool IsInitialized => _isInitialized;
 
-        public event Action? OnInitialized;
+        public event Action? OnInitialized
+        {
+            add => value?.Invoke();
+            remove { }
+        }
 
         public float DigCooldown => _digCooldown;
         public int MaxGlobalChatLength => _maxGlobalChatLength;
         public int MaxLocalChatLength => _maxLocalChatLength;
-
-        public void ApplyValues(float digCooldown, int maxGlobalChatLength, int maxLocalChatLength)
-        {
-            _digCooldown = digCooldown;
-            _maxGlobalChatLength = maxGlobalChatLength;
-            _maxLocalChatLength = maxLocalChatLength;
-            _isInitialized = true;
-            OnInitialized?.Invoke();
-            Debug.Log($"{TAG} Updated values: DigCooldown={DigCooldown}, MaxGlobalChat={MaxGlobalChatLength}, MaxLocalChat={MaxLocalChatLength}");
-        }
     }
 }

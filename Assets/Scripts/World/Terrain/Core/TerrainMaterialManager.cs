@@ -25,8 +25,8 @@ public sealed class TerrainMaterialManager
     private static readonly int WorldLightTexturePropertyId = Shader.PropertyToID("_WorldLightTexture");
     private static readonly int WorldLightRectPropertyId = Shader.PropertyToID("_WorldLightRect");
 
-    private Material[] _materials = Array.Empty<Material>();
-    private List<int>[] _subMeshIndices = Array.Empty<List<int>>();
+    private Material[] _materials = [];
+    private List<int>[] _subMeshIndices = [];
     private Shader? _terrainShader;
     private int _lastAtlasCount = -1;
     private bool _lightingBindingValidated;
@@ -34,9 +34,6 @@ public sealed class TerrainMaterialManager
     public Material[] Materials => _materials;
 
     public List<int>[] SubMeshIndices => _subMeshIndices;
-
-    public bool LightingBindingValidated => _lightingBindingValidated;
-
     public Shader? TerrainShader
     {
         get => _terrainShader;

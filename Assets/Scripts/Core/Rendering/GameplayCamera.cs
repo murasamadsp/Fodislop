@@ -78,10 +78,4 @@ public static class GameplayCamera
 
         return null;
     }
-
-    public static Camera? ResolveIn(Scene scene)
-    {
-        _ = scene;
-        return Resolve();
-    }
 }

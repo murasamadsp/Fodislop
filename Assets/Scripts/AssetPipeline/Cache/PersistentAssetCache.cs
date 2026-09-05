@@ -103,7 +103,23 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
             gate.Release();
         }
     }
+    private static void SaveAssetCore(string assetPath, byte[] data, string etag)
+    {
+        string manifestPath = GetManifestPath(assetPath);
 
+        string? directory = Path.GetDirectoryName(assetPath);
+        if (directory == null)
+        {
+            throw new InvalidOperationException(
+                $"Asset cache path has no parent directory: '{assetPath}'.");
+        }
+
+        Directory.CreateDirectory(directory);
+        WriteAtomically(assetPath, data);
+        WriteAtomically(manifestPath, PersistentAssetCacheEntryManifest.Create(data, etag).Serialize());
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
     public void SaveAsset(string filename, byte[] data, string etag)
     {
         if (string.IsNullOrWhiteSpace(filename))
@@ -127,23 +143,6 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         {
             gate.Release();
         }
-    }
-
-    private static void SaveAssetCore(string assetPath, byte[] data, string etag)
-    {
-        string manifestPath = GetManifestPath(assetPath);
-
-        string? directory = Path.GetDirectoryName(assetPath);
-        if (directory == null)
-        {
-            throw new InvalidOperationException(
-                $"Asset cache path has no parent directory: '{assetPath}'.");
-        }
-
-        Directory.CreateDirectory(directory);
-        WriteAtomically(assetPath, data);
-        WriteAtomically(manifestPath, PersistentAssetCacheEntryManifest.Create(data, etag).Serialize());
-        DeleteIfExists(GetLegacyETagPath(assetPath));
     }
 
     public async UniTask SaveAssetAsync(string filename, byte[] data, string etag)
@@ -187,26 +186,7 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         await WriteAtomicallyAsync(
             manifestPath,
             PersistentAssetCacheEntryManifest.Create(data, etag).Serialize());
-        DeleteIfExists(GetLegacyETagPath(assetPath));
     }
-
-    public string? GetETag(string filename)
-    {
-        string assetPath = GetAssetPath(filename);
-        SemaphoreSlim gate = GetEntryGate(assetPath);
-        gate.Wait();
-        try
-        {
-            return ReadVerifiedAsset(assetPath, out PersistentAssetCacheEntryManifest manifest) != null
-                ? manifest.ETag
-                : null;
-        }
-        finally
-        {
-            gate.Release();
-        }
-    }
-
     public async UniTask<string?> GetETagAsync(string filename)
     {
         string assetPath = GetAssetPath(filename);
@@ -228,9 +208,33 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Architecture", "Member used by editor tests")]
+    public string? GetETag(string filename)
+    {
+        string assetPath = GetAssetPath(filename);
+        SemaphoreSlim gate = GetEntryGate(assetPath);
+        gate.Wait();
+        try
+        {
+            byte[]? payload = ReadVerifiedAsset(assetPath, out PersistentAssetCacheEntryManifest manifest);
+            if (payload == null)
+            {
+                return null;
+            }
+
+            return manifest.ETag;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public bool HasAsset(string filename)
     {
-        return GetAsset(filename) != null;
+        string assetPath = GetAssetPath(filename);
+        string manifestPath = GetManifestPath(assetPath);
+        return File.Exists(assetPath) && File.Exists(manifestPath);
     }
 
     public void RemoveAsset(string filename)
@@ -275,8 +279,6 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
         _entryGates.GetOrAdd(assetPath, _ => new SemaphoreSlim(1, 1));
 
     private static string GetManifestPath(string assetPath) => assetPath + ".entry";
-
-    private static string GetLegacyETagPath(string assetPath) => assetPath + ".etag";
 
     private static byte[]? ReadVerifiedAsset(
         string assetPath,
@@ -338,7 +340,6 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
     {
         DeleteIfExists(assetPath);
         DeleteIfExists(GetManifestPath(assetPath));
-        DeleteIfExists(GetLegacyETagPath(assetPath));
     }
 
     private static void DeleteIfExists(string path)
