@@ -3,7 +3,7 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Lifecycle;
-using TMPro;
+using Fodinae.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Game;
@@ -13,8 +13,7 @@ namespace Fodinae.Game;
 /// </summary>
 public sealed class RobotNameplate
 {
-    private static TMP_FontAsset? _s_nameplateFont;
-    private TextMeshPro? _nicknameText;
+    private IWorldLabel? _nicknameText;
     private Vector3 _lastLabelsPosition;
     private bool _hasUpdatedLabels;
 
@@ -23,7 +22,8 @@ public sealed class RobotNameplate
         uint botId,
         string nickname,
         bool isLocalPlayer,
-        ISceneObjectFactory sceneObjects)
+        ISceneObjectFactory sceneObjects,
+        IWorldLabels labels)
     {
         Transform? existingNickname = robotTransform.Find("Nickname");
         if (isLocalPlayer)
@@ -36,65 +36,21 @@ public sealed class RobotNameplate
             return;
         }
 
-        GameObject textGo;
         if (existingNickname != null)
         {
-            textGo = existingNickname.gameObject;
-        }
-        else if (sceneObjects != null)
-        {
-            textGo = sceneObjects.Create("Nickname", RuntimeOwner.FloatingUI);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"[RobotNameplate] ISceneObjectFactory was not injected before creating nickname for bot {botId}.");
+            existingNickname.gameObject.SetActive(false);
         }
 
-        Transform? floatingOwner = sceneObjects.GetOwner(RuntimeOwner.FloatingUI);
-        if (floatingOwner != null)
-        {
-            textGo.transform.SetParent(floatingOwner, worldPositionStays: true);
-        }
-
-        _nicknameText = textGo.GetComponent<TextMeshPro>() ?? textGo.AddComponent<TextMeshPro>();
-        textGo.SetActive(true);
-        _nicknameText.alignment = TextAlignmentOptions.TopLeft;
-        _nicknameText.rectTransform.pivot = new Vector2(0f, 1f);
-        _nicknameText.fontSize = 6.4f;
-        _nicknameText.textWrappingMode = TextWrappingModes.NoWrap;
-        _nicknameText.overflowMode = TextOverflowModes.Overflow;
-        _nicknameText.color = Color.white;
-
-        // The project's UI fonts (Exo2/Unbounded/JetBrainsMono) are TextCore
-        // FontAssets for UI Toolkit and cannot feed a TMPro text object (their
-        // runtime type is FontAsset, not TMP_FontAsset; TMP_Text.font needs the
-        // latter). World-space text uses a dedicated mono TMP font built from
-        // JetBrainsMono (keeps the intended mono look) which has the Noto Sans
-        // SC/TC TMP fonts as its CJK fallback chain.
-        if (_nicknameText.font == null)
-        {
-            _s_nameplateFont ??= Resources.Load<TMP_FontAsset>("Fonts/JetBrainsMono_TMP") ??
-                                Resources.Load<TMP_FontAsset>("Fonts/NotoSansSC_TMP") ??
-                                TMP_Settings.defaultFontAsset;
-            if (_s_nameplateFont != null)
-            {
-                _nicknameText.font = _s_nameplateFont;
-            }
-        }
-
-        _nicknameText.text = !string.IsNullOrEmpty(nickname) ? nickname : string.Empty;
-
-        MeshRenderer textRenderer = _nicknameText.GetComponent<MeshRenderer>() ??
-            throw new InvalidOperationException($"[RobotNameplate] Nickname MeshRenderer is missing for bot {botId}.");
-        UnityRenderLayerContracts.ApplyWorldUI(textRenderer, 100);
+        _nicknameText ??= labels.Create(chatBubble: false);
+        _nicknameText.SetVisible(true);
+        _nicknameText.SetText(nickname ?? string.Empty);
     }
 
     public void SetText(string text, bool isLocalPlayer)
     {
         if (_nicknameText != null)
         {
-            _nicknameText.text = isLocalPlayer ? string.Empty : text;
+            _nicknameText.SetText(isLocalPlayer ? string.Empty : text);
         }
     }
 
@@ -102,19 +58,7 @@ public sealed class RobotNameplate
     {
         if (_nicknameText != null)
         {
-            _nicknameText.enabled = enabled;
-        }
-    }
-
-    public void ApplyLayer()
-    {
-        if (_nicknameText != null)
-        {
-            MeshRenderer? nicknameRenderer = _nicknameText.GetComponent<MeshRenderer>();
-            if (nicknameRenderer != null)
-            {
-                UnityRenderLayerContracts.ApplyWorldUI(nicknameRenderer, 100);
-            }
+            _nicknameText.SetVisible(enabled);
         }
     }
 
@@ -129,7 +73,7 @@ public sealed class RobotNameplate
         if (_nicknameText != null)
         {
             Vector3 topRight = new(robotPosition.x + 0.5f, robotPosition.y + 0.5f, robotPosition.z);
-            _nicknameText.transform.SetPositionAndRotation(topRight, Quaternion.identity);
+            _nicknameText.SetPosition(topRight);
         }
 
         if (clanTransform != null)
@@ -150,7 +94,7 @@ public sealed class RobotNameplate
     {
         if (_nicknameText != null)
         {
-            UnityEngine.Object.Destroy(_nicknameText.gameObject);
+            _nicknameText.Dispose();
             _nicknameText = null;
         }
     }

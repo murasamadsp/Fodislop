@@ -167,6 +167,7 @@ namespace Fodinae.Core
             builder.Register<GraphicsSettingsController>(Lifetime.Singleton);
             builder.Register<MapModeState>(Lifetime.Singleton);
             builder.Register<ChatEventGateway>(Lifetime.Singleton);
+            builder.RegisterEntryPoint<WorldLabels>().As<IWorldLabels>();
             builder.Register<ServerWindowPresenter>(Lifetime.Singleton);
             builder.Register<InputBlockState>(Lifetime.Singleton).As<IInputBlocker>();
             builder.Register<ProgrammatorData>(Lifetime.Singleton);

@@ -27,11 +27,14 @@ namespace Fodinae.Rendering.PostProcessing
         private Settings _settings = new();
 
         private PostProcessRenderPass? _pass;
+        private PostProcessRenderPass? _displayPass;
         private ScopesRenderPass? _scopesPass;
         private Camera? _mainCamera;
 
         public override void Create()
         {
+            _displayPass?.Dispose();
+            _displayPass = null;
             _pass?.Dispose();
             _pass = null;
             _scopesPass?.Dispose();
@@ -64,6 +67,8 @@ namespace Fodinae.Rendering.PostProcessing
 
             _pass = new PostProcessRenderPass(computeShader);
             _pass.ConfigureInput(ScriptableRenderPassInput.Color);
+            _displayPass = new PostProcessRenderPass(computeShader, displayPass: true);
+            _displayPass.ConfigureInput(ScriptableRenderPassInput.Color);
 
             ComputeShader? scopesShader = Resources.Load<ComputeShader>(
                 ProjectRuntimeContracts.ResourcePaths.ScopesCompute);
@@ -124,6 +129,7 @@ namespace Fodinae.Rendering.PostProcessing
             }
 
             renderer.EnqueuePass(_pass);
+            renderer.EnqueuePass(_displayPass!);
             if (_scopesPass != null && ScopesRenderPass.Enabled)
             {
                 renderer.EnqueuePass(_scopesPass);
@@ -132,6 +138,8 @@ namespace Fodinae.Rendering.PostProcessing
 
         protected override void Dispose(bool disposing)
         {
+            _displayPass?.Dispose();
+            _displayPass = null;
             _pass?.Dispose();
             _pass = null;
             _scopesPass?.Dispose();

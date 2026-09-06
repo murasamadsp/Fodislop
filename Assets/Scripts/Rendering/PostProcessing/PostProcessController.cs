@@ -23,8 +23,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         private Camera? _mainCamera;
         private bool _volumeSetupCompleted;
-        private WorldUiOverlayCameraRig _cameraRig = null!;
-        private bool _hasWorldUIProjection;
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -164,7 +162,6 @@ namespace Fodinae.Rendering.PostProcessing
         private void Awake()
         {
             _mainCamera = _gameplayCamera?.Camera;
-            _cameraRig = new WorldUiOverlayCameraRig(_sceneObjects);
         }
 
         private void OnEnable()
@@ -191,8 +188,6 @@ namespace Fodinae.Rendering.PostProcessing
             PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
             PostProcessRuntimeState.CompareSplit = 0f;
             PostProcessRuntimeState.SetMainCamera(null);
-            _cameraRig?.DisableOverlay();
-            _cameraRig?.ReleaseWorldUILayer();
         }
 
         private void OnDestroy()
@@ -363,15 +358,6 @@ namespace Fodinae.Rendering.PostProcessing
                     ? PostProcessLook.MotionBlur.Intensity
                     : 0f;
 
-            // Слой и стек камеры интерфейса пересобираются после применения
-            // конфига: смена эффектов может переключить постпроцесс на
-            // основной камере, а наложенная обязана остаться вне его.
-            Camera? configured = _cameraRig?.ConfiguredMainCamera;
-            if (configured != null)
-            {
-                _cameraRig!.EnsureCameraSetup(configured, RequireVolume());
-            }
-
             PostProcessRuntimeState.InvalidateTemporalHistory();
         }
 
@@ -454,25 +440,16 @@ namespace Fodinae.Rendering.PostProcessing
             }
         }
 
-        private void LateUpdate()
+        private void EnsureCameraSetup(Camera mainCamera)
         {
-            using var marker = _PostProcessLateUpdateMarker.Auto();
-            if (_mainCamera == null)
+            HDROutput.ConfigureCamera(mainCamera);
+            if (mainCamera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
             {
-                _mainCamera = _gameplayCamera?.Camera;
+                cameraData.volumeLayerMask = (1 << RequireVolume().gameObject.layer) |
+                    (1 << mainCamera.gameObject.layer);
+                cameraData.volumeTrigger = mainCamera.transform;
             }
-
-            Camera? mainCamera = _cameraRig.ConfiguredMainCamera ?? _mainCamera;
-            if (mainCamera == null)
-            {
-                return;
-            }
-
-            _cameraRig.Sync(mainCamera, RequireVolume());
         }
-
-        private void EnsureCameraSetup(Camera mainCamera) =>
-            _cameraRig.EnsureCameraSetup(mainCamera, RequireVolume());
 
         private Volume RequireVolume() =>
             _volume ?? throw new InvalidOperationException(

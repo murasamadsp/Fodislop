@@ -73,6 +73,9 @@ namespace Fodinae.Game
         private RobotLighting _lighting = null!;
         private RobotVisuals _visuals = null!;
         private readonly RobotNameplate _nameplate = new();
+
+        [Inject]
+        private IWorldLabels _worldLabels = null!;
         private readonly RobotMovement _movement = new();
 
         private bool _visualElementsInitialized;
@@ -176,7 +179,6 @@ namespace Fodinae.Game
 
         protected void OnEnable()
         {
-            ApplyWorldUILayer();
             if (!Application.isPlaying ||
                 (IsLocalPlayer ?
                     _localPlayer != null && _localPlayer.Current is { HasServerPosition: true } :
@@ -192,6 +194,7 @@ namespace Fodinae.Game
 
         protected void OnDisable()
         {
+            _nameplate.SetEnabled(false);
             _lighting.Remove(_lightingEngine);
             _visuals.SetTentaclesActive(false);
         }
@@ -204,7 +207,7 @@ namespace Fodinae.Game
             }
 
             _visualElementsInitialized = true;
-            _nameplate.Initialize(transform, _botId, _nickname, IsLocalPlayer, _sceneObjects);
+            _nameplate.Initialize(transform, _botId, _nickname, IsLocalPlayer, _sceneObjects, _worldLabels);
             _visuals.EnsureClanIcon(_sceneObjects, _botId);
         }
 
@@ -212,7 +215,6 @@ namespace Fodinae.Game
 
         public void SetAuraWanted(bool wanted) => _visuals?.SetAuraWanted(wanted, _sceneObjects);
 
-        private void ApplyWorldUILayer() => _nameplate.ApplyLayer();
 
         protected void Start()
         {

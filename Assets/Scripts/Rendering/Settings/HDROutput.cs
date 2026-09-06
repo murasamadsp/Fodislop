@@ -222,7 +222,7 @@ public static class HDROutput
         {
             builder.Append(" | HDR output: ").Append(cameraData.allowHDROutput)
                 .Append(" | Unity PP: ")
-                .Append(cameraData.renderPostProcessing ? "ON (!)" : "OFF (custom only)");
+                .Append(cameraData.renderPostProcessing ? "ON (URP output)" : "OFF");
         }
         else
         {
@@ -247,16 +247,14 @@ public static class HDROutput
         {
             HDROutputSettings output = HDROutputSettings.main;
 
-            // Only enable HDR on the camera if the user enabled it in settings
-            // AND the connected display actually supports and runs HDR.
-            cameraData.allowHDROutput = Enabled &&
-                output.available && output.active;
+            // Match the actual swapchain while an asynchronous mode change
+            // is pending; SDR numbers must never be sent to an HDR surface.
+            cameraData.allowHDROutput = output.available && output.active;
 
-            // Fodinae has one post-processing chain: the custom
-            // renderer feature. URP FinalBlit still performs the
-            // mandatory display color-space conversion and transfer
-            // encoding; that output step is not a second PP stack.
-            cameraData.renderPostProcessing = false;
+            // Artistic effects run before URP. URP owns tone mapping,
+            // display primaries, UI composition and transfer encoding.
+            cameraData.renderPostProcessing = true;
+            cameraData.dithering = true;
         }
     }
 }

@@ -178,56 +178,10 @@ internal sealed class GradingLayerControlsDrawer
 
     private void DrawCurveControls()
     {
-        using (new GUILayout.HorizontalScope())
-        {
-            if (GUILayout.Toggle(
-                    _state.Transform == DisplayTransform.Fodinae,
-                    "кривая",
-                    ToolTheme.SegmentedButton))
-            {
-                _state.Transform = DisplayTransform.Fodinae;
-            }
-
-            if (GUILayout.Toggle(
-                    _state.Transform == DisplayTransform.None,
-                    "без кривой",
-                    ToolTheme.SegmentedButton))
-            {
-                _state.Transform = DisplayTransform.None;
-            }
-        }
-
-        _state.WhitePoint = Slider(
-            "whitePoint", "белая точка", _state.WhitePoint,
-            ColorGradeState.WhitePointMin, ColorGradeState.WhitePointMax);
-        _state.GreyOut = Slider(
-            "greyOut", "серое на выходе", _state.GreyOut,
-            ColorGradeState.GreyOutMin, ColorGradeState.GreyOutMax);
-        _state.CurveSlope = Slider(
-            "curveSlope", "наклон у серого", _state.CurveSlope,
-            ColorGradeState.CurveSlopeMin, ColorGradeState.CurveSlopeMax);
-        _state.ShoulderPower = Slider(
-            "shoulderPower", "резкость плеча", _state.ShoulderPower,
-            ColorGradeState.CurvePowerMin, ColorGradeState.CurvePowerMax);
-        _state.ToePower = Slider(
-            "toePower", "резкость носка", _state.ToePower,
-            ColorGradeState.CurvePowerMin, ColorGradeState.CurvePowerMax);
-        _state.ToeStops = Slider(
-            "toeStops", "стопов под тени", _state.ToeStops,
-            ColorGradeState.ToeStopsMin, ColorGradeState.ToeStopsMax);
-        _state.PathToWhiteAmount = Slider(
-            "pathToWhiteAmount", "уход в белое", _state.PathToWhiteAmount,
-            ColorGradeState.PathToWhiteAmountMin, ColorGradeState.PathToWhiteAmountMax);
-        _state.PathToWhitePower = Slider(
-            "pathToWhitePower", "степень ухода", _state.PathToWhitePower,
-            ColorGradeState.PathToWhitePowerMin, ColorGradeState.PathToWhitePowerMax);
-
-        if (_state.ShoulderPower < 3f)
-        {
-            GUILayout.Label(
-                "Плечо ниже 3: света долго сходятся к белому, и кадр будет молочным.",
-                ToolTheme.WarningLabel);
-        }
+        GUILayout.Label(
+            "Вывод: URP Neutral / BT2390. Яркость задаётся калибровкой дисплея. " +
+            "Параметры прежней кривой сохраняются в старых файлах, но больше не применяются.",
+            ToolTheme.WarningLabel);
     }
 
     public static string GetLayerTitle(ColorGradeLayer layer) => layer switch

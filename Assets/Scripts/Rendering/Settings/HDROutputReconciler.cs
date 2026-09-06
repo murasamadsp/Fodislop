@@ -1,9 +1,12 @@
 #nullable enable
 
 using System;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using VContainer.Unity;
 
 namespace Fodinae.Rendering;
@@ -32,6 +35,9 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
     // но бутстрап заводил IGameplayCamera именно для потребителей DI.
     private readonly IGameplayCamera _camera;
     private float _nextProbeTime;
+    private Volume? _volume;
+    private VolumeProfile? _profile;
+    private Tonemapping? _tonemapping;
 
     public HDROutputReconciler(IGameplayCamera camera)
     {
@@ -40,12 +46,27 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
 
     public void Start()
     {
+        _profile = ScriptableObject.CreateInstance<VolumeProfile>();
+        _profile.name = "Display output calibration (runtime)";
+        _tonemapping = _profile.Add<Tonemapping>(true);
+        _tonemapping.mode.Override(TonemappingMode.Neutral);
+        _tonemapping.neutralHDRRangeReductionMode.Override(NeutralRangeReductionMode.BT2390);
+        _tonemapping.detectPaperWhite.Override(false);
+        _tonemapping.detectBrightnessLimits.Override(false);
+        _tonemapping.minNits.Override(0f);
+        _tonemapping.hueShiftAmount.Override(0f);
+        _volume = _camera.Camera.gameObject.AddComponent<Volume>();
+        _volume.isGlobal = true;
+        _volume.priority = float.MaxValue;
+        _volume.sharedProfile = _profile;
+        UpdateCalibration();
         SceneManager.sceneLoaded += OnSceneLoaded;
         Apply();
     }
 
     public void Tick()
     {
+        UpdateCalibration();
         if (Time.unscaledTime < _nextProbeTime)
         {
             return;
@@ -58,6 +79,40 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
     public void Dispose()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+        if (_volume != null)
+        {
+            _volume.enabled = false;
+            UnityEngine.Object.Destroy(_volume);
+        }
+
+        if (_profile != null)
+        {
+            foreach (VolumeComponent component in _profile.components)
+            {
+                UnityEngine.Object.Destroy(component);
+            }
+
+            UnityEngine.Object.Destroy(_profile);
+        }
+
+        _volume = null;
+        _profile = null;
+        _tonemapping = null;
+    }
+
+    private void UpdateCalibration()
+    {
+        if (_tonemapping == null)
+        {
+            return;
+        }
+
+        _tonemapping.paperWhite.value = PostProcessRuntimeState.DisplayPaperWhiteNits;
+        _tonemapping.maxNits.value = PostProcessRuntimeState.DisplayPeakBrightnessNits;
+        if (_camera.Camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
+        {
+            cameraData.volumeLayerMask |= 1 << _camera.Camera.gameObject.layer;
+        }
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode) => Apply();

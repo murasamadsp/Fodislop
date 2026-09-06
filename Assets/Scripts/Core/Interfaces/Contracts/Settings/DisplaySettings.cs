@@ -13,7 +13,7 @@ public sealed class DisplaySettings
     public const float GammaMax = 2.6f;
     public const float DefaultGamma = 2.2f;
     public const float PaperWhiteMin = 100f;
-    public const float PaperWhiteMax = 500f;
+    public const float PaperWhiteMax = 400f;
     public const float DefaultPaperWhite = 200f;
     public const float PeakBrightnessMin = 400f;
     public const float PeakBrightnessMax = 2000f;
