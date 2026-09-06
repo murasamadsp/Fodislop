@@ -117,6 +117,34 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 #endif
             }
 
+            /// <summary>
+            /// Возвращает полный сэмпл из world light texture.
+            /// RGB — direct + bounce (умножается на albedo).
+            /// A — ambient luma (добавляется ПОСЛЕ умножения на albedo).
+            /// </summary>
+            float4 GetWorldLightSample(float2 worldPos)
+            {
+                #if !defined(FODINAE_WORLD_LIGHTING)
+                    return float4(1.0, 1.0, 1.0, 0.0);
+                #else
+                float2 lightUV = GetWorldLightUv(worldPos);
+                if (_WorldLightDebugView != 0)
+                {
+                    int2 debugPixel = clamp(
+                        int2(lightUV * _WorldLightTextureSize.xy),
+                        int2(0, 0),
+                        int2(_WorldLightTextureSize.xy) - 1);
+                    float4 debugSample = _WorldLightTexture.Load(int3(debugPixel.x, debugPixel.y, 0));
+                    // В debug-режиме alpha=1 чтобы ambient не мешал визуализации
+                    return float4(debugSample.rgb, 1.0);
+                }
+
+                return _WorldLightTexture.Sample(
+                    sampler_WorldLightTexture,
+                    lightUV);
+                #endif
+            }
+
             float3 RgbToHsv(float3 c)
             {
                 float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -455,8 +483,13 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     alpha = lerp(alpha, 1.0, cornerExclude);
                     finalAlpha *= alpha;
                 }
-                float3 lightColor = GetWorldLightColor(input.worldPosition.xy);
+                float4 lightSample = GetWorldLightSample(input.worldPosition.xy);
+                float3 lightColor = lightSample.rgb;
+                float ambientFill = lightSample.a;
                 float3 litRgb = finalRgb * lightColor;
+                // Ambient добавляется ПОСЛЕ умножения на albedo, чтобы сцену
+                // было видно даже при тёмном albedo поверхностей.
+                litRgb += ambientFill;
                 if (finalAlpha < 0.99 && finalAlpha > 0.01)
                 {
                     litRgb /= max(finalAlpha, 0.15);
