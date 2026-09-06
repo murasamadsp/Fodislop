@@ -278,12 +278,6 @@ internal sealed class PauseMenuGraphicsTabBuilder
 
         graphicsSection.Add(customGraphicsSection);
 
-        void MarkGraphicsCustom()
-        {
-            _graphicsSettings.MarkCustom();
-            UpdateLightingQualityButton();
-        }
-
         // Diffuse bounce — константа, не настраивается
 
         return graphicsScroll;
