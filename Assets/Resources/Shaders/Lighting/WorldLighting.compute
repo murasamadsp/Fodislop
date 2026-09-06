@@ -303,23 +303,33 @@ float4 SampleEmission(float2 pixelPosition, float mipLevel)
 
 float4 CalculateAutomaticSurfaceNormal(float2 pixelPosition)
 {
-    // Сэмплы без клампа: на границе поля (край карты) сосед за пределами
-    // считается пустотой, и красноскал даёт градиент occupancy -> нормаль.
-    float occupancyLeft = 0.0;
-    float occupancyRight = 0.0;
-    float occupancyDown = 0.0;
-    float occupancyUp = 0.0;
-    GetOccupancyUnclamped(pixelPosition - float2(1.0, 0.0), occupancyLeft);
-    GetOccupancyUnclamped(pixelPosition + float2(1.0, 0.0), occupancyRight);
-    GetOccupancyUnclamped(pixelPosition - float2(0.0, 1.0), occupancyDown);
-    GetOccupancyUnclamped(pixelPosition + float2(0.0, 1.0), occupancyUp);
-    float2 occupancyGradient = float2(
-        occupancyRight - occupancyLeft,
-        occupancyUp - occupancyDown);
+    // Усиленные автонормали: широкий градиент + диагонали для чётких нормалей
+    float occL = 0.0, occR = 0.0, occD = 0.0, occU = 0.0;
+    float occDL = 0.0, occDR = 0.0, occUL = 0.0, occUR = 0.0;
+
+    // Широкий сэмпл (2 пикселя) для более сильного градиента
+    GetOccupancyUnclamped(pixelPosition + float2(-2.0, 0.0), occL);
+    GetOccupancyUnclamped(pixelPosition + float2(2.0, 0.0), occR);
+    GetOccupancyUnclamped(pixelPosition + float2(0.0, -2.0), occD);
+    GetOccupancyUnclamped(pixelPosition + float2(0.0, 2.0), occU);
+
+    // Диагонали для лучшего покрытия углов
+    GetOccupancyUnclamped(pixelPosition + float2(-1.0, -1.0), occDL);
+    GetOccupancyUnclamped(pixelPosition + float2(1.0, -1.0), occDR);
+    GetOccupancyUnclamped(pixelPosition + float2(-1.0, 1.0), occUL);
+    GetOccupancyUnclamped(pixelPosition + float2(1.0, 1.0), occUR);
+
+    // Градиент Собеля 3x3 для чётких краёв
+    float gradX = (occR - occL) + 0.5 * ((occDR + occUR) - (occDL + occUL));
+    float gradY = (occU - occD) + 0.5 * ((occUL + occUR) - (occDL + occDR));
+
+    float2 occupancyGradient = float2(gradX, gradY);
     float gradientLength = length(occupancyGradient);
-    float strength = saturate(gradientLength * 2.0);
+
+    // Усиленная сила нормали
+    float strength = saturate(gradientLength * 4.0);
     float3 surfaceNormal = float3(0.0, 0.0, 0.0);
-    if (gradientLength > 0.05)
+    if (gradientLength > 0.02)
     {
         surfaceNormal = float3(-occupancyGradient / gradientLength, 0.0);
     }
