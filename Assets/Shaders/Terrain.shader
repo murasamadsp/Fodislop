@@ -483,13 +483,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     alpha = lerp(alpha, 1.0, cornerExclude);
                     finalAlpha *= alpha;
                 }
-                float4 lightSample = GetWorldLightSample(input.worldPosition.xy);
-                float3 lightColor = lightSample.rgb;
-                float ambientFill = lightSample.a;
+                float3 lightColor = GetWorldLightColor(input.worldPosition.xy);
                 float3 litRgb = finalRgb * lightColor;
-                // Ambient добавляется ПОСЛЕ умножения на albedo, чтобы сцену
-                // было видно даже при тёмном albedo поверхностей.
-                litRgb += ambientFill;
                 if (finalAlpha < 0.99 && finalAlpha > 0.01)
                 {
                     litRgb /= max(finalAlpha, 0.15);

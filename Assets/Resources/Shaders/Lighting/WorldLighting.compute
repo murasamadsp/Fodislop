@@ -961,8 +961,5 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
             output *= maximumLight / outputPeak;
         }
     }
-    // Alpha-канал содержит ambient, который будет добавлен ПОСЛЕ умножения на albedo.
-    // Это позволяет видеть сцену даже при тёмном albedo поверхностей.
-    float ambientLuma = max(max(ambient.r, ambient.g), ambient.b);
-    _Result[pixel] = float4(output, ambientLuma);
+    _Result[pixel] = float4(ambient + output, 1.0);
 }
