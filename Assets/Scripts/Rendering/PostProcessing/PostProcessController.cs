@@ -16,7 +16,7 @@ namespace Fodinae.Rendering.PostProcessing
     [DisallowMultipleComponent]
     public class PostProcessController : MonoBehaviour
     {
-        private static readonly ProfilerMarker PostProcessLateUpdateMarker = new("Fodinae.PostProcess.LateUpdate");
+        private static readonly ProfilerMarker _PostProcessLateUpdateMarker = new("Fodinae.PostProcess.LateUpdate");
 
         [SerializeField]
         private Volume? _volume;

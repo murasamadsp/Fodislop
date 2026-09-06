@@ -69,7 +69,7 @@ internal sealed class ProgrammatorProgramStore
             public string?[] Values = null!;
         }
 
-        private string SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
+        private string _SavePath => Path.Combine(Application.persistentDataPath, "programmator.json");
 
         public void SaveProgram()
         {
@@ -79,7 +79,7 @@ internal sealed class ProgrammatorProgramStore
                 Labels = _data.Labels.ToArray(),
                 Values = _data.Values.ToArray(),
             };
-            File.WriteAllText(SavePath, JsonUtility.ToJson(data));
+            File.WriteAllText(_SavePath, JsonUtility.ToJson(data));
             Debug.Log("[Programmator] Program saved");
         }
 

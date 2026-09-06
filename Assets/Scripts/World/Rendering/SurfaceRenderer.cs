@@ -15,7 +15,7 @@ namespace Fodinae.World
     [DisallowMultipleComponent]
     public class SurfaceRenderer : MonoBehaviour, ILightingGeometryContributor
     {
-        private static readonly ProfilerMarker SurfaceLateUpdateMarker =
+        private static readonly ProfilerMarker _SurfaceLateUpdateMarker =
             new("Fodinae.Surface.LateUpdate");
 
         private const string TransitObjectName = "SurfaceTransit";

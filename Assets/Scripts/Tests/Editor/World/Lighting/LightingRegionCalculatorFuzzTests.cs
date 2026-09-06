@@ -44,7 +44,7 @@ public class LightingRegionCalculatorFuzzTests
 
     private const int MinCell = 2;
 
-    private static readonly int[] Seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
+    private static readonly int[] _Seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
 
     /// <summary>
     /// Coordinates chosen to break the arithmetic rather than to look
@@ -52,12 +52,12 @@ public class LightingRegionCalculatorFuzzTests
     /// anchor boundary at -1/0/1, and magnitudes big enough to stress the
     /// ceil/quantize path.
     /// </summary>
-    private static readonly int[] HostileCoords = [-10_000_000, -1000, -17, -8, -1, 0, 1, 7, 8, 9, 1000, 10_000_000];
+    private static readonly int[] _HostileCoords = [-10_000_000, -1000, -17, -8, -1, 0, 1, 7, 8, 9, 1000, 10_000_000];
 
-    private static readonly int[] HostileExtents = [-1_000_000, -32, -1, 0, 1, 7, 32, 1000, 10_000_000];
+    private static readonly int[] _HostileExtents = [-1_000_000, -32, -1, 0, 1, 7, 32, 1000, 10_000_000];
 
     [Test]
-    public void FreshRegionsAreAnchoredQuantizedAndCoverThePaddedViewport([ValueSource(nameof(Seeds))] int seed)
+    public void FreshRegionsAreAnchoredQuantizedAndCoverThePaddedViewport([ValueSource(nameof(_Seeds))] int seed)
     {
         var random = new System.Random(seed);
 
@@ -73,7 +73,7 @@ public class LightingRegionCalculatorFuzzTests
     }
 
     [Test]
-    public void TheNaNSentinelForcesAFreshRegionRegardlessOfOtherComponents([ValueSource(nameof(Seeds))] int seed)
+    public void TheNaNSentinelForcesAFreshRegionRegardlessOfOtherComponents([ValueSource(nameof(_Seeds))] int seed)
     {
         var random = new System.Random(seed);
 
@@ -99,7 +99,7 @@ public class LightingRegionCalculatorFuzzTests
     }
 
     [Test]
-    public void TheContainmentDecisionMatchesTheReferenceForEveryRandomInput([ValueSource(nameof(Seeds))] int seed)
+    public void TheContainmentDecisionMatchesTheReferenceForEveryRandomInput([ValueSource(nameof(_Seeds))] int seed)
     {
         var random = new System.Random(seed);
 
@@ -145,7 +145,7 @@ public class LightingRegionCalculatorFuzzTests
     }
 
     [Test]
-    public void HostilePreviousRegionsNeverThrowAndNeverProduceNaN([ValueSource(nameof(Seeds))] int seed)
+    public void HostilePreviousRegionsNeverThrowAndNeverProduceNaN([ValueSource(nameof(_Seeds))] int seed)
     {
         var random = new System.Random(seed);
         Vector4[] hostileRegions =
@@ -197,10 +197,10 @@ public class LightingRegionCalculatorFuzzTests
         if (random.Next(4) == 0)
         {
             return (
-                Pick(random, HostileCoords),
-                Pick(random, HostileCoords),
-                Pick(random, HostileExtents),
-                Pick(random, HostileExtents));
+                Pick(random, _HostileCoords),
+                Pick(random, _HostileCoords),
+                Pick(random, _HostileExtents),
+                Pick(random, _HostileExtents));
         }
 
         return (

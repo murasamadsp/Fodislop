@@ -32,7 +32,7 @@ namespace Fodinae.Editor
         private const string ProductName = "Fodinae";
         private const string DevArg = "-fodinaeDev";
 
-        private static string[] EnabledScenes =>
+        private static string[] _EnabledScenes =>
             EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
 
         [MenuItem("Build/macOS (Apple Silicon)")]
@@ -59,7 +59,7 @@ namespace Fodinae.Editor
         {
             BuildSettingsFix.ValidateScenesInBuildSettings();
 
-            var scenes = EnabledScenes;
+            var scenes = _EnabledScenes;
             if (scenes.Length == 0)
             {
                 Fail("No enabled scenes in EditorBuildSettings — nothing to build.");

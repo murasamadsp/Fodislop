@@ -61,7 +61,7 @@ namespace Fodinae.Game
         private bool _isMetadataLoaded;
         private bool _visualsLoadCompleted;
         private RobotAssetLoader? _assetLoaderHelper;
-        private RobotAssetLoader AssetLoader => _assetLoaderHelper ??= new RobotAssetLoader(_assetLoader, _operations, this.GetCancellationTokenOnDestroy());
+        private RobotAssetLoader _AssetLoader => _assetLoaderHelper ??= new RobotAssetLoader(_assetLoader, _operations, this.GetCancellationTokenOnDestroy());
         [SerializeField]
         private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
 
@@ -396,7 +396,7 @@ namespace Fodinae.Game
                 return;
             }
 
-            AssetLoader.LoadMetadataAssets(
+            _AssetLoader.LoadMetadataAssets(
                 _skinPath,
                 _tailPath,
                 _clanId,

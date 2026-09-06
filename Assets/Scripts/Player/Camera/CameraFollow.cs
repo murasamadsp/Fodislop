@@ -331,7 +331,7 @@ namespace Fodinae.Player
         /// <summary>Отдаёт камере размер согласно режиму выборки.</summary>
         private void ApplyZoom(float desiredSize)
         {
-            float size = Aligner.ResolveOrthographicSize(desiredSize, _minZoom, _maxZoom);
+            float size = _Aligner.ResolveOrthographicSize(desiredSize, _minZoom, _maxZoom);
             if (!Mathf.Approximately(_camera.orthographicSize, size))
             {
                 _camera.orthographicSize = size;
@@ -339,9 +339,9 @@ namespace Fodinae.Player
         }
 
         private Vector3 SnapToPixelGrid(Vector3 position) =>
-            Aligner.SnapPosition(position, _camera.orthographicSize);
+            _Aligner.SnapPosition(position, _camera.orthographicSize);
 
-        private CameraPixelGridAligner Aligner =>
+        private CameraPixelGridAligner _Aligner =>
             _aligner ??= new CameraPixelGridAligner(_clientConfig);
 
 

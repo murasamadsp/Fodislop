@@ -18,7 +18,7 @@ public sealed class SurfaceGeometryBuilder
     public const float GeometryCacheQuantum = 32f;
     public const float GeometryCachePadding = 16f;
 
-    private static readonly int[] QuadTriangles =
+    private static readonly int[] _QuadTriangles =
     [
         0, 1, 2, 3, 2, 1,
     ];
@@ -181,7 +181,7 @@ public sealed class SurfaceGeometryBuilder
         mesh.SetVertices(_quadVertices);
         mesh.SetUVs(channel: 0, _quadUv);
         mesh.SetUVs(channel: 1, _quadLightingData);
-        mesh.SetTriangles(QuadTriangles, submesh: 0, calculateBounds: true);
+        mesh.SetTriangles(_QuadTriangles, submesh: 0, calculateBounds: true);
     }
 
     private void AppendBoundaryQuad(

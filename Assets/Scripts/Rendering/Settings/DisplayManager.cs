@@ -94,11 +94,11 @@ namespace Fodinae.Rendering
         private static void ApplyPixelSampling(PixelSamplingMode mode)
         {
             Shader.SetGlobalFloat(
-                PixelArtFilteringProperty,
+                _PixelArtFilteringProperty,
                 PixelSamplingRules.FiltersTexelEdges(mode) ? 1f : 0f);
         }
 
-        private static readonly int PixelArtFilteringProperty = Shader.PropertyToID("_PixelArtFiltering");
+        private static readonly int _PixelArtFilteringProperty = Shader.PropertyToID("_PixelArtFiltering");
 
         public void SetResolution(int width, int height, FullScreenMode mode, int refreshRate = 60)
         {

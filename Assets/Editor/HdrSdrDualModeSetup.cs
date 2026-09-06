@@ -99,13 +99,13 @@ internal static class HdrSdrDualModeSetup
         Debug.Log("[HdrSdrDualModeSetup] Enabled URP HDR render targets.");
     }
 
-    private static readonly string[] CleanProfilePaths =
+    private static readonly string[] _CleanProfilePaths =
     [
         "Assets/Settings/PostProcessVolumeProfile.asset",
         "Assets/Settings/DefaultVolumeProfile.asset",
     ];
 
-    private static readonly Type[] BuiltInDuplicateTypes =
+    private static readonly Type[] _BuiltInDuplicateTypes =
     [
         typeof(Tonemapping),
         typeof(LiftGammaGain),
@@ -126,8 +126,8 @@ internal static class HdrSdrDualModeSetup
 
     private static void RemoveBuiltInTonemapping()
     {
-        var builtInTypesSet = new HashSet<Type>(BuiltInDuplicateTypes);
-        foreach (string profilePath in CleanProfilePaths)
+        var builtInTypesSet = new HashSet<Type>(_BuiltInDuplicateTypes);
+        foreach (string profilePath in _CleanProfilePaths)
         {
             VolumeProfile? profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(profilePath);
             if (profile == null)

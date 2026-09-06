@@ -22,7 +22,7 @@ public static class TileBitmaskConverter
     /// Bits 0-4 (I): Base Tile Index (0-13).
     /// </returns>
     public static byte GetDescriptor(byte presenceMask) =>
-        PresenceToDescriptor[presenceMask];
+        _PresenceToDescriptor[presenceMask];
 
     /// <summary>
     /// Lookup table converting every possible 8-neighbor mask (0-255)
@@ -30,7 +30,7 @@ public static class TileBitmaskConverter
     /// "Floating" corners (corners without both adjacent orthogonal edges)
     /// are gracefully ignored to find the best fitting valid tile.
     /// </summary>
-    private static readonly byte[] PresenceToDescriptor =
+    private static readonly byte[] _PresenceToDescriptor =
     [
         0x00, 0x01, 0x00, 0x01, 0xC1, 0x02, 0xC1, 0x04, 0x00, 0x01, 0x00, 0x01, 0xC1, 0x02, 0xC1, 0x04,
         0x41, 0x03, 0x41, 0x03, 0x42, 0x05, 0x42, 0x06, 0x41, 0x03, 0x41, 0x03, 0x44, 0x46, 0x44, 0x08,

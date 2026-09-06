@@ -41,7 +41,7 @@ namespace Fodinae.Editor
             public long GcAllocBytes;
         }
 
-        private static readonly List<Row> Rows = new();
+        private static readonly List<Row> _Rows = new();
         private static EditorApplication.CallbackFunction? _tick;
         private static float _phaseTime;
         private static int _state; // 0 = ON phase, 1 = MUTE phase, 2 = done
@@ -101,7 +101,7 @@ namespace Fodinae.Editor
             Profiler.enabled = true;
             _lighting.BypassLightingCompute = false;
             _lastAlloc = Profiler.GetTotalAllocatedMemoryLong();
-            Rows.Clear();
+            _Rows.Clear();
             _phaseTime = 0f;
             _frameIndex = 0;
             _state = 0;
@@ -129,7 +129,7 @@ namespace Fodinae.Editor
                 long frameAlloc = Math.Max(0L, alloc - _lastAlloc);
                 _lastAlloc = alloc;
 
-                Rows.Add(new Row
+                _Rows.Add(new Row
                 {
                     Muted = _state == 1,
                     Frame = _frameIndex++,
@@ -181,14 +181,14 @@ namespace Fodinae.Editor
 
         private static void WriteRows()
         {
-            if (Rows.Count == 0)
+            if (_Rows.Count == 0)
             {
                 return;
             }
 
             var sb = new StringBuilder();
             sb.Append("state,frame,frameMs,gcAllocBytes\n");
-            foreach (Row r in Rows)
+            foreach (Row r in _Rows)
             {
                 sb.Append(r.Muted ? "MUTE," : "ON,")
                   .Append(r.Frame).Append(',').Append(r.FrameMs.ToString("F3")).Append(',')
@@ -216,7 +216,7 @@ namespace Fodinae.Editor
             long sumAlloc = 0;
             float maxMs = 0f;
             int stallCount = 0;
-            foreach (Row r in Rows)
+            foreach (Row r in _Rows)
             {
                 if (r.Muted != muted)
                 {

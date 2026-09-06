@@ -41,8 +41,8 @@ public class RadialMenu
     public VisualElement Root => _root;
     public bool IsShown => _root.parent != null;
 
-    private static readonly Color DefaultBorder = new Color(0.5f, 0.5f, 0.5f, 1f);
-    private static readonly Color HoverBorder = new Color(1f, 0.84f, 0f, 1f);
+    private static readonly Color _DefaultBorder = new Color(0.5f, 0.5f, 0.5f, 1f);
+    private static readonly Color _HoverBorder = new Color(1f, 0.84f, 0f, 1f);
 
     public RadialMenu(ILocalizationService loc, IProgrammatorTextureCatalog textures)
     {
@@ -108,7 +108,7 @@ public class RadialMenu
 
             item.AddToClassList("prog-radial-item");
 
-            Color borderColor = (colors != null && i < colors.Length) ? colors[i] : DefaultBorder;
+            Color borderColor = (colors != null && i < colors.Length) ? colors[i] : _DefaultBorder;
             item.style.borderTopColor = borderColor;
             item.style.borderBottomColor = borderColor;
             item.style.borderLeftColor = borderColor;
@@ -215,8 +215,8 @@ public class RadialMenu
                 continue;
             }
 
-            Color bc = (i == index) ? HoverBorder
-                : (_innerItemColors != null && i < _innerItemColors.Length) ? _innerItemColors[i] : DefaultBorder;
+            Color bc = (i == index) ? _HoverBorder
+                : (_innerItemColors != null && i < _innerItemColors.Length) ? _innerItemColors[i] : _DefaultBorder;
             item.style.borderTopColor = bc;
             item.style.borderBottomColor = bc;
             item.style.borderLeftColor = bc;
@@ -234,7 +234,7 @@ public class RadialMenu
         var item = _innerContainer[index] as VisualElement;
         if (item != null)
         {
-            Color bc = (_innerItemColors != null && index < _innerItemColors.Length) ? _innerItemColors[index] : DefaultBorder;
+            Color bc = (_innerItemColors != null && index < _innerItemColors.Length) ? _innerItemColors[index] : _DefaultBorder;
             item.style.borderTopColor = bc;
             item.style.borderBottomColor = bc;
             item.style.borderLeftColor = bc;
@@ -253,7 +253,7 @@ public class RadialMenu
                 continue;
             }
 
-            Color bc = (i == index) ? HoverBorder : DefaultBorder;
+            Color bc = (i == index) ? _HoverBorder : _DefaultBorder;
             item.style.borderTopColor = bc;
             item.style.borderBottomColor = bc;
             item.style.borderLeftColor = bc;
@@ -271,10 +271,10 @@ public class RadialMenu
         var item = _outerContainer[index] as VisualElement;
         if (item != null)
         {
-            item.style.borderTopColor = DefaultBorder;
-            item.style.borderBottomColor = DefaultBorder;
-            item.style.borderLeftColor = DefaultBorder;
-            item.style.borderRightColor = DefaultBorder;
+            item.style.borderTopColor = _DefaultBorder;
+            item.style.borderBottomColor = _DefaultBorder;
+            item.style.borderLeftColor = _DefaultBorder;
+            item.style.borderRightColor = _DefaultBorder;
         }
     }
 

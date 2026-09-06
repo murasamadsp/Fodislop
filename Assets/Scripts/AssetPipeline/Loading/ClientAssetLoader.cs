@@ -20,7 +20,7 @@ namespace Fodinae
         private readonly AssetBatchDispatcher _dispatcher = new();
         private bool _batchLoopStarted;
 
-        private AssetCache Cache => _cache ??
+        private AssetCache _Cache => _cache ??
             throw new ObjectDisposedException(nameof(ClientAssetLoader));
 
         public int PendingAssetCount => _dispatcher.PendingCount;
@@ -38,12 +38,12 @@ namespace Fodinae
         [Inject]
         private IPersistentAssetCache _persistentCache = null!;
 
-        private IConnectionService ConnectionService =>
+        private IConnectionService _ConnectionService =>
             _connectionService ??
             throw new InvalidOperationException(
                 "ClientAssetLoader requires IConnectionService before loading assets.");
 
-        private ITextureStorageService TextureStorage => _textureStorage;
+        private ITextureStorageService _TextureStorage => _textureStorage;
 
         private bool _assetSubscriptionEstablished;
         private IConnectionService? _subscribedConnection;
@@ -71,7 +71,7 @@ namespace Fodinae
             _batchLoopStarted = true;
             _operations.Run(
                 "asset_request_batch_loop",
-                token => _dispatcher.ProcessBatchLoop(token, () => ConnectionService));
+                token => _dispatcher.ProcessBatchLoop(token, () => _ConnectionService));
         }
 
         protected void OnDestroy()
@@ -148,7 +148,7 @@ namespace Fodinae
                 return UniTask.FromResult<byte[]?>(null);
             }
 
-            return Cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
+            return _Cache.GetBytesAsync(cleanFilename, cancellationToken, timeoutSeconds);
         }
 
         public async UniTask<string> GetAssetPathAsync(
@@ -185,7 +185,7 @@ namespace Fodinae
 
         public async UniTask<Texture2D?> GetTextureAsync(string filename, CancellationToken cancellationToken = default)
         {
-            Texture2D? texture = await Cache.GetTextureAsync(filename, cancellationToken);
+            Texture2D? texture = await _Cache.GetTextureAsync(filename, cancellationToken);
             return texture ?? throw new FileNotFoundException(
                 $"Required texture '{filename}' could not be loaded.",
                 filename);
@@ -193,17 +193,17 @@ namespace Fodinae
 
         public UniTask<AudioClip?> GetAudioAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return Cache.GetAudioAsync(filename, cancellationToken);
+            return _Cache.GetAudioAsync(filename, cancellationToken);
         }
 
         public UniTask<Sprite[]?> GetSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return Cache.GetSpritesAsync(filename, cancellationToken);
+            return _Cache.GetSpritesAsync(filename, cancellationToken);
         }
 
         public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(string filename, CancellationToken cancellationToken = default)
         {
-            return Cache.GetAnimatedSpritesAsync(filename, cancellationToken);
+            return _Cache.GetAnimatedSpritesAsync(filename, cancellationToken);
         }
         public void ClearCache()
         {
@@ -217,7 +217,7 @@ namespace Fodinae
             filename = filename.TrimStart('/').ToLowerInvariant();
 
             // 1. Check local RAM/disk cache first when offline
-            var connectionService = ConnectionService;
+            var connectionService = _ConnectionService;
             var isConnected = connectionService.IsConnected;
 
             if (!isConnected)
@@ -232,7 +232,7 @@ namespace Fodinae
             // 2. Check local TextureStorageManager if available
             if (AssetBatchDispatcher.IsTextureFile(filename))
             {
-                var tsm = TextureStorage;
+                var tsm = _TextureStorage;
                 bool tsmHas = tsm != null && tsm.HasTexture(filename);
                 if (tsmHas && tsm != null)
                 {
@@ -259,8 +259,8 @@ namespace Fodinae
                         filename,
                         etag ?? string.Empty,
                         cts.Token,
-                        () => ConnectionService,
-                        () => TextureStorage);
+                        () => _ConnectionService,
+                        () => _TextureStorage);
 
                     if (result != null && result.Length > 0)
                     {
@@ -299,7 +299,7 @@ namespace Fodinae
 
             if (AssetBatchDispatcher.IsTextureFile(filename))
             {
-                var tsm = TextureStorage;
+                var tsm = _TextureStorage;
                 if (tsm != null)
                 {
                     var localData = await tsm.GetTextureData(filename);

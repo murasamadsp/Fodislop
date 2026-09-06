@@ -91,7 +91,7 @@ internal sealed class RobotAura
     /// Цвета нитей. Магия читается по холодной части спектра, а разнобой
     /// оттенков не даёт ауре выглядеть перекрашенной копией одной дуги.
     /// </summary>
-    private static readonly Color[] WispTints =
+    private static readonly Color[] _WispTints =
     [
         new(0.55f, 0.80f, 1.00f, 1f),
         new(0.76f, 0.62f, 1.00f, 1f),
@@ -325,7 +325,7 @@ internal sealed class RobotAura
                 RadiusScale = 1f + ((NextUnit(random) - 0.5f) * 2f * RadiusJitter),
                 PulseSpeed = 1.6f + (NextUnit(random) * 2.4f),
                 PulsePhase = NextUnit(random) * Mathf.PI * 2f,
-                Tint = WispTints[i % WispTints.Length],
+                Tint = _WispTints[i % _WispTints.Length],
             };
         }
     }

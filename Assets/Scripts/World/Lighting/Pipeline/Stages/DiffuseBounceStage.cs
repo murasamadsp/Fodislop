@@ -15,9 +15,9 @@ namespace Fodinae.World.Lighting.Pipeline.Stages;
 /// </summary>
 public sealed class DiffuseBounceStage : ILightingStage
 {
-    private static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
-    private static readonly int StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
-    private static readonly int BounceTextureId = Shader.PropertyToID("_BounceTexture");
+    private static readonly int _DirectInputId = Shader.PropertyToID("_DirectInput");
+    private static readonly int _StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
+    private static readonly int _BounceTextureId = Shader.PropertyToID("_BounceTexture");
 
     private readonly int _kernel;
 
@@ -31,17 +31,17 @@ public sealed class DiffuseBounceStage : ILightingStage
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            DirectInputId,
+            _DirectInputId,
             context.DirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            StaticDirectInputId,
+            _StaticDirectInputId,
             context.StaticDirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            BounceTextureId,
+            _BounceTextureId,
             context.BounceTexture);
         commandBuffer.DispatchCompute(
             context.Compute,

@@ -119,12 +119,12 @@ public class DummyConnection : IServerConnection, IOfflineConnection
     /// <summary>
     /// Stable local identity used by the emulated game server.
     /// </summary>
-    private string PlayerName => _authSession.PlayerName;
+    private string _PlayerName => _authSession._PlayerName;
 
     /// <summary>Офлайн-статистика (уровень/валюта) для мира.</summary>
-    private long Level => 12345;
+    private long _Level => 12345;
 
-    private long Currency => 123456;
+    private long _Currency => 123456;
 
     public ConnectionStatus ConnectionStatus => _session.Status;
 
@@ -403,9 +403,9 @@ public class DummyConnection : IServerConnection, IOfflineConnection
         return _worldStartup.InitializeAsync(
             PrebakedWorldCodeName,
             _session.LifecycleVersion,
-            PlayerName,
-            Level,
-            Currency,
+            _PlayerName,
+            _Level,
+            _Currency,
             _mockBotId);
     }
 

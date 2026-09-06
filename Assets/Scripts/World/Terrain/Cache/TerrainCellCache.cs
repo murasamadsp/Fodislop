@@ -20,7 +20,7 @@ public class TerrainCellCache
     // IsPopulated flag lives inside CellMetadata itself — one array instead of two
     private readonly CellMetadata[] _metadataLookup = new CellMetadata[65536];
 
-    private static CachedCellData UnloadedCellData => new()
+    private static CachedCellData _UnloadedCellData => new()
     {
         State = TerrainCellState.Unloaded,
         Type = CellType.Unloaded,
@@ -134,7 +134,7 @@ public class TerrainCellCache
 
                 if (type == CellType.Unloaded)
                 {
-                    _cellCache[x, y] = UnloadedCellData;
+                    _cellCache[x, y] = _UnloadedCellData;
                     continue;
                 }
 
@@ -179,7 +179,7 @@ public class TerrainCellCache
 
                 if (type == CellType.Unloaded)
                 {
-                    _cellCache[x, y] = UnloadedCellData;
+                    _cellCache[x, y] = _UnloadedCellData;
                     continue;
                 }
 
@@ -231,7 +231,7 @@ public class TerrainCellCache
 
             if (type == CellType.Unloaded)
             {
-                _cellCache[cx, cy] = UnloadedCellData;
+                _cellCache[cx, cy] = _UnloadedCellData;
                 return;
             }
 

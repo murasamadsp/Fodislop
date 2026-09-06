@@ -27,7 +27,7 @@ namespace Fodinae.Editor
     {
         private const string GeneratorPath = "scripts/generate_planet_maps.py";
 
-        private static readonly string[] RequiredMaps =
+        private static readonly string[] _RequiredMaps =
         {
             "Assets/Textures/UI/planet_albedo.png",
             "Assets/Textures/UI/planet_normal.png",
@@ -97,7 +97,7 @@ namespace Fodinae.Editor
 
         private static void WarnIfMapsMissing()
         {
-            foreach (string path in RequiredMaps)
+            foreach (string path in _RequiredMaps)
             {
                 if (File.Exists(path))
                 {

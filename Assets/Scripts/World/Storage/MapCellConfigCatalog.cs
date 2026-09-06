@@ -16,7 +16,7 @@ namespace Fodinae.World;
 /// </summary>
 public sealed class MapCellConfigCatalog
 {
-    private static readonly HashSet<CellType> RoundableLooseTypes = new()
+    private static readonly HashSet<CellType> _RoundableLooseTypes = new()
     {
         CellType.WhiteSand, CellType.DarkWhiteSand,
         CellType.RustySand, CellType.DarkRustySand,
@@ -32,7 +32,7 @@ public sealed class MapCellConfigCatalog
     private readonly Dictionary<CellType, int> _cellToTileGroup = new();
     private readonly Dictionary<CellType, ushort> _cellMoveSpeeds = new();
 
-    public static bool IsRoundableLoose(CellType type) => RoundableLooseTypes.Contains(type);
+    public static bool IsRoundableLoose(CellType type) => _RoundableLooseTypes.Contains(type);
 
     public void LoadConfigurations(CellConfigurationPacket[]? configurations, byte[][]? tileGroups)
     {

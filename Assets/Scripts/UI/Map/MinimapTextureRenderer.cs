@@ -12,10 +12,10 @@ namespace Fodinae.UI;
 /// </summary>
 internal sealed class MinimapTextureRenderer
 {
-    private static readonly Color32 UnloadedColor = new(0, 0, 0, 255);
-    private static readonly Color32 OutOfBoundsColor = new(0, 0, 0, 255);
-    private static readonly Color32 MarkerColor = Color.white;
-    private static readonly Color32 CenterColor = Color.red;
+    private static readonly Color32 _UnloadedColor = new(0, 0, 0, 255);
+    private static readonly Color32 _OutOfBoundsColor = new(0, 0, 0, 255);
+    private static readonly Color32 _MarkerColor = Color.white;
+    private static readonly Color32 _CenterColor = Color.red;
 
     private readonly Color32[] _cellColors = new Color32[256];
     private Color32[]? _pixelColors;
@@ -39,7 +39,7 @@ internal sealed class MinimapTextureRenderer
             CellType cellType = (CellType)i;
             if (cellType == CellType.Unloaded)
             {
-                _cellColors[i] = UnloadedColor;
+                _cellColors[i] = _UnloadedColor;
                 continue;
             }
 
@@ -82,7 +82,7 @@ internal sealed class MinimapTextureRenderer
                 int end = index + texSize;
                 while (index < end)
                 {
-                    colors[index++] = OutOfBoundsColor;
+                    colors[index++] = _OutOfBoundsColor;
                 }
 
                 continue;
@@ -94,7 +94,7 @@ internal sealed class MinimapTextureRenderer
 
                 if (serverX < 0 || serverX >= worldWidth)
                 {
-                    colors[index++] = OutOfBoundsColor;
+                    colors[index++] = _OutOfBoundsColor;
                     continue;
                 }
 
@@ -102,22 +102,22 @@ internal sealed class MinimapTextureRenderer
                 {
                     hasLoadedCells = true;
                     colors[index++] = cellType == CellType.Unloaded
-                        ? UnloadedColor
+                        ? _UnloadedColor
                         : _cellColors[(byte)cellType];
                 }
                 else
                 {
-                    colors[index++] = UnloadedColor;
+                    colors[index++] = _UnloadedColor;
                 }
             }
         }
 
         int cx = halfSize;
-        colors[(cx * texSize) + cx - 1] = MarkerColor;
-        colors[(cx * texSize) + cx] = CenterColor;
-        colors[(cx * texSize) + cx + 1] = MarkerColor;
-        colors[((cx - 1) * texSize) + cx] = MarkerColor;
-        colors[((cx + 1) * texSize) + cx] = MarkerColor;
+        colors[(cx * texSize) + cx - 1] = _MarkerColor;
+        colors[(cx * texSize) + cx] = _CenterColor;
+        colors[(cx * texSize) + cx + 1] = _MarkerColor;
+        colors[((cx - 1) * texSize) + cx] = _MarkerColor;
+        colors[((cx + 1) * texSize) + cx] = _MarkerColor;
 
         if (texture != null)
         {

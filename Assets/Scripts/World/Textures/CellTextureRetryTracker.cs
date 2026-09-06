@@ -16,7 +16,7 @@ namespace Fodinae.World.Textures;
 public sealed class CellTextureRetryTracker
 {
     private const double FailedCellTextureRetrySeconds = 30.0;
-    private static readonly Stopwatch RetryClock = Stopwatch.StartNew();
+    private static readonly Stopwatch _RetryClock = Stopwatch.StartNew();
 
     private readonly ConcurrentDictionary<CellType, byte> _inFlightRequests = new();
     private readonly ConcurrentDictionary<CellType, double> _retryTimes = new();
@@ -26,7 +26,7 @@ public sealed class CellTextureRetryTracker
     public bool ShouldThrottle(CellType cellType)
     {
         if (_retryTimes.TryGetValue(cellType, out double retryAfterSeconds) &&
-            RetryClock.Elapsed.TotalSeconds < retryAfterSeconds)
+            _RetryClock.Elapsed.TotalSeconds < retryAfterSeconds)
         {
             return true;
         }
@@ -52,7 +52,7 @@ public sealed class CellTextureRetryTracker
         catch (Exception exception)
         {
             bool firstFailure = !_retryTimes.ContainsKey(cellType);
-            _retryTimes[cellType] = RetryClock.Elapsed.TotalSeconds + FailedCellTextureRetrySeconds;
+            _retryTimes[cellType] = _RetryClock.Elapsed.TotalSeconds + FailedCellTextureRetrySeconds;
 
             if (firstFailure)
             {

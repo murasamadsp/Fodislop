@@ -25,8 +25,8 @@ namespace Fodinae.World.Lighting.Pipeline.Stages;
 /// </remarks>
 public sealed class DynamicEmissionCompositionStage : ILightingStage
 {
-    private static readonly int DynamicLightsId = Shader.PropertyToID("_DynamicLights");
-    private static readonly int CellSizeId = Shader.PropertyToID("_CellSize");
+    private static readonly int _DynamicLightsId = Shader.PropertyToID("_DynamicLights");
+    private static readonly int _CellSizeId = Shader.PropertyToID("_CellSize");
 
     public void Record(CommandBuffer commandBuffer, in LightingFrameContext context)
     {
@@ -56,8 +56,8 @@ public sealed class DynamicEmissionCompositionStage : ILightingStage
             // _CellSize would be visible to every shader that happens to
             // declare that name, and this pass has no business changing
             // what the rest of the frame sees.
-            context.DynamicEmissionMaterial.SetBuffer(DynamicLightsId, context.DynamicLightBuffer);
-            context.DynamicEmissionMaterial.SetFloat(CellSizeId, context.CellSize);
+            context.DynamicEmissionMaterial.SetBuffer(_DynamicLightsId, context.DynamicLightBuffer);
+            context.DynamicEmissionMaterial.SetFloat(_CellSizeId, context.CellSize);
             commandBuffer.DrawProcedural(
                 Matrix4x4.identity,
                 context.DynamicEmissionMaterial,
