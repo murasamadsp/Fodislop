@@ -119,7 +119,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection
     /// <summary>
     /// Stable local identity used by the emulated game server.
     /// </summary>
-    private string _PlayerName => _authSession._PlayerName;
+    private string _PlayerName => _authSession.PlayerName;
 
     /// <summary>Офлайн-статистика (уровень/валюта) для мира.</summary>
     private long _Level => 12345;

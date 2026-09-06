@@ -396,11 +396,20 @@ void TraceRadianceSegment(
         }
 
         int2 currentCell = int2(floor(samplePosition * cellsPerPixel));
-        // Угловой тест только на нулевом мипе. Выше занятость уже усреднена
-        // по нескольким клеткам, отдельного угла в ней нет — тест ничего не
-        // решает, а выборки берёт. Это внутренний цикл каскадного решения,
-        // самый горячий в движке: две лишние выборки здесь стоят кадра.
-        if (samplingMip <= 0.0)
+        // Угловой тест — только в нулевом каскаде (у него интервал
+        // начинается с нуля). Там луч длиной в пиксель, там ближний свет, и
+        // щель между блоками, соприкасающимися углом, видна именно там. В
+        // старших каскадах луч уходит на десятки клеток, его вклад размазан,
+        // и щели в нём не различить — а платится за неё полным счётом.
+        //
+        // По раскладке каскадов: у всех одинаково 4*W*H записей, но шагов на
+        // запись 1, 3, 12 и до 16. То есть нулевой каскад — около трёх
+        // процентов всех шагов луча, и заслон возвращает почти всю цену
+        // теста, сохраняя видимую часть эффекта.
+        //
+        // Мип проверяется заодно: выше нуля занятость уже усреднена по
+        // нескольким клеткам, отдельного угла в ней нет физически.
+        if (_CascadeInterval.x <= 0.0 && samplingMip <= 0.0)
         {
             bool diagonalOccluded = false;
             CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
@@ -448,7 +457,19 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
     float2 intervalEnd = origin + rayDirection * _CascadeInterval.y;
     float3 radiance = 0.0;
     float3 transmittance = 1.0;
-    if (_EnableBilinearFix == 0 || _HasFarCascade == 0)
+
+    // Билинейная поправка — только в нулевом каскаде (его интервал начинается
+    // с нуля). Она заменяет один марш на шестнадцать, и каждый из них длиннее
+    // обычного: идёт до начала интервала ДАЛЬНЕГО каскада. В нулевом каскаде
+    // обычный марш — один шаг, детский — три-четыре, то есть поправка там
+    // стоит под полсотни крат; в старших каскадах ровно шестнадцать, но при
+    // луче в десятки клеток её вклад уже не различить.
+    //
+    // Чинит она протечку света между зондами на стыке каскадов, а стык, на
+    // который смотрит игрок, — ближний.
+    bool useBilinearFix = _EnableBilinearFix != 0 && _CascadeInterval.x <= 0.0;
+
+    if (!useBilinearFix || _HasFarCascade == 0)
     {
         TraceRadianceSegment(
             origin,
@@ -502,12 +523,22 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
                         (farX == 0 ? 1.0 - farProbeBlend.x : farProbeBlend.x) *
                         (farY == 0 ? 1.0 - farProbeBlend.y : farProbeBlend.y) /
                         float(directionBranchCount);
+                    // Угол с нулевым билинейным весом не входит в сумму
+                    // ничем. Его выборка из атласа и, главное, его марш —
+                    // работа целиком в пустоту. На краю каскада clamp
+                    // схлопывает соседние углы в один и тот же зонд, и тогда
+                    // нулевых весов становится половина.
+                    if (probeWeight <= 0.0)
+                    {
+                        continue;
+                    }
+
                     uint3 farPackedInterval = _RadianceAtlas[farIndex];
                     float3 sampledFarRadiance =
                         UnpackRadiance(farPackedInterval.xy);
                     float3 sampledFarTransmittance =
                         UnpackTransmittance(farPackedInterval);
-                    if (_EnableBilinearFix != 0)
+                    if (useBilinearFix)
                     {
                         float farAngle = (float(farDirection) + 0.5) * PI2 /
                             float(_FarCascadeDirectionCount);
@@ -542,7 +573,7 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
             }
         }
 
-        if (_EnableBilinearFix != 0)
+        if (useBilinearFix)
         {
             radiance = fixedRadiance;
             transmittance = fixedTransmittance;

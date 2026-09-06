@@ -456,7 +456,7 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void LateUpdate()
         {
-            using var marker = PostProcessLateUpdateMarker.Auto();
+            using var marker = _PostProcessLateUpdateMarker.Auto();
             if (_mainCamera == null)
             {
                 _mainCamera = _gameplayCamera?.Camera;

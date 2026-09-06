@@ -93,7 +93,7 @@ namespace Fodinae.Networking.Connection
         /// </summary>
         private void DrainPacketQueue()
         {
-            using var marker = PacketDrainMarker.Auto();
+            using var marker = _PacketDrainMarker.Auto();
             float budgetSeconds = Mathf.Min(
                 Time.unscaledDeltaTime * PacketDrainBudgetFractionOfFrame,
                 PacketDrainBudgetMaximumSeconds);

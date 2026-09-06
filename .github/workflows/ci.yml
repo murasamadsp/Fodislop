@@ -24,11 +24,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-dotnet@v7
         with:
-          node-version: '24'
+          dotnet-version: '10.0.x'
       - name: Validate architecture, USS, and localization
-        run: node scripts/check-architecture.js
+        run: dotnet run --project tools/Fodinae.ArchitectureLinter
 
   macos-tests:
     name: Unity tests (macOS ARM64)

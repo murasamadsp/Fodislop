@@ -66,17 +66,24 @@ Shader "Fodinae/Backgrounds/FractalBackground"
 
                 float time = _Time.y * _Speed;
 
+                // Луч не зависит ни от номера итерации, ни от z: он один на
+                // пиксель. Считался внутри цикла — пятьдесят normalize на
+                // пиксель вместо одного, и это на весь экран каждый кадр.
+                float3 rayDirection = normalize(
+                    float3(2.0 * fragCoord - resolution.xy, resolution.y));
+
+                // Раньше здесь крутился цикл `d = 1; повторить пять раз d += d`.
+                // Он не зависит ни от чего и всегда даёт 32 — то есть двести
+                // пятьдесят сложений на пиксель ради константы.
+                const float foldFrequency = 32.0;
+
                 for (int iter = 0; iter < _Iterations; iter++)
                 {
-                    float3 p = z * normalize(float3(2.0 * fragCoord - resolution.xy, resolution.y));
+                    float3 p = z * rayDirection;
 
                     p.z -= time;
 
-                    d = 1.0;
-                    for (int j = 0; j < 5; j++)
-                        d += d;
-
-                    p += sin(p * d + p.z * d) / d;
+                    p += sin(p * foldFrequency + p.z * foldFrequency) / foldFrequency;
 
                     float2 offset = float2(0, 2);
                     d = 0.1 * length(1.0 + p.xy * sin(p.z + offset));

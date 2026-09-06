@@ -190,7 +190,7 @@ namespace Fodinae.Game
 
         protected void LateUpdate()
         {
-            using var marker = LateUpdateMarker.Auto();
+            using var marker = _LateUpdateMarker.Auto();
             if (!_geometryDirty)
             {
                 for (int i = 0; i < _sprites.Count; i++)

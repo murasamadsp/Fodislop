@@ -51,6 +51,19 @@ public class TerrainMeshBuilder
 
     public int DirtyVertexCount { get; private set; }
 
+    /// <summary>
+    /// True when the last <see cref="BuildRegion"/> rewrote a quad that
+    /// carries a foreground overlay, before or after the write.
+    /// </summary>
+    /// <remarks>
+    /// Накладка дверей — отдельная сетка, собранная копированием вершин
+    /// оверлейных квадов из этого буфера. Её надо пересобирать не только
+    /// когда список квадов поменялся, но и когда у прежнего квада
+    /// переписали вершины: копия иначе останется от старого кадра.
+    /// Флаг снят прямо в цикле записи, где обе стороны и так под рукой.
+    /// </remarks>
+    public bool OverlayQuadsTouched { get; private set; }
+
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
     {
         _cellSize = cellSize;
@@ -133,6 +146,7 @@ public class TerrainMeshBuilder
         {
             IndicesChanged = false;
             OverlayIndicesChanged = false;
+            OverlayQuadsTouched = false;
             DirtyVertexStart = 0;
             DirtyVertexCount = 0;
             return;
@@ -145,6 +159,7 @@ public class TerrainMeshBuilder
 
         bool atlasAssignmentChanged = false;
         bool overlayAssignmentChanged = false;
+        bool overlayQuadsTouched = false;
         for (int x = clampedStartX; x < endX; x++)
         {
             int gridX = minX + x;
@@ -174,11 +189,14 @@ public class TerrainMeshBuilder
 
                 overlayAssignmentChanged |=
                     previousOverlay != _foregroundOverlayFlags[quadIdx];
+                overlayQuadsTouched |=
+                    previousOverlay || _foregroundOverlayFlags[quadIdx];
             }
         }
 
         IndicesChanged = atlasAssignmentChanged;
         OverlayIndicesChanged = overlayAssignmentChanged || atlasAssignmentChanged;
+        OverlayQuadsTouched = overlayQuadsTouched;
         if (!atlasAssignmentChanged)
         {
             // The vertices moved onto different textures within the same
@@ -247,6 +265,10 @@ public class TerrainMeshBuilder
 
         IndicesChanged = atlasAssignmentChanged;
         OverlayIndicesChanged = atlasAssignmentChanged;
+        // Флаг обязан быть выставлен и здесь: иначе следующая заплатка
+        // прочитает его от прошлого вызова BuildRegion и решит судьбу
+        // накладки по чужому кадру.
+        OverlayQuadsTouched = lastDirtyQuad >= 0;
         DirtyVertexStart = lastDirtyQuad >= 0 ? firstDirtyQuad * 8 : 0;
         DirtyVertexCount = lastDirtyQuad >= 0 ? ((lastDirtyQuad + 1) * 8) - DirtyVertexStart : 0;
         if (!atlasAssignmentChanged)

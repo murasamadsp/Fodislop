@@ -217,7 +217,7 @@ namespace Fodinae.World
 
         protected void LateUpdate()
         {
-            using var marker = SurfaceLateUpdateMarker.Auto();
+            using var marker = _SurfaceLateUpdateMarker.Auto();
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
                 return;
