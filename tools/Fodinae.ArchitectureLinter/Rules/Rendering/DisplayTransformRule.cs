@@ -77,11 +77,6 @@ public sealed class DisplayTransformRule : IRule
                 "Include guard must close with #endif // FODINAE_COLOR_GRADING_INCLUDED.");
         }
 
-        foreach (string matrixName in new[] { "rec709ToDisplayP3", "rec709ToRec2020" })
-        {
-            CheckWhitePreservingMatrix(violations, path, source, matrixName);
-        }
-
         Dictionary<string, float[]> matrices = ReadMatrices(source);
         if (!matrices.TryGetValue("toLms", out float[]? toLms) ||
             !matrices.TryGetValue("fromLms", out float[]? fromLms))
@@ -115,19 +110,6 @@ public sealed class DisplayTransformRule : IRule
             }
         }
 
-        Require(
-            violations,
-            path,
-            source,
-            @"result\s*=\s*color\s*\*\s*\(mapped\s*/\s*norm\)",
-            "Curve must preserve hue by scaling color with mapped / norm.");
-        Require(
-            violations,
-            path,
-            source,
-            @"headStops\s*=\s*-log2\(max\(greyOut",
-            "Curve headroom must be derived from greyOut.");
-
         if (Regex.IsMatch(source, @"pow\(\s*color\s*,\s*max\(\s*displayGamma", Invariant) ||
             Regex.IsMatch(source, @"2\.2\s*/\s*_Gamma", Invariant))
         {
@@ -153,47 +135,16 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
-        Require(
-            violations,
-            path,
-            source,
-            @"headroom\s*\*\s*excess\s*/\s*\(headroom\s*\+\s*excess\)",
-            "HDR peak must use a soft shoulder.");
-        Require(
-            violations,
-            path,
-            source,
-            @"color\s*\*=\s*mapped\s*/\s*max\(norm",
-            "HDR shoulder must scale by the maximum channel to preserve hue.");
-
-        if (Regex.IsMatch(source, @"min\(\s*color\s*,\s*_HdrPeakBrightnessScale\s*\)", Invariant))
+        Require(violations, path, source, @"void\s+CompositeFinal", "Scene-linear artistic pass is required.");
+        Require(violations, path, source, @"void\s+DisplayFinal", "Display effects must be separated from the scene pass.");
+        Require(violations, path, source, @"source\.rgb\s*/\s*_DisplayPaperWhiteNits", "Display effects must normalize absolute HDR nits.");
+        Require(violations, path, source, @"ToDisplayOutput\(color\)", "Display effects must restore URP output units.");
+        if (source.Contains("FodinaeDisplayTransform(", StringComparison.Ordinal) ||
+            source.Contains("ConvertOutputGamut(", StringComparison.Ordinal) ||
+            source.Contains("headroom * excess", StringComparison.Ordinal))
         {
-            AddViolation(violations, path, "HDR peak must not hard-clip with min(color, peak).");
+            AddViolation(violations, path, "Custom effects must not perform tone mapping or own display gamut conversion.");
         }
-
-        int gamutPosition = source.IndexOf("color = ConvertOutputGamut", StringComparison.Ordinal);
-        int temporalPosition = source.IndexOf("if (_Temporal.x > 0.001", StringComparison.Ordinal);
-        if (gamutPosition < 0 || temporalPosition < 0 || gamutPosition > temporalPosition)
-        {
-            AddViolation(
-                violations,
-                path,
-                "Output gamut and HDR shoulder must execute before temporal accumulation.");
-        }
-
-        Require(
-            violations,
-            path,
-            source,
-            @"_HdrPeakBrightnessScale\s*<=\s*0\.01[^}]*2\.2\s*/\s*max\(_Gamma",
-            "SDR gamma must calibrate linear color before URP FinalBlit.",
-            RegexOptions.Singleline);
-        Require(
-            violations,
-            path,
-            source,
-            @"centeredUv\s*=\s*\(screenUv\s*-\s*_VignetteCenter\)",
-            "Vignette must use stable screenUv rather than heat-distorted sample UV.");
     }
 
     private void CheckScopesShader(
@@ -226,18 +177,12 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
-        Require(
-            violations,
-            path,
-            source,
-            @"DisplayPeakBrightnessNits\s*/\s*nativePaperWhite",
-            "Display peak brightness must reach the HDR pass relative to native paper white.");
-        Require(
-            violations,
-            path,
-            source,
-            @"OutputGamut\s*=\s*cameraData\.isHDROutputActive\s*\?\s*\(int\)DisplayGamutKind\.Rec709",
-            "HDR custom pass must leave output in Rec.709 for URP FinalBlit conversion.");
+        Require(violations, path, source, @"displayPass\s*\?\s*RenderPassEvent.AfterRenderingPostProcessing",
+            "Display effects must execute after URP tone mapping.");
+        Require(violations, path, source, @"output.paperWhite.value",
+            "Effect calibration must use the same VolumeStack paper white as URP.");
+        Require(violations, path, source, @"_outputSignature\s*!=\s*signature",
+            "Display changes must invalidate temporal history.");
         Require(
             violations,
             path,

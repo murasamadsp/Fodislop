@@ -120,10 +120,21 @@ public sealed class ToolGraph : IDisposable
         }
 
         EnsureTextureUpdated(color, top);
-        if (_texture != null)
+        if (_texture == null)
         {
-            GUI.DrawTexture(area, _texture, ScaleMode.StretchToFill, true);
+            return;
         }
+
+        // Отступ от края: рамка теперь со срезанным углом, и растянутая на всю
+        // площадь текстура закрыла бы и срез, и границу — график выглядел бы
+        // приклеенным поверх окна, а не вставленным в него.
+        const float inset = 5f;
+        var plot = new Rect(
+            area.x + inset,
+            area.y + inset,
+            Mathf.Max(1f, area.width - inset * 2f),
+            Mathf.Max(1f, area.height - inset * 2f));
+        GUI.DrawTexture(plot, _texture, ScaleMode.StretchToFill, true);
     }
 
     private void EnsureTextureUpdated(Color color, float top)
@@ -149,31 +160,93 @@ public sealed class ToolGraph : IDisposable
             return;
         }
 
-        Color32 barColor = color;
-        Color32 clearColor = new(0, 0, 0, 0);
-
-        for (int x = 0; x < width; x++)
-        {
-            int barHeight = 0;
-            if (x < _count)
-            {
-                int index = (_cursor - _count + x + width * 2) % width;
-                float normalized = Mathf.Clamp01(_samples[index] / top);
-                barHeight = _samples[index] > 0f
-                    ? Mathf.Max(1, Mathf.RoundToInt(normalized * height))
-                    : 0;
-            }
-
-            for (int y = 0; y < height; y++)
-            {
-                _pixelBuffer![y * width + x] = y < barHeight ? barColor : clearColor;
-            }
-        }
+        PaintGrid(width, height, color);
+        PaintBars(width, height, top, color);
 
         _texture.SetPixels32(_pixelBuffer!);
         _texture.Apply(false, false);
         _dirty = false;
         _lastColor = color;
         _lastTop = top;
+    }
+
+    /// <summary>
+    /// Разметка под столбцами: четверти шкалы.
+    /// </summary>
+    /// <remarks>
+    /// Без неё график показывал форму, но не величину: всплеск втрое выше
+    /// соседнего выглядел так же, как всплеск вдвое выше. Линии идут в самой
+    /// текстуре, а не поверх неё, потому что рисовать их в <c>OnGUI</c> значило
+    /// бы четыре лишних вызова на каждый график на каждом кадре.
+    /// </remarks>
+    private void PaintGrid(int width, int height, Color color)
+    {
+        Color32 empty = new(0, 0, 0, 0);
+        Color32 grid = new(
+            (byte)(color.r * 255f),
+            (byte)(color.g * 255f),
+            (byte)(color.b * 255f),
+            30);
+
+        int quarter = height / 4;
+        for (int y = 0; y < height; y++)
+        {
+            bool isGridRow = quarter > 0 && y % quarter == 0 && y > 0;
+            Color32 rowColor = isGridRow ? grid : empty;
+            int rowStart = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                // Пунктир, а не сплошная: сплошная линия на уровне столбца
+                // сливается с ним и читается как часть данных.
+                _pixelBuffer![rowStart + x] = isGridRow && (x & 3) == 0 ? rowColor : empty;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Столбцы с затуханием к основанию и яркой кромкой сверху.
+    /// </summary>
+    /// <remarks>
+    /// Сплошная заливка превращала плотный график в цветной прямоугольник, по
+    /// которому не читался ни один отдельный кадр. Затухание оставляет вес
+    /// внизу, а кромка — единственное, что глаз ведёт по времени.
+    /// </remarks>
+    private void PaintBars(int width, int height, float top, Color color)
+    {
+        byte red = (byte)(color.r * 255f);
+        byte green = (byte)(color.g * 255f);
+        byte blue = (byte)(color.b * 255f);
+        Color32 crest = new(
+            (byte)Mathf.Min(255f, color.r * 255f + 90f),
+            (byte)Mathf.Min(255f, color.g * 255f + 90f),
+            (byte)Mathf.Min(255f, color.b * 255f + 90f),
+            255);
+
+        for (int x = 0; x < width; x++)
+        {
+            if (x >= _count)
+            {
+                continue;
+            }
+
+            int index = (_cursor - _count + x + width * 2) % width;
+            float sample = _samples[index];
+            if (sample <= 0f)
+            {
+                continue;
+            }
+
+            float normalized = Mathf.Clamp01(sample / top);
+            int barHeight = Mathf.Max(1, Mathf.RoundToInt(normalized * height));
+
+            for (int y = 0; y < barHeight; y++)
+            {
+                float rise = barHeight > 1 ? y / (float)(barHeight - 1) : 1f;
+                byte alpha = (byte)Mathf.Lerp(46f, 210f, rise * rise);
+                _pixelBuffer![y * width + x] = new Color32(red, green, blue, alpha);
+            }
+
+            _pixelBuffer![(barHeight - 1) * width + x] = crest;
+        }
     }
 }

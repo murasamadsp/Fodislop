@@ -367,6 +367,14 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     _OutputTex[id.xy] = float4(color, srcAlpha);
 }
 
+float3 ToDisplayOutput(float3 color)
+{
+#if defined(HDR_COLORSPACE_CONVERSION)
+    color = RotateRec709ToOutputSpace(color);
+#endif
+    return max(0.0, color) * _DisplayPaperWhiteNits;
+}
+
 [numthreads(8, 8, 1)]
 void DisplayFinal(uint3 id : SV_DispatchThreadID)
 {
@@ -532,7 +540,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
                 falseColor = float3(1.0, 0.0, 0.0);           // пересвет
             }
 
-            _OutputTex[id.xy] = float4(falseColor, srcAlpha);
+            _OutputTex[id.xy] = float4(ToDisplayOutput(falseColor), srcAlpha);
             return;
         }
 
@@ -557,12 +565,9 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
             result = float3(0.0, 0.3, 1.0);
         }
 
-        _OutputTex[id.xy] = float4(result, srcAlpha);
+        _OutputTex[id.xy] = float4(ToDisplayOutput(result), srcAlpha);
         return;
     }
 
-#if defined(HDR_COLORSPACE_CONVERSION)
-    color = RotateRec709ToOutputSpace(color);
-#endif
-    _OutputTex[id.xy] = float4(max(0.0, color) * _DisplayPaperWhiteNits, srcAlpha);
+    _OutputTex[id.xy] = float4(ToDisplayOutput(color), srcAlpha);
 }

@@ -33,11 +33,13 @@ public sealed class FrameStatsWindow : ToolWindow
     private float _solvesPerSecond;
     private Vector2 _scroll;
 
-    private const string InitialFpsText = "-- кадр/с   -- мс   решений света --/с";
+    private const string InitialFpsText = "--";
+    private const string InitialFrameMsText = "-- мс на кадр   ·   решений света --/с";
     private const string InitialFrameStatsText = "кадр: сред --  мин --  макс -- мс";
     private const string InitialAllocationsText = "мусор: -- КБ/кадр   -- МБ/с   сборок 0";
 
     private string _fpsText = InitialFpsText;
+    private string _frameMsText = InitialFrameMsText;
     private string _frameStatsText = InitialFrameStatsText;
     private string _allocationsText = InitialAllocationsText;
 
@@ -87,7 +89,8 @@ public sealed class FrameStatsWindow : ToolWindow
             : 0f;
         _lastSolveCount = solveCount;
 
-        _fpsText = $"{_fps:F0} кадр/с   {_frameMs:F1} мс   решений света {_solvesPerSecond:F1}/с";
+        _fpsText = _fps.ToString("F0");
+        _frameMsText = $"{_frameMs:F1} мс на кадр   ·   решений света {_solvesPerSecond:F1}/с";
         _frameStatsText = $"кадр: сред {_frameTime.Average:F1}  мин {_frameTime.Minimum:F1}  макс {_frameTime.Maximum:F1} мс";
         _allocationsText = $"мусор: {_allocations.Last:F1} КБ/кадр   {_telemetry.GcAllocTotalPerSecondBytes / (1024f * 1024f):F2} МБ/с   сборок {_telemetry.GcCollectionCount}";
 
@@ -109,6 +112,7 @@ public sealed class FrameStatsWindow : ToolWindow
         _lastSolveCount = _lighting?.SolveCount ?? 0;
         _solvesPerSecond = 0f;
         _fpsText = InitialFpsText;
+        _frameMsText = InitialFrameMsText;
         _frameStatsText = InitialFrameStatsText;
         _allocationsText = InitialAllocationsText;
     }
@@ -121,13 +125,19 @@ public sealed class FrameStatsWindow : ToolWindow
 
     protected override void DrawContent()
     {
-        GUILayout.Label("КАДР", SectionLabelStyle);
         using (var scroll = new GUILayout.ScrollViewScope(_scroll))
         {
             _scroll = scroll.scrollPosition;
             float graphWidth = Mathf.Max(120f, Rect.width - 54f);
 
-            GUILayout.Label(_fpsText, MetricLabelStyle);
+            ToolChrome.SectionHeader("КАДР");
+            DrawHero(_fpsText, "КАДР/С", FrameHealthColor());
+            GUILayout.Label(_frameMsText, MutedLabelStyle);
+
+            // Доля бюджета в 16.7 мс. Число «11 мс» само по себе ничего не
+            // говорит; доля бюджета говорит сразу, есть ли ещё запас.
+            ToolChrome.MeterLine(_frameMs / 16.7f, FrameHealthColor());
+            GUILayout.Space(4f);
             GUILayout.Label(_frameStatsText, MutedLabelStyle);
 
             // Шкала прибита к 33 мс — двум кадрам при шестидесяти. Без опоры график
@@ -137,14 +147,61 @@ public sealed class FrameStatsWindow : ToolWindow
                 ToolTheme.FrameGraphColor,
                 33f);
 
-            ToolTheme.Separator();
-            GUILayout.Label("ПАМЯТЬ", SectionLabelStyle);
+            ToolChrome.SectionHeader("ПАМЯТЬ");
             GUILayout.Label(_allocationsText, MutedLabelStyle);
+
+            // Опора — килобайт на кадр. Ноль мусора это ровная пустая полоса,
+            // и любой всплеск над ней виден сразу, без чтения чисел.
+            ToolChrome.MeterLine(_allocations.Last / 16f, ToolTheme.AllocationGraphColor);
+            GUILayout.Space(2f);
 
             _allocations.Draw(
                 GUILayoutUtility.GetRect(graphWidth, 70f),
                 ToolTheme.AllocationGraphColor,
                 16f);
+        }
+    }
+
+    /// <summary>
+    /// Цвет по состоянию кадра.
+    /// </summary>
+    /// <remarks>
+    /// Пороги — кадр при шестидесяти и кадр при тридцати. Не «красиво», а
+    /// граница, за которой движение перестаёт быть плавным.
+    /// </remarks>
+    private Color FrameHealthColor()
+    {
+        if (_frameMs <= 0f)
+        {
+            return ToolTheme.FrameGraphColor;
+        }
+
+        if (_frameMs > 33.3f)
+        {
+            return ToolTheme.Error;
+        }
+
+        return _frameMs > 16.7f ? ToolTheme.Warning : ToolTheme.Success;
+    }
+
+    /// <summary>Крупное число с единицей и точкой состояния в одну строку.</summary>
+    private static void DrawHero(string value, string unit, Color color)
+    {
+        using (new GUILayout.HorizontalScope())
+        {
+            ToolChrome.StatusPip(color);
+
+            // Цвет переставляется прямо в общем стиле и возвращается на месте.
+            // Копия стиля выглядела бы аккуратнее, но это была бы новая GUIStyle
+            // на каждое событие IMGUI — мусор в окне, которое считает мусор.
+            GUIStyle style = MetricLabelStyle;
+            Color previous = style.normal.textColor;
+            style.normal.textColor = color;
+            GUILayout.Label(value, style);
+            style.normal.textColor = previous;
+
+            GUILayout.Label(unit, ToolTheme.UnitLabel);
+            GUILayout.FlexibleSpace();
         }
     }
 }
