@@ -36,8 +36,6 @@ namespace Fodinae.Rendering.PostProcessing
         private IClientConfigManager _clientConfigManager = null!;
         [Inject]
         private IGameplayCamera _gameplayCamera = null!;
-        [Inject]
-        private ISceneObjectFactory _sceneObjects = null!;
 
         [Inject]
         private void Construct(Volume volume)

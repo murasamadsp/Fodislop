@@ -18,12 +18,9 @@ namespace Fodinae.Tools.Imgui.Windows;
 /// </remarks>
 public sealed class RenderBypassWindow : ToolWindow
 {
-    private const float DefaultDynamicLightIntensity = 1.25f;
-
     private readonly IRuntimeDebugSettings _debugSettings;
     private readonly LightingEngine? _lighting;
     private readonly WorldGizmoOptions _gizmos;
-    private float _rememberedDynamicLightIntensity = DefaultDynamicLightIntensity;
     private Vector2 _scroll;
 
     public RenderBypassWindow(
@@ -44,7 +41,6 @@ public sealed class RenderBypassWindow : ToolWindow
     protected override void OnPlaySessionReset()
     {
         _scroll = default;
-        _rememberedDynamicLightIntensity = DefaultDynamicLightIntensity;
         _debugSettings.BypassLightingCompute = false;
         _debugSettings.BypassTerrainDraw = false;
         _debugSettings.BypassCpuMeshRebuild = false;
@@ -217,16 +213,6 @@ public sealed class RenderBypassWindow : ToolWindow
             return;
         }
 
-        float current = _lighting.DynamicLightIntensity;
-        if (current > 0.01f)
-        {
-            _rememberedDynamicLightIntensity = current;
-            _lighting.SetDynamicLightSettings(0f, _lighting.DynamicLightColor);
-            return;
-        }
-
-        _lighting.SetDynamicLightSettings(
-            Mathf.Max(_rememberedDynamicLightIntensity, 0.01f),
-            _lighting.DynamicLightColor);
+        // DynamicLightIntensity — константа, не настраивается
     }
 }

@@ -1,7 +1,7 @@
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using System.Drawing;
 
 namespace Fodinae.UIAssets;
 
@@ -104,92 +104,49 @@ internal static class Program
                     b = (int)Math.Round(cDeep.b + (cNight.b - cDeep.b) * k);
                 }
 
-                double fresnel = Math.Pow(1.0 - nz, 2.6);
-                double rimFactor = fresnel * 0.95;
-                r = (int)Math.Round(r * (1 - rimFactor) + cAtmo.r * rimFactor);
-                g = (int)Math.Round(g * (1 - rimFactor) + cAtmo.g * rimFactor);
-                b = (int)Math.Round(b * (1 - rimFactor) + cAtmo.b * rimFactor);
-
-                double edgeDist = radius - dist;
-                if (edgeDist < 3.0)
-                {
-                    double edgeT = edgeDist / 3.0;
-                    r = (int)Math.Round(cAtmo.r * (1 - edgeT) + r * edgeT);
-                    g = (int)Math.Round(cAtmo.g * (1 - edgeT) + g * edgeT);
-                    b = (int)Math.Round(cAtmo.b * (1 - edgeT) + b * edgeT);
-                }
-
-                pixels[y * size + x] = new Rgba32(
-                    (byte)Math.Clamp(r, 0, 255),
-                    (byte)Math.Clamp(g, 0, 255),
-                    (byte)Math.Clamp(b, 0, 255),
-                    255);
+                pixels[y * size + x] = new Rgba32((byte)r, (byte)g, (byte)b, 255);
             }
         }
 
-        img.Save(Path.Combine(OutputDir, "mm_planet.png"));
-        Console.WriteLine("Generated mm_planet.png");
-    }
-
-    private static float Noise2D(float[,] grid, double u, double v)
-    {
-        double gu = (u * 6) % 64;
-        double gv = (v * 6) % 64;
-        int x0 = (int)gu;
-        int y0 = (int)gv;
-        int x1 = (x0 + 1) % 64;
-        int y1 = (y0 + 1) % 64;
-        double fx = gu - x0;
-        double fy = gv - y0;
-        fx = fx * fx * (3 - 2 * fx);
-        fy = fy * fy * (3 - 2 * fy);
-
-        float top = grid[y0, x0] * (1 - (float)fx) + grid[y0, x1] * (float)fx;
-        float bottom = grid[y1, x0] * (1 - (float)fx) + grid[y1, x1] * (float)fx;
-        return top * (1 - (float)fy) + bottom * (float)fy;
+        img.Save(Path.Combine(OutputDir, "planet_exact.png"));
+        Console.WriteLine("Generated planet_exact.png");
     }
 
     private static void GenerateBrandLogo(int size)
     {
         using var img = new Image<Rgba32>(size, size);
-        var g = new SixLabors.ImageSharp.Drawing.Processing.PathBuilder();
-        double cx = size / 2.0;
-        double cy = size / 2.0;
-        double r = size * 0.44;
-
-        var points = new List<SixLabors.ImageSharp.Drawing.PointF>();
-        for (int i = 0; i < 6; i++)
+        img.Mutate(ctx =>
         {
-            double angle = Math.PI * 60 * i / 180.0 - Math.PI / 6.0;
-            points.Add(new SixLabors.ImageSharp.Drawing.PointF((float)(cx + r * Math.Cos(angle)), (float)(cy + r * Math.Sin(angle))));
-        }
+            double cx = size / 2.0;
+            double cy = size / 2.0;
+            double r = size * 0.44;
 
-        g.AddPolygon(points.ToArray());
-        img.Mutate(ctx => ctx.Draw(SixLabors.ImageSharp.Drawing.Color.White, 4.0f, g.Build()));
+            var points = new PointF[6];
+            for (int i = 0; i < 6; i++)
+            {
+                double angle = Math.PI * 60 * i / 180.0 - Math.PI / 6.0;
+                points[i] = new PointF((float)(cx + r * Math.Cos(angle)), (float)(cy + r * Math.Sin(angle)));
+            }
+            ctx.DrawPolygon(Color.White, 4.0f, points);
 
-        double rInner = r * 0.62;
-        var innerPoints = new List<SixLabors.ImageSharp.Drawing.PointF>();
-        for (int i = 0; i < 6; i++)
-        {
-            double angle = Math.PI * 60 * i / 180.0 - Math.PI / 6.0;
-            innerPoints.Add(new SixLabors.ImageSharp.Drawing.PointF((float)(cx + rInner * Math.Cos(angle)), (float)(cy + rInner * Math.Sin(angle))));
-        }
+            double rInner = r * 0.62;
+            var innerPoints = new PointF[6];
+            for (int i = 0; i < 6; i++)
+            {
+                double angle = Math.PI * 60 * i / 180.0 - Math.PI / 6.0;
+                innerPoints[i] = new PointF((float)(cx + rInner * Math.Cos(angle)), (float)(cy + rInner * Math.Sin(angle)));
+            }
+            ctx.DrawPolygon(Color.Transparent, 2.0f, innerPoints);
 
-        var g2 = new SixLabors.ImageSharp.Drawing.Processing.PathBuilder();
-        g2.AddPolygon(innerPoints.ToArray());
-        img.Mutate(ctx => ctx.Draw(SixLabors.ImageSharp.Drawing.Color.Transparent, 2.0f, g2.Build()));
-
-        double rCore = r * 0.28;
-        var corePoints = new List<SixLabors.ImageSharp.Drawing.PointF>();
-        for (int i = 0; i < 4; i++)
-        {
-            double angle = Math.PI * 90 * i / 180.0;
-            corePoints.Add(new SixLabors.ImageSharp.Drawing.PointF((float)(cx + rCore * Math.Cos(angle)), (float)(cy + rCore * Math.Sin(angle))));
-        }
-
-        var g3 = new SixLabors.ImageSharp.Drawing.Processing.PathBuilder();
-        g3.AddPolygon(corePoints.ToArray());
-        img.Mutate(ctx => ctx.Fill(SixLabors.ImageSharp.Drawing.Color.White, g3.Build()));
+            double rCore = r * 0.28;
+            var corePoints = new PointF[4];
+            for (int i = 0; i < 4; i++)
+            {
+                double angle = Math.PI * 90 * i / 180.0;
+                corePoints[i] = new PointF((float)(cx + rCore * Math.Cos(angle)), (float)(cy + rCore * Math.Sin(angle)));
+            }
+            ctx.FillPolygon(Color.White, corePoints);
+        });
 
         img.Save(Path.Combine(OutputDir, "mm_logo.png"));
         Console.WriteLine("Generated mm_logo.png");
@@ -273,6 +230,158 @@ internal static class Program
 
         img.Save(Path.Combine(OutputDir, "mm_space_bg.png"));
         Console.WriteLine("Generated mm_space_bg.png");
+    }
+
+    private static void GenerateSidebarIcons()
+    {
+        GenerateIcon("mm_icon_chronicle.png", 128, (draw, s) =>
+        {
+            double pad = s * 0.22;
+            double x0 = pad, y0 = pad * 0.8, x1 = s - pad, y1 = s - pad * 0.8;
+            draw.DrawPolygon(Color.White, (float)(s * 0.04),
+                new PointF[] {
+                    new((float)x0, (float)y0), new((float)x1, (float)y0), new((float)x1, (float)y1), new((float)x0, (float)y1)
+                });
+            float lw = (float)(s * 0.035);
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(pad + s * 0.1), (float)(y0 + s * 0.18)),
+                    new((float)(x1 - s * 0.1), (float)(y0 + s * 0.18))
+                });
+        });
+
+        GenerateIcon("mm_icon_settings.png", 128, (draw, s) =>
+        {
+            double cx = s / 2.0, cy = s / 2.0;
+            double rOuter = s * 0.34;
+            draw.FillCircle(Color.White, (float)cx, (float)cy, (float)rOuter);
+            draw.FillCircle(Color.Transparent, (float)cx, (float)cy, (float)(s * 0.12));
+        });
+
+        GenerateIcon("mm_icon_repair.png", 128, (draw, s) =>
+        {
+            float lw = (float)(s * 0.09);
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.28), (float)(s * 0.72)),
+                    new((float)(s * 0.62), (float)(s * 0.38))
+                });
+            draw.FillCircle(Color.White, (float)(s * 0.68), (float)(s * 0.32), (float)(s * 0.16));
+            draw.FillCircle(Color.Transparent, (float)(s * 0.68), (float)(s * 0.32), (float)(s * 0.09));
+            draw.FillCircle(Color.White, (float)(s * 0.26), (float)(s * 0.74), (float)(s * 0.08));
+        });
+
+        GenerateIcon("mm_icon_update.png", 128, (draw, s) =>
+        {
+            float lw = (float)(s * 0.045);
+            draw.DrawArc(Color.White, lw,
+                new RectangleF((float)(s * 0.28), (float)(s * 0.24), (float)(s * 0.44), (float)(s * 0.44)),
+                180, 180);
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.28), (float)(s * 0.46)),
+                    new((float)(s * 0.22), (float)(s * 0.66))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.72), (float)(s * 0.46)),
+                    new((float)(s * 0.78), (float)(s * 0.66))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.18), (float)(s * 0.66)),
+                    new((float)(s * 0.82), (float)(s * 0.66))
+                });
+            draw.FillCircle(Color.White, (float)(s / 2), (float)(s * 0.75), (float)(s * 0.06));
+        });
+
+        GenerateIcon("mm_icon_discord.png", 128, (draw, s) =>
+        {
+            double padX = s * 0.20, padY = s * 0.28;
+            draw.DrawPolygon(Color.White, (float)(s * 0.045),
+                new PointF[] {
+                    new((float)padX, (float)padY), new((float)(s - padX), (float)padY),
+                    new((float)(s - padX), (float)(s - padY)), new((float)padX, (float)(s - padY))
+                });
+            draw.FillCircle(Color.White, (float)(s / 2 - s * 0.12), (float)(s / 2), (float)(s * 0.05));
+            draw.FillCircle(Color.White, (float)(s / 2 + s * 0.12), (float)(s / 2), (float)(s * 0.05));
+        });
+
+        GenerateIcon("mm_icon_telegram.png", 128, (draw, s) =>
+        {
+            var pts = new PointF[]
+            {
+                new((float)(s * 0.80), (float)(s * 0.22)),
+                new((float)(s * 0.22), (float)(s * 0.52)),
+                new((float)(s * 0.44), (float)(s * 0.60)),
+                new((float)(s * 0.52), (float)(s * 0.78)),
+                new((float)(s * 0.62), (float)(s * 0.62)),
+            };
+            draw.FillPolygon(Color.White, new[] { pts[0], pts[1], pts[2] });
+            draw.FillPolygon(Color.White, new[] { pts[0], pts[2], pts[3] });
+            draw.FillPolygon(Color.White, new[] { pts[0], pts[3], pts[4] });
+        });
+
+        GenerateIcon("mm_icon_vk.png", 128, (draw, s) =>
+        {
+            double pad = s * 0.22;
+            draw.DrawPolygon(Color.White, (float)(s * 0.045),
+                new PointF[] {
+                    new((float)pad, (float)pad), new((float)(s - pad), (float)pad),
+                    new((float)(s - pad), (float)(s - pad)), new((float)pad, (float)(s - pad))
+                });
+            float lw = (float)(s * 0.05);
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.38), (float)(s * 0.32)),
+                    new((float)(s * 0.38), (float)(s * 0.68))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.38), (float)(s * 0.50)),
+                    new((float)(s * 0.62), (float)(s * 0.32))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.44), (float)(s * 0.46)),
+                    new((float)(s * 0.62), (float)(s * 0.68))
+                });
+        });
+
+        GenerateIcon("mm_icon_exit.png", 128, (draw, s) =>
+        {
+            float lw = (float)(s * 0.045);
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.54), (float)(s * 0.22)),
+                    new((float)(s * 0.24), (float)(s * 0.22))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.24), (float)(s * 0.22)),
+                    new((float)(s * 0.24), (float)(s * 0.78))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.24), (float)(s * 0.78)),
+                    new((float)(s * 0.54), (float)(s * 0.78))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.40), (float)(s * 0.50)),
+                    new((float)(s * 0.76), (float)(s * 0.50))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.62), (float)(s * 0.36)),
+                    new((float)(s * 0.76), (float)(s * 0.50))
+                });
+            draw.DrawLines(Color.White, lw,
+                new PointF[] {
+                    new((float)(s * 0.62), (float)(s * 0.64)),
+                    new((float)(s * 0.76), (float)(s * 0.50))
+                });
+        });
     }
 
     private static void GenerateSidebarIcons()
@@ -437,5 +546,24 @@ internal static class Program
         img.Mutate(ctx => ctx.Resize(size, KnownResamplers.Lanczos3));
         img.Save(Path.Combine(OutputDir, filename));
         Console.WriteLine($"Generated {filename}");
+    }
+
+    private static float Noise2D(float[,] grid, double u, double v)
+    {
+        int w = grid.GetLength(1);
+        int h = grid.GetLength(0);
+        double x = u * w - 0.5;
+        double y = v * h - 0.5;
+        int x0 = (int)Math.Floor(x);
+        int y0 = (int)Math.Floor(y);
+        double fx = x - x0;
+        double fy = y - y0;
+        int x1 = (x0 + 1) % w;
+        int y0c = Math.Clamp(y0, 0, h - 1);
+        int y1c = Math.Clamp(y0 + 1, 0, h - 1);
+
+        float top = grid[y0c, x0] * (float)(1 - fx) + grid[y0c, x1] * (float)fx;
+        float bottom = grid[y1c, x0] * (float)(1 - fx) + grid[y1c, x1] * (float)fx;
+        return top * (float)(1 - fy) + bottom * (float)fy;
     }
 }

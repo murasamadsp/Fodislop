@@ -88,22 +88,9 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
 
         if (config.SchemaVersion < 24)
         {
-            // Схема 24: сброс унаследованной эмиссии (8x компенсация старого оценщика)
-            // и завышенного фонового света к авторским физически обоснованным значениям (2.0 и 0.08).
-            if (config.Lighting != null)
-            {
-                if (config.Lighting.EmissionScale > 4f)
-                {
-                    config.Lighting.EmissionScale = WorldLightingSettings.DefaultEmissionScale;
-                }
-
-                if (config.Lighting.AmbientIntensity > 0.5f)
-                {
-                    config.Lighting.AmbientIntensity = WorldLightingSettings.DefaultAmbientIntensity;
-                }
-            }
-
-            config.SchemaVersion = 24;
+            // Схема 24-28: все значения освещения теперь константные.
+            // Миграция не требуется — ClientConfig.Lighting больше не используется.
+            config.SchemaVersion = 28;
             migrated = true;
         }
 

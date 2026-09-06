@@ -54,31 +54,21 @@ public sealed class RobotLighting
             return;
         }
 
-        bool engineReady = lightingEngine?.IsRuntimeConfigReady == true;
-        var defaults = new WorldLightingSettings();
-        _dynamicLightIntensity = engineReady
-            ? lightingEngine!.DynamicLightIntensity
-            : defaults.DynamicLightIntensity;
-        _dynamicLightColor = engineReady
-            ? lightingEngine!.DynamicLightColor
-            : defaults.DynamicLightColor;
-        _dynamicLightSettingsLoaded = engineReady;
+        _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
+        _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
+        _dynamicLightSettingsLoaded = true;
     }
 
     public void ResetPreferences(LightingEngine? lightingEngine)
     {
-        var defaults = new WorldLightingSettings();
-        _dynamicLightIntensity = lightingEngine?.DynamicLightIntensity ??
-            defaults.DynamicLightIntensity;
-        _dynamicLightColor = lightingEngine?.DynamicLightColor ??
-            defaults.DynamicLightColor;
+        _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
+        _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
         _dynamicLightSettingsLoaded = true;
     }
 
     public void SetIntensity(float intensity, LightingEngine? lightingEngine)
     {
         _dynamicLightIntensity = Mathf.Clamp(intensity, 0f, 4f);
-        lightingEngine?.SetDynamicLightSettings(_dynamicLightIntensity, _dynamicLightColor);
     }
 
     public void SetColor(Color color, LightingEngine? lightingEngine)
@@ -88,7 +78,6 @@ public sealed class RobotLighting
             Mathf.Max(0f, color.g),
             Mathf.Max(0f, color.b),
             1f);
-        lightingEngine?.SetDynamicLightSettings(_dynamicLightIntensity, _dynamicLightColor);
     }
 
     public void Update(Vector3 position, LightingEngine? lighting)

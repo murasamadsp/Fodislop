@@ -69,26 +69,7 @@ internal sealed class ClientConfigLegacySchema21
     public bool DisplayPhysicsEnabled;
     public bool TemporalEnabled;
 
-    public WorldLightingSettings ToLighting() => new()
-    {
-        DiffuseBounceEnabled = DiffuseBounceEnabled,
-        AmbientIntensity = AmbientIntensity,
-        EmissionScale = EmissionScale,
-        AmbientColor = AmbientColor,
-        EmptyExtinctionRgb = EmptyExtinctionRgb,
-        SolidExtinctionRgb = SolidExtinctionRgb,
-        EmptyExtinctionMultiplier = EmptyExtinctionMultiplier,
-        SolidExtinctionMultiplier = SolidExtinctionMultiplier,
-        BounceStrength = BounceStrength,
-        MaximumLightMultiplier = MaximumLightMultiplier,
-        EnableFinalLightingClamp = EnableFinalLightingClamp,
-        TransmittanceDebugDistanceCells = TransmittanceDebugDistanceCells,
-        MinimumTransmission = MinimumTransmission,
-        LightSafeBorder = LightSafeBorder,
-        DynamicLightIntensity = DynamicLightIntensity,
-        DynamicLightColor = DynamicLightColor,
-        DynamicLightUpdatesPerSecond = DynamicLightUpdatesPerSecond,
-    };
+    public WorldLightingSettings ToLighting() => new();
 
     public TerrainSettings ToTerrain() => new()
     {

@@ -148,7 +148,7 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeIntParam(
             compute,
             EnableDiffuseBounceId,
-            configHolder.DiffuseBounceEnabled ? 1 : 0);
+            1);
         commandBuffer.SetComputeIntParam(
             compute,
             BlockAveragedId,
