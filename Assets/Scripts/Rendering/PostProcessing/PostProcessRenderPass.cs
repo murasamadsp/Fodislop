@@ -208,8 +208,12 @@ namespace Fodinae.Rendering.PostProcessing
                     ? advanced.TemporalPersistenceIntensity > 0f || mbActive
                     : advanced.LightStability > 0f);
             Tonemapping output = stack.GetComponent<Tonemapping>();
-            float paperWhite = cameraData.isHDROutputActive ? output.paperWhite.value : 1f;
-            var signature = new Vector3(paperWhite, output.maxNits.value, (float)cameraData.hdrDisplayColorGamut);
+            bool hdrOutput = cameraData.isHDROutputActive;
+
+            // HDR display getters throw when HDR support is disabled in Player Settings.
+            ColorGamut hdrGamut = hdrOutput ? cameraData.hdrDisplayColorGamut : ColorGamut.sRGB;
+            float paperWhite = hdrOutput ? output.paperWhite.value : 1f;
+            var signature = new Vector3(paperWhite, output.maxNits.value, (float)hdrGamut);
             if (_outputSignature != signature)
             {
                 _outputSignature = signature;
@@ -312,9 +316,9 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.CdlOffset = grade.Offset;
                 passData.CdlPower = grade.Power;
                 passData.DisplayPaperWhiteNits = paperWhite;
-                passData.DisplayPeakRelative = cameraData.isHDROutputActive ? output.maxNits.value / paperWhite : 0f;
-                passData.HdrOutput = _displayPass && cameraData.isHDROutputActive;
-                passData.HdrGamut = cameraData.hdrDisplayColorGamut;
+                passData.DisplayPeakRelative = hdrOutput ? output.maxNits.value / paperWhite : 0f;
+                passData.HdrOutput = _displayPass && hdrOutput;
+                passData.HdrGamut = hdrGamut;
                 passData.EigengrauActive = eigengrauActive;
                 passData.EigengrauIntensity = eigengrau.intensity.value;
                 passData.EigengrauColor = eigengrau.color.value;

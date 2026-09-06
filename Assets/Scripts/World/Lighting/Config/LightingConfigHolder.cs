@@ -56,28 +56,9 @@ internal sealed class LightingConfigHolder(IClientConfigManager clientConfig)
     /// <summary>
     /// Вне режима игры тёмная сцена подменяется различимой.
     /// </summary>
-    /// <remarks>
-    /// Авторский ambient — 0.85 при почти чёрном цвете, и в окне Scene это
-    /// даёт чёрный прямоугольник: там нет ни игрока, ни динамических
-    /// источников. Подмена касается только того, что уходит в шейдер, и
-    /// никогда не попадает в конфиг.
-    /// </remarks>
-    public float AmbientIntensity =>
-        !Application.isPlaying && Lighting.AmbientIntensity < 0.4f
-            ? 0.4f
-            : Lighting.AmbientIntensity;
+    public float AmbientIntensity => Lighting.AmbientIntensity;
 
-    public Color AmbientColor
-    {
-        get
-        {
-            Color authored = Lighting.AmbientColor;
-            bool nearlyBlack = authored.r + authored.g + authored.b < 0.2f;
-            return !Application.isPlaying && nearlyBlack
-                ? new Color(0.8f, 0.85f, 0.95f, 1f)
-                : authored;
-        }
-    }
+    public Color AmbientColor => Lighting.AmbientColor;
 
     /// <summary>
     /// Откладывает запись конфига.

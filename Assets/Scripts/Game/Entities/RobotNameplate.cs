@@ -28,6 +28,8 @@ public sealed class RobotNameplate
         Transform? existingNickname = robotTransform.Find("Nickname");
         if (isLocalPlayer)
         {
+            _nicknameText?.Dispose();
+            _nicknameText = null;
             if (existingNickname != null)
             {
                 existingNickname.gameObject.SetActive(false);
@@ -42,6 +44,7 @@ public sealed class RobotNameplate
         }
 
         _nicknameText ??= labels.Create(chatBubble: false);
+        InvalidatePosition();
         _nicknameText.SetVisible(true);
         _nicknameText.SetText(nickname ?? string.Empty);
     }

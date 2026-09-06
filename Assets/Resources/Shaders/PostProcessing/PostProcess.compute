@@ -6,6 +6,8 @@
 #pragma multi_compile _ HDR_COLORSPACE_CONVERSION
 
 #include "ColorGrading.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl"
 
 Texture2D<float4> _InputTex;
@@ -69,11 +71,6 @@ float4 _Advanced1; // anamorphic length, diffraction, heat intensity/scale
 float4 _Advanced2; // glint intensity/threshold, dust intensity/scale
 float4 _Advanced3; // dust speed, phosphor mask, dithering, reserved
 float4 _Temporal; // persistence intensity/decay, stability, temporal motion blur
-
-float Luminance(float3 color)
-{
-    return dot(color, float3(0.2126, 0.7152, 0.0722));
-}
 
 float LinearToPerceptual(float linearValue)
 {

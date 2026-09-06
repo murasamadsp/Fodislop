@@ -1,0 +1,3 @@
+namespace Fodinae.Core.Rendering
+{
+}

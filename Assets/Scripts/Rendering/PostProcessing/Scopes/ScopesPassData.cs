@@ -19,4 +19,6 @@ internal sealed class ScopesPassData
     public int SourceWidth;
     public int SourceHeight;
     public float SignalScale;
+    public bool HdrOutput;
+    public ColorGamut HdrGamut;
 }

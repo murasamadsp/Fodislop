@@ -25,7 +25,6 @@ namespace Fodinae.Tools.Imgui;
 public static class ToolPalette
 {
     // ── Подложки ──────────────────────────────────────────────────────────
-    public static readonly Color32 Void = new(6, 8, 11, 250);
     public static readonly Color32 Panel = new(11, 15, 19, 246);
     public static readonly Color32 Raised = new(19, 25, 32, 255);
     public static readonly Color32 RaisedHover = new(28, 36, 45, 255);
@@ -60,8 +59,6 @@ public static class ToolPalette
     public const int FrameSize = 20;
 
     public static Texture2D White { get; private set; } = Texture2D.whiteTexture;
-
-    public static Texture2D AccentPixel { get; private set; } = Texture2D.whiteTexture;
 
     public static Texture2D Scanlines { get; private set; } = Texture2D.whiteTexture;
 
@@ -101,7 +98,6 @@ public static class ToolPalette
     {
         Release();
         White = CreateSolid("Tool.White", new Color32(255, 255, 255, 255));
-        AccentPixel = CreateSolid("Tool.Accent", _AccentSolid);
         Scanlines = CreateScanlines();
 
         WindowFrame = CreateNotched("Tool.WindowFrame", Panel, _AccentDim);
@@ -129,7 +125,6 @@ public static class ToolPalette
 
         _Textures.Clear();
         White = Texture2D.whiteTexture;
-        AccentPixel = Texture2D.whiteTexture;
         Scanlines = Texture2D.whiteTexture;
     }
 

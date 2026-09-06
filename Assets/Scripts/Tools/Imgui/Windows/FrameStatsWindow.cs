@@ -191,14 +191,13 @@ public sealed class FrameStatsWindow : ToolWindow
         {
             ToolChrome.StatusPip(color);
 
-            // Цвет переставляется прямо в общем стиле и возвращается на месте.
-            // Копия стиля выглядела бы аккуратнее, но это была бы новая GUIStyle
-            // на каждое событие IMGUI — мусор в окне, которое считает мусор.
+            // Крупное число рисуется общим стилем с временной подменой цвета:
+            // копия стиля означала бы новую GUIStyle на каждое событие IMGUI —
+            // мусор в окне, которое этот мусор и считает.
             GUIStyle style = MetricLabelStyle;
-            Color previous = style.normal.textColor;
-            style.normal.textColor = color;
-            GUILayout.Label(value, style);
-            style.normal.textColor = previous;
+            Rect area = GUILayoutUtility.GetRect(
+                new GUIContent(value), style, GUILayout.ExpandWidth(false));
+            ToolChrome.DrawTinted(area, value, style, color);
 
             GUILayout.Label(unit, ToolTheme.UnitLabel);
             GUILayout.FlexibleSpace();

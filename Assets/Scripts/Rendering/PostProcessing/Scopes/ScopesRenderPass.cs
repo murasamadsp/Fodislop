@@ -48,7 +48,7 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
     {
         renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing;
         renderPassEvent2D = RenderPassEvent2D.AfterRenderingPostProcessing;
-        _scopesCS = scopesCS;
+        _scopesCS = Object.Instantiate(scopesCS);
         _kernelClear = _scopesCS.FindKernel("ScopesClear");
         _kernelGather = _scopesCS.FindKernel("ScopesGather");
         _kernelHistogram = _scopesCS.FindKernel("HistogramResolve");
@@ -176,6 +176,8 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
         passData.KernelVectorscope = _kernelVectorscope;
         passData.Resources = _resources;
         passData.SourceTexture = activeColor;
+        passData.HdrOutput = cameraData.isHDROutputActive;
+        passData.HdrGamut = passData.HdrOutput ? cameraData.hdrDisplayColorGamut : ColorGamut.sRGB;
         TextureDesc sourceDescriptor = activeColor.GetDescriptor(renderGraph);
         RenderTextureDescriptor cameraDescriptor = cameraData.cameraTargetDescriptor;
         passData.SourceWidth = Mathf.Max(
@@ -188,7 +190,7 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
             sourceDescriptor.sizeMode == TextureSizeMode.Explicit
                 ? sourceDescriptor.height
                 : cameraDescriptor.height);
-        if (cameraData.isHDROutputActive)
+        if (passData.HdrOutput)
         {
             Tonemapping output = VolumeManager.instance.stack.GetComponent<Tonemapping>();
             passData.SignalScale = 1f / Mathf.Max(1f, output.maxNits.value);
@@ -213,5 +215,6 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
         }
 
         _resources.Dispose();
+        CoreUtils.Destroy(_scopesCS);
     }
 }

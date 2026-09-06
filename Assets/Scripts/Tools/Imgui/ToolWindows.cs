@@ -33,11 +33,18 @@ public static class ToolWindows
     private static bool _releaseCaptureRequested;
     private static ToolWindow? _focusedWindow;
     private static ToolWindow? _pendingFocus;
+    private static bool _layoutDirty;
+    private static float _nextLayoutSaveTime;
+    private static float? _pendingScale;
 
     public static int SessionGeneration { get; private set; }
 
     /// <summary>Масштаб интерфейса инструментов под экраны Retina / High-DPI.</summary>
-    public static float Scale => UIScaleUtility.IsRetinaOrHighDpi ? UIScaleUtility.RetinaDefaultScale : 1f;
+    public static float Scale => ToolLayoutStore.Scale > 0f
+        ? ToolLayoutStore.Scale
+        : UIScaleUtility.IsRetinaOrHighDpi ? 2f : 1f;
+
+    public static void RequestScale(float scale) => _pendingScale = scale;
 
     /// <summary>Мастер-тумблер: выключает всю систему разом.</summary>
     public static bool Enabled
@@ -81,6 +88,7 @@ public static class ToolWindows
         _releaseCaptureRequested = true;
         _focusedWindow = null;
         _pendingFocus = null;
+        _pendingScale = null;
         SessionGeneration = unchecked(SessionGeneration + 1);
     }
 
@@ -94,6 +102,7 @@ public static class ToolWindows
         window.CaptureInitialState();
         window.Id = _nextId++;
         _Windows.Add(window);
+        ToolLayoutStore.Load(window);
     }
 
     public static bool IsRegistered(ToolWindow window) => _Windows.Contains(window);
@@ -126,6 +135,7 @@ public static class ToolWindows
     public static void RequestVisibility(ToolWindow window, bool visible)
     {
         _PendingVisibility[window] = visible;
+        _layoutDirty = true;
         if (!visible)
         {
             if (ReferenceEquals(_focusedWindow, window))
@@ -154,19 +164,15 @@ public static class ToolWindows
         GUI.FocusWindow(window.Id);
     }
 
-    public static void ResetLayout()
-    {
-        _layoutResetRequested = true;
-    }
-
-    public static void ReleaseInputCapture()
-    {
-        _keyboardCaptured = false;
-        _pointerCaptured = false;
-        _releaseCaptureRequested = true;
-    }
-
-    /// <summary>Tests an Input System point against visible IMGUI windows.</summary>
+    /// <summary>
+    /// Попадает ли точка экрана в одно из открытых окон.
+    /// </summary>
+    /// <remarks>
+    /// Нужна игре, а не инструментам: щелчок по отладочному окну не должен
+    /// доходить до мира под ним. Координата приходит из системы ввода — снизу
+    /// вверх и в пикселях экрана, — а окна живут в координатах IMGUI: сверху
+    /// вниз и с учётом масштаба интерфейса. Отсюда пересчёт.
+    /// </remarks>
     public static bool ContainsScreenPoint(Vector2 screenPoint)
     {
         if (!Enabled)
@@ -209,19 +215,102 @@ public static class ToolWindows
         }
     }
 
+    /// <summary>
+    /// Кадровая логика всех окон.
+    /// </summary>
+    /// <remarks>
+    /// Идёт и при выключенной системе: инструмент, который начинает копить
+    /// историю только после открытия, показывает пустой график ровно тогда,
+    /// когда на него смотрят.
+    /// </remarks>
     public static void Tick()
     {
-        // Кадровая логика идёт и при выключенной системе: инструмент, который
-        // начинает копить историю только после открытия, показывает пустой
-        // график ровно тогда, когда на него смотрят.
         foreach (ToolWindow window in _Windows)
         {
             window.Tick();
         }
     }
 
+    /// <summary>
+    /// Снимает захват клавиатуры и указателя интерфейсом инструментов.
+    /// </summary>
+    /// <remarks>
+    /// Поле ввода или ползунок IMGUI удерживают ввод, и пока захват висит,
+    /// игра не слышит ни клавиш, ни мыши. Снимается он не только по Escape:
+    /// закрытие окна, снятие регистрации и выключение всей системы обязаны
+    /// сделать то же самое, иначе управление останется у контрола, которого
+    /// уже нет на экране.
+    /// </remarks>
+    public static void ReleaseInputCapture()
+    {
+        _keyboardCaptured = false;
+        _pointerCaptured = false;
+        _releaseCaptureRequested = true;
+    }
+
+    public static void ResetLayout()
+    {
+        _layoutResetRequested = true;
+    }
+
+    /// <summary>Раскладка изменилась и однажды должна доехать до диска.</summary>
+    internal static void NotifyLayoutChanged()
+    {
+        _layoutDirty = true;
+    }
+
+    /// <summary>
+    /// Запоминает раскладку. На диск сбрасывает только по явному требованию.
+    /// </summary>
+    /// <remarks>
+    /// Здесь две разные по цене операции, и их нельзя склеивать. Запомнить
+    /// состояние — это правка словаря в памяти, она стоит около нуля. Записать
+    /// файл — это обращение к диску, и оно стоит паузы в кадре. Первая версия
+    /// делала обе разом раз в секунду прямо из отрисовки: инструмент, который
+    /// меряет провалы кадра, сам раз в секунду и устраивал провал, и это было
+    /// бы видно в его же графике.
+    ///
+    /// Теперь состояние копится по ходу перетаскивания, а файл пишется там,
+    /// где кадр уже не важен: при выключении оверлея и при выходе. Потерять
+    /// раскладку при аварийном завершении можно — это отладочные окна, и цена
+    /// такой потери меньше цены пропущенного кадра.
+    /// </remarks>
+    public static void SaveLayout(bool immediate = false)
+    {
+        if (!_layoutDirty && !immediate)
+        {
+            return;
+        }
+
+        if (!immediate && Time.unscaledTime < _nextLayoutSaveTime)
+        {
+            return;
+        }
+
+        foreach (ToolWindow window in _Windows)
+        {
+            ToolLayoutStore.Save(window);
+        }
+
+        if (immediate)
+        {
+            ToolLayoutStore.Flush();
+        }
+
+        _layoutDirty = false;
+        _nextLayoutSaveTime = Time.unscaledTime + 1f;
+    }
+
     public static void Draw()
     {
+        // Keep Layout and Repaint on the same coordinate system.
+        if (Event.current.type == EventType.Layout && _pendingScale.HasValue)
+        {
+            ToolLayoutStore.Scale = _pendingScale.Value;
+            _pendingScale = null;
+            NotifyLayoutChanged();
+        }
+
         float scale = Scale;
         if (Event.current.type == EventType.Layout && _layoutResetRequested)
         {
@@ -230,7 +319,11 @@ public static class ToolWindows
             {
                 window.ResetPosition();
                 window.Rect = ConstrainToScreen(window, window.Rect, scale);
+                ToolLayoutStore.Discard(window);
             }
+
+            ToolLayoutStore.Flush();
+            _layoutDirty = false;
         }
 
         if (Event.current.type == EventType.Layout && _PendingVisibility.Count > 0)
@@ -282,7 +375,7 @@ public static class ToolWindows
                     window.Id,
                     window.Rect,
                     window.DrawWindow,
-                    window.DisplayTitle);
+                    GUIContent.none);
                 drawnRect = window.ApplyPendingSize(drawnRect);
                 if (!IsFinite(drawnRect))
                 {
@@ -290,7 +383,18 @@ public static class ToolWindows
                     drawnRect = window.Rect;
                 }
 
-                window.Rect = ConstrainToScreen(window, drawnRect, scale);
+                Rect constrained = ConstrainToScreen(window, drawnRect, scale);
+                if (constrained != window.Rect)
+                {
+                    _layoutDirty = true;
+                }
+
+                window.Rect = constrained;
+            }
+
+            if (Event.current.type == EventType.Repaint)
+            {
+                SaveLayout();
             }
 
             if (Event.current.type == EventType.Layout && _pendingFocus != null)
@@ -332,7 +436,12 @@ public static class ToolWindows
         float availableWidth = Mathf.Max(1f, (Screen.width / scale) - ScreenMargin * 2f);
         float availableHeight = Mathf.Max(1f, (Screen.height / scale) - ScreenMargin * 2f);
         float minimumWidth = Mathf.Min(window.MinimumSize.x, availableWidth);
-        float minimumHeight = Mathf.Min(window.MinimumSize.y, availableHeight);
+
+        // Свёрнутому окну нижняя граница не по содержимому, а по полосе
+        // заголовка: иначе общее правило тут же разворачивало бы его обратно.
+        float minimumHeight = window.Collapsed
+            ? Mathf.Min(ToolWindow.CollapsedHeight, availableHeight)
+            : Mathf.Min(window.MinimumSize.y, availableHeight);
         rect.width = Mathf.Clamp(rect.width, minimumWidth, availableWidth);
         rect.height = Mathf.Clamp(rect.height, minimumHeight, availableHeight);
         rect.x = Mathf.Clamp(rect.x, ScreenMargin, Mathf.Max(ScreenMargin, (Screen.width / scale) - rect.width - ScreenMargin));

@@ -36,6 +36,10 @@ public sealed class DisplayTransformRule : IRule
         CheckFile(violations, Path.Combine(shaderRoot, "Scopes.compute"), CheckScopesShader);
         CheckFile(
             violations,
+            Path.Combine(context.ProjectRoot, "Assets", "Scripts", "Rendering", "PostProcessing", "Scopes", "ScopesRenderPass.cs"),
+            CheckHdrDisplayAccess);
+        CheckFile(
+            violations,
             Path.Combine(
                 context.ProjectRoot,
                 "Assets",
@@ -135,6 +139,11 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
+        CheckHdrIncludes(violations, path, source);
+        if (Regex.IsMatch(source, @"\b(?:float|half|real)\s+Luminance\s*\(", Invariant))
+        {
+            AddViolation(violations, path, "Use Color.hlsl Luminance; a local definition conflicts on Metal.");
+        }
         Require(violations, path, source, @"void\s+CompositeFinal", "Scene-linear artistic pass is required.");
         Require(violations, path, source, @"void\s+DisplayFinal", "Display effects must be separated from the scene pass.");
         Require(violations, path, source, @"source\.rgb\s*/\s*_DisplayPaperWhiteNits", "Display effects must normalize absolute HDR nits.");
@@ -152,6 +161,9 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
+        CheckHdrIncludes(violations, path, source);
+        Require(violations, path, source, @"RotateOutputSpaceToRec709\(color\)",
+            "Rec.709 diagnostic axes must convert from the active HDR output gamut.");
         Require(
             violations,
             path,
@@ -172,11 +184,26 @@ public sealed class DisplayTransformRule : IRule
             "Vectorscope must use its own density normalization.");
     }
 
+    private void CheckHdrIncludes(
+        ICollection<RuleViolation> violations,
+        string path,
+        string source)
+    {
+        int common = source.IndexOf("#include \"Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl\"", StringComparison.Ordinal);
+        int color = source.IndexOf("#include \"Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl\"", StringComparison.Ordinal);
+        int hdr = source.IndexOf("#include \"Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl\"", StringComparison.Ordinal);
+        if (common < 0 || color <= common || hdr <= color)
+        {
+            AddViolation(violations, path, "HDR helpers require Common.hlsl and Color.hlsl (including ACES) before HDROutput.hlsl.");
+        }
+    }
+
     private void CheckRenderPassSource(
         ICollection<RuleViolation> violations,
         string path,
         string source)
     {
+        CheckHdrDisplayAccess(violations, path, source);
         Require(violations, path, source, @"displayPass\s*\?\s*RenderPassEvent.AfterRenderingPostProcessing",
             "Display effects must execute after URP tone mapping.");
         Require(violations, path, source, @"output.paperWhite.value",
@@ -201,6 +228,23 @@ public sealed class DisplayTransformRule : IRule
             source,
             @"temporalActive\s*=\s*PostProcessRuntimeState\.DebugView\s*==\s*PostProcessDebugView\.None",
             "Debug views must disable temporal history.");
+    }
+
+    private void CheckHdrDisplayAccess(
+        ICollection<RuleViolation> violations,
+        string path,
+        string source)
+    {
+        foreach (string line in source.Split('\n'))
+        {
+            if (line.Contains("cameraData.hdrDisplayColorGamut", StringComparison.Ordinal) &&
+                !Regex.IsMatch(line,
+                    @"(?:hdrOutput|passData\.HdrOutput)\s*\?\s*cameraData\.hdrDisplayColorGamut\s*:\s*ColorGamut\.sRGB",
+                    Invariant))
+            {
+                AddViolation(violations, path, "Read HDR display gamut only when HDR output is active; SDR must use sRGB without querying HDR display information.");
+            }
+        }
     }
 
     private void CheckWhitePreservingMatrix(

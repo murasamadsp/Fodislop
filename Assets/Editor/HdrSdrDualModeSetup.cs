@@ -12,15 +12,14 @@ namespace Fodinae.EditorTools;
 
 /// <summary>
 /// One-way project setup for URP HDR/SDR display switching.
-/// Scene rendering remains scene-linear HDR in both modes. Fodinae owns tone
-/// mapping; URP only performs the final display encoding.
+/// Scene rendering remains scene-linear HDR in both modes. URP owns tone
+/// mapping and display encoding; Fodinae owns the artistic effects.
 ///
 /// Run from Fodinae/Rendering/Apply HDR-SDR Dual Mode Setup.
 /// </summary>
 internal static class HdrSdrDualModeSetup
 {
     private const string UniversalRPPath = "Assets/Settings/UniversalRP.asset";
-    private const string VolumeProfilePath = "Assets/Settings/PostProcessVolumeProfile.asset";
     private const string MenuPath = "Fodinae/Rendering/Apply HDR-SDR Dual Mode Setup";
 
     [MenuItem(MenuPath)]
@@ -45,20 +44,6 @@ internal static class HdrSdrDualModeSetup
 
     [MenuItem(MenuPath, true)]
     private static bool ValidateApply() => !Application.isPlaying;
-
-    [InitializeOnLoadMethod]
-    private static void AutoEnforcePlayerSettings()
-    {
-        if (PlayerSettings.useHDRDisplay)
-        {
-            PlayerSettings.useHDRDisplay = false;
-        }
-
-        if (!PlayerSettings.allowHDRDisplaySupport)
-        {
-            PlayerSettings.allowHDRDisplaySupport = true;
-        }
-    }
 
     private static void ApplyPlayerSettings()
     {
@@ -103,6 +88,7 @@ internal static class HdrSdrDualModeSetup
     [
         "Assets/Settings/PostProcessVolumeProfile.asset",
         "Assets/Settings/DefaultVolumeProfile.asset",
+        "Assets/Settings/MenuSceneryVolumeProfile.asset",
     ];
 
     private static readonly Type[] _BuiltInDuplicateTypes =
@@ -122,7 +108,50 @@ internal static class HdrSdrDualModeSetup
         typeof(LensDistortion),
         typeof(PaniniProjection),
         typeof(DepthOfField),
+        typeof(ColorLookup),
+        typeof(ShadowsMidtonesHighlights),
+        typeof(ScreenSpaceLensFlare),
     ];
+
+    [MenuItem("Fodinae/Rendering/Clean Display Volume Profiles")]
+    private static void CleanDisplayProfiles()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            throw new InvalidOperationException("Volume profile cleanup requires Edit Mode.");
+        }
+
+        // Validate every target before changing any asset.
+        foreach (string path in _CleanProfilePaths)
+        {
+            if (AssetDatabase.LoadAssetAtPath<VolumeProfile>(path) == null)
+            {
+                throw new InvalidOperationException($"Missing VolumeProfile: {path}");
+            }
+        }
+
+        RemoveBuiltInTonemapping();
+        ValidateDisplayProfiles();
+    }
+
+    [MenuItem("Fodinae/Rendering/Validate Display Volume Profiles")]
+    private static void ValidateDisplayProfiles()
+    {
+        foreach (string path in _CleanProfilePaths)
+        {
+            VolumeProfile profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(path)
+                ?? throw new InvalidOperationException($"Missing VolumeProfile: {path}");
+            foreach (VolumeComponent component in profile.components)
+            {
+                if (component != null && Array.IndexOf(_BuiltInDuplicateTypes, component.GetType()) >= 0)
+                {
+                    throw new InvalidOperationException($"{path}: unexpected native effect {component.GetType().Name}.");
+                }
+            }
+        }
+
+        Debug.Log("[DisplayProfiles] All three authored profiles are free of native post effects. Output tonemapping belongs to Bootstrap.");
+    }
 
     private static void RemoveBuiltInTonemapping()
     {
@@ -135,21 +164,19 @@ internal static class HdrSdrDualModeSetup
                 continue;
             }
 
-            bool changed = profile.components.RemoveAll(component => component == null) > 0;
-            var seenTypes = new HashSet<Type>();
+            bool changed = false;
             for (int i = profile.components.Count - 1; i >= 0; i--)
             {
                 VolumeComponent component = profile.components[i];
                 if (component == null)
                 {
-                    profile.components.RemoveAt(i);
-                    changed = true;
                     continue;
                 }
 
                 Type type = component.GetType();
-                if (builtInTypesSet.Contains(type) || !seenTypes.Add(type))
+                if (builtInTypesSet.Contains(type))
                 {
+                    Debug.Log($"[DisplayProfiles] Removing {type.Name} from {profilePath}.");
                     profile.components.RemoveAt(i);
                     UnityEngine.Object.DestroyImmediate(component, allowDestroyingAssets: true);
                     changed = true;
@@ -159,8 +186,9 @@ internal static class HdrSdrDualModeSetup
             if (changed)
             {
                 EditorUtility.SetDirty(profile);
+                AssetDatabase.SaveAssetIfDirty(profile);
                 Debug.Log(
-                    $"[HdrSdrDualModeSetup] Cleaned duplicate and built-in components from '{profilePath}'.");
+                    $"[HdrSdrDualModeSetup] Removed native post effects from '{profilePath}', preserving custom components.");
             }
         }
     }

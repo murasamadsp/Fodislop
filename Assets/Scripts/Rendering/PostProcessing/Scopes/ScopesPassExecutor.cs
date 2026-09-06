@@ -17,6 +17,10 @@ internal static class ScopesPassExecutor
     {
         CommandBuffer cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
         ScopeResources resources = data.Resources;
+        HDROutputUtils.ConfigureHDROutput(
+            data.ScopesCS,
+            data.HdrGamut,
+            data.HdrOutput ? HDROutputUtils.Operation.ColorConversion : HDROutputUtils.Operation.None);
 
         ComputeBuffer histogram = Require(resources.HistogramBuffer, nameof(resources.HistogramBuffer));
         ComputeBuffer waveform = Require(resources.WaveformBuffer, nameof(resources.WaveformBuffer));

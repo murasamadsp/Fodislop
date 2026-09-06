@@ -169,16 +169,12 @@ namespace Fodinae.Game
 
             transform.localScale = Vector3.one;
             _movement.SnapTo(transform.position, transform.eulerAngles.z);
-
-            if (TryGetComponent<Rigidbody2D>(out var rb))
-            {
-                rb.freezeRotation = true;
-                rb.simulated = false;
-            }
         }
 
         protected void OnEnable()
         {
+            _nameplate.SetEnabled(!IsLocalPlayer);
+            _nameplate.InvalidatePosition();
             if (!Application.isPlaying ||
                 (IsLocalPlayer ?
                     _localPlayer != null && _localPlayer.Current is { HasServerPosition: true } :

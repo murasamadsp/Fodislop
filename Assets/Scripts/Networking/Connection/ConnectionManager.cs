@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Fodinae.Networking.Diagnostics;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
@@ -99,6 +100,8 @@ namespace Fodinae.Networking.Connection
                 PacketDrainBudgetMaximumSeconds);
             long startTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
             int processedCount = 0;
+            bool stoppedByBudget = false;
+            bool stoppedByCap = false;
             while (_packetQueue.TryDequeue(out ServerPacket packet))
             {
                 processedCount++;
@@ -118,15 +121,21 @@ namespace Fodinae.Networking.Connection
 
                 if (processedCount >= ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame)
                 {
+                    stoppedByCap = true;
                     break;
                 }
 
                 float elapsedMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
                 if (elapsedMs >= budgetSeconds * 1000f)
                 {
+                    stoppedByBudget = true;
                     break;
                 }
             }
+
+            // Остаток очереди и причина обрыва — единственный признак того, что
+            // пакет уже пришёл, но до обработчика в этом кадре не добрался.
+            PacketTelemetry.RecordQueueState(_packetQueue.Count, stoppedByBudget, stoppedByCap);
         }
 
         private void UpdateReconnect()

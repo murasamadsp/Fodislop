@@ -22,7 +22,7 @@ public sealed class WorldLightingSettings
     [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingEngine.SetDiffuseBounceEnabled -> _bounceDirty")]
     public bool DiffuseBounceEnabled = true;
 
-    public const float DefaultAmbientIntensity = 0.08f;
+    public const float DefaultAmbientIntensity = 0.35f;
     public const float DefaultEmissionScale = 2f;
 
     [SettingRange(0f, 1f)]
@@ -38,7 +38,7 @@ public sealed class WorldLightingSettings
     [SettingLabel("settings.advanced.ambient_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]
     [SettingConsumer(SettingConsumerTarget.LightingEngine, "LightingEngine.SetAmbientColor -> _compositeDirty")]
-    public Color AmbientColor = new(0.12f, 0.14f, 0.18f, 1f);
+    public Color AmbientColor = new(0.5f, 0.55f, 0.65f, 1f);
 
     [SettingLabel("settings.advanced.empty_extinction")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]
