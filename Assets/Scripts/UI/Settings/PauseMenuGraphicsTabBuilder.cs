@@ -284,16 +284,7 @@ internal sealed class PauseMenuGraphicsTabBuilder
             UpdateLightingQualityButton();
         }
 
-        Toggle globalIlluminationToggle = PauseMenuUIFactory.CreateBoundToggle(
-            _loc.Get("settings.advanced.diffuse_bounce"),
-            () => _lightingEngine.DiffuseBounceEnabled,
-            value =>
-            {
-                MarkGraphicsCustom();
-                _lightingEngine.SetDiffuseBounceEnabled(value);
-            },
-            _refreshers);
-        graphicsSection.Add(globalIlluminationToggle);
+        // Diffuse bounce — константа, не настраивается
 
         return graphicsScroll;
     }
