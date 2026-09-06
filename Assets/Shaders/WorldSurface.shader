@@ -131,9 +131,7 @@ Shader "Fodinae/World Surface"
                     sampler_BaseMap,
                     baseMapUV,
                     0);
-                float4 lightSample = SampleWorldLightFull(input.worldPosition);
-                float3 worldLight = lightSample.rgb;
-                float ambientFill = lightSample.a;
+                float3 worldLight = SampleWorldLight(input.worldPosition);
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(worldLight, surface.a);
@@ -142,8 +140,6 @@ Shader "Fodinae/World Surface"
                 float3 emission = surface.rgb * _EmissionColor.rgb *
                     _EmissionStrength * input.emissionMask * _WorldEmissionScale;
                 float3 litSurface = surface.rgb * worldLight;
-                // Ambient добавляется ПОСЛЕ умножения на albedo
-                litSurface += ambientFill;
                 return half4(litSurface + emission, surface.a);
             }
             ENDHLSL
