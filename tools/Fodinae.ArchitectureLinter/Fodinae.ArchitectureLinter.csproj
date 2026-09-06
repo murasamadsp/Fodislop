@@ -42,7 +42,6 @@
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\SettingSchema.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\AudioBusRegistry.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\AudioLayer.cs" />
-    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\LightingConfigLimits.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\LightingQualityMode.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\GraphicsQualitySettings.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\RenderingConstants.cs" />

@@ -46,7 +46,7 @@ public static class Program
         CheckDeclaredLabelsExistInLocalization(root);
         CheckGraphicsQualityRangesAreDeclared();
         CheckEveryFieldDeclaresConsumer();
-        CheckLightingConfigHolderDirtyTracking();
+        // LightingConfigHolder is now static with constants - no dirty tracking needed
         CheckSettingMutationDetection();
         CheckGraphicsQualitySettingsMutationAndMsaaCycle();
         CheckPostProcessLookAllConstantsValidViaReflection();
@@ -453,44 +453,6 @@ public static class Program
         }
     }
 
-    private static void CheckLightingConfigHolderDirtyTracking()
-    {
-        Section("сеттеры освещения корректно детектируют изменения (dirty tracking)");
-        var stub = new StubConfigManager();
-        var holder = new Fodinae.World.Lighting.LightingConfigHolder(stub);
-
-        TestSetter("DiffuseBounceEnabled", () => holder.SetDiffuseBounceEnabled(!holder.Lighting.DiffuseBounceEnabled), () => holder.SetDiffuseBounceEnabled(holder.Lighting.DiffuseBounceEnabled));
-        TestSetter("FinalLightingClampEnabled", () => holder.SetFinalLightingClampEnabled(!holder.Lighting.EnableFinalLightingClamp), () => holder.SetFinalLightingClampEnabled(holder.Lighting.EnableFinalLightingClamp));
-        TestSetter("AmbientIntensity", () => holder.SetAmbientIntensity(holder.Lighting.AmbientIntensity + 0.1f), () => holder.SetAmbientIntensity(holder.Lighting.AmbientIntensity));
-        TestSetter("EmissionScale", () => holder.SetEmissionScale(holder.Lighting.EmissionScale > 4f ? holder.Lighting.EmissionScale - 1f : holder.Lighting.EmissionScale + 1f), () => holder.SetEmissionScale(holder.Lighting.EmissionScale));
-        TestSetter("EmptyExtinctionMultiplier", () => holder.SetEmptyExtinctionMultiplier(holder.Lighting.EmptyExtinctionMultiplier + 0.2f), () => holder.SetEmptyExtinctionMultiplier(holder.Lighting.EmptyExtinctionMultiplier));
-        TestSetter("SolidExtinctionMultiplier", () => holder.SetSolidExtinctionMultiplier(holder.Lighting.SolidExtinctionMultiplier > 1f ? holder.Lighting.SolidExtinctionMultiplier - 0.5f : holder.Lighting.SolidExtinctionMultiplier + 0.5f), () => holder.SetSolidExtinctionMultiplier(holder.Lighting.SolidExtinctionMultiplier));
-        TestSetter("BounceStrength", () => holder.SetBounceStrength(holder.Lighting.BounceStrength > 0.5f ? 0.2f : 0.8f), () => holder.SetBounceStrength(holder.Lighting.BounceStrength));
-        TestSetter("MaximumLightMultiplier", () => holder.SetMaximumLightMultiplier(holder.Lighting.MaximumLightMultiplier + 0.5f), () => holder.SetMaximumLightMultiplier(holder.Lighting.MaximumLightMultiplier));
-        TestSetter("TransmittanceDebugDistance", () => holder.SetTransmittanceDebugDistance(holder.Lighting.TransmittanceDebugDistanceCells + 1f), () => holder.SetTransmittanceDebugDistance(holder.Lighting.TransmittanceDebugDistanceCells));
-        TestSetter("MinimumTransmission", () => holder.SetMinimumTransmission(holder.Lighting.MinimumTransmission * 1.5f), () => holder.SetMinimumTransmission(holder.Lighting.MinimumTransmission));
-        TestSetter("LightSafeBorder", () => holder.SetLightSafeBorder(holder.Lighting.LightSafeBorder + 1), () => holder.SetLightSafeBorder(holder.Lighting.LightSafeBorder));
-        TestSetter("DynamicLightUpdatesPerSecond", () => holder.SetDynamicLightUpdatesPerSecond(holder.Lighting.DynamicLightUpdatesPerSecond + 5f), () => holder.SetDynamicLightUpdatesPerSecond(holder.Lighting.DynamicLightUpdatesPerSecond));
-        TestSetter("AmbientColor", () => holder.SetAmbientColor(new Color(0.3f, 0.4f, 0.5f, 1f)), () => holder.SetAmbientColor(holder.Lighting.AmbientColor));
-        TestSetter("EmptyExtinctionColor", () => holder.SetEmptyExtinctionColor(new Color(0.05f, 0.05f, 0.05f, 1f)), () => holder.SetEmptyExtinctionColor(holder.Lighting.EmptyExtinctionRgb));
-        TestSetter("SolidExtinctionColor", () => holder.SetSolidExtinctionColor(new Color(0.8f, 0.8f, 0.8f, 1f)), () => holder.SetSolidExtinctionColor(holder.Lighting.SolidExtinctionRgb));
-        TestSetter("DynamicLightSettings", () => holder.SetDynamicLightSettings(holder.Lighting.DynamicLightIntensity + 0.5f, Color.red), () => holder.SetDynamicLightSettings(holder.Lighting.DynamicLightIntensity, holder.Lighting.DynamicLightColor));
-
-        void TestSetter(string name, Func<bool> change, Func<bool> repeat)
-        {
-            _checks++;
-            if (!change())
-            {
-                Failures.Add($"LightingConfigHolder.{name}: не сообщил об изменении значения (вернул false)");
-            }
-
-            _checks++;
-            if (repeat())
-            {
-                Failures.Add($"LightingConfigHolder.{name}: сообщил об изменении при повторном значении (вернул true)");
-            }
-        }
-    }
 
     private static void CheckSettingMutationDetection()
     {

@@ -1,6 +1,6 @@
 namespace Fodinae.PlanetBaker;
 
-internal static class PlanetMath
+public static class PlanetMath
 {
     public const double CONTINENT_SCALE = 3.0;
     public const double WARP_STRENGTH = 0.50;

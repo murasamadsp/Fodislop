@@ -99,7 +99,6 @@ internal static class LightingComputeBinder
         int bounceHeight,
         Vector4 worldRect,
         float cellSize,
-        LightingConfigHolder configHolder,
         in GraphicsQualitySettings qualitySettings,
         LightingQualityMode qualityMode,
         LightingEngine.DebugView debugView,
@@ -118,28 +117,25 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeVectorParam(
             compute,
             AmbientColorId,
-            configHolder.AmbientColor * configHolder.AmbientIntensity);
+            LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity);
         commandBuffer.SetComputeVectorParam(
             compute,
             EmptyExtinctionRgbId,
-            configHolder.EmptyExtinctionRgb * configHolder.EmptyExtinctionMultiplier);
+            LightingConfigHolder.EmptyExtinctionRgb * LightingConfigHolder.EmptyExtinctionMultiplier);
         commandBuffer.SetComputeVectorParam(
             compute,
             SolidExtinctionRgbId,
-            configHolder.SolidExtinctionRgb * configHolder.SolidExtinctionMultiplier);
-        commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionId, configHolder.MinimumTransmission);
-        commandBuffer.SetComputeFloatParam(compute, BounceStrengthId, configHolder.BounceStrength);
-        commandBuffer.SetComputeFloatParam(compute, EmissionScaleId, configHolder.EmissionScale);
-        commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierId, configHolder.MaximumLightMultiplier);
-        commandBuffer.SetComputeIntParam(
-            compute,
-            EnableFinalLightingClampId,
-            configHolder.EnableFinalLightingClamp ? 1 : 0);
+            LightingConfigHolder.SolidExtinctionRgb * LightingConfigHolder.SolidExtinctionMultiplier);
+        commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionId, LightingConfigHolder.MinimumTransmission);
+        commandBuffer.SetComputeFloatParam(compute, BounceStrengthId, LightingConfigHolder.BounceStrength);
+        commandBuffer.SetComputeFloatParam(compute, EmissionScaleId, LightingConfigHolder.EmissionScale);
+        commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierId, LightingConfigHolder.MaximumLightMultiplier);
+        commandBuffer.SetComputeIntParam(compute, EnableFinalLightingClampId, 0);
         commandBuffer.SetComputeFloatParam(compute, CellSizeId, cellSize);
         commandBuffer.SetComputeFloatParam(
             compute,
             TransmittanceDebugDistanceCellsId,
-            configHolder.TransmittanceDebugDistanceCells);
+            10f);
         commandBuffer.SetComputeIntParam(compute, DebugViewId, (int)debugView);
         commandBuffer.SetComputeIntParam(
             compute,
