@@ -91,14 +91,14 @@ public sealed class TerrainMeshManager
     /// перебирает несколько прямоугольников, и у строителя останется
     /// только последний из них.
     /// </remarks>
-    public void UploadDirectVertexBuffer(
+    public bool UploadDirectVertexBuffer(
         TerrainMeshBuilder meshBuilder,
         int vertexStart,
         int vertexCount)
     {
         if (_mesh == null)
         {
-            return;
+            return true;
         }
 
         int bufferLength = meshBuilder.VertexBuffer.Length;
@@ -106,14 +106,17 @@ public sealed class TerrainMeshManager
         int count = Mathf.Clamp(vertexCount, 0, bufferLength - start);
         if (count == 0)
         {
-            return;
+            return true;
         }
 
         // Сетка могла не пережить смену размеров: тогда частичная выгрузка
         // легла бы не по тем адресам, и вместо участка земли поехала бы вся.
+        // Молча пропустить нельзя — заплатка просто не появилась бы на
+        // экране и осталась бы невидимой навсегда. Отказ возвращается
+        // наружу, чтобы вызывающий заказал полную перестройку.
         if (_mesh.vertexCount != bufferLength)
         {
-            return;
+            return false;
         }
 
         _mesh.SetVertexBufferData(
@@ -123,6 +126,7 @@ public sealed class TerrainMeshManager
             count,
             0,
             UploadFlags);
+        return true;
     }
 
     public void UpdateMeshBounds(int meshWidth, int meshHeight, float cellSize)

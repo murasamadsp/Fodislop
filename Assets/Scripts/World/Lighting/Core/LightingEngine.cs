@@ -637,7 +637,7 @@ namespace Fodinae.World.Lighting
             MapManager? mapManager,
             TerrainRenderer terrainRenderer)
         {
-            using var lightingUpdateMarker = LightingUpdateMarker.Auto();
+            using var lightingUpdateMarker = _LightingUpdateMarker.Auto();
             if (visibleWidth <= 0 || visibleHeight <= 0 || camera == null ||
                 storage == null || mapManager == null)
             {
@@ -771,7 +771,7 @@ namespace Fodinae.World.Lighting
                 try
                 {
                     long buildStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                    using (BuildCommandsMarker.Auto())
+                    using (_BuildCommandsMarker.Auto())
                     {
                 commandBuffer.BeginSample("Fodinae.RadianceCascades");
                 bool rebuildFields = _fieldDirty || regionChanged || geometryChanged;
@@ -881,7 +881,7 @@ namespace Fodinae.World.Lighting
                 _telemetry.LightingCommandBufferBytes = commandBuffer.sizeInBytes;
                 _telemetry.ActiveDynamicLights = dynamicLightCount;
                 long executeStart = System.Diagnostics.Stopwatch.GetTimestamp();
-                using (ExecuteCommandsMarker.Auto())
+                using (_ExecuteCommandsMarker.Auto())
                 {
                     Graphics.ExecuteCommandBuffer(commandBuffer);
                 }
@@ -1052,7 +1052,7 @@ namespace Fodinae.World.Lighting
             float cellSize,
             out bool uploadedLightsChanged)
         {
-            using var dynamicUploadMarker = DynamicUploadMarker.Auto();
+            using var dynamicUploadMarker = _DynamicUploadMarker.Auto();
             return _dynamicLightManager.UploadDynamicLights(
                 commandBuffer,
                 _dynamicLightBuffer,
@@ -1063,7 +1063,7 @@ namespace Fodinae.World.Lighting
 
         private void DispatchRadianceCascades(CommandBuffer commandBuffer, int maxCascades = -1)
         {
-            using var cascadeMarker = CascadeMarker.Auto();
+            using var cascadeMarker = _CascadeMarker.Auto();
             commandBuffer.BeginSample("Fodinae.Lighting.RadianceCascades");
             ComputeShader compute = _lightingCompute!;
             commandBuffer.SetComputeBufferParam(
@@ -1076,15 +1076,23 @@ namespace Fodinae.World.Lighting
                 : _cascades.Count;
             for (int cascadeIndex = cascadeCount - 1; cascadeIndex >= 0; cascadeIndex--)
             {
-                DispatchRadianceCascade(commandBuffer, cascadeIndex);
+                DispatchRadianceCascade(commandBuffer, cascadeIndex, cascadeCount);
             }
 
             commandBuffer.EndSample("Fodinae.Lighting.RadianceCascades");
         }
 
+        /// <param name="dispatchedCascadeCount">
+        /// Сколько каскадов запущено в ЭТОМ проходе, а не сколько их всего.
+        /// Динамическая половина считает три из четырёх, и верхний из них
+        /// обязан знать, что над ним пусто: иначе он вычитает из атласа
+        /// каскад, которого в этом проходе не решали, — а там лежит
+        /// статическая половина, и свет земли подмешивается в лампы.
+        /// </param>
         private void DispatchRadianceCascade(
             CommandBuffer commandBuffer,
-            int cascadeIndex)
+            int cascadeIndex,
+            int dispatchedCascadeCount)
         {
             string sampleName = cascadeIndex switch
             {
@@ -1096,7 +1104,7 @@ namespace Fodinae.World.Lighting
             commandBuffer.BeginSample(sampleName);
             ComputeShader compute = _lightingCompute!;
             CascadeLayout cascade = _cascades[cascadeIndex];
-            bool hasFarCascade = cascadeIndex + 1 < _cascades.Count;
+            bool hasFarCascade = cascadeIndex + 1 < dispatchedCascadeCount;
             CascadeLayout farCascade = hasFarCascade
                 ? _cascades[cascadeIndex + 1]
                 : cascade;
@@ -1160,7 +1168,7 @@ namespace Fodinae.World.Lighting
 
         private void DispatchResolveDirect(CommandBuffer commandBuffer, RenderTexture directTarget)
         {
-            using var resolveMarker = ResolveMarker.Auto();
+            using var resolveMarker = _ResolveMarker.Auto();
             ComputeShader compute = _lightingCompute!;
             commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.CascadeOffsetId, _cascades[0].Offset);
             commandBuffer.SetComputeBufferParam(
@@ -1196,7 +1204,7 @@ namespace Fodinae.World.Lighting
 
         private void DispatchComposite(CommandBuffer commandBuffer)
         {
-            using var compositeMarker = CompositeMarker.Auto();
+            using var compositeMarker = _CompositeMarker.Auto();
             commandBuffer.BeginSample("Fodinae.Lighting.Composite");
             _compositePipeline!.Record(commandBuffer, BuildFrameContext());
             commandBuffer.EndSample("Fodinae.Lighting.Composite");

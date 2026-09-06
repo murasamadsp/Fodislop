@@ -74,8 +74,21 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         }
 
         _gameObject.SetActive(true);
-        _mesh.Clear();
-        _mesh.SetVertexBufferParams(_vertices.Count, TerrainMeshManager.VertexLayout);
+
+        // Переописывать буфер надо только когда изменилась его длина или
+        // число подсеток. Раньше Clear + SetVertexBufferParams шли каждый
+        // раз: это перевыделение на GPU, а состав дверей в кадре почти
+        // всегда тот же самый, и менялись только их вершины.
+        bool layoutChanged =
+            _mesh.vertexCount != _vertices.Count ||
+            _mesh.subMeshCount != sourceSubMeshIndices.Length;
+        if (layoutChanged)
+        {
+            _mesh.Clear();
+            _mesh.SetVertexBufferParams(_vertices.Count, TerrainMeshManager.VertexLayout);
+            _mesh.subMeshCount = sourceSubMeshIndices.Length;
+        }
+
         _mesh.SetVertexBufferData(
             _vertices,
             0,
@@ -83,7 +96,10 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
             _vertices.Count,
             0,
             UploadFlags);
-        _mesh.subMeshCount = sourceSubMeshIndices.Length;
+
+        // Индексы переписываются всегда. Одинаковая длина буфера НЕ значит
+        // одинаковый состав: одна дверь сменилась другой — счёт тот же, а
+        // треугольники другие, и пропуск оставил бы на экране прошлый кадр.
         for (int atlasIndex = 0; atlasIndex < _compactSubMeshIndices.Length; atlasIndex++)
         {
             _mesh.SetIndices(

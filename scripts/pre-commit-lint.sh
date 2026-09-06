@@ -12,7 +12,7 @@ echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
-node "$(dirname "$0")/check-architecture.js"
+dotnet run --project tools/Fodinae.ArchitectureLinter --no-build
 
 # Настройки описываются атрибутами и читаются рефлексией: ни компилятор, ни
 # линтер не могут сказать, что диапазон над полем осмыслен, что значение по

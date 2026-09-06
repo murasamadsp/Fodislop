@@ -91,6 +91,102 @@ public sealed class BackgroundFloodFill
         ReplaceUnloadedWithEmpty(0, w, 0, h);
     }
 
+    /// <summary>
+    /// Сдвигает готовую карту фона и пересчитывает только открывшуюся кайму.
+    /// </summary>
+    /// <remarks>
+    /// Полный проход стоит по площади и был единственным: кэш клеток и
+    /// предрасчёт при переходе через границу региона ехали сдвигом, а
+    /// заливка каждый раз считалась заново. Обе половины сдвига —
+    /// <c>Scroll2DArray</c> и посев каймы — лежали здесь написанные и
+    /// никем не вызванные.
+    ///
+    /// Волна расходится только по клеткам со значением Unloaded, а после
+    /// сдвига таковы ровно клетки каймы: середина уже разрешена и служит
+    /// стеной, о которую волна останавливается. Поэтому пересчёт стоит по
+    /// периметру, а не по площади.
+    ///
+    /// Шов приблизителен: клетка внутри могла бы получить другой источник,
+    /// будь он посеян заново. Это уже принятый здесь договор — заплаточный
+    /// <see cref="UpdateLocalRegion"/> и вовсе берёт частого соседа вместо
+    /// волны, а карта фона решает, что видно за стеной, и не участвует ни в
+    /// столкновениях, ни в освещении.
+    /// </remarks>
+    public void ComputeScrolled(int dx, int dy, ICachedCellDataProvider cellCache)
+    {
+        int w = _width;
+        int h = _height;
+        if (w <= 0 || h <= 0 || _bgMapBuffer == null)
+        {
+            return;
+        }
+
+        // Сдвиг больше окна не оставляет ничего годного для переноса.
+        if (Math.Abs(dx) >= w || Math.Abs(dy) >= h)
+        {
+            ComputeFull(cellCache);
+            return;
+        }
+
+        if (dx == 0 && dy == 0)
+        {
+            return;
+        }
+
+        Scroll2DArray(_bgMapBuffer, w, h, dx, dy);
+
+        var frontier = _fbpwFrontier;
+        frontier.Clear();
+
+        // Кайма по x во всю высоту, кайма по y только на оставшейся ширине:
+        // угол иначе был бы посеян дважды и попал бы в волну двумя записями.
+        int columnStart = dx > 0 ? w - dx : 0;
+        int columnCount = Math.Abs(dx);
+        if (columnCount > 0)
+        {
+            SeedBorderRegion(columnStart, columnCount, 0, h, cellCache, frontier);
+        }
+
+        int rowStart = dy > 0 ? h - dy : 0;
+        int rowCount = Math.Abs(dy);
+        int remainingStart = dx > 0 ? 0 : columnCount;
+        int remainingCount = w - columnCount;
+        if (rowCount > 0 && remainingCount > 0)
+        {
+            SeedBorderRegion(remainingStart, remainingCount, rowStart, rowCount, cellCache, frontier);
+        }
+
+        // Линия уже разрешённой внутренности вплотную к кайме — тоже
+        // источник. Без неё кайма, идущая сквозь сплошную породу, не имела
+        // бы во фронте ни одной клетки: у её клеток нет проходимого соседа,
+        // а внутренность источником не была. Волна тогда не доходила вовсе,
+        // и кайма целиком уходила в Empty — на каждом сдвиге по полосе,
+        // пока фон не становился пустым по всему экрану.
+        if (columnCount > 0)
+        {
+            int insideColumn = dx > 0 ? columnStart - 1 : columnCount;
+            SeedResolvedColumn(insideColumn, 0, h, frontier);
+        }
+
+        if (rowCount > 0 && remainingCount > 0)
+        {
+            int insideRow = dy > 0 ? rowStart - 1 : rowCount;
+            SeedResolvedRow(insideRow, remainingStart, remainingCount, frontier);
+        }
+
+        FBPWPropagate(frontier);
+
+        if (columnCount > 0)
+        {
+            ReplaceUnloadedWithEmpty(columnStart, columnCount, 0, h);
+        }
+
+        if (rowCount > 0)
+        {
+            ReplaceUnloadedWithEmpty(0, w, rowStart, rowCount);
+        }
+    }
+
     public void UpdateLocalRegion(int startX, int startY, int countX, int countY, ICachedCellDataProvider cellCache)
     {
         int w = _width;
@@ -118,6 +214,47 @@ public sealed class BackgroundFloodFill
             }
         }
     }
+    /// <summary>
+    /// Кладёт во фронт уже разрешённый столбец: он не переписывается, а
+    /// служит источником для соседней каймы.
+    /// </summary>
+    private void SeedResolvedColumn(int x, int startY, int countY, List<(int, int)> frontier)
+    {
+        if (x < 0 || x >= _width)
+        {
+            return;
+        }
+
+        int endY = Math.Min(startY + countY, _height);
+        for (int y = Math.Max(0, startY); y < endY; y++)
+        {
+            if (_bgMapBuffer[x, y] != CellType.Unloaded)
+            {
+                frontier.Add((x, y));
+            }
+        }
+    }
+
+    /// <summary>
+    /// То же для строки.
+    /// </summary>
+    private void SeedResolvedRow(int y, int startX, int countX, List<(int, int)> frontier)
+    {
+        if (y < 0 || y >= _height)
+        {
+            return;
+        }
+
+        int endX = Math.Min(startX + countX, _width);
+        for (int x = Math.Max(0, startX); x < endX; x++)
+        {
+            if (_bgMapBuffer[x, y] != CellType.Unloaded)
+            {
+                frontier.Add((x, y));
+            }
+        }
+    }
+
     private void SeedBorderRegion(int startX, int countX, int startY, int countY, ICachedCellDataProvider cellCache, List<(int, int)> frontier)
     {
         for (int x = startX; x < startX + countX; x++)
