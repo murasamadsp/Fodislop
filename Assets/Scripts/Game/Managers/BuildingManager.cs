@@ -27,7 +27,7 @@ namespace Fodinae.Game.Managers
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
 
-        private IMapDataProvider MapData => _mapDataProvider;
+        private IMapDataProvider _MapData => _mapDataProvider;
 
         public void AddOrUpdateBuilding(ushort x, ushort y, BuildingType buildingType, byte variant, byte linkedClan)
         {
@@ -39,7 +39,7 @@ namespace Fodinae.Game.Managers
             }
 
             building = _sceneObjects.Create<Building>($"Building_{x}_{y}", RuntimeOwner.Buildings);
-            building.transform.position = CoordinateUtils.ServerToUnityPos(x, y, MapData.WorldHeight);
+            building.transform.position = CoordinateUtils.ServerToUnityPos(x, y, _MapData.WorldHeight);
             building.Initialize(buildingType, variant, linkedClan);
             _buildings[pos] = building;
         }

@@ -11,14 +11,14 @@ namespace Fodinae.Core;
 
 internal static class SceneTransitionRuntime
 {
-    private static readonly TimeSpan PreviousSceneCleanupTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan _PreviousSceneCleanupTimeout = TimeSpan.FromSeconds(10);
 
     public static async UniTask<Exception?> TryCleanupPreviousSceneAsync(
         Scene previousScene,
         Func<Scene, UniTask> prepareForUnload,
         TimeSpan? cleanupTimeout = null)
     {
-        TimeSpan effectiveTimeout = cleanupTimeout ?? PreviousSceneCleanupTimeout;
+        TimeSpan effectiveTimeout = cleanupTimeout ?? _PreviousSceneCleanupTimeout;
         if (effectiveTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(

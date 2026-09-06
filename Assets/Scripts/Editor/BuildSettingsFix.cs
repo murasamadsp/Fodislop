@@ -27,7 +27,7 @@ namespace Fodinae.Editor
         private const string MainGameScenePath = "Assets/Scenes/MainGame.unity";
 
         /// <summary>Порядок здесь = порядок прохождения игроком.</summary>
-        private static readonly string[] RequiredScenePaths =
+        private static readonly string[] _RequiredScenePaths =
         [
             BootstrapScenePath,
             GatewayScenePath,
@@ -39,7 +39,7 @@ namespace Fodinae.Editor
         public static void EnsureScenesInBuildSettings()
         {
             var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>();
-            foreach (string path in RequiredScenePaths)
+            foreach (string path in _RequiredScenePaths)
             {
                 if (!File.Exists(path))
                 {
@@ -58,7 +58,7 @@ namespace Fodinae.Editor
                     continue;
                 }
 
-                if (Array.IndexOf(RequiredScenePaths, scene.path) >= 0)
+                if (Array.IndexOf(_RequiredScenePaths, scene.path) >= 0)
                 {
                     continue;
                 }
@@ -76,16 +76,16 @@ namespace Fodinae.Editor
         public static void ValidateScenesInBuildSettings()
         {
             EditorBuildSettingsScene[] scenes = EditorBuildSettings.scenes;
-            if (scenes.Length < RequiredScenePaths.Length)
+            if (scenes.Length < _RequiredScenePaths.Length)
             {
                 throw new InvalidOperationException(
                     $"Build Settings contain {scenes.Length} scene(s); " +
-                    $"at least {RequiredScenePaths.Length} production scenes are required.");
+                    $"at least {_RequiredScenePaths.Length} production scenes are required.");
             }
 
-            for (int index = 0; index < RequiredScenePaths.Length; index++)
+            for (int index = 0; index < _RequiredScenePaths.Length; index++)
             {
-                string requiredPath = RequiredScenePaths[index];
+                string requiredPath = _RequiredScenePaths[index];
                 if (!File.Exists(requiredPath))
                 {
                     throw new FileNotFoundException("Required production scene is missing.", requiredPath);

@@ -30,7 +30,7 @@ namespace Fodinae.Effekseer;
 /// </summary>
 public static class RuntimeEffekseerLoader
 {
-    private static readonly HashSet<EntityId> ActiveRuntimeEffectIds = new();
+    private static readonly HashSet<EntityId> _ActiveRuntimeEffectIds = new();
 
     /// <summary>
     /// Load an Effekseer effect from raw .efk bytes, downloading all referenced
@@ -124,7 +124,7 @@ public static class RuntimeEffekseerLoader
             // LoadEffect is intentionally called exactly once. Calling asset.LoadEffect()
             // after this repeats the native resource reload for the same asset.
             EffekseerSystem.Instance.LoadEffect(asset);
-            ActiveRuntimeEffectIds.Add(asset.GetEntityId());
+            _ActiveRuntimeEffectIds.Add(asset.GetEntityId());
             return asset;
         }
         catch
@@ -148,7 +148,7 @@ public static class RuntimeEffekseerLoader
             return;
         }
 
-        ActiveRuntimeEffectIds.Remove(asset.GetEntityId());
+        _ActiveRuntimeEffectIds.Remove(asset.GetEntityId());
 
         var resources = asset.textureResources;
         if (resources != null)

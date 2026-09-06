@@ -12,10 +12,10 @@ namespace Fodinae.World.Lighting.Pipeline.Stages;
 /// </summary>
 public sealed class CompositeStage : ILightingStage
 {
-    private static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
-    private static readonly int StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
-    private static readonly int BounceInputId = Shader.PropertyToID("_BounceInput");
-    private static readonly int ResultId = Shader.PropertyToID("_Result");
+    private static readonly int _DirectInputId = Shader.PropertyToID("_DirectInput");
+    private static readonly int _StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
+    private static readonly int _BounceInputId = Shader.PropertyToID("_BounceInput");
+    private static readonly int _ResultId = Shader.PropertyToID("_Result");
 
     private readonly int _kernel;
 
@@ -29,22 +29,22 @@ public sealed class CompositeStage : ILightingStage
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            DirectInputId,
+            _DirectInputId,
             context.DirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            StaticDirectInputId,
+            _StaticDirectInputId,
             context.StaticDirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            BounceInputId,
+            _BounceInputId,
             context.BounceTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            ResultId,
+            _ResultId,
             context.ResultTexture);
         commandBuffer.DispatchCompute(
             context.Compute,

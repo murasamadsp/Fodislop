@@ -35,27 +35,27 @@ namespace Fodinae.World.Lighting
         private const int RadianceStride = sizeof(uint) * 3;
         private const int MaximumDispatchGroupsPerDimension = 65535;
         private const string WorldLightingKeyword = "FODINAE_WORLD_LIGHTING";
-        private static readonly int WorldLightTextureId = Shader.PropertyToID("_WorldLightTexture");
-        private static readonly int WorldLightRectId = Shader.PropertyToID("_WorldLightRect");
-        private static readonly int WorldLightDebugViewId =
+        private static readonly int _WorldLightTextureId = Shader.PropertyToID("_WorldLightTexture");
+        private static readonly int _WorldLightRectId = Shader.PropertyToID("_WorldLightRect");
+        private static readonly int _WorldLightDebugViewId =
             Shader.PropertyToID("_WorldLightDebugView");
-        private static readonly int WorldLightTextureSizeId =
+        private static readonly int _WorldLightTextureSizeId =
             Shader.PropertyToID("_WorldLightTextureSize");
-        private static readonly int WorldEmissionScaleId =
+        private static readonly int _WorldEmissionScaleId =
             Shader.PropertyToID("_WorldEmissionScale");
-        private static readonly ProfilerMarker LightingUpdateMarker =
+        private static readonly ProfilerMarker _LightingUpdateMarker =
             new("Fodinae.Lighting.UpdateLighting.CPU");
-        private static readonly ProfilerMarker BuildCommandsMarker =
+        private static readonly ProfilerMarker _BuildCommandsMarker =
             new("Fodinae.Lighting.BuildCommands.CPU");
-        private static readonly ProfilerMarker ExecuteCommandsMarker =
+        private static readonly ProfilerMarker _ExecuteCommandsMarker =
             new("Fodinae.Lighting.ExecuteCommands.CPU");
-        private static readonly ProfilerMarker DynamicUploadMarker =
+        private static readonly ProfilerMarker _DynamicUploadMarker =
             new("Fodinae.Lighting.DynamicLights.Upload.CPU");
-        private static readonly ProfilerMarker CascadeMarker =
+        private static readonly ProfilerMarker _CascadeMarker =
             new("Fodinae.Lighting.Cascades.Record.CPU");
-        private static readonly ProfilerMarker ResolveMarker =
+        private static readonly ProfilerMarker _ResolveMarker =
             new("Fodinae.Lighting.Resolve.Record.CPU");
-        private static readonly ProfilerMarker CompositeMarker =
+        private static readonly ProfilerMarker _CompositeMarker =
             new("Fodinae.Lighting.Composite.Record.CPU");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -319,13 +319,13 @@ namespace Fodinae.World.Lighting
             // explicit PostStart resolution below performs the authoritative
             // initialization; do not throw every frame while that hand-off is
             // still pending.
-            if (DependenciesReady)
+            if (_DependenciesReady)
             {
                 TryInitialize();
             }
         }
 
-        private bool DependenciesReady =>
+        private bool _DependenciesReady =>
             _clientConfig?.Config != null &&
             _lightingGeometryRegistry != null;
 
@@ -336,7 +336,7 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
-            if (!DependenciesReady)
+            if (!_DependenciesReady)
             {
                 throw new InvalidOperationException(
                     "LightingEngine requires all DI dependencies before initialization.");
@@ -377,7 +377,7 @@ namespace Fodinae.World.Lighting
         {
             if (!_initialized)
             {
-                if (DependenciesReady)
+                if (_DependenciesReady)
                 {
                     TryInitialize();
                 }
@@ -687,7 +687,7 @@ namespace Fodinae.World.Lighting
                 _wasLightingBypassed = false;
                 _lightingDisabledStatePublished = false;
                 Shader.EnableKeyword(WorldLightingKeyword);
-                Shader.SetGlobalInteger(WorldLightDebugViewId, (int)_debugView);
+                Shader.SetGlobalInteger(_WorldLightDebugViewId, (int)_debugView);
                 _fieldDirty = true;
                 _compositeDirty = true;
                 _bounceDirty = true;
@@ -697,7 +697,7 @@ namespace Fodinae.World.Lighting
                 _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
                 if (_lightmapTexture != null)
                 {
-                    Shader.SetGlobalTexture(WorldLightTextureId, _lightmapTexture);
+                    Shader.SetGlobalTexture(_WorldLightTextureId, _lightmapTexture);
                 }
             }
 
@@ -921,11 +921,11 @@ namespace Fodinae.World.Lighting
             }
 
             Shader.DisableKeyword(WorldLightingKeyword);
-            Shader.SetGlobalTexture(WorldLightTextureId, Texture2D.whiteTexture);
-            Shader.SetGlobalVector(WorldLightRectId, new Vector4(-1000f, -1000f, 2000f, 2000f));
-            Shader.SetGlobalVector(WorldLightTextureSizeId, new Vector4(1, 1, 1, 1));
-            Shader.SetGlobalInteger(WorldLightDebugViewId, 0);
-            Shader.SetGlobalFloat(WorldEmissionScaleId, _configHolder.EmissionScale);
+            Shader.SetGlobalTexture(_WorldLightTextureId, Texture2D.whiteTexture);
+            Shader.SetGlobalVector(_WorldLightRectId, new Vector4(-1000f, -1000f, 2000f, 2000f));
+            Shader.SetGlobalVector(_WorldLightTextureSizeId, new Vector4(1, 1, 1, 1));
+            Shader.SetGlobalInteger(_WorldLightDebugViewId, 0);
+            Shader.SetGlobalFloat(_WorldEmissionScaleId, _configHolder.EmissionScale);
             _lightingDisabledStatePublished = true;
         }
 
@@ -940,18 +940,18 @@ namespace Fodinae.World.Lighting
             const float cellSize = ProjectRuntimeContracts.World.CellSize;
             Shader.EnableKeyword(WorldLightingKeyword);
             _lightingDisabledStatePublished = false;
-            Shader.SetGlobalTexture(WorldLightTextureId, _lightmapTexture);
-            Shader.SetGlobalInteger(WorldLightDebugViewId, (int)_debugView);
-            Shader.SetGlobalFloat(WorldEmissionScaleId, _configHolder.EmissionScale);
+            Shader.SetGlobalTexture(_WorldLightTextureId, _lightmapTexture);
+            Shader.SetGlobalInteger(_WorldLightDebugViewId, (int)_debugView);
+            Shader.SetGlobalFloat(_WorldEmissionScaleId, _configHolder.EmissionScale);
             Shader.SetGlobalVector(
-                WorldLightTextureSizeId,
+                _WorldLightTextureSizeId,
                 new Vector4(
                     _lightmapTexture.width,
                     _lightmapTexture.height,
                     1f / _lightmapTexture.width,
                     1f / _lightmapTexture.height));
             Shader.SetGlobalVector(
-                WorldLightRectId,
+                _WorldLightRectId,
                 new Vector4(
                     _lastVisibleRegion.x * cellSize,
                     _lastVisibleRegion.y * cellSize,

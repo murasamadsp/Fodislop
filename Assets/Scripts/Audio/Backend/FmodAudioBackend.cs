@@ -42,8 +42,8 @@ public sealed class FmodAudioBackend
     private bool _busesMapped;
     private bool _degraded;
 
-    private static readonly FMOD.VECTOR ForwardVector = new() { x = 0f, y = 0f, z = 1f };
-    private static readonly FMOD.VECTOR UpVector = new() { x = 0f, y = 1f, z = 0f };
+    private static readonly FMOD.VECTOR _ForwardVector = new() { x = 0f, y = 0f, z = 1f };
+    private static readonly FMOD.VECTOR _UpVector = new() { x = 0f, y = 1f, z = 0f };
 
     /// <summary>Банки не приехали: игра идёт, звука нет.</summary>
     public bool IsDegraded => _degraded;
@@ -196,8 +196,8 @@ public sealed class FmodAudioBackend
                 instance.set3DAttributes(new FMOD.ATTRIBUTES_3D
                 {
                     position = new FMOD.VECTOR { x = position.x, y = position.y, z = 0f },
-                    forward = ForwardVector,
-                    up = UpVector,
+                    forward = _ForwardVector,
+                    up = _UpVector,
                 });
             }
         }

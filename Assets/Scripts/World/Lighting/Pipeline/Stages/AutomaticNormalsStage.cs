@@ -12,7 +12,7 @@ namespace Fodinae.World.Lighting.Pipeline.Stages;
 /// </summary>
 public sealed class AutomaticNormalsStage : ILightingStage
 {
-    private static readonly int AutomaticNormalFieldId =
+    private static readonly int _AutomaticNormalFieldId =
         Shader.PropertyToID("_AutomaticNormalField");
 
     private readonly int _kernel;
@@ -27,7 +27,7 @@ public sealed class AutomaticNormalsStage : ILightingStage
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            AutomaticNormalFieldId,
+            _AutomaticNormalFieldId,
             context.AutomaticNormalField);
         commandBuffer.DispatchCompute(
             context.Compute,

@@ -22,11 +22,11 @@ internal static class DummyCellConfigurationUtilities
     /// предупреждения — просто клетка ведёт себя не так, и причину надо искать
     /// глазами по списку из девяноста строк.
     /// </remarks>
-    private static readonly HashSet<CellType> ConfiguredTypes = [];
+    private static readonly HashSet<CellType> _ConfiguredTypes = [];
 
     public static CellConfigurationPacket[] CreateCellConfigurations()
     {
-        ConfiguredTypes.Clear();
+        _ConfiguredTypes.Clear();
         var configs = new CellConfigurationPacket[256];
         for (int i = 0; i < 256; i++)
         {
@@ -193,7 +193,7 @@ internal static class DummyCellConfigurationUtilities
         byte frameOffset = 0,
         CellDistortionType distortion = (CellDistortionType)0)
     {
-        ConfiguredTypes.Add(type);
+        _ConfiguredTypes.Add(type);
         configs[(int)type] = new CellConfigurationPacket
         {
             Properties = props,
@@ -219,7 +219,7 @@ internal static class DummyCellConfigurationUtilities
     /// ещё не приехал». Про Skull и две фоновые с следами решение за автором
     /// мира — они выглядят как настоящие клетки, которым конфигурация нужна.
     /// </remarks>
-    private static readonly CellType[] KnownUnconfiguredTypes =
+    private static readonly CellType[] _KnownUnconfiguredTypes =
     [
         CellType.Unloaded,
         CellType.Pregener,
@@ -233,7 +233,7 @@ internal static class DummyCellConfigurationUtilities
         var missing = new List<CellType>();
         foreach (CellType type in Enum.GetValues(typeof(CellType)))
         {
-            if (!ConfiguredTypes.Contains(type) && Array.IndexOf(KnownUnconfiguredTypes, type) < 0)
+            if (!_ConfiguredTypes.Contains(type) && Array.IndexOf(_KnownUnconfiguredTypes, type) < 0)
             {
                 missing.Add(type);
             }
@@ -250,7 +250,7 @@ internal static class DummyCellConfigurationUtilities
             UnityEngine.Debug.LogError(
                 "[DummyCellConfiguration] Эти типы клеток отрисуются нейтральной серой " +
                 "заглушкой, потому что конфигурация им не задана: " + string.Join(", ", missing) +
-                ". Добавьте строку SetConfig либо внесите тип в KnownUnconfiguredTypes с причиной.");
+                ". Добавьте строку SetConfig либо внесите тип в _KnownUnconfiguredTypes с причиной.");
         }
     }
 

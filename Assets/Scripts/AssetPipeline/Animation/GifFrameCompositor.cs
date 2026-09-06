@@ -8,8 +8,8 @@ namespace Fodinae.World;
 
 internal static class GifFrameCompositor
 {
-    private static readonly int[] InterlaceRowStarts = [0, 4, 2, 1];
-    private static readonly int[] InterlaceRowSteps = [8, 8, 4, 2];
+    private static readonly int[] _InterlaceRowStarts = [0, 4, 2, 1];
+    private static readonly int[] _InterlaceRowSteps = [8, 8, 4, 2];
 
     public static void CompositeFrame(
         Color32[] canvas,
@@ -26,11 +26,11 @@ internal static class GifFrameCompositor
         int sourceRow = 0;
         if (interlaced)
         {
-            for (int pass = 0; pass < InterlaceRowStarts.Length; pass++)
+            for (int pass = 0; pass < _InterlaceRowStarts.Length; pass++)
             {
-                for (int targetRow = InterlaceRowStarts[pass];
+                for (int targetRow = _InterlaceRowStarts[pass];
                      targetRow < height;
-                     targetRow += InterlaceRowSteps[pass])
+                     targetRow += _InterlaceRowSteps[pass])
                 {
                     CompositeFrameRow(
                         canvas,

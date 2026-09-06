@@ -31,7 +31,7 @@ internal sealed class DummyWorldStartupResponder(
     Action<ServerPacket> sendPacket,
     Func<int, bool> loopAlive)
 {
-    private static readonly System.Random Rng = new();
+    private static readonly System.Random _Rng = new();
 
     public async UniTask InitializeAsync(
         string worldCodeName,
@@ -209,7 +209,7 @@ internal sealed class DummyWorldStartupResponder(
         {
             sendPacket(new ServerPacket(new PingPacket(
                 DateTimeOffset.UtcNow.Ticks,
-                Rng.Next(15, 60))));
+                _Rng.Next(15, 60))));
             await UniTask.Delay(5000);
         }
     }
@@ -219,7 +219,7 @@ internal sealed class DummyWorldStartupResponder(
         await UniTask.Delay(3000);
         while (loopAlive(lifecycleVersion))
         {
-            ushort players = (ushort)(38 + Rng.Next(0, 9));
+            ushort players = (ushort)(38 + _Rng.Next(0, 9));
             sendPacket(new ServerPacket(new OnlinePacket(players, 3)));
             await UniTask.Delay(12000);
         }

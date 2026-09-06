@@ -23,8 +23,8 @@ public static class ToolWindows
     private const int FirstWindowId = 0x7700;
     private const float ScreenMargin = 8f;
 
-    private static readonly List<ToolWindow> Windows = [];
-    private static readonly Dictionary<ToolWindow, bool> PendingVisibility = [];
+    private static readonly List<ToolWindow> _Windows = [];
+    private static readonly Dictionary<ToolWindow, bool> _PendingVisibility = [];
     private static int _nextId = FirstWindowId;
     private static bool _enabled;
     private static bool _keyboardCaptured;
@@ -53,7 +53,7 @@ public static class ToolWindows
         }
     }
 
-    public static IReadOnlyList<ToolWindow> All => Windows;
+    public static IReadOnlyList<ToolWindow> All => _Windows;
 
     /// <summary>True while an IMGUI control owns keyboard focus.</summary>
     public static bool HasKeyboardCapture => Enabled && _keyboardCaptured;
@@ -64,14 +64,14 @@ public static class ToolWindows
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetForPlaySession()
     {
-        foreach (ToolWindow window in Windows)
+        foreach (ToolWindow window in _Windows)
         {
             window.ResetForPlaySession();
             window.Dispose();
         }
 
-        Windows.Clear();
-        PendingVisibility.Clear();
+        _Windows.Clear();
+        _PendingVisibility.Clear();
         ToolTheme.Reset();
         _nextId = FirstWindowId;
         _enabled = false;
@@ -86,21 +86,21 @@ public static class ToolWindows
 
     public static void Register(ToolWindow window)
     {
-        if (Windows.Contains(window))
+        if (_Windows.Contains(window))
         {
             return;
         }
 
         window.CaptureInitialState();
         window.Id = _nextId++;
-        Windows.Add(window);
+        _Windows.Add(window);
     }
 
-    public static bool IsRegistered(ToolWindow window) => Windows.Contains(window);
+    public static bool IsRegistered(ToolWindow window) => _Windows.Contains(window);
 
     public static void Unregister(ToolWindow window)
     {
-        PendingVisibility.Remove(window);
+        _PendingVisibility.Remove(window);
         if (ReferenceEquals(_focusedWindow, window))
         {
             _focusedWindow = null;
@@ -111,7 +111,7 @@ public static class ToolWindows
             _pendingFocus = null;
         }
 
-        if (Windows.Remove(window))
+        if (_Windows.Remove(window))
         {
             // The removed window may own a text field or slider hot control.
             // Keeping that invisible control alive blocks gameplay input.
@@ -125,7 +125,7 @@ public static class ToolWindows
     /// </summary>
     public static void RequestVisibility(ToolWindow window, bool visible)
     {
-        PendingVisibility[window] = visible;
+        _PendingVisibility[window] = visible;
         if (!visible)
         {
             if (ReferenceEquals(_focusedWindow, window))
@@ -139,7 +139,7 @@ public static class ToolWindows
 
     public static void RequestFocus(ToolWindow window)
     {
-        if (Windows.Contains(window))
+        if (_Windows.Contains(window))
         {
             _pendingFocus = window;
         }
@@ -176,7 +176,7 @@ public static class ToolWindows
 
         float scale = Scale;
         Vector2 guiPoint = new(screenPoint.x / scale, (Screen.height - screenPoint.y) / scale);
-        foreach (ToolWindow window in Windows)
+        foreach (ToolWindow window in _Windows)
         {
             if (window.Visible && window.Rect.Contains(guiPoint))
             {
@@ -197,7 +197,7 @@ public static class ToolWindows
                 return false;
             }
 
-            foreach (ToolWindow window in Windows)
+            foreach (ToolWindow window in _Windows)
             {
                 if (window.WantsSampling)
                 {
@@ -214,7 +214,7 @@ public static class ToolWindows
         // Кадровая логика идёт и при выключенной системе: инструмент, который
         // начинает копить историю только после открытия, показывает пустой
         // график ровно тогда, когда на него смотрят.
-        foreach (ToolWindow window in Windows)
+        foreach (ToolWindow window in _Windows)
         {
             window.Tick();
         }
@@ -226,24 +226,24 @@ public static class ToolWindows
         if (Event.current.type == EventType.Layout && _layoutResetRequested)
         {
             _layoutResetRequested = false;
-            foreach (ToolWindow window in Windows)
+            foreach (ToolWindow window in _Windows)
             {
                 window.ResetPosition();
                 window.Rect = ConstrainToScreen(window, window.Rect, scale);
             }
         }
 
-        if (Event.current.type == EventType.Layout && PendingVisibility.Count > 0)
+        if (Event.current.type == EventType.Layout && _PendingVisibility.Count > 0)
         {
-            foreach ((ToolWindow window, bool visible) in PendingVisibility)
+            foreach ((ToolWindow window, bool visible) in _PendingVisibility)
             {
-                if (Windows.Contains(window))
+                if (_Windows.Contains(window))
                 {
                     window.Visible = visible;
                 }
             }
 
-            PendingVisibility.Clear();
+            _PendingVisibility.Clear();
         }
 
         if (_releaseCaptureRequested)
@@ -271,7 +271,7 @@ public static class ToolWindows
 
         try
         {
-            foreach (ToolWindow window in Windows)
+            foreach (ToolWindow window in _Windows)
             {
                 if (!window.Visible)
                 {
@@ -295,7 +295,7 @@ public static class ToolWindows
 
             if (Event.current.type == EventType.Layout && _pendingFocus != null)
             {
-                if (_pendingFocus.Visible && Windows.Contains(_pendingFocus))
+                if (_pendingFocus.Visible && _Windows.Contains(_pendingFocus))
                 {
                     _focusedWindow = _pendingFocus;
                     GUI.FocusWindow(_pendingFocus.Id);

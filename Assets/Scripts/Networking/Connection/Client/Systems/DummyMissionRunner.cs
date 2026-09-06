@@ -32,7 +32,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         ItemType RewardItem,
         long RewardAmount);
 
-    private static readonly MissionDef[] Missions =
+    private static readonly MissionDef[] _Missions =
     [
         new(0, "Копатель-ученик", "Сломайте 50 блоков", 50, ItemType.Cred, 25),
         new(1, "Опытный копатель", "Сломайте 200 блоков", 200, ItemType.Cred, 100),
@@ -41,15 +41,15 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
     public int ActiveMissionId { get; private set; } = -1;
     public long MissionProgress { get; private set; }
-    public bool[] MissionCompleted { get; } = new bool[Missions.Length];
-    public int MissionCount => Missions.Length;
+    public bool[] MissionCompleted { get; } = new bool[_Missions.Length];
+    public int MissionCount => _Missions.Length;
 
     public void SendMissionWindow(ushort x, ushort y)
     {
         var rows = new List<IGUIComponentPacket>();
-        for (int i = 0; i < Missions.Length; i++)
+        for (int i = 0; i < _Missions.Length; i++)
         {
-            var m = Missions[i];
+            var m = _Missions[i];
             string status = ActiveMissionId == m.Id
                 ? $"<color=yellow>Активно: {MissionProgress}/{m.Target}</color>"
                 : MissionCompleted[m.Id]
@@ -140,7 +140,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
     public void StartMission(int missionId, ushort x, ushort y)
     {
-        if (missionId < 0 || missionId >= Missions.Length)
+        if (missionId < 0 || missionId >= _Missions.Length)
         {
             return;
         }
@@ -150,7 +150,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
             return;
         }
 
-        var m = Missions[missionId];
+        var m = _Missions[missionId];
         ActiveMissionId = missionId;
         MissionProgress = 0;
         onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
@@ -180,7 +180,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
             return;
         }
 
-        var m = Missions[ActiveMissionId];
+        var m = _Missions[ActiveMissionId];
         MissionProgress++;
         onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
         if (MissionProgress >= m.Target)
@@ -203,7 +203,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
             return;
         }
 
-        var m = Missions[ActiveMissionId];
+        var m = _Missions[ActiveMissionId];
         inventory.TryGetValue(m.RewardItem, out long current);
         inventory[m.RewardItem] = current + m.RewardAmount;
         onReceived.Invoke(new ServerPacket(new InventoryPacket(

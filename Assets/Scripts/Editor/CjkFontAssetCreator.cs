@@ -30,7 +30,7 @@ namespace Fodinae.Editor
         private const string SimplifiedAssetPath = FontsDirectory + "/NotoSansSC_SDF.asset";
         private const string TraditionalAssetPath = FontsDirectory + "/NotoSansTC_SDF.asset";
 
-        private static readonly string[] PrimaryFontAssetPaths =
+        private static readonly string[] _PrimaryFontAssetPaths =
         [
             FontsDirectory + "/Exo2_SDF.asset",
             FontsDirectory + "/Unbounded_SDF.asset",
@@ -69,7 +69,7 @@ namespace Fodinae.Editor
             FontAsset traditional = CreateOrLoad(TraditionalFontPath, TraditionalAssetPath, includeCjk: true);
 
             int wired = 0;
-            foreach (string path in PrimaryFontAssetPaths)
+            foreach (string path in _PrimaryFontAssetPaths)
             {
                 FontAsset? primary = AssetDatabase.LoadAssetAtPath<FontAsset>(path);
                 if (primary == null)

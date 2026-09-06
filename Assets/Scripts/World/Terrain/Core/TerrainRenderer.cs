@@ -89,12 +89,12 @@ namespace Fodinae.World.Terrain
         private MapManager? _subscribedMapManager;
         private IWorldDataStorage? _subscribedStorage;
 
-        private static readonly ProfilerMarker CacheMarker = new("Fodinae.Terrain.Cache");
-        private static readonly ProfilerMarker PrecalculateMarker = new("Fodinae.Terrain.Precalculate");
-        private static readonly ProfilerMarker FloodFillMarker = new("Fodinae.Terrain.BackgroundFloodFill");
-        private static readonly ProfilerMarker MeshBuildMarker = new("Fodinae.Terrain.MeshBuild");
-        private static readonly ProfilerMarker MeshUploadMarker = new("Fodinae.Terrain.MeshUpload");
-        private static readonly ProfilerMarker TerrainLateUpdateMarker =
+        private static readonly ProfilerMarker _CacheMarker = new("Fodinae.Terrain.Cache");
+        private static readonly ProfilerMarker _PrecalculateMarker = new("Fodinae.Terrain.Precalculate");
+        private static readonly ProfilerMarker _FloodFillMarker = new("Fodinae.Terrain.BackgroundFloodFill");
+        private static readonly ProfilerMarker _MeshBuildMarker = new("Fodinae.Terrain.MeshBuild");
+        private static readonly ProfilerMarker _MeshUploadMarker = new("Fodinae.Terrain.MeshUpload");
+        private static readonly ProfilerMarker _TerrainLateUpdateMarker =
             new("Fodinae.Terrain.LateUpdate.CPU");
         private ulong _lightingGeometryRevision = 1;
 
@@ -821,6 +821,10 @@ namespace Fodinae.World.Terrain
 
             bool anyIndicesChanged = false;
             bool anyOverlayIndicesChanged = false;
+            // Объединение диапазонов по всем прямоугольникам: строитель
+            // помнит только последний, а выгрузка одна на весь патч.
+            int patchVertexStart = int.MaxValue;
+            int patchVertexEnd = 0;
             for (int i = 0; i < _dirtyRects.Count; i++)
             {
                 RectInt rect = _dirtyRects[i];
@@ -842,9 +846,22 @@ namespace Fodinae.World.Terrain
 
                 anyIndicesChanged |= _meshBuilder.IndicesChanged;
                 anyOverlayIndicesChanged |= _meshBuilder.OverlayIndicesChanged;
+                if (_meshBuilder.DirtyVertexCount > 0)
+                {
+                    patchVertexStart = Mathf.Min(patchVertexStart, _meshBuilder.DirtyVertexStart);
+                    patchVertexEnd = Mathf.Max(
+                        patchVertexEnd,
+                        _meshBuilder.DirtyVertexStart + _meshBuilder.DirtyVertexCount);
+                }
             }
 
-            _meshManager.UploadDirectVertexBuffer(_meshBuilder);
+            if (patchVertexEnd > 0)
+            {
+                _meshManager.UploadDirectVertexBuffer(
+                    _meshBuilder,
+                    patchVertexStart,
+                    patchVertexEnd - patchVertexStart);
+            }
 
             if (anyIndicesChanged)
             {
@@ -910,7 +927,10 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            _meshManager.UploadDirectVertexBuffer(_meshBuilder);
+            _meshManager.UploadDirectVertexBuffer(
+                _meshBuilder,
+                _meshBuilder.DirtyVertexStart,
+                _meshBuilder.DirtyVertexCount);
             Mesh? mesh = _meshManager.Mesh;
             if (mesh != null)
             {

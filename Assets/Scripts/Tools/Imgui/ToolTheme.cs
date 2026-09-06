@@ -18,9 +18,9 @@ public static class ToolTheme
     public static readonly Color Error = new(1f, 0.42f, 0.38f, 1f);
     public static readonly Color FrameGraphColor = new(0.24f, 0.78f, 0.95f, 0.95f);
     public static readonly Color AllocationGraphColor = new(1f, 0.55f, 0.24f, 0.95f);
-    private static readonly Color Text = new(0.91f, 0.94f, 0.97f, 1f);
-    private static readonly Color MutedText = new(0.58f, 0.64f, 0.70f, 1f);
-    private static readonly List<Texture2D> Textures = [];
+    private static readonly Color _Text = new(0.91f, 0.94f, 0.97f, 1f);
+    private static readonly Color _MutedText = new(0.58f, 0.64f, 0.70f, 1f);
+    private static readonly List<Texture2D> _Textures = [];
 
     private static GUISkin? _sourceSkin;
     private static GUISkin? _skin;
@@ -192,13 +192,13 @@ public static class ToolTheme
         _mutedLabel = new GUIStyle(_wrappedLabel)
         {
             fontSize = 10,
-            normal = { textColor = MutedText },
+            normal = { textColor = _MutedText },
         };
         _metricLabel = new GUIStyle(_skin.label)
         {
             fontSize = 16,
             fontStyle = FontStyle.Bold,
-            normal = { textColor = Text },
+            normal = { textColor = _Text },
             margin = new RectOffset(0, 0, 2, 5),
         };
         _fieldLabel = new GUIStyle(_skin.label)
@@ -249,7 +249,7 @@ public static class ToolTheme
     private static void ConfigureWindow(GUIStyle style, Texture2D background)
     {
         SetAllBackgrounds(style, background);
-        SetAllTextColors(style, Text);
+        SetAllTextColors(style, _Text);
         style.border = Border();
         style.padding = new RectOffset(12, 12, 32, 12);
         style.alignment = TextAnchor.UpperLeft;
@@ -266,7 +266,7 @@ public static class ToolTheme
         Texture2D selected)
     {
         SetButtonBackgrounds(style, normal, hover, pressed, selected);
-        SetAllTextColors(style, Text);
+        SetAllTextColors(style, _Text);
         SetOnTextColors(style, Color.white);
         style.border = Border();
         style.padding = new RectOffset(9, 9, 4, 5);
@@ -277,7 +277,7 @@ public static class ToolTheme
 
     private static void ConfigureLabel(GUIStyle style)
     {
-        SetAllTextColors(style, Text);
+        SetAllTextColors(style, _Text);
         style.fontSize = 12;
         style.padding = new RectOffset(1, 1, 1, 1);
         style.margin = new RectOffset(1, 1, 1, 1);
@@ -290,7 +290,7 @@ public static class ToolTheme
         float fixedHeight = 24f)
     {
         SetButtonBackgrounds(style, normal, normal, focused, focused);
-        SetAllTextColors(style, Text);
+        SetAllTextColors(style, _Text);
         style.border = Border();
         style.padding = new RectOffset(7, 7, 4, 4);
         style.fixedHeight = fixedHeight;
@@ -298,7 +298,7 @@ public static class ToolTheme
 
     private static void ConfigureToggle(GUIStyle style)
     {
-        SetAllTextColors(style, Text);
+        SetAllTextColors(style, _Text);
         SetOnTextColors(style, Color.white);
         style.fontSize = 12;
         style.fixedHeight = 22f;
@@ -307,7 +307,7 @@ public static class ToolTheme
     private static void ConfigureBox(GUIStyle style, Texture2D background)
     {
         SetAllBackgrounds(style, background);
-        SetAllTextColors(style, Text);
+        SetAllTextColors(style, _Text);
         style.border = Border();
         style.padding = new RectOffset(10, 10, 9, 10);
         style.margin = new RectOffset(1, 1, 4, 5);
@@ -388,7 +388,7 @@ public static class ToolTheme
         texture.hideFlags = HideFlags.HideAndDontSave;
         texture.SetPixel(0, 0, color);
         texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-        Textures.Add(texture);
+        _Textures.Add(texture);
         return texture;
     }
 
@@ -410,7 +410,7 @@ public static class ToolTheme
         ];
         texture.SetPixels32(pixels);
         texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-        Textures.Add(texture);
+        _Textures.Add(texture);
         return texture;
     }
 
@@ -470,12 +470,12 @@ public static class ToolTheme
             _skin = null;
         }
 
-        foreach (Texture2D texture in Textures)
+        foreach (Texture2D texture in _Textures)
         {
             CoreUtils.Destroy(texture);
         }
 
-        Textures.Clear();
+        _Textures.Clear();
         _accentTexture = null;
         _sectionLabel = null;
         _richLabel = null;

@@ -10,7 +10,7 @@ namespace Fodinae.Tests.Core;
 
 public sealed class ShaderWarmupContractTests
 {
-    private static readonly string[] RequiredShaders =
+    private static readonly string[] _RequiredShaders =
     [
         ProjectRuntimeContracts.ShaderNames.Terrain,
         ProjectRuntimeContracts.ShaderNames.WorldSurface,
@@ -23,7 +23,7 @@ public sealed class ShaderWarmupContractTests
         ProjectRuntimeContracts.ShaderNames.UnpremultiplyAlpha,
     ];
 
-    private static readonly string[] RequiredLightingKernels =
+    private static readonly string[] _RequiredLightingKernels =
     [
         "SolveCascade",
         "SolveAutomaticNormals",
@@ -35,9 +35,9 @@ public sealed class ShaderWarmupContractTests
     [Test]
     public void RequiredShaders_AreFoundAndSupported()
     {
-        for (int i = 0; i < RequiredShaders.Length; i++)
+        for (int i = 0; i < _RequiredShaders.Length; i++)
         {
-            string shaderName = RequiredShaders[i];
+            string shaderName = _RequiredShaders[i];
             Shader? shader = Shader.Find(shaderName);
             Assert.That(shader, Is.Not.Null, $"Required shader '{shaderName}' was not found.");
             Assert.That(shader!.isSupported, Is.True, $"Shader '{shaderName}' is not supported on the active graphics device.");
@@ -50,9 +50,9 @@ public sealed class ShaderWarmupContractTests
         var compute = Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute);
         Assert.That(compute, Is.Not.Null, "WorldLighting.compute resource was not found.");
 
-        for (int i = 0; i < RequiredLightingKernels.Length; i++)
+        for (int i = 0; i < _RequiredLightingKernels.Length; i++)
         {
-            string kernelName = RequiredLightingKernels[i];
+            string kernelName = _RequiredLightingKernels[i];
             Assert.That(compute.HasKernel(kernelName), Is.True, $"Kernel '{kernelName}' missing in WorldLighting.compute.");
         }
     }

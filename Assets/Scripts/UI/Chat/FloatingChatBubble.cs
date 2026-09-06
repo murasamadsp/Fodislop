@@ -31,11 +31,11 @@ namespace Fodinae.UI
         private Camera? _cam;
         private float _lastOrthoSize = -1f;
 
-        private static readonly int[] QuadTriangles = { 0, 1, 2, 2, 1, 3 };
-        private static readonly Vector2[] QuadUvs = { Vector2.zero, Vector2.right, Vector2.up, Vector2.one };
+        private static readonly int[] _QuadTriangles = { 0, 1, 2, 2, 1, 3 };
+        private static readonly Vector2[] _QuadUvs = { Vector2.zero, Vector2.right, Vector2.up, Vector2.one };
         private readonly Vector3[] _quadVertices = new Vector3[4];
 
-        private static Font? s_chatFont;
+        private static Font? _s_chatFont;
 
         public void Init(string text)
         {
@@ -48,10 +48,10 @@ namespace Fodinae.UI
                 // and the default font has no CJK glyphs. The bundled Noto Sans SC
                 // covers Latin/Cyrillic + Simplified & Traditional CJK in one font,
                 // so chat text renders Chinese instead of boxes.
-                s_chatFont ??= Resources.Load<Font>("Fonts/NotoSansSC-Regular");
-                if (s_chatFont != null)
+                _s_chatFont ??= Resources.Load<Font>("Fonts/NotoSansSC-Regular");
+                if (_s_chatFont != null)
                 {
-                    _textMesh.font = s_chatFont;
+                    _textMesh.font = _s_chatFont;
                 }
 
                 _meshRenderer = GetComponent<MeshRenderer>();
@@ -106,8 +106,8 @@ namespace Fodinae.UI
             _bgMesh.vertices = _quadVertices;
             if (isNewMesh)
             {
-                _bgMesh.triangles = QuadTriangles;
-                _bgMesh.uv = QuadUvs;
+                _bgMesh.triangles = _QuadTriangles;
+                _bgMesh.uv = _QuadUvs;
             }
 
             _bgMesh.RecalculateBounds();

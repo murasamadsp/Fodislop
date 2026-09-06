@@ -21,7 +21,7 @@ public sealed class GatewayOnboarding
     private const string PillDoneClass = "onb-pill--done";
     private const string ButtonHiddenClass = "onb-btn--hidden";
 
-    private static readonly string[] StepTitles =
+    private static readonly string[] _StepTitles =
     {
         "gateway.onb.step1_title",
         "gateway.onb.step2_title",
@@ -282,7 +282,7 @@ public sealed class GatewayOnboarding
 
     private void OnNext()
     {
-        if (_step >= StepTitles.Length - 1)
+        if (_step >= _StepTitles.Length - 1)
         {
             FinishOnboarding();
             return;
@@ -293,9 +293,9 @@ public sealed class GatewayOnboarding
 
     private void ApplyStep(int step)
     {
-        _step = Mathf.Clamp(step, 0, StepTitles.Length - 1);
+        _step = Mathf.Clamp(step, 0, _StepTitles.Length - 1);
 
-        for (int i = 0; i < StepTitles.Length; i++)
+        for (int i = 0; i < _StepTitles.Length; i++)
         {
             var content = _root.Q<VisualElement>($"OnbStep{i + 1}");
             content?.EnableInClassList(StepActiveClass, i == _step);
@@ -313,7 +313,7 @@ public sealed class GatewayOnboarding
         var title = _root.Q<Label>("OnboardingTitle");
         if (title != null)
         {
-            title.text = _loc.Get(StepTitles[_step]);
+            title.text = _loc.Get(_StepTitles[_step]);
         }
 
         _root.Q<Button>("OnbPrevButton")?.EnableInClassList(ButtonHiddenClass, _step == 0);
@@ -321,7 +321,7 @@ public sealed class GatewayOnboarding
         var next = _root.Q<Button>("OnbNextButton");
         if (next != null)
         {
-            next.text = _step >= StepTitles.Length - 1
+            next.text = _step >= _StepTitles.Length - 1
                 ? _loc.Get("gateway.onb.start")
                 : _loc.Get("gateway.onb.next");
         }

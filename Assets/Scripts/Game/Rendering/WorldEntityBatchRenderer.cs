@@ -26,7 +26,7 @@ namespace Fodinae.Game
         private const int OVERLAY_BATCH_SORTING_ORDER = 600;
         private const int TENTACLE_SORTING_ORDER = -1;
 
-        private static readonly ProfilerMarker LateUpdateMarker =
+        private static readonly ProfilerMarker _LateUpdateMarker =
             new("Fodinae.WorldEntities.LateUpdate");
 
         private readonly List<Tentacle> _tentacles = [];

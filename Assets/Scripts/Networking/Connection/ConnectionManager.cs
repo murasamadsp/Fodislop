@@ -25,7 +25,7 @@ namespace Fodinae.Networking.Connection
 {
     public class ConnectionManager : MonoBehaviour, IConnectionService
     {
-        private static readonly ProfilerMarker PacketDrainMarker =
+        private static readonly ProfilerMarker _PacketDrainMarker =
             new("Fodinae.Net.DrainPacketQueue");
 
         // Бюджет на обработку входящих пакетов — доля времени КАДРА, а не стены часов.
@@ -398,10 +398,10 @@ namespace Fodinae.Networking.Connection
         /// </summary>
         private sealed class ReconnectBackoff
         {
-            private static readonly float[] Steps = [1f, 2f, 4f, 8f, 16f, 30f];
+            private static readonly float[] _Steps = [1f, 2f, 4f, 8f, 16f, 30f];
 
             private int _attempt;
-            public float CurrentDelay => Steps[Math.Min(_attempt, Steps.Length - 1)];
+            public float CurrentDelay => _Steps[Math.Min(_attempt, _Steps.Length - 1)];
 
             public void RecordFailure()
             {

@@ -77,18 +77,50 @@ public sealed class TerrainMeshManager
             UploadFlags);
     }
 
-    public void UploadDirectVertexBuffer(TerrainMeshBuilder meshBuilder)
+    /// <summary>
+    /// Uploads only the vertices a patch actually rewrote.
+    /// </summary>
+    /// <remarks>
+    /// Раньше здесь уходил весь буфер целиком — на сетке 384x384 это
+    /// десятки мегабайт на КАЖДЫЙ грязный прямоугольник, хотя строитель
+    /// давно считает точный диапазон (<see cref="TerrainMeshBuilder.DirtyVertexStart"/>).
+    /// Стоя это не видно: грязных прямоугольников нет. На ходу они есть
+    /// каждый кадр, и кадр уходил в выгрузку неизменившихся вершин.
+    ///
+    /// Диапазон приходит снаружи, а не берётся у строителя: один патч
+    /// перебирает несколько прямоугольников, и у строителя останется
+    /// только последний из них.
+    /// </remarks>
+    public void UploadDirectVertexBuffer(
+        TerrainMeshBuilder meshBuilder,
+        int vertexStart,
+        int vertexCount)
     {
         if (_mesh == null)
         {
             return;
         }
 
+        int bufferLength = meshBuilder.VertexBuffer.Length;
+        int start = Mathf.Clamp(vertexStart, 0, bufferLength);
+        int count = Mathf.Clamp(vertexCount, 0, bufferLength - start);
+        if (count == 0)
+        {
+            return;
+        }
+
+        // Сетка могла не пережить смену размеров: тогда частичная выгрузка
+        // легла бы не по тем адресам, и вместо участка земли поехала бы вся.
+        if (_mesh.vertexCount != bufferLength)
+        {
+            return;
+        }
+
         _mesh.SetVertexBufferData(
             meshBuilder.VertexBuffer,
-            0,
-            0,
-            meshBuilder.VertexBuffer.Length,
+            start,
+            start,
+            count,
             0,
             UploadFlags);
     }

@@ -275,23 +275,11 @@ void CheckDiagonalStepOccluded(int2 prevCell, int2 currentCell, float2 cellsPerP
         CheckCellSolid(cornerA, cellsPerPixel, solidA);
         CheckCellSolid(cornerB, cellsPerPixel, solidB);
 
-        if (solidA && solidB)
-        {
-            isOccluded = true;
-        }
-        else if (abs(dx) > 1 || abs(dy) > 1)
-        {
-            int2 cornerA2 = int2(currentCell.x - stepX, currentCell.y);
-            int2 cornerB2 = int2(currentCell.x, currentCell.y - stepY);
-            bool solidA2 = false;
-            bool solidB2 = false;
-            CheckCellSolid(cornerA2, cellsPerPixel, solidA2);
-            CheckCellSolid(cornerB2, cellsPerPixel, solidB2);
-            if (solidA2 && solidB2)
-            {
-                isOccluded = true;
-            }
-        }
+        // Только пара углов у ИСХОДНОЙ клетки. Вторая пара, у клетки
+        // назначения, стоила ещё двух выборок и срабатывала ровно тогда,
+        // когда шаг перепрыгнул клетку — а перепрыгнувший луч прошёл не
+        // через названный угол, а мимо. Две выборки за догадку.
+        isOccluded = solidA && solidB;
     }
 }
 
@@ -408,12 +396,19 @@ void TraceRadianceSegment(
         }
 
         int2 currentCell = int2(floor(samplePosition * cellsPerPixel));
-        bool diagonalOccluded = false;
-        CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
-        if (diagonalOccluded)
+        // Угловой тест только на нулевом мипе. Выше занятость уже усреднена
+        // по нескольким клеткам, отдельного угла в ней нет — тест ничего не
+        // решает, а выборки берёт. Это внутренний цикл каскадного решения,
+        // самый горячий в движке: две лишние выборки здесь стоят кадра.
+        if (samplingMip <= 0.0)
         {
-            transmittance = 0.0;
-            break;
+            bool diagonalOccluded = false;
+            CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
+            if (diagonalOccluded)
+            {
+                transmittance = 0.0;
+                break;
+            }
         }
 
         prevCell = currentCell;

@@ -21,7 +21,7 @@ namespace Fodinae.Core
         private const string ConfigDirectory = "Config";
 
         public ClientConfig Config { get; private set; } = null!;
-        public string ConfigFilePath => Repository.ConfigPath;
+        public string ConfigFilePath => _Repository.ConfigPath;
         public GraphicsPreset SelectedGraphicsPreset => Config.GraphicsPreset;
 
         private bool _initialized;
@@ -38,16 +38,16 @@ namespace Fodinae.Core
             return Path.Combine(Application.persistentDataPath, ConfigDirectory, ConfigFileName);
         }
 
-        private ClientConfigRepository Repository =>
+        private ClientConfigRepository _Repository =>
             _repository ??= new ClientConfigRepository(GetConfigPath());
 
-        private ClientConfigMigration Migration =>
+        private ClientConfigMigration _Migration =>
             _migration ??= new ClientConfigMigration(_graphicsQualityProfile);
 
-        private ClientConfigValidator Validator =>
+        private ClientConfigValidator _Validator =>
             _validator ??= new ClientConfigValidator(_graphicsQualityProfile);
 
-        private ConfigSaveScheduler SaveScheduler =>
+        private ConfigSaveScheduler _SaveScheduler =>
             _saveScheduler ??= new ConfigSaveScheduler(this);
 
         /// <summary>
@@ -90,12 +90,12 @@ namespace Fodinae.Core
 
         private void Update()
         {
-            SaveScheduler.TryFlush(Time.unscaledTime);
+            _SaveScheduler.TryFlush(Time.unscaledTime);
         }
 
         private void OnApplicationQuit()
         {
-            SaveScheduler.Flush();
+            _SaveScheduler.Flush();
         }
 
         private void OnDisable()
@@ -103,12 +103,12 @@ namespace Fodinae.Core
             // Выход из Play Mode в редакторе OnApplicationQuit не вызывает.
             // Без этого правка, сделанная в последнюю четверть секунды, не
             // доехала бы до диска.
-            SaveScheduler.Flush();
+            _SaveScheduler.Flush();
         }
 
         public void Load()
         {
-            ClientConfigRepository repository = Repository;
+            ClientConfigRepository repository = _Repository;
             if (!repository.Exists)
             {
                 ApplyDefaults();
@@ -118,8 +118,8 @@ namespace Fodinae.Core
 
             ClientConfigRepository.LoadedConfig loaded = repository.Load();
             int sourceSchemaVersion = loaded.Config.SchemaVersion;
-            bool migrated = Migration.Migrate(loaded.Config, loaded.Json);
-            Validator.Validate(loaded.Config);
+            bool migrated = _Migration.Migrate(loaded.Config, loaded.Json);
+            _Validator.Validate(loaded.Config);
             Config = loaded.Config;
             if (migrated)
             {
@@ -248,9 +248,9 @@ namespace Fodinae.Core
         /// </summary>
         public void Save()
         {
-            Validator.Validate(Config);
-            Repository.Save(Config);
-            Debug.Log($"[ClientConfigManager] Saved config directly to {Repository.ConfigPath}");
+            _Validator.Validate(Config);
+            _Repository.Save(Config);
+            Debug.Log($"[ClientConfigManager] Saved config directly to {_Repository.ConfigPath}");
         }
 
         /// <summary>
@@ -275,8 +275,8 @@ namespace Fodinae.Core
             // Проверка немедленная, откладывается только диск. Иначе неверное
             // значение всплывало бы исключением на выходе из игры — позже
             // правки, которая его внесла, и без всякой связи с ней.
-            Validator.Validate(Config);
-            SaveScheduler.Queue();
+            _Validator.Validate(Config);
+            _SaveScheduler.Queue();
             Debug.Log("[ClientConfigManager] Queued deferred config save");
         }
 

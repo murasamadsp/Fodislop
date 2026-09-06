@@ -32,11 +32,11 @@ public static class ManagerContractMigrator
     private const string ScopeSourcePath = "Assets/Scripts/Core/Bootstrap/GameLifetimeScope.cs";
     private const string MainGameScenePath = "Assets/Scenes/MainGame.unity";
 
-    private static readonly Regex CallPattern = new(
+    private static readonly Regex _CallPattern = new(
         @"RegisterManager<(?<type>[A-Za-z0-9_.]+)>\(\s*builder\s*,\s*\""(?<group>[A-Za-z0-9_]+)\""",
         RegexOptions.Compiled);
 
-    private static readonly Dictionary<string, Type> ResolvedTypes = new();
+    private static readonly Dictionary<string, Type> _ResolvedTypes = new();
 
     [MenuItem("Fodinae/Architecture/Populate Manager Contract")]
     public static void Populate()
@@ -241,7 +241,7 @@ public static class ManagerContractMigrator
     {
         string source = System.IO.File.ReadAllText(ScopeSourcePath);
         var result = new List<(string, string)>();
-        foreach (Match match in CallPattern.Matches(source))
+        foreach (Match match in _CallPattern.Matches(source))
         {
             result.Add((match.Groups["type"].Value, match.Groups["group"].Value));
         }
@@ -314,7 +314,7 @@ public static class ManagerContractMigrator
 
     private static Type? ResolveType(string name)
     {
-        if (!ResolvedTypes.TryGetValue(name, out Type? type))
+        if (!_ResolvedTypes.TryGetValue(name, out Type? type))
         {
             type = null;
             string fullName = $"Fodinae.{name}";
@@ -344,7 +344,7 @@ public static class ManagerContractMigrator
             }
 
             type ??= byShortName;
-            ResolvedTypes[name] = type ?? typeof(MonoBehaviour);
+            _ResolvedTypes[name] = type ?? typeof(MonoBehaviour);
         }
 
         return type == typeof(MonoBehaviour) ? null : type;

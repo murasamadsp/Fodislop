@@ -200,11 +200,11 @@ public sealed class ServerAudioEvent : IDisposable
         ReleaseSlot();
     }
 
-    private static readonly Dictionary<SFX, string> SfxEventNameCache = new();
+    private static readonly Dictionary<SFX, string> _SfxEventNameCache = new();
 
     private static string GetSfxEventName(SFX sfx)
     {
-        if (SfxEventNameCache.TryGetValue(sfx, out var cachedName))
+        if (_SfxEventNameCache.TryGetValue(sfx, out var cachedName))
         {
             return cachedName;
         }
@@ -230,7 +230,7 @@ public sealed class ServerAudioEvent : IDisposable
         }
 
         var result = sb.ToString();
-        SfxEventNameCache[sfx] = result;
+        _SfxEventNameCache[sfx] = result;
         return result;
     }
 

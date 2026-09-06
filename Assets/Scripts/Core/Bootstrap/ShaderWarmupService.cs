@@ -30,7 +30,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         (ProjectRuntimeContracts.ShaderNames.UnpremultiplyAlpha, null),
     ];
 
-    private static readonly string[] WorldLightingKernels =
+    private static readonly string[] _WorldLightingKernels =
     [
         "SolveCascade",
         "SolveAutomaticNormals",
@@ -39,7 +39,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         "CompositeLighting",
     ];
 
-    private static readonly string[] PostProcessKernels =
+    private static readonly string[] _PostProcessKernels =
     [
         "BloomPrefilter",
         "BloomDownsample",
@@ -52,7 +52,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         CancellationToken cancellationToken)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        int totalSteps = ShadersToWarm.Length + WorldLightingKernels.Length + PostProcessKernels.Length;
+        int totalSteps = ShadersToWarm.Length + _WorldLightingKernels.Length + _PostProcessKernels.Length;
         int currentStep = 0;
         int warmedPasses = 0;
         int warmedKernels = 0;
@@ -110,10 +110,10 @@ public sealed class ShaderWarmupService : IShaderWarmupService
             var lightingCompute = Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.WorldLightingCompute);
             if (lightingCompute != null)
             {
-                for (int i = 0; i < WorldLightingKernels.Length; i++)
+                for (int i = 0; i < _WorldLightingKernels.Length; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    string kernelName = WorldLightingKernels[i];
+                    string kernelName = _WorldLightingKernels[i];
                     if (lightingCompute.HasKernel(kernelName))
                     {
                         _ = lightingCompute.FindKernel(kernelName);
@@ -127,16 +127,16 @@ public sealed class ShaderWarmupService : IShaderWarmupService
             }
             else
             {
-                currentStep += WorldLightingKernels.Length;
+                currentStep += _WorldLightingKernels.Length;
             }
 
             var postProcessCompute = Resources.Load<ComputeShader>(ProjectRuntimeContracts.ResourcePaths.PostProcessCompute);
             if (postProcessCompute != null)
             {
-                for (int i = 0; i < PostProcessKernels.Length; i++)
+                for (int i = 0; i < _PostProcessKernels.Length; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    string kernelName = PostProcessKernels[i];
+                    string kernelName = _PostProcessKernels[i];
                     if (postProcessCompute.HasKernel(kernelName))
                     {
                         _ = postProcessCompute.FindKernel(kernelName);
@@ -150,7 +150,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService
             }
             else
             {
-                currentStep += PostProcessKernels.Length;
+                currentStep += _PostProcessKernels.Length;
             }
 
             Debug.Log($"[ShaderWarmup] Successfully primed {warmedPasses} raster state(s) and {warmedKernels} compute kernel(s) in {stopwatch.ElapsedMilliseconds} ms.");

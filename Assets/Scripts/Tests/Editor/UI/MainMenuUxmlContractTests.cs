@@ -9,7 +9,7 @@ namespace Fodinae.Tests.UI;
 [TestFixture]
 public sealed class MainMenuUxmlContractTests
 {
-    private static readonly string[] RequiredLoaderElements =
+    private static readonly string[] _RequiredLoaderElements =
     [
         "LoaderContainer",
         "LoaderContent",
@@ -27,7 +27,7 @@ public sealed class MainMenuUxmlContractTests
         Assert.That(asset, Is.Not.Null);
 
         TemplateContainer tree = asset.CloneTree();
-        foreach (string elementName in RequiredLoaderElements)
+        foreach (string elementName in _RequiredLoaderElements)
         {
             Assert.That(tree.Q(elementName), Is.Not.Null, $"Missing #{elementName}");
         }
