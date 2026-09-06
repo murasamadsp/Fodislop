@@ -34,7 +34,7 @@ namespace Fodinae.UI
         private IRuntimeDebugSettings _debugSettings = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
-        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[4];
+        private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[7];
         private RenderBypassWindow? _bypassWindow;
         private bool _registered;
 
@@ -62,12 +62,14 @@ namespace Fodinae.UI
 
         private void OnDisable()
         {
+            ToolWindows.SaveLayout(immediate: true);
             SetToolsEnabled(false);
             _telemetry?.SetAllocationTrackingEnabled(false);
         }
 
         private void OnDestroy()
         {
+            ToolWindows.SaveLayout(immediate: true);
             SetToolsEnabled(false);
             _telemetry?.SetAllocationTrackingEnabled(false);
             foreach (ToolWindow? window in _ownedWindows)
@@ -114,11 +116,17 @@ namespace Fodinae.UI
                 _debugSettings,
                 stats);
             var bypass = new RenderBypassWindow(_debugSettings, _lighting, _gizmos);
+            var lightingCost = new LightingCostWindow(_lighting, _telemetry);
+            var breakdown = new FrameBreakdownWindow();
+            var packets = new PacketTrafficWindow();
             _bypassWindow = bypass;
             _ownedWindows[0] = toolbar;
             _ownedWindows[1] = stats;
             _ownedWindows[2] = world;
             _ownedWindows[3] = bypass;
+            _ownedWindows[4] = lightingCost;
+            _ownedWindows[5] = breakdown;
+            _ownedWindows[6] = packets;
 
             foreach (ToolWindow? window in _ownedWindows)
             {
@@ -148,9 +156,33 @@ namespace Fodinae.UI
                 return;
             }
 
+            ReleaseCaptureOnEscape(keyboard);
             UpdateTelemetryState();
             _telemetry.BeginFrame();
             ToolWindows.Tick();
+        }
+
+        /// <summary>
+        /// Возвращает управление игре по Escape.
+        /// </summary>
+        /// <remarks>
+        /// Поле ввода или ползунок в IMGUI удерживают клавиатуру, и пока захват
+        /// не снят, игра не слышит ни одной клавиши. Выходом было закрыть весь
+        /// интерфейс по F1 и потерять раскладку; теперь достаточно Escape.
+        ///
+        /// Переключения окон клавишами здесь нет намеренно. Цифровой ряд занят
+        /// хотбаром, функциональный — рабочим местом колориста, и всякая
+        /// раскладка поверх этого либо конфликтует с игрой, либо запоминается
+        /// хуже, чем один щелчок в списке инструментов.
+        /// </remarks>
+        private static void ReleaseCaptureOnEscape(Keyboard? keyboard)
+        {
+            if (keyboard != null &&
+                keyboard.escapeKey.wasPressedThisFrame &&
+                ToolWindows.HasKeyboardCapture)
+            {
+                ToolWindows.ReleaseInputCapture();
+            }
         }
 
         private void UpdateTelemetryState()

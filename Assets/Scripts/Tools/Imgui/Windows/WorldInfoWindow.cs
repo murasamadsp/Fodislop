@@ -25,6 +25,9 @@ namespace Fodinae.Tools.Imgui.Windows;
 /// </remarks>
 public sealed class WorldInfoWindow : ToolWindow
 {
+    /// <summary>Ширина, ниже которой колонки перестают помещаться рядом.</summary>
+    private const float TwoColumnWidth = 470f;
+
     private readonly IFrameTelemetry _telemetry;
     private readonly LightingEngine? _lighting;
     private readonly MapManager? _mapManager;
@@ -96,16 +99,35 @@ public sealed class WorldInfoWindow : ToolWindow
         using (var scroll = new GUILayout.ScrollViewScope(_scroll))
         {
             _scroll = scroll.scrollPosition;
-            GUILayout.Label("МИР И ИГРОК", SectionLabelStyle);
-            using (new GUILayout.VerticalScope(CardStyle))
+
+            // Две колонки, пока окно достаточно широкое. Столбцы читают
+            // вместе — «где я» и «во что это обходится», — и на широком окне
+            // разносить их по вертикали значило бы заставлять прокручивать
+            // ради сравнения того, что помещается рядом.
+            if (Rect.width >= TwoColumnWidth)
             {
-                GUILayout.Label(_left, RichLabelStyle);
+                using (new GUILayout.HorizontalScope())
+                {
+                    DrawColumn("МИР И ИГРОК", _left, GUILayout.Width((Rect.width - 46f) * 0.5f));
+                    DrawColumn("РЕНДЕР И КЛИЕНТ", _right);
+                }
+
+                return;
             }
 
-            GUILayout.Label("РЕНДЕР И КЛИЕНТ", SectionLabelStyle);
+            DrawColumn("МИР И ИГРОК", _left);
+            DrawColumn("РЕНДЕР И КЛИЕНТ", _right);
+        }
+    }
+
+    private static void DrawColumn(string title, string body, params GUILayoutOption[] options)
+    {
+        using (new GUILayout.VerticalScope(options))
+        {
+            ToolChrome.SectionHeader(title);
             using (new GUILayout.VerticalScope(CardStyle))
             {
-                GUILayout.Label(_right, RichLabelStyle);
+                GUILayout.Label(body, RichLabelStyle);
             }
         }
     }

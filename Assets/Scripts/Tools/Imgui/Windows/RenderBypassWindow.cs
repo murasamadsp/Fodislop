@@ -57,7 +57,9 @@ public sealed class RenderBypassWindow : ToolWindow
         using (var scroll = new GUILayout.ScrollViewScope(_scroll))
         {
             _scroll = scroll.scrollPosition;
-            GUILayout.Label("ОБХОДЫ", SectionLabelStyle);
+            DrawBypassWarning();
+
+            ToolChrome.SectionHeader("ОБХОДЫ");
             GUILayout.Label("Активный пункт отключает соответствующий этап.", MutedLabelStyle);
             _debugSettings.BypassLightingCompute = DrawSwitch(
                 _debugSettings.BypassLightingCompute, "Расчёт освещения");
@@ -66,59 +68,140 @@ public sealed class RenderBypassWindow : ToolWindow
             _debugSettings.BypassCpuMeshRebuild = DrawSwitch(
                 _debugSettings.BypassCpuMeshRebuild, "Пересборка меша");
             _debugSettings.ShowRobotDebugVisuals = DrawSwitch(
-                _debugSettings.ShowRobotDebugVisuals, "Отладка роботов");
+                _debugSettings.ShowRobotDebugVisuals, "Отладка роботов", ToolTheme.FrameGraphColor);
 
-            ToolTheme.Separator();
-            GUILayout.Label("ГИЗМО В МИРЕ", SectionLabelStyle);
-            _gizmos.ShowGrid = DrawSwitch(_gizmos.ShowGrid, "Сетка чанков");
-            _gizmos.ShowCursor = DrawSwitch(_gizmos.ShowCursor, "Курсор клетки");
+            ToolChrome.SectionHeader("ГИЗМО В МИРЕ");
+            _gizmos.ShowGrid = DrawSwitch(_gizmos.ShowGrid, "Сетка чанков", ToolTheme.FrameGraphColor);
+            _gizmos.ShowCursor = DrawSwitch(_gizmos.ShowCursor, "Курсор клетки", ToolTheme.FrameGraphColor);
 
             if (_lighting == null)
             {
                 return;
             }
 
-            ToolTheme.Separator();
-            GUILayout.Label("ДИНАМИЧЕСКИЙ СВЕТ", SectionLabelStyle);
+            ToolChrome.SectionHeader("ДИНАМИЧЕСКИЙ СВЕТ");
             bool lit = _lighting.DynamicLightIntensity > 0.01f;
-            if (DrawSwitch(lit, "Динамический свет") != lit)
+            if (DrawSwitch(lit, "Динамический свет", ToolTheme.Success) != lit)
             {
                 ToggleDynamicLight();
             }
 
-            GUILayout.Label("ВИД ОСВЕЩЕНИЯ", SectionLabelStyle);
-            GUILayout.Label(_lighting.ActiveDebugView.ToString(), MetricLabelStyle);
-            if (GUILayout.Button("Следующий вид", ActiveButtonStyle))
-            {
-                CycleLightingView(_lighting);
-            }
-
-            bool controlsEnabled = GUI.enabled;
-            GUI.enabled = controlsEnabled &&
-                _lighting.ActiveDebugView != LightingEngine.DebugView.FinalLighting;
-            if (GUILayout.Button("Вернуть обычный", SecondaryButtonStyle))
-            {
-                _lighting.SetDebugView(LightingEngine.DebugView.FinalLighting);
-            }
-
-            GUI.enabled = controlsEnabled;
+            DrawLightingViewPicker(_lighting);
         }
     }
 
-    private static bool DrawSwitch(bool value, string label)
+    /// <summary>
+    /// Предупреждение, пока хоть один этап выключен.
+    /// </summary>
+    /// <remarks>
+    /// Обход не помечен в самом кадре ничем: картинка просто становится другой.
+    /// Забытый обход стоил уже не одного часа разбора чисел, полученных не из
+    /// игры, — поэтому цена состояния названа прямо, а не выводится из того,
+    /// какие тумблеры горят ниже.
+    /// </remarks>
+    private void DrawBypassWarning()
     {
-        string marker = value ? "●" : "○";
-        return GUILayout.Toggle(value, $"{marker}  {label}", ToolTheme.SegmentedButton);
+        int active = 0;
+        if (_debugSettings.BypassLightingCompute)
+        {
+            active++;
+        }
+
+        if (_debugSettings.BypassTerrainDraw)
+        {
+            active++;
+        }
+
+        if (_debugSettings.BypassCpuMeshRebuild)
+        {
+            active++;
+        }
+
+        if (active == 0)
+        {
+            return;
+        }
+
+        ToolChrome.Banner($"КАДР НЕПОЛНЫЙ · ОБХОДОВ: {active}", ToolTheme.Error);
+        GUILayout.Space(4f);
+    }
+
+    /// <summary>
+    /// Выбор отладочного вида: назад, название, вперёд.
+    /// </summary>
+    /// <remarks>
+    /// Видов одиннадцать, и одной кнопкой «следующий» промах означал полный
+    /// круг. Шаг назад дешевле десяти шагов вперёд.
+    /// </remarks>
+    private static void DrawLightingViewPicker(LightingEngine lighting)
+    {
+        ToolChrome.SectionHeader("ВИД ОСВЕЩЕНИЯ");
+        bool custom = lighting.ActiveDebugView != LightingEngine.DebugView.FinalLighting;
+
+        using (new GUILayout.HorizontalScope())
+        {
+            ToolChrome.StatusPip(custom ? ToolTheme.Warning : ToolTheme.Success);
+            GUILayout.Label(lighting.ActiveDebugView.ToString(), MutedLabelStyle);
+        }
+
+        using (new GUILayout.HorizontalScope())
+        {
+            if (GUILayout.Button("◄", SecondaryButtonStyle, GUILayout.Width(34f)))
+            {
+                StepLightingView(lighting, -1);
+            }
+
+            if (GUILayout.Button("Следующий вид", ActiveButtonStyle))
+            {
+                StepLightingView(lighting, 1);
+            }
+        }
+
+        bool controlsEnabled = GUI.enabled;
+        GUI.enabled = controlsEnabled && custom;
+        if (GUILayout.Button("Вернуть обычный", SecondaryButtonStyle))
+        {
+            lighting.SetDebugView(LightingEngine.DebugView.FinalLighting);
+        }
+
+        GUI.enabled = controlsEnabled;
+    }
+
+    /// <summary>
+    /// Тумблер с точкой состояния.
+    /// </summary>
+    /// <remarks>
+    /// Цвет включённого состояния задаётся вызывающим, потому что смысл у
+    /// включённого разный. Обход по умолчанию красный: он что-то отнимает у
+    /// кадра. Гизмо и отладка роботов — синие: они добавляют, и тревоги в них
+    /// нет. Одинаковый цвет на всё стирал бы именно ту разницу, ради которой
+    /// на окно смотрят.
+    /// </remarks>
+    private static bool DrawSwitch(bool value, string label, Color? activeColor = null)
+    {
+        using (new GUILayout.HorizontalScope())
+        {
+            ToolChrome.StatusPip(value
+                ? activeColor ?? ToolTheme.Error
+                : ToolPalette.Fade(ToolPalette.MutedText, 0.45f));
+            return GUILayout.Toggle(value, label, ToolTheme.SegmentedButton);
+        }
     }
 
     /// <summary>
     /// Следующий вид по кругу. Длина берётся из самого перечисления: список
     /// уже рос, и зашитое число молча отрезало бы новые виды.
     /// </summary>
-    public static void CycleLightingView(LightingEngine lighting)
+    public static void CycleLightingView(LightingEngine lighting) => StepLightingView(lighting, 1);
+
+    /// <summary>Шаг по кругу в любую сторону.</summary>
+    private static void StepLightingView(LightingEngine lighting, int step)
     {
         int total = System.Enum.GetValues(typeof(LightingEngine.DebugView)).Length;
-        int next = ((int)lighting.ActiveDebugView + 1) % total;
+
+        // Плюс длина перед остатком: в C# остаток отрицательного числа
+        // отрицателен, и шаг назад с нулевого вида дал бы недопустимый вид.
+        int next = ((int)lighting.ActiveDebugView + step + total) % total;
         lighting.SetDebugView((LightingEngine.DebugView)next);
     }
 

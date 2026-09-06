@@ -30,11 +30,12 @@ public sealed class RobotCuller
 
         if (shouldCull)
         {
+            // Re-enabled entities may retain their previous culling state.
+            nameplate.SetEnabled(false);
             if (!_isCulled)
             {
                 _isCulled = true;
                 visuals.SetBodyVisible(false);
-                nameplate.SetEnabled(false);
                 visuals.SetTentaclesActive(false);
                 lighting.Remove(lightingEngine);
             }

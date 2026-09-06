@@ -28,6 +28,7 @@ public static class ToolTheme
     private static GUISkin? _sourceSkin;
     private static GUISkin? _skin;
     private static GUIStyle? _sectionLabel;
+    private static GUIStyle? _windowTitle;
     private static GUIStyle? _richLabel;
     private static GUIStyle? _wrappedLabel;
     private static GUIStyle? _mutedLabel;
@@ -47,6 +48,7 @@ public static class ToolTheme
     private static GUIStyle? _scope;
 
     public static GUIStyle SectionLabel => _sectionLabel!;
+    public static GUIStyle WindowTitle => _windowTitle!;
     public static GUIStyle RichLabel => _richLabel!;
     public static GUIStyle WrappedLabel => _wrappedLabel!;
     public static GUIStyle MutedLabel => _mutedLabel!;
@@ -124,6 +126,17 @@ public static class ToolTheme
 
     private static void BuildLabels()
     {
+        _windowTitle = new GUIStyle(_skin!.label)
+        {
+            fontSize = 12,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleLeft,
+            clipping = TextClipping.Clip,
+            wordWrap = false,
+            padding = new RectOffset(),
+            margin = new RectOffset(),
+            normal = { textColor = ToolPalette.Accent },
+        };
         _sectionLabel = new GUIStyle(_skin!.label)
         {
             fontSize = 10,
@@ -234,7 +247,7 @@ public static class ToolTheme
         // закрытия: содержимое не должно заходить под диагональ.
         style.padding = new RectOffset(13, 13, 34, 13);
         style.alignment = TextAnchor.UpperLeft;
-        style.contentOffset = new Vector2(13f, 7f);
+        style.contentOffset = Vector2.zero;
         style.fontSize = 11;
         style.fontStyle = FontStyle.Bold;
     }
@@ -415,6 +428,7 @@ public static class ToolTheme
 
         ToolPalette.Release();
         _sectionLabel = null;
+        _windowTitle = null;
         _richLabel = null;
         _wrappedLabel = null;
         _mutedLabel = null;

@@ -88,12 +88,6 @@ namespace Fodinae.Player.Logic
 
         protected void Awake()
         {
-            if (TryGetComponent<Rigidbody2D>(out var rb))
-            {
-                rb.freezeRotation = true;
-                rb.simulated = false;
-            }
-
             _robot = GetComponent<Robot>();
             if (_robot is not null)
             {

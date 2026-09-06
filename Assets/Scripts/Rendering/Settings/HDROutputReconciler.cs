@@ -58,6 +58,7 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
         _volume = _camera.Camera.gameObject.AddComponent<Volume>();
         _volume.isGlobal = true;
         _volume.priority = float.MaxValue;
+        _volume.weight = 1f;
         _volume.sharedProfile = _profile;
         UpdateCalibration();
         SceneManager.sceneLoaded += OnSceneLoaded;

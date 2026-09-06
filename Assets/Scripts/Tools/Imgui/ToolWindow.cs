@@ -27,6 +27,9 @@ namespace Fodinae.Tools.Imgui;
 /// </remarks>
 public abstract class ToolWindow : IDisposable
 {
+    /// <summary>Высота свёрнутого окна: только полоса заголовка.</summary>
+    public const float CollapsedHeight = ToolTheme.HeaderHeight + 4f;
+
     private readonly Rect _initialRect;
     private bool _initialStateCaptured;
     private bool _initialVisible;
@@ -35,6 +38,8 @@ public abstract class ToolWindow : IDisposable
     private string? _pendingDrawError;
     private bool _retryRequested;
     private Vector2? _pendingSize;
+    private bool _collapsed;
+    private float _expandedHeight;
 
     protected ToolWindow(string title, Rect initialRect)
     {
@@ -58,6 +63,39 @@ public abstract class ToolWindow : IDisposable
     public string DisplayTitle { get; }
 
     public Rect Rect;
+
+    /// <summary>
+    /// Свёрнуто ли окно в одну полосу заголовка.
+    /// </summary>
+    /// <remarks>
+    /// Не то же самое, что закрытое. Закрытое окно исчезает из виду целиком, и
+    /// чтобы понять, что оно вообще есть, надо идти в список инструментов.
+    /// Свёрнутое остаётся на своём месте и помнит размер: его открывают
+    /// обратно одним щелчком там же, где свернули. С пятью окнами на экране это
+    /// разница между «убрал с глаз» и «потерял».
+    /// </remarks>
+    public bool Collapsed
+    {
+        get => _collapsed;
+        set
+        {
+            if (_collapsed == value)
+            {
+                return;
+            }
+
+            if (value)
+            {
+                _expandedHeight = Rect.height;
+            }
+
+            _collapsed = value;
+            _pendingSize = new Vector2(
+                Rect.width,
+                value ? CollapsedHeight : Mathf.Max(MinimumSize.y, _expandedHeight));
+            ToolWindows.NotifyLayoutChanged();
+        }
+    }
 
     /// <summary>Видимость окна. Мастер-тумблер системы её не стирает.</summary>
     public bool Visible
@@ -95,6 +133,17 @@ public abstract class ToolWindow : IDisposable
     /// <summary>Whether the bottom-right resize grip is available.</summary>
     protected virtual bool CanResize => true;
 
+    /// <summary>
+    /// Можно ли восстанавливать сохранённую видимость этого окна.
+    /// </summary>
+    /// <remarks>
+    /// Совпадает с возможностью закрыть окно, и не случайно. Список
+    /// инструментов закрыть нельзя — он и есть путь ко всем остальным, — а
+    /// значит сохранённое «скрыт» вернуло бы состояние, из которого нет выхода
+    /// ничем, кроме стирания настроек вручную.
+    /// </remarks>
+    public bool CanRestoreVisibility => CanClose;
+
     protected static GUIStyle SectionLabelStyle => ToolTheme.SectionLabel;
 
     protected static GUIStyle RichLabelStyle => ToolTheme.RichLabel;
@@ -123,6 +172,9 @@ public abstract class ToolWindow : IDisposable
     public void ResetPosition()
     {
         Rect = _initialRect;
+        _collapsed = false;
+        _expandedHeight = 0f;
+        _pendingSize = null;
     }
 
     internal void CaptureInitialState()
@@ -144,6 +196,8 @@ public abstract class ToolWindow : IDisposable
         _pendingDrawError = null;
         _retryRequested = false;
         _pendingSize = null;
+        _collapsed = false;
+        _expandedHeight = 0f;
         OnPlaySessionReset();
     }
 
@@ -203,19 +257,41 @@ public abstract class ToolWindow : IDisposable
 
         bool focused = ToolWindows.IsFocused(this);
         var local = new Rect(0f, 0f, Rect.width, Rect.height);
-        ToolChrome.DrawScanlines(local);
         ToolChrome.DrawHeaderMarker(ToolTheme.HeaderHeight, focused);
         ToolChrome.DrawHeaderRule(Rect.width, ToolTheme.HeaderHeight, focused);
         ToolChrome.DrawCornerBrackets(local, focused);
 
         // Кнопка закрытия отодвинута от правого края на ширину среза: на самом
         // углу рамки её нет, и кнопка висела бы в пустоте.
+        float closeX = Rect.width - 32f;
+        float collapseX = CanClose ? closeX - 26f : closeX;
+        GUI.Label(
+            new Rect(13f, 0f, Mathf.Max(0f, collapseX - 19f), ToolTheme.HeaderHeight),
+            DisplayTitle,
+            ToolTheme.WindowTitle);
         if (CanClose && GUI.Button(
-                new Rect(Rect.width - 32f, 5f, 24f, 20f),
+                new Rect(closeX, 5f, 24f, 20f),
                 "×",
                 ToolTheme.CloseButton))
         {
             ToolWindows.RequestVisibility(this, visible: false);
+        }
+
+        if (GUI.Button(
+                new Rect(collapseX, 5f, 24f, 20f),
+                Collapsed ? "+" : "−",
+                ToolTheme.CloseButton))
+        {
+            Collapsed = !Collapsed;
+        }
+
+        if (Collapsed)
+        {
+            // Свёрнутое окно не рисует содержимое и не растягивается, но ручку
+            // перетаскивания сохраняет: полоса заголовка — это всё, что от
+            // него осталось, и она обязана остаться подвижной.
+            GUI.DragWindow(new Rect(0f, 0f, Rect.width, ToolTheme.HeaderHeight));
+            return;
         }
 
         if (_drawError != null)
