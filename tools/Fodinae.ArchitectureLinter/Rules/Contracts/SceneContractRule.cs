@@ -88,10 +88,10 @@ public sealed class SceneContractRule : IRule
                 });
             }
 
-            // Check required components
+            // Check required components (can be on any GameObject, not just named ones)
             foreach (var component in components)
             {
-                if (!content.Contains($"m_Name: {component}") && !ContainsComponentClass(content, component))
+                if (!HasComponentInScene(content, component))
                 {
                     violations.Add(new RuleViolation
                     {
@@ -133,9 +133,41 @@ public sealed class SceneContractRule : IRule
         return Regex.Matches(content, $"m_Name: {Regex.Escape(className)}(?:\\s|$)").Count;
     }
 
+    // Known component GUIDs (from Unity and project assemblies)
+    private static readonly Dictionary<string, string> KnownComponentGuids = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Unity built-in components
+        ["UIDocument"] = "0000000000000000e000000000000000",
+        // Project components (found via MCP inspection)
+        ["GatewayController"] = "908ee3e9c3acb4c3cba7e23129cc9b38",
+    };
+
+    /// <summary>
+    /// Checks if a component exists in the scene by looking for MonoBehaviour entries
+    /// that reference the component type by name or GUID.
+    /// </summary>
+    private static bool HasComponentInScene(string content, string className)
+    {
+        // Check 1: GameObject with this name exists
+        if (content.Contains($"m_Name: {className}"))
+            return true;
+
+        // Check 2: MonoBehaviour with m_EditorClassIdentifier containing this name
+        if (Regex.IsMatch(content, $"m_EditorClassIdentifier:.*{Regex.Escape(className)}"))
+            return true;
+
+        // Check 3: MonoBehaviour script GUID reference
+        if (KnownComponentGuids.TryGetValue(className, out var guid))
+        {
+            if (content.Contains($"guid: {guid}"))
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool ContainsComponentClass(string content, string className)
     {
-        return content.Contains($"m_Name: {className}") ||
-               content.Contains($"m_EditorClassIdentifier:.*{Regex.Escape(className)}");
+        return HasComponentInScene(content, className);
     }
 }
