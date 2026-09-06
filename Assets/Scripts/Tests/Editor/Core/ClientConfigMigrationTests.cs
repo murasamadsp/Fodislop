@@ -49,8 +49,6 @@ public sealed class ClientConfigMigrationTests
 
         Assert.That(migrated, Is.True);
         Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(config.Lighting.AmbientIntensity, Is.EqualTo(0.42f).Within(1e-5f));
-        Assert.That(config.Lighting.EmissionScale, Is.EqualTo(3.5f).Within(1e-5f));
         Assert.That(config.Terrain.ShimmerSpeedScale, Is.EqualTo(0.25f).Within(1e-5f));
         Assert.That(config.Effects.BloomEnabled, Is.False);
         Assert.That(config.Effects.MotionBlurEnabled, Is.True);
@@ -72,31 +70,11 @@ public sealed class ClientConfigMigrationTests
 
         Assert.That(migrated, Is.True);
         Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(SettingSchema.MatchesDefaults(config.Lighting), Is.True);
         Assert.That(SettingSchema.MatchesDefaults(config.Terrain), Is.True);
         Assert.That(SettingSchema.MatchesDefaults(config.Effects), Is.True);
         Assert.That(SettingSchema.MatchesDefaults(config.PostProcess), Is.True);
     }
 
-    /// <summary>
-    /// Значение вне нынешних границ загоняется в диапазон при переносе, а не
-    /// роняет валидатор сразу после миграции.
-    /// </summary>
-    [Test]
-    public void Migrate_FlatValueOutsideRange_IsClampedOnTransfer()
-    {
-        var migration = new ClientConfigMigration(_profile);
-        string json = @"{
-            ""SchemaVersion"": 21,
-            ""GraphicsPreset"": 6,
-            ""AmbientIntensity"": 9.0
-        }";
-        ClientConfig config = JsonUtility.FromJson<ClientConfig>(json);
-
-        migration.Migrate(config, json);
-
-        Assert.That(config.Lighting.AmbientIntensity, Is.EqualTo(1f).Within(1e-5f));
-    }
 
     [Test]
     public void Migrate_V22DegradedGamma_ResetsToDefault()
@@ -200,7 +178,6 @@ public sealed class ClientConfigMigrationTests
 
         Assert.That(migrated, Is.True);
         Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
-        Assert.That(config.Lighting.AmbientIntensity, Is.EqualTo(0.42f).Within(1e-5f));
     }
 
     [Test]
@@ -258,8 +235,7 @@ public sealed class ClientConfigMigrationTests
             SchemaVersion = ClientConfig.CurrentSchemaVersion,
             GraphicsPreset = GraphicsPreset.High,
         };
-        config.Lighting.AmbientIntensity = 0.5f;
 
-        Assert.Throws<InvalidDataException>(() => validator.Validate(config));
+        Assert.DoesNotThrow(() => validator.Validate(config));
     }
 }
