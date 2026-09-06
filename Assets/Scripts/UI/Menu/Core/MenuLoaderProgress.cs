@@ -18,7 +18,7 @@ internal sealed class MenuLoaderProgress
     // Значения — ключи словаря локализации, а не текст: Get() возвращает
     // ключ как есть, если его нет в словаре, поэтому литеральные фазы
     // (SpawnSync/SurfaceAssets) проходят без изменений.
-    private readonly (WorldLoadPhase Phase, string Label)[] PhaseSteps =
+    private readonly (WorldLoadPhase Phase, string Label)[] _PhaseSteps =
     {
         (WorldLoadPhase.Handshake, "menu.loading.phase.handshake"),
         (WorldLoadPhase.WorldManifest, "menu.loading.phase.assets"),
@@ -65,7 +65,7 @@ internal sealed class MenuLoaderProgress
 
         _phaseItems.Clear();
         _loaderPhaseList.Clear();
-        foreach ((WorldLoadPhase _, string label) in PhaseSteps)
+        foreach ((WorldLoadPhase _, string label) in _PhaseSteps)
         {
             var item = new VisualElement();
             item.AddToClassList("mm-loader-phase-item");
@@ -84,7 +84,7 @@ internal sealed class MenuLoaderProgress
 
     // Get() пропускает не-ключи как есть (возвращает сам ключ), поэтому
     // литеральные фазы без перевода не меняются. Null-безопасно: без
-    // инжекта локализации текст остаётся как в PhaseSteps/UXML.
+    // инжекта локализации текст остаётся как в _PhaseSteps/UXML.
     private string Localize(string keyOrText) => _loc == null ? keyOrText : _loc.Get(keyOrText);
 
     /// <summary>Пересобирает список фаз после смены языка.</summary>
@@ -92,7 +92,7 @@ internal sealed class MenuLoaderProgress
 
     public void UpdateProgress(WorldLoadPhase phase)
     {
-        int totalPhases = PhaseSteps.Length;
+        int totalPhases = _PhaseSteps.Length;
         bool done = phase >= WorldLoadPhase.Done;
         int phaseIndex = Mathf.Clamp((int)phase, 0, totalPhases);
 
@@ -117,7 +117,7 @@ internal sealed class MenuLoaderProgress
         {
             _loaderPhaseLabel.text = done
                 ? Localize("menu.loading.phase.ready")
-                : Localize(PhaseSteps[phaseIndex].Label);
+                : Localize(_PhaseSteps[phaseIndex].Label);
         }
 
         if (_loaderPhaseCount != null)

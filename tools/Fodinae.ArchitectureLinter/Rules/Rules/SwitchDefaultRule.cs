@@ -14,15 +14,6 @@ public sealed class SwitchDefaultRule : IRule
 {
     private static readonly Regex SwitchRegex = new(@"^\s*switch\s*\(\s*[\w.]+\s*\)\s*$", RegexOptions.Compiled);
 
-    // Files exempt from this rule (with reason)
-    private static readonly HashSet<string> Exempt = new(StringComparer.Ordinal)
-    {
-        // WindowBinding.RegisterValueChangeHandler enumerates elements that have
-        // a value change event. Labels and containers have none, so default would
-        // fire on half the markup.
-        "Assets/Scripts/UI/Binding/WindowBinding.cs",
-    };
-
     public string Id => "FOD-SWITCH-DEFAULT";
     public string Description => "Switch statements with 3+ cases must have default";
     public RuleSeverity Severity => RuleSeverity.Warning;
@@ -42,7 +33,6 @@ public sealed class SwitchDefaultRule : IRule
         {
             var relative = SourceScanner.GetProjectRelativePath(projectRoot, file);
             if (IsExcluded(relative)) continue;
-            if (Exempt.Contains(relative)) continue;
 
             cancellationToken.ThrowIfCancellationRequested();
             var content = File.ReadAllText(file);
@@ -75,7 +65,7 @@ public sealed class SwitchDefaultRule : IRule
                     violations.Add(new RuleViolation
                     {
                         RuleId = Id,
-                        Message = $"switch с {cases} case не имеет default — необработанное значение пройдёт молча. Добавьте default с throw/log или добавьте файл в Exempt с объяснением.",
+                        Message = $"switch с {cases} case не имеет default — необработанное значение пройдёт молча. Добавьте default с throw/log.",
                         Severity = Severity,
                         AssemblyName = relative,
                         TypeName = $"{relative}:{i + 1}"

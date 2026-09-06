@@ -26,11 +26,6 @@ public sealed class LightingSetterInvalidationRule : IRule
         @"(?:_ambientOcclusionDirty|_bounceDirty|_compositeDirty|_fieldDirty|MarkDirty|_nextDynamicLightingUpdateTime|_hasStaticRadianceState)\s*=",
         RegexOptions.IgnoreCase);
 
-    private static readonly HashSet<string> ExemptSetters = new()
-    {
-        "SetRenderScale", "SetMsaaLevel", "SetQualityLevel", "SetDynamicLight"
-    };
-
     public Task<IReadOnlyList<RuleViolation>> EvaluateAsync(
         IReadOnlyList<AssemblyDefinition> assemblies,
         LinterContext context,
@@ -51,7 +46,6 @@ public sealed class LightingSetterInvalidationRule : IRule
             if (!match.Success) continue;
 
             var methodName = match.Groups[1].Value;
-            if (ExemptSetters.Contains(methodName)) continue;
 
             // Find method body (up to 40 lines)
             var depth = 0;

@@ -18,7 +18,7 @@ internal static class StableUiFontAssetNormalizer
 {
     private const string MenuPath = "Fodinae/Assets/Normalize Stable UI Fonts";
 
-    private static readonly (string Path, bool IncludeCjk)[] FontAssets =
+    private static readonly (string Path, bool IncludeCjk)[] _FontAssets =
     [
         ("Assets/Resources/Fonts/Exo2_SDF.asset", false),
         ("Assets/Resources/Fonts/JetBrainsMono_SDF.asset", false),
@@ -35,7 +35,7 @@ internal static class StableUiFontAssetNormalizer
 
     private static void Normalize()
     {
-        foreach ((string assetPath, bool includeCjk) in FontAssets)
+        foreach ((string assetPath, bool includeCjk) in _FontAssets)
         {
             FontAsset? fontAsset = AssetDatabase.LoadAssetAtPath<FontAsset>(assetPath);
             if (fontAsset == null)

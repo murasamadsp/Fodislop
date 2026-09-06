@@ -111,7 +111,12 @@ namespace Fodinae.Networking
 
         private void TrySubscribeToNetworkService()
         {
-            if (_networkService == null)
+            if (_networkService == null ||
+                _worldInit == null || _playerInfo == null || _windowProcessor == null ||
+                _mapRegion == null || _building == null || _playerStats == null ||
+                _chat == null || _status == null || _audio == null || _inventory == null ||
+                _mission == null || _missionArrow == null || _connection == null ||
+                _clan == null || _authToken == null)
             {
                 return;
             }

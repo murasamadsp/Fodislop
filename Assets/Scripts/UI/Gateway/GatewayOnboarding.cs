@@ -28,7 +28,7 @@ public sealed class GatewayOnboarding
         "gateway.onb.step3_title",
     };
 
-    private static readonly (string Label, int Value)[] FrameRates =
+    private static readonly (string Label, int Value)[] _FrameRates =
     {
         ("gateway.onb.fps.unlimited", -1),
         ("144 FPS", 144),
@@ -36,7 +36,7 @@ public sealed class GatewayOnboarding
         ("60 FPS", 60),
     };
 
-    private static readonly (string Label, float Value)[] UIScales =
+    private static readonly (string Label, float Value)[] _UIScales =
     {
         ("gateway.onb.ui_scale.100", 1.00f),
         ("gateway.onb.ui_scale.115", 1.15f),
@@ -100,7 +100,7 @@ public sealed class GatewayOnboarding
         if (uiScale != null)
         {
             uiScale.choices = new List<string>();
-            foreach ((string label, float _) in UIScales)
+            foreach ((string label, float _) in _UIScales)
             {
                 uiScale.choices.Add(_loc.Get(label));
             }
@@ -110,7 +110,7 @@ public sealed class GatewayOnboarding
         if (frameRate != null)
         {
             frameRate.choices = new List<string>();
-            foreach ((string label, int _) in FrameRates)
+            foreach ((string label, int _) in _FrameRates)
             {
                 frameRate.choices.Add(label.StartsWith("gateway.") ? _loc.Get(label) : label);
             }
@@ -158,7 +158,7 @@ public sealed class GatewayOnboarding
         if (uiScale != null)
         {
             var labels = new List<string>();
-            foreach ((string label, float _) in UIScales)
+            foreach ((string label, float _) in _UIScales)
             {
                 labels.Add(_loc.Get(label));
             }
@@ -197,7 +197,7 @@ public sealed class GatewayOnboarding
         if (frameRate != null)
         {
             var labels = new List<string>();
-            foreach ((string label, int _) in FrameRates)
+            foreach ((string label, int _) in _FrameRates)
             {
                 labels.Add(label.StartsWith("gateway.") ? _loc.Get(label) : label);
             }
@@ -356,9 +356,9 @@ public sealed class GatewayOnboarding
             }
 
             var frameRate = _root.Q<DropdownField>("OnbFrameRate");
-            if (frameRate != null && frameRate.index >= 0 && frameRate.index < FrameRates.Length)
+            if (frameRate != null && frameRate.index >= 0 && frameRate.index < _FrameRates.Length)
             {
-                config.Display.TargetFrameRate = FrameRates[frameRate.index].Value;
+                config.Display.TargetFrameRate = _FrameRates[frameRate.index].Value;
             }
 
             var vsync = _root.Q<Toggle>("OnbVSync");
@@ -389,16 +389,16 @@ public sealed class GatewayOnboarding
 
     private static float ValueOfUIScale(int index)
     {
-        return index >= 0 && index < UIScales.Length ? UIScales[index].Value : 1f;
+        return index >= 0 && index < _UIScales.Length ? _UIScales[index].Value : 1f;
     }
 
     private static int IndexOfUIScale(float value)
     {
         int bestIndex = 0;
         float minDiff = float.MaxValue;
-        for (int i = 0; i < UIScales.Length; i++)
+        for (int i = 0; i < _UIScales.Length; i++)
         {
-            float diff = Mathf.Abs(UIScales[i].Value - value);
+            float diff = Mathf.Abs(_UIScales[i].Value - value);
             if (diff < minDiff)
             {
                 minDiff = diff;
@@ -411,9 +411,9 @@ public sealed class GatewayOnboarding
 
     private static int IndexOfFrameRate(int value)
     {
-        for (int i = 0; i < FrameRates.Length; i++)
+        for (int i = 0; i < _FrameRates.Length; i++)
         {
-            if (FrameRates[i].Value == value)
+            if (_FrameRates[i].Value == value)
             {
                 return i;
             }

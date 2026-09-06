@@ -398,6 +398,7 @@ namespace Fodinae.World.Lighting
             float intensity)
         {
             _dynamicLightManager.SetDynamicLight(id, position, color, intensity, _effectivePixelsPerCell);
+            _compositeDirty = true;
         }
 
         public void RemoveDynamicLight(int id)

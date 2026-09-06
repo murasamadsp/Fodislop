@@ -68,7 +68,7 @@ public class ObserverJoystick
     };
 
     // Center drag toward direction → (short=Cell* relative, long=Shift*)
-    private static readonly (ProgAction cell, ProgAction shift)[] CenterDragOps =
+    private static readonly (ProgAction cell, ProgAction shift)[] _CenterDragOps =
     {
         (ProgAction.CellRighthand, ProgAction.ShiftRighthand),   // 0  N    → Righthand (swapped)
         (ProgAction.Cell,          ProgAction.ShiftUp),           // 1  NE   → ShiftUp
@@ -107,8 +107,8 @@ public class ObserverJoystick
         {
             _dirClickTex[i] = textures.GetTexture(_DirClickOps[i]);
             _dirDragTex[i] = textures.GetTexture(_DirDragOps[i]);
-            _centerDragCellTex[i] = textures.GetTexture(CenterDragOps[i].cell);
-            _centerDragShiftTex[i] = textures.GetTexture(CenterDragOps[i].shift);
+            _centerDragCellTex[i] = textures.GetTexture(_CenterDragOps[i].cell);
+            _centerDragShiftTex[i] = textures.GetTexture(_CenterDragOps[i].shift);
         }
 
         _centerTex = textures.GetTexture(_CenterClickOp);
@@ -199,7 +199,7 @@ public class ObserverJoystick
                     int raw = (int)Mathf.Round(a / (Mathf.PI / 4f)) % 8;
                     _dragTargetDir = _atan2ToDir[raw];
 
-                    var ops = CenterDragOps[_dragTargetDir];
+                    var ops = _CenterDragOps[_dragTargetDir];
                     Texture2D? previewTex;
                     if (dist >= NearFarThresh && ops.shift != ProgAction.Cell)
                     {
@@ -242,7 +242,7 @@ public class ObserverJoystick
                 if (_isDragging && _dragTargetDir >= 0)
                 {
                     float dist = Vector2.Distance(evt.position, _pointerStart);
-                    var ops = CenterDragOps[_dragTargetDir];
+                    var ops = _CenterDragOps[_dragTargetDir];
 
                     if (dist >= NearFarThresh && ops.shift != ProgAction.Cell)
                     {

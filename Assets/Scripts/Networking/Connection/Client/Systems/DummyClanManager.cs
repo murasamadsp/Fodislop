@@ -20,7 +20,7 @@ internal sealed class DummyClanManager
 {
     private readonly Action<ServerPacket> _onReceived;
     private ushort _clanId;
-    private static readonly (ushort Id, string Name, string Desc)[] MockClans =
+    private static readonly (ushort Id, string Name, string Desc)[] _MockClans =
     {
         (1, "Альфа", "Старейший клан на сервере"),
     };
@@ -35,7 +35,7 @@ internal sealed class DummyClanManager
     public void SendClanListWindow()
     {
         var items = new List<IGUIComponentPacket>();
-        foreach (var clan in MockClans)
+        foreach (var clan in _MockClans)
         {
             items.Add(new DockPanelPacket
             {
@@ -123,7 +123,7 @@ internal sealed class DummyClanManager
     {
         string clanName = _clanId.ToString();
         string clanDesc = string.Empty;
-        foreach (var c in MockClans)
+        foreach (var c in _MockClans)
         {
             if (c.Id == _clanId)
             {
@@ -212,9 +212,9 @@ internal sealed class DummyClanManager
             else
             {
                 int idx = packet.ElementIndex - 1;
-                if (idx >= 0 && idx < MockClans.Length)
+                if (idx >= 0 && idx < _MockClans.Length)
                 {
-                    _clanId = MockClans[idx].Id;
+                    _clanId = _MockClans[idx].Id;
                     _onReceived.Invoke(new ServerPacket(new ShowClanPacket(_clanId)));
                     _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
                 }
