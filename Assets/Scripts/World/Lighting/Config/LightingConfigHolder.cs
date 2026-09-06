@@ -9,8 +9,8 @@ namespace Fodinae.World.Lighting;
 /// </summary>
 internal static class LightingConfigHolder
 {
-    public const float AmbientIntensity = 0.3f;
-    public const float EmissionScale = 1.0f;
+    public const float AmbientIntensity = 0.0f;
+    public const float EmissionScale = 8.0f;
     public static readonly Color AmbientColor = Color.white;
     public static readonly Color EmptyExtinctionRgb = Color.white;
     public static readonly Color SolidExtinctionRgb = Color.white;

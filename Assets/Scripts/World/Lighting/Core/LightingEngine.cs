@@ -26,6 +26,7 @@ namespace Fodinae.World.Lighting
             Occupancy,
             Albedo,
             Emission,
+            Normals,
             Transmission,
             DirectRadiance,
             DiffuseBounce,
