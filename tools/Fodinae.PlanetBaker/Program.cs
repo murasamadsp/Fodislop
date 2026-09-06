@@ -45,17 +45,15 @@ internal static class Program
 
             var (dirs, lat) = EquirectDirections(Width, bandHeight);
 
-            int idx = 0;
             var elevation = new double[bandHeight, Width];
             for (int y = 0; y < bandHeight; y++)
             {
                 for (int x = 0; x < Width; x++)
                 {
-                    double dx = dirs[idx];
-                    double dy = dirs[idx + 1];
-                    double dz = dirs[idx + 2];
-                    elevation[y, x] = PlanetMath.ElevationBase(dx, dy, dz);
-                    idx += 3;
+                    double dirX = dirs[y, x, 0];
+                    double dirY = dirs[y, x, 1];
+                    double dirZ = dirs[y, x, 2];
+                    elevation[y, x] = PlanetMath.ElevationBase(dirX, dirY, dirZ);
                 }
             }
 
@@ -79,7 +77,6 @@ internal static class Program
                 }
             }
 
-            idx = 0;
             var fault = new double[bandHeight, Width];
             var emission = new double[bandHeight, Width];
             var polar = new double[bandHeight, Width];
@@ -87,17 +84,15 @@ internal static class Program
             {
                 for (int x = 0; x < Width; x++)
                 {
-                    double ddx = dirs[idx];
-                    double ddy = dirs[idx + 1];
-                    double ddz = dirs[idx + 2];
-                    fault[y, x] = PlanetMath.FaultField(ddx, ddy, ddz);
-                    emission[y, x] = BuildEmission(ddx, ddy, ddz, elevN[y, x], fault[y, x]);
-                    polar[y, x] = PlanetMath.PolarCap(ddx, ddy, ddz, lat[y, x]);
-                    idx += 3;
+                    double dirX = dirs[y, x, 0];
+                    double dirY = dirs[y, x, 1];
+                    double dirZ = dirs[y, x, 2];
+                    fault[y, x] = PlanetMath.FaultField(dirX, dirY, dirZ);
+                    emission[y, x] = BuildEmission(dirX, dirY, dirZ, elevN[y, x], fault[y, x]);
+                    polar[y, x] = PlanetMath.PolarCap(dirX, dirY, dirZ, lat[y, x]);
                 }
             }
 
-            idx = 0;
             var province = new double[bandHeight, Width];
             var hue = new double[bandHeight, Width];
             var clouds = new double[bandHeight, Width];
@@ -105,13 +100,12 @@ internal static class Program
             {
                 for (int x = 0; x < Width; x++)
                 {
-                    double ddx = dirs[idx];
-                    double ddy = dirs[idx + 1];
-                    double ddz = dirs[idx + 2];
-                    province[y, x] = PlanetMath.ProvinceField(ddx, ddy, ddz);
-                    hue[y, x] = PlanetMath.HueField(ddx, ddy, ddz);
-                    clouds[y, x] = PlanetMath.CloudField(ddx, ddy, ddz);
-                    idx += 3;
+                    double dirX = dirs[y, x, 0];
+                    double dirY = dirs[y, x, 1];
+                    double dirZ = dirs[y, x, 2];
+                    province[y, x] = PlanetMath.ProvinceField(dirX, dirY, dirZ);
+                    hue[y, x] = PlanetMath.HueField(dirX, dirY, dirZ);
+                    clouds[y, x] = PlanetMath.CloudField(dirX, dirY, dirZ);
                 }
             }
 
@@ -121,10 +115,10 @@ internal static class Program
             {
                 for (int x = 0; x < Width; x++)
                 {
-                    double ddx = dirs[(y * Width + x) * 3];
-                    double ddy = dirs[(y * Width + x) * 3 + 1];
-                    double ddz = dirs[(y * Width + x) * 3 + 2];
-                    grain[y, x] = Math.Clamp(PlanetMath.Fbm(ddx * PlanetMath.GRAIN_SCALE, ddy * PlanetMath.GRAIN_SCALE, ddz * PlanetMath.GRAIN_SCALE, 2) * 0.5 + 0.5, 0.0, 1.0);
+                    double dirX = dirs[y, x, 0];
+                    double dirY = dirs[y, x, 1];
+                    double dirZ = dirs[y, x, 2];
+                    grain[y, x] = Math.Clamp(PlanetMath.Fbm(dirX * PlanetMath.GRAIN_SCALE, dirY * PlanetMath.GRAIN_SCALE, dirZ * PlanetMath.GRAIN_SCALE, 2) * 0.5 + 0.5, 0.0, 1.0);
                 }
             }
 
@@ -199,7 +193,15 @@ internal static class Program
         for (int i = 0; i < outputs.Length; i++)
         {
             string path = Path.Combine(OutputDir, outputs[i]);
-            using var img = Image.LoadPixelData<Rgb24>(data[i], Width, Height);
+            var flat = new Rgb24[Width * Height];
+            for (int y = 0; y < Height; y++)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    flat[y * Width + x] = data[i][y, x];
+                }
+            }
+            using var img = Image.LoadPixelData<Rgb24>(flat, Width, Height);
             img.Save(path);
             Console.WriteLine($"  записано {path} ({new FileInfo(path).Length / 1024 / 1024:F2} МБ)");
         }
@@ -207,7 +209,7 @@ internal static class Program
         return 0;
     }
 
-    private static (double[,] dirs, double[,] lat) EquirectDirections(int width, int height)
+    private static (double[,,] dirs, double[,] lat) EquirectDirections(int width, int height)
     {
         var dirs = new double[height, width, 3];
         var lat = new double[height, width];
@@ -367,7 +369,7 @@ internal static class Program
         return albedo;
     }
 
-    private static double[,] BuildEmission(double dx, double dy, double dz, double elevN, double fault)
+    private static double BuildEmission(double dx, double dy, double dz, double elevN, double fault)
     {
         double crack = PlanetMath.Smoothstep(PlanetMath.CRACK_THRESHOLD, 1.0, fault);
         crack = Math.Pow(crack, 1.55);
@@ -391,7 +393,6 @@ internal static class Program
         var (dirs, lat) = EquirectDirections(probeW, probeH);
 
         var elevation = new double[probeH, probeW];
-        int idx = 0;
         for (int y = 0; y < probeH; y++)
         {
             for (int x = 0; x < probeW; x++)

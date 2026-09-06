@@ -5,22 +5,25 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace Fodinae.PlanetPreview;
 
-internal static class Program
+internal readonly record struct Matrix3x3(
+    float M11, float M12, float M13,
+    float M21, float M22, float M23,
+    float M31, float M32, float M33)
 {
+    public static readonly Matrix3x3 Identity = new(1, 0, 0, 0, 1, 0, 0, 0, 1);
+}
+
+public static class PlanetPreviewApi
+{
+    public const double CameraDistance = 2.90;
     private const string TextureDir = "Assets/Textures/UI";
-    private const string OutputPath = "planet_preview.png";
     private const string MaterialPath = "Assets/Materials/PlanetSurface.mat";
     private const string AtmospherePath = "Assets/Materials/PlanetAtmosphere.mat";
     private const string ScenePath = "Assets/Scenes/MainMenu.unity";
-    private const double CameraDistance = 2.90;
-    private const double CameraFov = 36.0;
     private const double FrameMargin = 1.14;
 
-    public static int Main(string[] args)
+    public static Image<Rgb24> Render(int size, double zoom)
     {
-        int size = args.Length > 0 ? int.Parse(args[0]) : 900;
-        double zoom = args.Length > 1 ? double.Parse(args[1]) : 1.0;
-
         var mat = LoadMaterial(MaterialPath);
         var atmo = LoadMaterial(AtmospherePath);
 
@@ -234,22 +237,16 @@ internal static class Program
             }
         }
 
-        using var outImg = Image.LoadPixelData<Rgb24>(outPixels, size, size);
-        outImg.Save(OutputPath);
-        Console.WriteLine($"записано {OutputPath} ({size}x{size}, приближение {zoom:G}x)");
-        return 0;
-    }
+        var flat = new Rgb24[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                flat[y * size + x] = outPixels[y, x];
+            }
+        }
 
-    private readonly struct RgbF
-    {
-        public readonly float R;
-        public readonly float G;
-        public readonly float B;
-        public RgbF(float r, float g, float b) => (R, G, B) = (r, g, b);
-        public static implicit operator SixLabors.ImageSharp.PixelFormats.Rgb24(RgbF c) =>
-            new Rgb24((byte)Math.Clamp((int)Math.Round(c.R * 255.0), 0, 255),
-                      (byte)Math.Clamp((int)Math.Round(c.G * 255.0), 0, 255),
-                      (byte)Math.Clamp((int)Math.Round(c.B * 255.0), 0, 255));
+        return Image.LoadPixelData<Rgb24>(flat, size, size);
     }
 
     private static RgbF SampleEquirect(Image<Rgb24> tex, double u, double v)
@@ -321,7 +318,7 @@ internal static class Program
         return values;
     }
 
-    private static System.Numerics.Matrix3x3 ScenePlanetRotation()
+    private static Matrix3x3 ScenePlanetRotation()
     {
         string[] lines = File.ReadAllLines(ScenePath);
         for (int i = 0; i < lines.Length; i++)
@@ -343,7 +340,7 @@ internal static class Program
                             }
                         }
                         double x = q["x"], y = q["y"], z = q["z"], w = q["w"];
-                        return new System.Numerics.Matrix3x3(
+                        return new Matrix3x3(
                             (float)(1 - 2 * (y * y + z * z)), (float)(2 * (x * y - w * z)), (float)(2 * (x * z + w * y)),
                             (float)(2 * (x * y + w * z)), (float)(1 - 2 * (x * x + z * z)), (float)(2 * (y * z - w * x)),
                             (float)(2 * (x * z - w * y)), (float)(2 * (y * z + w * x)), (float)(1 - 2 * (x * x + y * y)));
@@ -352,11 +349,37 @@ internal static class Program
             }
         }
 
-        return System.Numerics.Matrix3x3.Identity;
+        return Matrix3x3.Identity;
     }
 
     private static Image<Rgb24> LoadTexture(string path)
     {
         return SixLabors.ImageSharp.Image.Load<Rgb24>(path);
+    }
+
+    private readonly struct RgbF
+    {
+        public readonly float X;
+        public readonly float Y;
+        public readonly float Z;
+        public RgbF(float x, float y, float z) => (X, Y, Z) = (x, y, z);
+        public static implicit operator SixLabors.ImageSharp.PixelFormats.Rgb24(RgbF c) =>
+            new Rgb24((byte)Math.Clamp((int)Math.Round(c.X * 255.0), 0, 255),
+                      (byte)Math.Clamp((int)Math.Round(c.Y * 255.0), 0, 255),
+                      (byte)Math.Clamp((int)Math.Round(c.Z * 255.0), 0, 255));
+    }
+}
+
+internal static class Program
+{
+    public static int Main(string[] args)
+    {
+        int size = args.Length > 0 ? int.Parse(args[0]) : 900;
+        double zoom = args.Length > 1 ? double.Parse(args[1]) : 1.0;
+
+        using var image = PlanetPreviewApi.Render(size, zoom);
+        image.Save("planet_preview.png");
+        Console.WriteLine($"записано planet_preview.png ({size}x{size}, приближение {zoom:G}x)");
+        return 0;
     }
 }

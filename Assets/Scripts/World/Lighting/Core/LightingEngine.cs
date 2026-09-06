@@ -71,7 +71,6 @@ namespace Fodinae.World.Lighting
         private LightingQualityMode _lightingQualityMode = LightingQualityMode.PerBlock;
         private TerrainRenderer? _activeTerrainRenderer;
 
-        private LightingConfigHolder _configHolder = null!;
 
         [Header("Diagnostics")]
         [SerializeField]
@@ -172,43 +171,43 @@ namespace Fodinae.World.Lighting
 
         public DebugView ActiveDebugView => _debugView;
 
-        public bool DiffuseBounceEnabled => _configHolder.DiffuseBounceEnabled;
+        public bool DiffuseBounceEnabled => LightingConfigHolder.BounceStrength > 0f;
 
-        public float AmbientIntensity => _configHolder.AmbientIntensity;
+        public float AmbientIntensity => LightingConfigHolder.AmbientIntensity;
 
-        public Color AmbientColor => _configHolder.AmbientColor;
+        public Color AmbientColor => LightingConfigHolder.AmbientColor;
 
-        public float EmissionScale => _configHolder.EmissionScale;
+        public float EmissionScale => LightingConfigHolder.EmissionScale;
 
-        public Color EmptyExtinctionRgb => _configHolder.EmptyExtinctionRgb;
+        public Color EmptyExtinctionRgb => LightingConfigHolder.EmptyExtinctionRgb;
 
-        public Color SolidExtinctionRgb => _configHolder.SolidExtinctionRgb;
+        public Color SolidExtinctionRgb => LightingConfigHolder.SolidExtinctionRgb;
 
-        public float EmptyExtinctionMultiplier => _configHolder.EmptyExtinctionMultiplier;
+        public float EmptyExtinctionMultiplier => LightingConfigHolder.EmptyExtinctionMultiplier;
 
-        public float SolidExtinctionMultiplier => _configHolder.SolidExtinctionMultiplier;
+        public float SolidExtinctionMultiplier => LightingConfigHolder.SolidExtinctionMultiplier;
 
-        public float BounceStrength => _configHolder.BounceStrength;
+        public float BounceStrength => LightingConfigHolder.BounceStrength;
 
-        public float MaximumLightMultiplier => _configHolder.MaximumLightMultiplier;
+        public float MaximumLightMultiplier => LightingConfigHolder.MaximumLightMultiplier;
 
-        public float TransmittanceDebugDistanceCells => _configHolder.TransmittanceDebugDistanceCells;
+        public float TransmittanceDebugDistanceCells => 10f;
 
-        public float MinimumTransmission => _configHolder.MinimumTransmission;
+        public float MinimumTransmission => LightingConfigHolder.MinimumTransmission;
 
-        public bool EnableFinalLightingClamp => _configHolder.EnableFinalLightingClamp;
+        public bool EnableFinalLightingClamp => false;
 
-        public float DynamicLightIntensity => _configHolder.DynamicLightIntensity;
+        public float DynamicLightIntensity => LightingConfigHolder.DynamicLightIntensity;
 
-        public Color DynamicLightColor => _configHolder.DynamicLightColor;
+        public Color DynamicLightColor => LightingConfigHolder.DynamicLightColor;
 
-        public float DynamicLightUpdatesPerSecond => _configHolder.DynamicLightUpdatesPerSecond;
+        public float DynamicLightUpdatesPerSecond => 20f;
 
-        public bool IsRuntimeConfigReady => _configHolder != null;
+        public bool IsRuntimeConfigReady => true;
 
-        public string RuntimeConfigFilePath => _configHolder.ConfigFilePath;
+        public string RuntimeConfigFilePath => "constants";
 
-        public int LightSafeBorder => _configHolder.LightSafeBorder;
+        public int LightSafeBorder => 2;
 
         public int DynamicLightCount => _dynamicLightManager.Count;
 
@@ -288,13 +287,13 @@ namespace Fodinae.World.Lighting
 
         public int AtlasEntryCount => _atlasEntryCount;
 
-        public Color ComputeAmbientColor => _configHolder.AmbientColor * _configHolder.AmbientIntensity;
+        public Color ComputeAmbientColor => LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity;
 
         public Color ComputeEmptyExtinction =>
-            _configHolder.EmptyExtinctionRgb * _configHolder.EmptyExtinctionMultiplier;
+            LightingConfigHolder.EmptyExtinctionRgb * LightingConfigHolder.EmptyExtinctionMultiplier;
 
         public Color ComputeSolidExtinction =>
-            _configHolder.SolidExtinctionRgb * _configHolder.SolidExtinctionMultiplier;
+            LightingConfigHolder.SolidExtinctionRgb * LightingConfigHolder.SolidExtinctionMultiplier;
 
         public int StableRegionPaddingCells => LightingRegionCalculator.LightingRegionPaddingCells;
 
@@ -305,7 +304,7 @@ namespace Fodinae.World.Lighting
                 // Dynamic sources are rasterized as one-cell emitters. Their
                 // propagation distance is solved by the same extinction and
                 // cascade intervals as terrain emission, not by a source halo.
-                return Mathf.Max(1, 1 + _configHolder.LightSafeBorder);
+                return 3;
             }
         }
 
@@ -342,7 +341,6 @@ namespace Fodinae.World.Lighting
                     "LightingEngine requires all DI dependencies before initialization.");
             }
 
-            _configHolder = new LightingConfigHolder(_clientConfig);
             ApplyQualitySettings(
                 _clientConfig.Config.GraphicsPreset,
                 _clientConfig.Config.GraphicsQualitySettings);
@@ -466,157 +464,9 @@ namespace Fodinae.World.Lighting
             Debug.Log($"[LightingEngine] SetDebugView: {debugView}");
         }
 
-        public void SetDiffuseBounceEnabled(bool enabled)
-        {
-            if (_configHolder.SetDiffuseBounceEnabled(enabled))
-            {
-                _bounceDirty = true;
-                _compositeDirty = true;
-                _hasStaticRadianceState = false;
-                _hasDynamicRadianceState = false;
-                Debug.Log($"[LightingEngine] SetDiffuseBounceEnabled: {enabled}");
-            }
-        }
-
-        public void SetAmbientIntensity(float value)
-        {
-            if (_configHolder.SetAmbientIntensity(value))
-            {
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetAmbientIntensity: {value}");
-            }
-        }
-
-        public void SetAmbientColor(Color value)
-        {
-            if (_configHolder.SetAmbientColor(value))
-            {
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetAmbientColor: {value}");
-            }
-        }
-
-        public void SetEmissionScale(float value)
-        {
-            if (_configHolder.SetEmissionScale(value))
-            {
-                _fieldDirty = true;
-                _hasStaticRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetEmissionScale: {value}");
-            }
-        }
-
-        public void SetEmptyExtinctionColor(Color value)
-        {
-            if (_configHolder.SetEmptyExtinctionColor(value))
-            {
-                _fieldDirty = true;
-                _hasStaticRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetEmptyExtinctionColor: {value}");
-            }
-        }
-
-        public void SetSolidExtinctionColor(Color value)
-        {
-            if (_configHolder.SetSolidExtinctionColor(value))
-            {
-                _fieldDirty = true;
-                _hasStaticRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetSolidExtinctionColor: {value}");
-            }
-        }
-
-        public void SetFinalLightingClampEnabled(bool enabled)
-        {
-            if (_configHolder.SetFinalLightingClampEnabled(enabled))
-            {
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetFinalLightingClampEnabled: {enabled}");
-            }
-        }
-
-        public void SetEmptyExtinctionMultiplier(float value)
-        {
-            if (_configHolder.SetEmptyExtinctionMultiplier(value))
-            {
-                _fieldDirty = true;
-                _hasStaticRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetEmptyExtinctionMultiplier: {value}");
-            }
-        }
-
-        public void SetSolidExtinctionMultiplier(float value)
-        {
-            if (_configHolder.SetSolidExtinctionMultiplier(value))
-            {
-                _fieldDirty = true;
-                _hasStaticRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetSolidExtinctionMultiplier: {value}");
-            }
-        }
-
-        public void SetBounceStrength(float value)
-        {
-            if (_configHolder.SetBounceStrength(value))
-            {
-                _bounceDirty = true;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetBounceStrength: {value}");
-            }
-        }
-
-        public void SetMaximumLightMultiplier(float value)
-        {
-            if (_configHolder.SetMaximumLightMultiplier(value))
-            {
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetMaximumLightMultiplier: {value}");
-            }
-        }
-
-        public void SetTransmittanceDebugDistance(float value)
-        {
-            if (_configHolder.SetTransmittanceDebugDistance(value))
-            {
-                _hasRenderedLightState = false;
-                _hasStaticRadianceState = false;
-                _hasDynamicRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetTransmittanceDebugDistance: {value}");
-            }
-        }
-
-        public void SetMinimumTransmission(float value)
-        {
-            if (_configHolder.SetMinimumTransmission(value))
-            {
-                _fieldDirty = true;
-                _hasStaticRadianceState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetMinimumTransmission: {value}");
-            }
-        }
-
-        public void SetLightSafeBorder(float value)
-        {
-            if (_configHolder.SetLightSafeBorder(value))
-            {
-                _fieldDirty = true;
-                _hasRenderedLightState = false;
-                _compositeDirty = true;
-                Debug.Log($"[LightingEngine] SetLightSafeBorder: {value}");
-            }
-        }
 
         public void ResetRuntimeLightingPreferences()
         {
-            _configHolder.ResetToDefaults();
-            _clientConfig.Save();
             ApplyQualitySettings(
                 _clientConfig.Config.GraphicsPreset,
                 _clientConfig.Config.GraphicsQualitySettings);
@@ -868,7 +718,7 @@ namespace Fodinae.World.Lighting
                 // Diffuse bounce: direct radiance in _directTexture is scattered
                 // by surface albedo into the receiver hemisphere (SolveDiffuseBounce),
                 // then CompositeLighting adds it to ambient + direct.
-                if (_configHolder.DiffuseBounceEnabled && _configHolder.BounceStrength > 0f)
+                if (LightingConfigHolder.BounceStrength > 0f)
                 {
                     _diffuseBouncePipeline!.Record(commandBuffer, BuildFrameContext());
                 }
@@ -896,7 +746,7 @@ namespace Fodinae.World.Lighting
                 _nextLightingUpdateTime = Time.unscaledTime +
                     (1f / Mathf.Max(_qualitySettings.LightingUpdatesPerSecond, 1f));
                 _nextDynamicLightingUpdateTime = Time.unscaledTime +
-                    (1f / Mathf.Max(_configHolder.DynamicLightUpdatesPerSecond, 1f));
+                    (1f / 20f);
                 _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
                 _lastContributorGeometryRevision = contributorGeometryRevision;
                 RememberDynamicLightState();
@@ -926,7 +776,7 @@ namespace Fodinae.World.Lighting
             Shader.SetGlobalVector(_WorldLightRectId, new Vector4(-1000f, -1000f, 2000f, 2000f));
             Shader.SetGlobalVector(_WorldLightTextureSizeId, new Vector4(1, 1, 1, 1));
             Shader.SetGlobalInteger(_WorldLightDebugViewId, 0);
-            Shader.SetGlobalFloat(_WorldEmissionScaleId, _configHolder.EmissionScale);
+            Shader.SetGlobalFloat(_WorldEmissionScaleId, LightingConfigHolder.EmissionScale);
             _lightingDisabledStatePublished = true;
         }
 
@@ -943,7 +793,7 @@ namespace Fodinae.World.Lighting
             _lightingDisabledStatePublished = false;
             Shader.SetGlobalTexture(_WorldLightTextureId, _lightmapTexture);
             Shader.SetGlobalInteger(_WorldLightDebugViewId, (int)_debugView);
-            Shader.SetGlobalFloat(_WorldEmissionScaleId, _configHolder.EmissionScale);
+            Shader.SetGlobalFloat(_WorldEmissionScaleId, LightingConfigHolder.EmissionScale);
             Shader.SetGlobalVector(
                 _WorldLightTextureSizeId,
                 new Vector4(
@@ -975,7 +825,6 @@ namespace Fodinae.World.Lighting
                 _bounceHeight,
                 worldRect,
                 cellSize,
-                _configHolder,
                 _qualitySettings,
                 _lightingQualityMode,
                 _debugView,
@@ -1216,26 +1065,6 @@ namespace Fodinae.World.Lighting
             return !_hasRenderedLightState || _dynamicLightManager.IsDirty;
         }
 
-        public void SetDynamicLightSettings(float intensity, Color color)
-        {
-            if (_configHolder.SetDynamicLightSettings(intensity, color))
-            {
-                _dynamicLightManager.MarkDirty();
-                _compositeDirty = true;
-                _hasDynamicRadianceState = false;
-                _hasRenderedLightState = false;
-                Debug.Log($"[LightingEngine] SetDynamicLightSettings: intensity={intensity}, color={color}");
-            }
-        }
-
-        public void SetDynamicLightUpdatesPerSecond(float value)
-        {
-            if (_configHolder.SetDynamicLightUpdatesPerSecond(value))
-            {
-                _nextDynamicLightingUpdateTime = 0f;
-                Debug.Log($"[LightingEngine] SetDynamicLightUpdatesPerSecond: {value}");
-            }
-        }
 
         private void RememberDynamicLightState()
         {
