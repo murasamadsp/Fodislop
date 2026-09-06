@@ -14,7 +14,7 @@ using Fodinae.World;
 using Fodinae.World.Lighting.Quality;
 using UnityEngine;
 
-namespace Fodinae.SettingsProbe;
+namespace Fodinae.ArchitectureLinter.SettingsProbe;
 
 /// <summary>
 /// Исполняет логику настроек вне Unity и печатает найденные расхождения.
@@ -24,14 +24,18 @@ namespace Fodinae.SettingsProbe;
 /// данных». Каждая соответствует уже случившейся поломке либо той, которую
 /// нечем было бы поймать иначе.
 /// </remarks>
-internal static class Program
+public static class Program
 {
     private static readonly List<string> Failures = [];
     private static int _checks;
 
-    private static int Main(string[] args)
+    /// <summary>
+    /// Runs all settings checks and returns list of failures.
+    /// </summary>
+    public static List<string> RunAllChecks(string root)
     {
-        string root = ResolveRepositoryRoot(args);
+        Failures.Clear();
+        _checks = 0;
 
         CheckEverySectionValidatesItsOwnDefaults();
         CheckDefaultsAreReportedAsDefaults();
@@ -49,20 +53,7 @@ internal static class Program
         CheckConsumerTargetsAndMechanismsReflection(root);
         CheckPixelGridLeavesNoMoire();
 
-        Console.WriteLine();
-        if (Failures.Count == 0)
-        {
-            Console.WriteLine($"PASSED: {_checks} проверок настроек, расхождений нет.");
-            return 0;
-        }
-
-        Console.WriteLine($"FAILED: {Failures.Count} расхождений из {_checks} проверок.");
-        foreach (string failure in Failures)
-        {
-            Console.WriteLine("  " + failure);
-        }
-
-        return 1;
+        return new List<string>(Failures);
     }
 
     /// <summary>

@@ -37,7 +37,7 @@ public sealed class ToolbarWindow : ToolWindow
 
     protected override void DrawContent()
     {
-        GUILayout.Label("РАБОЧЕЕ ПРОСТРАНСТВО", SectionLabelStyle);
+        ToolChrome.SectionHeader("РАБОЧЕЕ ПРОСТРАНСТВО");
         GUILayout.Label(
             "Открывайте только нужные панели — состояние окон сохраняется при скрытии интерфейса.",
             MutedLabelStyle);
@@ -52,19 +52,7 @@ public sealed class ToolbarWindow : ToolWindow
                     continue;
                 }
 
-                string marker = window.Visible ? "●" : "○";
-                bool visible = GUILayout.Toggle(
-                    window.Visible,
-                    $"{marker}  {window.Title}",
-                    SegmentedButtonStyle);
-                if (visible != window.Visible)
-                {
-                    ToolWindows.RequestVisibility(window, visible);
-                    if (visible)
-                    {
-                        ToolWindows.RequestFocus(window);
-                    }
-                }
+                DrawWindowRow(window);
             }
 
             ToolTheme.Separator();
@@ -73,8 +61,45 @@ public sealed class ToolbarWindow : ToolWindow
                 ToolWindows.ResetLayout();
             }
 
-            GUILayout.Label("КЛАВИШИ", SectionLabelStyle);
+            ToolChrome.SectionHeader("КЛАВИШИ");
             GUILayout.Label("F1  —  скрыть или показать все инструменты", MutedLabelStyle);
+        }
+    }
+
+    /// <summary>
+    /// Строка одного инструмента: точка состояния, название, тумблер.
+    /// </summary>
+    /// <remarks>
+    /// Точек две разных, и это не украшение. Жёлтая — окно открыто. Синяя —
+    /// окно закрыто, но продолжает копить данные: у части инструментов история
+    /// набирается всегда, и без этой отметки закрытое окно выглядело бы
+    /// выключенным, хотя оно работает.
+    /// </remarks>
+    private static void DrawWindowRow(ToolWindow window)
+    {
+        using (new GUILayout.HorizontalScope())
+        {
+            Color pip = window.Visible
+                ? ToolPalette.Accent
+                : window.WantsSampling
+                    ? ToolPalette.Data
+                    : ToolPalette.Fade(ToolPalette.MutedText, 0.5f);
+            ToolChrome.StatusPip(pip);
+
+            bool visible = GUILayout.Toggle(
+                window.Visible,
+                window.DisplayTitle,
+                SegmentedButtonStyle);
+            if (visible == window.Visible)
+            {
+                return;
+            }
+
+            ToolWindows.RequestVisibility(window, visible);
+            if (visible)
+            {
+                ToolWindows.RequestFocus(window);
+            }
         }
     }
 }

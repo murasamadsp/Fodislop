@@ -21,6 +21,43 @@
     <PackageReference Include="Mono.Cecil" Version="0.11.4" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <UnityManagedPath Condition="Exists('/Applications/Unity/Hub/Editor/6000.6.0f1')">/Applications/Unity/Hub/Editor/6000.6.0f1/Unity.app/Contents/Resources/Scripting/Managed</UnityManagedPath>
+    <UnityManagedPath Condition="Exists('/Applications/Unity/Hub/Editor/6000.5.0f1') AND '$(UnityManagedPath)' == ''">/Applications/Unity/Hub/Editor/6000.5.0f1/Unity.app/Contents/Resources/Scripting/Managed</UnityManagedPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UnityManagedPath)' != ''">
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(UnityManagedPath)/UnityEngine/UnityEngine.CoreModule.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(UnityManagedPath)/UnityEngine/UnityEngine.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UnityManagedPath)' != ''">
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\SettingAttributes.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\SettingSchema.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\AudioBusRegistry.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\AudioLayer.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\LightingConfigLimits.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\LightingQualityMode.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\GraphicsQualitySettings.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\RenderingConstants.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\PixelGrid.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\PixelSamplingMode.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\ProjectRuntimeContracts.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\ClientConfig.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\IClientConfigManager.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\Settings\*.cs" />
+    <Compile Include="..\..\Assets\Scripts\Rendering\PostProcessing\PostProcessLimits.cs" />
+    <Compile Include="..\..\Assets\Scripts\Rendering\PostProcessing\DisplayTransform.cs" />
+    <Compile Include="..\..\Assets\Scripts\Rendering\PostProcessing\PostProcessLook.cs" />
+    <Compile Include="..\..\Assets\Scripts\World\Lighting\Config\LightingConfigHolder.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="..\..\docs\architecture-rules.html" Pack="true" PackagePath="docs\architecture-rules.html" />
   </ItemGroup>

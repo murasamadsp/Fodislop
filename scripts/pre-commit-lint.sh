@@ -17,20 +17,9 @@ dotnet run --project tools/Fodinae.ArchitectureLinter --no-build
 # Настройки описываются атрибутами и читаются рефлексией: ни компилятор, ни
 # линтер не могут сказать, что диапазон над полем осмыслен, что значение по
 # умолчанию в него попадает и что ветка разбора для этого типа существует.
-# Проба исполняет эту логику вне Unity на настоящих файлах проекта. Мотиватор:
-# `case int number when field.Range != null` компилировался безупречно и ронял
-# запуск игры на штатном разрешении экрана.
-echo "--- Step 0.1: Executing settings schema probe ---"
-if command -v dotnet >/dev/null 2>&1; then
-    DOTNET_NOLOGO=1 dotnet run --project "$(dirname "$0")/../tools/Fodinae.SettingsProbe" \
-        --verbosity quiet -- "$(dirname "$0")/.."
-else
-    echo "Notice: dotnet not found; settings probe skipped."
-fi
-
-# Shader contracts live in the reflection-discovered C# architecture linter.
-# This source-based rule is safe to run locally without a fresh Unity assembly.
-echo "--- Step 0.2: Executing migrated C# architecture rules ---"
+# Settings probe checks are now part of ArchitectureLinter (FOD-SETTINGS-PROBE rule).
+# Run the unified linter which includes all settings validation.
+echo "--- Step 0.1: Executing architecture linter (includes settings probe) ---"
 if command -v dotnet >/dev/null 2>&1; then
     DOTNET_NOLOGO=1 dotnet run \
         --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \

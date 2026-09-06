@@ -282,7 +282,7 @@ public static class ToolWindows
                     window.Id,
                     window.Rect,
                     window.DrawWindow,
-                    window.Title);
+                    window.DisplayTitle);
                 drawnRect = window.ApplyPendingSize(drawnRect);
                 if (!IsFinite(drawnRect))
                 {

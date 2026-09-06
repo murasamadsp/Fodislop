@@ -39,11 +39,23 @@ public abstract class ToolWindow : IDisposable
     protected ToolWindow(string title, Rect initialRect)
     {
         Title = title;
+        DisplayTitle = title.ToUpperInvariant();
         Rect = initialRect;
         _initialRect = initialRect;
     }
 
     public string Title { get; }
+
+    /// <summary>
+    /// Заголовок в полосе окна.
+    /// </summary>
+    /// <remarks>
+    /// Верхний регистр посчитан один раз в конструкторе, а не при каждой
+    /// отрисовке: IMGUI рисует по несколько событий на кадр, и строка,
+    /// собираемая в <c>OnGUI</c>, — это мусор в куче на ровном месте, который
+    /// к тому же виден в том самом окне статистики, что стоит рядом.
+    /// </remarks>
+    public string DisplayTitle { get; }
 
     public Rect Rect;
 
@@ -189,9 +201,17 @@ public abstract class ToolWindow : IDisposable
             ToolWindows.NotifyWindowFocused(this);
         }
 
-        ToolTheme.DrawHeaderRule(Rect.width);
+        bool focused = ToolWindows.IsFocused(this);
+        var local = new Rect(0f, 0f, Rect.width, Rect.height);
+        ToolChrome.DrawScanlines(local);
+        ToolChrome.DrawHeaderMarker(ToolTheme.HeaderHeight, focused);
+        ToolChrome.DrawHeaderRule(Rect.width, ToolTheme.HeaderHeight, focused);
+        ToolChrome.DrawCornerBrackets(local, focused);
+
+        // Кнопка закрытия отодвинута от правого края на ширину среза: на самом
+        // углу рамки её нет, и кнопка висела бы в пустоте.
         if (CanClose && GUI.Button(
-                new Rect(Rect.width - 30f, 4f, 24f, 22f),
+                new Rect(Rect.width - 32f, 5f, 24f, 20f),
                 "×",
                 ToolTheme.CloseButton))
         {
@@ -316,11 +336,19 @@ public abstract class ToolWindow : IDisposable
     private static void DrawResizeGlyph(Rect grip, bool active)
     {
         Color previousColor = GUI.color;
-        GUI.color = active ? ToolTheme.Accent : new Color(0.46f, 0.54f, 0.61f, 0.85f);
-        Texture2D pixel = Texture2D.whiteTexture;
-        GUI.DrawTexture(new Rect(grip.xMax - 5f, grip.yMax - 4f, 3f, 2f), pixel);
-        GUI.DrawTexture(new Rect(grip.xMax - 8f, grip.yMax - 7f, 3f, 2f), pixel);
-        GUI.DrawTexture(new Rect(grip.xMax - 11f, grip.yMax - 10f, 3f, 2f), pixel);
+        Texture2D pixel = ToolPalette.White;
+
+        // Три диагональных штриха, а не сплошной уголок: уголок здесь уже есть —
+        // его рисует обвязка, — и второй такой же читался бы как сбой рамки.
+        for (int i = 0; i < 3; i++)
+        {
+            float offset = 4f + i * 3f;
+            GUI.color = active
+                ? ToolPalette.Accent
+                : ToolPalette.Fade(ToolPalette.Accent, 0.70f - i * 0.18f);
+            GUI.DrawTexture(new Rect(grip.xMax - offset - 1f, grip.yMax - offset, 3f, 2f), pixel);
+        }
+
         GUI.color = previousColor;
     }
 }

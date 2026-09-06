@@ -145,20 +145,6 @@
       в макете. `compare-components.py` теперь понимает составные значения
       (`mm-nav-tab--active` ↔ `fdn-settings-tab.active`) и раскрывает сокращения
       рамок, так что остальные модификаторы заводятся строкой в карте.
-- [ ] Отказ дисплея в HDR не доходит до игрока. `DisplayManager.SetHDREnabled`
-      теперь возвращает исход и откатывает настройку, когда дисплей HDR-способен,
-      но не переключается на лету, — однако галка в настройках
-      (`UI/Settings/PauseMenuDisplayTabBuilder.cs`) исход по-прежнему выбрасывает.
-      Правильное поведение: при `RejectedUnsupported` галку гасить как
-      неприменимую, при `RejectedNotSwitchable` показывать причину («переключите
-      HDR в настройках ОС»). Файл в main game — правки туда не разрешены.
-- [ ] Оверлей отладки не показывает, состоялось ли кодирование HDR. URP включает
-      его в `FinalBlitPass` только при `outputsToHDR && overlayUITexture.IsValid()`,
-      то есть когда собрана отдельная текстура оверлейного UI. Если её нет, сцена
-      уходит в HDR-swapchain без преобразования и paper white — картинка
-      неправильная, но не чёрная, и заметить трудно. Лечится одной строкой:
-      печатать `cameraData.rendersOverlayUI` рядом с `available/active/gamut`.
-      `UI/Overlays/InGameDebugOverlay.cs` — main game.
 - [x] Неподдерживаемые CSS-фильтры удалены из USS. `filter`,
       `backdrop-filter` и `box-shadow` не входят в используемый UI Toolkit USS;
       из-за них правила меню импортировались с ошибками и интерфейс получал
