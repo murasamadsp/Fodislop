@@ -2,8 +2,11 @@
 #pragma kernel BloomDownsample
 #pragma kernel BloomUpsample
 #pragma kernel CompositeFinal
+#pragma kernel DisplayFinal
+#pragma multi_compile _ HDR_COLORSPACE_CONVERSION
 
 #include "ColorGrading.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl"
 
 Texture2D<float4> _InputTex;
 Texture2D<float4> _SourceTex;
@@ -38,15 +41,8 @@ float4 _ColorFilter;
 float _Contrast;
 float _Saturation;
 float _Gamma;
-float _HdrPaperWhiteScale;
-float _HdrPeakBrightnessScale;
-
-// Слой вывода: 0 — без кривой (сверка), 1 — своя кривая. Значение авторское и
-// живёт в PostProcessLook, а не в настройках игрока.
-int _DisplayTransform;
-float _ToneMappingWhitePoint;
-float4 _CurveShape;  // x=greyOut, y=slope, z=shoulderPower, w=toePower
-float4 _CurveRange;  // x=toeStops, y=pathToWhiteAmount, z=pathToWhitePower
+float _DisplayPaperWhiteNits;
+float _DisplayPeakRelative;
 
 // Отладочный вид кадра: 0 обычный, 1 ложный цвет по зонам, 2 отсечка.
 // Устроен как _DebugView в WorldLighting.compute — ранним выходом.
@@ -57,7 +53,6 @@ int _PostDebugView;
 // кадре в одну секунду, а не по памяти между двумя запусками.
 float _CompareSplit;
 float2 _WhiteBalance;   // x=температура, y=оттенок, оба в [-100, 100]
-int _OutputGamut;       // 0=Rec.709, 1=Display P3, 2=Rec.2020
 float4 _CdlSlope;       // ASC CDL, применяется в логарифмическом пространстве
 float4 _CdlOffset;
 float4 _CdlPower;
@@ -315,6 +310,7 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
 
     // Слой 4a: линейный. Экспозиция и баланс белого описывают съёмку, а не
     // вкус, и потому применяются к сцен-линейным величинам.
+    float3 ungraded = color;
     color *= exp2(_Exposure) * _ColorFilter.rgb;
 
     if (abs(_WhiteBalance.x) > 0.001 || abs(_WhiteBalance.y) > 0.001)
@@ -358,37 +354,34 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         gradedLinear = ApplySaturation(max(0.0, gradedLinear), _Saturation, lumaWeights);
     }
 
-    if (_DisplayTransform != 0 && !leftOfSplit)
+    color = max(0.0, leftOfSplit ? ungraded : gradedLinear);
+
+    // Temporal stability belongs to scene-linear light. Both current and
+    // history now have the same units, independent of display calibration.
+    if (_Temporal.z > 0.001)
     {
-        color = FodinaeDisplayTransform(
-            gradedLinear,
-            _ToneMappingWhitePoint,
-            _CurveShape.x,
-            _CurveShape.y,
-            _CurveShape.z,
-            _CurveShape.w,
-            _CurveRange.x,
-            _CurveRange.y,
-            _CurveRange.z);
-    }
-    else
-    {
-        color = gradedLinear;
+        float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, screenUv, 0).rgb;
+        color = lerp(color, history, saturate(_Temporal.z));
     }
 
-    color = max(0.0, color);
+    _OutputTex[id.xy] = float4(color, srcAlpha);
+}
 
-    // Сама шторка: тонкая линия, иначе граница читается как деталь кадра.
-    if (_CompareSplit > 0.0 && abs(screenUv.x - _CompareSplit) < _ScreenSize.z)
-    {
-        color = float3(1.0, 0.25, 0.0);
-    }
+[numthreads(8, 8, 1)]
+void DisplayFinal(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_ScreenSize.x || id.y >= (uint)_ScreenSize.y) return;
 
-    // HDR Paper White scaling
-    if (abs(_HdrPaperWhiteScale - 1.0) > 0.001 && _HdrPaperWhiteScale > 0.01)
-    {
-        color *= _HdrPaperWhiteScale;
-    }
+    float2 screenUv = (id.xy + 0.5) * _ScreenSize.zw;
+    float2 uv = screenUv;
+    float4 source = _InputTex.SampleLevel(sampler_PointClamp, uv, 0);
+    float srcAlpha = source.a;
+    // URP supplies display-linear output: absolute nits in HDR, relative
+    // white in SDR. Normalize only for the artistic screen effects.
+    float3 color = source.rgb / _DisplayPaperWhiteNits;
+#if defined(HDR_COLORSPACE_CONVERSION)
+    color = RotateOutputSpaceToRec709(color);
+#endif
 
     // 5. Vignette
     if (_VignetteIntensity > 0.001)
@@ -402,10 +395,6 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         float edgeMask = smoothstep(0.5 - feather * 0.5, 0.5 + feather * 0.5, distanceFromCenter);
         color = lerp(color, _VignetteColor.rgb, saturate(edgeMask * _VignetteIntensity));
     }
-
-    // В SDR сжатие диапазона выполнено выше кривой слоя 4c, поэтому зерно
-    // ложится на готовые тона. В HDR окончательное peak-плечо стоит ниже,
-    // после экранных эффектов и перед temporal history.
 
     // 6. Eigengrau: fine, zero-mean film grain in dark areas. This is not a
     // bright overlay and contains no low-frequency or scrolling texture.
@@ -437,8 +426,8 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         {
             uint channel = id.x % 3;
             float3 phosphor = channel == 0
-                ? float3(1.08, 0.96, 0.96)
-                : (channel == 1 ? float3(0.96, 1.08, 0.96) : float3(0.96, 0.96, 1.08));
+                ? float3(1.0, 0.89, 0.89)
+                : (channel == 1 ? float3(0.89, 1.0, 0.89) : float3(0.89, 0.89, 1.0));
             encoded *= lerp(1.0, phosphor, _Advanced3.y);
         }
 
@@ -451,70 +440,36 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         color = pow(max(encoded, 0.0), displayGamma);
     }
 
-    // Примары и диапазон вывода применяются ДО temporal. History хранит
-    // готовый _OutputTex; смешивать её с текущим кадром до gamut/shoulder
-    // означало смешивать разные пространства и повторно сжимать прошлый HDR.
-    color = ConvertOutputGamut(color, _OutputGamut);
-
-    // Пользовательская gamma — калибровка SDR-дисплея, а не часть кривой.
-    // FinalBlit кодирует linear -> sRGB (~2.2), поэтому предварительная степень
-    // 2.2/gamma даёт требуемую итоговую степень 1/gamma без двойного encoding.
-    if (_HdrPeakBrightnessScale <= 0.01 && abs(_Gamma - 2.2) > 0.001)
+    // SDR calibration remains relative to the neutral 2.2 preference.
+    // No PQ/sRGB output encoding occurs here: URP performs it once, later.
+    if (_DisplayPeakRelative <= 0.01 && abs(_Gamma - 2.2) > 0.001)
     {
         color = pow(max(color, 0.0), 2.2 / max(_Gamma, 0.1));
     }
 
-    // HDR buffer values are relative to the native paper white. The user's
-    // peak setting becomes an asymptote in the same space. Preserve everything
-    // through paper white, then compress only the excess with a rational
-    // shoulder. One scale for all channels preserves hue in highlights.
-    if (_HdrPeakBrightnessScale > 0.01)
-    {
-        float shoulderStart = max(_HdrPaperWhiteScale, 0.01);
-        float peak = max(_HdrPeakBrightnessScale, shoulderStart + 0.01);
-        float norm = max(max(color.r, color.g), color.b);
-        if (norm > shoulderStart)
-        {
-            float headroom = peak - shoulderStart;
-            float excess = norm - shoulderStart;
-            float mapped = shoulderStart + headroom * excess / (headroom + excess);
-            color *= mapped / max(norm, 1e-5);
-        }
-    }
-
     if (_Temporal.x > 0.001 || _Temporal.z > 0.001 || _Temporal.w > 0.001)
     {
-        float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
-        float2 texel = _ScreenSize.zw;
-        float3 sourceCenter = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).rgb;
-        float3 left = _InputTex.SampleLevel(sampler_PointClamp, uv - float2(texel.x, 0.0), 0).rgb;
-        float3 right = _InputTex.SampleLevel(sampler_PointClamp, uv + float2(texel.x, 0.0), 0).rgb;
-        float3 down = _InputTex.SampleLevel(sampler_PointClamp, uv - float2(0.0, texel.y), 0).rgb;
-        float3 up = _InputTex.SampleLevel(sampler_PointClamp, uv + float2(0.0, texel.y), 0).rgb;
-        float3 sourceDeviation = max(
-            max(abs(left - sourceCenter), abs(right - sourceCenter)),
-            max(abs(down - sourceCenter), abs(up - sourceCenter)));
-
-        // Отклонение соседей измерено по ИСХОДНОЙ сцене — линейный HDR, где
-        // яркости уходят далеко за единицу. Границы клампа нужны в том
-        // пространстве, где сейчас лежит color: после блума, грейдинга и
-        // тонмапа. Складывать их напрямую нельзя, и раньше складывали:
-        // в светах границы получались втрое шире нужного, кламп не держал
-        // историю вовсе и давал шлейф, а в тенях — вчетверо у́же, и кламп
-        // съедал эффект целиком. Переносим отклонение через конвейер первым
-        // порядком: во сколько раз изменился сам пиксель, во столько же
-        // масштабируется его окрестность.
-        // Потолок 16 обязателен: на границе яркого объекта с чёрным фоном
-        // sourceCenter уходит в ноль, а отклонение остаётся большим, и
-        // отношение улетает в тысячи — кламп снова перестал бы работать.
-        float3 pipelineTransfer = clamp(color / max(sourceCenter, 1e-4), 0.0, 16.0);
-        float3 deviation = sourceDeviation * pipelineTransfer;
-
-        float3 neighbourhoodMin = max(0.0, color - deviation);
-        float3 neighbourhoodMax = color + deviation;
+        float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb / _DisplayPaperWhiteNits;
+#if defined(HDR_COLORSPACE_CONVERSION)
+        history = RotateOutputSpaceToRec709(history);
+#endif
+        float3 neighbourhoodMin = color;
+        float3 neighbourhoodMax = color;
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int x = -1; x <= 1; x++)
+            {
+                float3 sampleColor = _InputTex.SampleLevel(sampler_LinearClamp,
+                    uv + float2(x, y) * _ScreenSize.zw, 0).rgb / _DisplayPaperWhiteNits;
+#if defined(HDR_COLORSPACE_CONVERSION)
+                sampleColor = RotateOutputSpaceToRec709(sampleColor);
+#endif
+                neighbourhoodMin = min(neighbourhoodMin, sampleColor);
+                neighbourhoodMax = max(neighbourhoodMax, sampleColor);
+            }
+        }
 
         float3 stableHistory = clamp(history, neighbourhoodMin, neighbourhoodMax);
-        color = lerp(color, stableHistory, saturate(_Temporal.z));
         float3 persistence = max(color, history * saturate(_Temporal.y));
         color = lerp(color, persistence, saturate(_Temporal.x));
 
@@ -590,8 +545,8 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
 
         float maxChannel = max(color.r, max(color.g, color.b));
         float minChannel = min(color.r, min(color.g, color.b));
-        float clippingCeiling = _HdrPeakBrightnessScale > 0.01
-            ? _HdrPeakBrightnessScale * 0.995
+        float clippingCeiling = _DisplayPeakRelative > 0.01
+            ? _DisplayPeakRelative * 0.995
             : 0.999;
         if (maxChannel >= clippingCeiling)
         {
@@ -606,5 +561,8 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    _OutputTex[id.xy] = float4(color, srcAlpha);
+#if defined(HDR_COLORSPACE_CONVERSION)
+    color = RotateRec709ToOutputSpace(color);
+#endif
+    _OutputTex[id.xy] = float4(max(0.0, color) * _DisplayPaperWhiteNits, srcAlpha);
 }

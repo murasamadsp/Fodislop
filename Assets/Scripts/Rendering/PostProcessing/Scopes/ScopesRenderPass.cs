@@ -190,13 +190,8 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
                 : cameraDescriptor.height);
         if (cameraData.isHDROutputActive)
         {
-            HDROutputSettings output = HDROutputSettings.main;
-            float nativePaperWhite = output.available && output.paperWhiteNits > 10f
-                ? output.paperWhiteNits
-                : Fodinae.Core.DisplaySettings.DefaultPaperWhite;
-            float peakScale = PostProcessRuntimeState.DisplayPeakBrightnessNits /
-                nativePaperWhite;
-            passData.SignalScale = 1f / Mathf.Max(0.01f, peakScale);
+            Tonemapping output = VolumeManager.instance.stack.GetComponent<Tonemapping>();
+            passData.SignalScale = 1f / Mathf.Max(1f, output.maxNits.value);
         }
         else
         {

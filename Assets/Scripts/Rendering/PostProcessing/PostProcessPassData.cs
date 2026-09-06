@@ -9,6 +9,8 @@ namespace Fodinae.Rendering.PostProcessing;
 internal sealed class PostProcessPassData
 {
     public ComputeShader PostProcessCS = null!;
+    public bool HdrOutput;
+    public ColorGamut HdrGamut;
     public int KernelPrefilter;
     public int KernelDownsample;
     public int KernelUpsample;
@@ -46,17 +48,12 @@ internal sealed class PostProcessPassData
     public float Contrast;
     public float Saturation;
     public float Gamma;
-    public float HdrPaperWhiteScale;
-    public float HdrPeakBrightnessScale;
-    public int DisplayTransform;
-    public float ToneMappingWhitePoint;
-    public Vector4 CurveShape;
-    public Vector4 CurveRange;
+    public float DisplayPaperWhiteNits;
+    public float DisplayPeakRelative;
     public int PostDebugView;
     public float CompareSplit;
     public Vector2 WhiteBalance;
 
-    public int OutputGamut;
     public Vector4 CdlSlope;
     public Vector4 CdlOffset;
     public Vector4 CdlPower;

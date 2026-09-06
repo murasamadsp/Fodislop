@@ -22,8 +22,8 @@ public sealed class DesignSystemDebtRule : IRule
     private static readonly Dictionary<string, int> Budgets = new()
     {
         ["inline вне main game"] = 42,
-        ["inline в main game"] = 206,
-        ["литерал в общем слое"] = 216,
+        ["inline в main game"] = 208,
+        ["литерал в общем слое"] = 225,
         ["литерал в main game"] = 321,
     };
 

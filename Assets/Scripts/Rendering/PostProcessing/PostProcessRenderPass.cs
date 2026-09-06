@@ -14,7 +14,9 @@ namespace Fodinae.Rendering.PostProcessing
 {
     public class PostProcessRenderPass : ScriptableRenderPass2D
     {
+        private readonly bool _displayPass;
         private readonly ComputeShader _postProcessCS;
+        private Vector3 _outputSignature;
         private readonly int _kernelPrefilter;
         private readonly int _kernelDownsample;
         private readonly int _kernelUpsample;
@@ -60,15 +62,16 @@ namespace Fodinae.Rendering.PostProcessing
                 $"Post-process VolumeStack is missing required component '{componentName}'.");
         }
 
-        public PostProcessRenderPass(ComputeShader postProcessCS)
+        public PostProcessRenderPass(ComputeShader postProcessCS, bool displayPass = false)
         {
-            renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
-            renderPassEvent2D = RenderPassEvent2D.BeforeRenderingPostProcessing;
-            _postProcessCS = postProcessCS;
+            _displayPass = displayPass;
+            renderPassEvent = displayPass ? RenderPassEvent.AfterRenderingPostProcessing : RenderPassEvent.BeforeRenderingPostProcessing;
+            renderPassEvent2D = displayPass ? RenderPassEvent2D.AfterRenderingPostProcessing : RenderPassEvent2D.BeforeRenderingPostProcessing;
+            _postProcessCS = UnityEngine.Object.Instantiate(postProcessCS);
             _kernelPrefilter = _postProcessCS.FindKernel("BloomPrefilter");
             _kernelDownsample = _postProcessCS.FindKernel("BloomDownsample");
             _kernelUpsample = _postProcessCS.FindKernel("BloomUpsample");
-            _kernelComposite = _postProcessCS.FindKernel("CompositeFinal");
+            _kernelComposite = _postProcessCS.FindKernel(displayPass ? "DisplayFinal" : "CompositeFinal");
         }
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -132,9 +135,8 @@ namespace Fodinae.Rendering.PostProcessing
             float displayGamma =
                 PostProcessRuntimeState.BypassPostProcessEffects ? DisplaySettings.DefaultGamma : PostProcessRuntimeState.DisplayGamma;
 
-            bool bloomActive =
-                (bloom.active && bloom.IsActive()) ||
-                advanced.RequiresBloomTexture;
+            bool bloomActive = !_displayPass &&
+                ((bloom.active && bloom.IsActive()) || advanced.RequiresBloomTexture);
             bool vignetteActive = vignette.active && vignette.IsActive();
             bool caActive = ca.active && ca.IsActive();
             bool cgActive = cg.active && cg.IsActive();
@@ -202,9 +204,18 @@ namespace Fodinae.Rendering.PostProcessing
             historyDesc.enableRandomWrite = true;
 
             bool temporalActive = PostProcessRuntimeState.DebugView == PostProcessDebugView.None &&
-                (advanced.TemporalPersistenceIntensity > 0f ||
-                 advanced.LightStability > 0f ||
-                 mbActive);
+                (_displayPass
+                    ? advanced.TemporalPersistenceIntensity > 0f || mbActive
+                    : advanced.LightStability > 0f);
+            Tonemapping output = stack.GetComponent<Tonemapping>();
+            float paperWhite = cameraData.isHDROutputActive ? output.paperWhite.value : 1f;
+            var signature = new Vector3(paperWhite, output.maxNits.value, (float)cameraData.hdrDisplayColorGamut);
+            if (_outputSignature != signature)
+            {
+                _outputSignature = signature;
+                _historyValid = false;
+            }
+
             if (temporalActive && !_temporalWasActive)
             {
                 _historyValid = false;
@@ -294,51 +305,16 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.Saturation = cg.saturation.value;
                 passData.Gamma = displayGamma;
                 ColorGradeSnapshot grade = PostProcessRuntimeState.ColorGrade;
-                passData.DisplayTransform = cameraData.isHDROutputActive
-                    ? (int)DisplayTransform.None
-                    : (int)grade.Transform;
-                passData.ToneMappingWhitePoint = grade.WhitePoint;
-                passData.CurveShape = new Vector4(
-                    grade.GreyOut,
-                    grade.CurveSlope,
-                    grade.ShoulderPower,
-                    grade.ToePower);
-                passData.CurveRange = new Vector4(
-                    grade.ToeStops,
-                    grade.PathToWhiteAmount,
-                    grade.PathToWhitePower,
-                    0f);
-                passData.PostDebugView = (int)PostProcessRuntimeState.DebugView;
+                passData.PostDebugView = _displayPass ? (int)PostProcessRuntimeState.DebugView : 0;
                 passData.CompareSplit = PostProcessRuntimeState.CompareSplit;
                 passData.WhiteBalance = new Vector2(grade.Temperature, grade.Tint);
-                // HDR FinalBlit сам делает Rec.709 -> hdrDisplayColorGamut,
-                // когда cameraData.postProcessEnabled == false (наш контракт).
-                // Повторная матрица здесь дважды сжимала цветность. В SDR у
-                // FinalBlit такой ветки нет, поэтому wide-color перевод остаётся
-                // ответственностью этого прохода.
-                passData.OutputGamut = cameraData.isHDROutputActive
-                    ? (int)DisplayGamutKind.Rec709
-                    : (int)DisplayGamut.Current;
                 passData.CdlSlope = grade.Slope;
                 passData.CdlOffset = grade.Offset;
                 passData.CdlPower = grade.Power;
-
-                if (cameraData.isHDROutputActive)
-                {
-                    HDROutputSettings output = HDROutputSettings.main;
-                    float nativePaperWhite = output.available && output.paperWhiteNits > 10f
-                        ? output.paperWhiteNits
-                        : DisplaySettings.DefaultPaperWhite;
-                    passData.HdrPaperWhiteScale = PostProcessRuntimeState.DisplayPaperWhiteNits / nativePaperWhite;
-                    passData.HdrPeakBrightnessScale =
-                        PostProcessRuntimeState.DisplayPeakBrightnessNits / nativePaperWhite;
-                }
-                else
-                {
-                    passData.HdrPaperWhiteScale = 1f;
-                    passData.HdrPeakBrightnessScale = 0f;
-                }
-
+                passData.DisplayPaperWhiteNits = paperWhite;
+                passData.DisplayPeakRelative = cameraData.isHDROutputActive ? output.maxNits.value / paperWhite : 0f;
+                passData.HdrOutput = _displayPass && cameraData.isHDROutputActive;
+                passData.HdrGamut = cameraData.hdrDisplayColorGamut;
                 passData.EigengrauActive = eigengrauActive;
                 passData.EigengrauIntensity = eigengrau.intensity.value;
                 passData.EigengrauColor = eigengrau.color.value;
@@ -364,15 +340,15 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.Advanced3 = new Vector4(
                     advanced.VolumetricDustSpeed,
                     advanced.PhosphorMaskIntensity,
-                    advanced.DitheringIntensity,
+                    0f,
                     0f);
                 passData.HistoryValid = _historyValid;
                 passData.Temporal = passData.HistoryValid
                     ? new Vector4(
-                        advanced.TemporalPersistenceIntensity,
+                        _displayPass ? advanced.TemporalPersistenceIntensity : 0f,
                         advanced.TemporalPersistenceDecay,
-                        advanced.LightStability,
-                        mbActive ? mb.intensity.value : 0f)
+                        _displayPass ? 0f : advanced.LightStability,
+                        _displayPass && mbActive ? mb.intensity.value : 0f)
                     : Vector4.zero;
                 passData.TemporalActive = temporalActive;
                 passData.TimeSeconds = Time.time;
@@ -430,6 +406,7 @@ namespace Fodinae.Rendering.PostProcessing
 
         public void Dispose()
         {
+            UnityEngine.Object.Destroy(_postProcessCS);
             _historyTexture?.Release();
             _historyTexture = null;
             _historyValid = false;

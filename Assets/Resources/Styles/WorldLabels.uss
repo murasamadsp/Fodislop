@@ -1,0 +1,29 @@
+.world-labels {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+}
+
+.world-label-name, .world-label-chat {
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: white;
+    -unity-text-outline-width: 1px;
+    -unity-text-outline-color: rgba(0, 0, 0, 0.8);
+}
+
+.world-label-name {
+    font-size: 12px;
+}
+
+.world-label-chat {
+    font-size: 14px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 3px 8px;
+    max-width: 360px;
+    white-space: normal;
+}
