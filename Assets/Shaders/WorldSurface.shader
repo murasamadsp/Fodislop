@@ -86,6 +86,26 @@ Shader "Fodinae/World Surface"
                 return _WorldLightTexture.Sample(sampler_WorldLightTexture, lightUV).rgb;
             }
 
+            /// <summary>
+            /// Возвращает полный сэмпл: RGB = direct+bounce, A = ambient luma.
+            /// </summary>
+            float4 SampleWorldLightFull(float2 worldPosition)
+            {
+                float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
+                float2 lightUV = (worldPosition - _WorldLightRect.xy) / rectSize;
+                if (_WorldLightDebugView != 0)
+                {
+                    int2 debugPixel = clamp(
+                        int2(lightUV * _WorldLightTextureSize.xy),
+                        int2(0, 0),
+                        int2(_WorldLightTextureSize.xy) - 1);
+                    float4 debugSample = _WorldLightTexture.Load(int3(debugPixel, 0));
+                    return float4(debugSample.rgb, 1.0);
+                }
+
+                return _WorldLightTexture.Sample(sampler_WorldLightTexture, lightUV);
+            }
+
             Varyings VisibleVert(Attributes input)
             {
                 Varyings output;
@@ -111,7 +131,9 @@ Shader "Fodinae/World Surface"
                     sampler_BaseMap,
                     baseMapUV,
                     0);
-                float3 worldLight = SampleWorldLight(input.worldPosition);
+                float4 lightSample = SampleWorldLightFull(input.worldPosition);
+                float3 worldLight = lightSample.rgb;
+                float ambientFill = lightSample.a;
                 if (_WorldLightDebugView != 0)
                 {
                     return half4(worldLight, surface.a);
@@ -120,6 +142,8 @@ Shader "Fodinae/World Surface"
                 float3 emission = surface.rgb * _EmissionColor.rgb *
                     _EmissionStrength * input.emissionMask * _WorldEmissionScale;
                 float3 litSurface = surface.rgb * worldLight;
+                // Ambient добавляется ПОСЛЕ умножения на albedo
+                litSurface += ambientFill;
                 return half4(litSurface + emission, surface.a);
             }
             ENDHLSL

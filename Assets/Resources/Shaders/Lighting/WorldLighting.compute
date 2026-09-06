@@ -912,11 +912,13 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     float3 bounceTerm = _EnableDiffuseBounce != 0 ? bounce : 0.0;
-    float3 result = _AmbientColor.rgb + bounceTerm + combinedDirect.rgb;
+    float3 directAndBounce = bounceTerm + combinedDirect.rgb;
+    float3 ambient = _AmbientColor.rgb;
 
     if (_DebugView == 10) // Exposure (false-color zebras)
     {
         float maximumLight = max(_MaximumLightMultiplier, 0.0001);
+        float3 result = ambient + directAndBounce;
         float peak = Max3(result);
         float3 falseColor = float3(0.0, 0.0, 0.0);
         if (peak > maximumLight)
@@ -947,7 +949,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    float3 output = max(result, 0.0);
+    float3 output = max(directAndBounce, 0.0);
     if (_DebugView == 0 && _EnableFinalLightingClamp != 0)
     {
         float maximumLight = max(_MaximumLightMultiplier, 0.0001);
@@ -959,5 +961,8 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
             output *= maximumLight / outputPeak;
         }
     }
-    _Result[pixel] = float4(output, 1.0);
+    // Alpha-канал содержит ambient, который будет добавлен ПОСЛЕ умножения на albedo.
+    // Это позволяет видеть сцену даже при тёмном albedo поверхностей.
+    float ambientLuma = max(max(ambient.r, ambient.g), ambient.b);
+    _Result[pixel] = float4(output, ambientLuma);
 }
