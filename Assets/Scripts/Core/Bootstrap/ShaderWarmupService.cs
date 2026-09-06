@@ -17,7 +17,7 @@ namespace Fodinae.Core;
 /// </summary>
 public sealed class ShaderWarmupService : IShaderWarmupService
 {
-    private static readonly (string ShaderName, string[]? Keywords)[] ShadersToWarm =
+    private static readonly (string ShaderName, string[]? Keywords)[] _ShadersToWarm =
     [
         (ProjectRuntimeContracts.ShaderNames.Terrain, ["FODINAE_WORLD_LIGHTING"]),
         (ProjectRuntimeContracts.ShaderNames.WorldSurface, ["FODINAE_SURFACE_REDROCK", "FODINAE_SURFACE_TRANSIT", "FODINAE_SURFACE_PERSPECTIVE"]),
@@ -52,7 +52,7 @@ public sealed class ShaderWarmupService : IShaderWarmupService
         CancellationToken cancellationToken)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        int totalSteps = ShadersToWarm.Length + _WorldLightingKernels.Length + _PostProcessKernels.Length;
+        int totalSteps = _ShadersToWarm.Length + _WorldLightingKernels.Length + _PostProcessKernels.Length;
         int currentStep = 0;
         int warmedPasses = 0;
         int warmedKernels = 0;
@@ -62,11 +62,11 @@ public sealed class ShaderWarmupService : IShaderWarmupService
 
         try
         {
-            for (int i = 0; i < ShadersToWarm.Length; i++)
+            for (int i = 0; i < _ShadersToWarm.Length; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var (shaderName, keywords) = ShadersToWarm[i];
+                var (shaderName, keywords) = _ShadersToWarm[i];
                 Shader? shader = Shader.Find(shaderName);
                 if (shader != null && shader.isSupported)
                 {

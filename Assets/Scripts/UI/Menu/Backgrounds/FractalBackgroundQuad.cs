@@ -1,3 +1,5 @@
+#nullable enable
+
 using UnityEngine;
 
 namespace Fodinae.UI.Backgrounds
@@ -95,7 +97,7 @@ namespace Fodinae.UI.Backgrounds
             }
         }
 
-        private static void Destroy(Object obj)
+        private static new void Destroy(Object obj)
         {
             if (Application.isPlaying)
                 Destroy(obj);

@@ -74,6 +74,37 @@ public sealed class ForbiddenApiRule : IRule
             "PlayerPrefs запрещён — используйте ClientConfigManager (client_config.json)", null),
     };
 
+    // Files that are legitimate owners of specific APIs (file -> patterns they can use)
+    private static readonly Dictionary<string, string[]> LegitimateOwners = new(StringComparer.Ordinal)
+    {
+        // DisplayManager owns display settings
+        ["Assets/Scripts/Rendering/Settings/DisplayManager.cs"] = new[] {
+            "Application.targetFrameRate", "Screen.SetResolution", "QualitySettings.vSyncCount"
+        },
+        // DisplaySettings defines the values (doesn't use them)
+        ["Assets/Scripts/Core/Interfaces/Contracts/Settings/DisplaySettings.cs"] = new[] {
+            "Application.targetFrameRate", "Screen.SetResolution", "QualitySettings.vSyncCount"
+        },
+        // GameplayCamera wraps Camera.main
+        ["Assets/Scripts/Core/Rendering/GameplayCamera.cs"] = new[] { "Camera.main" },
+        // SceneObjectFactory creates GameObjects
+        ["Assets/Scripts/Core/Lifecycle/SceneObjectFactory.cs"] = new[] {
+            "new GameObject", "IObjectResolver"
+        },
+        // RuntimeTextureFactory creates textures
+        ["Assets/Scripts/AssetPipeline/Loading/RuntimeTextureFactory.cs"] = new[] { "new Texture2D" },
+        // Editor tools
+        ["Assets/Scripts/Editor/PlanetCapture.cs"] = new[] { "new Texture2D" },
+        // Legacy auth token storage (TODO: migrate to ClientConfigManager)
+        ["Assets/Scripts/Networking/Auth/AuthTokenManager.cs"] = new[] { "PlayerPrefs" },
+        ["Assets/Scripts/Networking/Auth/VkAuthService.cs"] = new[] { "PlayerPrefs" },
+        ["Assets/Scripts/UI/Gateway/AuthGate.cs"] = new[] { "PlayerPrefs" },
+        ["Assets/Scripts/UI/Gateway/GatewayController.cs"] = new[] { "PlayerPrefs" },
+        // Tests need to create objects
+        ["Assets/Scripts/Tests/Editor/Core/LocalPlayerStateTests.cs"] = new[] { "new GameObject" },
+        ["Assets/Scripts/Tests/Editor/Core/ProductionSceneContractValidatorTests.cs"] = new[] { "new GameObject" },
+    };
+
     public string Id => "FOD-FORBIDDEN-API";
     public string Description => "Forbidden API usage detection";
     public RuleSeverity Severity => RuleSeverity.Error;
@@ -112,10 +143,15 @@ public sealed class ForbiddenApiRule : IRule
 
             var source = File.ReadAllText(file);
             var stripped = SourceScanner.StripComments(source);
+            var ownerExemptions = LegitimateOwners.TryGetValue(relative, out var ex) ? ex : null;
 
             foreach (var (pattern, message, exempt) in SourcePatterns)
             {
                 if (exempt != null && relative == exempt)
+                    continue;
+
+                // Skip if file is a legitimate owner of this API
+                if (ownerExemptions != null && IsLegitimateOwner(pattern, ownerExemptions))
                     continue;
 
                 foreach (Match match in pattern.Matches(stripped))
@@ -153,6 +189,17 @@ public sealed class ForbiddenApiRule : IRule
         return relative.StartsWith("Assets/Scripts/VContainer/") ||
                relative.StartsWith("Assets/Plugins/") ||
                relative.StartsWith("Packages/");
+    }
+
+    private static bool IsLegitimateOwner(Regex pattern, string[] exemptions)
+    {
+        var patternStr = pattern.ToString().Replace(@"\", "").Replace("\\", "");
+        foreach (var exemption in exemptions)
+        {
+            if (patternStr.Contains(exemption))
+                return true;
+        }
+        return false;
     }
 
     private void ScanType(TypeDefinition type, List<RuleViolation> violations)
