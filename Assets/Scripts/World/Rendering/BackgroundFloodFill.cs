@@ -55,6 +55,20 @@ namespace Fodinae.World
         public CellType[,] Buffer => _bgMapBuffer;
 
         /// <summary>
+        /// Whether a cell counts as "floor" for the background map: a passable
+        /// cell that can seed its own type outward. Building doors are passable
+        /// for gameplay (the player walks through them) but are not floor - their
+        /// entrance texture must never leak under the transparent part of an
+        /// adjacent building wall/corner, so they are excluded here.
+        /// </summary>
+        private static bool IsFloorCell(CellType type, CellConfigProperties properties)
+        {
+            return (properties & CellConfigProperties.Passable) != 0 &&
+                type != CellType.Unloaded &&
+                type != CellType.BuildingDoor;
+        }
+
+        /// <summary>
         /// Full rebuild: parallel scan + FBPW wavefront + safety sweep.
         /// </summary>
         public void ComputeFull(ICachedCellDataProvider cellCache)
@@ -84,7 +98,7 @@ namespace Fodinae.World
                     int cy = y + 1;
                     var cell = cellCache.GetCell(cx, cy);
 
-                    if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
+                    if (IsFloorCell(cell.Type, cell.Properties))
                     {
                         _bgMapBuffer[x, y] = cell.Type;
                         columnFrontier.Add((x, y));
@@ -108,7 +122,7 @@ namespace Fodinae.World
                                 }
 
                                 var n = cellCache.GetCell(nx + 1, ny + 1);
-                                if ((n.Properties & CellConfigProperties.Passable) != 0 && n.Type != CellType.Unloaded)
+                                if (IsFloorCell(n.Type, n.Properties))
                                 {
                                     bool found = false;
                                     for (int i = 0; i < distinctCount; i++)
@@ -191,7 +205,7 @@ namespace Fodinae.World
                     int cy = y + 1;
                     var cell = cellCache.GetCell(cx, cy);
 
-                    if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
+                    if (IsFloorCell(cell.Type, cell.Properties))
                     {
                         _bgMapBuffer[x, y] = cell.Type;
                     }
@@ -208,7 +222,7 @@ namespace Fodinae.World
                                 }
 
                                 var n = cellCache.GetCell(cx + dx, cy + dy);
-                                if (n.Type != CellType.Unloaded && (n.Properties & CellConfigProperties.Passable) != 0)
+                                if (n.Type != CellType.Unloaded && IsFloorCell(n.Type, n.Properties))
                                 {
                                     bool found = false;
                                     for (int i = 0; i < distinctCount; i++)
@@ -379,7 +393,7 @@ namespace Fodinae.World
         private void SeedBorderCell(int x, int y, ICachedCellDataProvider cellCache, List<(int, int)> frontier)
         {
             var cell = cellCache.GetCell(x + 1, y + 1);
-            if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
+            if (IsFloorCell(cell.Type, cell.Properties))
             {
                 _bgMapBuffer[x, y] = cell.Type;
                 frontier.Add((x, y));
@@ -406,7 +420,7 @@ namespace Fodinae.World
                         }
 
                         var n = cellCache.GetCell(nx + 1, ny + 1);
-                        if ((n.Properties & CellConfigProperties.Passable) != 0 && n.Type != CellType.Unloaded)
+                        if (IsFloorCell(n.Type, n.Properties))
                         {
                             bool found = false;
                             for (int i = 0; i < distinctCount; i++)

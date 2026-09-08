@@ -413,7 +413,7 @@ namespace Fodinae.World.Terrain
             }
 
             CellType cellType = isBackground ? bgFloodFill.Buffer[x, y] : cellFgType;
-            if (isBackground && IsBuildingBlock(cellFgType))
+            if (isBackground && IsBuildingBlock(cellFgType) && (ccd.Properties & CellConfigProperties.Passable) != 0)
             {
                 cellType = CellType.Road;
             }
