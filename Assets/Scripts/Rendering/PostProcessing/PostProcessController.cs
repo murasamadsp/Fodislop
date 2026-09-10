@@ -165,6 +165,12 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void OnEnable()
         {
+            // Runtime debug state is static because the render pass is owned by
+            // the renderer asset. A controller re-enable must nevertheless
+            // start from the production frame; otherwise a previously opened
+            // grading scope can leave the game in a false-colour/gamut view.
+            PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
+
             if (Application.isPlaying &&
                 _clientConfigManager != null &&
                 _clientConfigManager.Config != null)
