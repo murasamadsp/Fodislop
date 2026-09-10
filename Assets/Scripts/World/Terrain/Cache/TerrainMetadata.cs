@@ -14,6 +14,20 @@ public enum TerrainCellState
 
 public struct CachedCellData
 {
+    /// <summary>
+    /// Клетка светится и её свечение анимировано.
+    /// </summary>
+    /// <remarks>
+    /// Предикат живёт здесь, а не у спрашивающих: <c>CellConfigProperties</c> и
+    /// <c>CellAnimationType</c> объявлены в сетевых пакетах, и каждый, кому нужен
+    /// этот вопрос, иначе тянул бы к себе пространство имён протокола. Рендереру
+    /// террейна знать про пакеты незачем.
+    /// </remarks>
+    public readonly bool HasAnimatedGlow =>
+        State == TerrainCellState.Loaded &&
+        Animation != CellAnimationType.None &&
+        (Properties & CellConfigProperties.Glowing) != 0;
+
     public TerrainCellState State;
     public CellType Type;
     public CellConfigProperties Properties;

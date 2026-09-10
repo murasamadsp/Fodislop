@@ -21,7 +21,6 @@ internal sealed class LightingResourceManager
     private RenderTexture? _materialField;
     private RenderTexture? _staticEmissionField;
     private RenderTexture? _dynamicEmissionField;
-    private RenderTexture? _automaticNormalField;
     private RenderTexture? _directTexture;
     private RenderTexture? _staticDirectTexture;
     private RenderTexture? _bounceTexture;
@@ -33,7 +32,6 @@ internal sealed class LightingResourceManager
     public RenderTexture? StaticEmissionField => _staticEmissionField;
     public RenderTexture? DynamicEmissionField => _dynamicEmissionField;
     public Material? DynamicEmissionMaterial { get; private set; }
-    public RenderTexture? AutomaticNormalField => _automaticNormalField;
     public RenderTexture? DirectTexture => _directTexture;
     public RenderTexture? StaticDirectTexture => _staticDirectTexture;
     public RenderTexture? BounceTexture => _bounceTexture;
@@ -42,7 +40,6 @@ internal sealed class LightingResourceManager
     public ComputeBuffer? DynamicLightBuffer { get; private set; }
 
     public int SolveCascadeKernel { get; private set; }
-    public int SolveAutomaticNormalsKernel { get; private set; }
     public int ResolveDirectKernel { get; private set; }
     public int SolveDiffuseBounceKernel { get; private set; }
     public int CompositeLightingKernel { get; private set; }
@@ -56,7 +53,6 @@ internal sealed class LightingResourceManager
 
     public readonly List<CascadeLayout> Cascades = new();
     public LightingPipeline? CompositePipeline { get; private set; }
-    public LightingPipeline? AutomaticNormalsPipeline { get; private set; }
     public LightingPipeline? DiffuseBouncePipeline { get; private set; }
     public LightingPipeline? DynamicEmissionCompositionPipeline { get; private set; }
     public LightingPipeline? MaterialFieldPipeline { get; private set; }
@@ -97,7 +93,6 @@ internal sealed class LightingResourceManager
         LightingCommandBuffer = null;
         LightingCompute = null;
         CompositePipeline = null;
-        AutomaticNormalsPipeline = null;
         DiffuseBouncePipeline = null;
         DynamicEmissionCompositionPipeline = null;
         MaterialFieldPipeline = null;
@@ -193,13 +188,6 @@ internal sealed class LightingResourceManager
             FilterMode.Bilinear,
             "_DynamicEmissionField",
             useMipMap: false);
-        _automaticNormalField = CreateTexture(
-            fieldWidth,
-            fieldHeight,
-            RenderTextureFormat.ARGBHalf,
-            randomWrite: true,
-            FilterMode.Point,
-            "_AutomaticNormalField");
         _directTexture = CreateTexture(
             fieldWidth,
             fieldHeight,
@@ -256,7 +244,6 @@ internal sealed class LightingResourceManager
         ReleaseTexture(ref _materialField);
         ReleaseTexture(ref _staticEmissionField);
         ReleaseTexture(ref _dynamicEmissionField);
-        ReleaseTexture(ref _automaticNormalField);
         ReleaseTexture(ref _directTexture);
         ReleaseTexture(ref _staticDirectTexture);
         ReleaseTexture(ref _bounceTexture);
@@ -380,7 +367,6 @@ internal sealed class LightingResourceManager
         (string Name, Action<int> SetIndex)[] requiredKernels =
         [
             (ProjectRuntimeContracts.ComputeKernelNames.SolveCascade, k => SolveCascadeKernel = k),
-            (ProjectRuntimeContracts.ComputeKernelNames.SolveAutomaticNormals, k => SolveAutomaticNormalsKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.ResolveDirect, k => ResolveDirectKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.SolveDiffuseBounce, k => SolveDiffuseBounceKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.CompositeLighting, k => CompositeLightingKernel = k),
@@ -401,8 +387,6 @@ internal sealed class LightingResourceManager
 
         CompositePipeline = new LightingPipeline(
             new CompositeStage(CompositeLightingKernel));
-        AutomaticNormalsPipeline = new LightingPipeline(
-            new AutomaticNormalsStage(SolveAutomaticNormalsKernel));
         DiffuseBouncePipeline = new LightingPipeline(
             new DiffuseBounceStage(SolveDiffuseBounceKernel));
         DynamicEmissionCompositionPipeline = new LightingPipeline(

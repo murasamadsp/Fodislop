@@ -108,8 +108,20 @@ public sealed class LightingQualityWiringTests
             "stops being per-pixel and no exception fires anywhere in the chain.");
     }
 
+    /// <remarks>
+    /// High поднят до PerPixel намеренно. В PerBlock число текселей поля на
+    /// клетку жёстко равно единице (LightingResourceManager: requestedPixelsPerCell),
+    /// заявленное в профиле LightingMinimumPixelsPerCell не используется вовсе,
+    /// а ResolveDirect вдобавок привязывает выборку к центру клетки. При таком
+    /// поле у освещения нет внутриклеточного разрешения: нормаль поверхности
+    /// постоянна внутри клетки по построению, и направленный отклик
+    /// принципиально не может дать рельеф.
+    ///
+    /// Пресеты ниже High остаются на PerBlock: там это осознанный размен
+    /// качества на кадр, а не побочный эффект.
+    /// </remarks>
     [Test]
-    public void StandardPresetsBelowUltraDefaultToPerBlock()
+    public void StandardPresetsBelowHighDefaultToPerBlock()
     {
         GraphicsQualityProfile profile = Resources.Load<GraphicsQualityProfile>(
             "GraphicsQualityProfile");
@@ -120,8 +132,6 @@ public sealed class LightingQualityWiringTests
                      GraphicsPreset.VeryLow,
                      GraphicsPreset.Low,
                      GraphicsPreset.Medium,
-                     GraphicsPreset.High,
-                     GraphicsPreset.VeryHigh,
                  })
         {
             Assert.That(
@@ -131,6 +141,29 @@ public sealed class LightingQualityWiringTests
                 "design change, update this test alongside it - don't let it silently pass.");
         }
     }
+
+    [Test]
+    public void HighAndAbovePresetsArePerPixel()
+    {
+        GraphicsQualityProfile profile = Resources.Load<GraphicsQualityProfile>(
+            "GraphicsQualityProfile");
+        Assert.That(profile, Is.Not.Null, "Resources/GraphicsQualityProfile.asset is missing.");
+
+        foreach (GraphicsPreset preset in new[]
+                 {
+                     GraphicsPreset.High,
+                     GraphicsPreset.VeryHigh,
+                 })
+        {
+            Assert.That(
+                profile!.Get(preset).LightingQuality,
+                Is.EqualTo(LightingQualityMode.PerPixel),
+                $"{preset} must carry LightingQuality: PerPixel explicitly. Dropping back " +
+                "to the enum's zero-default silently returns the preset to one lighting " +
+                "texel per world cell, and surface detail disappears with no error anywhere.");
+        }
+    }
+
 
     [Test]
     public void ValidateSettingsRejectsAnUndefinedLightingQualityValue()

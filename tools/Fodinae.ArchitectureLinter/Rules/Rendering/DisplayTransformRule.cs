@@ -37,7 +37,7 @@ public sealed class DisplayTransformRule : IRule
         CheckFile(
             violations,
             Path.Combine(context.ProjectRoot, "Assets", "Scripts", "Rendering", "PostProcessing", "Scopes", "ScopesRenderPass.cs"),
-            CheckHdrDisplayAccess);
+            CheckHDRDisplayAccess);
         CheckFile(
             violations,
             Path.Combine(
@@ -139,14 +139,19 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
-        CheckHdrIncludes(violations, path, source);
+        CheckHDRIncludes(violations, path, source);
         if (Regex.IsMatch(source, @"\b(?:float|half|real)\s+Luminance\s*\(", Invariant))
         {
             AddViolation(violations, path, "Use Color.hlsl Luminance; a local definition conflicts on Metal.");
         }
         Require(violations, path, source, @"void\s+CompositeFinal", "Scene-linear artistic pass is required.");
         Require(violations, path, source, @"void\s+DisplayFinal", "Display effects must be separated from the scene pass.");
-        Require(violations, path, source, @"source\.rgb\s*/\s*_DisplayPaperWhiteNits", "Display effects must normalize absolute HDR nits.");
+        Require(
+            violations,
+            path,
+            source,
+            @"source\.rgb\s*/\s*(?:_DisplayPaperWhiteNits|paperWhite)",
+            "Display effects must normalize absolute HDR nits.");
         Require(violations, path, source, @"ToDisplayOutput\(color\)", "Display effects must restore URP output units.");
         if (source.Contains("FodinaeDisplayTransform(", StringComparison.Ordinal) ||
             source.Contains("ConvertOutputGamut(", StringComparison.Ordinal) ||
@@ -161,7 +166,7 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
-        CheckHdrIncludes(violations, path, source);
+        CheckHDRIncludes(violations, path, source);
         Require(violations, path, source, @"RotateOutputSpaceToRec709\(color\)",
             "Rec.709 diagnostic axes must convert from the active HDR output gamut.");
         Require(
@@ -184,7 +189,7 @@ public sealed class DisplayTransformRule : IRule
             "Vectorscope must use its own density normalization.");
     }
 
-    private void CheckHdrIncludes(
+    private void CheckHDRIncludes(
         ICollection<RuleViolation> violations,
         string path,
         string source)
@@ -203,7 +208,7 @@ public sealed class DisplayTransformRule : IRule
         string path,
         string source)
     {
-        CheckHdrDisplayAccess(violations, path, source);
+        CheckHDRDisplayAccess(violations, path, source);
         Require(violations, path, source, @"displayPass\s*\?\s*RenderPassEvent.AfterRenderingPostProcessing",
             "Display effects must execute after URP tone mapping.");
         Require(violations, path, source, @"output.paperWhite.value",
@@ -230,7 +235,7 @@ public sealed class DisplayTransformRule : IRule
             "Debug views must disable temporal history.");
     }
 
-    private void CheckHdrDisplayAccess(
+    private void CheckHDRDisplayAccess(
         ICollection<RuleViolation> violations,
         string path,
         string source)
@@ -239,7 +244,7 @@ public sealed class DisplayTransformRule : IRule
         {
             if (line.Contains("cameraData.hdrDisplayColorGamut", StringComparison.Ordinal) &&
                 !Regex.IsMatch(line,
-                    @"(?:hdrOutput|passData\.HdrOutput)\s*\?\s*cameraData\.hdrDisplayColorGamut\s*:\s*ColorGamut\.sRGB",
+                    @"(?:hdrOutput|passData\.HDROutput)\s*\?\s*cameraData\.hdrDisplayColorGamut\s*:\s*ColorGamut\.sRGB",
                     Invariant))
             {
                 AddViolation(violations, path, "Read HDR display gamut only when HDR output is active; SDR must use sRGB without querying HDR display information.");

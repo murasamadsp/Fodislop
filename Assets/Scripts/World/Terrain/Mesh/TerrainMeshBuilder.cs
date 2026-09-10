@@ -19,6 +19,11 @@ public class TerrainMeshBuilder
     private int[] _fgAtlasIndices = Array.Empty<int>();
     private bool[] _foregroundOverlayFlags = Array.Empty<bool>();
 
+    /// <summary>Сколько вершин занимает одна клетка: два слоя по четыре.</summary>
+    private const int VerticesPerCell = 8;
+
+    private readonly TerrainSubMeshIndexBuilder _indexBuilder = new();
+
     /// <summary>
     /// Whether the last <see cref="BuildRegion"/> changed which submesh any
     /// quad belongs to, and so requires the index lists to be re-uploaded.
@@ -125,6 +130,161 @@ public class TerrainMeshBuilder
         });
 
         RebuildSubMeshIndices(meshWidth, meshHeight, subMeshIndices);
+    }
+
+    /// <summary>
+    /// Переносит уцелевшую часть сетки на новое место и пересобирает только
+    /// открывшуюся кайму.
+    /// </summary>
+    /// <remarks>
+    /// ЗАЧЕМ. Переход через границу региона снимался полной пересборкой:
+    /// <see cref="BuildFull"/> считал <c>FillQuadData</c> для каждой клетки
+    /// окна. Сетка снапится по восемь клеток, а окно доходит до 384 — сдвиг
+    /// открывает порядка двух процентов площади, и девяносто восемь
+    /// пересчитывались, чтобы получить ровно то, что уже лежало в буфере.
+    /// Кэш клеток, предрасчёт и заливка фона к этому моменту уже приехали
+    /// сдвигом; полными оставались только сборка меша и выгрузка.
+    ///
+    /// ПОЧЕМУ ПОЗИЦИЮ ПРАВИМ ВЫЧИТАНИЕМ. Из всех полей вершины на локальные
+    /// координаты завязана одна <c>Position</c>: она равна
+    /// <c>(x, y) * cellSize</c> плюс смещение искажения, а смещение живёт при
+    /// клетке мира и едет вместе с данными. Клетка, переехавшая из
+    /// <c>x + dx</c> в <c>x</c>, обязана потерять ровно <c>dx * cellSize</c>.
+    /// Остальные поля — мировые координаты, атлас, маски — верны на новом
+    /// месте без правки.
+    ///
+    /// ПОЧЕМУ КАЙМА ШИРЕ СДВИГА НА КЛЕТКУ. Маски соседства пересчитываются с
+    /// тем же запасом (<c>TerrainCellMaskCalculator.PrecalculateIncremental</c>):
+    /// у клетки, ставшей крайней внутри, сосед снаружи сменился, и её вид
+    /// вместе с ним. Кайма здесь обязана совпадать с каймой предрасчёта,
+    /// иначе шов останется отрисованным по старым маскам.
+    ///
+    /// ЧТО ОСТАЁТСЯ ПОЛНЫМ. Списки индексов: приписка клетки к атласу
+    /// привязана к месту в буфере, а сдвинулись все места сразу. Выгрузка
+    /// вершин — тоже: сдвиг меняет содержимое почти каждого слота.
+    /// </remarks>
+    public void ScrollAndBuildBand(
+        TerrainCellCache cellCache,
+        TerrainPrecalculator precalc,
+        BackgroundFloodFill bgFloodFill,
+        int minX,
+        int minY,
+        int meshWidth,
+        int meshHeight,
+        int dx,
+        int dy,
+        int worldWidth,
+        int worldHeight,
+        IReadOnlyList<IAtlasDescriptor> atlases,
+        List<int>[] subMeshIndices,
+        bool useColorLod,
+        MapManager mapManager,
+        ITextureService textureManager)
+    {
+        if (atlases == null || atlases.Count == 0 || subMeshIndices == null || subMeshIndices.Length == 0)
+        {
+            return;
+        }
+
+        EnsureCapacity(meshWidth, meshHeight, _cellSize);
+
+        // Сдвиг во всё окно не оставляет ничего годного для переноса, и
+        // разбор каймы выродился бы в ту же полную сборку с лишним копированием.
+        if (Mathf.Abs(dx) >= meshWidth || Mathf.Abs(dy) >= meshHeight)
+        {
+            BuildFull(
+                cellCache, precalc, bgFloodFill, minX, minY, meshWidth, meshHeight,
+                worldWidth, worldHeight, atlases, subMeshIndices, useColorLod,
+                mapManager, textureManager);
+            return;
+        }
+
+        // Сдвиг переписывает почти каждый слот буфера, поэтому наружу
+        // сообщаем ровно это: выгружать придётся весь диапазон.
+        IndicesChanged = true;
+        OverlayIndicesChanged = true;
+        OverlayQuadsTouched = true;
+        DirtyVertexStart = 0;
+        DirtyVertexCount = _vertexBuffer.Length;
+
+        if (dx != 0 || dy != 0)
+        {
+            TerrainMeshScroller.Scroll(_vertexBuffer, meshWidth, meshHeight, VerticesPerCell, dx, dy);
+            TerrainMeshScroller.Scroll(_bgAtlasIndices, meshWidth, meshHeight, 1, dx, dy);
+            TerrainMeshScroller.Scroll(_fgAtlasIndices, meshWidth, meshHeight, 1, dx, dy);
+            TerrainMeshScroller.Scroll(_foregroundOverlayFlags, meshWidth, meshHeight, 1, dx, dy);
+            TerrainMeshScroller.ShiftPositions(
+                _vertexBuffer, meshWidth, meshHeight, VerticesPerCell, _cellSize, dx, dy);
+        }
+
+        TerrainMeshScroller.GetBandExtents(meshWidth, dx, out int bandXStart, out int bandXLength);
+        TerrainMeshScroller.GetBandExtents(meshHeight, dy, out int bandYStart, out int bandYLength);
+
+        if (bandXLength > 0)
+        {
+            FillBand(
+                bandXStart, bandXStart + bandXLength, 0, meshHeight,
+                cellCache, precalc, bgFloodFill, minX, minY, meshHeight,
+                worldWidth, worldHeight, atlases, useColorLod, mapManager, textureManager);
+        }
+
+        if (bandYLength > 0 && bandXLength < meshWidth)
+        {
+            // Полоса по y берёт только ширину, не покрытую полосой по x:
+            // угол иначе был бы собран дважды.
+            int remainingStart = dx > 0 ? 0 : bandXLength;
+            int remainingEnd = dx > 0 ? bandXStart : meshWidth;
+
+            if (remainingStart < remainingEnd)
+            {
+                FillBand(
+                    remainingStart, remainingEnd, bandYStart, bandYStart + bandYLength,
+                    cellCache, precalc, bgFloodFill, minX, minY, meshHeight,
+                    worldWidth, worldHeight, atlases, useColorLod, mapManager, textureManager);
+            }
+        }
+
+        RebuildSubMeshIndices(meshWidth, meshHeight, subMeshIndices);
+    }
+
+    private void FillBand(
+        int startX,
+        int endX,
+        int startY,
+        int endY,
+        TerrainCellCache cellCache,
+        TerrainPrecalculator precalc,
+        BackgroundFloodFill bgFloodFill,
+        int minX,
+        int minY,
+        int meshHeight,
+        int worldWidth,
+        int worldHeight,
+        IReadOnlyList<IAtlasDescriptor> atlases,
+        bool useColorLod,
+        MapManager mapManager,
+        ITextureService textureManager)
+    {
+        for (int x = startX; x < endX; x++)
+        {
+            int gridX = minX + x;
+            for (int y = startY; y < endY; y++)
+            {
+                int unityY = minY + y;
+                int quadIndex = (x * meshHeight) + y;
+                int baseIndex = quadIndex * VerticesPerCell;
+                _bgAtlasIndices[quadIndex] = TerrainQuadBuilder.FillQuadData(
+                    _vertexBuffer, _foregroundOverlayFlags, _cellSize,
+                    x, y, gridX, unityY, cellCache, precalc, bgFloodFill,
+                    worldWidth, worldHeight, true, baseIndex, atlases, useColorLod,
+                    mapManager, textureManager);
+                _fgAtlasIndices[quadIndex] = TerrainQuadBuilder.FillQuadData(
+                    _vertexBuffer, _foregroundOverlayFlags, _cellSize,
+                    x, y, gridX, unityY, cellCache, precalc, bgFloodFill,
+                    worldWidth, worldHeight, false, baseIndex + 4, atlases, useColorLod,
+                    mapManager, textureManager);
+            }
+        }
     }
 
     public void BuildRegion(TerrainCellCache cellCache, TerrainPrecalculator precalc, BackgroundFloodFill bgFloodFill,
@@ -279,44 +439,18 @@ public class TerrainMeshBuilder
         RebuildSubMeshIndices(meshWidth, meshHeight, subMeshIndices);
     }
 
-    private static void AddQuadIndices(List<int> indices, int baseIndex)
-    {
-        indices.Add(baseIndex);
-        indices.Add(baseIndex + 3);
-        indices.Add(baseIndex + 2);
-        indices.Add(baseIndex + 2);
-        indices.Add(baseIndex + 1);
-        indices.Add(baseIndex);
-    }
-
     private void RebuildSubMeshIndices(
         int meshWidth,
         int meshHeight,
         List<int>[] subMeshIndices)
     {
-        for (int i = 0; i < subMeshIndices.Length; i++)
-        {
-            subMeshIndices[i].Clear();
-        }
-
-        int totalQuads = meshWidth * meshHeight;
-
-        for (int i = 0; i < totalQuads; i++)
-        {
-            int backgroundAtlas = _bgAtlasIndices[i];
-
-            if (backgroundAtlas >= 0 && backgroundAtlas < subMeshIndices.Length)
-            {
-                AddQuadIndices(subMeshIndices[backgroundAtlas], i * 8);
-            }
-
-            int foregroundAtlas = _fgAtlasIndices[i];
-
-            if (foregroundAtlas >= 0 && foregroundAtlas < subMeshIndices.Length)
-            {
-                AddQuadIndices(subMeshIndices[foregroundAtlas], (i * 8) + 4);
-            }
-        }
+        _indexBuilder.Rebuild(
+            _bgAtlasIndices,
+            _fgAtlasIndices,
+            meshWidth,
+            meshHeight,
+            VerticesPerCell,
+            subMeshIndices);
     }
 
     public void RebuildOverlaySubMeshIndices(
@@ -324,25 +458,12 @@ public class TerrainMeshBuilder
         int meshHeight,
         List<int>[] overlaySubMeshIndices)
     {
-        foreach (List<int> indices in overlaySubMeshIndices)
-        {
-            indices.Clear();
-        }
-
-        int totalQuads = meshWidth * meshHeight;
-
-        for (int i = 0; i < totalQuads; i++)
-        {
-            int foregroundAtlas = _fgAtlasIndices[i];
-
-            if (!_foregroundOverlayFlags[i] ||
-                foregroundAtlas < 0 ||
-                foregroundAtlas >= overlaySubMeshIndices.Length)
-            {
-                continue;
-            }
-
-            AddQuadIndices(overlaySubMeshIndices[foregroundAtlas], (i * 8) + 4);
-        }
+        TerrainSubMeshIndexBuilder.RebuildOverlay(
+            _fgAtlasIndices,
+            _foregroundOverlayFlags,
+            meshWidth,
+            meshHeight,
+            VerticesPerCell,
+            overlaySubMeshIndices);
     }
 }

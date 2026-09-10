@@ -43,6 +43,7 @@ internal sealed class GradingLayersWindow : ToolWindow
 
     protected override void DrawContent()
     {
+        _state.BeginHistoryFrame();
         ApplyPendingSelection();
         HandleKeyboardShortcuts();
         _drawer.ApplyPendingActions();
@@ -63,6 +64,8 @@ internal sealed class GradingLayersWindow : ToolWindow
 
             _drawer.DrawActions(SectionLabelStyle, WrappedLabelStyle);
         }
+
+        _state.CommitHistoryFrame();
     }
 
     private void HandleKeyboardShortcuts()
@@ -138,6 +141,26 @@ internal sealed class GradingLayersWindow : ToolWindow
 
             case KeyCode.R:
                 ResetCurrentLayer();
+                currentEvent.Use();
+                break;
+
+            case KeyCode.Z when currentEvent.control || currentEvent.command:
+                if (currentEvent.shift)
+                {
+                    _state.Redo();
+                }
+                else
+                {
+                    _state.Undo();
+                }
+
+                _state.CancelHistoryFrame();
+                currentEvent.Use();
+                break;
+
+            case KeyCode.Y when currentEvent.control || currentEvent.command:
+                _state.Redo();
+                _state.CancelHistoryFrame();
                 currentEvent.Use();
                 break;
 
@@ -363,6 +386,17 @@ internal sealed class GradingLayersWindow : ToolWindow
         using (new GUILayout.HorizontalScope())
         {
             bool controlsEnabled = GUI.enabled;
+            bool wasEnabled = _state.IsEnabled(layer);
+            bool enabled = GUILayout.Toggle(
+                wasEnabled,
+                "Enable",
+                SegmentedButtonStyle,
+                GUILayout.ExpandWidth(true));
+            if (enabled != wasEnabled)
+            {
+                _state.SetEnabled(layer, enabled);
+            }
+
             GUI.enabled = controlsEnabled && !soloed;
             bool bypass = GUILayout.Toggle(
                 wasBypassed,

@@ -307,7 +307,7 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
         try
         {
             byte[] fileData = File.ReadAllBytes(absolutePath);
-            return RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+            return RuntimeTextureFactory.DecodeEncodedImageToRGBA32NoMip(
                 fileData,
                 Path.GetFileNameWithoutExtension(assetPath),
                 RuntimeTextureColorSpace.Srgb,

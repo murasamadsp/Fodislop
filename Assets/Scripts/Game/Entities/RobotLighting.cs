@@ -30,12 +30,25 @@ public sealed class RobotLighting
 
     private const float DynamicLightPositionEpsilon = 0.00390625f;
 
-    public RobotLighting(bool emitsDynamicLight, float defaultIntensity, Color defaultColor)
+    /// <remarks>
+    /// ЗАЧЕМ БЕЗ ПАРАМЕТРОВ. Раньше все три величины приходили снаружи, из
+    /// сериализованных полей <c>Robot</c>, и путь у них был разный. Цвет и
+    /// интенсивность немедленно затирались значениями из
+    /// <see cref="WorldLightingSettings"/>, так что переданное просто
+    /// пропадало. А флаг не затирался ничем — и оставался тем, чем его
+    /// оставила сериализация. У робота из сцены это авторская галка, а у
+    /// созданного через <c>AddComponent</c> — голый <c>false</c> языка, потому
+    /// что сериализованному полю на таком экземпляре взять значение неоткуда.
+    /// Свой робот светил, чужие нет.
+    ///
+    /// Теперь источник у всех трёх один, и разойтись им негде.
+    /// </remarks>
+    public RobotLighting()
     {
         _dynamicLightId = Interlocked.Increment(ref _nextDynamicLightId);
-        _dynamicLightEnabled = emitsDynamicLight;
-        _dynamicLightIntensity = defaultIntensity;
-        _dynamicLightColor = defaultColor;
+        _dynamicLightEnabled = WorldLightingSettings.DynamicLightEnabled;
+        _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
+        _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
     }
 
     public float DynamicLightIntensity => _dynamicLightIntensity;
@@ -64,6 +77,28 @@ public sealed class RobotLighting
         _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
         _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
         _dynamicLightSettingsLoaded = true;
+    }
+
+    /// <summary>
+    /// Включает или гасит источник этого робота.
+    /// </summary>
+    /// <remarks>
+    /// Гасить обязательно снятием с учёта, а не одним флагом: уже поданный
+    /// источник живёт в движке до явного удаления и иначе остался бы светить
+    /// с последнего места навсегда.
+    /// </remarks>
+    public void SetEnabled(bool enabled, LightingEngine? lightingEngine)
+    {
+        if (_dynamicLightEnabled == enabled)
+        {
+            return;
+        }
+
+        _dynamicLightEnabled = enabled;
+        if (!enabled)
+        {
+            Remove(lightingEngine);
+        }
     }
 
     public void SetIntensity(float intensity, LightingEngine? lightingEngine)

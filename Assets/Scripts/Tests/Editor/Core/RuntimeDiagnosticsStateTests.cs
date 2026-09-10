@@ -107,6 +107,9 @@ public sealed class RuntimeDiagnosticsStateTests
         var state = new ColorGradeState
         {
             Exposure = 1.5f,
+            BlackPoint = 0.1f,
+            InputWhitePoint = 2f,
+            HighlightRecovery = 0.5f,
             Slope = new Vector3(1.2f, 0.9f, 1.1f),
         };
         state.SetBypassed(ColorGradeLayer.Cdl, bypassed: true);
@@ -116,6 +119,56 @@ public sealed class RuntimeDiagnosticsStateTests
         Assert.That(snapshot.Slope, Is.EqualTo(Vector3.one));
         Assert.That(state.EffectiveExposure, Is.EqualTo(1.5f));
         Assert.That(state.Slope, Is.EqualTo(new Vector3(1.2f, 0.9f, 1.1f)));
+
+        state.SetBypassed(ColorGradeLayer.Cdl, bypassed: false);
+        state.SetBypassed(ColorGradeLayer.Exposure, bypassed: true);
+        snapshot = state.ToSnapshot();
+        Assert.That(snapshot.Exposure, Is.Zero);
+        Assert.That(snapshot.BlackPoint, Is.Zero);
+        Assert.That(snapshot.InputWhitePoint, Is.EqualTo(1f));
+        Assert.That(snapshot.HighlightRecovery, Is.Zero);
+    }
+
+    [Test]
+    public void ColorGradeState_DisabledLayerIsNeutralAndUndoable()
+    {
+        var state = new ColorGradeState
+        {
+            Exposure = 2f,
+        };
+
+        state.BeginHistoryFrame();
+        state.SetEnabled(ColorGradeLayer.Exposure, enabled: false);
+        state.CommitHistoryFrame();
+
+        Assert.That(state.IsEnabled(ColorGradeLayer.Exposure), Is.False);
+        Assert.That(state.ToSnapshot().Exposure, Is.Zero);
+        Assert.That(state.ToAuthoredSnapshot().EnabledMask & 1, Is.Zero);
+
+        Assert.That(state.Undo(), Is.True);
+        Assert.That(state.IsEnabled(ColorGradeLayer.Exposure), Is.True);
+        Assert.That(state.ToSnapshot().Exposure, Is.EqualTo(2f));
+
+        state.Solo = ColorGradeLayer.Exposure;
+        state.SetEnabled(ColorGradeLayer.Exposure, enabled: false);
+        Assert.That(state.Solo, Is.Null);
+        Assert.That(state.IsActive(ColorGradeLayer.Cdl), Is.True);
+    }
+
+    [Test]
+    public void ColorGradeSnapshot_BlendPreservesEnabledMask()
+    {
+        var left = new ColorGradeState();
+        left.SetEnabled(ColorGradeLayer.Exposure, enabled: false);
+        var right = new ColorGradeState();
+        right.SetEnabled(ColorGradeLayer.Cdl, enabled: false);
+
+        ColorGradeSnapshot blended = left.ToAuthoredSnapshot().BlendTo(
+            right.ToAuthoredSnapshot(),
+            0.25f);
+
+        Assert.That(blended.EnabledMask & 1, Is.Zero);
+        Assert.That(blended.EnabledMask & (1 << 2), Is.Not.Zero);
     }
 
     [Test]
@@ -167,6 +220,80 @@ public sealed class RuntimeDiagnosticsStateTests
         Assert.That(state.Slope.x, Is.EqualTo(PostProcessLook.Grade.Slope.x));
         Assert.That(state.Slope.y, Is.EqualTo(ColorGradeState.SlopeMin));
         Assert.That(state.Slope.z, Is.EqualTo(ColorGradeState.SlopeMax));
+    }
+
+    [Test]
+    public void ColorGradeState_DefaultsAreIdentityForEveryGradeLayer()
+    {
+        var state = new ColorGradeState();
+        ColorGradeSnapshot snapshot = state.ToAuthoredSnapshot();
+
+        Assert.That(snapshot.Transform, Is.EqualTo(DisplayTransform.None));
+        Assert.That(snapshot.EnabledMask, Is.EqualTo((1 << 6) - 1));
+        Assert.That(
+            snapshot.ColorManagement.DynamicRange,
+            Is.EqualTo(ColorGradeDynamicRangeMode.Sdr));
+        Assert.That(snapshot.Exposure, Is.Zero);
+        Assert.That(snapshot.BlackPoint, Is.Zero);
+        Assert.That(snapshot.InputWhitePoint, Is.EqualTo(1f));
+        Assert.That(snapshot.HighlightRecovery, Is.Zero);
+        Assert.That(snapshot.Temperature, Is.Zero);
+        Assert.That(snapshot.Tint, Is.Zero);
+        Assert.That(snapshot.Slope, Is.EqualTo(Vector3.one));
+        Assert.That(snapshot.Offset, Is.EqualTo(Vector3.zero));
+        Assert.That(snapshot.Power, Is.EqualTo(Vector3.one));
+        Assert.That(snapshot.PrimaryLift, Is.EqualTo(Vector3.zero));
+        Assert.That(snapshot.PrimaryGamma, Is.EqualTo(Vector3.one));
+        Assert.That(snapshot.PrimaryGain, Is.EqualTo(Vector3.one));
+        Assert.That(snapshot.PrimaryOffset, Is.EqualTo(Vector3.zero));
+        Assert.That(snapshot.PrimaryMaster, Is.EqualTo(new Vector4(0f, 1f, 1f, 0f)));
+        Assert.That(snapshot.CdlMaster, Is.EqualTo(new Vector3(1f, 0f, 1f)));
+        Assert.That(snapshot.CdlSaturation, Is.EqualTo(1f));
+        Assert.That(snapshot.Saturation, Is.EqualTo(1f));
+        Assert.That(snapshot.Vibrance, Is.Zero);
+        Assert.That(snapshot.Hue, Is.Zero);
+        Assert.That(snapshot.Contrast, Is.Zero);
+        Assert.That(snapshot.Pivot, Is.EqualTo(0.5f));
+        Assert.That(snapshot.Shadows, Is.Zero);
+        Assert.That(snapshot.Highlights, Is.Zero);
+        Assert.That(snapshot.Blacks, Is.Zero);
+        Assert.That(snapshot.Whites, Is.Zero);
+        Assert.That(snapshot.Toe, Is.Zero);
+        Assert.That(snapshot.Shoulder, Is.Zero);
+        Assert.That(snapshot.MasterCurve.Evaluate(0.25f), Is.EqualTo(0.25f));
+        Assert.That(snapshot.RedCurve.Evaluate(0.75f), Is.EqualTo(0.75f));
+        Assert.That(snapshot.Qualifier.Enabled, Is.False);
+        Assert.That(snapshot.Lut, Is.Null);
+        Assert.That(snapshot.LutIntensity, Is.Zero);
+    }
+
+    [Test]
+    public void ColorGradeCurve_NonFinitePointsCannotEscapeAsNonFiniteValues()
+    {
+        var curve = new ColorGradeCurve();
+        curve.Load(
+            [
+                new Vector2(float.NaN, float.PositiveInfinity),
+                new Vector2(0.5f, 0.25f),
+                new Vector2(float.PositiveInfinity, float.NaN),
+            ],
+            (int)ColorCurveInterpolation.Smooth);
+
+        Assert.That(curve.GetPoint(0), Is.EqualTo(new Vector2(0f, 0.5f)));
+        Assert.That(curve.GetPoint(curve.PointCount - 1).x, Is.EqualTo(1f));
+        Assert.That(float.IsFinite(curve.Evaluate(float.NaN)), Is.True);
+        Assert.That(float.IsFinite(curve.Evaluate(float.PositiveInfinity)), Is.True);
+    }
+
+    [Test]
+    public void ColorGradeQualifier_RejectsNonFiniteHueSamples()
+    {
+        var qualifier = new ColorGradeQualifier();
+
+        qualifier.AddHueSample(float.NaN);
+        qualifier.AddHueSample(float.PositiveInfinity);
+
+        Assert.That(qualifier.HueSamples, Is.Empty);
     }
 
     [Test]

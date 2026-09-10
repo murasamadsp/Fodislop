@@ -130,7 +130,7 @@ public static class WebPAnimationDecoder
                                 stride);
                         }
 
-                        Texture2D? frameTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                        Texture2D? frameTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
                             width,
                             height,
                             $"DecodedWebPFrame_{frameTextures.Count}",
@@ -194,7 +194,7 @@ public static class WebPAnimationDecoder
                     $"texture limit {SystemInfo.maxTextureSize}.");
             }
 
-            atlas = RuntimeTextureFactory.CreateRgba32NoMip(
+            atlas = RuntimeTextureFactory.CreateRGBA32NoMip(
                 width,
                 atlasHeight,
                 "DecodedWebPAtlas",

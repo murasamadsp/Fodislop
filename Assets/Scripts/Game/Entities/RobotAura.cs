@@ -350,7 +350,7 @@ internal sealed class RobotAura
 
         // Сглаживание размыло бы отрезок в пять пикселей, повтор по краям
         // дал бы кайму на прозрачном фоне.
-        Texture2D texture = RuntimeTextureFactory.CreateRgba32NoMip(
+        Texture2D texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             SegmentLengthPixels,
             SegmentThicknessPixels,
             "RobotAuraWisp",

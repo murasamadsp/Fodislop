@@ -43,18 +43,6 @@ namespace Fodinae.Game
         private string _tailPath = string.Empty;
         [SerializeField]
         private float _rotationSpeed = ProjectRuntimeContracts.Movement.RobotRotationSpeed;
-        [Header("Dynamic Emission")]
-        [SerializeField]
-        [Tooltip("Разрешает Robot регистрировать dynamic emission source в LightingEngine.")]
-        private bool _emitsDynamicLight;
-        [SerializeField]
-        [Range(0f, 4f)]
-        [Tooltip("Интенсивность dynamic emission. HDR-значение выше 1 усиливает источник.")]
-        private float _dynamicLightIntensity;
-        [SerializeField]
-        [ColorUsage(showAlpha: false, hdr: true)]
-        [Tooltip("HDR-цвет dynamic emission источника Robot.")]
-        private Color _dynamicLightColor;
 
         private const float VISUAL_ROTATION_OFFSET = -90f;
 
@@ -109,7 +97,7 @@ namespace Fodinae.Game
         [Inject]
         private void InitializeEntityBatch(WorldEntityBatchRenderer entityBatchRenderer)
         {
-            _lighting ??= new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _lighting ??= new RobotLighting();
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
             _entityBatchRenderer = entityBatchRenderer;
             InitializeVisualElements();
@@ -123,7 +111,7 @@ namespace Fodinae.Game
         /// </summary>
         private void EnsureVisuals()
         {
-            _lighting ??= new RobotLighting(_emitsDynamicLight, _dynamicLightIntensity, _dynamicLightColor);
+            _lighting ??= new RobotLighting();
             _visuals ??= new RobotVisuals(transform, IsLocalPlayer);
         }
 
@@ -299,6 +287,8 @@ namespace Fodinae.Game
         public void SetDynamicLightIntensity(float intensity) => _lighting.SetIntensity(intensity, _lightingEngine);
 
         public void SetDynamicLightColor(Color color) => _lighting.SetColor(color, _lightingEngine);
+
+        public void SetDynamicLightEnabled(bool enabled) => _lighting.SetEnabled(enabled, _lightingEngine);
 
         public void ResetDynamicLightPreferences()
         {

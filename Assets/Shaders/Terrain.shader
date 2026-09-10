@@ -39,6 +39,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma multi_compile _ FODINAE_WORLD_LIGHTING
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Shaders/TerrainColorAnimation.hlsl"
             #include "TerrainTileAddressing.hlsl"
 
             #define EPS 0.0001
@@ -72,10 +73,17 @@ Shader "Universal Render Pipeline/Custom/Terrain"
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
-            float4 _BaseMap_TexelSize;
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
 
+            // ВСЁ, ЧТО ЗАВИСИТ ОТ МАТЕРИАЛА, ОБЯЗАНО ЛЕЖАТЬ ЗДЕСЬ.
+            //
+            // SRP Batcher склеивает вызовы отрисовки только у шейдеров, где ни
+            // одно свойство материала не объявлено снаружи UnityPerMaterial.
+            // `_BaseMap_TexelSize` Unity заводит сам под текстуру _BaseMap, то
+            // есть это свойство материала; стоя снаружи, оно ломало совместимость
+            // целиком, и батчер молча выключался на всём террейне — счётчик
+            // пакетов показывал ноль при трёх сотнях смен материала.
             CBUFFER_START(UnityPerMaterial)
                 float4 _ShimmerColor;
                 float4 _FlowScale;
@@ -83,6 +91,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float _PulseSpeedScale;
                 float4 _DebugColor;
                 float _DebugMode;
+                float4 _BaseMap_TexelSize;
             CBUFFER_END
 
             Texture2D<float4> _WorldLightTexture;
@@ -145,22 +154,40 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 #endif
             }
 
-            float3 RgbToHsv(float3 c)
-            {
-                float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-                float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-                float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+            // AO вокруг блоков по полю занятости.
+            //
+            // Радиус задаётся мипом: цепь у поля уже построена стадией
+            // освещения, и мип 2 усредняет занятость по четырём текселям —
+            // это и есть спад на несколько клеток от свободной стороны.
+            // Тень под самим блоком не рисуется: её всё равно не видно.
+            Texture2D<float4> _WorldOccupancyTexture;
+            SamplerState sampler_WorldOccupancyTexture;
+            int _WorldOccupancyYFlip;
 
-                float d = q.x - min(q.w, q.y);
-                float e = 1.0e-10;
-                return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-            }
+            // Числа живут в TerrainLook (Assets/Scripts/Core/Rendering/VisualTuning.cs)
+            // и приезжают сюда глобалями один раз при старте.
+            float _TerrainAmbientOcclusionMip;
+            float _TerrainAmbientOcclusionStrength;
 
-            float3 HsvToRgb(float3 c)
+            float GetAmbientOcclusion(float2 worldPos)
             {
-                float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-                return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+                float2 uv = (worldPos - _WorldLightRect.xy) /
+                    max(_WorldLightRect.zw, float2(0.0001, 0.0001));
+                if (_WorldOccupancyYFlip != 0)
+                {
+                    uv.y = 1.0 - uv.y;
+                }
+
+                float nearby = _WorldOccupancyTexture.SampleLevel(
+                    sampler_WorldOccupancyTexture,
+                    saturate(uv),
+                    _TerrainAmbientOcclusionMip).a;
+                // Корень выравнивает углы. Мип усредняет по квадрату: у плоской
+                // стороны в окрестности занята половина, у выпуклого угла —
+                // четверть, и без правки выходит крест вместо кольца. Корень
+                // поднимает четверть до половины, а половину только до 0.7, то
+                // есть тянет вверх слабое сильнее, чем сильное.
+                return saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
             }
 
             float MissingTextureHash(float2 position)
@@ -177,7 +204,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float hue = MissingTextureHash(cell);
                 float value = lerp(0.35, 0.8, MissingTextureHash(cell + 17.0));
                 float saturation = lerp(0.55, 0.9, MissingTextureHash(cell + 43.0));
-                return HsvToRgb(float3(hue, saturation, value));
+                return TerrainHSVToRGB(float3(hue, saturation, value));
             }
 
             // Тумблер режима выборки. Ноль — ближайшая без сглаживания,
@@ -398,7 +425,9 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                float3 finalRgb = texColor.rgb;
+                float3 finalRGB = texColor.rgb;
+                float2 artMinUV = baseUV + tileOffsetUV;
+                float2 artMaxUV = artMinUV + availableTileSize;
                 int animType = (int)(input.animData.x + 0.5);
                 float speed = input.animData.y;
                 float offset = input.animData.z;
@@ -407,39 +436,29 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // paint synthetic triangular shadows over the source texture.
                 // All terrain darkening comes from the world light texture.
 
-                if (animType == 1) // Blinking
+                // Карта потока нужна ТОЛЬКО мерцанию.
+                //
+                // До выноса анимации в общую функцию эта выборка стояла внутри
+                // ветки мерцания, а после — на общем пути, то есть на каждом
+                // пикселе террейна и почти всегда впустую. Клетки одного тайла
+                // делят тип анимации, так что ветвление здесь когерентное и
+                // волна честно пропускает выборку.
+                float3 flowSample = 0.0;
+                if (animType == 2)
                 {
-                    float pulse = 0.5 + 0.5 * sin(
-                        _Time.y * speed * _PulseSpeedScale + offset);
-                    finalRgb *= pulse;
+                    flowSample = SampleFlowMap(input.worldPos.xy + input.uv);
                 }
-                else if (animType == 2) // Shimmer
-                {
-                    float2 pixelWorldPos = input.worldPos.xy + input.uv;
-                    float3 flowSample = SampleFlowMap(pixelWorldPos);
 
-                    float3 flowHsv = RgbToHsv(flowSample);
-                    float hueAngle = flowHsv.x * 6.28318548;
-                    float chroma = max(flowSample.r, max(flowSample.g, flowSample.b)) - min(flowSample.r, min(flowSample.g, flowSample.b));
-
-                    float wave = sin(-(hueAngle + _Time.y * speed * _ShimmerSpeedScale));
-                    wave = (wave + 1.0) * 0.5;
-                    float waveCubed = wave * wave * wave;
-
-                    float luminance = dot(texColor.rgb, float3(0.299, 0.587, 0.114));
-                    float invLum = 1.0 - luminance;
-                    float lumMask = 1.0 - invLum * invLum * invLum;
-
-                    float factor = waveCubed * lumMask * chroma;
-
-                    finalRgb = lerp(finalRgb, _ShimmerColor.rgb, factor);
-                }
-                else if (animType == 3) // Rainbow
-                {
-                    float3 hsv = RgbToHsv(finalRgb);
-                    hsv.x = frac(hsv.x + _Time.y * (speed / 255.0));
-                    finalRgb = HsvToRgb(hsv);
-                }
+                finalRGB = AnimateTerrainColor(
+                    finalRGB,
+                    texColor.rgb,
+                    animType,
+                    speed,
+                    offset,
+                    flowSample,
+                    _ShimmerColor.rgb,
+                    _ShimmerSpeedScale,
+                    _PulseSpeedScale);
 
                 float finalAlpha = 1.0;
                 float4 glowFlags = input.glowData;
@@ -483,14 +502,26 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     alpha = lerp(alpha, 1.0, cornerExclude);
                     finalAlpha *= alpha;
                 }
+
                 float3 lightColor = GetWorldLightColor(input.worldPosition.xy);
-                float3 litRgb = finalRgb * lightColor;
+                float3 litRGB = finalRGB * lightColor;
+
+                // Тень получает только фон. Блоки все одной высоты и друг на
+                // друга не падают, а бит 64 — как раз физическая масса
+                // переднего плана.
+                #ifdef FODINAE_WORLD_LIGHTING
+                uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
+                if ((shadowFlags & 64u) == 0u)
+                {
+                    litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
+                }
+                #endif
                 if (finalAlpha < 0.99 && finalAlpha > 0.01)
                 {
-                    litRgb /= max(finalAlpha, 0.15);
+                    litRGB /= max(finalAlpha, 0.15);
                 }
 
-                return half4(litRgb, finalAlpha);
+                return half4(litRGB, finalAlpha);
             }
             ENDHLSL
         }
@@ -511,6 +542,28 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma fragment MaterialFieldFrag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Shaders/TerrainColorAnimation.hlsl"
+
+            TEXTURE2D(_FlowMap);
+            SAMPLER(sampler_FlowMap);
+
+            // Тот же UnityPerMaterial, что и в пассе Universal2D, слово в слово.
+            //
+            // SRP Batcher требует, чтобы КАЖДЫЙ пасс шейдера объявлял этот
+            // блок и объявлял его одинаково. Пасс без блока делает несовместимым
+            // весь шейдер целиком, а не только себя, — и батчер выключался на
+            // террейне даже после того, как `_BaseMap_TexelSize` переехал
+            // внутрь. Здесь ни одно из этих свойств не читается; блок стоит
+            // ради совпадения раскладки, и убирать его как «мёртвый» нельзя.
+            CBUFFER_START(UnityPerMaterial)
+                float4 _ShimmerColor;
+                float4 _FlowScale;
+                float _ShimmerSpeedScale;
+                float _PulseSpeedScale;
+                float4 _DebugColor;
+                float _DebugMode;
+                float4 _BaseMap_TexelSize;
+            CBUFFER_END
 
             struct MaterialFieldAttributes
             {
@@ -611,6 +664,35 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                         solidBoundaryMask,
                         solidDiagonalMask)
                     : 1.0;
+                // Альбедо анимируется ровно так же, как видимый цвет.
+                //
+                // Без этого поле материалов отдавало решателю постоянный цвет
+                // при мигающей и переливающейся картинке: мигающая лава светила
+                // ровно, радужный блок красил отскок одним оттенком. Маска
+                // яркости для мерцания берётся от самого альбедо — текстуры в
+                // этом пассе нет, и средний цвет клетки тут лучшее, что есть.
+                // Как и в видимом пассе: поток читается только мерцанием.
+                int albedoAnimationType = (int)(input.animData.x + 0.5);
+                float3 flowSample = 0.0;
+                if (albedoAnimationType == 2)
+                {
+                    flowSample = SAMPLE_TEXTURE2D(
+                        _FlowMap,
+                        sampler_FlowMap,
+                        (input.worldPos.xy + input.uv) / _FlowScale.xy).rgb;
+                }
+
+                surfaceAlbedo = AnimateTerrainColor(
+                    surfaceAlbedo,
+                    surfaceAlbedo,
+                    albedoAnimationType,
+                    input.animData.y,
+                    input.animData.z,
+                    flowSample,
+                    _ShimmerColor.rgb,
+                    _ShimmerSpeedScale,
+                    _PulseSpeedScale);
+
                 float surface = step(0.05, input.color.a) * isForeground;
                 output.material = half4(surfaceAlbedo * surface, occupancy);
                 output.emission = half4(

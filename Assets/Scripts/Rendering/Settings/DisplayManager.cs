@@ -31,17 +31,15 @@ namespace Fodinae.Rendering
                 return;
             }
 
+            HDROutput.SetEnabled(display.HDREnabled);
             AutoDetectDisplayCapabilities(display);
             SanitizeCalibration(display);
-            HDROutput.SetEnabled(display.HDREnabled);
             PostProcessRuntimeState.SetDisplayCalibration(
                 display.Gamma,
                 display.PaperWhiteNits,
                 display.PeakBrightnessNits);
 
-            QualitySettings.vSyncCount = display.VSync ? 1 : 0;
-            Application.targetFrameRate = display.TargetFrameRate;
-            Time.maximumDeltaTime = 0.1f;
+            ApplyFrameTiming(display);
 
             if (display.ResolutionWidth > 0 && display.ResolutionHeight > 0)
             {
@@ -49,6 +47,18 @@ namespace Fodinae.Rendering
                 int refresh = display.RefreshRate > 0 ? display.RefreshRate : (int)Screen.currentResolution.refreshRateRatio.value;
                 Screen.SetResolution(display.ResolutionWidth, display.ResolutionHeight, mode, new RefreshRate { numerator = (uint)Mathf.Max(1, refresh), denominator = 1 });
             }
+        }
+
+        public static void ApplyFrameTiming(DisplaySettings display)
+        {
+            if (display == null)
+            {
+                return;
+            }
+
+            QualitySettings.vSyncCount = display.VSync ? 1 : 0;
+            Application.targetFrameRate = display.TargetFrameRate;
+            Time.maximumDeltaTime = 0.1f;
         }
 
         public void ApplyDisplaySettings()
@@ -138,12 +148,9 @@ namespace Fodinae.Rendering
         /// Applies the HDR preference and reports what the display did with it.
         /// </summary>
         /// <remarks>
-        /// A refused request must not stay written in the config. Otherwise the
-        /// settings toggle keeps reading back "on" from a preference the display
-        /// never honoured, and the player is told the opposite of what they see.
-        /// The one refusal that is NOT rolled back is an absent HDR display:
-        /// availability is reported late and can appear after a monitor change,
-        /// and HDROutputReconciler completes the request when it does.
+        /// The preference survives unavailable or non-switchable outputs.
+        /// Actual output status is shown separately; a later monitor or OS
+        /// change lets HDROutputReconciler complete the request.
         /// </remarks>
         public HDROutput.ApplyRequestResult SetHDREnabled(bool enabled)
         {
@@ -152,19 +159,14 @@ namespace Fodinae.Rendering
                 return HDROutput.ApplyRequestResult.RejectedUnsupported;
             }
 
-            bool previous = _clientConfig.Config.Display.HDREnabled;
             _clientConfig.UpdateSection(config => config.Display, display => display.HDREnabled = enabled);
 
             HDROutput.ApplyRequestResult result = HDROutput.SetEnabled(enabled);
             if (result == HDROutput.ApplyRequestResult.RejectedNotSwitchable)
             {
-                _clientConfig.UpdateSection(config => config.Display, display => display.HDREnabled = previous);
-                HDROutput.SetEnabled(previous);
-                HDROutput.ConfigureCamera(_gameplayCamera.Camera);
                 Debug.LogWarning(
-                    "[HDR] Display is HDR-capable but not runtime-switchable; " +
-                    $"the preference stays at {previous}. Switch HDR in the OS display settings.");
-                return result;
+                    "[HDR] The current output cannot switch HDR at runtime; " +
+                    $"the preference is kept at {enabled} for a compatible output.");
             }
 
             if (result == HDROutput.ApplyRequestResult.RejectedUnsupported)

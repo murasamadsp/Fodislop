@@ -97,6 +97,17 @@ namespace Fodinae.UI
             }
         }
 
+        /// <summary>
+        /// Показывает локальное сообщение облаком над роботом.
+        /// </summary>
+        /// <remarks>
+        /// Одно облако на робота: новое сообщение вытесняет прежнее, а не висит
+        /// рядом с ним. Так в эталоне, и так честнее — робот говорит одно за раз.
+        ///
+        /// Отсечения по экрану здесь нет намеренно. Робот может заговорить у
+        /// самого края и въехать в кадр через мгновение; облако, отброшенное при
+        /// появлении, назад уже не вернётся, и сообщение пропадёт совсем.
+        /// </remarks>
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
             TryInitialize();
@@ -105,16 +116,7 @@ namespace Fodinae.UI
                 _camera = _gameplayCamera.Camera;
             }
 
-            var robot = _robotManager?.GetOrCreateRobot(packet.BotId);
-            if (robot == null)
-            {
-                return;
-            }
-
-            if (!IsInCameraView(robot.transform.position))
-            {
-                return;
-            }
+            ExpireBubbleOf((int)packet.BotId);
 
             var bubble = GetFromPool();
             if (bubble == null)
@@ -122,9 +124,27 @@ namespace Fodinae.UI
                 return;
             }
 
-            bubble.transform.position = robot.transform.position + (Vector3.up * 1.8f);
-            bubble.Init(packet.Text);
+            var robot = _robotManager?.GetOrCreateRobot(packet.BotId);
+            if (robot == null)
+            {
+                ReturnToPool(bubble);
+                return;
+            }
+
+            bubble.Init((int)packet.BotId, packet.Text, robot.transform);
             _activeBubbles.Add(bubble);
+        }
+
+        private void ExpireBubbleOf(int ownerId)
+        {
+            for (int i = _activeBubbles.Count - 1; i >= 0; i--)
+            {
+                FloatingChatBubble bubble = _activeBubbles[i];
+                if (bubble != null && bubble.OwnerId == ownerId)
+                {
+                    bubble.Expire();
+                }
+            }
         }
 
         private FloatingChatBubble? GetFromPool()
@@ -160,15 +180,5 @@ namespace Fodinae.UI
             _pool.Enqueue(bubble);
         }
 
-        private bool IsInCameraView(Vector3 worldPos)
-        {
-            if (_camera == null)
-            {
-                return false;
-            }
-
-            Vector3 vp = _camera.WorldToViewportPoint(worldPos);
-            return vp.x >= -0.15f && vp.x <= 1.15f && vp.y >= -0.15f && vp.y <= 1.15f;
-        }
     }
 }

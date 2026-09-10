@@ -313,11 +313,15 @@ public sealed class FrameBreakdownWindow : ToolWindow
                 return;
             }
 
-            ToolChrome.SectionHeader("ВИДЕОКАРТА");
-            DrawGroup(_gpuRows, _gpu, _gpuPeak, ToolTheme.FrameGraphColor);
+            const double targetBudget = 1000.0 / 60.0;
+            double gpuScale = System.Math.Max(_gpuPeak, targetBudget);
+            double cpuScale = System.Math.Max(_cpuPeak, targetBudget);
 
-            ToolChrome.SectionHeader("ПРОЦЕССОР");
-            DrawGroup(_cpuRows, _cpu, _cpuPeak, ToolTheme.Warning);
+            ToolChrome.SectionHeader($"ВИДЕОКАРТА (шкала {gpuScale:F1} мс, бюджет {targetBudget:F1} мс)");
+            DrawGroup(_gpuRows, _gpu, gpuScale, ToolTheme.FrameGraphColor);
+
+            ToolChrome.SectionHeader($"ПРОЦЕССОР (шкала {cpuScale:F1} мс, бюджет {targetBudget:F1} мс)");
+            DrawGroup(_cpuRows, _cpu, cpuScale, ToolTheme.Warning);
 
             ToolChrome.SectionHeader("СЧЁТЧИКИ КАДРА");
             foreach (string row in _counterRows)

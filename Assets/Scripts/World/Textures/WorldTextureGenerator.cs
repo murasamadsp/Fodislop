@@ -12,7 +12,7 @@ public static class WorldTextureGenerator
 {
     public static Texture2D CreateFlowMap()
     {
-        var texture = RuntimeTextureFactory.CreateRgba32NoMip(
+        var texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             12,
             10,
             "ShimmerFlowMap",
@@ -35,7 +35,7 @@ public static class WorldTextureGenerator
 
     public static Texture2D CreateMissingCellTexture(CellType cellType, int cellSize)
     {
-        Texture2D texture = RuntimeTextureFactory.CreateRgba32NoMip(
+        Texture2D texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             cellSize,
             cellSize,
             $"MissingCell_{(int)cellType}",

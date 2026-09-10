@@ -18,28 +18,30 @@ public static class HDROutput
 {
     private static HDRDiagnosticState _lastDiagnosticState;
     private static bool _hasDiagnosticState;
-    private static bool _enabled;
-    private static bool _preferenceInitialized;
+    private static HDROutputController _controller = new(new UnityHDROutputBackend());
 
-    public static bool Enabled => _preferenceInitialized && _enabled;
+    public static bool Enabled => _controller.DesiredHDR;
+
+    public static bool Active => _controller.Current.RenderingHDR;
+    public static HDROutputController.Phase Status => _controller.Status;
+    public static bool RuntimeSwitchable => _controller.Current.Switchable;
+    public static bool CanSwitch => _controller.Current.CanSwitch &&
+        _controller.Status is not HDROutputController.Phase.Pending and not HDROutputController.Phase.Uninitialized &&
+        !_controller.HasReadFailure;
 
     private readonly record struct HDRDiagnosticState(
-        bool Available,
-        bool Active,
-        bool ChangeRequested,
-        HDRDisplaySupportFlags SupportFlags,
-        ColorGamut Gamut,
-        float PaperWhiteNits,
-        int MinToneMapLuminance,
-        int MaxToneMapLuminance);
+        HDROutputController.Snapshot Output,
+        bool DesiredHDR,
+        HDROutputController.Phase Phase,
+        int Attempts,
+        string? Error);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetDiagnostics()
     {
         _lastDiagnosticState = default;
         _hasDiagnosticState = false;
-        _enabled = false;
-        _preferenceInitialized = false;
+        _controller = new HDROutputController(new UnityHDROutputBackend());
     }
 
     public enum ApplyRequestResult
@@ -47,35 +49,41 @@ public static class HDROutput
         /// <summary>Запрос применён, дисплей поставлен в режим <c>enabled</c>.</summary>
         Applied,
 
+        /// <summary>The asynchronous switch has been requested, but is not yet active.</summary>
+        Requested,
+
         /// <summary>Запрос отправлен ранее и ещё в полёте; повторный вызов проигнорирован.</summary>
         AlreadyPending,
 
-        /// <summary>Дисплей не HDR-capable в принципе (нет <c>HDROutputSettings.available</c>).</summary>
+        /// <summary>HDR is currently unavailable; this does not identify the monitor's hardware capability.</summary>
         RejectedUnsupported,
 
         /// <summary>Дисплей HDR-capable, но без <c>RuntimeSwitchable</c> флага — переключение невозможно.</summary>
         RejectedNotSwitchable,
+
+        Retrying,
+        Failed,
     }
 
     public static void AutoDetectDisplayCapabilities(DisplaySettings display)
     {
-        HDROutputSettings output = HDROutputSettings.main;
-        if (output.available)
+        HDROutputController.Snapshot output = _controller.Current;
+        if (output.Available)
         {
-            if (display.PaperWhiteNits <= 10f && output.paperWhiteNits > 10f)
+            if (display.PaperWhiteNits <= 10f && output.PaperWhiteNits > 10f)
             {
                 display.PaperWhiteNits = Mathf.Clamp(
-                    output.paperWhiteNits,
+                    output.PaperWhiteNits,
                     DisplaySettings.PaperWhiteMin,
                     DisplaySettings.PaperWhiteMax);
             }
 
-            if (display.PeakBrightnessNits <= 100f && output.maxToneMapLuminance > 100)
+            if (display.PeakBrightnessNits <= 100f && output.MaxNits > 100)
             {
                 display.PeakBrightnessNits = Mathf.Max(
                     display.PaperWhiteNits,
                     Mathf.Clamp(
-                        output.maxToneMapLuminance,
+                        output.MaxNits,
                         DisplaySettings.PeakBrightnessMin,
                         DisplaySettings.PeakBrightnessMax));
             }
@@ -87,81 +95,43 @@ public static class HDROutput
         // Store intent before probing the display. Availability can be
         // reported late (for example after a scene or display change),
         // and Refresh must still be able to complete the request.
-        _enabled = enabled;
-        _preferenceInitialized = true;
+        _controller.SetPreference(enabled);
 
-        HDROutputSettings output = HDROutputSettings.main;
-        if (!output.available)
-        {
-            LogDiagnostics(output);
-            return ApplyRequestResult.RejectedUnsupported;
-        }
+        return ApplyPreference();
+    }
 
-        if (!output.HDRModeChangeRequested && enabled == output.active)
-        {
-            LogDiagnostics(output);
-            return ApplyRequestResult.Applied;
-        }
-
-        bool runtimeSwitchable =
-            (SystemInfo.hdrDisplaySupportFlags &
-                HDRDisplaySupportFlags.RuntimeSwitchable) != 0;
-        if (!runtimeSwitchable)
-        {
-            LogDiagnostics(output);
-            return ApplyRequestResult.RejectedNotSwitchable;
-        }
-
-        if (output.HDRModeChangeRequested)
-        {
-            LogDiagnostics(output);
-            return ApplyRequestResult.AlreadyPending;
-        }
-
-        // Request a switch only when the current state differs from
-        // the user request, otherwise we keep spamming
-        // RequestHDRModeChange every toggle reset.
-        if (enabled != output.active)
-        {
-            output.RequestHDRModeChange(enabled);
-        }
-
-        LogDiagnostics(output);
-        return ApplyRequestResult.Applied;
+    public static void Retry()
+    {
+        _controller.NotifyEnvironmentChanged();
+        Reconcile();
     }
 
     public static void Reconcile()
     {
-        HDROutputSettings output = HDROutputSettings.main;
-        if (!output.available)
-        {
-            LogDiagnostics(output);
-            return;
-        }
-
-        if (_preferenceInitialized && Enabled != output.active &&
-            (SystemInfo.hdrDisplaySupportFlags &
-                HDRDisplaySupportFlags.RuntimeSwitchable) != 0 &&
-            !output.HDRModeChangeRequested)
-        {
-            output.RequestHDRModeChange(Enabled);
-        }
-
-        LogDiagnostics(output);
+        ApplyPreference();
     }
 
-    private static void LogDiagnostics(HDROutputSettings output)
+    private static ApplyRequestResult ApplyPreference()
     {
-        bool available = output.available;
+        int attempts = _controller.Attempts;
+        _controller.Update(Time.realtimeSinceStartupAsDouble);
+        LogDiagnostics();
+        return _controller.Status switch
+        {
+            HDROutputController.Phase.HDR or HDROutputController.Phase.SDR => ApplyRequestResult.Applied,
+            HDROutputController.Phase.Pending => _controller.Attempts > attempts
+                ? ApplyRequestResult.Requested : ApplyRequestResult.AlreadyPending,
+            HDROutputController.Phase.NotSwitchable => ApplyRequestResult.RejectedNotSwitchable,
+            HDROutputController.Phase.Retrying => ApplyRequestResult.Retrying,
+            HDROutputController.Phase.Failed => ApplyRequestResult.Failed,
+            _ => ApplyRequestResult.RejectedUnsupported,
+        };
+    }
+
+    private static void LogDiagnostics()
+    {
         var state = new HDRDiagnosticState(
-            available,
-            available && output.active,
-            available && output.HDRModeChangeRequested,
-            SystemInfo.hdrDisplaySupportFlags,
-            available ? output.displayColorGamut : default,
-            available ? output.paperWhiteNits : 0f,
-            available ? output.minToneMapLuminance : 0,
-            available ? output.maxToneMapLuminance : 0);
+            _controller.Current, Enabled, Status, _controller.Attempts, _controller.Error);
         if (_hasDiagnosticState && state == _lastDiagnosticState)
         {
             return;
@@ -169,14 +139,27 @@ public static class HDROutput
 
         _lastDiagnosticState = state;
         _hasDiagnosticState = true;
-        Debug.Log(
+        string message =
             "[HDR] " +
-            $"available={state.Available}, active={state.Active}, " +
-            $"changeRequested={state.ChangeRequested}, " +
-            $"supportFlags={state.SupportFlags}, gamut={state.Gamut}, " +
-            $"paperWhite={state.PaperWhiteNits:F1} nits, " +
-            $"min={state.MinToneMapLuminance} nits, " +
-            $"max={state.MaxToneMapLuminance} nits.");
+            $"available={state.Output.Available}, active={state.Output.Active}, " +
+            $"changeRequested={state.Output.Pending}, " +
+            $"display={state.Output.Identity}, desired={state.DesiredHDR}, phase={state.Phase}, " +
+            $"attempts={state.Attempts}, error={state.Error}, " +
+            $"environment={Application.platform}, graphicsAPI={SystemInfo.graphicsDeviceType}, " +
+            $"pipelineHDR={_controller.Current.PipelineSupported}, " +
+            $"supported={state.Output.Supported}, switchable={state.Output.Switchable}, " +
+            $"gamut={(ColorGamut)state.Output.Gamut}, " +
+            $"paperWhite={state.Output.PaperWhiteNits:F1} nits, " +
+            $"min={state.Output.MinNits} nits, " +
+            $"max={state.Output.MaxNits} nits.";
+        if (state.Phase == HDROutputController.Phase.Failed)
+        {
+            Debug.LogWarning(message);
+        }
+        else
+        {
+            Debug.Log(message);
+        }
     }
 
     public static void AppendDebugInfo(StringBuilder builder, Camera? camera)
@@ -186,29 +169,25 @@ public static class HDROutput
             throw new ArgumentNullException(nameof(builder));
         }
 
-        HDROutputSettings output = HDROutputSettings.main;
-        bool available = output.available;
-        bool active = available && output.active;
-        bool changeRequested = available && output.HDRModeChangeRequested;
-        ColorGamut gamut = available ? output.displayColorGamut : default;
-        float paperWhiteNits = available ? output.paperWhiteNits : 0f;
-        int minNits = available ? output.minToneMapLuminance : 0;
-        int maxNits = available ? output.maxToneMapLuminance : 0;
-        string status = !Enabled
-            ? "DISABLED"
-            : active
-                ? "ACTIVE"
-                : available ? "AVAILABLE / INACTIVE" : "UNAVAILABLE";
+        HDROutputController.Snapshot output = _controller.Current;
+        string status = Status.ToString();
         builder.Append("<b>[HDR: ").Append(status).Append("]</b>\n")
+            .Append("Window display: ").Append(output.Identity.Name)
+            .Append(" | Environment: ").Append(Application.platform)
+            .Append(" | Graphics API: ").Append(SystemInfo.graphicsDeviceType).Append('\n')
             .Append("Enabled in settings: ").Append(Enabled).Append('\n')
-            .Append("Available: ").Append(available)
-            .Append(" | Active: ").Append(active)
-            .Append(" | Requested: ").Append(changeRequested).Append('\n')
-            .Append("Support: ").Append(SystemInfo.hdrDisplaySupportFlags)
-            .Append(" | Gamut: ").Append(gamut).Append('\n')
-            .Append("Luminance: ").Append(minNits)
-            .Append(" / ").Append(paperWhiteNits.ToString("F1"))
-            .Append(" / ").Append(maxNits)
+            .Append("Attempts: ").Append(_controller.Attempts)
+            .Append(" | Error: ").Append(_controller.Error ?? "none").Append('\n')
+            .Append("Available: ").Append(output.Available)
+            .Append(" | Active: ").Append(output.Active)
+            .Append(" | Requested: ").Append(output.Pending).Append('\n')
+            .Append("Supported: ").Append(output.Supported)
+            .Append(" | Pipeline HDR: ").Append(output.PipelineSupported)
+            .Append(" | Switchable: ").Append(output.Switchable)
+            .Append(" | Gamut: ").Append((ColorGamut)output.Gamut).Append('\n')
+            .Append("Luminance: ").Append(output.MinNits)
+            .Append(" / ").Append(output.PaperWhiteNits.ToString("F1"))
+            .Append(" / ").Append(output.MaxNits)
             .Append(" nits (min / paper / OS max)\n");
 
         if (camera == null)
@@ -245,11 +224,9 @@ public static class HDROutput
         camera.allowHDR = true;
         if (camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
         {
-            HDROutputSettings output = HDROutputSettings.main;
-
-            // Match the actual swapchain while an asynchronous mode change
-            // is pending; SDR numbers must never be sent to an HDR surface.
-            cameraData.allowHDROutput = output.available && output.active;
+            // This is permission, not a cached copy of the swapchain state.
+            // URP checks the live output state when constructing camera data.
+            cameraData.allowHDROutput = true;
 
             // Artistic effects run before URP. URP owns tone mapping,
             // display primaries, UI composition and transfer encoding.

@@ -41,7 +41,10 @@ public sealed class PostProcessRuntimeContractRule : IRule
         new(
             "Fodinae.Rendering.DisplayManager",
             "SetHDREnabled",
-            [new("Fodinae.Rendering.HDROutput", "SetEnabled", 2)]),
+            [
+                new("Fodinae.Rendering.HDROutput", "SetEnabled", 1),
+                new("Fodinae.Rendering.HDROutput", "ConfigureCamera", 1),
+            ]),
     ];
 
     public string Id => "FOD-POSTPROCESS-RUNTIME";

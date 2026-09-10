@@ -208,7 +208,7 @@ public static class RuntimeEffekseerLoader
 
         // Single-frame images are normalized to the same explicit runtime
         // format as terrain and UI textures.
-        return RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+        return RuntimeTextureFactory.DecodeEncodedImageToRGBA32NoMip(
             bytes,
             $"EffekseerTex_{serverPath}",
             RuntimeTextureColorSpace.Srgb,

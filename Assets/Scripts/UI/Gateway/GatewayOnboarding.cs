@@ -385,6 +385,8 @@ public sealed class GatewayOnboarding
                 config.Audio.MuteInBackground = mute.value;
             }
         });
+
+        Fodinae.Rendering.DisplayManager.ApplyFrameTiming(_clientConfig.Config.Display);
     }
 
     private static float ValueOfUIScale(int index)

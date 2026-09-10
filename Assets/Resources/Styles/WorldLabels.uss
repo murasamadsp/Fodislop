@@ -11,19 +11,39 @@
     position: absolute;
     left: 0;
     top: 0;
+}
+
+.world-label-name {
+    font-size: 12px;
     color: white;
     -unity-text-outline-width: 1px;
     -unity-text-outline-color: rgba(0, 0, 0, 0.8);
 }
 
-.world-label-name {
-    font-size: 12px;
-}
-
+/* Облако локального чата.
+ *
+ * Числа взяты из эталона, не подобраны: спрайт 32x32 с рамкой девятки
+ * {лево 13, низ 22, право 12, верх 7}, цвет фона белый с альфой 0.616,
+ * текст чёрный по центру, кегль 14. Хвост облака сидит в нижней части
+ * спрайта, поэтому облако висит НАД роботом и указывает на него вниз.
+ *
+ * Обводки у текста нет намеренно: она нужна была белым буквам на прозрачном
+ * фоне, а здесь фон свой и буквы тёмные.
+ */
 .world-label-chat {
     font-size: 14px;
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 3px 8px;
+    color: rgb(0, 0, 0);
+    -unity-text-align: middle-center;
+    background-image: resource("UI/Sprites/LocalChatBubble");
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0.616);
+    -unity-slice-left: 13;
+    -unity-slice-bottom: 22;
+    -unity-slice-right: 12;
+    -unity-slice-top: 7;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 6px;
+    padding-bottom: 24px;
     max-width: 360px;
     white-space: normal;
 }

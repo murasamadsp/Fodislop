@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
+using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
 using Unity.Profiling;
 using UnityEngine;
@@ -31,6 +32,16 @@ namespace Fodinae.Game
 
         private readonly List<Tentacle> _tentacles = [];
         private readonly List<SpriteHandle> _sprites = [];
+
+        /// <summary>Видимые спрайты этого кадра, разложенные по слоям отрисовки.</summary>
+        /// <remarks>
+        /// Списки живут в поле, а не заводятся на кадр: пересборка идёт каждый
+        /// кадр, пока в мире хоть что-то движется, и три новых списка на кадр
+        /// были бы мусором на ровном месте.
+        /// </remarks>
+        private readonly List<SpriteHandle> _visibleUnderTentacles = [];
+        private readonly List<SpriteHandle> _visibleOverTentacles = [];
+        private readonly List<SpriteHandle> _visibleOverlay = [];
         private Vector3[] _verts = new Vector3[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Vector2[] _uvs = new Vector2[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
         private Color32[] _colors = new Color32[VERTS_PER_TENTACLE * INITIAL_CAPACITY];
@@ -41,92 +52,25 @@ namespace Fodinae.Game
         private int _uploadedTentacleCount = -1;
         private int _uploadedSpriteCount = -1;
         private bool _geometryDirty = true;
+
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
         [Inject]
         private ISharedMaterialCache _sharedMaterials = null!;
+        [Inject]
+        private IGameplayCamera? _gameplayCamera;
 
-        public sealed class SpriteHandle
+        public sealed class SpriteHandle : WorldEntitySpriteHandle
         {
-            internal SpriteHandle(Transform transform, int sortingOrder)
+            internal SpriteHandle(Transform transform, int sortingOrder, bool isStatic = false)
+                : base(transform, sortingOrder, isStatic)
             {
-                Transform = transform;
-                SortingOrder = sortingOrder;
-            }
-
-            internal Transform Transform { get; }
-            internal int SortingOrder { get; }
-            internal Sprite? Sprite { get; private set; }
-            internal Color Color { get; private set; } = Color.white;
-            internal bool Enabled { get; private set; }
-            private Vector3 _lastPosition;
-            private Quaternion _lastRotation;
-            private Vector3 _lastScale;
-            private Sprite? _lastSprite;
-            private Color _lastColor;
-            private bool _lastEnabled;
-            private bool _hasSnapshot;
-
-            public void SetSprite(Sprite? sprite)
-            {
-                Sprite = sprite;
-                if (sprite == null)
-                {
-                    Enabled = false;
-                }
-            }
-
-            public void SetColor(Color color)
-            {
-                Color = color;
-            }
-
-            public void SetEnabled(bool enabled)
-            {
-                Enabled = enabled && Sprite != null;
-            }
-
-            internal bool HasChanged()
-            {
-                if (Transform == null)
-                {
-                    return _hasSnapshot;
-                }
-
-                return !_hasSnapshot ||
-                    _lastPosition != Transform.position ||
-                    _lastRotation != Transform.rotation ||
-                    _lastScale != Transform.lossyScale ||
-                    _lastSprite != Sprite ||
-                    _lastColor != Color ||
-                    _lastEnabled != Enabled;
-            }
-
-            internal void CaptureState()
-            {
-                if (Transform == null)
-                {
-                    _lastPosition = Vector3.zero;
-                    _lastRotation = Quaternion.identity;
-                    _lastScale = Vector3.one;
-                }
-                else
-                {
-                    _lastPosition = Transform.position;
-                    _lastRotation = Transform.rotation;
-                    _lastScale = Transform.lossyScale;
-                }
-
-                _lastSprite = Sprite;
-                _lastColor = Color;
-                _lastEnabled = Enabled;
-                _hasSnapshot = true;
             }
         }
 
-        public SpriteHandle RegisterSprite(Transform spriteTransform, int sortingOrder)
+        public SpriteHandle RegisterSprite(Transform spriteTransform, int sortingOrder, bool isStatic = false)
         {
-            var handle = new SpriteHandle(spriteTransform, sortingOrder);
+            var handle = new SpriteHandle(spriteTransform, sortingOrder, isStatic);
             _sprites.Add(handle);
             _sprites.Sort(static (left, right) => left.SortingOrder.CompareTo(right.SortingOrder));
             _geometryDirty = true;
@@ -188,9 +132,26 @@ namespace Fodinae.Game
                 "World-entity atlas is not initialized.");
         }
 
+        /// <remarks>
+        /// ПОРЯДОК ЗДЕСЬ ОБЯЗАТЕЛЕН. Сперва один опрос трансформов на кадр,
+        /// и только потом всё остальное: проверка изменений, отбор видимых,
+        /// запись геометрии и снимок состояния читают снятые значения и в
+        /// движок больше не ходят.
+        ///
+        /// Раньше опроса как такового не было — каждый из этих проходов
+        /// спрашивал трансформ сам. Проходов было пять, и все шли по всему
+        /// списку зарегистрированных спрайтов, а не по видимым: здания
+        /// сидят в хвосте по порядку сортировки, и город платил за себя
+        /// в каждом кадре просто фактом своего существования.
+        /// </remarks>
         protected void LateUpdate()
         {
             using var marker = _LateUpdateMarker.Auto();
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                _sprites[i].RefreshFrameState();
+            }
+
             if (!_geometryDirty)
             {
                 for (int i = 0; i < _sprites.Count; i++)
@@ -203,11 +164,111 @@ namespace Fodinae.Game
                 }
             }
 
-            if (_geometryDirty && _mesh != null)
+            if (!_geometryDirty || _mesh == null)
             {
-                RebuildMesh();
-                _overlayBatch?.Rebuild(_sprites, GetAtlasRect);
+                return;
             }
+
+            Camera? camera = _gameplayCamera?.Camera;
+            bool hasCamera = TryGetVisibleRect(camera, out Rect visibleRect);
+            CollectVisibleSprites(hasCamera, visibleRect);
+            RebuildMesh(hasCamera, visibleRect);
+            _overlayBatch?.Rebuild(_visibleOverlay, GetAtlasRect, _mesh.bounds);
+
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                _sprites[i].CaptureState();
+            }
+
+            _geometryDirty = false;
+        }
+
+        /// <summary>
+        /// Раскладывает видимые спрайты по слоям одним проходом.
+        /// </summary>
+        /// <remarks>
+        /// Границы слоёв — по порядку сортировки, а список отсортирован по нему
+        /// же, но опираться на это отбором с ранним выходом нельзя: отсечение по
+        /// видимости прореживает список внутри каждого слоя, и выйти раньше
+        /// значит потерять спрайт. Проход остаётся один на кадр, и в нём нет ни
+        /// одного обращения в движок.
+        /// </remarks>
+        private void CollectVisibleSprites(bool hasCamera, in Rect visibleRect)
+        {
+            _visibleUnderTentacles.Clear();
+            _visibleOverTentacles.Clear();
+            _visibleOverlay.Clear();
+
+            for (int i = 0; i < _sprites.Count; i++)
+            {
+                SpriteHandle handle = _sprites[i];
+                if (!IsRenderable(handle) || !IsInView(handle, hasCamera, visibleRect))
+                {
+                    continue;
+                }
+
+                if (handle.SortingOrder >= OVERLAY_BATCH_SORTING_ORDER)
+                {
+                    _visibleOverlay.Add(handle);
+                }
+                else if (handle.SortingOrder < TENTACLE_SORTING_ORDER)
+                {
+                    _visibleUnderTentacles.Add(handle);
+                }
+                else
+                {
+                    _visibleOverTentacles.Add(handle);
+                }
+            }
+        }
+
+        private static bool TryGetVisibleRect(Camera? camera, out Rect visibleRect)
+        {
+            if (camera == null)
+            {
+                visibleRect = default;
+                return false;
+            }
+
+            Transform camTransform = camera.transform;
+            Vector3 camPos = camTransform.position;
+            float halfHeight = camera.orthographic
+                ? camera.orthographicSize
+                : (Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * Mathf.Abs(camPos.z));
+            float halfWidth = halfHeight * camera.aspect;
+
+            const float margin = 8.0f;
+            float minX = camPos.x - halfWidth - margin;
+            float minY = camPos.y - halfHeight - margin;
+            float width = (halfWidth + margin) * 2f;
+            float height = (halfHeight + margin) * 2f;
+
+            visibleRect = new Rect(minX, minY, width, height);
+            return true;
+        }
+
+        private static bool IsInView(SpriteHandle handle, bool hasCamera, in Rect visibleRect)
+        {
+            if (!hasCamera)
+            {
+                return true;
+            }
+
+            Vector3 pos = handle.GetWorldPosition();
+            return pos.x >= visibleRect.xMin && pos.x <= visibleRect.xMax &&
+                   pos.y >= visibleRect.yMin && pos.y <= visibleRect.yMax;
+        }
+
+        private static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect)
+        {
+            if (!hasCamera)
+            {
+                return true;
+            }
+
+            Vector3 pos = tentacle.RootPosition;
+            return pos.x >= visibleRect.xMin && pos.x <= visibleRect.xMax &&
+                   pos.y >= visibleRect.yMin && pos.y <= visibleRect.yMax;
         }
 
         private void EnsureRenderer()
@@ -248,55 +309,33 @@ namespace Fodinae.Game
             atlas.EnsureTexture(texture);
         }
 
-        private void RebuildMesh()
+        private void RebuildMesh(bool hasCamera, in Rect visibleRect)
         {
             Mesh mesh = _mesh ?? throw new InvalidOperationException(
                 "Tentacle mesh must exist before geometry is rebuilt.");
             int activeCount = 0;
             for (int i = 0; i < _tentacles.Count; i++)
             {
-                if (_tentacles[i].IsActive)
+                Tentacle tentacle = _tentacles[i];
+                if (tentacle.IsActive && IsTentacleInView(tentacle, hasCamera, visibleRect))
                 {
                     activeCount++;
                 }
             }
 
-            int activeSpriteCount = 0;
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                if (_sprites[i].Enabled &&
-                    _sprites[i].Transform != null &&
-                    _sprites[i].SortingOrder < OVERLAY_BATCH_SORTING_ORDER)
-                {
-                    activeSpriteCount++;
-                }
-            }
-
+            int activeSpriteCount = _visibleUnderTentacles.Count + _visibleOverTentacles.Count;
             int vertexCount = (activeCount * VERTS_PER_TENTACLE) + (activeSpriteCount * 4);
             int indexCount = (activeCount * TRIS_PER_TENTACLE) + (activeSpriteCount * 6);
             EnsureGeometryCapacity(vertexCount, indexCount);
 
             int vertexCursor = 0;
             int indexCursor = 0;
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                SpriteHandle handle = _sprites[i];
-                if (!IsRenderable(handle) ||
-                    handle.SortingOrder >= TENTACLE_SORTING_ORDER ||
-                    handle.SortingOrder >= OVERLAY_BATCH_SORTING_ORDER)
-                {
-                    continue;
-                }
-
-                WriteSpriteGeometry(handle, vertexCursor, indexCursor);
-                vertexCursor += 4;
-                indexCursor += 6;
-            }
+            WriteSprites(_visibleUnderTentacles, ref vertexCursor, ref indexCursor);
 
             for (int i = 0; i < _tentacles.Count; i++)
             {
                 Tentacle tentacle = _tentacles[i];
-                if (!tentacle.IsActive)
+                if (!tentacle.IsActive || !IsTentacleInView(tentacle, hasCamera, visibleRect))
                 {
                     continue;
                 }
@@ -311,6 +350,7 @@ namespace Fodinae.Game
                 {
                     _colors[vertexOffset + vertex] = Color.white;
                 }
+
                 int indexOffset = indexCursor;
                 for (int segment = 0; segment < POINT_COUNT - 1; segment++)
                 {
@@ -328,20 +368,10 @@ namespace Fodinae.Game
                 indexCursor += TRIS_PER_TENTACLE;
             }
 
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                SpriteHandle handle = _sprites[i];
-                if (!IsRenderable(handle) ||
-                    handle.SortingOrder < TENTACLE_SORTING_ORDER ||
-                    handle.SortingOrder >= OVERLAY_BATCH_SORTING_ORDER)
-                {
-                    continue;
-                }
+            WriteSprites(_visibleOverTentacles, ref vertexCursor, ref indexCursor);
 
-                WriteSpriteGeometry(handle, vertexCursor, indexCursor);
-                vertexCursor += 4;
-                indexCursor += 6;
-            }
+            vertexCount = vertexCursor;
+            indexCount = indexCursor;
 
             bool topologyChanged =
                 _uploadedTentacleCount != activeCount ||
@@ -367,78 +397,59 @@ namespace Fodinae.Game
                         calculateBounds: false);
                 }
 
-                Vector3 minimum = _verts[0];
-                Vector3 maximum = minimum;
-                for (int i = 1; i < vertexCount; i++)
+                if (hasCamera)
                 {
-                    minimum = Vector3.Min(minimum, _verts[i]);
-                    maximum = Vector3.Max(maximum, _verts[i]);
+                    mesh.bounds = new Bounds(
+                        new Vector3(visibleRect.center.x, visibleRect.center.y, 0f),
+                        new Vector3(visibleRect.size.x, visibleRect.size.y, 10f));
                 }
+                else
+                {
+                    Vector3 minimum = _verts[0];
+                    Vector3 maximum = minimum;
+                    for (int i = 1; i < vertexCount; i++)
+                    {
+                        minimum = Vector3.Min(minimum, _verts[i]);
+                        maximum = Vector3.Max(maximum, _verts[i]);
+                    }
 
-                mesh.bounds = new Bounds(
-                    (minimum + maximum) * 0.5f,
-                    maximum - minimum + new Vector3(0.1f, 0.1f, 0.1f));
+                    mesh.bounds = new Bounds(
+                        (minimum + maximum) * 0.5f,
+                        maximum - minimum + new Vector3(0.1f, 0.1f, 0.1f));
+                }
             }
 
             _uploadedTentacleCount = activeCount;
             _uploadedSpriteCount = activeSpriteCount;
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                _sprites[i].CaptureState();
-            }
-
-            _geometryDirty = false;
         }
 
         private static bool IsRenderable(SpriteHandle handle)
         {
-            return handle.Enabled && handle.Transform != null && handle.Sprite != null;
+            return handle.Enabled && handle.FrameAlive && handle.Sprite != null;
         }
 
-        private void WriteSpriteGeometry(SpriteHandle handle, int vertexOffset, int indexOffset)
+        private void WriteSprites(
+            List<SpriteHandle> handles,
+            ref int vertexCursor,
+            ref int indexCursor)
         {
-            Sprite sprite = handle.Sprite ?? throw new InvalidOperationException(
-                "An enabled batched sprite requires a Sprite.");
-            Rect textureAtlasRect = GetAtlasRect(sprite.texture);
-            Rect source = sprite.rect;
-            float pixelsPerUnit = sprite.pixelsPerUnit;
-            Vector2 pivot = new(
-                sprite.pivot.x / source.width,
-                sprite.pivot.y / source.height);
-            float width = source.width / pixelsPerUnit;
-            float height = source.height / pixelsPerUnit;
-            float left = -pivot.x * width;
-            float right = left + width;
-            float bottom = -pivot.y * height;
-            float top = bottom + height;
-            Transform spriteTransform = handle.Transform;
-
-            _verts[vertexOffset] = spriteTransform.TransformPoint(new Vector3(left, bottom, 0f));
-            _verts[vertexOffset + 1] = spriteTransform.TransformPoint(new Vector3(left, top, 0f));
-            _verts[vertexOffset + 2] = spriteTransform.TransformPoint(new Vector3(right, bottom, 0f));
-            _verts[vertexOffset + 3] = spriteTransform.TransformPoint(new Vector3(right, top, 0f));
-
-            float uMin = textureAtlasRect.xMin + ((source.xMin / sprite.texture.width) * textureAtlasRect.width);
-            float uMax = textureAtlasRect.xMin + ((source.xMax / sprite.texture.width) * textureAtlasRect.width);
-            float vMin = textureAtlasRect.yMin + ((source.yMin / sprite.texture.height) * textureAtlasRect.height);
-            float vMax = textureAtlasRect.yMin + ((source.yMax / sprite.texture.height) * textureAtlasRect.height);
-            _uvs[vertexOffset] = new Vector2(uMin, vMin);
-            _uvs[vertexOffset + 1] = new Vector2(uMin, vMax);
-            _uvs[vertexOffset + 2] = new Vector2(uMax, vMin);
-            _uvs[vertexOffset + 3] = new Vector2(uMax, vMax);
-
-            Color32 color = handle.Color;
-            _colors[vertexOffset] = color;
-            _colors[vertexOffset + 1] = color;
-            _colors[vertexOffset + 2] = color;
-            _colors[vertexOffset + 3] = color;
-
-            _tris[indexOffset] = vertexOffset;
-            _tris[indexOffset + 1] = vertexOffset + 1;
-            _tris[indexOffset + 2] = vertexOffset + 2;
-            _tris[indexOffset + 3] = vertexOffset + 2;
-            _tris[indexOffset + 4] = vertexOffset + 1;
-            _tris[indexOffset + 5] = vertexOffset + 3;
+            for (int i = 0; i < handles.Count; i++)
+            {
+                SpriteHandle handle = handles[i];
+                Sprite sprite = handle.Sprite ?? throw new InvalidOperationException(
+                    "An enabled batched sprite requires a Sprite.");
+                WorldEntityGeometry.WriteSprite(
+                    _verts,
+                    _uvs,
+                    _colors,
+                    _tris,
+                    handle,
+                    GetAtlasRect(sprite.texture),
+                    vertexCursor,
+                    indexCursor);
+                vertexCursor += 4;
+                indexCursor += 6;
+            }
         }
 
         private void EnsureGeometryCapacity(int vertexCount, int indexCount)

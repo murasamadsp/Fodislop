@@ -5,7 +5,6 @@
 #pragma kernel DisplayFinal
 #pragma multi_compile _ HDR_COLORSPACE_CONVERSION
 
-#include "ColorGrading.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl"
@@ -41,7 +40,9 @@ float _ChromaticAberrationIntensity;
 float _Exposure;
 float4 _ColorFilter;
 float _Contrast;
+float4 _ContrastControls;
 float _Saturation;
+float _CdlSaturation;
 float _Gamma;
 float _DisplayPaperWhiteNits;
 float _DisplayPeakRelative;
@@ -50,14 +51,53 @@ float _DisplayPeakRelative;
 // Устроен как _DebugView в WorldLighting.compute — ранним выходом.
 int _PostDebugView;
 
-// Шторка сравнения: доля ширины кадра, левее которой кривая не применяется.
-// Ноль — выключено. Главный инструмент сравнения: разница видна на одном
-// кадре в одну секунду, а не по памяти между двумя запусками.
+// Шторка сравнения. CompareSplit используется только режимами wipe; режим
+// Off всегда отключает сравнение, даже если в буфере осталась старая позиция.
 float _CompareSplit;
+int _CompareMode;   // 0 off, 1 vertical, 2 horizontal, 3 side-by-side, 4 A/B
+int _CompareBefore;
 float2 _WhiteBalance;   // x=температура, y=оттенок, оба в [-100, 100]
 float4 _CdlSlope;       // ASC CDL, применяется в логарифмическом пространстве
 float4 _CdlOffset;
 float4 _CdlPower;
+float3 _CdlMaster; // slope, offset, power master values
+float4 _PrimaryLift;
+float4 _PrimaryGamma;
+float4 _PrimaryGain;
+float4 _PrimaryOffset;
+float4 _PrimaryMaster; // lift, gamma, gain, offset master values
+// x=center hue degrees, y=half-width, z=feather, w=saturation multiplier.
+float4 _HueVsSaturation;
+float4 _HueVsHue;
+float4 _HueVsLuminance;
+float4 _LuminanceVsSaturation;
+float4 _SaturationVsSaturation;
+float _Vibrance;
+float _Hue;
+float _BlackPoint;
+float _InputWhitePoint;
+float _HighlightRecovery;
+float4 _DisplayGrade0; // white point, grey output, curve slope, transform
+float4 _DisplayGrade1; // shoulder power, toe power, toe stops, path-to-white
+float _DisplayGradePathPower;
+float4 _Qualifier0; // hue center/width/softness, enabled(+)/invert(-)
+float4 _Qualifier1; // sat center/width/softness, luma center
+float4 _Qualifier2; // luma width/softness, hue shift, saturation multiplier
+float4 _Qualifier3; // exposure, temperature, tint, reserved
+float4 _Qualifier4; // lift RGB, reserved
+float4 _Qualifier5; // gamma RGB, reserved
+float4 _Qualifier6; // gain RGB, reserved
+float4 _QualifierHueSamples[8]; // hue center/width/softness for additive samples
+int _QualifierHueSampleCount;
+Texture2D<float4> _GradeLut1D;
+Texture3D<float4> _GradeLut3D;
+SamplerState sampler_GradeLut1D_LinearClamp;
+SamplerState sampler_GradeLut3D_LinearClamp;
+float4 _GradeLutParams; // intensity, type (1D/3D), color-space mode, reserved
+float3 _GradeLutDomainMin;
+float3 _GradeLutDomainMax;
+float4 _ColorManagement0; // input, working, output primaries, reference mode
+float4 _ColorManagement1; // input transfer, output transfer, SDR(0)/HDR(1)
 
 float _EigengrauIntensity;
 float4 _EigengrauColor;
@@ -71,6 +111,32 @@ float4 _Advanced1; // anamorphic length, diffraction, heat intensity/scale
 float4 _Advanced2; // glint intensity/threshold, dust intensity/scale
 float4 _Advanced3; // dust speed, phosphor mask, dithering, reserved
 float4 _Temporal; // persistence intensity/decay, stability, temporal motion blur
+
+// Color grading functions must see the complete parameter block above. Keeping
+// this include after the declarations also makes Metal compile every kernel
+// consistently; Metal does not allow a function to reference a later global.
+#include "ColorGrading.hlsl"
+
+inline bool CompareShowsBefore(float2 screenUv)
+{
+    bool showBefore = _CompareMode == 4 && _CompareBefore != 0;
+    if (_CompareMode == 1)
+    {
+        showBefore = screenUv.x < _CompareSplit;
+    }
+
+    if (_CompareMode == 2)
+    {
+        showBefore = screenUv.y < _CompareSplit;
+    }
+
+    if (_CompareMode == 3)
+    {
+        showBefore = screenUv.x < 0.5;
+    }
+
+    return showBefore;
+}
 
 float LinearToPerceptual(float linearValue)
 {
@@ -113,12 +179,34 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
     // Prefilter directly to half resolution. Four source taps retain small
     // emissive sprites without paying for a separate full-resolution pass.
     float2 halfTexel = _SourceTexelSize.xy * 0.5;
-    float4 color =
-        _InputTex.SampleLevel(sampler_LinearClamp, uv + float2(-halfTexel.x, -halfTexel.y), 0) +
-        _InputTex.SampleLevel(sampler_LinearClamp, uv + float2( halfTexel.x, -halfTexel.y), 0) +
-        _InputTex.SampleLevel(sampler_LinearClamp, uv + float2(-halfTexel.x,  halfTexel.y), 0) +
-        _InputTex.SampleLevel(sampler_LinearClamp, uv + float2( halfTexel.x,  halfTexel.y), 0);
-    color *= 0.25;
+    float4 sample0 = _InputTex.SampleLevel(
+        sampler_LinearClamp,
+        uv + float2(-halfTexel.x, -halfTexel.y),
+        0);
+    float4 sample1 = _InputTex.SampleLevel(
+        sampler_LinearClamp,
+        uv + float2( halfTexel.x, -halfTexel.y),
+        0);
+    float4 sample2 = _InputTex.SampleLevel(
+        sampler_LinearClamp,
+        uv + float2(-halfTexel.x,  halfTexel.y),
+        0);
+    float4 sample3 = _InputTex.SampleLevel(
+        sampler_LinearClamp,
+        uv + float2( halfTexel.x,  halfTexel.y),
+        0);
+    // Bloom is composed with the working-space main image in CompositeFinal.
+    // Decode and adapt each sample before averaging: applying a nonlinear
+    // transfer or primary matrix after the average is not colorimetrically
+    // equivalent for P3/Rec.2020 or sRGB/PQ inputs.
+    float3 workingBloom =
+        ApplyColorManagementInput(sample0.rgb) +
+        ApplyColorManagementInput(sample1.rgb) +
+        ApplyColorManagementInput(sample2.rgb) +
+        ApplyColorManagementInput(sample3.rgb);
+    float4 color = float4(
+        workingBloom * 0.25,
+        (sample0.a + sample1.a + sample2.a + sample3.a) * 0.25);
 
     float lum = Luminance(color.rgb);
     float knee = max(_BloomThreshold * _BloomSoftKnee, 0.0001);
@@ -209,7 +297,7 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     // физически. Оставлено потому, что прибитая единица — это молчаливая
     // потеря данных, которая всплывёт ровно в тот день, когда буфер станет
     // 64-битным, и искать её будут долго.
-    float3 color;
+    float3 color = 0.0;
     float srcAlpha = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).a;
     if (_ChromaticAberrationIntensity > 0.001)
     {
@@ -225,6 +313,7 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     {
         color = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).rgb;
     }
+    color = ApplyColorManagementInput(color);
 
     // 2. Bloom Composition
     if (_BloomIntensity > 0.001 ||
@@ -275,10 +364,22 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     {
         float2 contrastOffset = _ScreenSize.zw * 2.0;
         float3 localMean =
-            _InputTex.SampleLevel(sampler_LinearClamp, uv + float2( contrastOffset.x,  contrastOffset.y), 0).rgb +
-            _InputTex.SampleLevel(sampler_LinearClamp, uv + float2(-contrastOffset.x,  contrastOffset.y), 0).rgb +
-            _InputTex.SampleLevel(sampler_LinearClamp, uv + float2( contrastOffset.x, -contrastOffset.y), 0).rgb +
-            _InputTex.SampleLevel(sampler_LinearClamp, uv + float2(-contrastOffset.x, -contrastOffset.y), 0).rgb;
+            ApplyColorManagementInput(_InputTex.SampleLevel(
+                sampler_LinearClamp,
+                uv + float2(contrastOffset.x, contrastOffset.y),
+                0).rgb) +
+            ApplyColorManagementInput(_InputTex.SampleLevel(
+                sampler_LinearClamp,
+                uv + float2(-contrastOffset.x, contrastOffset.y),
+                0).rgb) +
+            ApplyColorManagementInput(_InputTex.SampleLevel(
+                sampler_LinearClamp,
+                uv + float2(contrastOffset.x, -contrastOffset.y),
+                0).rgb) +
+            ApplyColorManagementInput(_InputTex.SampleLevel(
+                sampler_LinearClamp,
+                uv + float2(-contrastOffset.x, -contrastOffset.y),
+                0).rgb);
         color += (color - localMean * 0.25) * _Advanced0.x;
     }
 
@@ -316,7 +417,15 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
             color, WhiteBalanceCoefficients(_WhiteBalance.x, _WhiteBalance.y));
     }
 
-    color = max(0.0, color);
+    color = ApplyInputRange(color, _BlackPoint, _InputWhitePoint, _HighlightRecovery);
+
+    color = ApplyPrimaryWheels(
+        color,
+        _PrimaryLift.rgb,
+        _PrimaryGamma.rgb,
+        _PrimaryGain.rgb,
+        _PrimaryOffset.rgb,
+        _PrimaryMaster);
 
     const float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
 
@@ -331,27 +440,60 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     // Экранная координата берётся заново: uv выше могло сдвинуть тепловое
     // искажение, а шторка обязана стоять ровно.
     float2 screenUv = (id.xy + 0.5) * _ScreenSize.zw;
-    bool leftOfSplit = _CompareSplit > 0.0 && screenUv.x < _CompareSplit;
+    bool showBefore = CompareShowsBefore(screenUv);
 
     // The creative grade is independent from the display curve. Previously
     // bypassing/soloing the curve also bypassed CDL, and the comparison split
     // compared two different grades instead of only showing curve before/after.
-    float3 logColor = FodinaeLogEncode(color);
-    logColor = ApplyCdl(logColor, _CdlSlope.rgb, _CdlOffset.rgb, _CdlPower.rgb);
+    bool displayReferred = _ColorManagement0.w > 0.5;
+    float3 logColor = displayReferred
+        ? FodinaeDisplayEncode(color)
+        : FodinaeLogEncode(color);
+    logColor = ApplyCdl(
+        logColor,
+        _CdlSlope.rgb * _CdlMaster.x,
+        _CdlOffset.rgb + _CdlMaster.y,
+        _CdlPower.rgb * _CdlMaster.z);
 
-    if (abs(_Contrast) > 0.001)
+    if (abs(_Contrast) > 0.001 ||
+        abs(_ContrastControls.x - 0.5) > 0.001 ||
+        abs(_ContrastControls.y) > 0.001 ||
+        abs(_ContrastControls.z) > 0.001 ||
+        abs(_ContrastControls.w) > 0.001 ||
+        abs(_ContrastControls2.x) > 0.001 ||
+        _ContrastControls2.y > 0.001 ||
+        _ContrastControls2.z > 0.001)
     {
-        const float contrastPivot = 0.5;
-        logColor = ApplyContrast(logColor, _Contrast, contrastPivot);
+        logColor = ApplyContrastControls(logColor, _Contrast, _ContrastControls, _ContrastControls2);
     }
 
-    float3 gradedLinear = FodinaeLogDecode(logColor);
+    float3 gradedLinear = displayReferred
+        ? FodinaeDisplayDecode(logColor)
+        : FodinaeLogDecode(logColor);
+    if (abs(_CdlSaturation - 1.0) > 0.001)
+    {
+        gradedLinear = ApplySaturation(gradedLinear, _CdlSaturation, lumaWeights);
+    }
+
     if (abs(_Saturation - 1.0) > 0.001)
     {
-        gradedLinear = ApplySaturation(max(0.0, gradedLinear), _Saturation, lumaWeights);
+        gradedLinear = ApplySaturation(gradedLinear, _Saturation, lumaWeights);
     }
 
-    color = max(0.0, leftOfSplit ? ungraded : gradedLinear);
+    gradedLinear = ApplyVibrance(gradedLinear, _Vibrance, lumaWeights);
+    gradedLinear = ApplyGlobalHue(gradedLinear, _Hue);
+    gradedLinear = ApplyHueVsHue(gradedLinear, _HueVsHue);
+    gradedLinear = ApplyHueVsSaturation(gradedLinear, _HueVsSaturation);
+    gradedLinear = ApplyHueVsLuminance(gradedLinear, _HueVsLuminance);
+    gradedLinear = ApplyLuminanceVsSaturation(gradedLinear, _LuminanceVsSaturation);
+    gradedLinear = ApplySaturationVsSaturation(gradedLinear, _SaturationVsSaturation);
+    gradedLinear = ApplySelectiveCurves(gradedLinear);
+    gradedLinear = ApplyQualifier(gradedLinear);
+
+    // Keep the grading result in float/HDR between stages. Negative values
+    // may be produced by offsets and contrast, and must not be discarded
+    // before temporal accumulation or the final display transform.
+    color = showBefore ? ungraded : gradedLinear;
 
     // Temporal stability belongs to scene-linear light. Both current and
     // history now have the same units, independent of display calibration.
@@ -369,7 +511,10 @@ float3 ToDisplayOutput(float3 color)
 #if defined(HDR_COLORSPACE_CONVERSION)
     color = RotateRec709ToOutputSpace(color);
 #endif
-    return max(0.0, color) * _DisplayPaperWhiteNits;
+    // HDR calibration can briefly be unavailable while the display mode is
+    // being reconciled. Never allow a zero white level to create NaN/Inf.
+    float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
+    return max(0.0, color) * paperWhite;
 }
 
 [numthreads(8, 8, 1)]
@@ -383,10 +528,13 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
     float srcAlpha = source.a;
     // URP supplies display-linear output: absolute nits in HDR, relative
     // white in SDR. Normalize only for the artistic screen effects.
-    float3 color = source.rgb / _DisplayPaperWhiteNits;
+    float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
+    float3 color = source.rgb / paperWhite;
+    color = ApplyColorManagementOutput(color);
 #if defined(HDR_COLORSPACE_CONVERSION)
     color = RotateOutputSpaceToRec709(color);
 #endif
+    bool showBefore = CompareShowsBefore(screenUv);
 
     // 5. Vignette
     if (_VignetteIntensity > 0.001)
@@ -452,9 +600,17 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         color = pow(max(color, 0.0), 2.2 / max(_Gamma, 0.1));
     }
 
+    if (!showBefore)
+    {
+        color = ApplyDisplayRollOff(color);
+        color = ApplyDisplayTransform(color);
+        color = ApplyCubeLut(color);
+        color = ApplyDisplayCurves(color);
+    }
+
     if (_Temporal.x > 0.001 || _Temporal.z > 0.001 || _Temporal.w > 0.001)
     {
-        float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb / _DisplayPaperWhiteNits;
+        float3 history = _HistoryTex.SampleLevel(sampler_LinearClamp, uv, 0).rgb / paperWhite;
 #if defined(HDR_COLORSPACE_CONVERSION)
         history = RotateOutputSpaceToRec709(history);
 #endif
@@ -465,7 +621,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
             for (int x = -1; x <= 1; x++)
             {
                 float3 sampleColor = _InputTex.SampleLevel(sampler_LinearClamp,
-                    uv + float2(x, y) * _ScreenSize.zw, 0).rgb / _DisplayPaperWhiteNits;
+                    uv + float2(x, y) * _ScreenSize.zw, 0).rgb / paperWhite;
 #if defined(HDR_COLORSPACE_CONVERSION)
                 sampleColor = RotateOutputSpaceToRec709(sampleColor);
 #endif
@@ -498,12 +654,76 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         // перцептивное, и по линейной яркости они легли бы неравномерно.
         float encoded = LinearToPerceptual(Luminance(max(color, 0.0)));
 
+        if (_PostDebugView == 3)
+        {
+            // Gamut is a property of the declared display space, not of the
+            // internal working space. Check the same output-primary transform
+            // that DisplayFinal uses so P3/Rec.2020 warnings are meaningful.
+            float3 displayGamutColor = ApplyColorManagementOutput(color);
+            float outOfGamut = max(
+                max(max(-displayGamutColor.r, -displayGamutColor.g),
+                    max(-displayGamutColor.b, 0.0)),
+                max(max(displayGamutColor.r - 1.0, displayGamutColor.g - 1.0),
+                    max(displayGamutColor.b - 1.0, 0.0)));
+            color = outOfGamut > 0.0001
+                ? float3(1.0, 0.0, 1.0)
+                : color;
+        }
+        else if (_PostDebugView == 4)
+        {
+            color = float3(Luminance(max(color, 0.0)), Luminance(max(color, 0.0)), Luminance(max(color, 0.0)));
+        }
+        else if (_PostDebugView == 5)
+        {
+            float maximum = max(color.r, max(color.g, color.b));
+            float minimum = min(color.r, min(color.g, color.b));
+            float saturation = saturate((maximum - minimum) / max(maximum, 1e-5));
+            color = float3(saturation, saturation, saturation);
+        }
+        else if (_PostDebugView == 6)
+        {
+            float matte = QualifierMask(color);
+            color = float3(matte, matte, matte);
+        }
+        else if (_PostDebugView == 7)
+        {
+            color = float3(color.r, color.r, color.r);
+        }
+        else if (_PostDebugView == 8)
+        {
+            color = float3(color.g, color.g, color.g);
+        }
+        else if (_PostDebugView == 9)
+        {
+            color = float3(color.b, color.b, color.b);
+        }
+        else if (_PostDebugView == 10 || _PostDebugView == 11)
+        {
+            float maxChannel = max(color.r, max(color.g, color.b));
+            float minChannel = min(color.r, min(color.g, color.b));
+            float clippingCeiling = _DisplayPeakRelative > 0.01
+                ? _DisplayPeakRelative * 0.995
+                : 0.999;
+            bool highlightClipped = maxChannel >= clippingCeiling;
+            bool shadowClipped = minChannel <= 0.0005;
+            bool marked = _PostDebugView == 10 ? highlightClipped : shadowClipped;
+            float3 marker = _PostDebugView == 10
+                ? float3(1.0, 0.0, 0.0)
+                : float3(0.0, 0.3, 1.0);
+            color = marked ? lerp(color, marker, 0.8) : color;
+        }
+        if (_PostDebugView >= 3)
+        {
+            _OutputTex[id.xy] = float4(ToDisplayOutput(color), srcAlpha);
+            return;
+        }
+
         if (_PostDebugView == 1)
         {
             // Ложный цвет по зонам. Границы совпадают с тем, что читают на
             // площадке: чёрное, тени, ключевой тон (18% серого приходится на
             // 0.46 в перцептивном), света, пересвет.
-            float3 falseColor;
+            float3 falseColor = float3(0.0, 0.0, 0.0);
             if (encoded < 0.02)
             {
                 falseColor = float3(0.0, 0.0, 0.45);          // провал в чёрное

@@ -19,6 +19,10 @@ internal sealed class ScopesPassData
     public int SourceWidth;
     public int SourceHeight;
     public float SignalScale;
-    public bool HdrOutput;
-    public ColorGamut HdrGamut;
+    public int HistogramMode;
+    public float VectorscopeScale;
+    public bool ShowSkinToneLine;
+    public int WaveformMode;
+    public bool HDROutput;
+    public ColorGamut HDRGamut;
 }

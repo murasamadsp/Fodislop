@@ -200,6 +200,8 @@ namespace Fodinae.UI
 
             PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
             PostProcessRuntimeState.CompareSplit = 0f;
+            PostProcessRuntimeState.CompareMode = CompareMode.Off;
+            PostProcessRuntimeState.CompareBefore = false;
         }
 
         private void OnGUI()

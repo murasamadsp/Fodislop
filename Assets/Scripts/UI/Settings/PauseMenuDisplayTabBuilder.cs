@@ -133,6 +133,10 @@ internal sealed class PauseMenuDisplayTabBuilder
             value => _displayManager.SetVSync(value),
             _refreshers);
         displaySection.Add(vSyncToggle);
+        Label syncContext = displaySection.Q<Label>("DisplaySyncContext") ??
+            throw new InvalidOperationException("[PauseMenu] DisplaySyncContext is missing from PauseMenu.uxml.");
+        syncContext.text = _loc.Get("settings.display.sync_editor");
+        UIState.SetHidden(syncContext, !Application.isEditor);
 
         VisualElement gammaSlider = PauseMenuUIFactory.CreateBoundSlider<DisplaySettings>(
             nameof(DisplaySettings.Gamma),
@@ -142,12 +146,16 @@ internal sealed class PauseMenuDisplayTabBuilder
             _refreshers);
         displaySection.Add(gammaSlider);
 
-        Toggle hdrToggle = PauseMenuUIFactory.CreateBoundToggle(
-            _loc.Get("menu.settings.hdr"),
-            () => _clientConfig.Config.Display.HDREnabled,
-            value => _displayManager.SetHDREnabled(value),
-            _refreshers);
-        hdrOutputGroup.Add(hdrToggle);
+        Toggle hdrToggle = hdrOutputGroup.Q<Toggle>("HDRToggle") ??
+            throw new InvalidOperationException("[PauseMenu] HDRToggle is missing from PauseMenu.uxml.");
+        hdrToggle.label = _loc.Get("menu.settings.hdr");
+        hdrToggle.RegisterValueChangedCallback(evt => _displayManager.SetHDREnabled(evt.newValue));
+        Label hdrStatus = hdrOutputGroup.Q<Label>("HDRStatus") ??
+            throw new InvalidOperationException("[PauseMenu] HDRStatus is missing from PauseMenu.uxml.");
+        Button hdrRetry = hdrOutputGroup.Q<Button>("HDRRetry") ??
+            throw new InvalidOperationException("[PauseMenu] HDRRetry is missing from PauseMenu.uxml.");
+        hdrRetry.text = _loc.Get("settings.display.hdr_retry");
+        hdrRetry.clicked += HDROutput.Retry;
 
         VisualElement paperWhiteSlider = PauseMenuUIFactory.CreateBoundSlider<DisplaySettings>(
             nameof(DisplaySettings.PaperWhiteNits),
@@ -165,16 +173,36 @@ internal sealed class PauseMenuDisplayTabBuilder
             _refreshers);
         hdrOutputGroup.Add(peakBrightnessSlider);
 
-        void UpdateHdrSlidersState()
+        void UpdateHDRSlidersState()
         {
-            bool hdrOn = _clientConfig.Config.Display.HDREnabled;
+            bool hdrOn = HDROutput.Active;
+            hdrToggle.SetEnabled(HDROutput.CanSwitch);
+            hdrToggle.SetValueWithoutNotify(hdrOn);
+            hdrStatus.text = _loc.Get(HDROutput.Status switch
+            {
+                HDROutputController.Phase.Pending => "settings.display.hdr_pending",
+                HDROutputController.Phase.Retrying => "settings.display.hdr_retrying",
+                HDROutputController.Phase.Failed => "settings.display.hdr_failed",
+                HDROutputController.Phase.Unsupported => "settings.display.hdr_unsupported",
+                HDROutputController.Phase.Unavailable => "settings.display.hdr_unavailable",
+                HDROutputController.Phase.NotSwitchable => hdrOn
+                    ? "settings.display.hdr_fixed_on" : "settings.display.hdr_fixed_off",
+                HDROutputController.Phase.HDR => HDROutput.RuntimeSwitchable
+                    ? "settings.display.hdr_active" : "settings.display.hdr_fixed_on",
+                HDROutputController.Phase.SDR => HDROutput.RuntimeSwitchable
+                    ? "settings.display.hdr_inactive" : "settings.display.hdr_fixed_off",
+                _ => "settings.display.hdr_pending",
+            });
+            hdrRetry.SetEnabled(HDROutput.Status == HDROutputController.Phase.Failed && HDROutput.CanSwitch);
+            UIState.SetHidden(hdrRetry, HDROutput.Status != HDROutputController.Phase.Failed);
             gammaSlider.SetEnabled(!hdrOn);
             paperWhiteSlider.SetEnabled(hdrOn);
             peakBrightnessSlider.SetEnabled(hdrOn);
         }
 
-        _refreshers.Add(UpdateHdrSlidersState);
-        UpdateHdrSlidersState();
+        _refreshers.Add(UpdateHDRSlidersState);
+        hdrOutputGroup.schedule.Execute(UpdateHDRSlidersState).Every(250);
+        UpdateHDRSlidersState();
 
         return displayScroll;
     }

@@ -17,16 +17,16 @@
 // светах и подъём в тенях на глаз не видны вовсе, пока не станут грубыми.
 // Колорист смотрит на приборы, а не на картинку, — и здесь то же самое.
 //
-// ГДЕ СНИМАЕТСЯ. После всего постпроцесса, с готового кадра. Смысл прибора в
-// том, чтобы показать, что уходит на экран, а не что было в середине
-// конвейера.
+// ГДЕ СНИМАЕТСЯ. По умолчанию после всего постпроцесса, с готового кадра.
+// UI также может поставить pass перед грейдом, чтобы сравнить BEFORE и AFTER.
 //
 // ПОЧЕМУ БУФЕРЫ, А НЕ АТОМАРНЫЕ ТЕКСТУРЫ. Накопление идёт через
 // InterlockedAdd по RWStructuredBuffer. Атомарные операции над RWTexture2D
 // поддержаны не везде — на Metal, где проект и разрабатывается, их применимость
 // ограничена, и прибор молча считал бы мусор. Буфер работает всюду одинаково.
 //
-// ЦЕНА. Три буфера: 1024, 65536 и 65536 uint — вместе полмегабайта. Разбор
+// ЦЕНА. Три основных буфера и маленький буфер статистики — около полмегабайта.
+// Разбор
 // живёт только пока открыто рабочее место, и вне его ядра не запускаются.
 
 #define SCOPE_BINS 256
@@ -34,8 +34,9 @@
 #define SCOPE_PLANE (SCOPE_SIZE * SCOPE_SIZE)
 
 RWStructuredBuffer<uint> _HistogramBuffer;    // 4 * 256: R, G, B, яркость
-RWStructuredBuffer<uint> _WaveformBuffer;     // 3 * 256 * 256: R, G, B — столбец кадра x уровень
+RWStructuredBuffer<uint> _WaveformBuffer;     // 4 * 256 * 256: R, G, B, luma — столбец x уровень
 RWStructuredBuffer<uint> _VectorscopeBuffer;  // 256 * 256, плоскость Cb/Cr
+RWStructuredBuffer<uint> _ScopeStatsBuffer;   // [0] black, [1] highlight samples
 
 Texture2D<float4> _ScopeSource;
 RWTexture2D<float4> _ScopeOutput;
@@ -44,6 +45,10 @@ SamplerState sampler_LinearClamp;
 float4 _ScopeSourceSize;  // xy = размер источника, zw = 1/размер
 float4 _ScopeParams;      // x = histogram norm, y = шаг, z/w = waveform/vector norm
 float _ScopeSignalScale;  // HDR: configured peak -> 1; SDR: 1
+int _ScopeHistogramMode;  // 0 = RGB + luma, 1 = luma, 2 = RGB
+float _ScopeVectorscopeScale;
+int _ScopeShowSkinToneLine;
+int _ScopeWaveformMode;   // 0 = RGB overlay, 1 = RGB parade, 2 = luma
 
 float ScopeLuminance(float3 color)
 {
@@ -78,7 +83,13 @@ void ScopesClear(uint3 id : SV_DispatchThreadID)
     _WaveformBuffer[0 * SCOPE_PLANE + index] = 0;
     _WaveformBuffer[1 * SCOPE_PLANE + index] = 0;
     _WaveformBuffer[2 * SCOPE_PLANE + index] = 0;
+    _WaveformBuffer[3 * SCOPE_PLANE + index] = 0;
     _VectorscopeBuffer[index] = 0;
+    if (id.x == 0 && id.y == 0)
+    {
+        _ScopeStatsBuffer[0] = 0;
+        _ScopeStatsBuffer[1] = 0;
+    }
 
     // Первые четыре строки сетки заодно накрывают все 4*256 корзин
     // гистограммы — отдельное ядро ради тысячи обнулений не нужно.
@@ -103,6 +114,14 @@ void ScopesGather(uint3 id : SV_DispatchThreadID)
     // These diagnostic axes are Rec.709, independent of the HDR output gamut.
     color = RotateOutputSpaceToRec709(color);
 #endif
+    if (any(color <= 0.0))
+    {
+        InterlockedAdd(_ScopeStatsBuffer[0], 1);
+    }
+    if (any(color >= 1.0))
+    {
+        InterlockedAdd(_ScopeStatsBuffer[1], 1);
+    }
     color = max(color, 0.0);
     float3 encoded = float3(
         ScopeEncode(color.r), ScopeEncode(color.g), ScopeEncode(color.b));
@@ -123,6 +142,7 @@ void ScopesGather(uint3 id : SV_DispatchThreadID)
     InterlockedAdd(_WaveformBuffer[0 * SCOPE_PLANE + ScopeBin(encoded.r) * SCOPE_SIZE + column], 1);
     InterlockedAdd(_WaveformBuffer[1 * SCOPE_PLANE + ScopeBin(encoded.g) * SCOPE_SIZE + column], 1);
     InterlockedAdd(_WaveformBuffer[2 * SCOPE_PLANE + ScopeBin(encoded.b) * SCOPE_SIZE + column], 1);
+    InterlockedAdd(_WaveformBuffer[3 * SCOPE_PLANE + ScopeBin(luma) * SCOPE_SIZE + column], 1);
 
     // Вектороскоп: плоскость цветности Cb/Cr по BT.709. Радиус — насыщенность,
     // угол — оттенок. На нём и видно, уводит ли кривая света по цвету.
@@ -142,6 +162,66 @@ void ScopesGather(uint3 id : SV_DispatchThreadID)
 float ScopeResponse(uint count, float normalization)
 {
     return saturate(log2(1.0 + count * normalization) / 8.0);
+}
+
+float ScopeLine(float distance, float width)
+{
+    return 1.0 - smoothstep(width, width * 2.0, distance);
+}
+
+float ScopeTargetDot(float2 centered, float2 target)
+{
+    return ScopeLine(distance(centered, target), 0.018);
+}
+
+float3 ScopeVectorscopeOverlay(float2 centered)
+{
+    float radius = length(centered);
+    float3 overlay = 0.0;
+
+    // Круги 75% и 100% насыщенности, плюс центральный crosshair.
+    float ring75 = ScopeLine(abs(radius - 0.75), 0.012);
+    float ring100 = ScopeLine(abs(radius - 1.0), 0.012);
+    float cross = max(
+        ScopeLine(abs(centered.x), 0.006),
+        ScopeLine(abs(centered.y), 0.006));
+    overlay += (ring75 + ring100) * 0.22;
+    overlay += cross * 0.16;
+
+    // Координаты target-плашек BT.709 в той же Cb/Cr системе, что и gather.
+    float3 targetColors[6] = {
+        float3(1.0, 0.0, 0.0), // R
+        float3(1.0, 0.0, 1.0), // Mg
+        float3(0.0, 0.0, 1.0), // B
+        float3(0.0, 1.0, 1.0), // Cy
+        float3(0.0, 1.0, 0.0), // G
+        float3(1.0, 1.0, 0.0), // Y
+    };
+    float3 targetWeights = float3(0.0, 0.0, 0.0);
+    for (int targetIndex = 0; targetIndex < 6; targetIndex++)
+    {
+        float targetLuma = ScopeLuminance(targetColors[targetIndex]);
+        float2 target = float2(
+            (targetColors[targetIndex].b - targetLuma) * 0.5389,
+            (targetColors[targetIndex].r - targetLuma) * 0.6350) * 2.0;
+        float weight75 = ScopeTargetDot(centered, target * 0.75);
+        float weight100 = ScopeTargetDot(centered, target);
+        float weight = max(weight75, weight100 * 0.85);
+        targetWeights = max(targetWeights, targetColors[targetIndex] * weight);
+    }
+
+    // Классическая skin-tone line: направление от центра в сторону R с
+    // небольшим отрицательным Cb, заданное в координатах этого прибора.
+    if (_ScopeShowSkinToneLine != 0)
+    {
+        float2 skinDirection = normalize(float2(-0.24, 0.97));
+        float skinDistance = abs(centered.x * skinDirection.y - centered.y * skinDirection.x);
+        float skinAlong = dot(centered, skinDirection);
+        float skinLine = ScopeLine(skinDistance, 0.012) * step(0.0, skinAlong);
+        overlay = max(overlay, float3(0.82, 0.55, 0.2) * skinLine * 0.8);
+    }
+
+    return max(overlay, targetWeights);
 }
 
 [numthreads(8, 8, 1)]
@@ -167,7 +247,10 @@ void HistogramResolve(uint3 id : SV_DispatchThreadID)
 
     float3 rgb = step(height, bars);
     float grey = step(height, luma) * 0.35;
-    _ScopeOutput[id.xy] = float4(max(rgb, grey), 1.0);
+    float3 output = _ScopeHistogramMode == 1
+        ? float3(grey, grey, grey)
+        : (_ScopeHistogramMode == 2 ? rgb : max(rgb, grey));
+    _ScopeOutput[id.xy] = float4(output, 1.0);
 }
 
 [numthreads(8, 8, 1)]
@@ -180,8 +263,15 @@ void WaveformResolve(uint3 id : SV_DispatchThreadID)
         return;
     }
 
+    float normalizedX = id.x / max((float)size.x, 1.0);
+    uint panel = _ScopeWaveformMode == 1
+        ? min((uint)(normalizedX * 3.0), 2u)
+        : 0u;
+    float panelX = _ScopeWaveformMode == 1
+        ? normalizedX * 3.0 - panel
+        : normalizedX;
     uint column = (uint)clamp(
-        (id.x / max((float)size.x, 1.0)) * SCOPE_SIZE, 0.0, SCOPE_SIZE - 1);
+        panelX * SCOPE_SIZE, 0.0, SCOPE_SIZE - 1);
     uint level = (uint)clamp(
         (1.0 - id.y / max((float)size.y - 1.0, 1.0)) * (SCOPE_SIZE - 1),
         0.0,
@@ -192,6 +282,18 @@ void WaveformResolve(uint3 id : SV_DispatchThreadID)
         ScopeResponse(_WaveformBuffer[0 * SCOPE_PLANE + cell], _ScopeParams.z),
         ScopeResponse(_WaveformBuffer[1 * SCOPE_PLANE + cell], _ScopeParams.z),
         ScopeResponse(_WaveformBuffer[2 * SCOPE_PLANE + cell], _ScopeParams.z));
+    if (_ScopeWaveformMode == 2)
+    {
+        float signal = ScopeResponse(_WaveformBuffer[3 * SCOPE_PLANE + cell], _ScopeParams.z);
+        parade = float3(signal, signal, signal);
+    }
+    else if (_ScopeWaveformMode == 1)
+    {
+        float signal = parade[panel];
+        parade = panel == 0 ? float3(signal, 0.0, 0.0)
+            : panel == 1 ? float3(0.0, signal, 0.0)
+            : float3(0.0, 0.0, signal);
+    }
     // Наложением, а не тремя панелями рядом: при наложении серое пятно прямо
     // означает сведённые каналы, а любой цветной отлив — что они разошлись.
     _ScopeOutput[id.xy] = float4(parade, 1.0);
@@ -209,18 +311,21 @@ void VectorscopeResolve(uint3 id : SV_DispatchThreadID)
 
     float2 uv = float2(id.x / max((float)size.x - 1.0, 1.0),
                        1.0 - id.y / max((float)size.y - 1.0, 1.0));
-    uint2 sourcePixel = (uint2)clamp(uv * (SCOPE_SIZE - 1), 0.0, SCOPE_SIZE - 1);
+    float2 centered = uv * 2.0 - 1.0;
+    float2 zoomedCentered = centered * _ScopeVectorscopeScale;
+    float2 zoomedUv = zoomedCentered * 0.5 + 0.5;
+    uint2 sourcePixel = (uint2)clamp(zoomedUv * (SCOPE_SIZE - 1), 0.0, SCOPE_SIZE - 1);
     float value = ScopeResponse(
         _VectorscopeBuffer[sourcePixel.y * SCOPE_SIZE + sourcePixel.x], _ScopeParams.w);
 
     // Подложка окрашена по тому же Cb/Cr, что и накопление: точка, попавшая в
     // жёлтый сектор, светится на жёлтом фоне, и читать оттенок можно без
     // легенды.
-    float2 centered = uv * 2.0 - 1.0;
     float3 tint = saturate(float3(
-        0.5 + centered.y / 0.6350,
-        0.5 - (centered.x * 0.1146 / 0.5389 + centered.y * 0.2989 / 0.6350) / 0.7152,
-        0.5 + centered.x / 0.5389));
+        0.5 + zoomedCentered.y / 0.6350,
+        0.5 - (zoomedCentered.x * 0.1146 / 0.5389 + zoomedCentered.y * 0.2989 / 0.6350) / 0.7152,
+        0.5 + zoomedCentered.x / 0.5389));
 
-    _ScopeOutput[id.xy] = float4(tint * value, 1.0);
+    float3 targetOverlay = ScopeVectorscopeOverlay(zoomedCentered);
+    _ScopeOutput[id.xy] = float4(max(tint * value, targetOverlay), 1.0);
 }

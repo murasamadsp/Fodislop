@@ -66,7 +66,7 @@ namespace Fodinae.UI
 
             _textureRenderer = new MinimapTextureRenderer(_uiSize);
 
-            _minimapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+            _minimapTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
                 _uiSize,
                 _uiSize,
                 "MinimapTexture",

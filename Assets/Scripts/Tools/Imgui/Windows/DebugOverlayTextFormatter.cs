@@ -110,6 +110,8 @@ internal static class DebugOverlayTextFormatter
             sb,
             gameplayCamera?.Camera);
 
+        sb.Append("Editor=").Append(Application.isEditor).Append("\n\n");
+
         long totalMemMb = Profiler.GetMonoUsedSizeLong() / (1024 * 1024);
         long totalAllocMb = Profiler.GetMonoHeapSizeLong() / (1024 * 1024);
         long totalReservedMb = Profiler.GetTotalReservedMemoryLong() / (1024 * 1024);

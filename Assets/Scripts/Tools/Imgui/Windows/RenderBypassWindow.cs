@@ -129,6 +129,7 @@ public sealed class RenderBypassWindow : ToolWindow
     /// Видов одиннадцать, и одной кнопкой «следующий» промах означал полный
     /// круг. Шаг назад дешевле десяти шагов вперёд.
     /// </remarks>
+
     private static void DrawLightingViewPicker(LightingEngine lighting)
     {
         ToolChrome.SectionHeader("ВИД ОСВЕЩЕНИЯ");

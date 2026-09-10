@@ -103,6 +103,8 @@ public sealed class ForbiddenApiRule : IRule
         // Tests need to create objects
         ["Assets/Scripts/Tests/Editor/Core/LocalPlayerStateTests.cs"] = new[] { "new GameObject" },
         ["Assets/Scripts/Tests/Editor/Core/ProductionSceneContractValidatorTests.cs"] = new[] { "new GameObject" },
+        ["Assets/Scripts/Tests/Editor/Core/DisplayOutputProfileTests.cs"] = new[] { "new GameObject" },
+        ["Assets/Scripts/Tests/Editor/Core/LocalPlayerStateFuzzTests.cs"] = new[] { "new GameObject" },
     };
 
     public string Id => "FOD-FORBIDDEN-API";

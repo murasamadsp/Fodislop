@@ -60,7 +60,6 @@ Shader "Fodinae/World Entity"
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
-            float4 _MainTex_TexelSize;
 
             // Тумблер режима выборки. Ноль — ближайшая без сглаживания,
             // единица — со сглаженной границей текселя. Раздаётся глобально
@@ -93,8 +92,12 @@ Shader "Fodinae/World Entity"
                 return uvTexels / textureSize;
             }
 
+            // Свойства материала держатся вместе: одно, объявленное снаружи,
+            // выключает SRP Batcher на всём шейдере. `_MainTex_TexelSize` Unity
+            // заводит сам под текстуру _MainTex — это свойство материала.
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color;
+                float4 _MainTex_TexelSize;
             CBUFFER_END
 
             Texture2D<float4> _WorldLightTexture;
@@ -146,15 +149,18 @@ Shader "Fodinae/World Entity"
                     ? SAMPLE_TEXTURE2D(_MainTex, sampler_PointClamp, sampleUV)
                     : SAMPLE_TEXTURE2D(_MainTex, sampler_LinearClamp, sampleUV);
                 half4 color = texColor * input.color * _Color;
-                float3 worldLight = GetWorldLightColor(input.worldPos);
-                if (_WorldLightDebugView != 0)
+                if (color.a > 0.003)
                 {
-                    return half4(worldLight, color.a);
+                    float3 worldLight = GetWorldLightColor(input.worldPos);
+                    color.rgb *= worldLight;
+                    // Premultiplied output, matching Sprites/Default's blend.
+                    color.rgb *= color.a;
+                }
+                else
+                {
+                    color = half4(0.0, 0.0, 0.0, 0.0);
                 }
 
-                color.rgb *= worldLight;
-                // Premultiplied output, matching Sprites/Default's blend.
-                color.rgb *= color.a;
                 return color;
             }
             ENDHLSL

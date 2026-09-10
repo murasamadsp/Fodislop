@@ -39,7 +39,10 @@ public static class PostProcessRuntimeState
     private static ColorGradeSnapshot _colorGrade = ColorGradeSnapshot.FromLook();
     private static PostProcessDebugView _debugView;
     private static float _compareSplit;
+    private static CompareMode _compareMode;
+    private static bool _compareBefore;
     private static bool _bypassPostProcessEffects;
+    private static bool _temporaryBypass;
 
     internal static uint CameraGeneration => _cameraGeneration;
 
@@ -70,6 +73,25 @@ public static class PostProcessRuntimeState
             }
 
             _bypassPostProcessEffects = value;
+            InvalidateTemporalHistory();
+        }
+    }
+
+    /// <summary>
+    /// Временный bypass для A/B: активен только пока удерживается клавиша.
+    /// Постоянная настройка и сохранённый грейд не изменяются.
+    /// </summary>
+    public static bool TemporaryBypass
+    {
+        get => _temporaryBypass;
+        set
+        {
+            if (_temporaryBypass == value)
+            {
+                return;
+            }
+
+            _temporaryBypass = value;
             InvalidateTemporalHistory();
         }
     }
@@ -110,6 +132,39 @@ public static class PostProcessRuntimeState
         }
     }
 
+    public static CompareMode CompareMode
+    {
+        get => _compareMode;
+        set
+        {
+            CompareMode sanitized = Enum.IsDefined(typeof(CompareMode), value)
+                ? value
+                : CompareMode.Off;
+            if (_compareMode == sanitized)
+            {
+                return;
+            }
+
+            _compareMode = sanitized;
+            InvalidateTemporalHistory();
+        }
+    }
+
+    public static bool CompareBefore
+    {
+        get => _compareBefore;
+        set
+        {
+            if (_compareBefore == value)
+            {
+                return;
+            }
+
+            _compareBefore = value;
+            InvalidateTemporalHistory();
+        }
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetForDomainReload()
     {
@@ -123,7 +178,10 @@ public static class PostProcessRuntimeState
         _colorGrade = ColorGradeSnapshot.FromLook();
         _debugView = PostProcessDebugView.None;
         _compareSplit = 0f;
+        _compareMode = CompareMode.Off;
+        _compareBefore = false;
         _bypassPostProcessEffects = false;
+        _temporaryBypass = false;
     }
 
     public static void SetDisplayCalibration(float gamma, float paperWhiteNits, float peakBrightnessNits)

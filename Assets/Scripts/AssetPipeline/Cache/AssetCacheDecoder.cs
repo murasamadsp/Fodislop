@@ -59,7 +59,7 @@ internal static class AssetCacheDecoder
         }
 
         bool makeNoLongerReadable = RuntimeTextureFactory.SupportsTexture2DGpuCopy;
-        Texture2D? staticTex = RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+        Texture2D? staticTex = RuntimeTextureFactory.DecodeEncodedImageToRGBA32NoMip(
             bytes,
             $"Cache_Tex_{DateTime.Now.Ticks}",
             RuntimeTextureColorSpace.Srgb,

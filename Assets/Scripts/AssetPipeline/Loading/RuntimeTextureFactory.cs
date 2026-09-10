@@ -17,7 +17,7 @@ public static class RuntimeTextureFactory
     public static bool SupportsTexture2DGpuCopy =>
         (SystemInfo.copyTextureSupport & CopyTextureSupport.Basic) != 0;
 
-    public static Texture2D CreateRgba32NoMip(
+    public static Texture2D CreateRGBA32NoMip(
         int width,
         int height,
         string name,
@@ -80,7 +80,54 @@ public static class RuntimeTextureFactory
         ApplySampling(texture, filterMode, wrapMode);
         return texture;
     }
-    public static Texture2D DecodeEncodedImageToRgba32NoMip(
+
+    /// <summary>
+    /// Creates a readable-free floating-point texture for runtime data such as
+    /// HDR lookup tables. Keeping this construction here makes the resource
+    /// policy identical for decoded images and generated GPU data.
+    /// </summary>
+    public static Texture2D CreateRGBAFloatNoMip(
+        int width,
+        int height,
+        string name,
+        RuntimeTextureColorSpace colorSpace,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode)
+    {
+        ValidateDimensions(width, height, name);
+        var texture = new Texture2D(
+            width,
+            height,
+            TextureFormat.RGBAFloat,
+            mipChain: false,
+            linear: colorSpace == RuntimeTextureColorSpace.Linear)
+        {
+            name = name,
+        };
+        ApplySampling(texture, filterMode, wrapMode);
+        return texture;
+    }
+
+    public static Texture3D CreateRGBAFloat3DNoMip(
+        int size,
+        string name,
+        FilterMode filterMode,
+        TextureWrapMode wrapMode)
+    {
+        ValidateDimensions(size, size, name);
+        var texture = new Texture3D(
+            size,
+            size,
+            size,
+            TextureFormat.RGBAFloat,
+            mipChain: false)
+        {
+            name = name,
+        };
+        ApplySampling(texture, filterMode, wrapMode);
+        return texture;
+    }
+    public static Texture2D DecodeEncodedImageToRGBA32NoMip(
         byte[] data,
         string name,
         RuntimeTextureColorSpace colorSpace,
@@ -100,7 +147,7 @@ public static class RuntimeTextureFactory
                 nameof(data));
         }
 
-        Texture2D staging = CreateRgba32NoMip(
+        Texture2D staging = CreateRGBA32NoMip(
             2,
             2,
             $"Decoding_{name}",
@@ -115,7 +162,7 @@ public static class RuntimeTextureFactory
                     $"Encoded image '{name}' could not be decoded by Unity.");
             }
 
-            return CopyToRgba32NoMip(
+            return CopyToRGBA32NoMip(
                 staging,
                 name,
                 colorSpace,
@@ -129,7 +176,7 @@ public static class RuntimeTextureFactory
         }
     }
 
-    public static Texture2D CopyToRgba32NoMip(
+    public static Texture2D CopyToRGBA32NoMip(
         Texture2D source,
         string name,
         RuntimeTextureColorSpace colorSpace,
@@ -148,7 +195,7 @@ public static class RuntimeTextureFactory
                 $"Texture '{source.name}' must be readable before conversion to RGBA32.");
         }
 
-        Texture2D result = CreateRgba32NoMip(
+        Texture2D result = CreateRGBA32NoMip(
             source.width,
             source.height,
             name,
@@ -194,6 +241,30 @@ public static class RuntimeTextureFactory
         else
         {
             UnityEngine.Object.DestroyImmediate(runtimeObject);
+        }
+    }
+
+    private static void ValidateDimensions(int width, int height, string name)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(width),
+                "Runtime texture dimensions must be positive.");
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException(
+                "Runtime texture name cannot be null or whitespace.",
+                nameof(name));
+        }
+
+        if (width > SystemInfo.maxTextureSize || height > SystemInfo.maxTextureSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(width),
+                "Runtime texture dimensions exceed the GPU limit.");
         }
     }
 }

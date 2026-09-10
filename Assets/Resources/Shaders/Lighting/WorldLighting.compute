@@ -1,5 +1,4 @@
 #pragma kernel SolveCascade
-#pragma kernel SolveAutomaticNormals
 #pragma kernel ResolveDirect
 #pragma kernel SolveDiffuseBounce
 #pragma kernel CompositeLighting
@@ -14,8 +13,6 @@ Texture2D<float4> _MaterialField;
 Texture2D<float4> _EmissionField;
 RWStructuredBuffer<uint3> _RadianceAtlas;
 RWTexture2D<float4> _DirectTexture;
-RWTexture2D<float4> _AutomaticNormalField;
-Texture2D<float4> _AutomaticNormalInput;
 Texture2D<float4> _DirectInput;
 
 // Resolved radiance from the terrain's own emitters, solved separately and kept
@@ -36,8 +33,8 @@ int2 _FieldSize;
 int2 _BounceSize;
 float4 _WorldRect;
 float4 _AmbientColor;
-float4 _EmptyExtinctionRgb;
-float4 _SolidExtinctionRgb;
+float4 _EmptyExtinctionRGB;
+float4 _SolidExtinctionRGB;
 float _MinimumTransmission;
 float _BounceStrength;
 float _EmissionScale;
@@ -109,35 +106,31 @@ float3 UnpackTransmittance(uint3 packedInterval)
 float3 TransmissionFromPath(float2 pathLength)
 {
     float3 opticalDepth =
-        _EmptyExtinctionRgb.rgb * pathLength.x +
-        (_SolidExtinctionRgb.rgb * 8.0) * pathLength.y;
+        _EmptyExtinctionRGB.rgb * pathLength.x +
+        (_SolidExtinctionRGB.rgb * 8.0) * pathLength.y;
     return exp(-opticalDepth);
 }
 
 float3 SegmentTransmission(float solid, float physicalLength)
 {
-    float3 solidExtinction = _SolidExtinctionRgb.rgb * 8.0;
+    float3 solidExtinction = _SolidExtinctionRGB.rgb * 8.0;
     float3 extinction = lerp(
-        _EmptyExtinctionRgb.rgb,
+        _EmptyExtinctionRGB.rgb,
         solidExtinction,
         solid);
     return exp(-extinction * physicalLength);
 }
 
+// Числа окклюзии приезжают из TerrainLook — теми же, что уходят в террейн.
+// Дублировать их здесь нельзя: отладочный вид разошёлся бы с картинкой молча,
+// и врал бы ровно тогда, когда им проверяют подобранное значение.
+float _TerrainAmbientOcclusionMip;
+float _TerrainAmbientOcclusionStrength;
+
 float Max3(float3 value)
 {
     return max(value.x, max(value.y, value.z));
 }
-
-// Константа направлений для ResolveDirect: на Metal static const внутри
-// функции может конфликтовать, объявление до использования обязательно.
-static const float2 kResolveDirections4[4] =
-{
-    float2(0.70710678118, 0.70710678118),
-    float2(-0.70710678118, 0.70710678118),
-    float2(-0.70710678118, -0.70710678118),
-    float2(0.70710678118, -0.70710678118)
-};
 
 float2 OutputUv(float2 pixelPosition)
 {
@@ -221,27 +214,6 @@ float SampleOccupancy(float2 pixelPosition, float mipLevel)
     return material.a;
 }
 
-// Occupancy без клампа UV: за пределами поля — 0 (пустота). Нужен для
-// автонормалей: на границе карты красноскал (occupancy 1) доходит до края
-// поля, и кламп в SampleOccupancy возвращал тот же 1, обнуляя градиент —
-// нормали на границе мира не появлялись.
-void GetOccupancyUnclamped(float2 pixelPosition, out float occupancy)
-{
-    occupancy = 0.0;
-    bool isInsideField = all(pixelPosition >= 0.0) && all(pixelPosition < float2(_FieldSize));
-    if (isInsideField)
-    {
-        float2 safeFieldSize = max(float2(_FieldSize), float2(1.0, 1.0));
-        float2 uv = pixelPosition / safeFieldSize;
-        if (_MaterialYFlip != 0)
-        {
-            uv.y = 1.0 - uv.y;
-        }
-
-        occupancy = _MaterialField.SampleLevel(sampler_LinearClamp, uv, 0.0).a;
-    }
-}
-
 float PathLengthInCells(float2 rayDirection, float pathLengthInPixels)
 {
     float2 cellsPerPixel = (_WorldRect.zw / _CellSize) / float2(_FieldSize);
@@ -299,64 +271,6 @@ float4 SampleEmission(float2 pixelPosition, float mipLevel)
         sampler_LinearClamp,
         MaterialUv(pixelPosition),
         mipLevel);
-}
-
-float4 CalculateAutomaticSurfaceNormal(float2 pixelPosition)
-{
-    // Усиленные автонормали: широкий градиент + диагонали для чётких нормалей
-    float occL = 0.0, occR = 0.0, occD = 0.0, occU = 0.0;
-    float occDL = 0.0, occDR = 0.0, occUL = 0.0, occUR = 0.0;
-
-    // Широкий сэмпл (2 пикселя) для более сильного градиента
-    GetOccupancyUnclamped(pixelPosition + float2(-2.0, 0.0), occL);
-    GetOccupancyUnclamped(pixelPosition + float2(2.0, 0.0), occR);
-    GetOccupancyUnclamped(pixelPosition + float2(0.0, -2.0), occD);
-    GetOccupancyUnclamped(pixelPosition + float2(0.0, 2.0), occU);
-
-    // Диагонали для лучшего покрытия углов
-    GetOccupancyUnclamped(pixelPosition + float2(-1.0, -1.0), occDL);
-    GetOccupancyUnclamped(pixelPosition + float2(1.0, -1.0), occDR);
-    GetOccupancyUnclamped(pixelPosition + float2(-1.0, 1.0), occUL);
-    GetOccupancyUnclamped(pixelPosition + float2(1.0, 1.0), occUR);
-
-    // Градиент Собеля 3x3 для чётких краёв
-    float gradX = (occR - occL) + 0.5 * ((occDR + occUR) - (occDL + occUL));
-    float gradY = (occU - occD) + 0.5 * ((occUL + occUR) - (occDL + occDR));
-
-    float2 occupancyGradient = float2(gradX, gradY);
-    float gradientLength = length(occupancyGradient);
-
-    // Усиленная сила нормали
-    float strength = saturate(gradientLength * 4.0);
-    float3 surfaceNormal = float3(0.0, 0.0, 0.0);
-    if (gradientLength > 0.02)
-    {
-        surfaceNormal = float3(-occupancyGradient / gradientLength, 0.0);
-    }
-
-    return float4(surfaceNormal, strength);
-}
-
-float4 SampleAutomaticSurfaceNormal(float2 pixelPosition)
-{
-    int2 pixel = clamp(
-        int2(floor(pixelPosition)),
-        int2(0, 0),
-        _FieldSize - 1);
-    return _AutomaticNormalInput.Load(int3(pixel.x, pixel.y, 0));
-}
-
-float SurfaceLambert(
-    float4 normalData,
-    float2 lightDirection)
-{
-    float3 surfaceNormal = normalData.xyz;
-    float normalStrength = saturate(normalData.w);
-    float directionalResponse = saturate(dot(
-        surfaceNormal,
-        float3(lightDirection, 0.0)));
-    float normalMask = step(0.001, normalStrength);
-    return lerp(1.0, directionalResponse, normalStrength * normalMask);
 }
 
 void TraceRadianceSegment(
@@ -604,18 +518,6 @@ void SolveCascade(uint3 dispatchId : SV_DispatchThreadID)
 }
 
 [numthreads(8, 8, 1)]
-void SolveAutomaticNormals(uint3 dispatchId : SV_DispatchThreadID)
-{
-    if (any(dispatchId.xy >= (uint2)_FieldSize))
-    {
-        return;
-    }
-
-    _AutomaticNormalField[dispatchId.xy] = CalculateAutomaticSurfaceNormal(
-        float2(dispatchId.xy) + 0.5);
-}
-
-[numthreads(8, 8, 1)]
 void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
 {
     if (any(dispatchId.xy >= (uint2)_FieldSize))
@@ -628,16 +530,14 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
     GetBlockSnappedPixel(pixel, samplePixel);
     int probeIndex = samplePixel.y * _FieldSize.x + samplePixel.x;
     float3 radiance = 0.0;
-    float4 normalData = SampleAutomaticSurfaceNormal(float2(samplePixel) + 0.5);
 
-    if (_DebugView == 5)
+    if (_DebugView == 4)
     {
         float3 localTransmission = 0.0;
         float2 origin = float2(pixel) + 0.5;
         float2 regionCellCount = _WorldRect.zw / _CellSize;
         float2 cellsPerPixel = regionCellCount / float2(_FieldSize);
         int2 receiverCell = int2(floor(origin * cellsPerPixel));
-        bool startsInSolid = SampleOccupancy(origin, 0.0) >= 0.5;
 
         [loop]
         for (int debugDirection = 0; debugDirection < 32; debugDirection++)
@@ -693,9 +593,7 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
     {
         int atlasIndex = _CascadeOffset + probeIndex * 4 + direction;
         uint3 packedInterval = _RadianceAtlas[atlasIndex];
-        radiance += UnpackRadiance(packedInterval.xy) * SurfaceLambert(
-            normalData,
-            kResolveDirections4[direction]);
+        radiance += UnpackRadiance(packedInterval.xy);
     }
 
     float3 directOutput = radiance * 0.25;
@@ -711,7 +609,7 @@ void SolveDiffuseBounce(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     int2 pixel = int2(dispatchId.xy);
-    float bounceStrength = (_DebugView == 9) ? max(_BounceStrength, 1.0) : _BounceStrength;
+    float bounceStrength = (_DebugView == 8) ? max(_BounceStrength, 1.0) : _BounceStrength;
     if (_EnableDiffuseBounce == 0 && _DebugView != 9)
     {
         _BounceTexture[pixel] = 0.0;
@@ -862,6 +760,18 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
+    // Тот же мип занятости, из которого террейн строит AO вокруг блоков.
+    // Радиус держится здесь и в Terrain.shader порознь: там он в пикселях
+    // экрана, тут в текселях поля, и сводить их в одну константу нечем.
+    // Вид показывает источник, а не готовую тень.
+    if (_DebugView == 10) // AmbientOcclusion
+    {
+        float nearby = SampleOccupancy(float2(pixel) + 0.5, _TerrainAmbientOcclusionMip);
+        float occlusion = saturate(sqrt(nearby) * _TerrainAmbientOcclusionStrength);
+        _Result[pixel] = float4(occlusion, occlusion, occlusion, 1.0);
+        return;
+    }
+
     if (_DebugView == 2) // Albedo
     {
         _Result[pixel] = float4(material.rgb, 1.0);
@@ -874,32 +784,42 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
         return;
     }
 
-    if (_DebugView == 4) // Normals
-    {
-        float4 normalData = SampleAutomaticSurfaceNormal(float2(pixel) + 0.5);
-        float3 normalVisual = normalData.w > 0.05
-            ? (normalData.xyz * 0.5 + 0.5)
-            : 0.0;
-        _Result[pixel] = float4(normalVisual, 1.0);
-        return;
-    }
-
     float4 dynamicDirect = _DirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
     float4 staticDirect = _StaticDirectInput.Load(int3(pixel.x, pixel.y, 0)).rgba;
 
-    if (_DebugView == 5) // Transmission (pure transmittance without static contamination)
+    // Прозрачность среды берётся из статической половины, а не из
+    // динамической.
+    //
+    // ЗАЧЕМ. В этом отладочном виде ResolveDirect выходит раньше и пишет одну
+    // прозрачность, без всякой эмиссии, — обе половины содержат одно и то же,
+    // и опасаться загрязнения статикой здесь не от чего. Зато динамическая
+    // половина решается только когда в кадре есть хоть один динамический
+    // источник, а иначе её текстуру просто обнуляют (ClearDynamicDirect). Вид
+    // выходил чёрным ровно там, где рядом нет ни одной лампы, — то есть почти
+    // всегда. Статическая половина пересчитывается при каждой смене
+    // отладочного вида и потому заполнена всегда.
+    if (_DebugView == 4) // Transmission
     {
-        _Result[pixel] = float4(dynamicDirect.rgb, 1.0);
+        // Берётся та половина, которая в этом кадре решалась.
+        //
+        // В этом отладочном виде ResolveDirect выходит раньше и пишет одну
+        // прозрачность, без эмиссии, — обе половины содержат одно и то же,
+        // и выбирать между ними по смыслу не из чего. Зато пропущена может
+        // быть любая: динамическая не решается, когда в кадре нет ни одного
+        // динамического источника (её текстуру тогда обнуляют), а статическая
+        // — когда геометрия не менялась. Максимум переживает пропуск любой из
+        // них, тогда как жёсткая привязка к одной давала чёрный экран.
+        _Result[pixel] = float4(max(staticDirect.rgb, dynamicDirect.rgb), 1.0);
         return;
     }
 
-    if (_DebugView == 6) // StaticDirect
+    if (_DebugView == 5) // StaticDirect
     {
         _Result[pixel] = float4(staticDirect.rgb, 1.0);
         return;
     }
 
-    if (_DebugView == 7) // DynamicDirect
+    if (_DebugView == 6) // DynamicDirect
     {
         _Result[pixel] = float4(dynamicDirect.rgb, 1.0);
         return;
@@ -907,7 +827,7 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 
     float4 combinedDirect = dynamicDirect + staticDirect;
 
-    if (_DebugView == 8) // DirectRadiance (combined)
+    if (_DebugView == 7) // DirectRadiance (combined)
     {
         _Result[pixel] = float4(combinedDirect.rgb, 1.0);
         return;
@@ -915,17 +835,18 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
 
     float3 bounce = SampleBounceFiltered(uv);
 
-    if (_DebugView == 9) // DiffuseBounce
+    if (_DebugView == 8) // DiffuseBounce
     {
         _Result[pixel] = float4(bounce, 1.0);
         return;
     }
 
     float3 bounceTerm = _EnableDiffuseBounce != 0 ? bounce : 0.0;
+
     float3 directAndBounce = bounceTerm + combinedDirect.rgb;
     float3 ambient = _AmbientColor.rgb;
 
-    if (_DebugView == 10) // Exposure (false-color zebras)
+    if (_DebugView == 9) // Exposure (false-color zebras)
     {
         float maximumLight = max(_MaximumLightMultiplier, 0.0001);
         float3 result = ambient + directAndBounce;

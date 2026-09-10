@@ -19,7 +19,7 @@ internal sealed class WorldEntityTextureAtlas : IDisposable
     public WorldEntityTextureAtlas()
     {
         int atlasSize = Mathf.Min(AtlasSize, SystemInfo.maxTextureSize);
-        Texture = RuntimeTextureFactory.CreateRgba32NoMip(
+        Texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             atlasSize,
             atlasSize,
             "WorldEntityAtlas",

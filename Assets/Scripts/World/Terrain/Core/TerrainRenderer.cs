@@ -287,6 +287,7 @@ namespace Fodinae.World.Terrain
 
         protected void OnDestroy()
         {
+
             if (_subscribedStorage != null)
             {
                 _subscribedStorage.CellChanged -= HandleCellChanged;
@@ -597,6 +598,11 @@ namespace Fodinae.World.Terrain
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
                 _lightingGeometryRevision++;
                 _dirtyRects.Clear();
+
+                // Сброса кэша здесь нет намеренно: ревизия геометрии поднята
+                // строкой выше, а её изменение и так заставляет освещение
+                // перерисовать поле. Второй повод к тому же действию только
+                // добавлял работы.
             }
             else if (!_dirtyRects.IsEmpty)
             {
@@ -744,7 +750,24 @@ namespace Fodinae.World.Terrain
                 long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
                 using (_MeshBuildMarker.Auto())
                 {
-                    _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
+                    // Сетка едет тем же сдвигом, что кэш, предрасчёт и
+                    // заливка выше. Полная сборка остаётся ровно там, где
+                    // переносить нечего: при смене набора атласов приписка
+                    // клеток к сабмешам считана по старому набору, и
+                    // перенести её значит нарисовать чужими текстурами.
+                    if (canScrollCache && !materialsChanged)
+                    {
+                        _meshBuilder.ScrollAndBuildBand(
+                            _cellCache, _precalc, _backgroundFloodFill, minX, minY,
+                            _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY,
+                            _mapManager.WorldWidth, _mapManager.WorldHeight, atlases,
+                            _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
+                    }
+                    else
+                    {
+                        _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
+                    }
+
                     EnsureDoorOverlayIndices(atlases.Count);
                     _meshBuilder.RebuildOverlaySubMeshIndices(
                         _meshWidth,
