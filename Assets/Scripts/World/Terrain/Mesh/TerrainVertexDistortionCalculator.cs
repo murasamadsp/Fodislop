@@ -178,7 +178,7 @@ public sealed class TerrainVertexDistortionCalculator
 
         if (IsCause(tl) && IsCause(tr) && IsCause(bl) && IsCause(br))
         {
-            return new Vector3(rx - (3f / 16f), ry - (3f / 16f), 0);
+            return Vector3.zero;
         }
 
         if (IsBlock(tl) || IsBlock(tr) || IsBlock(bl) || IsBlock(br))

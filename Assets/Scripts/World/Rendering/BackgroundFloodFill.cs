@@ -53,6 +53,13 @@ public sealed class BackgroundFloodFill
 
     public CellType[,] Buffer => _bgMapBuffer;
 
+    private static bool IsFloorCell(CellType type, CellConfigProperties properties)
+    {
+        return (properties & CellConfigProperties.Passable) != 0 &&
+            type != CellType.Unloaded &&
+            type != CellType.BuildingDoor;
+    }
+
     /// <summary>
     /// Full rebuild: parallel scan + FBPW wavefront + safety sweep.
     /// </summary>
@@ -202,7 +209,7 @@ public sealed class BackgroundFloodFill
             {
                 var cell = cellCache.GetCell(x + 1, y + 1);
 
-                if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
+                if (IsFloorCell(cell.Type, cell.Properties))
                 {
                     _bgMapBuffer[x, y] = cell.Type;
                 }
@@ -283,7 +290,7 @@ public sealed class BackgroundFloodFill
     private void SeedCell(int x, int y, ICachedCellDataProvider cellCache, List<(int, int)> frontier)
     {
         var cell = cellCache.GetCell(x + 1, y + 1);
-        if ((cell.Properties & CellConfigProperties.Passable) != 0 && cell.Type != CellType.Unloaded)
+        if (IsFloorCell(cell.Type, cell.Properties))
         {
             _bgMapBuffer[x, y] = cell.Type;
             frontier.Add((x, y));
@@ -410,7 +417,8 @@ public sealed class BackgroundFloodFill
                             continue;
                         }
 
-                        if (_bgMapBuffer[nx, ny] != CellType.Unloaded)
+                        var n = cellCache.GetCell(nx + 1, ny + 1);
+                        if (IsFloorCell(n.Type, n.Properties))
                         {
                             continue;
                         }
@@ -465,7 +473,6 @@ public sealed class BackgroundFloodFill
         public int Count;
     }
 }
-
 /// <summary>
 /// Interface used by BackgroundFloodFill to read cell data without coupling to the full
 /// TerrainRenderer cell cache.

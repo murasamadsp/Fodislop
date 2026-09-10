@@ -25,6 +25,8 @@ public class InventoryModel : Fodinae.UI.HUD.Inventory.Interfaces.IInventoryMode
 
     private int _selectedSlot = -1;
     public int SelectedSlot => _selectedSlot;
+    public bool HasSelectedItem =>
+        _selectedSlot >= 0 && _selectedSlot < _slots.Length && _slots[_selectedSlot] != null;
     public event Action<int>? OnSlotSelected;
 
     public ItemData? GetSlot(int index) => (index >= 0 && index < _slots.Length) ? _slots[index] : null;
