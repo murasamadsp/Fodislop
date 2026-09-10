@@ -171,7 +171,7 @@ internal sealed class GradingScopesWindow : ToolWindow
             DebugViewButton("отсечка", PostProcessDebugView.Clipping);
             DebugViewButton("highlights", PostProcessDebugView.HighlightClipping);
             DebugViewButton("shadows", PostProcessDebugView.ShadowClipping);
-            DebugViewButton("gamut", PostProcessDebugView.GamutWarning);
+            DebugViewButton("GAMUT WARNING", PostProcessDebugView.GamutWarning);
             DebugViewButton("luma", PostProcessDebugView.LumaOnly);
             DebugViewButton("sat", PostProcessDebugView.SaturationOnly);
             DebugViewButton("matte", PostProcessDebugView.QualifierMatte);
@@ -192,7 +192,7 @@ internal sealed class GradingScopesWindow : ToolWindow
             PostProcessDebugView.ShadowClipping =>
                 "синее — clipped shadows, исходное изображение сохранено",
             PostProcessDebugView.GamutWarning =>
-                "магентовый — канал вышел за display gamut",
+                "синий — ниже display gamut, магентовый — выше, белый — оба предупреждения",
             PostProcessDebugView.LumaOnly =>
                 "монохромная яркость финального graded output",
             PostProcessDebugView.SaturationOnly =>
