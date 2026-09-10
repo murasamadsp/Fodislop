@@ -660,14 +660,19 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
             // internal working space. Check the same output-primary transform
             // that DisplayFinal uses so P3/Rec.2020 warnings are meaningful.
             float3 displayGamutColor = ApplyColorManagementOutput(color);
-            float outOfGamut = max(
-                max(max(-displayGamutColor.r, -displayGamutColor.g),
-                    max(-displayGamutColor.b, 0.0)),
-                max(max(displayGamutColor.r - 1.0, displayGamutColor.g - 1.0),
-                    max(displayGamutColor.b - 1.0, 0.0)));
-            color = outOfGamut > 0.0001
-                ? float3(1.0, 0.0, 1.0)
-                : color;
+            bool belowGamut = min(
+                displayGamutColor.r,
+                min(displayGamutColor.g, displayGamutColor.b)) < -0.0001;
+            bool aboveGamut = max(
+                displayGamutColor.r,
+                max(displayGamutColor.g, displayGamutColor.b)) > 1.0001;
+            color = belowGamut && aboveGamut
+                ? float3(1.0, 1.0, 1.0)
+                : belowGamut
+                    ? float3(0.0, 0.3, 1.0)
+                    : aboveGamut
+                        ? float3(1.0, 0.0, 1.0)
+                        : color;
         }
         else if (_PostDebugView == 4)
         {
