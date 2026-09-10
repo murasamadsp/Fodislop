@@ -12,7 +12,7 @@ echo "=== C# Local Analyzer Check ==="
 echo "Environment: CI=${CI:-false}, OS=$(uname -s), DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
 
 echo "--- Step 0: Auditing project architecture and settings invariants ---"
-dotnet run --project tools/Fodinae.ArchitectureLinter --no-build
+dotnet run --project tools/Fodinae.ArchitectureLinter --no-build --no-restore
 
 # Настройки описываются атрибутами и читаются рефлексией: ни компилятор, ни
 # линтер не могут сказать, что диапазон над полем осмыслен, что значение по
@@ -23,6 +23,8 @@ echo "--- Step 0.1: Executing architecture linter (includes settings probe) ---"
 if command -v dotnet >/dev/null 2>&1; then
     DOTNET_NOLOGO=1 dotnet run \
         --project "$(dirname "$0")/../tools/Fodinae.ArchitectureLinter" \
+        --no-build \
+        --no-restore \
         --verbosity quiet -- \
         --project-root "$(dirname "$0")/.." \
         --rule FOD-DISPLAY-TRANSFORM \

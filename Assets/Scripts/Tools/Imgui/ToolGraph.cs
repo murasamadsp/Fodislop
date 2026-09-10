@@ -144,7 +144,7 @@ public sealed class ToolGraph : IDisposable
 
         if (_texture == null)
         {
-            _texture = RuntimeTextureFactory.CreateRgba32NoMip(
+            _texture = RuntimeTextureFactory.CreateRGBA32NoMip(
                 width,
                 height,
                 "ToolGraph",

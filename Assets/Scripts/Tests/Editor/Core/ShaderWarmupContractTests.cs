@@ -26,7 +26,6 @@ public sealed class ShaderWarmupContractTests
     private static readonly string[] _RequiredLightingKernels =
     [
         "SolveCascade",
-        "SolveAutomaticNormals",
         "ResolveDirect",
         "SolveDiffuseBounce",
         "CompositeLighting",

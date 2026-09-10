@@ -33,7 +33,6 @@ public sealed class ShaderWarmupService : IShaderWarmupService
     private static readonly string[] _WorldLightingKernels =
     [
         "SolveCascade",
-        "SolveAutomaticNormals",
         "ResolveDirect",
         "SolveDiffuseBounce",
         "CompositeLighting",

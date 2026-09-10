@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -190,18 +191,37 @@ public sealed class TerrainMeshManager
         }
 
         commandBuffer.BeginSample("Fodinae.Terrain.RenderMaterialFields");
+
+        // Поле рисуется целиком.
+        //
+        // Частичная перерисовка по прямоугольникам отсюда убрана: очистка под
+        // ножницами на Metal чистит ЦЕЛЬ, а не прямоугольник, поэтому каждый
+        // патч стирал поле полностью и дорисовывал только свой кусок. В игре это
+        // выглядело так, что свет пропадал, появлялся частями и уезжал при
+        // движении. Возвращать эту оптимизацию можно только вместе со способом
+        // чистить прямоугольник, которому можно доверять на всех бэкендах.
+        DrawTerrainSubMeshes(
+            commandBuffer, localToWorldMatrix, materials, subMeshCount, materialFieldPass);
+
+        commandBuffer.EndSample("Fodinae.Terrain.RenderMaterialFields");
+    }
+
+    private void DrawTerrainSubMeshes(
+        CommandBuffer commandBuffer,
+        Matrix4x4 localToWorldMatrix,
+        Material[] materials,
+        int subMeshCount,
+        int materialFieldPass)
+    {
         for (int subMeshIndex = 0; subMeshIndex < subMeshCount; subMeshIndex++)
         {
-            Material material = materials[subMeshIndex];
             commandBuffer.DrawMesh(
                 _mesh,
                 localToWorldMatrix,
-                material,
+                materials[subMeshIndex],
                 subMeshIndex,
                 materialFieldPass);
         }
-
-        commandBuffer.EndSample("Fodinae.Terrain.RenderMaterialFields");
     }
 
     public void DestroyMesh()

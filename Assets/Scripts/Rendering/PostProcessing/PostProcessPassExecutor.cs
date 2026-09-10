@@ -9,10 +9,13 @@ namespace Fodinae.Rendering.PostProcessing;
 
 internal static class PostProcessPassExecutor
 {
+    private static Texture2D? _identityLut1D;
+    private static Texture3D? _identityLut3D;
+
     public static void Render(PostProcessPassData data, UnsafeGraphContext context)
     {
-        HDROutputUtils.ConfigureHDROutput(data.PostProcessCS, data.HdrGamut,
-            data.HdrOutput ? HDROutputUtils.Operation.ColorConversion : HDROutputUtils.Operation.None);
+        HDROutputUtils.ConfigureHDROutput(data.PostProcessCS, data.HDRGamut,
+            data.HDROutput ? HDROutputUtils.Operation.ColorConversion : HDROutputUtils.Operation.None);
         var cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
         int width = data.Width;
         int height = data.Height;
@@ -41,12 +44,14 @@ internal static class PostProcessPassExecutor
 
         cmd.BeginSample("Fodinae.PostProcess.BlitBack");
         Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
+        cmd.EndSample("Fodinae.PostProcess.BlitBack");
+
         if (data.TemporalActive)
         {
+            cmd.BeginSample("Fodinae.PostProcess.HistoryCopy");
             cmd.CopyTexture(data.IntermediateTexture, data.HistoryTexture);
+            cmd.EndSample("Fodinae.PostProcess.HistoryCopy");
         }
-
-        cmd.EndSample("Fodinae.PostProcess.BlitBack");
     }
 
     private static void ExecuteBloom(PostProcessPassData data, CommandBuffer cmd, int width, int height)
@@ -170,18 +175,139 @@ internal static class PostProcessPassExecutor
         cmd.SetComputeVectorParam(data.PostProcessCS, ColorFilterID, data.CgActive ? data.ColorFilter : Color.white);
         cmd.SetComputeFloatParam(data.PostProcessCS, ContrastID, data.CgActive ? data.Contrast : 0f);
         cmd.SetComputeFloatParam(data.PostProcessCS, SaturationID, data.CgActive ? data.Saturation : 1f);
+        cmd.SetComputeFloatParam(data.PostProcessCS, CdlSaturationID, data.CdlSaturation);
         cmd.SetComputeFloatParam(data.PostProcessCS, GammaID, data.Gamma);
-        cmd.SetComputeFloatParam(data.PostProcessCS, DisplayPaperWhiteNitsID, data.DisplayPaperWhiteNits);
+        // Keep the shader finite even if a stale/partially initialized HDR
+        // output profile reaches the pass before display reconciliation.
+        cmd.SetComputeFloatParam(
+            data.PostProcessCS,
+            DisplayPaperWhiteNitsID,
+            Mathf.Max(data.DisplayPaperWhiteNits, 1f));
         cmd.SetComputeFloatParam(
             data.PostProcessCS,
             DisplayPeakRelativeID,
             data.DisplayPeakRelative);
         cmd.SetComputeIntParam(data.PostProcessCS, PostDebugViewID, data.PostDebugView);
         cmd.SetComputeFloatParam(data.PostProcessCS, CompareSplitID, data.CompareSplit);
+        cmd.SetComputeIntParam(data.PostProcessCS, CompareModeID, data.CompareMode);
+        cmd.SetComputeIntParam(data.PostProcessCS, CompareBeforeID, data.CompareBefore ? 1 : 0);
         cmd.SetComputeVectorParam(data.PostProcessCS, WhiteBalanceID, data.WhiteBalance);
         cmd.SetComputeVectorParam(data.PostProcessCS, CdlSlopeID, data.CdlSlope);
         cmd.SetComputeVectorParam(data.PostProcessCS, CdlOffsetID, data.CdlOffset);
         cmd.SetComputeVectorParam(data.PostProcessCS, CdlPowerID, data.CdlPower);
+        cmd.SetComputeVectorParam(data.PostProcessCS, CdlMasterID, data.CdlMaster);
+        cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryLiftID, data.PrimaryLift);
+        cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryGammaID, data.PrimaryGamma);
+        cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryGainID, data.PrimaryGain);
+        cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryOffsetID, data.PrimaryOffset);
+        cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryMasterID, data.PrimaryMaster);
+        cmd.SetComputeVectorParam(data.PostProcessCS, HueVsSaturationID, data.HueVsSaturation);
+        cmd.SetComputeVectorParam(data.PostProcessCS, HueVsHueID, data.HueVsHue);
+        cmd.SetComputeVectorParam(data.PostProcessCS, HueVsLuminanceID, data.HueVsLuminance);
+        cmd.SetComputeVectorParam(data.PostProcessCS, LuminanceVsSaturationID, data.LuminanceVsSaturation);
+        cmd.SetComputeVectorParam(data.PostProcessCS, SaturationVsSaturationID, data.SaturationVsSaturation);
+        cmd.SetComputeFloatParam(data.PostProcessCS, VibranceID, data.Vibrance);
+        cmd.SetComputeFloatParam(data.PostProcessCS, HueID, data.Hue);
+        cmd.SetComputeVectorParam(data.PostProcessCS, ContrastControlsID, data.ContrastControls);
+        cmd.SetComputeVectorParam(data.PostProcessCS, ContrastControls2ID, data.ContrastControls2);
+        cmd.SetComputeFloatParam(data.PostProcessCS, BlackPointID, data.BlackPoint);
+        cmd.SetComputeFloatParam(data.PostProcessCS, InputWhitePointID, data.InputWhitePoint);
+        cmd.SetComputeFloatParam(data.PostProcessCS, HighlightRecoveryID, data.HighlightRecovery);
+        cmd.SetComputeVectorParam(data.PostProcessCS, DisplayGrade0ID, data.DisplayGrade0);
+        cmd.SetComputeVectorParam(data.PostProcessCS, DisplayGrade1ID, data.DisplayGrade1);
+        cmd.SetComputeFloatParam(
+            data.PostProcessCS,
+            DisplayGradePathPowerID,
+            data.DisplayGradePathPower);
+        cmd.SetComputeVectorArrayParam(data.PostProcessCS, MasterCurveID, data.MasterCurvePoints);
+        cmd.SetComputeVectorArrayParam(data.PostProcessCS, RedCurveID, data.RedCurvePoints);
+        cmd.SetComputeVectorArrayParam(data.PostProcessCS, GreenCurveID, data.GreenCurvePoints);
+        cmd.SetComputeVectorArrayParam(data.PostProcessCS, BlueCurveID, data.BlueCurvePoints);
+        cmd.SetComputeVectorArrayParam(
+            data.PostProcessCS,
+            HueVsHueCurveID,
+            data.HueVsHueCurvePoints);
+        cmd.SetComputeVectorArrayParam(
+            data.PostProcessCS,
+            HueVsSaturationCurveID,
+            data.HueVsSaturationCurvePoints);
+        cmd.SetComputeVectorArrayParam(
+            data.PostProcessCS,
+            HueVsLuminanceCurveID,
+            data.HueVsLuminanceCurvePoints);
+        cmd.SetComputeVectorArrayParam(
+            data.PostProcessCS,
+            LuminanceVsSaturationCurveID,
+            data.LuminanceVsSaturationCurvePoints);
+        cmd.SetComputeVectorArrayParam(
+            data.PostProcessCS,
+            SaturationVsSaturationCurveID,
+            data.SaturationVsSaturationCurvePoints);
+        cmd.SetComputeIntParam(data.PostProcessCS, MasterCurvePointCountID, data.MasterCurvePointCount);
+        cmd.SetComputeIntParam(data.PostProcessCS, RedCurvePointCountID, data.RedCurvePointCount);
+        cmd.SetComputeIntParam(data.PostProcessCS, GreenCurvePointCountID, data.GreenCurvePointCount);
+        cmd.SetComputeIntParam(data.PostProcessCS, BlueCurvePointCountID, data.BlueCurvePointCount);
+        cmd.SetComputeIntParam(
+            data.PostProcessCS,
+            HueVsHueCurvePointCountID,
+            data.HueVsHueCurvePointCount);
+        cmd.SetComputeIntParam(
+            data.PostProcessCS,
+            HueVsSaturationCurvePointCountID,
+            data.HueVsSaturationCurvePointCount);
+        cmd.SetComputeIntParam(
+            data.PostProcessCS,
+            HueVsLuminanceCurvePointCountID,
+            data.HueVsLuminanceCurvePointCount);
+        cmd.SetComputeIntParam(
+            data.PostProcessCS,
+            LuminanceVsSaturationCurvePointCountID,
+            data.LuminanceVsSaturationCurvePointCount);
+        cmd.SetComputeIntParam(
+            data.PostProcessCS,
+            SaturationVsSaturationCurvePointCountID,
+            data.SaturationVsSaturationCurvePointCount);
+        cmd.SetComputeIntParam(data.PostProcessCS, CurveInterpolationID, data.CurveInterpolation);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier0ID, data.Qualifier0);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier1ID, data.Qualifier1);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier2ID, data.Qualifier2);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier3ID, data.Qualifier3);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier4ID, data.Qualifier4);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier5ID, data.Qualifier5);
+        cmd.SetComputeVectorParam(data.PostProcessCS, Qualifier6ID, data.Qualifier6);
+        cmd.SetComputeVectorArrayParam(
+            data.PostProcessCS,
+            QualifierHueSamplesID,
+            data.QualifierHueSamples);
+        cmd.SetComputeIntParam(
+            data.PostProcessCS,
+            QualifierHueSampleCountID,
+            data.QualifierHueSampleCount);
+        cmd.SetComputeVectorParam(
+            data.PostProcessCS,
+            LutParamsID,
+            new Vector4(
+                data.LutIntensity,
+                data.LutType,
+                data.LutColorSpace,
+                data.Lut1D != null ? data.Lut1D.width : data.Lut3D != null ? data.Lut3D.width : 0f));
+        cmd.SetComputeVectorParam(data.PostProcessCS, LutDomainMinID, data.LutDomainMin);
+        cmd.SetComputeVectorParam(data.PostProcessCS, LutDomainMaxID, data.LutDomainMax);
+        cmd.SetComputeVectorParam(data.PostProcessCS, ColorManagement0ID, data.ColorManagement0);
+        cmd.SetComputeVectorParam(data.PostProcessCS, ColorManagement1ID, data.ColorManagement1);
+        // Metal validates every resource declared by a compute kernel, even when
+        // the LUT branch is disabled by intensity/type. Bind explicit identity
+        // LUTs so neutral grading remains mathematically unchanged.
+        cmd.SetComputeTextureParam(
+            data.PostProcessCS,
+            data.KernelComposite,
+            Lut1DID,
+            data.Lut1D ?? GetIdentityLut1D());
+        cmd.SetComputeTextureParam(
+            data.PostProcessCS,
+            data.KernelComposite,
+            Lut3DID,
+            data.Lut3D ?? GetIdentityLut3D());
         cmd.SetComputeFloatParam(data.PostProcessCS, EigengrauIntensityID, data.EigengrauActive ? data.EigengrauIntensity : 0f);
         if (data.EigengrauActive)
         {
@@ -214,5 +340,51 @@ internal static class PostProcessPassExecutor
                 HistoryTexID,
                 Texture2D.blackTexture);
         }
+    }
+
+    private static Texture2D GetIdentityLut1D()
+    {
+        if (_identityLut1D != null)
+        {
+            return _identityLut1D;
+        }
+
+        _identityLut1D = RuntimeTextureFactory.CreateRGBAFloatNoMip(
+            2,
+            1,
+            "PostProcess_IdentityLut1D",
+            RuntimeTextureColorSpace.Linear,
+            FilterMode.Bilinear,
+            TextureWrapMode.Clamp);
+        _identityLut1D.SetPixels([Color.black, Color.white]);
+        _identityLut1D.Apply(false, true);
+        return _identityLut1D;
+    }
+
+    private static Texture3D GetIdentityLut3D()
+    {
+        if (_identityLut3D != null)
+        {
+            return _identityLut3D;
+        }
+
+        _identityLut3D = RuntimeTextureFactory.CreateRGBAFloat3DNoMip(
+            2,
+            "PostProcess_IdentityLut3D",
+            FilterMode.Bilinear,
+            TextureWrapMode.Clamp);
+        _identityLut3D.SetPixels(
+        [
+            Color.black,
+            new Color(1f, 0f, 0f, 1f),
+            new Color(0f, 1f, 0f, 1f),
+            Color.white,
+            new Color(0f, 0f, 1f, 1f),
+            new Color(1f, 0f, 1f, 1f),
+            new Color(0f, 1f, 1f, 1f),
+            Color.white,
+        ]);
+        _identityLut3D.Apply(false, true);
+        return _identityLut3D;
     }
 }

@@ -12,19 +12,30 @@ internal static class ScopesPassExecutor
 {
     private const int GroupSize = 8;
     private const float TargetSamples = 65_536f;
+    private const float UpdateIntervalSeconds = 0.1f;
+
+    private static float _nextUpdateTime;
 
     public static void Render(ScopesPassData data, UnsafeGraphContext context)
     {
+        float now = Time.realtimeSinceStartup;
+        if (now < _nextUpdateTime)
+        {
+            return;
+        }
+
+        _nextUpdateTime = now + UpdateIntervalSeconds;
         CommandBuffer cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
         ScopeResources resources = data.Resources;
         HDROutputUtils.ConfigureHDROutput(
             data.ScopesCS,
-            data.HdrGamut,
-            data.HdrOutput ? HDROutputUtils.Operation.ColorConversion : HDROutputUtils.Operation.None);
+            data.HDRGamut,
+            data.HDROutput ? HDROutputUtils.Operation.ColorConversion : HDROutputUtils.Operation.None);
 
         ComputeBuffer histogram = Require(resources.HistogramBuffer, nameof(resources.HistogramBuffer));
         ComputeBuffer waveform = Require(resources.WaveformBuffer, nameof(resources.WaveformBuffer));
         ComputeBuffer vectorscope = Require(resources.VectorscopeBuffer, nameof(resources.VectorscopeBuffer));
+        ComputeBuffer stats = Require(resources.StatsBuffer, nameof(resources.StatsBuffer));
 
         // Прореживание: разбирать каждый пиксель кадра в 4K не нужно и вредно —
         // прибор от этого не точнее, а кадр дороже. Сетки 256x256 выборок
@@ -58,13 +69,21 @@ internal static class ScopesPassExecutor
                 densityNormalization,
                 densityNormalization));
         cmd.SetComputeFloatParam(data.ScopesCS, ScopeSignalScaleID, data.SignalScale);
+        cmd.SetComputeIntParam(data.ScopesCS, ScopeHistogramModeID, data.HistogramMode);
+        cmd.SetComputeFloatParam(data.ScopesCS, ScopeVectorscopeScaleID, data.VectorscopeScale);
+        cmd.SetComputeIntParam(
+            data.ScopesCS,
+            ScopeShowSkinToneLineID,
+            data.ShowSkinToneLine ? 1 : 0);
+        cmd.SetComputeIntParam(data.ScopesCS, ScopeWaveformModeID, data.WaveformMode);
 
-        BindBuffers(cmd, data.ScopesCS, data.KernelClear, histogram, waveform, vectorscope);
+        BindBuffers(cmd, data.ScopesCS, data.KernelClear, histogram, waveform, vectorscope, stats);
         Dispatch(cmd, data.ScopesCS, data.KernelClear, ScopeResources.Size, ScopeResources.Size);
 
-        BindBuffers(cmd, data.ScopesCS, data.KernelGather, histogram, waveform, vectorscope);
+        BindBuffers(cmd, data.ScopesCS, data.KernelGather, histogram, waveform, vectorscope, stats);
         cmd.SetComputeTextureParam(data.ScopesCS, data.KernelGather, ScopeSourceID, data.SourceTexture);
         Dispatch(cmd, data.ScopesCS, data.KernelGather, sampledWidth, sampledHeight);
+        AsyncGPUReadback.Request(stats, resources.ApplyStats);
 
         Resolve(cmd, data, data.KernelHistogram, resources.HistogramTexture, histogram, waveform, vectorscope);
         Resolve(cmd, data, data.KernelWaveform, resources.WaveformTexture, histogram, waveform, vectorscope);
@@ -92,11 +111,16 @@ internal static class ScopesPassExecutor
         int kernel,
         ComputeBuffer histogram,
         ComputeBuffer waveform,
-        ComputeBuffer vectorscope)
+        ComputeBuffer vectorscope,
+        ComputeBuffer? stats = null)
     {
         cmd.SetComputeBufferParam(shader, kernel, HistogramBufferID, histogram);
         cmd.SetComputeBufferParam(shader, kernel, WaveformBufferID, waveform);
         cmd.SetComputeBufferParam(shader, kernel, VectorscopeBufferID, vectorscope);
+        if (stats != null)
+        {
+            cmd.SetComputeBufferParam(shader, kernel, ScopeStatsBufferID, stats);
+        }
     }
 
     private static void Dispatch(CommandBuffer cmd, ComputeShader shader, int kernel, int width, int height)

@@ -140,7 +140,30 @@ internal static class DummyCellConfigurationUtilities
         SetConfig(configs, CellType.TeleportBlock, CellConfigProperties.Passable | CellConfigProperties.ReceivesShadow | CellConfigProperties.Glowing, 0);
 
         RequireEveryCellTypeConfigured();
+        ApplyMapColors(configs);
         return configs;
+    }
+
+    /// <summary>
+    /// Ставит клеткам цвета карты из старого клиента.
+    /// </summary>
+    /// <remarks>
+    /// ПОСЛЕ ВСЕХ SetConfig, а не вместо них. SetConfig задаёт поведение —
+    /// проходимость, разрушаемость, свечение, анимацию, — и цвет там был лишь
+    /// значением по умолчанию. Цвет же переносится целой таблицей, номер в
+    /// номер, и разносить её обратно по восьмидесяти строкам значило бы
+    /// потерять возможность сверить перенос с оригиналом.
+    ///
+    /// Альфа при этом значима не только для карты: у светящихся клеток шейдер
+    /// берёт из неё силу эмиссии. В перенесённой таблице она равна единице
+    /// везде, кроме пустоты и дороги, — то есть свечение осталось прежним.
+    /// </remarks>
+    private static void ApplyMapColors(CellConfigurationPacket[] configs)
+    {
+        for (int cellId = 0; cellId < configs.Length; cellId++)
+        {
+            configs[cellId] = configs[cellId] with { Color = DummyMapColors.Get(cellId) };
+        }
     }
 
     public static int GetCrystalBasketIndex(CellType cell)

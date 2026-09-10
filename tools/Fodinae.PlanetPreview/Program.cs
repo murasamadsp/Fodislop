@@ -249,7 +249,7 @@ public static class PlanetPreviewApi
         return Image.LoadPixelData<Rgb24>(flat, size, size);
     }
 
-    private static RgbF SampleEquirect(Image<Rgb24> tex, double u, double v)
+    private static RGBF SampleEquirect(Image<Rgb24> tex, double u, double v)
     {
         int w = tex.Width;
         int h = tex.Height;
@@ -272,7 +272,7 @@ public static class PlanetPreviewApi
         float g = (float)((c00.G * (1 - fx) + c10.G * fx + c01.G * (1 - fx) + c11.G * fx) * 0.5 / 255.0);
         float b = (float)((c00.B * (1 - fx) + c10.B * fx + c01.B * (1 - fx) + c11.B * fx) * 0.5 / 255.0);
 
-        return new RgbF(r, g, b);
+        return new RGBF(r, g, b);
     }
 
     private static Dictionary<string, double> LoadMaterial(string path)
@@ -357,13 +357,13 @@ public static class PlanetPreviewApi
         return SixLabors.ImageSharp.Image.Load<Rgb24>(path);
     }
 
-    private readonly struct RgbF
+    private readonly struct RGBF
     {
         public readonly float X;
         public readonly float Y;
         public readonly float Z;
-        public RgbF(float x, float y, float z) => (X, Y, Z) = (x, y, z);
-        public static implicit operator SixLabors.ImageSharp.PixelFormats.Rgb24(RgbF c) =>
+        public RGBF(float x, float y, float z) => (X, Y, Z) = (x, y, z);
+        public static implicit operator SixLabors.ImageSharp.PixelFormats.Rgb24(RGBF c) =>
             new Rgb24((byte)Math.Clamp((int)Math.Round(c.X * 255.0), 0, 255),
                       (byte)Math.Clamp((int)Math.Round(c.Y * 255.0), 0, 255),
                       (byte)Math.Clamp((int)Math.Round(c.Z * 255.0), 0, 255));

@@ -268,9 +268,20 @@ internal static class TerrainQuadBuilder
             glowFlags += 2f;
         }
 
-        byte solidConnectivityMask = !isBackground && isSameCell
-            ? precalc.CellSolidBoundaryMasks[x, y]
-            : (byte)0;
+        // Маска соседства кладётся и фоновым квадам тоже.
+        //
+        // ЗАЧЕМ. Клетке пола нужно знать, что над ней твёрдый блок, — иначе
+        // шейдеру нечем нарисовать падающую от блока тень, а без тени
+        // выдавленность блока читается как обводка, а не как высота. Маска в
+        // (x, y) описывает твёрдость соседей этой клетки в переднем плане, что
+        // фону и требуется: бит 1 означает «сверху блок».
+        //
+        // ПОЧЕМУ ЭТО БЕЗОПАСНО. Единственный прежний потребитель битов 0-3 —
+        // ветка скругления контура, а она включается флагом isRoundable,
+        // который у фона всегда снят. Поле материалов трогает маску только под
+        // тем же флагом. Так что до этой правки у фона стоял ноль не по
+        // смыслу, а потому что читать его было некому.
+        byte solidConnectivityMask = precalc.CellSolidBoundaryMasks[x, y];
         float solidBoundaryMask = solidConnectivityMask & 15;
         float solidDiagonalMask = solidConnectivityMask >> 4;
         bool hasRoundedPhysicalContour =

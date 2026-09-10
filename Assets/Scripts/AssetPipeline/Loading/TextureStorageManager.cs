@@ -111,7 +111,7 @@ namespace Fodinae.AssetPipeline
             }
 
             bool makeNoLongerReadable = RuntimeTextureFactory.SupportsTexture2DGpuCopy;
-            return RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+            return RuntimeTextureFactory.DecodeEncodedImageToRGBA32NoMip(
                 data,
                 filename,
                 RuntimeTextureColorSpace.Srgb,

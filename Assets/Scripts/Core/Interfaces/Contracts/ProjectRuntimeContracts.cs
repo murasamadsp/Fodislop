@@ -117,7 +117,6 @@ public static class ProjectRuntimeContracts
     public static class ComputeKernelNames
     {
         public const string SolveCascade = "SolveCascade";
-        public const string SolveAutomaticNormals = "SolveAutomaticNormals";
         public const string ResolveDirect = "ResolveDirect";
         public const string SolveDiffuseBounce = "SolveDiffuseBounce";
         public const string CompositeLighting = "CompositeLighting";

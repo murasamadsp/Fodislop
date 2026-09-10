@@ -35,6 +35,10 @@
       <HintPath>$(UnityManagedPath)/UnityEngine/UnityEngine.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="UnityEngine.ScriptingModule">
+      <HintPath>$(UnityManagedPath)/UnityEngine/UnityEngine.ScriptingModule.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup Condition="'$(UnityManagedPath)' != ''">
@@ -51,10 +55,9 @@
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\ClientConfig.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\IClientConfigManager.cs" />
     <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\Settings\*.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\DisplayTransform.cs" />
+    <Compile Include="..\..\Assets\Scripts\Core\Interfaces\Contracts\VisualTuning.cs" />
     <Compile Include="..\..\Assets\Scripts\Rendering\PostProcessing\PostProcessLimits.cs" />
-    <Compile Include="..\..\Assets\Scripts\Rendering\PostProcessing\DisplayTransform.cs" />
-    <Compile Include="..\..\Assets\Scripts\Rendering\PostProcessing\PostProcessLook.cs" />
-    <Compile Include="..\..\Assets\Scripts\World\Lighting\Config\LightingConfigHolder.cs" />
   </ItemGroup>
 
   <ItemGroup>

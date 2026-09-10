@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -35,6 +36,12 @@ internal sealed class ScopeResources : IDisposable
 
     public ComputeBuffer? VectorscopeBuffer { get; private set; }
 
+    public ComputeBuffer? StatsBuffer { get; private set; }
+
+    public uint ClippedBlackSamples { get; private set; }
+
+    public uint ClippedHighlightSamples { get; private set; }
+
     public RenderTexture? HistogramTexture { get; private set; }
 
     public RenderTexture? WaveformTexture { get; private set; }
@@ -45,6 +52,7 @@ internal sealed class ScopeResources : IDisposable
         HistogramBuffer != null &&
         WaveformBuffer != null &&
         VectorscopeBuffer != null &&
+        StatsBuffer != null &&
         HistogramTexture != null && HistogramTexture.IsCreated() &&
         WaveformTexture != null && WaveformTexture.IsCreated() &&
         VectorscopeTexture != null && VectorscopeTexture.IsCreated();
@@ -63,10 +71,10 @@ internal sealed class ScopeResources : IDisposable
             // отдельно, а не выводится из троих: по трём каналам её не восстановить,
             // а именно по ней читается экспозиция.
             HistogramBuffer = new ComputeBuffer(Bins * 4, sizeof(uint), ComputeBufferType.Structured);
-            // Три плоскости: парад RGB. Одна яркость не отвечает на первый
-            // вопрос разбора — какой канал упёрся в потолок раньше прочих.
-            WaveformBuffer = new ComputeBuffer(Size * Size * 3, sizeof(uint), ComputeBufferType.Structured);
+            // Четыре плоскости: RGB и отдельная luma для режима Luma waveform.
+            WaveformBuffer = new ComputeBuffer(Size * Size * 4, sizeof(uint), ComputeBufferType.Structured);
             VectorscopeBuffer = new ComputeBuffer(Size * Size, sizeof(uint), ComputeBufferType.Structured);
+            StatsBuffer = new ComputeBuffer(2, sizeof(uint), ComputeBufferType.Structured);
 
             HistogramTexture = CreateTexture(HistogramWidth, HistogramHeight, "_ScopeHistogram");
             WaveformTexture = CreateTexture(Size, Size, "_ScopeWaveform");
@@ -116,6 +124,10 @@ internal sealed class ScopeResources : IDisposable
         WaveformBuffer = null;
         VectorscopeBuffer?.Release();
         VectorscopeBuffer = null;
+        StatsBuffer?.Release();
+        StatsBuffer = null;
+        ClippedBlackSamples = 0;
+        ClippedHighlightSamples = 0;
 
         Release(HistogramTexture);
         HistogramTexture = null;
@@ -123,6 +135,21 @@ internal sealed class ScopeResources : IDisposable
         WaveformTexture = null;
         Release(VectorscopeTexture);
         VectorscopeTexture = null;
+    }
+
+    public void ApplyStats(AsyncGPUReadbackRequest request)
+    {
+        if (request.hasError)
+        {
+            return;
+        }
+
+        NativeArray<uint> values = request.GetData<uint>();
+        if (values.Length >= 2)
+        {
+            ClippedBlackSamples = values[0];
+            ClippedHighlightSamples = values[1];
+        }
     }
 
     private static void Release(RenderTexture? texture)

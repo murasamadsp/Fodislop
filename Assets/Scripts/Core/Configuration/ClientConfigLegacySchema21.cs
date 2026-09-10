@@ -2,6 +2,7 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Fodinae.Core;
 
@@ -31,8 +32,11 @@ internal sealed class ClientConfigLegacySchema21
     public float AmbientIntensity;
     public float EmissionScale;
     public Color AmbientColor;
-    public Color EmptyExtinctionRgb;
-    public Color SolidExtinctionRgb;
+    [FormerlySerializedAs("EmptyExtinctionRgb")]
+    public Color EmptyExtinctionRGB;
+
+    [FormerlySerializedAs("SolidExtinctionRgb")]
+    public Color SolidExtinctionRGB;
     public float EmptyExtinctionMultiplier;
     public float SolidExtinctionMultiplier;
     public float BounceStrength;

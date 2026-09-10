@@ -400,7 +400,7 @@ namespace Fodinae.UI
                 Destroy(_mapTexture);
             }
 
-            _mapTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+            _mapTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
                 _texWidth,
                 _texHeight,
                 "WorldMapTexture",

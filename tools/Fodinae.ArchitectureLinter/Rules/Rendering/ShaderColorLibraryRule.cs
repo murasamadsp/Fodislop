@@ -14,7 +14,7 @@ public sealed class ShaderColorLibraryRule : IRule
     private static readonly string[] ColorFunctions =
     {
         "SRGBToLinear", "LinearToSRGB", "FastSRGBToLinear", "FastLinearToSRGB",
-        "Luminance", "RgbToHsv", "HsvToRgb",
+        "Luminance", "RGBToHSV", "HSVToRGB",
     };
 
     public string Id => "FOD-SHADER-COLOR";

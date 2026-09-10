@@ -62,6 +62,8 @@ public sealed class ServerAudioEvent : IDisposable
     private EffekseerHandle _effekseerHandle;
     private EffekseerEffectAsset? _effekseerAsset;
     private bool _hasEffekseerEffect;
+    private IRobotView? _sourceBot;
+    private IRobotView? _targetBot;
 
     private CancellationTokenSource? _cts;
 
@@ -144,22 +146,14 @@ public sealed class ServerAudioEvent : IDisposable
 
         if (_hasEffekseerEffect)
         {
-            if (_parsedParams.HasSourceBot)
+            if (_sourceBot != null)
             {
-                var sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotId);
-                if (sourceBot != null)
-                {
-                    _effekseerHandle.SetLocation(sourceBot.transform.position);
-                }
+                _effekseerHandle.SetLocation(_sourceBot.transform.position);
             }
 
-            if (_targetBotId != 0)
+            if (_targetBot != null)
             {
-                var targetBot = _robotService.GetOrCreateRobot(_targetBotId);
-                if (targetBot != null)
-                {
-                    _effekseerHandle.SetTargetLocation(targetBot.transform.position);
-                }
+                _effekseerHandle.SetTargetLocation(_targetBot.transform.position);
             }
 
             if (!_effekseerHandle.exists)
@@ -240,13 +234,14 @@ public sealed class ServerAudioEvent : IDisposable
 
         if (_parsedParams.HasSourceBot)
         {
-            var sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotId);
-            pos = sourceBot != null
-                ? sourceBot.transform.position
+            _sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotId);
+            pos = _sourceBot != null
+                ? _sourceBot.transform.position
                 : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
         }
         else
         {
+            _sourceBot = null;
             pos = CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
         }
 
@@ -257,16 +252,20 @@ public sealed class ServerAudioEvent : IDisposable
 
         _intendedWorldPosition = pos;
 
-        if (_targetBotId != 0 && _gameObject != null)
+        if (_targetBotId != 0)
         {
-            var targetBot = _robotService.GetOrCreateRobot(_targetBotId);
-            if (targetBot != null)
+            _targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+            if (_targetBot != null && _gameObject != null)
             {
                 // The dig effect must point the way the bot faces, toward
                 // the cell being dug. The previous +180 offset rendered it
                 // pointing back at the bot's tail.
-                _gameObject.transform.rotation = Quaternion.Euler(0, 0, targetBot.LogicalFacingAngle);
+                _gameObject.transform.rotation = Quaternion.Euler(0, 0, _targetBot.LogicalFacingAngle);
             }
+        }
+        else
+        {
+            _targetBot = null;
         }
 
         _slot?.SetColor(_primaryColor);
@@ -482,5 +481,7 @@ public sealed class ServerAudioEvent : IDisposable
         }
 
         _gameObject = null;
+        _sourceBot = null;
+        _targetBot = null;
     }
 }

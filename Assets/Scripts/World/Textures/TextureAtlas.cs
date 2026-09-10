@@ -68,7 +68,7 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
         _textureResolver = textureResolver ?? throw new ArgumentNullException(nameof(textureResolver));
         _packer = new AtlasRectanglePacker(size, padding);
 
-        _atlasTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+        _atlasTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
             size,
             size,
             $"TerrainAtlas_{size}",

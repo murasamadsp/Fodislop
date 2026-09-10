@@ -22,20 +22,26 @@ internal sealed class ColorGradeZonePayload
     public float Exposure = PostProcessLook.ColorGrading.Exposure;
     public float Contrast = PostProcessLook.ColorGrading.Contrast;
     public float Saturation = PostProcessLook.ColorGrading.Saturation;
+    public float CdlSaturation = 1f;
     public int Transform;
     public float Temperature;
     public float Tint;
     public Vector3 Slope = Vector3.one;
     public Vector3 Offset;
     public Vector3 Power = Vector3.one;
+    public Vector3 PrimaryLift;
+    public Vector3 PrimaryGamma = Vector3.one;
+    public Vector3 PrimaryGain = Vector3.one;
+    public Vector3 PrimaryOffset;
+    public Vector4 PrimaryMaster = new(0f, 1f, 1f, 0f);
     public float WhitePoint = 1f;
-    public float GreyOut;
-    public float CurveSlope;
-    public float ShoulderPower;
-    public float ToePower;
-    public float ToeStops;
-    public float PathToWhiteAmount;
-    public float PathToWhitePower;
+    public float GreyOut = PostProcessLook.Grade.GreyOut;
+    public float CurveSlope = PostProcessLook.Grade.CurveSlope;
+    public float ShoulderPower = PostProcessLook.Grade.ShoulderPower;
+    public float ToePower = PostProcessLook.Grade.ToePower;
+    public float ToeStops = PostProcessLook.Grade.ToeStops;
+    public float PathToWhiteAmount = PostProcessLook.Grade.PathToWhiteAmount;
+    public float PathToWhitePower = PostProcessLook.Grade.PathToWhitePower;
 }
 
 /// <summary>Перевод зон между рабочим видом и формой файла.</summary>
@@ -62,12 +68,18 @@ internal static class ColorGradeZonePayloads
                 Exposure = zone.Exposure,
                 Contrast = zone.Contrast,
                 Saturation = zone.Saturation,
+                CdlSaturation = grade.CdlSaturation,
                 Transform = (int)grade.Transform,
                 Temperature = grade.Temperature,
                 Tint = grade.Tint,
                 Slope = grade.Slope,
                 Offset = grade.Offset,
                 Power = grade.Power,
+                PrimaryLift = grade.PrimaryLift,
+                PrimaryGamma = grade.PrimaryGamma,
+                PrimaryGain = grade.PrimaryGain,
+                PrimaryOffset = grade.PrimaryOffset,
+                PrimaryMaster = grade.PrimaryMaster,
                 WhitePoint = grade.WhitePoint,
                 GreyOut = grade.GreyOut,
                 CurveSlope = grade.CurveSlope,
@@ -130,11 +142,30 @@ internal static class ColorGradeZonePayloads
                 Grade = new ColorGradeSnapshot
                 {
                     Transform = (DisplayTransform)payload.Transform,
+                    Exposure = hasFullGrade
+                        ? payload.Exposure
+                        : PostProcessLook.ColorGrading.Exposure,
                     Temperature = payload.Temperature,
                     Tint = payload.Tint,
                     Slope = payload.Slope,
                     Offset = payload.Offset,
                     Power = payload.Power,
+                    PrimaryLift = payloadVersion >= 18
+                        ? payload.PrimaryLift
+                        : Vector3.zero,
+                    PrimaryGamma = payloadVersion >= 18
+                        ? payload.PrimaryGamma
+                        : Vector3.one,
+                    PrimaryGain = payloadVersion >= 18
+                        ? payload.PrimaryGain
+                        : Vector3.one,
+                    PrimaryOffset = payloadVersion >= 18
+                        ? payload.PrimaryOffset
+                        : Vector3.zero,
+                    PrimaryMaster = payloadVersion >= 18
+                        ? payload.PrimaryMaster
+                        : new Vector4(0f, 1f, 1f, 0f),
+                    CdlSaturation = payload.CdlSaturation,
                     WhitePoint = payload.WhitePoint,
                     GreyOut = payload.GreyOut,
                     CurveSlope = payload.CurveSlope,

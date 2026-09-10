@@ -178,7 +178,7 @@ public static class GifAnimationDecoder
                             transparentIndex,
                             interlaced);
 
-                        Texture2D frameTexture = RuntimeTextureFactory.CreateRgba32NoMip(
+                        Texture2D frameTexture = RuntimeTextureFactory.CreateRGBA32NoMip(
                             _sw,
                             _sh,
                             "DecodedGifFrame",
@@ -274,7 +274,7 @@ public static class GifAnimationDecoder
                         $"texture limit {SystemInfo.maxTextureSize}.");
                 }
 
-                atlas = RuntimeTextureFactory.CreateRgba32NoMip(
+                atlas = RuntimeTextureFactory.CreateRGBA32NoMip(
                     _sw,
                     atlasHeight,
                     "DecodedGifAtlas",

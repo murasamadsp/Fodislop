@@ -56,6 +56,7 @@ MonoBehaviour:
     VSyncCount: 1
     AntiAliasing: 0
     PostProcessQuality: 0
+    LightingQuality: 2
   _veryHigh:
     LightingMinimumPixelsPerCell: 4
     LightingMaximumTextureDimension: 1024
@@ -67,6 +68,7 @@ MonoBehaviour:
     VSyncCount: 1
     AntiAliasing: 0
     PostProcessQuality: 0
+    LightingQuality: 2
   _ultra:
     LightingMinimumPixelsPerCell: 4
     LightingMaximumTextureDimension: 1280

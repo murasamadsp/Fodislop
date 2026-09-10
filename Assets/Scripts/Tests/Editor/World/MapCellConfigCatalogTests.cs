@@ -139,7 +139,7 @@ public class MapCellConfigCatalogTests
     }
 
     [Test]
-    public void GetCellMinimapColor_WithConfigColor_UnpacksRgb()
+    public void GetCellMinimapColor_WithConfigColor_UnpacksRGB()
     {
         var catalog = new MapCellConfigCatalog();
         int argb = unchecked((int)0xFF112233);

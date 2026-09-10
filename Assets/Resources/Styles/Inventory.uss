@@ -82,53 +82,60 @@
     flex-shrink: 0;
 }
 
+/* Ячейка по скриншоту оригинала: почти чёрный квадрат без рамки, с
+   небольшим зазором до соседней — сквозь него видно мир. Шаг сетки остаётся
+   55 (51 сама клетка плюс по 2 отступа), поэтому четыре строки по-прежнему
+   укладываются в 220. Ни голубой обводки, ни крупного скругления там нет —
+   именно они и делали вид чужим. */
 .inv-cell {
-    width: 50px;
-    height: 50px;
-    min-width: 50px;
-    min-height: 50px;
+    width: 51px;
+    height: 51px;
+    min-width: 51px;
+    min-height: 51px;
     flex-shrink: 0;
     flex-grow: 0;
     justify-content: center;
     align-items: center;
-    margin: 3px;
-    background-color: var(--surface-shelf-dense);
-    border-width: 1px;
-    border-color: var(--accent-cyan-glow);
-    border-radius: var(--radius-md);
+    margin: 2px;
+    padding: 0;
+    border-width: 0;
+    border-radius: 3px;
+    background-color: rgba(10, 11, 13, 0.85);
 }
 
 .inv-cell:hover {
-    border-color: var(--accent-cyan-dense);
-    background-color: var(--surface-shelf-dense);
+    background-color: rgba(32, 34, 38, 0.9);
 }
 
 .inv-cell--selected {
-    border-width: 2px;
-    border-color: var(--accent-gold);
-    background-color: var(--light-film);
+    background-color: rgba(48, 44, 20, 0.95);
 }
 
 .inv-cell--highlight {
-    background-color: var(--light-sheen);
+    background-color: rgba(32, 34, 38, 0.9);
 }
 
+/* Иконка квадратная и по центру клетки.
+   В префабе старого клиента у неё стоит 38x30, но там в неё кладут настоящий
+   спрайт предмета со своим соотношением сторон, и прямоугольник поля просто
+   не виден. У нас на его месте пока заглушка, и несимметричное поле читается
+   как перекос самой клетки. Квадрат 38x38 в клетке 51 даёт равные поля со
+   всех сторон. */
 .inv-icon {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
     align-self: center;
-    justify-content: center;
 }
 
 .inv-qty {
     position: absolute;
-    right: 3px;
-    bottom: 2px;
-    font-size: var(--size-xs);
-    color: var(--light-solid);
-    -unity-font-style: bold;
+    right: 2px;
+    bottom: 1px;
+    font-size: 10px;
+    color: rgb(255, 255, 255);
+    -unity-text-align: lower-right;
 }
 
 .inv-floating {
@@ -153,21 +160,43 @@
        picking-mode="Position" — паттерн как в ObserverJoystick.uxml. */
 }
 
+/* ─── Раскладка снята со старого клиента ───────────────────────────────
+   Панель там висела в ПРАВОМ ВЕРХНЕМ углу со смещением (-13, -53), а не
+   внизу по центру. Сетка: GridLayoutGroup 55x55 без промежутков и полей,
+   StartCorner = UpperRight, StartAxis = Vertical, Constraint =
+   FixedRowCount со счётом 4. То есть предметы заполняют столбец сверху
+   вниз, а новые столбцы прирастают ВЛЕВО.
+
+   В UI Toolkit нет GridLayoutGroup, и то же самое делается переносом:
+   flex-direction: column + flex-wrap задают заполнение по столбцам,
+   фиксированная высота 220px (4 x 55) задаёт четыре строки, а wrap-reverse
+   разворачивает ось переноса, чтобы первый столбец оказался справа.
+
+   Внешний вид — наш: панель остаётся sci-fi-panel, ячейки берут наши
+   границы, скругления и цвета из токенов. Перенесена геометрия, не стиль. */
 .inv-hotbar {
     position: absolute;
-    bottom: 16px;
-    align-self: center;
+    top: 53px;
+    right: 13px;
     flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    padding: var(--space-3) var(--space-6);
+    align-items: flex-start;
+    padding: 0;
     border-radius: var(--radius-md);
 }
 
+/* Столбцы строятся явными контейнерами, а не переносом строк.
+   Перенос (flex-wrap) в Yoga раскладывал их лесенкой: высота контейнера в
+   точности равна четырём клеткам, и на границе он то влезал, то нет.
+   Явный столбец такой неопределённости не имеет.
+   row-reverse: первый столбец справа, следующие прирастают влево — как
+   StartCorner = UpperRight в старом клиенте. */
 .inv-hotbar-slots {
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
+    flex-direction: row-reverse;
+    align-items: flex-start;
+}
+
+.inv-slot-column {
+    flex-direction: column;
 }
 
 .inv-grid-container {
@@ -177,13 +206,27 @@
     margin-top: var(--space-5);
 }
 
+/* Узкая вертикальная полоса слева от сетки — как в старом клиенте:
+   15 в ширину, 220 в высоту, то есть ровно по высоте четырёх строк. */
+/* В оригинале это не панель, а узкая полоска с маленьким треугольником по
+   центру высоты, справа от сетки. Фона и рамки у неё нет. */
 .inv-toggle-btn {
-    margin-left: var(--space-5);
-    height: 48px;
-    padding-left: var(--space-7);
-    padding-right: var(--space-7);
+    width: 15px;
+    min-width: 15px;
+    height: 220px;
+    margin: 0;
+    padding: 0;
     justify-content: center;
     align-items: center;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    color: rgba(200, 200, 200, 0.8);
+    font-size: 12px;
+}
+
+.inv-toggle-btn:hover {
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(255, 255, 255);
 }
 
 .inv-header-left {

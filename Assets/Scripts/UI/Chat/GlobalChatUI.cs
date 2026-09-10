@@ -20,18 +20,12 @@ namespace Fodinae.UI
 {
     public class GlobalChatUI : MonoBehaviour, ILocalizableUI
     {
-        [Inject]
-        private UIDocument _doc = null!;
-        [Inject]
-        private INetworkService _networkService = null!;
-        [Inject]
-        private IInputBlocker _inputBlocker = null!;
-        [Inject]
-        private UIInputManager _uiInput = null!;
-        [Inject]
-        private ILocalizationService _loc = null!;
-        [Inject]
-        private IAsyncOperationSupervisor _operations = null!;
+        [Inject] private UIDocument _doc = null!;
+        [Inject] private INetworkService _networkService = null!;
+        [Inject] private IInputBlocker _inputBlocker = null!;
+        [Inject] private UIInputManager _uiInput = null!;
+        [Inject] private ILocalizationService _loc = null!;
+        [Inject] private IAsyncOperationSupervisor _operations = null!;
 
         private ChatEventGateway _chatEvents = null!;
         private ChatViewElements? _view;
@@ -42,6 +36,8 @@ namespace Fodinae.UI
         private ChatChannel _activeChannel;
         private readonly ChatMessageHistory _history = new();
         private readonly ChatMuteTracker _muteTracker = new();
+        private bool _lastMutedState;
+        private bool _hasCachedMuteState;
 
         protected void Start()
         {
@@ -58,7 +54,6 @@ namespace Fodinae.UI
         {
             _chatEvents = chatEvents;
             _chatEvents.MessageReceived += AddMessage;
-            _chatEvents.LocalMessageReceived += AddLocalMessage;
             _chatEvents.MuteReceived += ApplyMute;
         }
 
@@ -137,7 +132,6 @@ namespace Fodinae.UI
             if (_chatEvents != null)
             {
                 _chatEvents.MessageReceived -= AddMessage;
-                _chatEvents.LocalMessageReceived -= AddLocalMessage;
                 _chatEvents.MuteReceived -= ApplyMute;
             }
 
@@ -147,6 +141,7 @@ namespace Fodinae.UI
             _view?.Tree.RemoveFromHierarchy();
             _view = null;
             _colorController = null;
+            _hasCachedMuteState = false;
         }
 
         private void ApplyChatConfig()
@@ -385,10 +380,11 @@ namespace Fodinae.UI
             AppendMessage(ChatChannel.Global, ChatMessageFormatter.FormatGlobal(msg, DateTime.Now));
         }
 
-        private void AddLocalMessage(LocalChatMessagePacket packet)
-        {
-            AppendMessage(ChatChannel.Local, ChatMessageFormatter.FormatLocal(packet, DateTime.Now, _loc));
-        }
+        // Локальные сообщения в окне не показываются и потому здесь не
+        // выписываются вовсе. Локальный чат — это облако над роботом, а не строка
+        // в журнале; пока он был и там, и там, сообщение появлялось дважды, причём
+        // в журнале без всякой привязки к тому, кто и где его сказал. Показ —
+        // у FloatingChatManager, вкладка осталась только режимом ввода.
 
         private void AppendMessage(ChatChannel channel, string formattedMessage)
         {
@@ -478,14 +474,36 @@ namespace Fodinae.UI
             }
 
             bool muted = _muteTracker.IsMuted;
+
+            // Кэш переживал вид, который он и защищал.
+            //
+            // RefreshMuteState вызывается из Update, то есть и тогда, когда чат
+            // закрыт и _view равен null: первый же такой вызов запоминал
+            // «немой = нет» и глушил все последующие. Дальше чат открывался,
+            // элементы создавались заново — и SetEnabled к ним не применялся уже
+            // никогда, потому что состояние немоты с тех пор не менялось. Поле
+            // ввода оставалось в том виде, в каком его собрал UXML.
+            //
+            // Сбрасывается вместе с видом: сравнивать состояние можно только с
+            // тем, кому его в самом деле выставили.
+            if (_view == null)
+            {
+                _hasCachedMuteState = false;
+                return;
+            }
+
+            if (_hasCachedMuteState && _lastMutedState == muted)
+            {
+                return;
+            }
+
+            _lastMutedState = muted;
+            _hasCachedMuteState = true;
             _view?.InputField?.SetEnabled(!muted);
             _view?.SendButton?.SetEnabled(!muted);
             _view?.ColorButton?.SetEnabled(!muted);
         }
 
-        private void AddSystemMessage(string message)
-        {
-            AppendMessage(ChatChannel.Global, message);
-        }
+        private void AddSystemMessage(string message) => AppendMessage(ChatChannel.Global, message);
     }
 }

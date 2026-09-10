@@ -47,15 +47,27 @@ public sealed class FrameProbe : IDisposable
     [
         ProfilerCategory.Render,
         ProfilerCategory.Scripts,
+        ProfilerCategory.Gui,
+        ProfilerCategory.Internal,
+        ProfilerCategory.Memory,
+        ProfilerCategory.Audio,
+        ProfilerCategory.Physics,
+        ProfilerCategory.Input,
     ];
 
+    private readonly ProfilerCategory? _explicitCategory;
     private ProfilerRecorder _recorder;
 
-    public FrameProbe(string title, string markerName, bool isDetail = false)
+    public FrameProbe(
+        string title,
+        string markerName,
+        bool isDetail = false,
+        ProfilerCategory? category = null)
     {
         Title = title;
         MarkerName = markerName;
         IsDetail = isDetail;
+        _explicitCategory = category;
     }
 
     public string Title { get; }
@@ -87,12 +99,34 @@ public sealed class FrameProbe : IDisposable
             return;
         }
 
+        if (_explicitCategory.HasValue)
+        {
+            ProfilerRecorder recorder = ProfilerRecorder.StartNew(
+                _explicitCategory.Value,
+                MarkerName,
+                SampleCapacity,
+                ProfilerRecorderOptions.Default | ProfilerRecorderOptions.SumAllSamplesInFrame);
+            if (recorder.Valid)
+            {
+                _recorder = recorder;
+                return;
+            }
+
+            recorder.Dispose();
+        }
+
         foreach (ProfilerCategory category in _Candidates)
         {
+            if (_explicitCategory.HasValue && category == _explicitCategory.Value)
+            {
+                continue;
+            }
+
             ProfilerRecorder recorder = ProfilerRecorder.StartNew(
                 category,
                 MarkerName,
-                SampleCapacity);
+                SampleCapacity,
+                ProfilerRecorderOptions.Default | ProfilerRecorderOptions.SumAllSamplesInFrame);
             if (recorder.Valid)
             {
                 _recorder = recorder;
@@ -129,7 +163,11 @@ public sealed class FrameProbe : IDisposable
     {
         if (!_recorder.Valid)
         {
-            return;
+            Start();
+            if (!_recorder.Valid)
+            {
+                return;
+            }
         }
 
         LastMilliseconds = _recorder.LastValue / 1_000_000.0;
@@ -137,7 +175,7 @@ public sealed class FrameProbe : IDisposable
         int count = _recorder.Count;
         if (count <= 0)
         {
-            AverageMilliseconds = 0d;
+            AverageMilliseconds = LastMilliseconds;
             return;
         }
 

@@ -34,8 +34,8 @@ namespace Fodinae.Editor
             EditorGUILayout.Toggle("Cascade budget limited", engine.CascadeBudgetLimited);
             EditorGUILayout.Vector4Field("_WorldRect", engine.WorldRect);
             EditorGUILayout.ColorField(new GUIContent("_AmbientColor"), engine.ComputeAmbientColor, true, true, true);
-            EditorGUILayout.ColorField(new GUIContent("_EmptyExtinctionRgb"), engine.ComputeEmptyExtinction, true, true, true);
-            EditorGUILayout.ColorField(new GUIContent("_SolidExtinctionRgb"), engine.ComputeSolidExtinction, true, true, true);
+            EditorGUILayout.ColorField(new GUIContent("_EmptyExtinctionRGB"), engine.ComputeEmptyExtinction, true, true, true);
+            EditorGUILayout.ColorField(new GUIContent("_SolidExtinctionRGB"), engine.ComputeSolidExtinction, true, true, true);
             EditorGUILayout.FloatField("_MinimumTransmission", engine.MinimumTransmission);
             EditorGUILayout.FloatField("_BounceStrength", engine.BounceStrength);
             EditorGUILayout.FloatField("_EmissionScale", engine.EmissionScale);

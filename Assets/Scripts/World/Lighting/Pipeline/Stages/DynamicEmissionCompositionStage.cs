@@ -39,19 +39,22 @@ public sealed class DynamicEmissionCompositionStage : ILightingStage
             clearDepth: false,
             clearColor: true,
             backgroundColor: Color.clear);
+        // Проекция ставится до ветки по лампам: террейн рисуется в эту же цель
+        // независимо от того, есть ли в кадре хоть одна лампа.
+        Vector4 worldRect = context.WorldRect;
+        Matrix4x4 projection = Matrix4x4.Ortho(
+            worldRect.x,
+            worldRect.x + worldRect.z,
+            worldRect.y,
+            worldRect.y + worldRect.w,
+            -100f,
+            100f);
+        commandBuffer.SetViewProjectionMatrices(
+            Matrix4x4.identity,
+            GL.GetGPUProjectionMatrix(projection, renderIntoTexture: true));
+
         if (context.DynamicLightCount > 0 && context.DynamicLightBuffer != null)
         {
-            Vector4 worldRect = context.WorldRect;
-            Matrix4x4 projection = Matrix4x4.Ortho(
-                worldRect.x,
-                worldRect.x + worldRect.z,
-                worldRect.y,
-                worldRect.y + worldRect.w,
-                -100f,
-                100f);
-            commandBuffer.SetViewProjectionMatrices(
-                Matrix4x4.identity,
-                GL.GetGPUProjectionMatrix(projection, renderIntoTexture: true));
             // Set on the material, not as global shader state. A global
             // _CellSize would be visible to every shader that happens to
             // declare that name, and this pass has no business changing

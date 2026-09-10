@@ -17,7 +17,6 @@ internal static class LightingComputeBinder
 {
     public static readonly int MaterialFieldId = Shader.PropertyToID("_MaterialField");
     public static readonly int EmissionFieldId = Shader.PropertyToID("_EmissionField");
-    public static readonly int AutomaticNormalInputId = Shader.PropertyToID("_AutomaticNormalInput");
     public static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
     public static readonly int DirectTextureId = Shader.PropertyToID("_DirectTexture");
     public static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
@@ -29,10 +28,14 @@ internal static class LightingComputeBinder
     public static readonly int BounceSizeId = Shader.PropertyToID("_BounceSize");
     public static readonly int WorldRectId = Shader.PropertyToID("_WorldRect");
     public static readonly int AmbientColorId = Shader.PropertyToID("_AmbientColor");
-    public static readonly int EmptyExtinctionRgbId = Shader.PropertyToID("_EmptyExtinctionRgb");
-    public static readonly int SolidExtinctionRgbId = Shader.PropertyToID("_SolidExtinctionRgb");
+    public static readonly int EmptyExtinctionRGBId = Shader.PropertyToID("_EmptyExtinctionRGB");
+    public static readonly int SolidExtinctionRGBId = Shader.PropertyToID("_SolidExtinctionRGB");
     public static readonly int MinimumTransmissionId = Shader.PropertyToID("_MinimumTransmission");
     public static readonly int BounceStrengthId = Shader.PropertyToID("_BounceStrength");
+    public static readonly int TerrainAmbientOcclusionMipId =
+        Shader.PropertyToID("_TerrainAmbientOcclusionMip");
+    public static readonly int TerrainAmbientOcclusionStrengthId =
+        Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
     public static readonly int EmissionScaleId = Shader.PropertyToID("_EmissionScale");
     public static readonly int MaximumLightMultiplierId = Shader.PropertyToID("_MaximumLightMultiplier");
     public static readonly int EnableFinalLightingClampId = Shader.PropertyToID("_EnableFinalLightingClamp");
@@ -58,6 +61,30 @@ internal static class LightingComputeBinder
     public static readonly int CascadeDispatchRowWidthId = Shader.PropertyToID("_CascadeDispatchRowWidth");
     public static readonly int BlockAveragedId = Shader.PropertyToID("_BlockAveraged");
 
+    /// <summary>
+    /// Дальность луча отладочного вида прозрачности, в клетках.
+    /// </summary>
+    /// <remarks>
+    /// ЗАЧЕМ ВЫВОДИТСЯ, А НЕ ЗАДАЁТСЯ ЧИСЛОМ. Прозрачность считается как
+    /// <c>exp(-ослабление * длина)</c>, и осмысленный диапазон у экспоненты
+    /// короткий: дальше трёх единиц оптической толщины всё сливается в ноль.
+    /// Здесь стояла константа 10 клеток. Пока ослабление пустоты было малым,
+    /// вид работал; когда оно стало равно единице на клетку, произведение
+    /// достигло десяти, <c>exp(-10) ≈ 4.5e-5</c>, и вид почернел целиком — при
+    /// формально исправном коде вокруг.
+    ///
+    /// Дальность привязана к самому ослаблению, поэтому вид переживёт
+    /// следующую правку освещения, а не сломается о неё молча.
+    /// </remarks>
+    public static float ResolveTransmittanceDebugDistance()
+    {
+        Color extinction = LightingConfigHolder.EmptyExtinctionRGB *
+            LightingConfigHolder.EmptyExtinctionMultiplier;
+        // По сильнейшему каналу: он темнеет первым и задаёт, где вид упрётся в ноль.
+        float strongest = Mathf.Max(extinction.r, Mathf.Max(extinction.g, extinction.b));
+        return Mathf.Clamp(3f / Mathf.Max(strongest, 1e-4f), 1f, 32f);
+    }
+
     public static void BindFieldTextures(
         CommandBuffer commandBuffer,
         ComputeShader compute,
@@ -77,19 +104,6 @@ internal static class LightingComputeBinder
             emissionField);
     }
 
-    public static void BindAutomaticNormalInput(
-        CommandBuffer commandBuffer,
-        ComputeShader compute,
-        int kernel,
-        RenderTexture automaticNormalField)
-    {
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            kernel,
-            AutomaticNormalInputId,
-            automaticNormalField);
-    }
-
     public static void BindSharedParameters(
         CommandBuffer commandBuffer,
         ComputeShader compute,
@@ -104,9 +118,7 @@ internal static class LightingComputeBinder
         LightingEngine.DebugView debugView,
         RenderTexture materialField,
         RenderTexture emissionField,
-        RenderTexture automaticNormalField,
         int solveCascadeKernel,
-        int solveAutomaticNormalsKernel,
         int resolveDirectKernel,
         int solveDiffuseBounceKernel,
         int compositeLightingKernel)
@@ -120,14 +132,22 @@ internal static class LightingComputeBinder
             LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity);
         commandBuffer.SetComputeVectorParam(
             compute,
-            EmptyExtinctionRgbId,
-            LightingConfigHolder.EmptyExtinctionRgb * LightingConfigHolder.EmptyExtinctionMultiplier);
+            EmptyExtinctionRGBId,
+            LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier);
         commandBuffer.SetComputeVectorParam(
             compute,
-            SolidExtinctionRgbId,
-            LightingConfigHolder.SolidExtinctionRgb * LightingConfigHolder.SolidExtinctionMultiplier);
+            SolidExtinctionRGBId,
+            LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier);
         commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionId, LightingConfigHolder.MinimumTransmission);
         commandBuffer.SetComputeFloatParam(compute, BounceStrengthId, LightingConfigHolder.BounceStrength);
+        commandBuffer.SetComputeFloatParam(
+            compute,
+            TerrainAmbientOcclusionMipId,
+            Fodinae.World.Terrain.TerrainLook.AmbientOcclusionMip);
+        commandBuffer.SetComputeFloatParam(
+            compute,
+            TerrainAmbientOcclusionStrengthId,
+            Fodinae.World.Terrain.TerrainLook.AmbientOcclusionStrength);
         commandBuffer.SetComputeFloatParam(compute, EmissionScaleId, LightingConfigHolder.EmissionScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierId, LightingConfigHolder.MaximumLightMultiplier);
         commandBuffer.SetComputeIntParam(compute, EnableFinalLightingClampId, 0);
@@ -135,7 +155,7 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeFloatParam(
             compute,
             TransmittanceDebugDistanceCellsId,
-            10f);
+            ResolveTransmittanceDebugDistance());
         commandBuffer.SetComputeIntParam(compute, DebugViewId, (int)debugView);
         commandBuffer.SetComputeIntParam(
             compute,
@@ -155,17 +175,9 @@ internal static class LightingComputeBinder
             qualityMode == LightingQualityMode.PerBlock ? 1 : 0);
 
         BindFieldTextures(commandBuffer, compute, solveCascadeKernel, materialField, emissionField);
-        commandBuffer.SetComputeTextureParam(
-            compute,
-            solveAutomaticNormalsKernel,
-            MaterialFieldId,
-            materialField);
         BindFieldTextures(commandBuffer, compute, resolveDirectKernel, materialField, emissionField);
         BindFieldTextures(commandBuffer, compute, solveDiffuseBounceKernel, materialField, emissionField);
         BindFieldTextures(commandBuffer, compute, compositeLightingKernel, materialField, emissionField);
-        BindAutomaticNormalInput(commandBuffer, compute, resolveDirectKernel, automaticNormalField);
-        BindAutomaticNormalInput(commandBuffer, compute, solveDiffuseBounceKernel, automaticNormalField);
-        BindAutomaticNormalInput(commandBuffer, compute, compositeLightingKernel, automaticNormalField);
     }
 
     public static void BindCascadeParameters(

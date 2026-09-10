@@ -1,6 +1,7 @@
 #nullable enable
 
 using Fodinae.World.Terrain;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Fodinae.World.Lighting.Pipeline;
@@ -24,7 +25,6 @@ public readonly record struct LightingFrameContext(
     RenderTexture StaticDirectTexture,
     RenderTexture BounceTexture,
     RenderTexture ResultTexture,
-    RenderTexture AutomaticNormalField,
     RenderTexture MaterialField,
     RenderTexture StaticEmissionField,
     RenderTexture DynamicEmissionField,

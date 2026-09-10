@@ -21,9 +21,15 @@ namespace Fodinae.UI.HUD.Inventory.View
 {
     public class InventoryView : MonoBehaviour, ILocalizableUI
     {
-        private const int HOTBAR_COLS = 9;
-        private const int INVENTORY_COLS = 9;
-        private const int CELLSIZE = 50;
+
+        /// <summary>
+        /// Сколько предметов показывает короткий список. Четыре — это ровно один
+        /// столбец при четырёх строках, как в свёрнутом состоянии оригинала.
+        /// </summary>
+        private const int SHORTLISTSIZE = 4;
+
+        /// <summary>Строк в сетке. Столько же было в старом клиенте.</summary>
+        private const int ROWCOUNT = 4;
 
         [Inject]
         private UIDocument _doc = null!;
@@ -37,11 +43,14 @@ namespace Fodinae.UI.HUD.Inventory.View
         private UIInputManager _uiInput = null!;
 
         private readonly Dictionary<int, List<VisualElement>> _slotElements = new();
+        private readonly List<int> _occupiedSlots = new();
         private readonly InventoryDragAndContextMenu _dragAndContext = new();
 
         private VisualElement? _hotbarContainer;
         private Button? _inventoryButton;
-        private VisualElement? _fullInventoryPanel;
+        private VisualElement? _hotbarSlots;
+        private VisualElement? _fullSlots;
+        private Label? _toggleGlyph;
         private bool _isInventoryOpen;
         private Label? _capacityLabel;
 
@@ -269,84 +278,35 @@ namespace Fodinae.UI.HUD.Inventory.View
                 }
 
                 _hotbarContainer = tree.Q<VisualElement>("HotbarContainer");
-                var hotbarSlots = tree.Q<VisualElement>("HotbarSlots") ?? _hotbarContainer;
-                for (int i = 0; i < HOTBAR_COLS; i++)
-                {
-                    var cell = CreateCell(i, $"Hotbar_{i}");
-                    hotbarSlots.Add(cell);
-                }
+                _hotbarSlots = tree.Q<VisualElement>("HotbarSlots") ?? _hotbarContainer;
 
                 _inventoryButton = tree.Q<Button>("InventoryToggleBtn");
                 if (_inventoryButton != null)
                 {
-                    _inventoryButton.clicked += ToggleInventory;
+                    _inventoryButton.clicked += ToggleFullInventory;
                     if (_loc != null)
                     {
-                        _inventoryButton.tooltip = _loc.Get("inventory.open");
-                        Label? toggleLabel = _inventoryButton.Q<Label>();
-                        if (toggleLabel != null)
-                        {
-                            toggleLabel.text = _loc.Get("inventory.hotbar");
-                        }
+                        _inventoryButton.tooltip = $"{_loc.Get("inventory.open")} — {_loc.Get("inventory.hotbar")}";
+
+                        // Кнопка — узкая вертикальная полоса шириной в пятнадцать
+                        // пикселей, как в старом клиенте: название туда не влезает
+                        // и вылезало поверх сетки. Внутри остаётся только стрелка,
+                        // которая разворачивается при сворачивании — тем же
+                        // признаком, что и треугольник в эталоне.
+                        _toggleGlyph = _inventoryButton.Q<Label>();
                     }
+
+                    ApplyInventoryMode();
                 }
 
-                Label? inventoryTitle = tree.Q<Label>("InventoryTitle");
-                if (inventoryTitle != null && _loc != null)
-                {
-                    inventoryTitle.text = _loc.Get("inventory.title");
-                }
+                _fullSlots = tree.Q<VisualElement>("InventoryGrid");
+                RebuildSlots();
 
-                _fullInventoryPanel = tree.Q<VisualElement>("FullInventoryPanel");
-                var closeBtn = tree.Q<Button>("CloseInventoryBtn");
-                if (closeBtn != null)
-                {
-                    closeBtn.clicked += ToggleInventory;
-                }
-
-                var inventoryGrid = tree.Q<VisualElement>("InventoryGrid");
-                if (inventoryGrid != null)
-                {
-                    var grid = CreateGrid(0, InventoryModel.TOTALSLOTS - 1, "Inv");
-                    inventoryGrid.Add(grid);
-                }
-
-                _capacityLabel = tree.Q<Label>("CapacityLabel");
-                if (_capacityLabel != null && _loc != null)
-                {
-                    _capacityLabel.text = _loc.Get("inventory.capacity", InventoryModel.TOTALSLOTS);
-                }
             }
             else
             {
                 throw new InvalidOperationException("[InventoryView] Failed to load UI/Inventory.uxml");
             }
-        }
-
-        private VisualElement CreateGrid(int fromSlot, int toSlot, string prefix)
-        {
-            var grid = new VisualElement();
-            grid.name = $"{prefix}_Grid";
-            grid.AddToClassList("inv-grid");
-
-            int slotIndex = fromSlot;
-            int cols = (toSlot - fromSlot + 1 > 9) ? INVENTORY_COLS : (toSlot - fromSlot + 1);
-            int rows = (toSlot - fromSlot + 1 + cols - 1) / cols;
-
-            for (int row = 0; row < rows; row++)
-            {
-                var rowContainer = new VisualElement();
-                rowContainer.AddToClassList("inv-grid-row");
-
-                for (int col = 0; col < cols && slotIndex <= toSlot; col++, slotIndex++)
-                {
-                    rowContainer.Add(CreateCell(slotIndex, $"{prefix}_{slotIndex}"));
-                }
-
-                grid.Add(rowContainer);
-            }
-
-            return grid;
         }
 
         private VisualElement CreateCell(int slotIndex, string name)
@@ -360,31 +320,12 @@ namespace Fodinae.UI.HUD.Inventory.View
             // наследуется на поддерево и слот не получает мышь вообще — хотбар
             // выглядит как мёртвый интерфейс.
             cell.pickingMode = PickingMode.Position;
-            cell.style.width = CELLSIZE;
-            cell.style.height = CELLSIZE;
-            cell.style.minWidth = CELLSIZE;
-            cell.style.minHeight = CELLSIZE;
-            cell.style.flexShrink = 0;
-            cell.style.flexGrow = 0;
-            cell.style.marginRight = 3;
-            cell.style.marginLeft = 3;
-            cell.style.marginTop = 3;
-            cell.style.marginBottom = 3;
-            cell.style.backgroundColor = new Color(0.08f, 0.1f, 0.15f, 0.85f);
-            cell.style.borderTopWidth = 1;
-            cell.style.borderBottomWidth = 1;
-            cell.style.borderLeftWidth = 1;
-            cell.style.borderRightWidth = 1;
-            cell.style.borderTopColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
-            cell.style.borderBottomColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
-            cell.style.borderLeftColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
-            cell.style.borderRightColor = new Color(0.31f, 0.55f, 0.78f, 0.4f);
-            cell.style.borderTopLeftRadius = 4;
-            cell.style.borderTopRightRadius = 4;
-            cell.style.borderBottomLeftRadius = 4;
-            cell.style.borderBottomRightRadius = 4;
-            cell.style.justifyContent = Justify.Center;
-            cell.style.alignItems = Align.Center;
+
+            // Вид ячейки — целиком в .inv-cell из Inventory.uss, и здесь его
+            // задавать нельзя. Раньше тут стояли размер, отступы, цвет, рамки и
+            // скругления инлайном; инлайн старше таблицы стилей, поэтому правки
+            // в USS не действовали вовсе — оттуда и брались голубая обводка,
+            // крупные скругления и отступ, ломавший шаг сетки.
 
             var icon = new VisualElement();
             icon.name = "Icon";
@@ -440,6 +381,15 @@ namespace Fodinae.UI.HUD.Inventory.View
 
         private void RefreshSlot(int slotIndex)
         {
+            bool occupied = _model?.GetSlot(slotIndex) != null;
+            if (occupied != _occupiedSlots.Contains(slotIndex))
+            {
+                // Предмет появился или кончился: состав сетки изменился, и
+                // обновлением одной ячейки тут не обойтись.
+                RebuildSlots();
+                return;
+            }
+
             if (!_slotElements.ContainsKey(slotIndex))
             {
                 return;
@@ -476,11 +426,122 @@ namespace Fodinae.UI.HUD.Inventory.View
             }
         }
 
-        private void ToggleInventory()
+        /// <summary>
+        /// Пересобирает обе сетки по занятым слотам.
+        /// </summary>
+        /// <remarks>
+        /// ПОЧЕМУ НЕ ФИКСИРОВАННОЕ ЧИСЛО ЯЧЕЕК. В старом клиенте сервер
+        /// присылает ровно те предметы, что есть, и сетка строится по ним.
+        /// Пустых клеток там не бывает вовсе. У нас же короткий список рисовал
+        /// девять слотов, а полный — все шестьдесят три, и оба почти целиком
+        /// состояли из пустоты: девять клеток при четырёх строках дают рваный
+        /// столбец из одной, а шестьдесят три — стену на пол-экрана.
+        ///
+        /// Короткий список — не больше <see cref="SHORTLISTSIZE"/> предметов,
+        /// то есть ровно один столбец, как на скриншоте свёрнутого состояния.
+        /// Полный — все занятые слоты.
+        ///
+        /// Полоса переключения прячется, когда переключать не на что: в
+        /// оригинале она появляется, только если предметов больше короткого
+        /// списка.
+        /// </remarks>
+        private void RebuildSlots()
+        {
+            _occupiedSlots.Clear();
+            for (int i = 0; i < InventoryModel.TOTALSLOTS; i++)
+            {
+                if (_model?.GetSlot(i) != null)
+                {
+                    _occupiedSlots.Add(i);
+                }
+            }
+
+            FillSlots(_hotbarSlots, "Hotbar", Math.Min(_occupiedSlots.Count, SHORTLISTSIZE));
+            FillSlots(_fullSlots, "Inv", _occupiedSlots.Count);
+
+            if (_inventoryButton != null)
+            {
+                _inventoryButton.style.display = _occupiedSlots.Count > SHORTLISTSIZE
+                    ? DisplayStyle.Flex
+                    : DisplayStyle.None;
+            }
+
+            ApplyInventoryMode();
+        }
+
+        private void FillSlots(VisualElement? container, string prefix, int count)
+        {
+            if (container == null)
+            {
+                return;
+            }
+
+            // Ячейки пересоздаются целиком: список занятых слотов меняется, и
+            // сохранять привязку старых элементов к новым номерам не к чему.
+            foreach (List<VisualElement> elements in _slotElements.Values)
+            {
+                elements.RemoveAll(cell => container.Contains(cell));
+            }
+
+            container.Clear();
+
+            // Четыре строки, столбцы прирастают влево — как FixedRowCount = 4 со
+            // StartAxis = Vertical в старом клиенте. Столбец здесь настоящий
+            // контейнер, а не результат переноса: перенос раскладывал клетки
+            // лесенкой, потому что высота в точности равна четырём клеткам и на
+            // границе он то влезал, то нет.
+            VisualElement? column = null;
+            for (int i = 0; i < count; i++)
+            {
+                if (i % ROWCOUNT == 0)
+                {
+                    column = new VisualElement();
+                    column.AddToClassList("inv-slot-column");
+                    container.Add(column);
+                }
+
+                int slotIndex = _occupiedSlots[i];
+                column!.Add(CreateCell(slotIndex, $"{prefix}_{slotIndex}"));
+            }
+        }
+
+        /// <summary>
+        /// Переключает угловую панель между коротким и полным списком.
+        /// </summary>
+        /// <remarks>
+        /// Так в старом клиенте: полный список показывался В ТОЙ ЖЕ угловой
+        /// сетке, а не в отдельном окне посреди экрана, и полоса слева
+        /// переключала одно на другое. Треугольник на ней разворачивался по оси
+        /// X — здесь ту же роль играет стрелка.
+        /// </remarks>
+        private void ToggleFullInventory()
         {
             _isInventoryOpen = !_isInventoryOpen;
-            UIVisibilityAnimator.SetHidden(_fullInventoryPanel, !_isInventoryOpen);
+            ApplyInventoryMode();
         }
+
+        private void ApplyInventoryMode()
+        {
+            if (_hotbarSlots != null)
+            {
+                _hotbarSlots.style.display =
+                    _isInventoryOpen ? DisplayStyle.None : DisplayStyle.Flex;
+            }
+
+            if (_fullSlots != null)
+            {
+                _fullSlots.style.display =
+                    _isInventoryOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
+            if (_toggleGlyph != null)
+            {
+                _toggleGlyph.text = _isInventoryOpen ? "\u25B6" : "\u25C0";
+            }
+        }
+
+        // Клавиша делает ровно то же, что полоса: отдельного окна больше нет.
+        private void ToggleInventory() => ToggleFullInventory();
         private void ShowItemInfo(ItemData item)
         {
             _tooltipName.text = _loc!.Get("inventory.tooltip_item", item.Name ?? item.ItemType.ToString(), item.ItemType, item.Quantity);

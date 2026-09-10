@@ -76,6 +76,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection
             () => LoopAlive(_session.LifecycleVersion),
             operations);
         _chatResponder = new DummyChatResponder(SendPacket);
+        _adminCommands = new DummyAdminCommands(SendPacket, _playerState, _worldState);
         _clanManager = new DummyClanManager(SendPacket);
         _pathFinder = new DummyPathFinder(SendPacket, _worldState.GetCellConfig);
         _movementResponder = new DummyMovementResponder(
@@ -141,6 +142,7 @@ public class DummyConnection : IServerConnection, IOfflineConnection
     private readonly DummyTeleportManager _teleportManager;
     private readonly DummyChatSimulator _chatSimulator;
     private readonly DummyChatResponder _chatResponder;
+    private readonly DummyAdminCommands _adminCommands;
     private readonly DummyClanManager _clanManager;
     private readonly DummyPathFinder _pathFinder;
     private readonly DummyMovementResponder _movementResponder;
@@ -369,7 +371,12 @@ public class DummyConnection : IServerConnection, IOfflineConnection
                 break;
 
             case SendChatMessagePacket globalMsg:
-                _chatResponder.SendGlobal(globalMsg);
+                // Команда не уходит в чат: она обрабатывается и отвечает сама.
+                if (!_adminCommands.TryHandle(globalMsg.Message))
+                {
+                    _chatResponder.SendGlobal(globalMsg);
+                }
+
                 break;
             case MinesServer.Networking.Client.Packets.Inventory.SelectItemPacket selectItem:
                 _inventoryResponder.Select(selectItem.Item);

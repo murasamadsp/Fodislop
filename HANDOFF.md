@@ -53,7 +53,7 @@
 
 - Изменён `Assets/Settings/DefaultVolumeProfile.asset`: удалено 742 строки штатных subassets через Editor, не текстом.
 - `PostProcessVolumeProfile.asset` и `MenuSceneryVolumeProfile.asset` не нуждались в изменениях.
-- `Assets/Editor/HdrSdrDualModeSetup.cs` содержит отдельные команды:
+- `Assets/Editor/HDRSDRDualModeSetup.cs` содержит отдельные команды:
   - `Fodinae/Rendering/Clean Display Volume Profiles`
   - `Fodinae/Rendering/Validate Display Volume Profiles`
 - Отдельная очистка не меняет Player Settings, сцены и URP asset; сохраняет только затронутые профили через SaveAssetIfDirty.

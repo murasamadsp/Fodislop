@@ -32,7 +32,7 @@ public sealed class DesignSystemDebtRule : IRule
     private static readonly HashSet<string> GeneratedUss = new() { "ThemeTokens.uss", "TokenUtilities.uss" };
 
     private static readonly Regex HexColor = new(@"#[0-9a-fA-F]{3,8}\b", RegexOptions.Compiled);
-    private static readonly Regex Rgba = new(@"\brgba?\(", RegexOptions.Compiled);
+    private static readonly Regex RGBA = new(@"\brgba?\(", RegexOptions.Compiled);
     private static readonly Regex NamedColor = new(@":\s*(?:white|black|red|green|blue|yellow|magenta|cyan|gray|grey|silver|maroon|olive|lime|teal|navy|fuchsia|purple|aquamarine)\s*[;}]", RegexOptions.Compiled);
     private static readonly Regex PxValues = new(@"(?<![\w-])\d+(?:\.\d+)?px", RegexOptions.Compiled);
 
@@ -83,7 +83,7 @@ public sealed class DesignSystemDebtRule : IRule
             var code = StripUssComments(File.ReadAllText(file));
 
             counts[key] += HexColor.Matches(code).Count;
-            counts[key] += Rgba.Matches(code).Count;
+            counts[key] += RGBA.Matches(code).Count;
             counts[key] += NamedColor.Matches(code).Count;
             counts[key] += PxValues.Matches(code).Count;
         }

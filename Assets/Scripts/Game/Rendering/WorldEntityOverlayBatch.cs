@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using Fodinae.Core.Lifecycle;
-using Fodinae.World;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -40,19 +39,22 @@ public sealed class WorldEntityOverlayBatch : IDisposable
         renderer.sortingOrder = sortingOrder;
     }
 
+    /// <summary>
+    /// Собирает накладку из уже отобранных спрайтов.
+    /// </summary>
+    /// <remarks>
+    /// Отбор снаружи не ради вкуса. Здания сидят именно в этом слое, и раньше
+    /// накладка дважды за кадр проходила по всему списку зарегистрированных
+    /// спрайтов — на подсчёт и на запись, — спрашивая у каждого трансформ. Тот
+    /// же отбор пакет уже делает для основной сетки одним проходом; повторять
+    /// его здесь значило платить за город второй и третий раз.
+    /// </remarks>
     public void Rebuild(
         IReadOnlyList<WorldEntityBatchRenderer.SpriteHandle> sprites,
-        Func<Texture2D, Rect> getAtlasRect)
+        Func<Texture2D, Rect> getAtlasRect,
+        Bounds? bounds)
     {
-        int spriteCount = 0;
-        for (int i = 0; i < sprites.Count; i++)
-        {
-            if (IsRenderable(sprites[i]))
-            {
-                spriteCount++;
-            }
-        }
-
+        int spriteCount = sprites.Count;
         int vertexCount = spriteCount * 4;
         int indexCount = spriteCount * 6;
         EnsureCapacity(vertexCount, indexCount);
@@ -61,15 +63,23 @@ public sealed class WorldEntityOverlayBatch : IDisposable
         for (int i = 0; i < sprites.Count; i++)
         {
             WorldEntityBatchRenderer.SpriteHandle handle = sprites[i];
-            if (!IsRenderable(handle))
-            {
-                continue;
-            }
-
-            WriteSprite(handle, getAtlasRect, vertexCursor, indexCursor);
+            Sprite sprite = handle.Sprite ?? throw new InvalidOperationException(
+                "An enabled overlay sprite requires a Sprite.");
+            WorldEntityGeometry.WriteSprite(
+                _vertices,
+                _uvs,
+                _colors,
+                _indices,
+                handle,
+                getAtlasRect(sprite.texture),
+                vertexCursor,
+                indexCursor);
             vertexCursor += 4;
             indexCursor += 6;
         }
+
+        vertexCount = vertexCursor;
+        indexCount = indexCursor;
 
         bool topologyChanged = _uploadedSpriteCount != spriteCount;
         if (topologyChanged)
@@ -93,7 +103,14 @@ public sealed class WorldEntityOverlayBatch : IDisposable
                     calculateBounds: false);
             }
 
-            _mesh.RecalculateBounds();
+            if (bounds.HasValue)
+            {
+                _mesh.bounds = bounds.Value;
+            }
+            else
+            {
+                _mesh.RecalculateBounds();
+            }
         }
 
         _uploadedSpriteCount = spriteCount;
@@ -102,58 +119,6 @@ public sealed class WorldEntityOverlayBatch : IDisposable
     public void Dispose()
     {
         UnityEngine.Object.Destroy(_mesh);
-    }
-
-    private static bool IsRenderable(WorldEntityBatchRenderer.SpriteHandle handle)
-    {
-        return handle.Enabled &&
-            handle.Transform != null &&
-            handle.Sprite != null &&
-            handle.SortingOrder >= RenderingConstants.BUILDING_ROOF_SORTING_ORDER;
-    }
-
-    private void WriteSprite(
-        WorldEntityBatchRenderer.SpriteHandle handle,
-        Func<Texture2D, Rect> getAtlasRect,
-        int vertexOffset,
-        int indexOffset)
-    {
-        Sprite sprite = handle.Sprite ?? throw new InvalidOperationException(
-            "An enabled overlay sprite requires a Sprite.");
-        Rect atlasRect = getAtlasRect(sprite.texture);
-        Rect source = sprite.rect;
-        Vector2 pivot = new(
-            sprite.pivot.x / source.width,
-            sprite.pivot.y / source.height);
-        float width = source.width / sprite.pixelsPerUnit;
-        float height = source.height / sprite.pixelsPerUnit;
-        float left = -pivot.x * width;
-        float bottom = -pivot.y * height;
-        Transform spriteTransform = handle.Transform;
-
-        _vertices[vertexOffset] = spriteTransform.TransformPoint(new Vector3(left, bottom, 0f));
-        _vertices[vertexOffset + 1] = spriteTransform.TransformPoint(new Vector3(left, bottom + height, 0f));
-        _vertices[vertexOffset + 2] = spriteTransform.TransformPoint(new Vector3(left + width, bottom, 0f));
-        _vertices[vertexOffset + 3] = spriteTransform.TransformPoint(new Vector3(left + width, bottom + height, 0f));
-        float uMin = atlasRect.xMin + ((source.xMin / sprite.texture.width) * atlasRect.width);
-        float uMax = atlasRect.xMin + ((source.xMax / sprite.texture.width) * atlasRect.width);
-        float vMin = atlasRect.yMin + ((source.yMin / sprite.texture.height) * atlasRect.height);
-        float vMax = atlasRect.yMin + ((source.yMax / sprite.texture.height) * atlasRect.height);
-        _uvs[vertexOffset] = new Vector2(uMin, vMin);
-        _uvs[vertexOffset + 1] = new Vector2(uMin, vMax);
-        _uvs[vertexOffset + 2] = new Vector2(uMax, vMin);
-        _uvs[vertexOffset + 3] = new Vector2(uMax, vMax);
-        for (int i = 0; i < 4; i++)
-        {
-            _colors[vertexOffset + i] = handle.Color;
-        }
-
-        _indices[indexOffset] = vertexOffset;
-        _indices[indexOffset + 1] = vertexOffset + 1;
-        _indices[indexOffset + 2] = vertexOffset + 2;
-        _indices[indexOffset + 3] = vertexOffset + 2;
-        _indices[indexOffset + 4] = vertexOffset + 1;
-        _indices[indexOffset + 5] = vertexOffset + 3;
     }
 
     private void EnsureCapacity(int vertexCount, int indexCount)

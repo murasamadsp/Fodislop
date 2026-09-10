@@ -34,7 +34,7 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
     // Через именованный контракт, а не через сырую Camera: тот же объект,
     // но бутстрап заводил IGameplayCamera именно для потребителей DI.
     private readonly IGameplayCamera _camera;
-    private float _nextProbeTime;
+    private double _nextProbeTime;
     private Volume? _volume;
     private VolumeProfile? _profile;
     private Tonemapping? _tonemapping;
@@ -62,24 +62,29 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
         _volume.sharedProfile = _profile;
         UpdateCalibration();
         SceneManager.sceneLoaded += OnSceneLoaded;
+        Display.onDisplaysUpdated += OnDisplaysUpdated;
+        Application.focusChanged += OnFocusChanged;
         Apply();
     }
 
     public void Tick()
     {
         UpdateCalibration();
-        if (Time.unscaledTime < _nextProbeTime)
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (now < _nextProbeTime)
         {
             return;
         }
 
-        _nextProbeTime = Time.unscaledTime + ProbeIntervalSeconds;
+        _nextProbeTime = now + ProbeIntervalSeconds;
         Apply();
     }
 
     public void Dispose()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+        Display.onDisplaysUpdated -= OnDisplaysUpdated;
+        Application.focusChanged -= OnFocusChanged;
         if (_volume != null)
         {
             _volume.enabled = false;
@@ -117,6 +122,17 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode) => Apply();
+
+    private void OnDisplaysUpdated() => HDROutput.Retry();
+
+    private void OnFocusChanged(bool focused)
+    {
+        if (focused)
+        {
+            HDROutput.Retry();
+            Apply();
+        }
+    }
 
     private void Apply()
     {

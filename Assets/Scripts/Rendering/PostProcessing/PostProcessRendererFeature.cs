@@ -128,11 +128,17 @@ namespace Fodinae.Rendering.PostProcessing
                 PostProcessRuntimeState.SetMainCamera(_mainCamera);
             }
 
+            bool scopesEnabled = _scopesPass != null && ScopesRenderPass.Enabled;
+            if (scopesEnabled && ScopesRenderPass.SourceMode == ScopesSourceMode.Before)
+            {
+                renderer.EnqueuePass(_scopesPass!);
+            }
+
             renderer.EnqueuePass(_pass);
             renderer.EnqueuePass(_displayPass!);
-            if (_scopesPass != null && ScopesRenderPass.Enabled)
+            if (scopesEnabled && ScopesRenderPass.SourceMode == ScopesSourceMode.After)
             {
-                renderer.EnqueuePass(_scopesPass);
+                renderer.EnqueuePass(_scopesPass!);
             }
         }
 

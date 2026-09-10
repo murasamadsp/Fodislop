@@ -134,7 +134,7 @@ public static class ToolPalette
 
     private static Texture2D Allocate(string name, int width, int height)
     {
-        Texture2D texture = RuntimeTextureFactory.CreateRgba32NoMip(
+        Texture2D texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             width,
             height,
             name,
@@ -233,7 +233,7 @@ public static class ToolPalette
     /// </remarks>
     private static Texture2D CreateScanlines()
     {
-        Texture2D texture = RuntimeTextureFactory.CreateRgba32NoMip(
+        Texture2D texture = RuntimeTextureFactory.CreateRGBA32NoMip(
             1,
             4,
             "Tool.Scanlines",

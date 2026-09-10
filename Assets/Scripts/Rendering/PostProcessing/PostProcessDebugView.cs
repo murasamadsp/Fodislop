@@ -27,4 +27,31 @@ public enum PostProcessDebugView
     /// информацией: красные упёрлись в потолок, синие сели в пол.
     /// </summary>
     Clipping = 2,
+
+    /// <summary>Показывает пиксели вне display gamut.</summary>
+    GamutWarning = 3,
+
+    /// <summary>Монохромная яркостная составляющая.</summary>
+    LumaOnly = 4,
+
+    /// <summary>Насыщенность как диагностическая шкала.</summary>
+    SaturationOnly = 5,
+
+    /// <summary>Чёрно-белая matte qualifier-а.</summary>
+    QualifierMatte = 6,
+
+    /// <summary>Только красный канал.</summary>
+    SoloRed = 7,
+
+    /// <summary>Только зелёный канал.</summary>
+    SoloGreen = 8,
+
+    /// <summary>Только синий канал.</summary>
+    SoloBlue = 9,
+
+    /// <summary>Подсвечивает только clipped highlights поверх изображения.</summary>
+    HighlightClipping = 10,
+
+    /// <summary>Подсвечивает только clipped shadows поверх изображения.</summary>
+    ShadowClipping = 11,
 }

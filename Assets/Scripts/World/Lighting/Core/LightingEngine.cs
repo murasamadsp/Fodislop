@@ -20,16 +20,44 @@ namespace Fodinae.World.Lighting
     [DisallowMultipleComponent]
     public class LightingEngine : MonoBehaviour
     {
+        /// <summary>
+        /// Отладочные виды освещения.
+        /// </summary>
+        /// <remarks>
+        /// ЗАЧЕМ ЯВНЫЕ НОМЕРА. Значение уходит в шейдер как есть
+        /// (<c>SetComputeIntParam(DebugViewId, (int)debugView)</c>), то есть
+        /// порядковый номер члена — это и есть номер ветки в
+        /// <c>WorldLighting.compute</c>. Пока номера были неявными, списки
+        /// разошлись: в шейдере видов десять, здесь было семь, и всё после
+        /// четвёртого показывало не то, что называлось — «DirectRadiance»
+        /// открывал StaticDirect, «DiffuseBounce» открывал DynamicDirect, а три
+        /// вида не открывались вовсе. Явные номера делают расхождение
+        /// невозможным молча: добавить ветку в шейдер и забыть про этот список
+        /// теперь нельзя, номер не сойдётся.
+        /// </remarks>
         public enum DebugView
         {
-            FinalLighting,
-            Occupancy,
-            Albedo,
-            Emission,
-            Normals,
-            Transmission,
-            DirectRadiance,
-            DiffuseBounce,
+            FinalLighting = 0,
+            Occupancy = 1,
+            Albedo = 2,
+            Emission = 3,
+            Transmission = 4,
+            StaticDirect = 5,
+            DynamicDirect = 6,
+            DirectRadiance = 7,
+            DiffuseBounce = 8,
+            Exposure = 9,
+
+            /// <summary>
+            /// Занятость, усреднённая по окрестности, — источник AO, которым
+            /// террейн затемняет фон вокруг блоков. Белое значит закрыто.
+            /// </summary>
+            /// <remarks>
+            /// Готовой тени тут нет: она рисуется в <c>Terrain.shader</c> на
+            /// экранном разрешении и только по фону, а сюда попадает лишь та
+            /// величина, из которой она считается.
+            /// </remarks>
+            AmbientOcclusion = 10,
         }
 
         private const int DynamicLightStride = sizeof(float) * 8;
@@ -44,6 +72,13 @@ namespace Fodinae.World.Lighting
             Shader.PropertyToID("_WorldLightTextureSize");
         private static readonly int _WorldEmissionScaleId =
             Shader.PropertyToID("_WorldEmissionScale");
+
+        // Поле занятости для падающей тени в террейне. Y-переворот отдаётся
+        // отдельно: компьют читает это поле с поправкой, террейн обязан так же.
+        private static readonly int _WorldOccupancyTextureId =
+            Shader.PropertyToID("_WorldOccupancyTexture");
+        private static readonly int _WorldOccupancyYFlipId =
+            Shader.PropertyToID("_WorldOccupancyYFlip");
         private static readonly ProfilerMarker _LightingUpdateMarker =
             new("Fodinae.Lighting.UpdateLighting.CPU");
         private static readonly ProfilerMarker _BuildCommandsMarker =
@@ -91,13 +126,11 @@ namespace Fodinae.World.Lighting
         private RenderTexture? _staticEmissionField => _resources.StaticEmissionField;
         private RenderTexture? _dynamicEmissionField => _resources.DynamicEmissionField;
         private Material? _dynamicEmissionMaterial => _resources.DynamicEmissionMaterial;
-        private RenderTexture? _automaticNormalField => _resources.AutomaticNormalField;
         private RenderTexture? _directTexture => _resources.DirectTexture;
         private RenderTexture? _staticDirectTexture => _resources.StaticDirectTexture;
         private RenderTexture? _bounceTexture => _resources.BounceTexture;
         private RenderTexture? _lightmapTexture => _resources.LightmapTexture;
         private int _solveCascadeKernel => _resources.SolveCascadeKernel;
-        private int _solveAutomaticNormalsKernel => _resources.SolveAutomaticNormalsKernel;
         private int _resolveDirectKernel => _resources.ResolveDirectKernel;
         private int _solveDiffuseBounceKernel => _resources.SolveDiffuseBounceKernel;
         private int _compositeLightingKernel => _resources.CompositeLightingKernel;
@@ -108,7 +141,6 @@ namespace Fodinae.World.Lighting
         private int _atlasCapacity => _resources.AtlasCapacity;
         private int _atlasEntryCount => _resources.AtlasEntryCount;
         private LightingPipeline? _compositePipeline => _resources.CompositePipeline;
-        private LightingPipeline? _automaticNormalsPipeline => _resources.AutomaticNormalsPipeline;
         private LightingPipeline? _diffuseBouncePipeline => _resources.DiffuseBouncePipeline;
         private LightingPipeline? _dynamicEmissionCompositionPipeline => _resources.DynamicEmissionCompositionPipeline;
         private LightingPipeline? _materialFieldPipeline => _resources.MaterialFieldPipeline;
@@ -118,7 +150,22 @@ namespace Fodinae.World.Lighting
         private float _effectivePixelsPerCell;
         private bool _textureDimensionLimited;
         private bool _cascadeBudgetLimited;
-        private bool _fieldDirty = true;
+        private bool _fieldDirtyState = true;
+
+        /// <summary>
+        /// Поле требует перерисовки.
+        /// </summary>
+        /// <remarks>
+        /// Поле перерисовывается целиком: частичная перерисовка по
+        /// прямоугольникам была убрана, потому что очистка под ножницами на
+        /// Metal чистит цель, а не прямоугольник.
+        /// </remarks>
+        private bool _fieldDirty
+        {
+            get => _fieldDirtyState;
+            set => _fieldDirtyState = value;
+        }
+
         private bool _compositeDirty = true;
         private bool _bounceDirty = true;
         private bool _wasLightingBypassed;
@@ -180,9 +227,9 @@ namespace Fodinae.World.Lighting
 
         public float EmissionScale => LightingConfigHolder.EmissionScale;
 
-        public Color EmptyExtinctionRgb => LightingConfigHolder.EmptyExtinctionRgb;
+        public Color EmptyExtinctionRGB => LightingConfigHolder.EmptyExtinctionRGB;
 
-        public Color SolidExtinctionRgb => LightingConfigHolder.SolidExtinctionRgb;
+        public Color SolidExtinctionRGB => LightingConfigHolder.SolidExtinctionRGB;
 
         public float EmptyExtinctionMultiplier => LightingConfigHolder.EmptyExtinctionMultiplier;
 
@@ -192,7 +239,13 @@ namespace Fodinae.World.Lighting
 
         public float MaximumLightMultiplier => LightingConfigHolder.MaximumLightMultiplier;
 
-        public float TransmittanceDebugDistanceCells => 10f;
+        /// <remarks>
+        /// Считается там же, где выставляется в компьют, а не повторяется числом:
+        /// вторая копия этой величины уже разошлась с первой и показывала в
+        /// интерфейсе не то, чем на деле светил отладочный вид.
+        /// </remarks>
+        public float TransmittanceDebugDistanceCells =>
+            LightingComputeBinder.ResolveTransmittanceDebugDistance();
 
         public float MinimumTransmission => LightingConfigHolder.MinimumTransmission;
 
@@ -291,10 +344,10 @@ namespace Fodinae.World.Lighting
         public Color ComputeAmbientColor => LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity;
 
         public Color ComputeEmptyExtinction =>
-            LightingConfigHolder.EmptyExtinctionRgb * LightingConfigHolder.EmptyExtinctionMultiplier;
+            LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier;
 
         public Color ComputeSolidExtinction =>
-            LightingConfigHolder.SolidExtinctionRgb * LightingConfigHolder.SolidExtinctionMultiplier;
+            LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier;
 
         public int StableRegionPaddingCells => LightingRegionCalculator.LightingRegionPaddingCells;
 
@@ -506,7 +559,26 @@ namespace Fodinae.World.Lighting
 
             if (_lightingQualityMode == LightingQualityMode.Off)
             {
+                // Выключенное освещение освобождает свою память, а не только
+                // перестаёт считать.
+                //
+                // Поля, атлас яркости и карта света держали около 249 МБ
+                // render target'ов при нулевом времени на GPU: ветка выходила
+                // раньше расчёта, но раньше освобождения — тоже. Освобождение
+                // делается ровно на переходе, по тому же флагу, что и
+                // публикация: иначе оно шло бы каждый кадр.
+                //
+                // Обратный переход собирает всё заново сам: EnsureResources
+                // пересоздаёт поля, когда _materialField или RadianceAtlas
+                // пустые, а ветка выше уже помечает поля грязными и сбрасывает
+                // регион в NaN.
+                bool enteringDisabledState = !_lightingDisabledStatePublished;
                 PublishLightingDisabledState();
+                if (enteringDisabledState)
+                {
+                    ReleaseResources();
+                }
+
                 return;
             }
 
@@ -529,8 +601,22 @@ namespace Fodinae.World.Lighting
             // stale, but do none of the per-frame field work.
             if (BypassLightingCompute)
             {
+                // Мьют тоже отдаёт память, а не только перестаёт считать.
+                //
+                // Сброс делается ровно на входе в мьют и потому не спорит с
+                // тем, ради чего эта ветка выходит раньше расчёта: пока мьют
+                // держится, выделять уже нечего — ветка возвращается до
+                // EnsureResources, и пересечение границы региона больше не
+                // трогает поля. Раньше они просто висели: 249 МБ целей при
+                // нулевом времени на GPU.
+                bool enteringBypass = !_wasLightingBypassed;
                 _wasLightingBypassed = true;
                 PublishLightingDisabledState();
+                if (enteringBypass)
+                {
+                    ReleaseResources();
+                }
+
                 return;
             }
 
@@ -648,6 +734,13 @@ namespace Fodinae.World.Lighting
                         out dynamicLightsChanged);
                 }
 
+                // Анимированное свечение сюда НЕ добавляется, и это намеренно.
+                //
+                // Условие «в кадре есть анимированная светящаяся клетка» верно
+                // почти всегда, и кадр переставал уходить в ранний выход вовсе:
+                // каскады, разрешение и сведение считались каждый кадр даже в
+                // полном покое. Оживить пульсацию таким способом — значит
+                // заплатить за неё всем конвейером освещения.
                 if (!rebuildFields && !dynamicLightsChanged &&
                     !_compositeDirty && !_bounceDirty)
                 {
@@ -674,11 +767,6 @@ namespace Fodinae.World.Lighting
                     worldRect,
                     cellSize,
                     _staticEmissionField!);
-                if (rebuildFields)
-                {
-                    DispatchAutomaticNormals(commandBuffer);
-                }
-
                 // Terrain emitters are re-solved only when the geometry they
                 // depend on changes - explicitly NOT when a lamp moves. That
                 // dependency was the whole reason walking cost a full solve per
@@ -793,6 +881,14 @@ namespace Fodinae.World.Lighting
             Shader.EnableKeyword(WorldLightingKeyword);
             _lightingDisabledStatePublished = false;
             Shader.SetGlobalTexture(_WorldLightTextureId, _lightmapTexture);
+            if (_materialField != null)
+            {
+                Shader.SetGlobalTexture(_WorldOccupancyTextureId, _materialField);
+                Shader.SetGlobalInteger(
+                    _WorldOccupancyYFlipId,
+                    SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
+            }
+
             Shader.SetGlobalInteger(_WorldLightDebugViewId, (int)_debugView);
             Shader.SetGlobalFloat(_WorldEmissionScaleId, LightingConfigHolder.EmissionScale);
             Shader.SetGlobalVector(
@@ -831,9 +927,7 @@ namespace Fodinae.World.Lighting
                 _debugView,
                 _materialField!,
                 emissionField,
-                _automaticNormalField!,
                 _solveCascadeKernel,
-                _solveAutomaticNormalsKernel,
                 _resolveDirectKernel,
                 _solveDiffuseBounceKernel,
                 _compositeLightingKernel);
@@ -850,22 +944,6 @@ namespace Fodinae.World.Lighting
                 kernel,
                 _materialField!,
                 emissionField);
-        }
-
-        private void BindAutomaticNormalInput(CommandBuffer commandBuffer, int kernel)
-        {
-            LightingComputeBinder.BindAutomaticNormalInput(
-                commandBuffer,
-                _lightingCompute!,
-                kernel,
-                _automaticNormalField!);
-        }
-
-        private void DispatchAutomaticNormals(CommandBuffer commandBuffer)
-        {
-            commandBuffer.BeginSample("Fodinae.Lighting.AutomaticNormals");
-            _automaticNormalsPipeline!.Record(commandBuffer, BuildFrameContext());
-            commandBuffer.EndSample("Fodinae.Lighting.AutomaticNormals");
         }
 
         /// <summary>
@@ -885,7 +963,6 @@ namespace Fodinae.World.Lighting
                 _staticDirectTexture!,
                 _bounceTexture!,
                 _lightmapTexture!,
-                _automaticNormalField!,
                 _materialField!,
                 _staticEmissionField!,
                 _dynamicEmissionField!,

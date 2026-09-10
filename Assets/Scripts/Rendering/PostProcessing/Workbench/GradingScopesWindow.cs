@@ -43,6 +43,11 @@ internal sealed class GradingScopesWindow : ToolWindow
         _debugViewRequested = null;
         PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
         PostProcessRuntimeState.CompareSplit = 0f;
+        PostProcessRuntimeState.CompareMode = CompareMode.Off;
+        PostProcessRuntimeState.CompareBefore = false;
+        ScopesRenderPass.SourceMode = ScopesSourceMode.After;
+        ScopesRenderPass.WaveformMode = ScopeWaveformMode.Overlay;
+        ScopesRenderPass.HistogramMode = 0;
         _scroll = default;
     }
 
@@ -52,6 +57,11 @@ internal sealed class GradingScopesWindow : ToolWindow
         {
             PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
             PostProcessRuntimeState.CompareSplit = 0f;
+            PostProcessRuntimeState.CompareMode = CompareMode.Off;
+            PostProcessRuntimeState.CompareBefore = false;
+            ScopesRenderPass.SourceMode = ScopesSourceMode.After;
+            ScopesRenderPass.WaveformMode = ScopeWaveformMode.Overlay;
+            ScopesRenderPass.HistogramMode = 0;
             _debugViewRequested = null;
         }
     }
@@ -80,6 +90,7 @@ internal sealed class GradingScopesWindow : ToolWindow
 
             DrawDebugViewRow();
             DrawCompareRow();
+            DrawScopeSourceRow();
             ToolTheme.Separator();
 
             bool available = _scopesEnabled && ScopesRenderPass.Available;
@@ -96,6 +107,13 @@ internal sealed class GradingScopesWindow : ToolWindow
             GUILayout.Label(
                 message,
                 available ? ToolTheme.SuccessLabel : MutedLabelStyle);
+            if (available)
+            {
+                GUILayout.Label(
+                    $"Clipped: shadows {ScopesRenderPass.ClippedBlackSamples:N0} / " +
+                    $"highlights {ScopesRenderPass.ClippedHighlightSamples:N0} samples",
+                    ToolTheme.MutedLabel);
+            }
 
             float scopeWidth = Mathf.Max(120f, Mathf.Min(410f, Rect.width - 48f));
             DrawScope(
@@ -105,7 +123,11 @@ internal sealed class GradingScopesWindow : ToolWindow
                 128f);
             GUILayout.Space(6f);
             DrawScope(
-                "Waveform RGB",
+                ScopesRenderPass.WaveformMode == ScopeWaveformMode.Parade
+                    ? "Waveform RGB parade"
+                    : ScopesRenderPass.WaveformMode == ScopeWaveformMode.Luma
+                        ? "Waveform Luma"
+                        : "Waveform RGB overlay",
                 available ? ScopesRenderPass.LiveWaveform : null,
                 scopeWidth,
                 220f);
@@ -116,6 +138,26 @@ internal sealed class GradingScopesWindow : ToolWindow
                 scopeWidth,
                 220f,
                 ScaleMode.ScaleToFit);
+            bool showSkinToneLine = GUILayout.Toggle(
+                ScopesRenderPass.ShowSkinToneLine,
+                "Skin-tone line",
+                ToolTheme.SegmentedButton);
+            ScopesRenderPass.ShowSkinToneLine = showSkinToneLine;
+            GUILayout.Label(
+                "Targets: R / Mg / B / Cy / G / Y · 75% / 100%",
+                ToolTheme.MutedLabel);
+            using (new GUILayout.HorizontalScope())
+            {
+                GUILayout.Label("vectorscope zoom", ToolTheme.FieldLabel, GUILayout.Width(120f));
+                ScopesRenderPass.VectorscopeScale = GUILayout.HorizontalSlider(
+                    ScopesRenderPass.VectorscopeScale,
+                    0.5f,
+                    2f);
+                GUILayout.Label(
+                    $"{ScopesRenderPass.VectorscopeScale:0.00}×",
+                    ToolTheme.FieldLabel,
+                    GUILayout.Width(48f));
+            }
         }
     }
 
@@ -127,6 +169,15 @@ internal sealed class GradingScopesWindow : ToolWindow
             DebugViewButton("обычный", PostProcessDebugView.None);
             DebugViewButton("ложный цвет", PostProcessDebugView.FalseColor);
             DebugViewButton("отсечка", PostProcessDebugView.Clipping);
+            DebugViewButton("highlights", PostProcessDebugView.HighlightClipping);
+            DebugViewButton("shadows", PostProcessDebugView.ShadowClipping);
+            DebugViewButton("gamut", PostProcessDebugView.GamutWarning);
+            DebugViewButton("luma", PostProcessDebugView.LumaOnly);
+            DebugViewButton("sat", PostProcessDebugView.SaturationOnly);
+            DebugViewButton("matte", PostProcessDebugView.QualifierMatte);
+            DebugViewButton("R", PostProcessDebugView.SoloRed);
+            DebugViewButton("G", PostProcessDebugView.SoloGreen);
+            DebugViewButton("B", PostProcessDebugView.SoloBlue);
         }
 
         string explanation = PostProcessRuntimeState.DebugView switch
@@ -136,6 +187,21 @@ internal sealed class GradingScopesWindow : ToolWindow
                 "красное — пересвет, синее — провал",
             PostProcessDebugView.Clipping =>
                 "красное — упёрлось в потолок, синее — село в пол",
+            PostProcessDebugView.HighlightClipping =>
+                "красное — clipped highlights, исходное изображение сохранено",
+            PostProcessDebugView.ShadowClipping =>
+                "синее — clipped shadows, исходное изображение сохранено",
+            PostProcessDebugView.GamutWarning =>
+                "магентовый — канал вышел за display gamut",
+            PostProcessDebugView.LumaOnly =>
+                "монохромная яркость финального graded output",
+            PostProcessDebugView.SaturationOnly =>
+                "чёрный — нейтральный, белый — максимальная насыщенность",
+            PostProcessDebugView.QualifierMatte =>
+                "белое — выбранная qualifier-маска, чёрное — исключённые пиксели",
+            PostProcessDebugView.SoloRed => "только красный канал",
+            PostProcessDebugView.SoloGreen => "только зелёный канал",
+            PostProcessDebugView.SoloBlue => "только синий канал",
             PostProcessDebugView.None => string.Empty,
             _ => "неизвестный вид кадра",
         };
@@ -145,32 +211,137 @@ internal sealed class GradingScopesWindow : ToolWindow
         }
     }
 
-    private static void DrawCompareRow()
+    private void DrawCompareRow()
     {
         GUILayout.Label("СРАВНЕНИЕ ДО / ПОСЛЕ", SectionLabelStyle);
-        float split;
+
         using (new GUILayout.HorizontalScope())
         {
-            split = GUILayout.HorizontalSlider(
-                PostProcessRuntimeState.CompareSplit, 0f, 1f);
-            if (split < 0.01f)
-            {
-                split = 0f;
-            }
-            else if (split > 0.99f)
-            {
-                split = 1f;
-            }
+            CompareModeButton("выкл", CompareMode.Off);
+            CompareModeButton("верт. wipe", CompareMode.VerticalWipe);
+            CompareModeButton("гориз. wipe", CompareMode.HorizontalWipe);
+            CompareModeButton("side-by-side", CompareMode.SideBySide);
+            CompareModeButton("A/B", CompareMode.AbToggle);
+        }
 
-            PostProcessRuntimeState.CompareSplit = split;
-            GUILayout.Label($"{split:P0}", ToolTheme.FieldLabel, GUILayout.Width(48f));
+        CompareMode mode = PostProcessRuntimeState.CompareMode;
+        if (mode == CompareMode.AbToggle)
+        {
+            bool before = GUILayout.Toggle(
+                PostProcessRuntimeState.CompareBefore,
+                "Показывать BEFORE",
+                ToolTheme.SegmentedButton);
+            PostProcessRuntimeState.CompareBefore = before;
+        }
+
+        float split = PostProcessRuntimeState.CompareSplit;
+        if (mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe)
+        {
+            using (new GUILayout.HorizontalScope())
+            {
+                split = GUILayout.HorizontalSlider(
+                    split, 0f, 1f);
+                PostProcessRuntimeState.CompareSplit = split;
+                GUILayout.Label($"{split:P0}", ToolTheme.FieldLabel, GUILayout.Width(48f));
+            }
+        }
+
+            GUILayout.Label(
+                mode switch
+            {
+                CompareMode.VerticalWipe => "Слева — BEFORE, справа — AFTER.",
+                CompareMode.HorizontalWipe => "Снизу — BEFORE, сверху — AFTER.",
+                CompareMode.SideBySide => "Левая половина — BEFORE, правая — AFTER.",
+                CompareMode.AbToggle => PostProcessRuntimeState.CompareBefore
+                    ? "A/B: показывается BEFORE."
+                    : "A/B: показывается AFTER.",
+                _ => "Сравнение выключено.",
+            },
+            ToolTheme.MutedLabel);
+        GUILayout.Label(
+            "Удерживайте \\ для временного bypass и быстрого A/B сравнения.",
+            ToolTheme.MutedLabel);
+    }
+
+    private static void DrawScopeSourceRow()
+    {
+        GUILayout.Label("ИСТОЧНИК ПРИБОРОВ", SectionLabelStyle);
+        using (new GUILayout.HorizontalScope())
+        {
+            ScopeSourceButton("после грейда", ScopesSourceMode.After);
+            ScopeSourceButton("до грейда", ScopesSourceMode.Before);
         }
 
         GUILayout.Label(
-            split > 0f
-                ? "Слева — исходный кадр, справа — результат тонкоррекции."
-                : "Сравнение выключено.",
+            ScopesRenderPass.SourceMode == ScopesSourceMode.Before
+                ? "Scopes читают исходный camera color до постпроцесса."
+                : "Scopes читают финальный camera color после постпроцесса.",
             ToolTheme.MutedLabel);
+
+        GUILayout.Label("WAVEFORM", SectionLabelStyle);
+        using (new GUILayout.HorizontalScope())
+        {
+            WaveformModeButton("overlay", ScopeWaveformMode.Overlay);
+            WaveformModeButton("RGB parade", ScopeWaveformMode.Parade);
+            WaveformModeButton("Luma", ScopeWaveformMode.Luma);
+        }
+
+        GUILayout.Label("HISTOGRAM", SectionLabelStyle);
+        using (new GUILayout.HorizontalScope())
+        {
+            HistogramModeButton("RGB + luma", 0);
+            HistogramModeButton("luma", 1);
+            HistogramModeButton("RGB", 2);
+        }
+    }
+
+    private static void ScopeSourceButton(string label, ScopesSourceMode mode)
+    {
+        bool selected = ScopesRenderPass.SourceMode == mode;
+        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
+        if (toggled && !selected)
+        {
+            ScopesRenderPass.SourceMode = mode;
+        }
+    }
+
+    private static void WaveformModeButton(string label, ScopeWaveformMode mode)
+    {
+        bool selected = ScopesRenderPass.WaveformMode == mode;
+        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
+        if (toggled && !selected)
+        {
+            ScopesRenderPass.WaveformMode = mode;
+        }
+    }
+
+    private static void HistogramModeButton(string label, int mode)
+    {
+        bool selected = ScopesRenderPass.HistogramMode == mode;
+        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
+        if (toggled && !selected)
+        {
+            ScopesRenderPass.HistogramMode = mode;
+        }
+    }
+
+    private static void CompareModeButton(string label, CompareMode mode)
+    {
+        bool selected = PostProcessRuntimeState.CompareMode == mode;
+        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
+        if (toggled && !selected)
+        {
+            PostProcessRuntimeState.CompareMode = mode;
+            if (mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe)
+            {
+                PostProcessRuntimeState.CompareSplit = 0.5f;
+            }
+            else if (mode == CompareMode.Off)
+            {
+                PostProcessRuntimeState.CompareSplit = 0f;
+                PostProcessRuntimeState.CompareBefore = false;
+            }
+        }
     }
 
     private void DebugViewButton(string label, PostProcessDebugView view)

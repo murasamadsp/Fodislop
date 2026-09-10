@@ -52,7 +52,7 @@ public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCa
         Texture2D tex;
         try
         {
-            tex = RuntimeTextureFactory.DecodeEncodedImageToRgba32NoMip(
+            tex = RuntimeTextureFactory.DecodeEncodedImageToRGBA32NoMip(
                 File.ReadAllBytes(path),
                 $"ItemIcon_{type}",
                 RuntimeTextureColorSpace.Srgb,

@@ -243,7 +243,7 @@ public static class SettingSchema
                     break;
                 case Color color:
                     // У цвета диапазон не объявляется: компоненты бывают выше
-                    // единицы (SolidExtinctionRgb авторски равен 1.2). Требуется
+                    // единицы (SolidExtinctionRGB авторски равен 1.2). Требуется
                     // только конечность и неотрицательность — отрицательная
                     // яркость физически невозможна и ломает решатель света.
                     RequireFiniteNonNegative(color.r, $"{name}.r");

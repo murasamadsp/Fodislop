@@ -23,6 +23,7 @@ namespace Fodinae.Rendering.PostProcessing
 
         private Camera? _mainCamera;
         private bool _volumeSetupCompleted;
+        private bool _missingConfigReported;
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
@@ -181,10 +182,13 @@ namespace Fodinae.Rendering.PostProcessing
         {
             _gradingWorkbench.Deactivate();
             PostProcessRuntimeState.BypassPostProcessEffects = false;
+            PostProcessRuntimeState.TemporaryBypass = false;
             PostProcessRuntimeState.SetAdvancedSettings(default);
             PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
             PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
             PostProcessRuntimeState.CompareSplit = 0f;
+            PostProcessRuntimeState.CompareMode = CompareMode.Off;
+            PostProcessRuntimeState.CompareBefore = false;
             PostProcessRuntimeState.SetMainCamera(null);
         }
 
@@ -232,6 +236,32 @@ namespace Fodinae.Rendering.PostProcessing
 
             if (_volumeSetupCompleted)
             {
+                return;
+            }
+
+            // Без конфига подготовка НЕ объявляется завершённой.
+            //
+            // Метод публичный, и вызывали его в том числе оттуда, где внедрение
+            // ещё не случилось. Флаг при этом взводился на строку раньше, чем
+            // ApplyClientConfig падал на отсутствующем IClientConfigManager, —
+            // и дальше уже каждый Update заходил в грейд и бросал исключение
+            // заново. Два исключения на кадр со сборкой стека, до конца сессии,
+            // от одной неудачной подготовки.
+            //
+            // Теперь неудача просто не считается успехом: флаг не взводится,
+            // Update выходит на нём же, а подготовку повторят Start или OnEnable,
+            // когда конфиг появится.
+            if (_clientConfigManager?.Config == null)
+            {
+                if (!_missingConfigReported)
+                {
+                    _missingConfigReported = true;
+                    Debug.LogWarning(
+                        "PostProcessController: подготовка тома отложена — " +
+                        "IClientConfigManager ещё не внедрён или его конфиг пуст.",
+                        this);
+                }
+
                 return;
             }
 
