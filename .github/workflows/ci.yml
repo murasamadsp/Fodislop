@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  UNITY_EDITOR_VERSION: 6000.5.0f1
+  UNITY_EDITOR_VERSION: 6000.6.0f1
   UNITY_NO_CONSENT_PROMPT: '1'
   UNITY_NO_UPDATE_CHECK: '1'
 

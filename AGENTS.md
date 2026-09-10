@@ -1,6 +1,6 @@
 # AGENTS.md — инструкции для клиента Fodinae
 
-Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.5.0f1`), URP 2D 17.5, C# 12, UI Toolkit, UniTask и сетевые пакеты `darkar25.fodinae.*` из MinesServerNetworking.
+Fodinae — 2D MMORPG-песочница на Unity 6 (`6000.6.0f1`), URP 2D 17.6, C# 12, UI Toolkit, UniTask и сетевые пакеты `darkar25.fodinae.*` из MinesServerNetworking.
 
 ---
 
