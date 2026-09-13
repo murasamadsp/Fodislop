@@ -107,9 +107,6 @@ public sealed class RuntimeAssetPathsTests
         var state = new ColorGradeState
         {
             Exposure = 1.5f,
-            BlackPoint = 0.1f,
-            InputWhitePoint = 2f,
-            HighlightRecovery = 0.5f,
             Slope = new Vector3(1.2f, 0.9f, 1.1f),
         };
         state.SetBypassed(ColorGradeLayer.Cdl, bypassed: true);
@@ -124,9 +121,6 @@ public sealed class RuntimeAssetPathsTests
         state.SetBypassed(ColorGradeLayer.Exposure, bypassed: true);
         snapshot = state.ToSnapshot();
         Assert.That(snapshot.Exposure, Is.Zero);
-        Assert.That(snapshot.BlackPoint, Is.Zero);
-        Assert.That(snapshot.InputWhitePoint, Is.EqualTo(1f));
-        Assert.That(snapshot.HighlightRecovery, Is.Zero);
     }
 
     [Test]
@@ -234,9 +228,6 @@ public sealed class RuntimeAssetPathsTests
             snapshot.ColorManagement.DynamicRange,
             Is.EqualTo(ColorGradeDynamicRangeMode.Sdr));
         Assert.That(snapshot.Exposure, Is.Zero);
-        Assert.That(snapshot.BlackPoint, Is.Zero);
-        Assert.That(snapshot.InputWhitePoint, Is.EqualTo(1f));
-        Assert.That(snapshot.HighlightRecovery, Is.Zero);
         Assert.That(snapshot.Temperature, Is.Zero);
         Assert.That(snapshot.Tint, Is.Zero);
         Assert.That(snapshot.Slope, Is.EqualTo(Vector3.one));

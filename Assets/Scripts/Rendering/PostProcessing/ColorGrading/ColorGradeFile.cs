@@ -164,10 +164,6 @@ public static class ColorGradeFile
         public float CdlSaturation = 1f;
         public float Vibrance;
         public float Hue;
-        public Vector4 HueVsHue = new(120f, 30f, 15f, 0f);
-        public Vector4 HueVsLuminance = new(120f, 30f, 15f, 0f);
-        public Vector4 LuminanceVsSaturation = new(0.5f, 0.25f, 0.1f, 1f);
-        public Vector4 SaturationVsSaturation = new(0.5f, 0.25f, 0.1f, 1f);
         public float Temperature;
         public float Tint;
         public Vector3 Slope;
@@ -179,11 +175,7 @@ public static class ColorGradeFile
         public Vector3 PrimaryOffset;
         public Vector4 PrimaryMaster = new(0f, 1f, 1f, 0f);
         public Vector3 CdlMaster = new(1f, 0f, 1f);
-        public Vector4 HueVsSaturation = new(120f, 30f, 15f, 1f);
         public float WhitePoint;
-        public float BlackPoint;
-        public float InputWhitePoint = 1f;
-        public float HighlightRecovery;
         public float GreyOut;
         public float CurveSlope;
         public float ShoulderPower;
@@ -242,10 +234,6 @@ public static class ColorGradeFile
             CdlSaturation = state.CdlSaturation,
             Vibrance = state.Vibrance,
             Hue = state.Hue,
-            HueVsHue = state.HueVsHue,
-            HueVsLuminance = state.HueVsLuminance,
-            LuminanceVsSaturation = state.LuminanceVsSaturation,
-            SaturationVsSaturation = state.SaturationVsSaturation,
             Temperature = state.Temperature,
             Tint = state.Tint,
             Slope = state.Slope,
@@ -257,11 +245,7 @@ public static class ColorGradeFile
             PrimaryOffset = state.PrimaryOffset,
             PrimaryMaster = state.PrimaryMaster,
             CdlMaster = state.CdlMaster,
-            HueVsSaturation = state.HueVsSaturation,
             WhitePoint = state.WhitePoint,
-            BlackPoint = state.BlackPoint,
-            InputWhitePoint = state.InputWhitePoint,
-            HighlightRecovery = state.HighlightRecovery,
             GreyOut = state.GreyOut,
             CurveSlope = state.CurveSlope,
             ShoulderPower = state.ShoulderPower,
@@ -347,31 +331,12 @@ public static class ColorGradeFile
                 return false;
             }
 
-            if (payload.Version >= 4 &&
-                CountJsonFields(json, nameof(Payload.HueVsSaturation)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "HueVsSaturation; грейд оставлен как есть.");
-                return false;
-            }
-
             if (payload.Version >= 7 &&
                 CountJsonFields(json, nameof(Payload.Vibrance)) == 0)
             {
                 Debug.LogWarning(
                     $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
                     "Vibrance; грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 8 &&
-                (CountJsonFields(json, nameof(Payload.HueVsHue)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.HueVsLuminance)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "полные selective hue-кривые; грейд оставлен как есть.");
                 return false;
             }
 
@@ -395,16 +360,6 @@ public static class ColorGradeFile
                 Debug.LogWarning(
                     $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит Hue; " +
                     "грейд оставлен как есть.");
-                return false;
-            }
-
-            if (payload.Version >= 11 &&
-                (CountJsonFields(json, nameof(Payload.LuminanceVsSaturation)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.SaturationVsSaturation)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "полные luma/saturation curves; грейд оставлен как есть.");
                 return false;
             }
 
@@ -473,17 +428,6 @@ public static class ColorGradeFile
                 return false;
             }
 
-            if (payload.Version >= 5 &&
-                (CountJsonFields(json, nameof(Payload.BlackPoint)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.InputWhitePoint)) == 0 ||
-                 CountJsonFields(json, nameof(Payload.HighlightRecovery)) == 0))
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "полный входной диапазон; грейд оставлен как есть.");
-                return false;
-            }
-
             if (payload.Version >= 6 &&
                 CountJsonFields(json, nameof(Payload.CdlMaster)) == 0)
             {
@@ -524,18 +468,6 @@ public static class ColorGradeFile
             state.CdlSaturation = payload.Version >= 16 ? payload.CdlSaturation : 1f;
             state.Vibrance = payload.Version >= 7 ? payload.Vibrance : 0f;
             state.Hue = payload.Version >= 10 ? payload.Hue : 0f;
-            state.HueVsHue = payload.Version >= 8
-                ? payload.HueVsHue
-                : new Vector4(120f, 30f, 15f, 0f);
-            state.HueVsLuminance = payload.Version >= 8
-                ? payload.HueVsLuminance
-                : new Vector4(120f, 30f, 15f, 0f);
-            state.LuminanceVsSaturation = payload.Version >= 11
-                ? payload.LuminanceVsSaturation
-                : new Vector4(0.5f, 0.25f, 0.1f, 1f);
-            state.SaturationVsSaturation = payload.Version >= 11
-                ? payload.SaturationVsSaturation
-                : new Vector4(0.5f, 0.25f, 0.1f, 1f);
             state.Temperature = payload.Temperature;
             state.Tint = payload.Tint;
             state.Slope = payload.Slope;
@@ -551,13 +483,7 @@ public static class ColorGradeFile
             state.CdlMaster = payload.Version >= 6
                 ? payload.CdlMaster
                 : new Vector3(1f, 0f, 1f);
-            state.HueVsSaturation = payload.Version >= 4
-                ? payload.HueVsSaturation
-                : new Vector4(120f, 30f, 15f, 1f);
             state.WhitePoint = payload.WhitePoint;
-            state.BlackPoint = payload.Version >= 5 ? payload.BlackPoint : 0f;
-            state.InputWhitePoint = payload.Version >= 5 ? payload.InputWhitePoint : 1f;
-            state.HighlightRecovery = payload.Version >= 5 ? payload.HighlightRecovery : 0f;
             state.GreyOut = payload.GreyOut;
             state.CurveSlope = payload.CurveSlope;
             state.ShoulderPower = payload.ShoulderPower;
@@ -738,20 +664,7 @@ public static class ColorGradeFile
 
     private static bool HasRequiredVersionedFields(string json, Payload payload)
     {
-        if (payload.Version >= 4 &&
-            CountJsonFields(json, nameof(Payload.HueVsSaturation)) == 0)
-        {
-            return false;
-        }
-
         if (payload.Version >= 7 && CountJsonFields(json, nameof(Payload.Vibrance)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 8 &&
-            (CountJsonFields(json, nameof(Payload.HueVsHue)) == 0 ||
-             CountJsonFields(json, nameof(Payload.HueVsLuminance)) == 0))
         {
             return false;
         }
@@ -773,26 +686,11 @@ public static class ColorGradeFile
             return false;
         }
 
-        if (payload.Version >= 11 &&
-            (CountJsonFields(json, nameof(Payload.LuminanceVsSaturation)) == 0 ||
-             CountJsonFields(json, nameof(Payload.SaturationVsSaturation)) == 0))
-        {
-            return false;
-        }
-
         if (payload.Version >= 12 &&
             (CountJsonFields(json, nameof(Payload.MasterCurve)) == 0 ||
              CountJsonFields(json, nameof(Payload.RedCurve)) == 0 ||
              CountJsonFields(json, nameof(Payload.GreenCurve)) == 0 ||
              CountJsonFields(json, nameof(Payload.BlueCurve)) == 0))
-        {
-            return false;
-        }
-
-        if (payload.Version >= 5 &&
-            (CountJsonFields(json, nameof(Payload.BlackPoint)) == 0 ||
-             CountJsonFields(json, nameof(Payload.InputWhitePoint)) == 0 ||
-             CountJsonFields(json, nameof(Payload.HighlightRecovery)) == 0))
         {
             return false;
         }
@@ -1123,10 +1021,6 @@ public static class ColorGradeFile
         Constant(builder, culture, "CdlSaturation", state.CdlSaturation);
         Constant(builder, culture, "Vibrance", state.Vibrance);
         Constant(builder, culture, "Hue", state.Hue);
-        builder.AppendLine($"        public static Vector4 HueVsHue => {VectorSource(state.HueVsHue, culture)};");
-        builder.AppendLine($"        public static Vector4 HueVsLuminance => {VectorSource(state.HueVsLuminance, culture)};");
-        builder.AppendLine($"        public static Vector4 LuminanceVsSaturation => {VectorSource(state.LuminanceVsSaturation, culture)};");
-        builder.AppendLine($"        public static Vector4 SaturationVsSaturation => {VectorSource(state.SaturationVsSaturation, culture)};");
         AppendCurveSource(builder, culture, "HueVsHueCurve", state.HueVsHueCurve);
         AppendCurveSource(builder, culture, "HueVsSaturationCurve", state.HueVsSaturationCurve);
         AppendCurveSource(builder, culture, "HueVsLuminanceCurve", state.HueVsLuminanceCurve);
@@ -1169,9 +1063,6 @@ public static class ColorGradeFile
         builder.AppendLine($"        public static Vector4 PrimaryMaster => {VectorSource(state.PrimaryMaster, culture)};");
         builder.AppendLine();
         builder.AppendLine($"        public static Vector3 CdlMaster => {VectorSource(state.CdlMaster, culture)};");
-        builder.AppendLine();
-        builder.AppendLine(
-            $"        public static Vector4 HueVsSaturation => {VectorSource(state.HueVsSaturation, culture)};");
         builder.AppendLine();
         Constant(builder, culture, "GreyOut", state.GreyOut);
         Constant(builder, culture, "CurveSlope", state.CurveSlope);

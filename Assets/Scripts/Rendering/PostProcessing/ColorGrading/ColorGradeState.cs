@@ -41,14 +41,6 @@ public sealed class ColorGradeState
     public const float VibranceMax = 1f;
     public const float HueMin = -180f;
     public const float HueMax = 180f;
-    public const float HueCenterMin = 0f;
-    public const float HueCenterMax = 360f;
-    public const float HueWidthMin = 0f;
-    public const float HueWidthMax = 180f;
-    public const float HueFeatherMin = 0f;
-    public const float HueFeatherMax = 180f;
-    public const float HueSaturationMin = 0f;
-    public const float HueSaturationMax = 2f;
     public const float HueShiftMin = -180f;
     public const float HueShiftMax = 180f;
     public const float HueLuminanceMin = -1f;
@@ -61,12 +53,6 @@ public sealed class ColorGradeState
     public const float TonalAdjustmentMax = 0.5f;
     public const float WhitePointMin = 0.25f;
     public const float WhitePointMax = 8f;
-    public const float BlackPointMin = 0f;
-    public const float BlackPointMax = 0.99f;
-    public const float InputWhitePointMin = 0.01f;
-    public const float InputWhitePointMax = 64f;
-    public const float HighlightRecoveryMin = 0f;
-    public const float HighlightRecoveryMax = 1f;
     public const float GreyOutMin = 0.05f;
     public const float GreyOutMax = 0.5f;
     public const float CurveSlopeMin = 0.5f;
@@ -137,22 +123,7 @@ public sealed class ColorGradeState
 
     public Vector3 CdlMaster { get; set; }
 
-    public Vector4 HueVsSaturation { get; set; }
-
-    public Vector4 HueVsHue { get; set; }
-
-    public Vector4 HueVsLuminance { get; set; }
-
-    public Vector4 LuminanceVsSaturation { get; set; }
-    public Vector4 SaturationVsSaturation { get; set; }
-
     public float WhitePoint { get; set; }
-
-    public float BlackPoint { get; set; }
-
-    public float InputWhitePoint { get; set; }
-
-    public float HighlightRecovery { get; set; }
 
     public float GreyOut { get; set; }
 
@@ -379,16 +350,8 @@ public sealed class ColorGradeState
         PrimaryGain = Vector3.one;
         PrimaryOffset = Vector3.zero;
         PrimaryMaster = new Vector4(0f, 1f, 1f, 0f);
-        HueVsSaturation = new Vector4(120f, 30f, 15f, 1f);
-        HueVsHue = new Vector4(120f, 30f, 15f, 0f);
-        HueVsLuminance = new Vector4(120f, 30f, 15f, 0f);
-        LuminanceVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f);
-        SaturationVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f);
         CdlMaster = new Vector3(1f, 0f, 1f);
         WhitePoint = PostProcessLook.Grade.WhitePoint;
-        BlackPoint = 0f;
-        InputWhitePoint = 1f;
-        HighlightRecovery = 0f;
         GreyOut = PostProcessLook.Grade.GreyOut;
         CurveSlope = PostProcessLook.Grade.CurveSlope;
         ShoulderPower = PostProcessLook.Grade.ShoulderPower;
@@ -427,9 +390,6 @@ public sealed class ColorGradeState
         {
             case ColorGradeLayer.Exposure:
                 Exposure = PostProcessLook.ColorGrading.Exposure;
-                BlackPoint = 0f;
-                InputWhitePoint = 1f;
-                HighlightRecovery = 0f;
                 break;
             case ColorGradeLayer.WhiteBalance:
                 Temperature = PostProcessLook.Grade.Temperature;
@@ -451,11 +411,6 @@ public sealed class ColorGradeState
                 Saturation = PostProcessLook.ColorGrading.Saturation;
                 Vibrance = 0f;
                 Hue = 0f;
-                HueVsSaturation = new Vector4(120f, 30f, 15f, 1f);
-                HueVsHue = new Vector4(120f, 30f, 15f, 0f);
-                HueVsLuminance = new Vector4(120f, 30f, 15f, 0f);
-                LuminanceVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f);
-                SaturationVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f);
                 HueVsHueCurve.Reset();
                 HueVsSaturationCurve.Reset();
                 HueVsLuminanceCurve.Reset();
@@ -538,20 +493,7 @@ public sealed class ColorGradeState
             FiniteClamp(CdlMaster.x, SlopeMin, SlopeMax, 1f),
             FiniteClamp(CdlMaster.y, OffsetMin, OffsetMax, 0f),
             FiniteClamp(CdlMaster.z, PowerMin, PowerMax, 1f));
-        HueVsSaturation = new Vector4(
-            FiniteClamp(HueVsSaturation.x, HueCenterMin, HueCenterMax, 120f),
-            FiniteClamp(HueVsSaturation.y, HueWidthMin, HueWidthMax, 30f),
-            FiniteClamp(HueVsSaturation.z, HueFeatherMin, HueFeatherMax, 15f),
-            FiniteClamp(HueVsSaturation.w, HueSaturationMin, HueSaturationMax, 1f));
-        HueVsHue = SanitizeHueRange(HueVsHue, 0f);
-        HueVsLuminance = SanitizeHueRange(HueVsLuminance, 0f);
-        LuminanceVsSaturation = SanitizeSaturationCurve(LuminanceVsSaturation);
-        SaturationVsSaturation = SanitizeSaturationCurve(SaturationVsSaturation);
         WhitePoint = FiniteClamp(WhitePoint, WhitePointMin, WhitePointMax, PostProcessLook.Grade.WhitePoint);
-        BlackPoint = FiniteClamp(BlackPoint, BlackPointMin, BlackPointMax, 0f);
-        InputWhitePoint = FiniteClamp(InputWhitePoint, InputWhitePointMin, InputWhitePointMax, 1f);
-        InputWhitePoint = Mathf.Max(InputWhitePoint, BlackPoint + 0.01f);
-        HighlightRecovery = FiniteClamp(HighlightRecovery, HighlightRecoveryMin, HighlightRecoveryMax, 0f);
         GreyOut = FiniteClamp(GreyOut, GreyOutMin, GreyOutMax, PostProcessLook.Grade.GreyOut);
         CurveSlope = FiniteClamp(CurveSlope, CurveSlopeMin, CurveSlopeMax, PostProcessLook.Grade.CurveSlope);
         ShoulderPower = FiniteClamp(
@@ -621,17 +563,9 @@ public sealed class ColorGradeState
         PrimaryGain = PrimaryGain,
         PrimaryOffset = PrimaryOffset,
         PrimaryMaster = PrimaryMaster,
-        HueVsSaturation = HueVsSaturation,
-        HueVsHue = HueVsHue,
-        HueVsLuminance = HueVsLuminance,
-        LuminanceVsSaturation = LuminanceVsSaturation,
-        SaturationVsSaturation = SaturationVsSaturation,
         Vibrance = Vibrance,
         Hue = Hue,
         CdlMaster = CdlMaster,
-        BlackPoint = BlackPoint,
-        InputWhitePoint = InputWhitePoint,
-        HighlightRecovery = HighlightRecovery,
         Pivot = Pivot,
         Shadows = Shadows,
         Highlights = Highlights,
@@ -673,13 +607,6 @@ public sealed class ColorGradeState
                 ? authored.Transform
                 : DisplayTransform.None,
             Exposure = IsActive(ColorGradeLayer.Exposure) ? authored.Exposure : 0f,
-            BlackPoint = IsActive(ColorGradeLayer.Exposure) ? authored.BlackPoint : 0f,
-            InputWhitePoint = IsActive(ColorGradeLayer.Exposure)
-                ? authored.InputWhitePoint
-                : 1f,
-            HighlightRecovery = IsActive(ColorGradeLayer.Exposure)
-                ? authored.HighlightRecovery
-                : 0f,
             CdlSaturation = IsActive(ColorGradeLayer.Cdl) ? authored.CdlSaturation : 1f,
             MasterCurve = IsActive(ColorGradeLayer.Curve)
                 ? authored.MasterCurve
@@ -738,21 +665,6 @@ public sealed class ColorGradeState
             Whites = IsActive(ColorGradeLayer.Contrast) ? authored.Whites : 0f,
             Toe = IsActive(ColorGradeLayer.Contrast) ? authored.Toe : 0f,
             Shoulder = IsActive(ColorGradeLayer.Contrast) ? authored.Shoulder : 0f,
-            HueVsSaturation = IsActive(ColorGradeLayer.Saturation)
-                ? authored.HueVsSaturation
-                : new Vector4(120f, 30f, 15f, 1f),
-            HueVsHue = IsActive(ColorGradeLayer.Saturation)
-                ? authored.HueVsHue
-                : new Vector4(120f, 30f, 15f, 0f),
-            HueVsLuminance = IsActive(ColorGradeLayer.Saturation)
-                ? authored.HueVsLuminance
-                : new Vector4(120f, 30f, 15f, 0f),
-            LuminanceVsSaturation = IsActive(ColorGradeLayer.Saturation)
-                ? authored.LuminanceVsSaturation
-                : new Vector4(0.5f, 0.25f, 0.1f, 1f),
-            SaturationVsSaturation = IsActive(ColorGradeLayer.Saturation)
-                ? authored.SaturationVsSaturation
-                : new Vector4(0.5f, 0.25f, 0.1f, 1f),
             Vibrance = IsActive(ColorGradeLayer.Saturation) ? authored.Vibrance : 0f,
             Hue = IsActive(ColorGradeLayer.Saturation) ? authored.Hue : 0f,
         };
@@ -776,18 +688,6 @@ public sealed class ColorGradeState
             FiniteClamp(value.x, minimum, maximum, fallback.x),
             FiniteClamp(value.y, minimum, maximum, fallback.y),
             FiniteClamp(value.z, minimum, maximum, fallback.z));
-
-    private static Vector4 SanitizeHueRange(Vector4 value, float neutralAmount) => new(
-        FiniteClamp(value.x, 0f, 360f, 120f),
-        FiniteClamp(value.y, 0f, 180f, 30f),
-        FiniteClamp(value.z, 0f, 180f, 15f),
-        FiniteClamp(value.w, -180f, 180f, neutralAmount));
-
-    private static Vector4 SanitizeSaturationCurve(Vector4 value) => new(
-        FiniteClamp(value.x, 0f, 1f, 0.5f),
-        FiniteClamp(value.y, 0f, 1f, 0.25f),
-        FiniteClamp(value.z, 0f, 1f, 0.1f),
-        FiniteClamp(value.w, 0f, 2f, 1f));
 
     private static void TrimHistory(Stack<ColorGradeSnapshot> history)
     {
@@ -831,15 +731,7 @@ public sealed class ColorGradeState
         PrimaryOffset = snapshot.PrimaryOffset;
         PrimaryMaster = snapshot.PrimaryMaster;
         CdlMaster = snapshot.CdlMaster;
-        HueVsSaturation = snapshot.HueVsSaturation;
-        HueVsHue = snapshot.HueVsHue;
-        HueVsLuminance = snapshot.HueVsLuminance;
-        LuminanceVsSaturation = snapshot.LuminanceVsSaturation;
-        SaturationVsSaturation = snapshot.SaturationVsSaturation;
         WhitePoint = snapshot.WhitePoint;
-        BlackPoint = snapshot.BlackPoint;
-        InputWhitePoint = snapshot.InputWhitePoint;
-        HighlightRecovery = snapshot.HighlightRecovery;
         GreyOut = snapshot.GreyOut;
         CurveSlope = snapshot.CurveSlope;
         ShoulderPower = snapshot.ShoulderPower;
@@ -948,15 +840,7 @@ public sealed class ColorGradeState
             left.PrimaryOffset == right.PrimaryOffset &&
             left.PrimaryMaster == right.PrimaryMaster &&
             left.CdlMaster == right.CdlMaster &&
-            left.HueVsSaturation == right.HueVsSaturation &&
-            left.HueVsHue == right.HueVsHue &&
-            left.HueVsLuminance == right.HueVsLuminance &&
-            left.LuminanceVsSaturation == right.LuminanceVsSaturation &&
-            left.SaturationVsSaturation == right.SaturationVsSaturation &&
             left.WhitePoint == right.WhitePoint &&
-            left.BlackPoint == right.BlackPoint &&
-            left.InputWhitePoint == right.InputWhitePoint &&
-            left.HighlightRecovery == right.HighlightRecovery &&
             left.GreyOut == right.GreyOut &&
             left.CurveSlope == right.CurveSlope &&
             left.ShoulderPower == right.ShoulderPower &&

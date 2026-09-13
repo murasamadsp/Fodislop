@@ -68,18 +68,10 @@ internal sealed class PostProcessPassData
     public Vector4 PrimaryGain;
     public Vector4 PrimaryOffset;
     public Vector4 PrimaryMaster;
-    public Vector4 HueVsSaturation;
-    public Vector4 HueVsHue;
-    public Vector4 HueVsLuminance;
-    public Vector4 LuminanceVsSaturation;
-    public Vector4 SaturationVsSaturation;
     public float Vibrance;
     public float Hue;
     public Vector4 ContrastControls;
     public Vector3 ContrastControls2;
-    public float BlackPoint;
-    public float InputWhitePoint;
-    public float HighlightRecovery;
     public Vector4 DisplayGrade0;
     public Vector4 DisplayGrade1;
     public float DisplayGradePathPower;

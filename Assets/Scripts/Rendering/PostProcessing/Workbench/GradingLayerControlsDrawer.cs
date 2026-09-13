@@ -151,18 +151,6 @@ internal sealed class GradingLayerControlsDrawer
         _state.Exposure = Slider(
             "exposure", "стопы", _state.Exposure,
             ColorGradeState.ExposureMin, ColorGradeState.ExposureMax);
-        _state.BlackPoint = Slider(
-            "black-point", "black point", _state.BlackPoint,
-            ColorGradeState.BlackPointMin, ColorGradeState.BlackPointMax);
-        _state.InputWhitePoint = Slider(
-            "input-white-point", "white point", _state.InputWhitePoint,
-            ColorGradeState.InputWhitePointMin, ColorGradeState.InputWhitePointMax);
-        _state.HighlightRecovery = Slider(
-            "highlight-recovery", "recovery", _state.HighlightRecovery,
-            ColorGradeState.HighlightRecoveryMin, ColorGradeState.HighlightRecoveryMax);
-        GUILayout.Label(
-            "Входной диапазон HDR. Нейтрально: black 0, white 1, recovery 0.",
-            ToolTheme.MutedLabel);
     }
 
     private void DrawWhiteBalanceControls()
@@ -261,74 +249,6 @@ internal sealed class GradingLayerControlsDrawer
             "vibrance", "vibrance", _state.Vibrance,
             ColorGradeState.VibranceMin, ColorGradeState.VibranceMax);
         _state.Hue = Slider("hue", "hue shift °", _state.Hue, -180f, 180f);
-
-        GUILayout.Label("HUE VS SATURATION", ToolTheme.SectionLabel);
-        if (GUILayout.Button("Eyedropper: Hue vs Saturation", ToolTheme.SecondaryButton))
-        {
-            ColorGradeScreenSampler.Arm(sample =>
-            {
-                Vector4 current = _state.HueVsSaturation;
-                current.x = HueFromRGB(sample);
-                _state.HueVsSaturation = current;
-                _numberText.Remove("hue-vs-sat.center");
-            });
-        }
-
-        Vector4 selective = _state.HueVsSaturation;
-        selective.x = Slider("hue-vs-sat.center", "  центр °", selective.x, 0f, 360f);
-        selective.y = Slider("hue-vs-sat.width", "  ширина °", selective.y, 0f, 180f);
-        selective.z = Slider("hue-vs-sat.feather", "  feather °", selective.z, 0f, 180f);
-        selective.w = Slider("hue-vs-sat.multiplier", "  saturation ×", selective.w, 0f, 2f);
-        _state.HueVsSaturation = selective;
-        GUILayout.Label("HUE VS HUE / LUMINANCE", ToolTheme.SectionLabel);
-        using (new GUILayout.HorizontalScope())
-        {
-            if (GUILayout.Button("Eyedropper: Hue vs Hue", ToolTheme.SecondaryButton))
-            {
-                ColorGradeScreenSampler.Arm(sample =>
-                {
-                    Vector4 current = _state.HueVsHue;
-                    current.x = HueFromRGB(sample);
-                    _state.HueVsHue = current;
-                    _numberText.Remove("hue-vs-hue.center");
-                });
-            }
-
-            if (GUILayout.Button("Eyedropper: Hue vs Luma", ToolTheme.SecondaryButton))
-            {
-                ColorGradeScreenSampler.Arm(sample =>
-                {
-                    Vector4 current = _state.HueVsLuminance;
-                    current.x = HueFromRGB(sample);
-                    _state.HueVsLuminance = current;
-                    _numberText.Remove("hue-vs-luma.center");
-                });
-            }
-        }
-        Vector4 hueShift = _state.HueVsHue;
-        hueShift.x = Slider("hue-vs-hue.center", "  hue center °", hueShift.x, 0f, 360f);
-        hueShift.y = Slider("hue-vs-hue.width", "  hue width °", hueShift.y, 0f, 180f);
-        hueShift.z = Slider("hue-vs-hue.feather", "  hue feather °", hueShift.z, 0f, 180f);
-        hueShift.w = Slider("hue-vs-hue.shift", "  hue shift °", hueShift.w, -180f, 180f);
-        _state.HueVsHue = hueShift;
-        Vector4 hueLuma = _state.HueVsLuminance;
-        hueLuma.x = Slider("hue-vs-luma.center", "  luma center °", hueLuma.x, 0f, 360f);
-        hueLuma.y = Slider("hue-vs-luma.width", "  luma width °", hueLuma.y, 0f, 180f);
-        hueLuma.z = Slider("hue-vs-luma.feather", "  luma feather °", hueLuma.z, 0f, 180f);
-        hueLuma.w = Slider("hue-vs-luma.amount", "  luma amount", hueLuma.w, -1f, 1f);
-        _state.HueVsLuminance = hueLuma;
-        Vector4 lumaSat = _state.LuminanceVsSaturation;
-        lumaSat.x = Slider("luma-vs-sat.center", "  luma center", lumaSat.x, 0f, 1f);
-        lumaSat.y = Slider("luma-vs-sat.width", "  luma width", lumaSat.y, 0f, 1f);
-        lumaSat.z = Slider("luma-vs-sat.feather", "  luma feather", lumaSat.z, 0f, 1f);
-        lumaSat.w = Slider("luma-vs-sat.multiplier", "  luma sat ×", lumaSat.w, 0f, 2f);
-        _state.LuminanceVsSaturation = lumaSat;
-        Vector4 satSat = _state.SaturationVsSaturation;
-        satSat.x = Slider("sat-vs-sat.center", "  sat center", satSat.x, 0f, 1f);
-        satSat.y = Slider("sat-vs-sat.width", "  sat width", satSat.y, 0f, 1f);
-        satSat.z = Slider("sat-vs-sat.feather", "  sat feather", satSat.z, 0f, 1f);
-        satSat.w = Slider("sat-vs-sat.multiplier", "  sat sat ×", satSat.w, 0f, 2f);
-        _state.SaturationVsSaturation = satSat;
 
         GUILayout.Label("SELECTIVE CURVES", ToolTheme.SectionLabel);
         DrawCurveEditor("hue-vs-hue.curve", "Hue vs Hue", _state.HueVsHueCurve);
@@ -1065,11 +985,5 @@ internal sealed class GradingLayerControlsDrawer
         }
 
         _wheelTexture = null;
-    }
-
-    private static float HueFromRGB(Color color)
-    {
-        Color.RGBToHSV(color, out float hue, out _, out _);
-        return hue * 360f;
     }
 }

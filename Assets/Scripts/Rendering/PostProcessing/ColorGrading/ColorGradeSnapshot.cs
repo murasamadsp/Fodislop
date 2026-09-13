@@ -17,12 +17,6 @@ public readonly record struct ColorGradeSnapshot
 
     public float WhitePoint { get; init; }
 
-    public float BlackPoint { get; init; }
-
-    public float InputWhitePoint { get; init; }
-
-    public float HighlightRecovery { get; init; }
-
     public float Temperature { get; init; }
 
     public float Tint { get; init; }
@@ -44,14 +38,6 @@ public readonly record struct ColorGradeSnapshot
     public Vector4 PrimaryMaster { get; init; }
 
     public Vector3 CdlMaster { get; init; }
-
-    public Vector4 HueVsSaturation { get; init; }
-
-    public Vector4 HueVsHue { get; init; }
-
-    public Vector4 HueVsLuminance { get; init; }
-    public Vector4 LuminanceVsSaturation { get; init; }
-    public Vector4 SaturationVsSaturation { get; init; }
 
     public float Vibrance { get; init; }
 
@@ -123,8 +109,6 @@ public readonly record struct ColorGradeSnapshot
         Offset = Vector3.zero;
         Power = Vector3.one;
         WhitePoint = PostProcessLook.Grade.WhitePoint;
-        BlackPoint = 0f;
-        InputWhitePoint = 1f;
         PrimaryLift = Vector3.zero;
         PrimaryGamma = Vector3.one;
         PrimaryGain = Vector3.one;
@@ -142,11 +126,6 @@ public readonly record struct ColorGradeSnapshot
         PathToWhitePower = PostProcessLook.Grade.PathToWhitePower;
         GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled;
         GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength;
-        HueVsSaturation = new Vector4(120f, 30f, 15f, 1f);
-        HueVsHue = new Vector4(120f, 30f, 15f, 0f);
-        HueVsLuminance = new Vector4(120f, 30f, 15f, 0f);
-        LuminanceVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f);
-        SaturationVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f);
         MasterCurve = new ColorGradeCurve();
         RedCurve = new ColorGradeCurve();
         GreenCurve = new ColorGradeCurve();
@@ -166,9 +145,6 @@ public readonly record struct ColorGradeSnapshot
         Exposure = PostProcessLook.ColorGrading.Exposure,
         Contrast = PostProcessLook.ColorGrading.Contrast,
         WhitePoint = PostProcessLook.Grade.WhitePoint,
-        BlackPoint = 0f,
-        InputWhitePoint = 1f,
-        HighlightRecovery = 0f,
         Pivot = 0.5f,
         Shadows = 0f,
         Highlights = 0f,
@@ -186,11 +162,6 @@ public readonly record struct ColorGradeSnapshot
         PrimaryGain = Vector3.one,
         PrimaryOffset = Vector3.zero,
         PrimaryMaster = new Vector4(0f, 1f, 1f, 0f),
-        HueVsSaturation = new Vector4(120f, 30f, 15f, 1f),
-        HueVsHue = new Vector4(120f, 30f, 15f, 0f),
-        HueVsLuminance = new Vector4(120f, 30f, 15f, 0f),
-        LuminanceVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f),
-        SaturationVsSaturation = new Vector4(0.5f, 0.25f, 0.1f, 1f),
         Vibrance = 0f,
         Saturation = PostProcessLook.ColorGrading.Saturation,
         CdlSaturation = 1f,
@@ -241,9 +212,6 @@ public readonly record struct ColorGradeSnapshot
             Exposure = Mathf.Lerp(Exposure, other.Exposure, t),
             Contrast = Mathf.Lerp(Contrast, other.Contrast, t),
             WhitePoint = Mathf.Lerp(WhitePoint, other.WhitePoint, t),
-            BlackPoint = Mathf.Lerp(BlackPoint, other.BlackPoint, t),
-            InputWhitePoint = Mathf.Lerp(InputWhitePoint, other.InputWhitePoint, t),
-            HighlightRecovery = Mathf.Lerp(HighlightRecovery, other.HighlightRecovery, t),
             Pivot = Mathf.Lerp(Pivot, other.Pivot, t),
             Shadows = Mathf.Lerp(Shadows, other.Shadows, t),
             Highlights = Mathf.Lerp(Highlights, other.Highlights, t),
@@ -261,11 +229,6 @@ public readonly record struct ColorGradeSnapshot
             PrimaryGain = Vector3.Lerp(PrimaryGain, other.PrimaryGain, t),
             PrimaryOffset = Vector3.Lerp(PrimaryOffset, other.PrimaryOffset, t),
             PrimaryMaster = Vector4.Lerp(PrimaryMaster, other.PrimaryMaster, t),
-            HueVsSaturation = Vector4.Lerp(HueVsSaturation, other.HueVsSaturation, t),
-            HueVsHue = Vector4.Lerp(HueVsHue, other.HueVsHue, t),
-            HueVsLuminance = Vector4.Lerp(HueVsLuminance, other.HueVsLuminance, t),
-            LuminanceVsSaturation = Vector4.Lerp(LuminanceVsSaturation, other.LuminanceVsSaturation, t),
-            SaturationVsSaturation = Vector4.Lerp(SaturationVsSaturation, other.SaturationVsSaturation, t),
             Vibrance = Mathf.Lerp(Vibrance, other.Vibrance, t),
             Saturation = Mathf.Lerp(Saturation, other.Saturation, t),
             CdlSaturation = Mathf.Lerp(CdlSaturation, other.CdlSaturation, t),
@@ -335,11 +298,6 @@ public readonly record struct ColorGradeSnapshot
                 ColorGradeState.WhitePointMin,
                 ColorGradeState.WhitePointMax,
                 defaults.WhitePoint),
-            BlackPoint = FiniteClamp(BlackPoint, 0f, 0.99f, defaults.BlackPoint),
-            InputWhitePoint = Mathf.Max(
-                FiniteClamp(InputWhitePoint, 0.01f, 64f, defaults.InputWhitePoint),
-                FiniteClamp(BlackPoint, 0f, 0.99f, defaults.BlackPoint) + 0.01f),
-            HighlightRecovery = FiniteClamp(HighlightRecovery, 0f, 1f, defaults.HighlightRecovery),
             Contrast = FiniteClamp(
                 Contrast,
                 ColorGradeState.ContrastMin,
@@ -402,11 +360,6 @@ public readonly record struct ColorGradeSnapshot
                 FiniteClamp(PrimaryMaster.y, ColorGradeState.PowerMin, ColorGradeState.PowerMax, 1f),
                 FiniteClamp(PrimaryMaster.z, ColorGradeState.SlopeMin, ColorGradeState.SlopeMax, 1f),
                 FiniteClamp(PrimaryMaster.w, ColorGradeState.OffsetMin, ColorGradeState.OffsetMax, 0f)),
-            HueVsSaturation = SanitizeHueVsSaturation(HueVsSaturation, defaults.HueVsSaturation),
-            HueVsHue = SanitizeHueRange(HueVsHue, defaults.HueVsHue),
-            HueVsLuminance = SanitizeHueRange(HueVsLuminance, defaults.HueVsLuminance),
-            LuminanceVsSaturation = SanitizeSaturationCurve(LuminanceVsSaturation, defaults.LuminanceVsSaturation),
-            SaturationVsSaturation = SanitizeSaturationCurve(SaturationVsSaturation, defaults.SaturationVsSaturation),
             Vibrance = FiniteClamp(Vibrance, -1f, 1f, defaults.Vibrance),
             Saturation = FiniteClamp(
                 Saturation,
@@ -526,22 +479,4 @@ public readonly record struct ColorGradeSnapshot
             FiniteClamp(value.x, minimum, maximum, fallback.x),
             FiniteClamp(value.y, minimum, maximum, fallback.y),
             FiniteClamp(value.z, minimum, maximum, fallback.z));
-
-    private static Vector4 SanitizeHueVsSaturation(Vector4 value, Vector4 fallback) => new(
-        FiniteClamp(value.x, 0f, 360f, fallback.x),
-        FiniteClamp(value.y, 0f, 180f, fallback.y),
-        FiniteClamp(value.z, 0f, 180f, fallback.z),
-        FiniteClamp(value.w, 0f, 2f, fallback.w));
-
-    private static Vector4 SanitizeHueRange(Vector4 value, Vector4 fallback) => new(
-        FiniteClamp(value.x, 0f, 360f, fallback.x),
-        FiniteClamp(value.y, 0f, 180f, fallback.y),
-        FiniteClamp(value.z, 0f, 180f, fallback.z),
-        FiniteClamp(value.w, -180f, 180f, fallback.w));
-
-    private static Vector4 SanitizeSaturationCurve(Vector4 value, Vector4 fallback) => new(
-        FiniteClamp(value.x, 0f, 1f, fallback.x),
-        FiniteClamp(value.y, 0f, 1f, fallback.y),
-        FiniteClamp(value.z, 0f, 1f, fallback.z),
-        FiniteClamp(value.w, 0f, 2f, fallback.w));
 }

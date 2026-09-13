@@ -70,17 +70,8 @@ float4 _PrimaryGamma;
 float4 _PrimaryGain;
 float4 _PrimaryOffset;
 float4 _PrimaryMaster; // lift, gamma, gain, offset master values
-// x=center hue degrees, y=half-width, z=feather, w=saturation multiplier.
-float4 _HueVsSaturation;
-float4 _HueVsHue;
-float4 _HueVsLuminance;
-float4 _LuminanceVsSaturation;
-float4 _SaturationVsSaturation;
 float _Vibrance;
 float _Hue;
-float _BlackPoint;
-float _InputWhitePoint;
-float _HighlightRecovery;
 float4 _DisplayGrade0; // white point, grey output, curve slope, transform
 float4 _DisplayGrade1; // shoulder power, toe power, toe stops, path-to-white
 float _DisplayGradePathPower;
@@ -191,8 +182,6 @@ float3 ApplyCreativeGrade(float3 color)
             color, WhiteBalanceCoefficients(_WhiteBalance.x, _WhiteBalance.y));
     }
 
-    color = ApplyInputRange(color, _BlackPoint, _InputWhitePoint, _HighlightRecovery);
-
     color = ApplyPrimaryWheels(
         color,
         _PrimaryLift.rgb,
@@ -251,11 +240,6 @@ float3 ApplyCreativeGrade(float3 color)
 
     gradedLinear = ApplyVibrance(gradedLinear, _Vibrance, lumaWeights);
     gradedLinear = ApplyGlobalHue(gradedLinear, _Hue);
-    gradedLinear = ApplyHueVsHue(gradedLinear, _HueVsHue);
-    gradedLinear = ApplyHueVsSaturation(gradedLinear, _HueVsSaturation);
-    gradedLinear = ApplyHueVsLuminance(gradedLinear, _HueVsLuminance);
-    gradedLinear = ApplyLuminanceVsSaturation(gradedLinear, _LuminanceVsSaturation);
-    gradedLinear = ApplySaturationVsSaturation(gradedLinear, _SaturationVsSaturation);
     gradedLinear = ApplySelectiveCurves(gradedLinear);
     gradedLinear = ApplyQualifier(gradedLinear);
 

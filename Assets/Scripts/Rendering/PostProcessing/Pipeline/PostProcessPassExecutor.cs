@@ -212,18 +212,10 @@ internal static class PostProcessPassExecutor
         cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryGainID, data.PrimaryGain);
         cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryOffsetID, data.PrimaryOffset);
         cmd.SetComputeVectorParam(data.PostProcessCS, PrimaryMasterID, data.PrimaryMaster);
-        cmd.SetComputeVectorParam(data.PostProcessCS, HueVsSaturationID, data.HueVsSaturation);
-        cmd.SetComputeVectorParam(data.PostProcessCS, HueVsHueID, data.HueVsHue);
-        cmd.SetComputeVectorParam(data.PostProcessCS, HueVsLuminanceID, data.HueVsLuminance);
-        cmd.SetComputeVectorParam(data.PostProcessCS, LuminanceVsSaturationID, data.LuminanceVsSaturation);
-        cmd.SetComputeVectorParam(data.PostProcessCS, SaturationVsSaturationID, data.SaturationVsSaturation);
         cmd.SetComputeFloatParam(data.PostProcessCS, VibranceID, data.Vibrance);
         cmd.SetComputeFloatParam(data.PostProcessCS, HueID, data.Hue);
         cmd.SetComputeVectorParam(data.PostProcessCS, ContrastControlsID, data.ContrastControls);
         cmd.SetComputeVectorParam(data.PostProcessCS, ContrastControls2ID, data.ContrastControls2);
-        cmd.SetComputeFloatParam(data.PostProcessCS, BlackPointID, data.BlackPoint);
-        cmd.SetComputeFloatParam(data.PostProcessCS, InputWhitePointID, data.InputWhitePoint);
-        cmd.SetComputeFloatParam(data.PostProcessCS, HighlightRecoveryID, data.HighlightRecovery);
         cmd.SetComputeVectorParam(data.PostProcessCS, DisplayGrade0ID, data.DisplayGrade0);
         cmd.SetComputeVectorParam(data.PostProcessCS, DisplayGrade1ID, data.DisplayGrade1);
         cmd.SetComputeFloatParam(

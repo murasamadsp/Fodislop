@@ -358,11 +358,6 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.PrimaryGain = grade.PrimaryGain;
                 passData.PrimaryOffset = grade.PrimaryOffset;
                 passData.PrimaryMaster = grade.PrimaryMaster;
-                passData.HueVsSaturation = grade.HueVsSaturation;
-                passData.HueVsHue = grade.HueVsHue;
-                passData.HueVsLuminance = grade.HueVsLuminance;
-                passData.LuminanceVsSaturation = grade.LuminanceVsSaturation;
-                passData.SaturationVsSaturation = grade.SaturationVsSaturation;
                 passData.Vibrance = grade.Vibrance;
                 passData.Hue = grade.Hue;
                 passData.ContrastControls = new Vector4(
@@ -374,9 +369,6 @@ namespace Fodinae.Rendering.PostProcessing
                     grade.Whites,
                     grade.Toe,
                     grade.Shoulder);
-                passData.BlackPoint = grade.BlackPoint;
-                passData.InputWhitePoint = grade.InputWhitePoint;
-                passData.HighlightRecovery = grade.HighlightRecovery;
                 passData.DisplayGrade0 = new Vector4(
                     grade.WhitePoint,
                     grade.GreyOut,
