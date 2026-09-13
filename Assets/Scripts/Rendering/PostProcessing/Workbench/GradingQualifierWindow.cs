@@ -174,27 +174,6 @@ internal sealed class GradingQualifierWindow : ToolWindow
                 ? ColorGradeLutColorSpace.SrgbRec709
                 : ColorGradeLutColorSpace.LinearRec709;
 
-            GUILayout.Label("COLOR MANAGEMENT", SectionLabelStyle);
-            ColorGradeColorManagement management = _state.ColorManagement;
-            management.InputColorSpace = EnumCycle(
-                "Input", management.InputColorSpace, "Rec.709", "Display P3", "Rec.2020");
-            management.WorkingColorSpace = EnumCycle(
-                "Working", management.WorkingColorSpace, "Rec.709", "Display P3", "Rec.2020");
-            management.OutputColorSpace = EnumCycle(
-                "Output", management.OutputColorSpace, "Rec.709", "Display P3", "Rec.2020");
-            management.InputTransfer = EnumCycle(
-                "Input transfer", management.InputTransfer, "Linear", "sRGB", "PQ", "HLG");
-            management.OutputTransfer = EnumCycle(
-                "Output transfer", management.OutputTransfer, "Linear", "sRGB", "PQ", "HLG");
-            management.DynamicRange = EnumCycle(
-                "Dynamic range", management.DynamicRange, "SDR", "HDR");
-            GUILayout.Label(
-                "Output transfer — контракт display pipeline; финальное кодирование " +
-                "sRGB/PQ/HLG выполняет URP один раз.",
-                ToolTheme.MutedLabel);
-            management.ReferenceMode = EnumCycle(
-                "Reference", management.ReferenceMode, "Scene-referred", "Display-referred");
-
             GUILayout.Label(
                 "Маска вычисляется в grading space; hue range корректно " +
                 "пересекает 0°/360°. Multi-sample можно расширить кнопкой Add sample.",

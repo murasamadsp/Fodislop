@@ -99,8 +99,6 @@ public readonly record struct ColorGradeSnapshot
 
     public ColorGradeLutColorSpace LutColorSpace { get; init; }
 
-    public ColorGradeColorManagement ColorManagement { get; init; }
-
     public ColorGradeSnapshot()
     {
         EnabledMask = (1 << 6) - 1;
@@ -136,7 +134,6 @@ public readonly record struct ColorGradeSnapshot
         LuminanceVsSaturationCurve = new ColorGradeCurve(ColorGradeCurveKind.Range);
         SaturationVsSaturationCurve = new ColorGradeCurve(ColorGradeCurveKind.Range);
         Qualifier = new ColorGradeQualifier();
-        ColorManagement = new ColorGradeColorManagement();
     }
 
     public static ColorGradeSnapshot FromLook() => new()
@@ -183,7 +180,6 @@ public readonly record struct ColorGradeSnapshot
         Qualifier = new ColorGradeQualifier(),
         LutIntensity = 0f,
         LutColorSpace = ColorGradeLutColorSpace.LinearRec709,
-        ColorManagement = new ColorGradeColorManagement(),
     };
 
     [ExcludeFromCodeCoverage]
@@ -264,9 +260,6 @@ public readonly record struct ColorGradeSnapshot
             Lut = t > 0.5f ? other.Lut : Lut,
             LutIntensity = Mathf.Lerp(LutIntensity, other.LutIntensity, t),
             LutColorSpace = t > 0.5f ? other.LutColorSpace : LutColorSpace,
-            ColorManagement = t > 0.5f
-                ? other.ColorManagement.Clone()
-                : ColorManagement.Clone(),
         };
     }
 
@@ -440,7 +433,6 @@ public readonly record struct ColorGradeSnapshot
             LutColorSpace = System.Enum.IsDefined(typeof(ColorGradeLutColorSpace), LutColorSpace)
                 ? LutColorSpace
                 : defaults.LutColorSpace,
-            ColorManagement = SanitizeColorManagement(ColorManagement, defaults.ColorManagement),
         };
     }
 
@@ -456,15 +448,6 @@ public readonly record struct ColorGradeSnapshot
         ColorGradeQualifier fallback)
     {
         ColorGradeQualifier result = qualifier?.Clone() ?? fallback.Clone();
-        result.Sanitize();
-        return result;
-    }
-
-    private static ColorGradeColorManagement SanitizeColorManagement(
-        ColorGradeColorManagement? settings,
-        ColorGradeColorManagement fallback)
-    {
-        ColorGradeColorManagement result = settings?.Clone() ?? fallback.Clone();
         result.Sanitize();
         return result;
     }

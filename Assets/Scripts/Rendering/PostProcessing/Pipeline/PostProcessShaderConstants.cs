@@ -96,8 +96,6 @@ internal static class PostProcessShaderConstants
     public static readonly int LutParamsID = Shader.PropertyToID("_GradeLutParams");
     public static readonly int LutDomainMinID = Shader.PropertyToID("_GradeLutDomainMin");
     public static readonly int LutDomainMaxID = Shader.PropertyToID("_GradeLutDomainMax");
-    public static readonly int ColorManagement0ID = Shader.PropertyToID("_ColorManagement0");
-    public static readonly int ColorManagement1ID = Shader.PropertyToID("_ColorManagement1");
 
     public static readonly int EigengrauIntensityID = Shader.PropertyToID("_EigengrauIntensity");
     public static readonly int EigengrauColorID = Shader.PropertyToID("_EigengrauColor");

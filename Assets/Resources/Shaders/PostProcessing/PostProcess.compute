@@ -92,8 +92,6 @@ SamplerState sampler_GradeLut3D_LinearClamp;
 float4 _GradeLutParams; // intensity, type (1D/3D), color-space mode, reserved
 float3 _GradeLutDomainMin;
 float3 _GradeLutDomainMax;
-float4 _ColorManagement0; // input, working, output primaries, reference mode
-float4 _ColorManagement1; // input transfer, output transfer, SDR(0)/HDR(1)
 
 float _EigengrauIntensity;
 float4 _EigengrauColor;
@@ -203,10 +201,7 @@ float3 ApplyCreativeGrade(float3 color)
     // The creative grade is independent from the display curve. Previously
     // bypassing/soloing the curve also bypassed CDL, and the comparison split
     // compared two different grades instead of only showing curve before/after.
-    bool displayReferred = _ColorManagement0.w > 0.5;
-    float3 logColor = displayReferred
-        ? FodinaeDisplayEncode(color)
-        : FodinaeLogEncode(color);
+    float3 logColor = FodinaeLogEncode(color);
     logColor = ApplyCdl(
         logColor,
         _CdlSlope.rgb * _CdlMaster.x,
@@ -225,9 +220,7 @@ float3 ApplyCreativeGrade(float3 color)
         logColor = ApplyContrastControls(logColor, _Contrast, _ContrastControls, _ContrastControls2);
     }
 
-    float3 gradedLinear = displayReferred
-        ? FodinaeDisplayDecode(logColor)
-        : FodinaeLogDecode(logColor);
+    float3 gradedLinear = FodinaeLogDecode(logColor);
     if (abs(_CdlSaturation - 1.0) > 0.001)
     {
         gradedLinear = ApplySaturation(gradedLinear, _CdlSaturation, lumaWeights);
@@ -304,15 +297,7 @@ void BloomPrefilter(uint3 id : SV_DispatchThreadID)
         sampler_LinearClamp,
         uv + float2( halfTexel.x,  halfTexel.y),
         0);
-    // Bloom is composed with the working-space main image in CompositeFinal.
-    // Decode and adapt each sample before averaging: applying a nonlinear
-    // transfer or primary matrix after the average is not colorimetrically
-    // equivalent for P3/Rec.2020 or sRGB/PQ inputs.
-    float3 workingBloom =
-        ApplyColorManagementInput(sample0.rgb) +
-        ApplyColorManagementInput(sample1.rgb) +
-        ApplyColorManagementInput(sample2.rgb) +
-        ApplyColorManagementInput(sample3.rgb);
+    float3 workingBloom = sample0.rgb + sample1.rgb + sample2.rgb + sample3.rgb;
     float4 color = float4(
         workingBloom * 0.25,
         (sample0.a + sample1.a + sample2.a + sample3.a) * 0.25);
@@ -422,7 +407,6 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     {
         color = _InputTex.SampleLevel(sampler_PointClamp, uv, 0).rgb;
     }
-    color = ApplyColorManagementInput(color);
 
     // 2. Bloom Composition
     if (_BloomIntensity > 0.001 ||
@@ -473,22 +457,22 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     {
         float2 contrastOffset = _ScreenSize.zw * 2.0;
         float3 localMean =
-            ApplyColorManagementInput(_InputTex.SampleLevel(
+            _InputTex.SampleLevel(
                 sampler_LinearClamp,
                 uv + float2(contrastOffset.x, contrastOffset.y),
-                0).rgb) +
-            ApplyColorManagementInput(_InputTex.SampleLevel(
+                0).rgb +
+            _InputTex.SampleLevel(
                 sampler_LinearClamp,
                 uv + float2(-contrastOffset.x, contrastOffset.y),
-                0).rgb) +
-            ApplyColorManagementInput(_InputTex.SampleLevel(
+                0).rgb +
+            _InputTex.SampleLevel(
                 sampler_LinearClamp,
                 uv + float2(contrastOffset.x, -contrastOffset.y),
-                0).rgb) +
-            ApplyColorManagementInput(_InputTex.SampleLevel(
+                0).rgb +
+            _InputTex.SampleLevel(
                 sampler_LinearClamp,
                 uv + float2(-contrastOffset.x, -contrastOffset.y),
-                0).rgb);
+                0).rgb;
         // По яркости, а не по каналам. Поканальное color - mean уводило каналы
         // тёмного пикселя рядом со светлым в минус, и после обрезки край тени
         // становился цветным или чёрным. Масштаб всего цвета сохраняет оттенок
@@ -596,7 +580,6 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
     // white in SDR. Normalize only for the artistic screen effects.
     float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
     float3 color = source.rgb / paperWhite;
-    color = ApplyColorManagementOutput(color);
 #if defined(HDR_COLORSPACE_CONVERSION)
     color = RotateOutputSpaceToRec709(color);
 #endif
@@ -668,7 +651,6 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
 
     if (!showBefore)
     {
-        color = ApplyDisplayRollOff(color);
         color = ApplyDisplayTransform(color);
         color = ApplyCubeLut(color);
         color = ApplyDisplayCurves(color);
@@ -722,12 +704,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
 
         if (_PostDebugView == 3)
         {
-            // Gamut is a property of the declared display space, not of the
-            // internal working space. Check the same output-primary transform
-            // that DisplayFinal uses so P3/Rec.2020 warnings are meaningful.
-            // Цвет уже переведён в примары вывода в начале DisplayFinal; повторный
-            // ApplyColorManagementOutput переводил его второй раз. При HDR кадр
-            // держится в Rec.709, и проверять надо в пространстве дисплея.
+            // При HDR кадр держится в Rec.709; проверять надо в пространстве дисплея.
 #if defined(HDR_COLORSPACE_CONVERSION)
             float3 displayGamutColor = RotateRec709ToOutputSpace(color);
 #else

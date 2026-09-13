@@ -467,17 +467,6 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.LutColorSpace = (int)grade.LutColorSpace;
                 passData.LutDomainMin = grade.Lut?.DomainMin ?? Vector3.zero;
                 passData.LutDomainMax = grade.Lut?.DomainMax ?? Vector3.one;
-                ColorGradeColorManagement management = grade.ColorManagement;
-                passData.ColorManagement0 = new Vector4(
-                    (int)management.InputColorSpace,
-                    (int)management.WorkingColorSpace,
-                    (int)management.OutputColorSpace,
-                    (int)management.ReferenceMode);
-                passData.ColorManagement1 = new Vector4(
-                    (int)management.InputTransfer,
-                    (int)management.OutputTransfer,
-                    (int)management.DynamicRange,
-                    0f);
                 passData.DisplayPaperWhiteNits = paperWhite;
                 passData.DisplayPeakRelative = hdrOutput ? peakNits / paperWhite : 0f;
                 passData.HDROutput = _displayPass && hdrOutput;

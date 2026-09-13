@@ -198,13 +198,6 @@ public static class ColorGradeFile
         public string LutPath = string.Empty;
         public float LutIntensity;
         public int LutColorSpace;
-        public int InputColorSpace;
-        public int WorkingColorSpace;
-        public int OutputColorSpace;
-        public int InputTransfer;
-        public int OutputTransfer = (int)ColorGradeTransferFunction.Srgb;
-        public int ReferenceMode;
-        public int DynamicRange = (int)ColorGradeDynamicRangeMode.Sdr;
         public int EnabledMask = (1 << 6) - 1;
         // Поля оставлены для чтения файлов v1. Начиная с v2 диагностические
         // состояния предпросмотра не сохраняются вместе с авторским look.
@@ -268,13 +261,6 @@ public static class ColorGradeFile
             LutPath = state.LutPath,
             LutIntensity = state.LutIntensity,
             LutColorSpace = (int)state.LutColorSpace,
-            InputColorSpace = (int)state.ColorManagement.InputColorSpace,
-            WorkingColorSpace = (int)state.ColorManagement.WorkingColorSpace,
-            OutputColorSpace = (int)state.ColorManagement.OutputColorSpace,
-            InputTransfer = (int)state.ColorManagement.InputTransfer,
-            OutputTransfer = (int)state.ColorManagement.OutputTransfer,
-            ReferenceMode = (int)state.ColorManagement.ReferenceMode,
-            DynamicRange = (int)state.ColorManagement.DynamicRange,
             EnabledMask = state.EnabledMask,
             BypassMask = 0,
             SoloLayer = -1,
@@ -410,15 +396,6 @@ public static class ColorGradeFile
                 return false;
             }
 
-            if (payload.Version >= 20 &&
-                CountJsonFields(json, nameof(Payload.DynamicRange)) == 0)
-            {
-                Debug.LogWarning(
-                    $"[ColorGrade] Файл {Path} версии {payload.Version} не содержит " +
-                    "dynamic range; грейд оставлен как есть.");
-                return false;
-            }
-
             if (payload.Version >= 13 &&
                 CountJsonFields(json, nameof(Payload.Qualifier)) == 0)
             {
@@ -542,27 +519,6 @@ public static class ColorGradeFile
                     Debug.LogWarning($"[ColorGrade] Lut не загружен: {lutError}");
                 }
             }
-            state.ColorManagement.InputColorSpace = payload.Version >= 14
-                ? (ColorGradeColorSpace)payload.InputColorSpace
-                : ColorGradeColorSpace.Rec709;
-            state.ColorManagement.WorkingColorSpace = payload.Version >= 14
-                ? (ColorGradeColorSpace)payload.WorkingColorSpace
-                : ColorGradeColorSpace.Rec709;
-            state.ColorManagement.OutputColorSpace = payload.Version >= 14
-                ? (ColorGradeColorSpace)payload.OutputColorSpace
-                : ColorGradeColorSpace.Rec709;
-            state.ColorManagement.InputTransfer = payload.Version >= 14
-                ? (ColorGradeTransferFunction)payload.InputTransfer
-                : ColorGradeTransferFunction.Linear;
-            state.ColorManagement.OutputTransfer = payload.Version >= 14
-                ? (ColorGradeTransferFunction)payload.OutputTransfer
-                : ColorGradeTransferFunction.Srgb;
-            state.ColorManagement.ReferenceMode = payload.Version >= 14
-                ? (ColorGradeReferenceMode)payload.ReferenceMode
-                : ColorGradeReferenceMode.SceneReferred;
-            state.ColorManagement.DynamicRange = payload.Version >= 20
-                ? (ColorGradeDynamicRangeMode)payload.DynamicRange
-                : ColorGradeDynamicRangeMode.Sdr;
             state.EnabledMask = payload.Version >= 19
                 ? payload.EnabledMask
                 : (1 << 6) - 1;
@@ -731,11 +687,6 @@ public static class ColorGradeFile
         }
 
         if (payload.Version >= 19 && CountJsonFields(json, nameof(Payload.EnabledMask)) == 0)
-        {
-            return false;
-        }
-
-        if (payload.Version >= 20 && CountJsonFields(json, nameof(Payload.DynamicRange)) == 0)
         {
             return false;
         }

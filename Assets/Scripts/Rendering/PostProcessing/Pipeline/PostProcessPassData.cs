@@ -111,8 +111,6 @@ internal sealed class PostProcessPassData
     public int LutColorSpace;
     public Vector3 LutDomainMin;
     public Vector3 LutDomainMax;
-    public Vector4 ColorManagement0;
-    public Vector4 ColorManagement1;
 
     public bool EigengrauActive;
     public float EigengrauIntensity;

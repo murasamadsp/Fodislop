@@ -168,26 +168,6 @@ float3 FodinaeLogDecode(float3 logColor)
     return sign(logColor) * max(exp2(stops) - toeFloor, 0.0) * FodinaeMidGrey;
 }
 
-float3 FodinaeDisplayEncode(float3 linearColor)
-{
-    float3 magnitude = abs(linearColor);
-    float3 encoded = lerp(
-        magnitude * 12.92,
-        1.055 * pow(magnitude, 1.0 / 2.4) - 0.055,
-        step(0.0031308, magnitude));
-    return sign(linearColor) * encoded;
-}
-
-float3 FodinaeDisplayDecode(float3 encodedColor)
-{
-    float3 magnitude = abs(encodedColor);
-    float3 linearValue = lerp(
-        magnitude / 12.92,
-        pow(max(magnitude + 0.055, 0.0) / 1.055, 2.4),
-        step(0.04045, magnitude));
-    return sign(encodedColor) * linearValue;
-}
-
 // ----------------------------------------------------------------------------
 // Слой 3: ASC CDL — стандарт обмена грейдом
 // ----------------------------------------------------------------------------
@@ -509,31 +489,6 @@ inline float3 ApplyDisplayCurves(float3 color)
     return result;
 }
 
-float3 ApplyDisplayRollOff(float3 color)
-{
-    float toe = saturate(_ContrastControls2.y);
-    float shoulder = saturate(_ContrastControls2.z);
-    float3 result = color;
-    if (toe > 1e-5)
-    {
-        float3 belowBlack = min(result, 0.0);
-        // Compress only the out-of-range shadow excursion. The previous
-        // subtraction could cross zero when toe was strong and turn a
-        // negative signal into a positive one instead of a soft clip.
-        float3 compressedBlack = belowBlack /
-            (1.0 + toe * 8.0 * abs(belowBlack));
-        result = max(result, compressedBlack);
-    }
-
-    if (shoulder > 1e-5)
-    {
-        float3 excess = max(result - 1.0, 0.0);
-        result = min(result, 1.0) + excess / (1.0 + excess * shoulder * 8.0);
-    }
-
-    return result;
-}
-
 inline float3 ApplyDisplayTransform(float3 color)
 {
     // DisplayTransform.None is a deliberate exact bypass. This keeps the
@@ -717,109 +672,6 @@ inline float3 ApplyCubeLut(float3 color)
     }
 
     return lerp(color, lutColor, saturate(_GradeLutParams.x));
-}
-
-float3 DecodeGradeTransfer(float3 color, int transfer)
-{
-    float3 result = color;
-    if (transfer == 1)
-    {
-        float3 low = color / 12.92;
-        float3 high = pow(max((color + 0.055) / 1.055, 0.0), 2.4);
-        result = lerp(high, low, step(color, 0.04045));
-    }
-
-    if (transfer == 2)
-    {
-        // SMPTE ST 2084 inverse EOTF, normalized to the project HDR range.
-        const float m1 = 2610.0 / 16384.0;
-        const float m2 = 2523.0 / 32.0;
-        const float c1 = 3424.0 / 4096.0;
-        const float c2 = 2413.0 / 128.0;
-        const float c3 = 2392.0 / 128.0;
-        float3 encoded = min(max(color, 0.0), 4.0);
-        float3 powered = pow(encoded, 1.0 / m2);
-        result = pow(max(powered - c1, 0.0) / max(c2 - c3 * powered, 1e-5), 1.0 / m1);
-    }
-
-    if (transfer == 3)
-    {
-        // ARIB STD-B67 inverse OETF. Negative encoded values are treated as
-        // black at this transfer-function boundary; this prevents NaN when a
-        // diagnostic pass deliberately feeds an out-of-range signal into it.
-        float3 encoded = max(color, 0.0);
-        float3 safeEncoded = min(encoded, 4.0);
-        float3 low = safeEncoded * safeEncoded / 3.0;
-        // HLG is nominally defined on [0, 1]. HDR intermediates can be much
-        // larger, so cap only the exponential branch to keep finite values
-        // from turning into Inf while preserving the complete nominal range.
-        float3 exponentialInput = safeEncoded;
-        float3 high =
-            (exp((exponentialInput - 0.5599107) / 0.17883277) + 0.28466892) / 12.0;
-        result = lerp(high, low, step(encoded, 0.5));
-    }
-
-    return result;
-}
-
-inline float3 GradeRec709ToSpace(float3 color, int space)
-{
-    float3 result = color;
-    if (space == 1)
-    {
-        result = mul(float3x3(
-            0.8226, 0.1775, 0.0000,
-            0.0332, 0.9668, 0.0000,
-            0.0171, 0.0724, 0.9108), color);
-    }
-
-    if (space == 2)
-    {
-        result = mul(float3x3(
-            0.6274, 0.3293, 0.0433,
-            0.0691, 0.9195, 0.0114,
-            0.0164, 0.0880, 0.8956), color);
-    }
-
-    return result;
-}
-
-inline float3 GradeSpaceToRec709(float3 color, int space)
-{
-    float3 result = color;
-    if (space == 1)
-    {
-        result = mul(float3x3(
-            1.2247, -0.2249, 0.0000,
-            -0.0421, 1.0421, 0.0000,
-            -0.0196, -0.0787, 1.0985), color);
-    }
-
-    if (space == 2)
-    {
-        result = mul(float3x3(
-            1.6605, -0.5876, -0.0728,
-            -0.1246, 1.1329, -0.0083,
-            -0.0182, -0.1006, 1.1187), color);
-    }
-
-    return result;
-}
-
-float3 ApplyColorManagementInput(float3 color)
-{
-    color = DecodeGradeTransfer(color, (int)_ColorManagement1.x);
-    color = GradeSpaceToRec709(color, (int)_ColorManagement0.x);
-    color = GradeRec709ToSpace(color, (int)_ColorManagement0.y);
-    return color;
-}
-
-float3 ApplyColorManagementOutput(float3 color)
-{
-    color = GradeSpaceToRec709(color, (int)_ColorManagement0.y);
-    // URP owns the final transfer encoding. Keeping it out of this pass avoids
-    // encoding sRGB twice while still making the declared output primaries explicit.
-    return GradeRec709ToSpace(color, (int)_ColorManagement0.z);
 }
 
 #endif // FODINAE_COLOR_GRADING_INCLUDED

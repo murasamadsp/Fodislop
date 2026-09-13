@@ -224,9 +224,6 @@ public sealed class RuntimeAssetPathsTests
 
         Assert.That(snapshot.Transform, Is.EqualTo(DisplayTransform.None));
         Assert.That(snapshot.EnabledMask, Is.EqualTo((1 << 6) - 1));
-        Assert.That(
-            snapshot.ColorManagement.DynamicRange,
-            Is.EqualTo(ColorGradeDynamicRangeMode.Sdr));
         Assert.That(snapshot.Exposure, Is.Zero);
         Assert.That(snapshot.Temperature, Is.Zero);
         Assert.That(snapshot.Tint, Is.Zero);

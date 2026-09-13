@@ -165,8 +165,6 @@ public sealed class ColorGradeState
 
     public ColorGradeCubeLut? Lut { get; private set; }
 
-    public ColorGradeColorManagement ColorManagement { get; } = new();
-
     public string LutPath { get; private set; } = string.Empty;
 
     public float LutIntensity { get; set; }
@@ -372,13 +370,6 @@ public sealed class ColorGradeState
         SaturationVsSaturationCurve.Reset();
         Qualifier.Reset();
         ClearLut();
-        ColorManagement.InputColorSpace = ColorGradeColorSpace.Rec709;
-        ColorManagement.WorkingColorSpace = ColorGradeColorSpace.Rec709;
-        ColorManagement.OutputColorSpace = ColorGradeColorSpace.Rec709;
-        ColorManagement.InputTransfer = ColorGradeTransferFunction.Linear;
-        ColorManagement.OutputTransfer = ColorGradeTransferFunction.Srgb;
-        ColorManagement.ReferenceMode = ColorGradeReferenceMode.SceneReferred;
-        ColorManagement.DynamicRange = ColorGradeDynamicRangeMode.Sdr;
 
         ClearPreviewOverrides();
     }
@@ -533,7 +524,6 @@ public sealed class ColorGradeState
         {
             LutColorSpace = ColorGradeLutColorSpace.LinearRec709;
         }
-        ColorManagement.Sanitize();
 
         if (Solo.HasValue && !Enum.IsDefined(typeof(ColorGradeLayer), Solo.Value))
         {
@@ -595,7 +585,6 @@ public sealed class ColorGradeState
         Lut = Lut,
         LutIntensity = LutIntensity,
         LutColorSpace = LutColorSpace,
-        ColorManagement = ColorManagement.Clone(),
     }.Sanitized();
 
     public ColorGradeSnapshot ToSnapshot()
@@ -751,13 +740,6 @@ public sealed class ColorGradeState
         CopyCurve(LuminanceVsSaturationCurve, snapshot.LuminanceVsSaturationCurve);
         CopyCurve(SaturationVsSaturationCurve, snapshot.SaturationVsSaturationCurve);
         CopyQualifier(Qualifier, snapshot.Qualifier);
-        ColorManagement.InputColorSpace = snapshot.ColorManagement.InputColorSpace;
-        ColorManagement.WorkingColorSpace = snapshot.ColorManagement.WorkingColorSpace;
-        ColorManagement.OutputColorSpace = snapshot.ColorManagement.OutputColorSpace;
-        ColorManagement.InputTransfer = snapshot.ColorManagement.InputTransfer;
-        ColorManagement.OutputTransfer = snapshot.ColorManagement.OutputTransfer;
-        ColorManagement.ReferenceMode = snapshot.ColorManagement.ReferenceMode;
-        ColorManagement.DynamicRange = snapshot.ColorManagement.DynamicRange;
         if (snapshot.Lut == null)
         {
             ClearLut();
@@ -853,13 +835,6 @@ public sealed class ColorGradeState
             ReferenceEquals(left.Lut, right.Lut) &&
             left.LutIntensity == right.LutIntensity &&
             left.LutColorSpace == right.LutColorSpace &&
-            left.ColorManagement.InputColorSpace == right.ColorManagement.InputColorSpace &&
-            left.ColorManagement.WorkingColorSpace == right.ColorManagement.WorkingColorSpace &&
-            left.ColorManagement.OutputColorSpace == right.ColorManagement.OutputColorSpace &&
-            left.ColorManagement.InputTransfer == right.ColorManagement.InputTransfer &&
-            left.ColorManagement.OutputTransfer == right.ColorManagement.OutputTransfer &&
-            left.ColorManagement.ReferenceMode == right.ColorManagement.ReferenceMode &&
-            left.ColorManagement.DynamicRange == right.ColorManagement.DynamicRange &&
             CurvesEqual(left.MasterCurve, right.MasterCurve) &&
             CurvesEqual(left.RedCurve, right.RedCurve) &&
             CurvesEqual(left.GreenCurve, right.GreenCurve) &&

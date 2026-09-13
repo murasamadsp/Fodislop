@@ -297,8 +297,6 @@ internal static class PostProcessPassExecutor
                 data.Lut1D != null ? data.Lut1D.width : data.Lut3D != null ? data.Lut3D.width : 0f));
         cmd.SetComputeVectorParam(data.PostProcessCS, LutDomainMinID, data.LutDomainMin);
         cmd.SetComputeVectorParam(data.PostProcessCS, LutDomainMaxID, data.LutDomainMax);
-        cmd.SetComputeVectorParam(data.PostProcessCS, ColorManagement0ID, data.ColorManagement0);
-        cmd.SetComputeVectorParam(data.PostProcessCS, ColorManagement1ID, data.ColorManagement1);
         // Metal validates every resource declared by a compute kernel, even when
         // the Lut branch is disabled by intensity/type. Bind explicit identity
         // LUTs so neutral grading remains mathematically unchanged.
