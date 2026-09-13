@@ -13,9 +13,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Builds the Graphics tab in the Pause Menu.
-/// </summary>
 internal sealed class PauseMenuGraphicsTabBuilder
 {
     private readonly GraphicsSettingsController _graphicsSettings;

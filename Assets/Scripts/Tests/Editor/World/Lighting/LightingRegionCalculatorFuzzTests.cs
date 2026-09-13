@@ -6,52 +6,19 @@ using UnityEngine;
 
 namespace Fodinae.Tests.World.Lighting;
 
-/// <summary>
-/// Fuzzes <see cref="LightingRegionCalculator.GetStableLightingRegion"/> -
-/// the per-frame decision of where the lighting field lives and when it is
-/// allowed to stay put.
-/// </summary>
-/// <remarks>
-/// The renderer runs this from the game camera every frame. The two ways it
-/// can betray the player are churn (re-anchoring on camera motion that
-/// stayed inside the safe margin, the exact framerate sink the cache exists
-/// to prevent) and a region that does not cover the padded viewport (the
-/// field then has holes in it). Both are silent - there is no error to log.
-/// So the properties asserted here are the contract the renderer relies on:
-/// the NaN x-component is the "no previous region" sentinel and forces a
-/// fresh compute no matter what else is in the vector; a viewport inside
-/// the safe margin returns the previous region verbatim; and a fresh region
-/// is anchored on the 8-cell grid, sized on the 32-cell quantum, at least
-/// two cells, and covers the padded viewport.
-///
-/// The seeds are fixed. A fuzz test that picks a new seed every run reports
-/// failures nobody can reproduce.
-///
-/// NaN in the z/w components is deliberately excluded: RoundToInt on NaN is
-/// platform-dependent, and the x-sentinel is the documented protocol for
-/// "no previous region".
-/// </remarks>
 [TestFixture]
 public class LightingRegionCalculatorFuzzTests
 {
     private const int Padding = LightingRegionCalculator.LightingRegionPaddingCells;
 
-    /// <summary>Anchor grid cell size (SnapLightingRegion's stride).</summary>
     private const int AnchorCells = 8;
 
-    /// <summary>Fresh-region size quantum.</summary>
     private const int Quantum = 32;
 
     private const int MinCell = 2;
 
     private static readonly int[] _Seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
 
-    /// <summary>
-    /// Coordinates chosen to break the arithmetic rather than to look
-    /// plausible: far negative (world space extends below the origin), the
-    /// anchor boundary at -1/0/1, and magnitudes big enough to stress the
-    /// ceil/quantize path.
-    /// </summary>
     private static readonly int[] _HostileCoords = [-10_000_000, -1000, -17, -8, -1, 0, 1, 7, 8, 9, 1000, 10_000_000];
 
     private static readonly int[] _HostileExtents = [-1_000_000, -32, -1, 0, 1, 7, 32, 1000, 10_000_000];
@@ -210,12 +177,6 @@ public class LightingRegionCalculatorFuzzTests
             random.Next(0, 2001));
     }
 
-    /// <summary>
-    /// A structurally valid previous region: anchored anywhere, sized on
-    /// the 32-cell quantum, at least 32 cells per side so the safe-margin
-    /// rule has room to matter. Stored values are exactly representable as
-    /// floats, so RoundToInt inside the calculator is lossless.
-    /// </summary>
     private static Vector4 RandomValidRegion(System.Random random)
     {
         int width = random.Next(1, 257) * Quantum;
@@ -227,12 +188,6 @@ public class LightingRegionCalculatorFuzzTests
             height);
     }
 
-    /// <summary>
-    /// The fresh-region contract: west/south edges are snapped anchors
-    /// (multiples of 8), sizes are multiples of 32 unless clamped to the
-    /// two-cell minimum, and the region covers the viewport plus padding on
-    /// every side.
-    /// </summary>
     private static void AssertFreshRegion(
         Vector4 region,
         int minX,

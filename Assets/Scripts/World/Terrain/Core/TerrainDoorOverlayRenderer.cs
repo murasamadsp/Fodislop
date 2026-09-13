@@ -9,10 +9,6 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Renders only doorway terrain quads above world entities without duplicating
-/// the complete terrain vertex buffer on the GPU.
-/// </summary>
 public sealed class TerrainDoorOverlayRenderer : IDisposable
 {
     private const MeshUpdateFlags UploadFlags =

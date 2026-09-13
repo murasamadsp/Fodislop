@@ -14,15 +14,6 @@ public enum TerrainCellState
 
 public struct CachedCellData
 {
-    /// <summary>
-    /// Клетка светится и её свечение анимировано.
-    /// </summary>
-    /// <remarks>
-    /// Предикат живёт здесь, а не у спрашивающих: <c>CellConfigProperties</c> и
-    /// <c>CellAnimationType</c> объявлены в сетевых пакетах, и каждый, кому нужен
-    /// этот вопрос, иначе тянул бы к себе пространство имён протокола. Рендереру
-    /// террейна знать про пакеты незачем.
-    /// </remarks>
     public readonly bool HasAnimatedGlow =>
         State == TerrainCellState.Loaded &&
         Animation != CellAnimationType.None &&
@@ -34,7 +25,7 @@ public struct CachedCellData
     public byte ReliefGroup;
     public CellDistortionType Distortion;
     public bool HasTileGroup;
-    public int TileGroupId;
+    public int TileGroupID;
     public Color32 MinimapColor; // was Color (16 bytes) — Color32 (4 bytes) sufficient for minimap
     public CellAnimationType Animation;
     public float AnimationSpeed;
@@ -52,7 +43,7 @@ public struct CellMetadata
     public byte ReliefGroup;
     public CellDistortionType Distortion;
     public bool HasTileGroup;
-    public int TileGroupId;
+    public int TileGroupID;
     public Color32 MinimapColor; // was Color (16 bytes) — Color32 (4 bytes) sufficient for minimap
     public CellAnimationType Animation;
     public float AnimationSpeed;
@@ -62,6 +53,5 @@ public struct CellMetadata
     public int AnimationFrameCount;
     public float FrameHeightTiles;
     public bool IsTextureReady;
-    /// <summary>True once fully populated; replaces the parallel _metadataReady bool[] in TerrainCellCache.</summary>
     public bool IsPopulated;
 }

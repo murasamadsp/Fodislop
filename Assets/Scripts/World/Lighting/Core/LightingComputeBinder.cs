@@ -9,73 +9,54 @@ using Fodinae.World.Lighting.Quality;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-/// <summary>
-/// Centralizes Shader property IDs and provides helpers for binding compute shader parameters
-/// across Radiance Cascades kernels.
-/// </summary>
 internal static class LightingComputeBinder
 {
-    public static readonly int MaterialFieldId = Shader.PropertyToID("_MaterialField");
-    public static readonly int EmissionFieldId = Shader.PropertyToID("_EmissionField");
-    public static readonly int RadianceAtlasId = Shader.PropertyToID("_RadianceAtlas");
-    public static readonly int DirectTextureId = Shader.PropertyToID("_DirectTexture");
-    public static readonly int DirectInputId = Shader.PropertyToID("_DirectInput");
-    public static readonly int StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
-    public static readonly int BounceTextureId = Shader.PropertyToID("_BounceTexture");
-    public static readonly int BounceInputId = Shader.PropertyToID("_BounceInput");
-    public static readonly int ResultId = Shader.PropertyToID("_Result");
-    public static readonly int FieldSizeId = Shader.PropertyToID("_FieldSize");
-    public static readonly int BounceSizeId = Shader.PropertyToID("_BounceSize");
-    public static readonly int WorldRectId = Shader.PropertyToID("_WorldRect");
-    public static readonly int AmbientColorId = Shader.PropertyToID("_AmbientColor");
-    public static readonly int EmptyExtinctionRGBId = Shader.PropertyToID("_EmptyExtinctionRGB");
-    public static readonly int SolidExtinctionRGBId = Shader.PropertyToID("_SolidExtinctionRGB");
-    public static readonly int MinimumTransmissionId = Shader.PropertyToID("_MinimumTransmission");
-    public static readonly int BounceStrengthId = Shader.PropertyToID("_BounceStrength");
-    public static readonly int TerrainAmbientOcclusionMipId =
+    public static readonly int MaterialFieldID = Shader.PropertyToID("_MaterialField");
+    public static readonly int EmissionFieldID = Shader.PropertyToID("_EmissionField");
+    public static readonly int RadianceAtlasID = Shader.PropertyToID("_RadianceAtlas");
+    public static readonly int DirectTextureID = Shader.PropertyToID("_DirectTexture");
+    public static readonly int DirectInputID = Shader.PropertyToID("_DirectInput");
+    public static readonly int StaticDirectInputID = Shader.PropertyToID("_StaticDirectInput");
+    public static readonly int BounceTextureID = Shader.PropertyToID("_BounceTexture");
+    public static readonly int BounceInputID = Shader.PropertyToID("_BounceInput");
+    public static readonly int ResultID = Shader.PropertyToID("_Result");
+    public static readonly int FieldSizeID = Shader.PropertyToID("_FieldSize");
+    public static readonly int BounceSizeID = Shader.PropertyToID("_BounceSize");
+    public static readonly int WorldRectID = Shader.PropertyToID("_WorldRect");
+    public static readonly int AmbientColorID = Shader.PropertyToID("_AmbientColor");
+    public static readonly int EmptyExtinctionRGBID = Shader.PropertyToID("_EmptyExtinctionRGB");
+    public static readonly int SolidExtinctionRGBID = Shader.PropertyToID("_SolidExtinctionRGB");
+    public static readonly int MinimumTransmissionID = Shader.PropertyToID("_MinimumTransmission");
+    public static readonly int BounceStrengthID = Shader.PropertyToID("_BounceStrength");
+    public static readonly int TerrainAmbientOcclusionMipID =
         Shader.PropertyToID("_TerrainAmbientOcclusionMip");
-    public static readonly int TerrainAmbientOcclusionStrengthId =
+    public static readonly int TerrainAmbientOcclusionStrengthID =
         Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
-    public static readonly int EmissionScaleId = Shader.PropertyToID("_EmissionScale");
-    public static readonly int MaximumLightMultiplierId = Shader.PropertyToID("_MaximumLightMultiplier");
-    public static readonly int EnableFinalLightingClampId = Shader.PropertyToID("_EnableFinalLightingClamp");
-    public static readonly int CellSizeId = Shader.PropertyToID("_CellSize");
-    public static readonly int TransmittanceDebugDistanceCellsId = Shader.PropertyToID("_TransmittanceDebugDistanceCells");
-    public static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
-    public static readonly int MaterialYFlipId = Shader.PropertyToID("_MaterialYFlip");
-    public static readonly int MaximumIntervalStepsId = Shader.PropertyToID("_MaximumIntervalSteps");
-    public static readonly int EnableDiffuseBounceId = Shader.PropertyToID("_EnableDiffuseBounce");
-    public static readonly int CascadeOffsetId = Shader.PropertyToID("_CascadeOffset");
-    public static readonly int CascadeProbeSizeId = Shader.PropertyToID("_CascadeProbeSize");
-    public static readonly int CascadeProbeSpacingId = Shader.PropertyToID("_CascadeProbeSpacing");
-    public static readonly int CascadeDirectionCountId = Shader.PropertyToID("_CascadeDirectionCount");
-    public static readonly int CascadeIntervalId = Shader.PropertyToID("_CascadeInterval");
-    public static readonly int FarCascadeOffsetId = Shader.PropertyToID("_FarCascadeOffset");
-    public static readonly int FarCascadeProbeSizeId = Shader.PropertyToID("_FarCascadeProbeSize");
-    public static readonly int FarCascadeProbeSpacingId = Shader.PropertyToID("_FarCascadeProbeSpacing");
-    public static readonly int FarCascadeDirectionCountId = Shader.PropertyToID("_FarCascadeDirectionCount");
-    public static readonly int FarCascadeIntervalId = Shader.PropertyToID("_FarCascadeInterval");
-    public static readonly int HasFarCascadeId = Shader.PropertyToID("_HasFarCascade");
-    public static readonly int EnableBilinearFixId = Shader.PropertyToID("_EnableBilinearFix");
-    public static readonly int CascadeEntryCountId = Shader.PropertyToID("_CascadeEntryCount");
-    public static readonly int CascadeDispatchRowWidthId = Shader.PropertyToID("_CascadeDispatchRowWidth");
-    public static readonly int BlockAveragedId = Shader.PropertyToID("_BlockAveraged");
+    public static readonly int EmissionScaleID = Shader.PropertyToID("_EmissionScale");
+    public static readonly int MaximumLightMultiplierID = Shader.PropertyToID("_MaximumLightMultiplier");
+    public static readonly int EnableFinalLightingClampID = Shader.PropertyToID("_EnableFinalLightingClamp");
+    public static readonly int CellSizeID = Shader.PropertyToID("_CellSize");
+    public static readonly int TransmittanceDebugDistanceCellsID = Shader.PropertyToID("_TransmittanceDebugDistanceCells");
+    public static readonly int DebugViewID = Shader.PropertyToID("_DebugView");
+    public static readonly int MaterialYFlipID = Shader.PropertyToID("_MaterialYFlip");
+    public static readonly int MaximumIntervalStepsID = Shader.PropertyToID("_MaximumIntervalSteps");
+    public static readonly int EnableDiffuseBounceID = Shader.PropertyToID("_EnableDiffuseBounce");
+    public static readonly int CascadeOffsetID = Shader.PropertyToID("_CascadeOffset");
+    public static readonly int CascadeProbeSizeID = Shader.PropertyToID("_CascadeProbeSize");
+    public static readonly int CascadeProbeSpacingID = Shader.PropertyToID("_CascadeProbeSpacing");
+    public static readonly int CascadeDirectionCountID = Shader.PropertyToID("_CascadeDirectionCount");
+    public static readonly int CascadeIntervalID = Shader.PropertyToID("_CascadeInterval");
+    public static readonly int FarCascadeOffsetID = Shader.PropertyToID("_FarCascadeOffset");
+    public static readonly int FarCascadeProbeSizeID = Shader.PropertyToID("_FarCascadeProbeSize");
+    public static readonly int FarCascadeProbeSpacingID = Shader.PropertyToID("_FarCascadeProbeSpacing");
+    public static readonly int FarCascadeDirectionCountID = Shader.PropertyToID("_FarCascadeDirectionCount");
+    public static readonly int FarCascadeIntervalID = Shader.PropertyToID("_FarCascadeInterval");
+    public static readonly int HasFarCascadeID = Shader.PropertyToID("_HasFarCascade");
+    public static readonly int EnableBilinearFixID = Shader.PropertyToID("_EnableBilinearFix");
+    public static readonly int CascadeEntryCountID = Shader.PropertyToID("_CascadeEntryCount");
+    public static readonly int CascadeDispatchRowWidthID = Shader.PropertyToID("_CascadeDispatchRowWidth");
+    public static readonly int BlockAveragedID = Shader.PropertyToID("_BlockAveraged");
 
-    /// <summary>
-    /// Дальность луча отладочного вида прозрачности, в клетках.
-    /// </summary>
-    /// <remarks>
-    /// ЗАЧЕМ ВЫВОДИТСЯ, А НЕ ЗАДАЁТСЯ ЧИСЛОМ. Прозрачность считается как
-    /// <c>exp(-ослабление * длина)</c>, и осмысленный диапазон у экспоненты
-    /// короткий: дальше трёх единиц оптической толщины всё сливается в ноль.
-    /// Здесь стояла константа 10 клеток. Пока ослабление пустоты было малым,
-    /// вид работал; когда оно стало равно единице на клетку, произведение
-    /// достигло десяти, <c>exp(-10) ≈ 4.5e-5</c>, и вид почернел целиком — при
-    /// формально исправном коде вокруг.
-    ///
-    /// Дальность привязана к самому ослаблению, поэтому вид переживёт
-    /// следующую правку освещения, а не сломается о неё молча.
-    /// </remarks>
     public static float ResolveTransmittanceDebugDistance()
     {
         Color extinction = LightingConfigHolder.EmptyExtinctionRGB *
@@ -95,12 +76,12 @@ internal static class LightingComputeBinder
         commandBuffer.SetComputeTextureParam(
             compute,
             kernel,
-            MaterialFieldId,
+            MaterialFieldID,
             materialField);
         commandBuffer.SetComputeTextureParam(
             compute,
             kernel,
-            EmissionFieldId,
+            EmissionFieldID,
             emissionField);
     }
 
@@ -123,55 +104,55 @@ internal static class LightingComputeBinder
         int solveDiffuseBounceKernel,
         int compositeLightingKernel)
     {
-        commandBuffer.SetComputeIntParams(compute, FieldSizeId, fieldWidth, fieldHeight);
-        commandBuffer.SetComputeIntParams(compute, BounceSizeId, bounceWidth, bounceHeight);
-        commandBuffer.SetComputeVectorParam(compute, WorldRectId, worldRect);
+        commandBuffer.SetComputeIntParams(compute, FieldSizeID, fieldWidth, fieldHeight);
+        commandBuffer.SetComputeIntParams(compute, BounceSizeID, bounceWidth, bounceHeight);
+        commandBuffer.SetComputeVectorParam(compute, WorldRectID, worldRect);
         commandBuffer.SetComputeVectorParam(
             compute,
-            AmbientColorId,
+            AmbientColorID,
             LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity);
         commandBuffer.SetComputeVectorParam(
             compute,
-            EmptyExtinctionRGBId,
+            EmptyExtinctionRGBID,
             LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier);
         commandBuffer.SetComputeVectorParam(
             compute,
-            SolidExtinctionRGBId,
+            SolidExtinctionRGBID,
             LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier);
-        commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionId, LightingConfigHolder.MinimumTransmission);
-        commandBuffer.SetComputeFloatParam(compute, BounceStrengthId, LightingConfigHolder.BounceStrength);
+        commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionID, LightingConfigHolder.MinimumTransmission);
+        commandBuffer.SetComputeFloatParam(compute, BounceStrengthID, LightingConfigHolder.BounceStrength);
         commandBuffer.SetComputeFloatParam(
             compute,
-            TerrainAmbientOcclusionMipId,
+            TerrainAmbientOcclusionMipID,
             Fodinae.World.Terrain.TerrainLook.AmbientOcclusionMip);
         commandBuffer.SetComputeFloatParam(
             compute,
-            TerrainAmbientOcclusionStrengthId,
+            TerrainAmbientOcclusionStrengthID,
             Fodinae.World.Terrain.TerrainLook.AmbientOcclusionStrength);
-        commandBuffer.SetComputeFloatParam(compute, EmissionScaleId, LightingConfigHolder.EmissionScale);
-        commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierId, LightingConfigHolder.MaximumLightMultiplier);
-        commandBuffer.SetComputeIntParam(compute, EnableFinalLightingClampId, 0);
-        commandBuffer.SetComputeFloatParam(compute, CellSizeId, cellSize);
+        commandBuffer.SetComputeFloatParam(compute, EmissionScaleID, LightingConfigHolder.EmissionScale);
+        commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierID, LightingConfigHolder.MaximumLightMultiplier);
+        commandBuffer.SetComputeIntParam(compute, EnableFinalLightingClampID, 0);
+        commandBuffer.SetComputeFloatParam(compute, CellSizeID, cellSize);
         commandBuffer.SetComputeFloatParam(
             compute,
-            TransmittanceDebugDistanceCellsId,
+            TransmittanceDebugDistanceCellsID,
             ResolveTransmittanceDebugDistance());
-        commandBuffer.SetComputeIntParam(compute, DebugViewId, (int)debugView);
+        commandBuffer.SetComputeIntParam(compute, DebugViewID, (int)debugView);
         commandBuffer.SetComputeIntParam(
             compute,
-            MaterialYFlipId,
+            MaterialYFlipID,
             SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
-            MaximumIntervalStepsId,
+            MaximumIntervalStepsID,
             Mathf.Clamp(qualitySettings.LightingMaximumRaySteps, 1, 64));
         commandBuffer.SetComputeIntParam(
             compute,
-            EnableDiffuseBounceId,
+            EnableDiffuseBounceID,
             1);
         commandBuffer.SetComputeIntParam(
             compute,
-            BlockAveragedId,
+            BlockAveragedID,
             qualityMode == LightingQualityMode.PerBlock ? 1 : 0);
 
         BindFieldTextures(commandBuffer, compute, solveCascadeKernel, materialField, emissionField);
@@ -188,48 +169,48 @@ internal static class LightingComputeBinder
         bool hasFarCascade,
         bool bilinearFix)
     {
-        commandBuffer.SetComputeIntParam(compute, CascadeOffsetId, cascade.Offset);
+        commandBuffer.SetComputeIntParam(compute, CascadeOffsetID, cascade.Offset);
         commandBuffer.SetComputeIntParams(
             compute,
-            CascadeProbeSizeId,
+            CascadeProbeSizeID,
             cascade.ProbeWidth,
             cascade.ProbeHeight);
         commandBuffer.SetComputeIntParam(
             compute,
-            CascadeProbeSpacingId,
+            CascadeProbeSpacingID,
             cascade.ProbeSpacing);
         commandBuffer.SetComputeIntParam(
             compute,
-            CascadeDirectionCountId,
+            CascadeDirectionCountID,
             cascade.DirectionCount);
         commandBuffer.SetComputeVectorParam(
             compute,
-            CascadeIntervalId,
+            CascadeIntervalID,
             new Vector4(cascade.IntervalStart, cascade.IntervalEnd, 0f, 0f));
-        commandBuffer.SetComputeIntParam(compute, FarCascadeOffsetId, farCascade.Offset);
+        commandBuffer.SetComputeIntParam(compute, FarCascadeOffsetID, farCascade.Offset);
         commandBuffer.SetComputeIntParams(
             compute,
-            FarCascadeProbeSizeId,
+            FarCascadeProbeSizeID,
             farCascade.ProbeWidth,
             farCascade.ProbeHeight);
         commandBuffer.SetComputeIntParam(
             compute,
-            FarCascadeProbeSpacingId,
+            FarCascadeProbeSpacingID,
             farCascade.ProbeSpacing);
         commandBuffer.SetComputeIntParam(
             compute,
-            FarCascadeDirectionCountId,
+            FarCascadeDirectionCountID,
             farCascade.DirectionCount);
         commandBuffer.SetComputeVectorParam(
             compute,
-            FarCascadeIntervalId,
+            FarCascadeIntervalID,
             new Vector4(
                 farCascade.IntervalStart,
                 farCascade.IntervalEnd,
                 0f,
                 0f));
-        commandBuffer.SetComputeIntParam(compute, HasFarCascadeId, hasFarCascade ? 1 : 0);
-        commandBuffer.SetComputeIntParam(compute, EnableBilinearFixId, bilinearFix ? 1 : 0);
-        commandBuffer.SetComputeIntParam(compute, CascadeEntryCountId, cascade.EntryCount);
+        commandBuffer.SetComputeIntParam(compute, HasFarCascadeID, hasFarCascade ? 1 : 0);
+        commandBuffer.SetComputeIntParam(compute, EnableBilinearFixID, bilinearFix ? 1 : 0);
+        commandBuffer.SetComputeIntParam(compute, CascadeEntryCountID, cascade.EntryCount);
     }
 }

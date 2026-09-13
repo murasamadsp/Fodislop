@@ -11,9 +11,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Builds the Audio Settings section in the pause menu.
-/// </summary>
 internal sealed class PauseMenuAudioTabBuilder
 {
     private readonly IClientConfigManager _clientConfig;

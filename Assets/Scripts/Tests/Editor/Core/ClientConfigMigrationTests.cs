@@ -25,11 +25,6 @@ public sealed class ClientConfigMigrationTests
         Object.DestroyImmediate(_profile);
     }
 
-    /// <summary>
-    /// Файл схемы 21 хранит поля вида плоско в корне. После миграции они
-    /// обязаны оказаться в секциях с теми же значениями: настроенный игроком
-    /// свет — это его работа, и терять её при смене формы файла нельзя.
-    /// </summary>
     [Test]
     public void Migrate_FlatV21Config_MovesPlayerValuesIntoSections()
     {
@@ -54,11 +49,6 @@ public sealed class ClientConfigMigrationTests
         Assert.That(config.Effects.MotionBlurEnabled, Is.True);
     }
 
-    /// <summary>
-    /// Файл старее девятнадцатой схемы плоского хвоста с осмысленными
-    /// величинами уже не содержит: их удалили вместе с тридцатью пятью
-    /// ползунками постпроцесса. Секции получают авторские значения.
-    /// </summary>
     [Test]
     public void Migrate_PreV19Config_RestoresAuthoredSections()
     {
@@ -113,6 +103,35 @@ public sealed class ClientConfigMigrationTests
     }
 
     [Test]
+    public void Migrate_PreV24Config_AppliesPixelSamplingAndRetinaSteps()
+    {
+        var migration = new ClientConfigMigration(_profile);
+        var config = new ClientConfig
+        {
+            SchemaVersion = 23,
+            GraphicsPreset = GraphicsPreset.Custom,
+            Display = new DisplaySettings
+            {
+                PixelSampling = (PixelSamplingMode)999,
+            },
+            Interface = new InterfaceSettings
+            {
+                UIScale = 1f,
+            },
+        };
+
+        bool migrated = migration.Migrate(config, "{}");
+
+        Assert.That(migrated, Is.True);
+        Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(config.Display.PixelSampling, Is.EqualTo(PixelSamplingMode.SmoothFiltered));
+        if (UIScaleUtility.IsRetinaOrHighDpi)
+        {
+            Assert.That(config.Interface.UIScale, Is.EqualTo(UIScaleUtility.RetinaDefaultScale));
+        }
+    }
+
+    [Test]
     public void Migrate_CurrentCustomConfig_IsIdempotent()
     {
         var migration = new ClientConfigMigration(_profile);
@@ -164,7 +183,7 @@ public sealed class ClientConfigMigrationTests
     }
 
     [Test]
-    public void Migrate_FutureSchemaConfig_ClampsAndReachesCurrentSchema()
+    public void Migrate_FutureSchemaConfig_RefusesDestructiveDowngrade()
     {
         var migration = new ClientConfigMigration(_profile);
         string json = @"{
@@ -174,10 +193,11 @@ public sealed class ClientConfigMigrationTests
         }";
         ClientConfig config = JsonUtility.FromJson<ClientConfig>(json);
 
-        bool migrated = migration.Migrate(config, json);
+        InvalidDataException exception = Assert.Throws<InvalidDataException>(
+            () => migration.Migrate(config, json))!;
 
-        Assert.That(migrated, Is.True);
-        Assert.That(config.SchemaVersion, Is.EqualTo(ClientConfig.CurrentSchemaVersion));
+        Assert.That(exception.Message, Does.Contain("newer than supported"));
+        Assert.That(config.SchemaVersion, Is.EqualTo(29));
     }
 
     [Test]
@@ -221,11 +241,6 @@ public sealed class ClientConfigMigrationTests
         Assert.That(exception.Message, Does.Contain(nameof(config.Interface.Language)));
     }
 
-    /// <summary>
-    /// Инвариант «стандартный пресет не тронут» раньше был цепочкой из сорока
-    /// сравнений, которую забывали дополнять. Проверка, что он действует и
-    /// теперь, когда список полей берётся из объявления секции.
-    /// </summary>
     [Test]
     public void Validator_RejectsCustomizedVisualsUnderStandardPreset()
     {

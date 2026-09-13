@@ -4,7 +4,6 @@ using System;
 
 namespace Fodinae.Rendering;
 
-/// <summary>Serializes asynchronous output requests without depending on a player loop or native display.</summary>
 public sealed class HDROutputController(HDROutputController.IBackend backend)
 {
     public const double RequestTimeoutSeconds = 10;
@@ -70,7 +69,6 @@ public sealed class HDROutputController(HDROutputController.IBackend backend)
         }
     }
 
-    /// <summary>A new display environment or an explicit retry allows another bounded set of attempts.</summary>
     public void NotifyEnvironmentChanged()
     {
         ResetAttempts();

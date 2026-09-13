@@ -14,7 +14,6 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    /// <summary>Owns the in-game IMGUI diagnostics host and its shortcuts.</summary>
     [DisallowMultipleComponent]
     public sealed class InGameDebugOverlay : MonoBehaviour
     {
@@ -47,6 +46,14 @@ namespace Fodinae.UI
                 SetToolsEnabled(value);
                 UpdateTelemetryState();
             }
+        }
+
+        private void Awake()
+        {
+            // OnGUI живёт на этом компоненте всегда, а инструменты большую часть
+            // времени скрыты. Без раскладки Unity не гоняет Layout-событие и не
+            // строит кэш GUILayout на каждый кадр ради пустого вызова.
+            useGUILayout = ToolWindows.Enabled;
         }
 
         private void OnEnable()
@@ -151,6 +158,9 @@ namespace Fodinae.UI
                 UpdateTelemetryState();
             }
 
+            // Включить инструменты может не только F1 (F5 открывает грейдинг
+            // напрямую), поэтому раскладка сверяется с реестром каждый кадр.
+            useGUILayout = ToolWindows.Enabled;
             if (!ToolWindows.Enabled)
             {
                 return;
@@ -162,19 +172,6 @@ namespace Fodinae.UI
             ToolWindows.Tick();
         }
 
-        /// <summary>
-        /// Возвращает управление игре по Escape.
-        /// </summary>
-        /// <remarks>
-        /// Поле ввода или ползунок в IMGUI удерживают клавиатуру, и пока захват
-        /// не снят, игра не слышит ни одной клавиши. Выходом было закрыть весь
-        /// интерфейс по F1 и потерять раскладку; теперь достаточно Escape.
-        ///
-        /// Переключения окон клавишами здесь нет намеренно. Цифровой ряд занят
-        /// хотбаром, функциональный — рабочим местом колориста, и всякая
-        /// раскладка поверх этого либо конфликтует с игрой, либо запоминается
-        /// хуже, чем один щелчок в списке инструментов.
-        /// </remarks>
         private static void ReleaseCaptureOnEscape(Keyboard? keyboard)
         {
             if (keyboard != null &&
@@ -190,9 +187,10 @@ namespace Fodinae.UI
             _telemetry?.SetAllocationTrackingEnabled(ToolWindows.AnySampling);
         }
 
-        private static void SetToolsEnabled(bool enabled)
+        private void SetToolsEnabled(bool enabled)
         {
             ToolWindows.Enabled = enabled;
+            useGUILayout = enabled;
             if (enabled)
             {
                 return;
@@ -206,10 +204,21 @@ namespace Fodinae.UI
 
         private void OnGUI()
         {
-            if (_registered)
+            if (!_registered)
             {
-                ToolWindows.Draw();
+                return;
             }
+
+            // Реестр включили между Update и OnGUI этого кадра: окна используют
+            // GUILayout, а раскладка на компоненте ещё выключена. Рисовать
+            // начнём со следующего кадра, когда Update её включит.
+            if (ToolWindows.Enabled && !useGUILayout)
+            {
+                useGUILayout = true;
+                return;
+            }
+
+            ToolWindows.Draw();
         }
 
         private void OnDrawGizmos()

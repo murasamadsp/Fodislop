@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using Fodinae.Core;
@@ -14,8 +15,12 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyWorldSimulationState(IAsyncOperationSupervisor operations) : IDisposable
+internal sealed class DummyWorldSimulationState(
+    IAsyncOperationSupervisor operations,
+    IDummyWorldMapSource worldMaps) : IDisposable
 {
+    private readonly IDummyWorldMapSource _worldMaps = worldMaps ??
+        throw new ArgumentNullException(nameof(worldMaps));
     private readonly IAsyncOperationSupervisor _operations = operations ??
         throw new ArgumentNullException(nameof(operations));
     private readonly HashSet<int> _sentMapChunks = new();
@@ -72,7 +77,7 @@ internal sealed class DummyWorldSimulationState(IAsyncOperationSupervisor operat
         CellConfigurations = DummyCellConfigurationUtilities.CreateCellConfigurations();
         DisposeLayer();
 
-        string mapPath = await DummyWorldMapArchive.ResolveMapFileAsync(worldCodeName);
+        string mapPath = await _worldMaps.GetMapFileAsync(worldCodeName, CancellationToken.None);
         (int worldWidth, int worldHeight) =
             await DummyWorldMapArchive.ReadDimensionsWithRetryAsync(mapPath);
         if (worldWidth <= 0 || worldHeight <= 0)

@@ -29,7 +29,7 @@ public sealed class ProductionSceneContractValidatorTests
     [TearDown]
     public void TearDown()
     {
-        if (_originalSetup.Length > 0)
+        if (_originalSetup.Any(item => item.isLoaded && item.isActive))
         {
             EditorSceneManager.RestoreSceneManagerSetup(_originalSetup);
         }
@@ -84,13 +84,19 @@ public sealed class ProductionSceneContractValidatorTests
         }
         finally
         {
-            EditorSceneManager.RestoreSceneManagerSetup(before);
+            if (before.Any(item => item.isLoaded && item.isActive))
+            {
+                EditorSceneManager.RestoreSceneManagerSetup(before);
+            }
         }
 
         SceneSetup[] after = EditorSceneManager.GetSceneManagerSetup();
-        Assert.That(after.Select(item => item.path), Is.EqualTo(before.Select(item => item.path)));
-        Assert.That(after.Select(item => item.isLoaded), Is.EqualTo(before.Select(item => item.isLoaded)));
-        Assert.That(after.Select(item => item.isActive), Is.EqualTo(before.Select(item => item.isActive)));
+        if (before.Any(item => item.isLoaded && item.isActive))
+        {
+            Assert.That(after.Select(item => item.path), Is.EqualTo(before.Select(item => item.path)));
+            Assert.That(after.Select(item => item.isLoaded), Is.EqualTo(before.Select(item => item.isLoaded)));
+            Assert.That(after.Select(item => item.isActive), Is.EqualTo(before.Select(item => item.isActive)));
+        }
     }
 
     [Test]

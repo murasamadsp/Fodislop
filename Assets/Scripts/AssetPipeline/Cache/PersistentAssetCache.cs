@@ -32,19 +32,12 @@ public sealed class PersistentAssetCache : IPersistentAssetCache
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _entryGates =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <remarks>
-    /// [Inject] обязателен, хотя параметров нет. Без него VContainer выбирает
-    /// конструктор с НАИБОЛЬШИМ числом параметров, просматривая и непубличные,
-    /// то есть тестовый (string cachePath) — и падает на разрешении System.String,
-    /// роняя сборку контейнера целиком в Awake бутстрапа.
-    /// </remarks>
     [Inject]
     public PersistentAssetCache()
         : this(GetDefaultCachePath())
     {
     }
 
-    /// <summary>Путь задаётся только из тестов; контейнер сюда не ходит.</summary>
     internal PersistentAssetCache(string cachePath)
     {
         _cachePath = Path.GetFullPath(cachePath);

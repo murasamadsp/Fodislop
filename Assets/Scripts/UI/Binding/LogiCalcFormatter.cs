@@ -9,21 +9,10 @@ using SmartFormat.Core.Extensions;
 using SmartFormat.Core.Parsing;
 
 namespace SmartFormat.Extensions;
-/// <summary>
-/// An <see cref="IFormatter"/> used to evaluate mathematical and logical expressions.
-/// Uses NCalc (https://github.com/ncalc/ncalc) for expression evaluation.
-/// </summary>
 /// <example>
 /// Template: "Result: {score:calc: [score] * 2}" where score=21 → "Result: 42"
 /// Template: "Total: {:calc(0.00):({count} + {bonus}) * 1.2}".
 /// </example>
-/// <remarks>
-/// The formatter name is "calc".
-/// Inside the expression, use SmartFormat placeholders like {name}
-/// to reference values from the current data source.
-/// Placeholders like {name} become NCalc parameters [name].
-/// Supports all NCalc arithmetic, logical, and function operators.
-/// </remarks>
 public class LogiCalcFormatter : IFormatter
 {
     /// <inheritdoc/>
@@ -127,10 +116,6 @@ public class LogiCalcFormatter : IFormatter
         }
     }
 
-    /// <summary>
-    /// Builds the dot-separated selector name from a placeholder.
-    /// Example: "{Person.Siblings[0]}" => "Person.Siblings.0".
-    /// </summary>
     private static string GetSelectorName(Placeholder placeholder)
     {
         var nameBuilder = new StringBuilder();
@@ -155,10 +140,6 @@ public class LogiCalcFormatter : IFormatter
         return nameBuilder.ToString();
     }
 
-    /// <summary>
-    /// Attempts to convert a string to a numeric type (int, long, float, double)
-    /// for use in NCalc arithmetic.
-    /// </summary>
     private static object? ConvertStringToNumeric(string value)
     {
         if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intVal))

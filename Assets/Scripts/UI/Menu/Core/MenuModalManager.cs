@@ -11,9 +11,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Manages modal dialog visibility, tabs and backdrop in the Main Menu.
-/// </summary>
 public sealed class MenuModalManager
 {
     private const string SettingsPaneActiveClass = "mm-tab-pane--active";

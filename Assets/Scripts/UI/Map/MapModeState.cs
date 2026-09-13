@@ -4,7 +4,6 @@ using System;
 
 namespace Fodinae.UI;
 
-/// <summary>Scene-local state shared by the map views without a view-to-view dependency.</summary>
 public sealed class MapModeState
 {
     public bool IsOpen { get; private set; }

@@ -3,28 +3,6 @@
 using UnityEngine;
 
 namespace Fodinae.World.Terrain;
-/// <summary>
-/// Accumulates the regions of the terrain grid that need patching before
-/// the next mesh update, as a bounded set of separate rectangles.
-/// </summary>
-/// <remarks>
-/// This used to be four ints on <see cref="TerrainRenderer"/> holding one
-/// min/max rectangle. That is correct for a player mining a single cell and
-/// badly wrong for streamed chunks: they arrive scattered across the
-/// viewport, each one small, and unioning two of them at opposite corners
-/// produces a rectangle covering the whole screen. The renderer's size
-/// check then measured that union, concluded the patch was not worth it,
-/// and handed the frame to the full rebuild - which is how the debug
-/// overlay came to read 9 rebuilds and 9 full repopulations. Every single
-/// one.
-///
-/// Keeping the rectangles apart makes <see cref="TotalArea"/> describe the
-/// cells a patch will actually visit, which is what that decision needs.
-///
-/// It is a separate type from the renderer because the interesting part is
-/// arithmetic - clamping, unioning, overflow - and a MonoBehaviour cannot
-/// be exercised without a scene. Here it can be fuzzed directly.
-/// </remarks>
 public sealed class DirtyRectSet
 {
     public const int MaximumRects = 8;
@@ -43,10 +21,6 @@ public sealed class DirtyRectSet
         _count = 0;
     }
 
-    /// <summary>
-    /// The number of cells a patch would visit: the sum of the rectangles,
-    /// not the area of their bounding box.
-    /// </summary>
     public long TotalArea
     {
         get
@@ -61,9 +35,6 @@ public sealed class DirtyRectSet
         }
     }
 
-    /// <summary>
-    /// Records a rectangle to patch, clipped to <paramref name="bounds"/>.
-    /// </summary>
     /// <returns>
     /// False when the rectangle lies wholly outside the bounds or is empty,
     /// in which case nothing was recorded.

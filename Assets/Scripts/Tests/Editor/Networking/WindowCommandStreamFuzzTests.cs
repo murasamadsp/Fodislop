@@ -17,9 +17,9 @@ public class WindowCommandStreamFuzzTests
         for (int i = 0; i < 200; i++)
         {
             if (random.Next(2) == 0)
-                stream.PublishOpen(new OpenWindowPacket("t", 100, 100, null));
+                stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
             else
-                stream.PublishClose(new CloseWindowPacket());
+                stream.PublishCloseWindow(new CloseWindowPacket());
             Assert.That(stream.HasOpenWindows, Is.EqualTo(random.Next(2) == 0 ? false : true).Or.EqualTo(false),
                 $"i={i}");
         }
@@ -34,7 +34,7 @@ public class WindowCommandStreamFuzzTests
         {
             bool? v = null;
             stream.OpenWindowVisibilityChanged += x => v = x;
-            stream.PublishOpen(new OpenWindowPacket("t", 100, 100, null));
+            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
             Assert.That(v, Is.True, $"i={i}");
         }
     }
@@ -46,10 +46,10 @@ public class WindowCommandStreamFuzzTests
         var stream = new WindowCommandStream();
         for (int i = 0; i < 50; i++)
         {
-            stream.PublishOpen(new OpenWindowPacket("t", 100, 100, null));
+            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
             bool? v = null;
             stream.OpenWindowVisibilityChanged += x => v = x;
-            stream.PublishClose(new CloseWindowPacket());
+            stream.PublishCloseWindow(new CloseWindowPacket());
             Assert.That(v, Is.False, $"i={i}");
         }
     }
@@ -61,8 +61,8 @@ public class WindowCommandStreamFuzzTests
         var stream = new WindowCommandStream();
         for (int i = 0; i < 50; i++)
         {
-            stream.PublishOpen(new OpenWindowPacket("t", 100, 100, null));
-            stream.PublishModal(new ModalWindowPacket("a", "b", "c", "d"));
+            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
+            stream.PublishModalWindow(new ModalWindowPacket("a", "b", "c", "d"));
             Assert.IsTrue(stream.HasOpenWindows, $"i={i}");
         }
     }
@@ -74,10 +74,10 @@ public class WindowCommandStreamFuzzTests
         var stream = new WindowCommandStream();
         for (int i = 0; i < 50; i++)
         {
-            stream.PublishOpen(new OpenWindowPacket("t", 100, 100, null));
+            stream.PublishOpenWindow(new OpenWindowPacket("t", 100, 100, null));
             int count = 0;
             stream.OpenWindowVisibilityChanged += _ => count++;
-            stream.SetOpenWindowVisibility(true);
+            stream.SetServerWindowVisibility(true);
             Assert.That(count, Is.EqualTo(0), $"i={i}");
         }
     }

@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Precalculates cell topology descriptors, bitmasks, relief masks, and shadow boundaries.
-/// </summary>
 public sealed class TerrainCellMaskCalculator
 {
     public int[,] CellTilingDescriptors { get; private set; } = null!;
@@ -177,42 +174,42 @@ public sealed class TerrainCellMaskCalculator
         }
 
         byte m = 0;
-        if (left.HasTileGroup && left.TileGroupId == data.TileGroupId)
+        if (left.HasTileGroup && left.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 0;
         }
 
-        if (bottomLeft.HasTileGroup && bottomLeft.TileGroupId == data.TileGroupId)
+        if (bottomLeft.HasTileGroup && bottomLeft.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 1;
         }
 
-        if (bottom.HasTileGroup && bottom.TileGroupId == data.TileGroupId)
+        if (bottom.HasTileGroup && bottom.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 2;
         }
 
-        if (bottomRight.HasTileGroup && bottomRight.TileGroupId == data.TileGroupId)
+        if (bottomRight.HasTileGroup && bottomRight.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 3;
         }
 
-        if (right.HasTileGroup && right.TileGroupId == data.TileGroupId)
+        if (right.HasTileGroup && right.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 4;
         }
 
-        if (topRight.HasTileGroup && topRight.TileGroupId == data.TileGroupId)
+        if (topRight.HasTileGroup && topRight.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 5;
         }
 
-        if (top.HasTileGroup && top.TileGroupId == data.TileGroupId)
+        if (top.HasTileGroup && top.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 6;
         }
 
-        if (topLeft.HasTileGroup && topLeft.TileGroupId == data.TileGroupId)
+        if (topLeft.HasTileGroup && topLeft.TileGroupID == data.TileGroupID)
         {
             m |= 1 << 7;
         }

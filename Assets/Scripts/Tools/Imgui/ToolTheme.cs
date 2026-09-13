@@ -5,15 +5,6 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.Tools.Imgui;
 
-/// <summary>
-/// Стили отладочного интерфейса, собранные из <see cref="ToolPalette"/>.
-/// </summary>
-/// <remarks>
-/// Здесь только сборка стилей. Цвета и текстуры живут в палитре, рисование
-/// рамок — в <see cref="ToolChrome"/>; тремя файлами, а не одним, потому что
-/// это три разные причины для правки: поменять цвет, поменять начертание,
-/// поменять обвязку.
-/// </remarks>
 public static class ToolTheme
 {
     public const float HeaderHeight = 28f;
@@ -54,7 +45,6 @@ public static class ToolTheme
     public static GUIStyle MutedLabel => _mutedLabel!;
     public static GUIStyle MetricLabel => _metricLabel!;
 
-    /// <summary>Единица измерения рядом с крупным числом.</summary>
     public static GUIStyle UnitLabel => _unitLabel!;
     public static GUIStyle FieldLabel => _fieldLabel!;
     public static GUIStyle ActiveButton => _activeButton!;
@@ -69,7 +59,6 @@ public static class ToolTheme
     public static GUIStyle Graph => _graph!;
     public static GUIStyle Scope => _scope!;
 
-    /// <summary>Returns the themed clone associated with the current Unity skin.</summary>
     public static GUISkin ResolveSkin(GUISkin source)
     {
         if (_skin != null && ReferenceEquals(_sourceSkin, source))

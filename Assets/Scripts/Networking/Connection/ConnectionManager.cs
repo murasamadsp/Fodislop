@@ -85,13 +85,6 @@ namespace Fodinae.Networking.Connection
             UpdateReconnect();
         }
 
-        /// <summary>
-        /// Разбирает очередь входящих пакетов в рамках бюджета на кадр — доля
-        /// <see cref="PacketDrainBudgetFractionOfFrame"/> от времени кадра, но не более
-        /// <see cref="PacketDrainBudgetMaximumSeconds"/>. Батч за кадр дополнительно
-        /// ограничен <see cref="ProjectRuntimeContracts.RuntimeLimits.MaximumPacketBatchPerFrame"/>,
-        /// чтобы единичный всплеск не вешал кадр.
-        /// </summary>
         private void DrainPacketQueue()
         {
             using var marker = _PacketDrainMarker.Auto();
@@ -190,11 +183,6 @@ namespace Fodinae.Networking.Connection
             OnReconnectStatusChanged?.Invoke(_reconnectStatus);
         }
 
-        /// <summary>
-        /// Выбирает транспорт: реальный Darkar25 <see cref="TcpConnection"/> из
-        /// конфига, либо офлайн-заглушку <see cref="DummyConnection"/> для
-        /// локального теста без сервера.
-        /// </summary>
         private IServerConnection CreateConnection()
         {
             // Config может быть ещё не загружен (ClientConfigManager грузит его в Start).
@@ -401,10 +389,6 @@ namespace Fodinae.Networking.Connection
             }
         }
 
-        /// <summary>
-        /// Экспоненциальный backoff реконнекта с капом:
-        /// 1s → 2s → 4s → 8s → 16s → 30s → 30s ...
-        /// </summary>
         private sealed class ReconnectBackoff
         {
             private static readonly float[] _Steps = [1f, 2f, 4f, 8f, 16f, 30f];

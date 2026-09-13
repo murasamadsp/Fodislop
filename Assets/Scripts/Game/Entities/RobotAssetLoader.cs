@@ -9,9 +9,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Handles asynchronous loading of skin, tail, and clan textures for a Robot entity.
-/// </summary>
 public sealed class RobotAssetLoader
 {
     private const string TAG = "[Robot]";
@@ -40,7 +37,7 @@ public sealed class RobotAssetLoader
     public void LoadMetadataAssets(
         string skinPath,
         string tailPath,
-        byte clanId,
+        byte clanID,
         bool isLocalPlayer,
         Action<Sprite?> onSkinLoaded,
         Action<Texture2D?> onTailLoaded,
@@ -55,7 +52,7 @@ public sealed class RobotAssetLoader
             supervisorToken => LoadMetadataAssetsAsync(
                 skinPath,
                 tailPath,
-                clanId,
+                clanID,
                 isLocalPlayer,
                 onSkinLoaded,
                 onTailLoaded,
@@ -67,7 +64,7 @@ public sealed class RobotAssetLoader
     private async UniTask LoadMetadataAssetsAsync(
         string skinPath,
         string tailPath,
-        byte clanId,
+        byte clanID,
         bool isLocalPlayer,
         Action<Sprite?> onSkinLoaded,
         Action<Texture2D?> onTailLoaded,
@@ -81,7 +78,7 @@ public sealed class RobotAssetLoader
         CancellationToken token = linkedCancellation.Token;
         UniTask clanTask = isLocalPlayer
             ? UniTask.CompletedTask
-            : LoadClanAsync(clanId, onClanLoaded, token);
+            : LoadClanAsync(clanID, onClanLoaded, token);
 
         await UniTask.WhenAll(
             LoadSkinAsync(skinPath, onSkinLoaded, token),
@@ -151,16 +148,16 @@ public sealed class RobotAssetLoader
     }
 
     private async UniTask LoadClanAsync(
-        byte clanId,
+        byte clanID,
         Action<Sprite?> onClanLoaded,
         CancellationToken token)
     {
-        if (clanId == 0)
+        if (clanID == 0)
         {
             return;
         }
 
-        string clanPath = $"/Clan/{clanId}";
+        string clanPath = $"/Clan/{clanID}";
         Texture2D? clanTexture = await TryLoadOptionalTextureAsync(_assetLoader, clanPath, token);
         if (token.IsCancellationRequested || clanTexture == null)
         {

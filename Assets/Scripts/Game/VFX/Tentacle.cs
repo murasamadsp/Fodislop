@@ -4,11 +4,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Simulated spring-chain tail segment. Owns only simulation state —
-/// rendering is delegated to <see cref="WorldEntityBatchRenderer"/>, which
-/// merges all tentacles of all robots into one atlas-backed mesh.
-/// </summary>
 public class Tentacle
 {
     private const float MAX_SEGMENT_DIST = 0.2f;
@@ -156,11 +151,6 @@ public class Tentacle
         _renderer.MarkDirty(_texture);
     }
 
-    /// <summary>
-    /// Emits a billboarded quad strip (2 verts per chain point) for the 2D
-    /// orthographic camera, replacing what LineRenderer used to rebuild on
-    /// the CPU every frame per tentacle.
-    /// </summary>
     public void WriteGeometry(
         Vector3[] verts,
         Vector2[] uvs,

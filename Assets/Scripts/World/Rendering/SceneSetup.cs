@@ -9,10 +9,6 @@ using VContainer;
 
 namespace Fodinae.World
 {
-    /// <summary>
-    /// Scene setup manager that ensures the world background renderer is properly configured.
-    /// This script should be added to a persistent GameObject in the scene.
-    /// </summary>
     [DefaultExecutionOrder(-1000)] // Run before other scripts
     public class SceneSetup : MonoBehaviour
     {

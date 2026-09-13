@@ -10,9 +10,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Controls daily bonus panel and claiming interactions in Player HUD.
-/// </summary>
 public sealed class PlayerHUDBonusController
 {
     private readonly Action<ElementClickPacket> _sendPacket;

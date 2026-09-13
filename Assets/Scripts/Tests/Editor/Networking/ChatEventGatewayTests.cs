@@ -8,11 +8,6 @@ using UnityEngine;
 
 namespace Fodinae.Tests.Networking;
 
-/// <summary>
-/// ChatEventGateway is the packet-to-presentation boundary for chat:
-/// ChatProcessor publishes, chat UI subscribes. Pins the wiring so
-/// processor/UI decoupling cannot silently drop chat messages.
-/// </summary>
 [TestFixture]
 public class ChatEventGatewayTests
 {

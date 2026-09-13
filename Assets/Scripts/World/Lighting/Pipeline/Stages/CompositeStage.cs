@@ -4,18 +4,12 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace Fodinae.World.Lighting.Pipeline.Stages;
-/// <summary>
-/// Dispatches <c>CompositeLighting</c>: sums the dynamic direct texture,
-/// the cached static direct texture and the diffuse-bounce texture into
-/// the final lightmap. Extracted verbatim from the engine's former
-/// private <c>DispatchComposite</c>.
-/// </summary>
 public sealed class CompositeStage : ILightingStage
 {
-    private static readonly int _DirectInputId = Shader.PropertyToID("_DirectInput");
-    private static readonly int _StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
-    private static readonly int _BounceInputId = Shader.PropertyToID("_BounceInput");
-    private static readonly int _ResultId = Shader.PropertyToID("_Result");
+    private static readonly int _DirectInputID = Shader.PropertyToID("_DirectInput");
+    private static readonly int _StaticDirectInputID = Shader.PropertyToID("_StaticDirectInput");
+    private static readonly int _BounceInputID = Shader.PropertyToID("_BounceInput");
+    private static readonly int _ResultID = Shader.PropertyToID("_Result");
 
     private readonly int _kernel;
 
@@ -29,22 +23,22 @@ public sealed class CompositeStage : ILightingStage
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _DirectInputId,
+            _DirectInputID,
             context.DirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _StaticDirectInputId,
+            _StaticDirectInputID,
             context.StaticDirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _BounceInputId,
+            _BounceInputID,
             context.BounceTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _ResultId,
+            _ResultID,
             context.ResultTexture);
         commandBuffer.DispatchCompute(
             context.Compute,

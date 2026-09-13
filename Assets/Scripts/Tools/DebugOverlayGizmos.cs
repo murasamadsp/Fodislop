@@ -12,12 +12,6 @@ using UnityEngine.InputSystem;
 
 namespace Fodinae.Tools;
 
-/// <remarks>
-/// Публичен по той же причине, что и типы окон: рисует по нему
-/// <c>OnDrawGizmos</c> хозяина, а хозяин живёт в сборке <c>Fodinae.UI</c>,
-/// тогда как этот файл — в <c>Fodinae.Runtime</c>. Через границу сборок
-/// <c>internal</c> не виден.
-/// </remarks>
 public static class DebugOverlayGizmos
 {
     public static void DrawWorldDebugGizmos(

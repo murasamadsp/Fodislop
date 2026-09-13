@@ -8,18 +8,6 @@ using UnityEngine.SceneManagement;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Per-load handshake between the persistent composition root and exactly one
-/// content-scene composition root.
-/// </summary>
-/// <remarks>
-/// The ticket carries a hard transition budget: if the target scene never
-/// reaches <see cref="MarkPresentationReady"/> within the configured timeout,
-/// the ticket fails with <see cref="TimeoutException"/> and every waiter is
-/// short-circuited exactly once. This prevents an eternal loader when the
-/// target composition root dies before attaching (e.g. an exception inside its
-/// Awake before the ticket could be attached).
-/// </remarks>
 public sealed class SceneTransitionTicket : IDisposable
 {
     public static readonly TimeSpan DefaultTransitionTimeout = TimeSpan.FromSeconds(30);
@@ -148,11 +136,6 @@ public sealed class SceneTransitionTicket : IDisposable
 
     public UniTask WaitForPresentationAsync() => AwaitPhaseAsync(_presentationReady.Task);
 
-    /// <summary>
-    /// Completes when the coordinator fails this ticket. The returned task
-    /// itself is a signal; awaiting the phase task afterwards rethrows the
-    /// original failure.
-    /// </summary>
     public UniTask WaitForFailureAsync() => _failureSignal.Task;
 
     public void Dispose()

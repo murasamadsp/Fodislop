@@ -26,9 +26,6 @@ public readonly record struct DynamicLightSource(
     Color Color,
     float Intensity);
 
-/// <summary>
-/// Manages registration, spatial filtering, and GPU upload for dynamic light sources.
-/// </summary>
 public sealed class DynamicLightManager
 {
     private const float DynamicLightPositionEpsilon = 0.00390625f;

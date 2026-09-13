@@ -7,9 +7,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Manages AutoDig and Aggression mode toggle buttons, status LEDs, and tooltips in Player HUD.
-/// </summary>
 internal sealed class PlayerHUDModeController : IDisposable
 {
     private readonly ILocalPlayerState _localPlayer;

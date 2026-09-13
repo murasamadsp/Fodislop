@@ -13,18 +13,18 @@ using VContainer;
 
 namespace Fodinae.Game
 {
-    public class VFXPool : MonoBehaviour, IVFXService
+    public class VfxPool : MonoBehaviour, IVfxService
     {
         [Serializable]
         public struct PoolConfig
         {
             [SerializeField]
-            private VFXType _vfxType;
+            private VfxType _vfxType;
 
             [SerializeField]
             private int _initialSize;
 
-            public VFXType VfxType => _vfxType;
+            public VfxType VfxType => _vfxType;
 
             public int InitialSize => _initialSize;
         }
@@ -41,7 +41,7 @@ namespace Fodinae.Game
         [SerializeField]
         private int _softMaxPerType = 30;
 
-        private readonly Dictionary<VFXType, SubPool> _pools = new();
+        private readonly Dictionary<VfxType, SubPool> _pools = new();
         private readonly List<SubPool> _poolList = new();
         private int _totalActiveVfxCount;
 
@@ -134,7 +134,7 @@ namespace Fodinae.Game
             }
         }
 
-        private SubPool GetOrCreateSubPool(VFXType vfxType)
+        private SubPool GetOrCreateSubPool(VfxType vfxType)
         {
             if (!_pools.TryGetValue(vfxType, out var pool))
             {
@@ -151,14 +151,14 @@ namespace Fodinae.Game
             return pool;
         }
 
-        public void Preload(VFXType vfxType, int count)
+        public void Preload(VfxType vfxType, int count)
         {
             var pool = GetOrCreateSubPool(vfxType);
             pool.TargetSize = Mathf.Max(pool.TargetSize, count);
             SpawnToTargetSize(pool);
         }
 
-        public IVFXSlot? Acquire(VFXType vfxType)
+        public IVfxSlot? Acquire(VfxType vfxType)
         {
             var pool = GetOrCreateSubPool(vfxType);
             var slot = AcquireInternal(pool);
@@ -179,7 +179,7 @@ namespace Fodinae.Game
             return slot;
         }
 
-        public void Release(IVFXSlot slot)
+        public void Release(IVfxSlot slot)
         {
             if (slot is not PooledSlot pooled || pooled.IsInPool)
             {
@@ -290,7 +290,7 @@ namespace Fodinae.Game
 
         private PooledSlot CreatePooledSlot(SubPool pool)
         {
-            GameObject go = _sceneObjects.Create($"PooledVFX_{pool.VfxType}", RuntimeOwner.Vfx);
+            GameObject go = _sceneObjects.Create($"PooledVfx_{pool.VfxType}", RuntimeOwner.VFX);
             go.SetActive(false);
 
             WorldEntityBatchRenderer.SpriteHandle? handle =
@@ -351,9 +351,9 @@ namespace Fodinae.Game
             }
         }
 
-        public sealed class PooledSlot : IVFXSlot
+        public sealed class PooledSlot : IVfxSlot
         {
-            public VFXType VfxType;
+            public VfxType VfxType;
             public GameObject? GameObject { get; set; }
             public WorldEntityBatchRenderer EntityBatchRenderer = null!;
             public WorldEntityBatchRenderer.SpriteHandle BatchHandle = null!;
@@ -386,7 +386,7 @@ namespace Fodinae.Game
 
         private sealed class SubPool
         {
-            public VFXType VfxType;
+            public VfxType VfxType;
             public readonly Queue<PooledSlot> Available = new();
             public readonly List<PooledSlot> Active = new();
             public int TargetSize;

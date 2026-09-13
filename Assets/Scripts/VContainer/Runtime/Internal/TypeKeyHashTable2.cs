@@ -17,15 +17,8 @@ namespace VContainer.Internal
             public const uint DistOne = 0x00000100;
             public const uint FingerPrintMask = 0x000000FF;
 
-            /// <summary>
-            /// upper 3 bytes: dist (distance of , also known PSL (probe sequence length))
-            /// lower 1 bytes: fingerprint (lower 1 byte of hash code)
-            /// </summary>
             public uint DistAndFingerPrint;
 
-            /// <summary>
-            /// The index that point to the location where value is actually stored.
-            /// </summary>
             public int EntryIndex;
         }
 
@@ -119,9 +112,6 @@ namespace VContainer.Internal
             });
         }
 
-        /// <summary>
-        ///
-        /// </summary>
         /// <param name="bucket"></param>
         /// <param name="i"></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

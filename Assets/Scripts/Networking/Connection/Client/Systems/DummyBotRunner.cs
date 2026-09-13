@@ -13,10 +13,6 @@ namespace MinesServer.Networking.Connection.Client;
 
 internal static class DummyBotRunner
 {
-    /// <summary>
-    /// Имена ботов-«игроков». Единый источник истины: DummyChatSimulator
-    /// ссылается на него, чтобы чат-игроки были теми же, кого видно на карте.
-    /// </summary>
     public static readonly string[] BotNames =
     {
         "Mira",

@@ -7,7 +7,7 @@ namespace Fodinae.ArchitectureLinter.Rules.Settings;
 
 public sealed class SettingsWiringRule : IRule
 {
-    private const string ConfigPath = "Assets/Scripts/Core/Interfaces/Contracts/ClientConfig.cs";
+    private const string ConfigPath = "Assets/Scripts/Core/Configuration/Contracts/ClientConfig.cs";
     private const string SettingsDir = "Assets/Scripts/Core/Interfaces/Contracts/Settings";
 
     private static readonly HashSet<string> MetadataFields = new(StringComparer.Ordinal)
@@ -46,7 +46,7 @@ public sealed class SettingsWiringRule : IRule
         var settingsFiles = Directory.Exists(Path.Combine(projectRoot, SettingsDir))
             ? Directory.EnumerateFiles(Path.Combine(projectRoot, SettingsDir), "*.cs").ToList()
             : new List<string>();
-        var extraFiles = new[] { Path.Combine(projectRoot, "Assets/Scripts/Core/Interfaces/Contracts/GraphicsQualitySettings.cs") };
+        var extraFiles = new[] { Path.Combine(projectRoot, "Assets/Scripts/Rendering/Settings/Contracts/GraphicsQualitySettings.cs") };
         foreach (var f in extraFiles)
             if (File.Exists(f)) settingsFiles.Add(f);
 

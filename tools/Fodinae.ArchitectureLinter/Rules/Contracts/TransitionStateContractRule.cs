@@ -74,7 +74,7 @@ public sealed class TransitionStateContractRule : IRule
         }
 
         // ISceneNavigator
-        var navigatorPath = Path.Combine(projectRoot, "Assets/Scripts/Core/Interfaces/Contracts/ISceneNavigator.cs");
+        var navigatorPath = Path.Combine(projectRoot, "Assets/Scripts/Core/Interfaces/Contracts/Core/ISceneNavigator.cs");
         if (File.Exists(navigatorPath))
         {
             var navigator = File.ReadAllText(navigatorPath);
@@ -85,7 +85,7 @@ public sealed class TransitionStateContractRule : IRule
                     RuleId = Id,
                     Message = "ISceneNavigator должен предоставлять единственный typed TransitionChanged event.",
                     Severity = Severity,
-                    TypeName = "Assets/Scripts/Core/Interfaces/Contracts/ISceneNavigator.cs"
+                    TypeName = "Assets/Scripts/Core/Interfaces/Contracts/Core/ISceneNavigator.cs"
                 });
             }
         }
@@ -127,7 +127,7 @@ public sealed class TransitionStateContractRule : IRule
         }
 
         // SceneTransitionStatus
-        var statusPath = Path.Combine(projectRoot, "Assets/Scripts/Core/Interfaces/Contracts/SceneTransitionStatus.cs");
+        var statusPath = Path.Combine(projectRoot, "Assets/Scripts/Core/Bootstrap/Contracts/SceneTransitionStatus.cs");
         if (File.Exists(statusPath))
         {
             var status = File.ReadAllText(statusPath);
@@ -140,7 +140,7 @@ public sealed class TransitionStateContractRule : IRule
                     RuleId = Id,
                     Message = "SceneTransitionStatus должен представлять successful, degraded и failed terminal outcomes.",
                     Severity = Severity,
-                    TypeName = "Assets/Scripts/Core/Interfaces/Contracts/SceneTransitionStatus.cs"
+                    TypeName = "Assets/Scripts/Core/Bootstrap/Contracts/SceneTransitionStatus.cs"
                 });
             }
         }

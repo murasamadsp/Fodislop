@@ -50,10 +50,6 @@ internal sealed class DummyChatSimulator(
         }
     }
 
-    /// <summary>
-    /// Случайная реакция «игрока» на то, что игрок копает блок. Вызывается
-    /// сервером при BzPacket; без действия — молчит.
-    /// </summary>
     public void SendMiningReaction()
     {
         if (_rng.Next(100) >= 25)

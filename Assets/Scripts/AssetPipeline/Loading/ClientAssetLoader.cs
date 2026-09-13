@@ -86,11 +86,6 @@ namespace Fodinae
             UnsubscribeFromConnection();
         }
 
-        /// <summary>
-        /// Binds the packet stream after VContainer injection. Unity may call
-        /// Awake/OnEnable before [Inject] has populated the connection field,
-        /// and OnDestroy may fire during domain reload before any injection.
-        /// </summary>
         public void EnsureAssetSubscription()
         {
             if (_subscribedConnection != null)

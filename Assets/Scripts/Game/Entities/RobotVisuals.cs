@@ -8,9 +8,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Manages procedural visuals, sprite batching, skin/tail texture loading and tentacles for a Robot entity.
-/// </summary>
 public sealed class RobotVisuals
 {
     private readonly Transform _transform;
@@ -230,17 +227,6 @@ public sealed class RobotVisuals
         }
     }
 
-    /// <summary>
-    /// Зажигает или гасит магическую ауру вокруг робота.
-    /// </summary>
-    /// <remarks>
-    /// Облако создаётся при первом показе, а не вместе с роботом: у
-    /// большинства роботов оно не загорится ни разу, а это два десятка
-    /// объектов сцены и столько же записей в батче на каждого.
-    ///
-    /// Гашение не мгновенное — у ауры есть релиз, — поэтому за снятием
-    /// флага должны продолжать идти вызовы <see cref="TickAura"/>.
-    /// </remarks>
     public void SetAuraWanted(bool wanted, ISceneObjectFactory? sceneObjects)
     {
         if (!wanted && _aura == null)

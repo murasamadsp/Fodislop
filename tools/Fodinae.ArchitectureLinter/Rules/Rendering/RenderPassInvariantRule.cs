@@ -19,7 +19,7 @@ public sealed class RenderPassInvariantRule : IRule
     public RuleSeverity Severity => RuleSeverity.Error;
     public bool RequiresAssemblies => false;
 
-    private const string RenderPassPath = "Assets/Scripts/Rendering/PostProcessing/PostProcessRenderPass.cs";
+    private const string RenderPassPath = "Assets/Scripts/Rendering/PostProcessing/Pipeline/PostProcessRenderPass.cs";
 
     private static readonly Regex BypassBlock = new(@"if \(\s*(?:PostProcessRuntimeState\.)?BypassPostProcessEffects\s*\)", RegexOptions.Compiled);
     private static readonly Regex EffectDisable = new(@"^\s*(?:bloomActive|vignetteActive|caActive|cgActive|eigengrauActive|mbActive)\s*=\s*false\s*;", RegexOptions.Multiline);

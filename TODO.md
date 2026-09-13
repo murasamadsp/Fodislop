@@ -28,7 +28,7 @@
 - [ ] `World/Persistence/WorldLayer.cs` (1081): format/index/cache/IO/compaction.
 - [x] `Networking/Connection/Client/DummyConnection.cs` (393, было 1154): разделён на session/auth/player+world simulation/movement/gameplay+chat+inventory+window+asset responders.
 - [ ] `World/Terrain/Core/TerrainRenderer.cs` (874): lifecycle/coverage/mesh/material updates.
-- [x] `UI/Overlays/InGameDebugOverlay.cs` (218, было 837): перевод отладки на IMGUI; окна инструментов вынесены в `Tools/Imgui/Windows/`, реестр — `ToolWindows`, текст — `DebugOverlayTextFormatter`, гизмо — `DebugOverlayGizmos`.
+- [x] `UI/Overlays/InGameDebugOverlay.cs` (218, было 837): перевод отладки на IMGUI; окна инструментов вынесены в `Tools/IMGUI/Windows/`, реестр — `ToolWindows`, текст — `DebugOverlayTextFormatter`, гизмо — `DebugOverlayGizmos`.
 - [ ] `AssetPipeline/Animation/GifAnimationDecoder.cs` (774): parser/LZW/compositing/output.
 - [ ] `UI/Chat/GlobalChatUI.cs` (727): state/presenter/view binding.
 - [ ] `Rendering/PostProcessing/PostProcessRenderPass.cs` (708): resources/scheduling/effect passes.
@@ -219,7 +219,7 @@
 - [ ] Потолок долга по арту в духе `DEBT_BUDGET`: число ассетов вне метрики
       фиксируется числом; рост — нарушение, падение — тоже, иначе отвоёванное
       можно молча вернуть.
-- [ ] Расширить `Assets/Editor/PixelArtTextureImportPolicy.cs` на
+- [ ] Расширить `Assets/Editor/Rendering/PixelArtTextureImportPolicy.cs` на
       `Assets/Textures` (сейчас покрыты только `Resources/Programmator` и
       `Resources/Skills`). В комментарии честно оговорить, что для этой ветки
       настройки импорта на экран не влияют: `BuildTextureStager` копирует файлы

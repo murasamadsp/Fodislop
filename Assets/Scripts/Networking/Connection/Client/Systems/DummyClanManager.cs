@@ -19,8 +19,8 @@ namespace MinesServer.Networking.Connection.Client;
 internal sealed class DummyClanManager
 {
     private readonly Action<ServerPacket> _onReceived;
-    private ushort _clanId;
-    private static readonly (ushort Id, string Name, string Desc)[] _MockClans =
+    private ushort _clanID;
+    private static readonly (ushort ID, string Name, string Desc)[] _MockClans =
     {
         (1, "Альфа", "Старейший клан на сервере"),
     };
@@ -30,7 +30,7 @@ internal sealed class DummyClanManager
         _onReceived = onReceived;
     }
 
-    public ushort ClanId => _clanId;
+    public ushort ClanID => _clanID;
 
     public void SendClanListWindow()
     {
@@ -51,14 +51,14 @@ internal sealed class DummyClanManager
                 {
                     new ImagePacket
                     {
-                        URI = $"clan/{clan.Id}.png",
+                        URI = $"clan/{clan.ID}.png",
                         Width = 16,
                         Height = 16,
                         AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
                     },
                     new TextPacket
                     {
-                        Text = $"<color=white><b>Клан «{clan.Name}»</b>  <color=#888888>(ID: {clan.Id})</color></color>",
+                        Text = $"<color=white><b>Клан «{clan.Name}»</b>  <color=#888888>(ID: {clan.ID})</color></color>",
                         OnClickContext = ".",
                         AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Left") },
                     },
@@ -121,11 +121,11 @@ internal sealed class DummyClanManager
 
     public void SendClanInfoWindow()
     {
-        string clanName = _clanId.ToString();
+        string clanName = _clanID.ToString();
         string clanDesc = string.Empty;
         foreach (var c in _MockClans)
         {
-            if (c.Id == _clanId)
+            if (c.ID == _clanID)
             {
                 clanName = c.Name;
                 clanDesc = c.Desc;
@@ -164,7 +164,7 @@ internal sealed class DummyClanManager
                 },
                 new TextPacket
                 {
-                    Text = $"<color=white><b>Клан «{clanName}»</b></color>\n<color=#888888>ID: {_clanId}</color>\n<color=#999999>{clanDesc}</color>",
+                    Text = $"<color=white><b>Клан «{clanName}»</b></color>\n<color=#888888>ID: {_clanID}</color>\n<color=#999999>{clanDesc}</color>",
                     AttachedProperties = new[] { new StringPairPacket("DockPanel.Dock", "Top") },
                     Style = new GUIStylePacket
                     {
@@ -195,12 +195,12 @@ internal sealed class DummyClanManager
     {
         if (packet.WindowTag == "join_clan")
         {
-            _clanId = 1;
+            _clanID = 1;
             _onReceived.Invoke(new ServerPacket(new ShowClanPacket(1)));
         }
         else if (packet.WindowTag == "leave_clan")
         {
-            _clanId = 0;
+            _clanID = 0;
             _onReceived.Invoke(new ServerPacket(new HideClanPacket()));
         }
         else if (packet.WindowTag == "clan_list")
@@ -214,8 +214,8 @@ internal sealed class DummyClanManager
                 int idx = packet.ElementIndex - 1;
                 if (idx >= 0 && idx < _MockClans.Length)
                 {
-                    _clanId = _MockClans[idx].Id;
-                    _onReceived.Invoke(new ServerPacket(new ShowClanPacket(_clanId)));
+                    _clanID = _MockClans[idx].ID;
+                    _onReceived.Invoke(new ServerPacket(new ShowClanPacket(_clanID)));
                     _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
                 }
             }
@@ -228,7 +228,7 @@ internal sealed class DummyClanManager
             }
             else
             {
-                _clanId = 0;
+                _clanID = 0;
                 _onReceived.Invoke(new ServerPacket(new HideClanPacket()));
                 _onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
             }
@@ -237,7 +237,7 @@ internal sealed class DummyClanManager
 
     public void HandleOpenClanClick()
     {
-        if (_clanId == 0)
+        if (_clanID == 0)
         {
             SendClanListWindow();
         }

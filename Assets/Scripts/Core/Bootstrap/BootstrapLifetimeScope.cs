@@ -49,23 +49,6 @@ namespace Fodinae.Core
 
         public event Action<SceneTransitionStatus>? TransitionChanged;
 
-        /// <summary>
-        /// Stops Unity capturing a managed stack trace for plain
-        /// <see cref="LogType.Log"/> messages.
-        /// </summary>
-        /// <remarks>
-        /// The stack trace, not the message, is what makes Debug.Log expensive:
-        /// Unity walks and formats the managed call stack on every single call,
-        /// on the calling thread. For an informational log nobody reads the
-        /// stack of, that is pure cost, and it is paid in the editor and in
-        /// development builds - exactly where anyone is looking at a frame
-        /// graph and wondering about unexplained spikes.
-        ///
-        /// Warning, Error, Assert and Exception are deliberately untouched:
-        /// their stack traces are the whole point for diagnostics.
-        ///
-        /// Runs before the first scene loads so no log beats it to the punch.
-        /// </remarks>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void ConfigureLogStackTraces()
         {
@@ -359,11 +342,6 @@ namespace Fodinae.Core
             await scope.PrepareForUnloadAsync();
         }
 
-        /// <summary>
-        /// Disconnects, tears down the current world, and returns to the main menu.
-        /// Runs on the Bootstrap scope, which survives the whole transition — the caller
-        /// (e.g. PauseMenu) lives in MainGame and gets destroyed partway through this.
-        /// </summary>
         public void ReturnToMainMenu()
         {
             Container.Resolve<AsyncOperationSupervisor>().Run(
@@ -425,6 +403,9 @@ namespace Fodinae.Core
             // DummyConnection emulates the game server in offline mode. External
             // identity providers do not route authentication through it.
             builder.Register<DummyConnection>(Lifetime.Singleton).AsSelf().AsImplementedInterfaces();
+            builder.Register<DummyWorldMapSource>(Lifetime.Singleton);
+            builder.RegisterEntryPoint<Fodinae.Networking.Connection.WorldEntryPreparation>()
+                .As<IWorldEntryPreparation>();
             builder.Register<GameTokenStore>(Lifetime.Singleton).As<IGameTokenStore>();
             builder.Register<RuntimeDebugSettings>(Lifetime.Singleton).As<IRuntimeDebugSettings>();
             builder.Register<OfflineScenarioSettings>(Lifetime.Singleton).As<IOfflineScenarioSettings>();

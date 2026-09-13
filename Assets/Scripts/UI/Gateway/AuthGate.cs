@@ -9,33 +9,8 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
-/// <summary>
-/// Ворота входа главного меню.
-///
-/// ВАЖНО о протоколе. В MinesProtocol нет ни логина, ни пароля, ни
-/// регистрации: <c>ClientHelloPacket</c> несёт токен из PlayerPrefs
-/// (пустой при первом запуске), а сервер в ответ присылает
-/// <c>AuthTokenPacket</c>, после чего клиент вызывает AuthorizeUI.
-///
-/// Поэтому поля пароля, вкладка регистрации и EULA — заглушки по макету
-/// visual/fodinae-ui-lab: они отрисованы, но ни во что не отправляются,
-/// и экран честно сообщает об этом подсказкой. Реально работают три пути:
-/// «Войти» (обычное подключение с существующим или пустым токеном),
-/// «Войти через VK» (VK ID device-flow, см. VkIdentityProvider) и
-/// «Офлайн режим (Dummy)» (локальная песочница без сервера).
-///
-/// Разметка живёт в Resources/UI/MainMenu.uxml, стили — в
-/// Resources/Styles/Auth.uss.
-/// </summary>
 public sealed class AuthGate
 {
-    /// <summary>
-    /// Согласие на авто-вход. Хранится отдельно от самого токена: токен
-    /// сервер выдаёт сам при первом же подключении, то есть он есть почти
-    /// всегда, — а вот «пускать без экрана входа» игрок должен разрешить
-    /// явно. Значение по умолчанию 0: ворота показываются, пока галочку не
-    /// поставили и не прошли вход хотя бы раз.
-    /// </summary>
     private const string AutoLoginPrefsKey = "Auth.AutoLogin";
 
     private const string ActiveTabClass = "auth-tab--active";
@@ -57,7 +32,6 @@ public sealed class AuthGate
     private Label? _vkLabel;
     private bool _vkBusy;
 
-    /// <summary>Вызывается, когда игрок прошёл ворота и меню можно показывать.</summary>
     public event Action? Passed;
 
     private AuthGate(
@@ -99,10 +73,6 @@ public sealed class AuthGate
         return _loc != null ? _loc.Get(key, arg0) : fallback;
     }
 
-    /// <summary>
-    /// Собирает ворота из уже склонированного дерева. Возвращает null, если
-    /// разметки нет — тогда меню просто работает как раньше.
-    /// </summary>
     public static AuthGate? TryCreate(
         VisualElement tree,
         IClientConfigManager clientConfig,
@@ -176,11 +146,6 @@ public sealed class AuthGate
         _autoLogin.SetValueWithoutNotify(PlayerPrefs.GetInt(AutoLoginPrefsKey, 0) == 1);
     }
 
-    /// <summary>
-    /// Вход через VK ID (device-flow). Ссылка подтверждения открывается в
-    /// браузере; сервис опрашивает VK до выдачи токена. При успехе —
-    /// подставляем имя из профиля VK и проходим ворота как обычный «Войти».
-    /// </summary>
     private async void StartVkLogin()
     {
         if (_vkBusy)
@@ -227,15 +192,6 @@ public sealed class AuthGate
         ShowHint(message, warn: true);
     }
 
-    /// <summary>
-    /// Готовит форму входа. Если токен уже получен и игрок разрешил
-    /// авто-вход, ворота сразу отдают Passed — повторять экран на каждом
-    /// запуске незачем.
-    ///
-    /// Видимость слоя здесь не трогается: ею владеет GatewayController
-    /// через состояние на корне, потому что состояние у ворот ровно одно
-    /// и держать его в двух местах — способ показать два экрана разом.
-    /// </summary>
     public void Show()
     {
         if (!GatewayDevFlags.ForceGates && _authentication.HasStoredCredentials && _autoLogin.value)
@@ -290,11 +246,6 @@ public sealed class AuthGate
         _hint.EnableInClassList(HintWarnClass, warn);
     }
 
-    /// <summary>
-    /// Позывной из отпечатка устройства — тот же приём, что и
-    /// generateSeededCallsign() в макете, и он совпадает с реальной
-    /// моделью: сервер и так опознаёт клиента по токену, а не по имени.
-    /// </summary>
     private string GenerateCallsign()
     {
         string seed = SystemInfo.deviceUniqueIdentifier;

@@ -5,9 +5,6 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Networking.Buildings;
-/// <summary>
-/// Footprint copied 1:1 from MinesServer Game/Buildings/Crafter.cs (CellsToPlace).
-/// </summary>
 public sealed class Crafter : PackBuilding
 {
     public override PackType Type => PackType.Craft;

@@ -4,7 +4,6 @@ using System;
 
 namespace Fodinae.Core;
 
-/// <summary>Интерфейс: масштаб, язык, схема управления.</summary>
 [Serializable]
 public sealed class InterfaceSettings
 {

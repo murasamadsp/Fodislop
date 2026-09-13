@@ -14,7 +14,12 @@ internal static class DummyMapStreamer
 {
     public static void SendMapChunksAround(IWorldLayer<CellType>? worldLayer, HashSet<int> sentMapChunks, ushort serverX, ushort serverY, Action<ServerPacket> sendPacket)
     {
-        const int StreamingRadiusChunks = 4;
+        // The dummy server runs inside the Unity player. Loading a 9x9 chunk
+        // window synchronously during the handshake stalls the main thread on
+        // the 296 MB prebaked map and makes PlayMode startup exceed its test
+        // timeout. One surrounding chunk is enough for the startup scene and
+        // keeps the fixture disposable; movement requests stream more later.
+        const int StreamingRadiusChunks = 1;
         if (worldLayer == null)
         {
             throw new InvalidOperationException(

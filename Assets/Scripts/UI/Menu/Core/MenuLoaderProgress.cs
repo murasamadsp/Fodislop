@@ -7,12 +7,6 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
-/// <summary>
-/// Отвечает за статический экран загрузки/спуска главного меню: список фаз
-/// и обновление визуального прогресса до передачи управления MainGame.
-/// Фазы приходят из IWorldLoadProgress (реальный гейт готовности мира), а не
-/// из таймера — прогресс отражает фактическое продвижение стартапа.
-/// </summary>
 internal sealed class MenuLoaderProgress
 {
     // Значения — ключи словаря локализации, а не текст: Get() возвращает
@@ -84,10 +78,9 @@ internal sealed class MenuLoaderProgress
 
     // Get() пропускает не-ключи как есть (возвращает сам ключ), поэтому
     // литеральные фазы без перевода не меняются. Null-безопасно: без
-    // инжекта локализации текст остаётся как в _PhaseSteps/UXML.
+    // инжекта локализации текст остаётся как в _PhaseSteps/Uxml.
     private string Localize(string keyOrText) => _loc == null ? keyOrText : _loc.Get(keyOrText);
 
-    /// <summary>Пересобирает список фаз после смены языка.</summary>
     public void RefreshLocalization() => BuildPhaseList();
 
     public void UpdateProgress(WorldLoadPhase phase)

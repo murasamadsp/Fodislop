@@ -52,10 +52,6 @@ namespace Fodinae.Networking
             UnsubscribeFromConnection();
         }
 
-        /// <summary>
-        /// Binds the packet stream after VContainer injection. Unity may call
-        /// OnEnable before [Inject] has populated the connection field.
-        /// </summary>
         public void EnsureConnectionSubscription()
         {
             if (_subscribedConnection != null)

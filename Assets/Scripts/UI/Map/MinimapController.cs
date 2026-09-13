@@ -13,9 +13,6 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    /// <summary>
-    /// Chunk-batched minimap renderer with time-throttled updates and async GPU upload.
-    /// </summary>
     public class MinimapController : MonoBehaviour
     {
         [SerializeField]

@@ -9,7 +9,6 @@ using VContainer.Unity;
 
 namespace Fodinae.UI;
 
-/// <summary>Projects world annotations into the existing screen-space UI panel.</summary>
 public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : IWorldLabels, ILateTickable, IDisposable
 {
     private readonly List<Entry> _entries = [];
@@ -45,7 +44,14 @@ public sealed class WorldLabels(UIDocument document, IGameplayCamera camera) : I
             return;
         }
 
-        Camera view = camera.Camera;
+        // Камера принадлежит Bootstrap и может быть уничтожена раньше этой сцены:
+        // порядок разрушения сцен при выходе и в тестах не гарантирован.
+        Camera? view = camera.Camera;
+        if (view == null)
+        {
+            return;
+        }
+
         foreach (Entry entry in _entries)
         {
             Vector3 viewport = view.WorldToViewportPoint(entry.Position);

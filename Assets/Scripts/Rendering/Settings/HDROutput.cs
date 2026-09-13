@@ -10,10 +10,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-/// <summary>
-/// Owns the boundary between the scene-linear HDR render and the operating
-/// system's HDR display surface.
-/// </summary>
 public static class HDROutput
 {
     private static HDRDiagnosticState _lastDiagnosticState;
@@ -46,19 +42,14 @@ public static class HDROutput
 
     public enum ApplyRequestResult
     {
-        /// <summary>Запрос применён, дисплей поставлен в режим <c>enabled</c>.</summary>
         Applied,
 
-        /// <summary>The asynchronous switch has been requested, but is not yet active.</summary>
         Requested,
 
-        /// <summary>Запрос отправлен ранее и ещё в полёте; повторный вызов проигнорирован.</summary>
         AlreadyPending,
 
-        /// <summary>HDR is currently unavailable; this does not identify the monitor's hardware capability.</summary>
         RejectedUnsupported,
 
-        /// <summary>Дисплей HDR-capable, но без <c>RuntimeSwitchable</c> флага — переключение невозможно.</summary>
         RejectedNotSwitchable,
 
         Retrying,
@@ -92,9 +83,6 @@ public static class HDROutput
 
     public static ApplyRequestResult SetEnabled(bool enabled)
     {
-        // Store intent before probing the display. Availability can be
-        // reported late (for example after a scene or display change),
-        // and Refresh must still be able to complete the request.
         _controller.SetPreference(enabled);
 
         return ApplyPreference();

@@ -8,24 +8,16 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Во что обходится одно решение света, по каскадам.
-/// </summary>
-/// <remarks>
-/// Числа считались и раньше — <see cref="CascadeCostCalculator"/> написан,
-/// покрыт тестами и повторяет арифметику самого шейдера, — но не показывались
-/// нигде. Именно их не хватало, когда кадр проседал при ходьбе: цена решения
-/// выяснялась вычислениями на бумаге, хотя движок знал её сам.
-///
-/// Показывается стоимость ПОЛНОГО решения. Динамическая половина решается по
-/// трём каскадам вместо всех, поэтому её строка дешевле; в шапке написано,
-/// сколько решений какой половины прошло за последнюю секунду, — по этим двум
-/// числам и видно, за что платит кадр.
-/// </remarks>
 public sealed class LightingCostWindow : ToolWindow
 {
-    /// <summary>Обновление раз в полсекунды: раскладка каскадов так часто не меняется.</summary>
     private const float RefreshInterval = 0.5f;
+
+    private const string FieldTitle = "Разрешение поля";
+    private const string FieldTitleLimited = "Разрешение поля — упёрлось в потолок";
+    private const string CascadeTitle = "Число каскадов";
+    private const string CascadeTitleLimited = "Число каскадов — упёрлось в потолок";
+    private const string AtlasTitle = "Атлас проб";
+    private const string NoDetail = "--";
 
     private readonly LightingEngine? _lighting;
     private readonly IFrameTelemetry _telemetry;
@@ -37,6 +29,15 @@ public sealed class LightingCostWindow : ToolWindow
     private long _heaviestRaySteps;
     private string _summary = "нет данных";
     private string _solveMix = "решений: --";
+
+    // Строки пределов собираются по таймеру, а не на каждое событие IMGUI:
+    // окно открыто, пока смотрят на цену кадра, и мусор здесь искажает то,
+    // что окно показывает.
+    private bool _fieldLimited;
+    private bool _cascadeLimited;
+    private string _fieldDetail = NoDetail;
+    private string _cascadeDetail = NoDetail;
+    private string _atlasDetail = NoDetail;
     private float _nextUpdate;
     private Vector2 _scroll;
 
@@ -47,7 +48,6 @@ public sealed class LightingCostWindow : ToolWindow
         _telemetry = telemetry;
     }
 
-    /// <summary>Данных не копит: всё берётся у движка в момент опроса.</summary>
     public override bool WantsSampling => false;
 
     public override Vector2 MinimumSize => new(280f, 260f);
@@ -60,6 +60,7 @@ public sealed class LightingCostWindow : ToolWindow
         }
 
         _nextUpdate = Time.unscaledTime + RefreshInterval;
+        RefreshLimits(_lighting);
         if (!_lighting.IsInitialized)
         {
             _summary = "движок света ещё не готов";
@@ -82,6 +83,21 @@ public sealed class LightingCostWindow : ToolWindow
         _heaviestRaySteps = 0;
         _summary = "нет данных";
         _solveMix = "решений: --";
+        _fieldLimited = false;
+        _cascadeLimited = false;
+        _fieldDetail = NoDetail;
+        _cascadeDetail = NoDetail;
+        _atlasDetail = NoDetail;
+    }
+
+    private void RefreshLimits(LightingEngine lighting)
+    {
+        _fieldLimited = lighting.TextureDimensionLimited;
+        _cascadeLimited = lighting.CascadeBudgetLimited;
+        _fieldDetail =
+            $"{lighting.FieldWidth}×{lighting.FieldHeight} при {lighting.EffectivePixelsPerCell:F2} пикс/клетку";
+        _cascadeDetail = $"{lighting.CascadeCount} каскадов, шагов до {lighting.MaximumIntervalSteps}";
+        _atlasDetail = $"{lighting.AtlasEntryCount} записей, источников {lighting.DynamicLightCount}";
     }
 
     private void Recalculate()
@@ -109,14 +125,6 @@ public sealed class LightingCostWindow : ToolWindow
             $"динамических {_telemetry.LightingDynamicSolveCount}";
     }
 
-    /// <summary>
-    /// Миллионы, а не полное число.
-    /// </summary>
-    /// <remarks>
-    /// «46 900 000» и «69 800 000» глазом не различаются и не запоминаются.
-    /// Разница между «46.9 М» и «703.1 М» видна сразу — а именно её и надо
-    /// увидеть, потому что она и есть двадцатикратная просадка.
-    /// </remarks>
     private static string Millions(long value) =>
         value >= 1_000_000
             ? $"{value / 1_000_000.0:F1} М"
@@ -150,15 +158,6 @@ public sealed class LightingCostWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Строка на каскад: текст и полоса доли.
-    /// </summary>
-    /// <remarks>
-    /// Доля считается от самого дорогого каскада, а не от суммы. Смысл вопроса
-    /// не «сколько процентов набрал этот», а «какой из них здесь главный»: у
-    /// нижнего каскада шагов на порядок больше, и на шкале от суммы все
-    /// остальные схлопнулись бы в невидимые огрызки.
-    /// </remarks>
     private void DrawCascadeRows()
     {
         if (_rows.Count == 0)
@@ -178,27 +177,12 @@ public sealed class LightingCostWindow : ToolWindow
         }
     }
 
-    /// <summary>Упёрлось ли качество в потолок — и в какой именно.</summary>
     private void DrawLimits()
     {
-        if (_lighting == null)
-        {
-            return;
-        }
-
         ToolChrome.SectionHeader("ПРЕДЕЛЫ");
-        DrawLimitRow(
-            "Разрешение поля",
-            _lighting.TextureDimensionLimited,
-            $"{_lighting.FieldWidth}×{_lighting.FieldHeight} при {_lighting.EffectivePixelsPerCell:F2} пикс/клетку");
-        DrawLimitRow(
-            "Число каскадов",
-            _lighting.CascadeBudgetLimited,
-            $"{_lighting.CascadeCount} каскадов, шагов до {_lighting.MaximumIntervalSteps}");
-        DrawLimitRow(
-            "Атлас проб",
-            false,
-            $"{_lighting.AtlasEntryCount} записей, источников {_lighting.DynamicLightCount}");
+        DrawLimitRow(_fieldLimited ? FieldTitleLimited : FieldTitle, _fieldLimited, _fieldDetail);
+        DrawLimitRow(_cascadeLimited ? CascadeTitleLimited : CascadeTitle, _cascadeLimited, _cascadeDetail);
+        DrawLimitRow(AtlasTitle, false, _atlasDetail);
     }
 
     private static void DrawLimitRow(string title, bool limited, string detail)
@@ -208,7 +192,7 @@ public sealed class LightingCostWindow : ToolWindow
             ToolChrome.StatusPip(limited ? ToolTheme.Warning : ToolTheme.Success);
             using (new GUILayout.VerticalScope())
             {
-                GUILayout.Label(limited ? $"{title} — упёрлось в потолок" : title, WrappedLabelStyle);
+                GUILayout.Label(title, WrappedLabelStyle);
                 GUILayout.Label(detail, MutedLabelStyle);
             }
         }

@@ -10,11 +10,6 @@ using UnityEngine;
 
 namespace Fodinae.Networking.Processors;
 
-/// <summary>
-/// Player/robot identity and state packets: local player identity, robot
-/// metadata, authoritative robot positions and the local player's own
-/// server-authoritative state (speed, teleport, auto-dig, aggression).
-/// </summary>
 public sealed class PlayerInfoProcessor(
     IRobotService robotManager,
     IPlayerStats playerStats,
@@ -30,7 +25,7 @@ public sealed class PlayerInfoProcessor(
 {
     public void Process(PlayerInfoPacket packet)
     {
-        robotManager.SetLocalPlayerBotId(packet.BotId);
+        robotManager.SetLocalPlayerBotID(packet.BotId);
         playerStats.SetNickname(packet.Nickname);
 
         var player = localPlayer.Current;
@@ -75,7 +70,7 @@ public sealed class PlayerInfoProcessor(
     public void Process(RobotPositionPacket packet)
     {
         robotManager.UpdateRobotPosition(packet.BotId, packet.X, packet.Y, packet.Rotation);
-        if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotId)
+        if (packet.BotId != 0 && packet.BotId == robotManager.LocalPlayerBotID)
         {
             localPlayer.Current?.UpdateServerPosition(new Vector2Int(packet.X, packet.Y));
         }

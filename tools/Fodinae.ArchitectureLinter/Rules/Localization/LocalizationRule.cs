@@ -12,7 +12,7 @@ namespace Fodinae.ArchitectureLinter.Rules.Localization;
 public sealed class LocalizationRule : IRule
 {
     private const string LocalizationDir = "Assets/Resources/Localization";
-    private const string UiDir = "Assets/Resources/UI";
+    private const string UIDir = "Assets/Resources/UI";
     private static readonly Regex LiteralKeyRegex = new(
         @"\\?\""(?<key>[a-z][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\\?\""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -200,7 +200,7 @@ public sealed class LocalizationRule : IRule
             }
         }
 
-        var uiDir = Path.Combine(projectRoot, UiDir);
+        var uiDir = Path.Combine(projectRoot, UIDir);
         if (Directory.Exists(uiDir))
         {
             foreach (var file in Directory.EnumerateFiles(uiDir, "*.uxml"))

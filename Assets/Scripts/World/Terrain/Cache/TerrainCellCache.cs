@@ -349,7 +349,7 @@ public class TerrainCellCache
             ReliefGroup = config.ReliefGroup,
             Distortion = config.Distortion,
             HasTileGroup = mm.TryGetTileGroup(type, out int gid),
-            TileGroupId = gid,
+            TileGroupID = gid,
             MinimapColor = (Color32)mm.GetCellMinimapColor(type),
             Animation = config.Animation,
             AnimationSpeed = wtm.GetAnimationSpeedForCell(type),
@@ -392,7 +392,7 @@ public class TerrainCellCache
             ReliefGroup = meta.ReliefGroup,
             Distortion = meta.Distortion,
             HasTileGroup = meta.HasTileGroup,
-            TileGroupId = meta.TileGroupId,
+            TileGroupID = meta.TileGroupID,
             MinimapColor = meta.MinimapColor, // Color32 = Color32, no conversion
             Animation = meta.Animation,
             AnimationSpeed = meta.AnimationSpeed,

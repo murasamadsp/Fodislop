@@ -9,9 +9,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Manages live status lines, temporary buffs and expiration timers in the HUD.
-/// </summary>
 public sealed class PlayerHUDStatusPanel
 {
     private readonly Dictionary<string, VisualElement> _statusLineElements = new();

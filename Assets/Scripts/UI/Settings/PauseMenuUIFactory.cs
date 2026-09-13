@@ -50,19 +50,6 @@ internal static class PauseMenuUIFactory
 
         return (float)Math.Round(rawValue, 2);
     }
-    /// <summary>
-    /// Ползунок, берущий границы и подпись из объявления поля секции.
-    /// </summary>
-    /// <remarks>
-    /// ЗАЧЕМ. Диапазон настройки объявлен над её полем
-    /// (<c>[SettingRange]</c>). Перегрузка с явными <c>minimum</c> и
-    /// <c>maximum</c> делала билдер четвёртым местом, где записан тот же
-    /// отрезок, и эти четыре записи расходились: ползунок мог показывать
-    /// диапазон, который валидатор не принимает.
-    ///
-    /// Имя поля проверяется в <see cref="SettingSchema.RangeOf{TSection}"/>
-    /// и падает при опечатке, а не показывает игроку неверные границы.
-    /// </remarks>
     public static VisualElement CreateBoundSlider<TSection>(
         string fieldName,
         ILocalizationService loc,

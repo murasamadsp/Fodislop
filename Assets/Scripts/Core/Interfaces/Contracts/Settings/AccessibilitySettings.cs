@@ -4,7 +4,6 @@ using System;
 
 namespace Fodinae.Core;
 
-/// <summary>Доступность: цветовая коррекция и светочувствительность.</summary>
 [Serializable]
 public sealed class AccessibilitySettings
 {

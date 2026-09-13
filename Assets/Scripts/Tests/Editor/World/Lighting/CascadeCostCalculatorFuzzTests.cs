@@ -7,24 +7,6 @@ using NUnit.Framework;
 
 namespace Fodinae.Tests.World.Lighting;
 
-/// <summary>
-/// Fuzzes <see cref="CascadeCostCalculator"/> against a reference
-/// implementation written from the documented contract, not by copying the
-/// code under test.
-/// </summary>
-/// <remarks>
-/// The debug overlay prints these numbers as fact. A stepCount that is off
-/// by one is not a cosmetic error: ray budgets decide whether a solve fits
-/// the frame budget, and the merge-tap count decides atlas traffic. The
-/// reference here recomputes every field from the documented rules
-/// (interval length clamped to at least one, steps clamped to the budget,
-/// merge taps only for cascades with a coarser neighbour) so a silent
-/// drift in the implementation shows up as a mismatch instead of two wrong
-/// numbers agreeing with each other.
-///
-/// The seeds are fixed. A fuzz test that picks a new seed every run reports
-/// failures nobody can reproduce.
-/// </remarks>
 [TestFixture]
 public class CascadeCostCalculatorFuzzTests
 {
@@ -168,12 +150,6 @@ public class CascadeCostCalculatorFuzzTests
         }
     }
 
-    /// <summary>
-    /// Recomputes one sample from the documented contract and asserts the
-    /// collector produced exactly that. Written against the rules in the
-    /// doc comments (interval length min 1, ceil, clamp to budget, merge
-    /// taps only with a coarser neighbour), not against the implementation.
-    /// </summary>
     private static void AssertSampleMatchesReference(
         CascadeCostSample sample,
         IReadOnlyList<CascadeLayout> cascades,
@@ -211,11 +187,6 @@ public class CascadeCostCalculatorFuzzTests
         Assert.That(sample.MergeTapCount, Is.EqualTo(mergeTaps), context);
     }
 
-    /// <summary>
-    /// Mirrors <c>Mathf.Clamp(int, int, int)</c> exactly (including the
-    /// degenerate max &lt; min case) so the reference is self-contained and
-    /// the hostile-budget tests stay defined.
-    /// </summary>
     private static int Clamp(int value, int min, int max)
     {
         if (value < min)

@@ -10,9 +10,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Textures;
 
-/// <summary>
-/// Tracks in-flight texture requests and suppresses repeated failure logs with backoff.
-/// </summary>
 public sealed class CellTextureRetryTracker
 {
     private const double FailedCellTextureRetrySeconds = 30.0;

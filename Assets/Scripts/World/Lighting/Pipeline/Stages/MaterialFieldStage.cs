@@ -3,16 +3,6 @@
 using UnityEngine.Rendering;
 
 namespace Fodinae.World.Lighting.Pipeline.Stages;
-/// <summary>
-/// Rebuilds the material/emission fields from terrain and registered
-/// lighting-geometry contributors, then generates the mip chain the
-/// ray march needs for its far-step occupancy samples. Extracted
-/// verbatim from the "rebuildFields" block inside the engine's former
-/// inline <c>UpdateLighting</c>. The decision of whether a rebuild is
-/// needed this frame (field/region/geometry dirty) stays in
-/// <c>LightingEngine.UpdateLighting</c>, same as every other
-/// extracted stage's dispatch condition.
-/// </summary>
 public sealed class MaterialFieldStage : ILightingStage
 {
     public void Record(CommandBuffer commandBuffer, in LightingFrameContext context)

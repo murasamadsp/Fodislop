@@ -8,7 +8,7 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Core.Localization;
 using Fodinae.Game.Managers;
 using Fodinae.Networking;
-using Fodinae.UI.HUD.Inventory.Model;
+using Fodinae.Game.Inventory;
 using MinesServer.Networking.Client.Packets.Chat;
 using MinesServer.Networking.Server.Packets.Chat;
 using MinesServer.Networking.Server.Packets.World;
@@ -105,7 +105,6 @@ namespace Fodinae.UI
             }
         }
 
-        /// <summary>Переприменяет статические ключи UXML после смены языка.</summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(GlobalChatUI));
@@ -489,7 +488,7 @@ namespace Fodinae.UI
             // «немой = нет» и глушил все последующие. Дальше чат открывался,
             // элементы создавались заново — и SetEnabled к ним не применялся уже
             // никогда, потому что состояние немоты с тех пор не менялось. Поле
-            // ввода оставалось в том виде, в каком его собрал UXML.
+            // ввода оставалось в том виде, в каком его собрал Uxml.
             //
             // Сбрасывается вместе с видом: сравнивать состояние можно только с
             // тем, кому его в самом деле выставили.

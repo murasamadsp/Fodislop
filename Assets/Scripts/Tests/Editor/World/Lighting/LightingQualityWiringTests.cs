@@ -108,18 +108,6 @@ public sealed class LightingQualityWiringTests
             "stops being per-pixel and no exception fires anywhere in the chain.");
     }
 
-    /// <remarks>
-    /// High поднят до PerPixel намеренно. В PerBlock число текселей поля на
-    /// клетку жёстко равно единице (LightingResourceManager: requestedPixelsPerCell),
-    /// заявленное в профиле LightingMinimumPixelsPerCell не используется вовсе,
-    /// а ResolveDirect вдобавок привязывает выборку к центру клетки. При таком
-    /// поле у освещения нет внутриклеточного разрешения: нормаль поверхности
-    /// постоянна внутри клетки по построению, и направленный отклик
-    /// принципиально не может дать рельеф.
-    ///
-    /// Пресеты ниже High остаются на PerBlock: там это осознанный размен
-    /// качества на кадр, а не побочный эффект.
-    /// </remarks>
     [Test]
     public void StandardPresetsBelowHighDefaultToPerBlock()
     {

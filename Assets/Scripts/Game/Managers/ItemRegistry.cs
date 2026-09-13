@@ -21,9 +21,6 @@ public sealed class ItemRegistry(IRuntimeAssetPaths runtimeAssetPaths) : IItemCa
 
     public IEnumerable<ItemType> AllTypes => (ItemType[])System.Enum.GetValues(typeof(ItemType));
 
-    /// <summary>
-    /// Loads a local icon on first use and retains it for the application lifetime.
-    /// </summary>
     public Texture2D? GetIcon(ItemType type)
     {
         if (_iconCache.TryGetValue(type, out var t))

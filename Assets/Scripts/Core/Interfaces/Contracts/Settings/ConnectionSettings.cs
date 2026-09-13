@@ -4,7 +4,6 @@ using System;
 
 namespace Fodinae.Core;
 
-/// <summary>Подключение к серверу.</summary>
 [Serializable]
 public sealed class ConnectionSettings
 {

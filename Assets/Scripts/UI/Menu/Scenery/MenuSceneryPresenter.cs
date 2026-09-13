@@ -9,10 +9,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Owns the main menu's ambient scene: the starfield backdrop, the planet
-/// render target, the descent camera fly-in and the surface markers.
-/// </summary>
 internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
 {
     private readonly IRuntimeAssetPaths _runtimeAssetPaths = runtimeAssetPaths;
@@ -146,7 +142,7 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
     {
         if (image == null)
         {
-            Debug.LogWarning($"[MainMenu] Optional image '{debugName}' is missing from UXML ({assetPath}).");
+            Debug.LogWarning($"[MainMenu] Optional image '{debugName}' is missing from Uxml ({assetPath}).");
             return;
         }
 
@@ -176,7 +172,7 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
         var element = _tree.Q<VisualElement>(elementName);
         if (element == null)
         {
-            Debug.LogWarning($"[MainMenu] ApplyIconTexture: element '{elementName}' not found in UXML tree");
+            Debug.LogWarning($"[MainMenu] ApplyIconTexture: element '{elementName}' not found in Uxml tree");
             return;
         }
 
@@ -231,7 +227,7 @@ internal sealed class MenuSceneryPresenter(IRuntimeAssetPaths runtimeAssetPaths)
         {
             if (!_scenerySearchWarned)
             {
-                Debug.LogWarning("[MainMenu] Optional 'MainMenuPlanetImage' element is missing from UXML.");
+                Debug.LogWarning("[MainMenu] Optional 'MainMenuPlanetImage' element is missing from Uxml.");
                 _scenerySearchWarned = true;
             }
 

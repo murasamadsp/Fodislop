@@ -3,12 +3,6 @@
 using Fodinae.Rendering;
 
 namespace Fodinae.World.Lighting.Quality;
-/// <summary>
-/// Resolves the lighting tier a <see cref="GraphicsQualitySettings"/> value
-/// actually runs at: <see cref="GraphicsPreset.Ultra"/> solves per-pixel
-/// rather than per-block, but never against an explicit
-/// <see cref="LightingQualityMode.Off"/>.
-/// </summary>
 public static class LightingQualityResolver
 {
     public static LightingQualityMode Resolve(

@@ -3,6 +3,7 @@
 #pragma kernel BloomUpsample
 #pragma kernel CompositeFinal
 #pragma kernel DisplayFinal
+#pragma kernel BakeGradeLut
 #pragma multi_compile _ HDR_COLORSPACE_CONVERSION
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
@@ -17,6 +18,9 @@ Texture2D<float4> _HistoryTex;
 
 RWTexture2D<float4> _DestTex;
 RWTexture2D<float4> _OutputTex;
+// Запечённый творческий грейд: 33^3 в лог-шкале входа и выхода.
+RWTexture3D<float4> _BakedGradeLut;
+Texture3D<float4> _BakedGradeLutTex;
 
 SamplerState sampler_LinearClamp;
 SamplerState sampler_PointClamp;
@@ -80,6 +84,7 @@ float _HighlightRecovery;
 float4 _DisplayGrade0; // white point, grey output, curve slope, transform
 float4 _DisplayGrade1; // shoulder power, toe power, toe stops, path-to-white
 float _DisplayGradePathPower;
+float _GamutCompression; // 0 выкл, 1 полное сжатие гамута на выводе
 float4 _Qualifier0; // hue center/width/softness, enabled(+)/invert(-)
 float4 _Qualifier1; // sat center/width/softness, luma center
 float4 _Qualifier2; // luma width/softness, hue shift, saturation multiplier
@@ -167,6 +172,126 @@ float FilmGrain(float2 pixel)
     float previous = Hash31(float3(grainPixel, epoch * 1.618 + 17.0));
     float next = Hash31(float3(grainPixel, (epoch + 1.0) * 1.618 + 17.0));
     return lerp(previous, next, blend) * 2.0 - 1.0;
+}
+
+float3 ApplyCreativeGrade(float3 color)
+{
+    // ------------------------------------------------------------------
+    // 4. Цвет. Порядок слоёв объяснён в ColorGrading.hlsl и не произволен:
+    // физика в линейном, вкус в логарифмическом, кривая последней.
+    // ------------------------------------------------------------------
+
+    // Слой 4a: линейный. Экспозиция и баланс белого описывают съёмку, а не
+    // вкус, и потому применяются к сцен-линейным величинам.
+    color *= exp2(_Exposure) * _ColorFilter.rgb;
+
+    if (abs(_WhiteBalance.x) > 0.001 || abs(_WhiteBalance.y) > 0.001)
+    {
+        color = ApplyWhiteBalance(
+            color, WhiteBalanceCoefficients(_WhiteBalance.x, _WhiteBalance.y));
+    }
+
+    color = ApplyInputRange(color, _BlackPoint, _InputWhitePoint, _HighlightRecovery);
+
+    color = ApplyPrimaryWheels(
+        color,
+        _PrimaryLift.rgb,
+        _PrimaryGamma.rgb,
+        _PrimaryGain.rgb,
+        _PrimaryOffset.rgb,
+        _PrimaryMaster);
+
+    const float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
+
+    // Слой 4b: логарифмический. Творческий грейд живёт здесь, потому что шаг
+    // в логе равномерен по восприятию, а в линейном — нет: одна и та же
+    // прибавка контраста означала бы разное в тенях и в светах.
+    //
+    // Опорная точка контраста 0.5 — средне-серый собственной лог-шкалы. В неё
+    // 0.18 сцены попадает примерно в середину; в прежнем линейном
+    // варианте почти вся сцена лежала ниже неё, и любой контраст утягивал
+    // картинку в тень.
+    // The creative grade is independent from the display curve. Previously
+    // bypassing/soloing the curve also bypassed CDL, and the comparison split
+    // compared two different grades instead of only showing curve before/after.
+    bool displayReferred = _ColorManagement0.w > 0.5;
+    float3 logColor = displayReferred
+        ? FodinaeDisplayEncode(color)
+        : FodinaeLogEncode(color);
+    logColor = ApplyCdl(
+        logColor,
+        _CdlSlope.rgb * _CdlMaster.x,
+        _CdlOffset.rgb + _CdlMaster.y,
+        _CdlPower.rgb * _CdlMaster.z);
+
+    if (abs(_Contrast) > 0.001 ||
+        abs(_ContrastControls.x - 0.5) > 0.001 ||
+        abs(_ContrastControls.y) > 0.001 ||
+        abs(_ContrastControls.z) > 0.001 ||
+        abs(_ContrastControls.w) > 0.001 ||
+        abs(_ContrastControls2.x) > 0.001 ||
+        _ContrastControls2.y > 0.001 ||
+        _ContrastControls2.z > 0.001)
+    {
+        logColor = ApplyContrastControls(logColor, _Contrast, _ContrastControls, _ContrastControls2);
+    }
+
+    float3 gradedLinear = displayReferred
+        ? FodinaeDisplayDecode(logColor)
+        : FodinaeLogDecode(logColor);
+    if (abs(_CdlSaturation - 1.0) > 0.001)
+    {
+        gradedLinear = ApplySaturation(gradedLinear, _CdlSaturation, lumaWeights);
+    }
+
+    if (abs(_Saturation - 1.0) > 0.001)
+    {
+        gradedLinear = ApplySaturation(gradedLinear, _Saturation, lumaWeights);
+    }
+
+    gradedLinear = ApplyVibrance(gradedLinear, _Vibrance, lumaWeights);
+    gradedLinear = ApplyGlobalHue(gradedLinear, _Hue);
+    gradedLinear = ApplyHueVsHue(gradedLinear, _HueVsHue);
+    gradedLinear = ApplyHueVsSaturation(gradedLinear, _HueVsSaturation);
+    gradedLinear = ApplyHueVsLuminance(gradedLinear, _HueVsLuminance);
+    gradedLinear = ApplyLuminanceVsSaturation(gradedLinear, _LuminanceVsSaturation);
+    gradedLinear = ApplySaturationVsSaturation(gradedLinear, _SaturationVsSaturation);
+    gradedLinear = ApplySelectiveCurves(gradedLinear);
+    gradedLinear = ApplyQualifier(gradedLinear);
+
+    return gradedLinear;
+}
+
+// Грейд запекается каждый кадр: 33^3 = 36 тыс. вызовов вместо ~6.5 млн пикселей,
+// и таблица не может устареть из-за неотслеженного параметра. Узлы лежат
+// равномерно в лог-шкале, результат хранится в ней же: интерполяция в логе
+// оставляет нейтральный грейд точным тождеством (в линейных числах соседние
+// узлы через полстопа давали бы ошибку порядка 1.5%).
+static const float BakedGradeLutSize = 33.0;
+
+[numthreads(4, 4, 4)]
+void BakeGradeLut(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= (uint3)BakedGradeLutSize)) return;
+
+    float3 encoded = float3(id) / (BakedGradeLutSize - 1.0);
+    float3 graded = ApplyCreativeGrade(FodinaeLogDecode(encoded));
+    _BakedGradeLut[id] = float4(FodinaeLogEncode(graded), 1.0);
+}
+
+// Отрицательные входы идут как ноль: таблица построена на неотрицательной
+// шкале. Ярче верхней границы шкалы цвет нормируется перед чтением и
+// возвращается множителем после: HDR не срезается.
+float3 SampleBakedGrade(float3 color)
+{
+    float3 positive = max(color, 0.0);
+    float peak = max(positive.r, max(positive.g, positive.b));
+    float headLimit = FodinaeMidGrey * (exp2(FodinaeSceneHeadStops) - exp2(-FodinaeSceneToeStops));
+    float scale = max(peak / headLimit, 1.0);
+    float3 encoded = saturate(FodinaeLogEncode(positive / scale));
+    float3 uvw = encoded * ((BakedGradeLutSize - 1.0) / BakedGradeLutSize) + 0.5 / BakedGradeLutSize;
+    float3 gradedEncoded = _BakedGradeLutTex.SampleLevel(sampler_LinearClamp, uvw, 0).rgb;
+    return FodinaeLogDecode(gradedEncoded) * scale;
 }
 
 [numthreads(8, 8, 1)]
@@ -380,7 +505,14 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
                 sampler_LinearClamp,
                 uv + float2(-contrastOffset.x, -contrastOffset.y),
                 0).rgb);
-        color += (color - localMean * 0.25) * _Advanced0.x;
+        // По яркости, а не по каналам. Поканальное color - mean уводило каналы
+        // тёмного пикселя рядом со светлым в минус, и после обрезки край тени
+        // становился цветным или чёрным. Масштаб всего цвета сохраняет оттенок
+        // и ограничен сверху (1 + k): target <= luma * (1 + k).
+        float centerLuma = Luminance(max(color, 0.0));
+        float meanLuma = Luminance(max(localMean * 0.25, 0.0));
+        float targetLuma = max(centerLuma + (centerLuma - meanLuma) * _Advanced0.x, 0.0);
+        color *= targetLuma / max(centerLuma, 1e-6);
     }
 
     if (_Advanced2.x > 0.001)
@@ -402,98 +534,15 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     }
 
     // ------------------------------------------------------------------
-    // 4. Цвет. Порядок слоёв объяснён в ColorGrading.hlsl и не произволен:
-    // физика в линейном, вкус в логарифмическом, кривая последней.
+    // 4. Цвет. Творческий грейд целиком запечён в таблицу (ApplyCreativeGrade,
+    // BakeGradeLut): на пиксель остаётся одно чтение.
     // ------------------------------------------------------------------
-
-    // Слой 4a: линейный. Экспозиция и баланс белого описывают съёмку, а не
-    // вкус, и потому применяются к сцен-линейным величинам.
     float3 ungraded = color;
-    color *= exp2(_Exposure) * _ColorFilter.rgb;
-
-    if (abs(_WhiteBalance.x) > 0.001 || abs(_WhiteBalance.y) > 0.001)
-    {
-        color = ApplyWhiteBalance(
-            color, WhiteBalanceCoefficients(_WhiteBalance.x, _WhiteBalance.y));
-    }
-
-    color = ApplyInputRange(color, _BlackPoint, _InputWhitePoint, _HighlightRecovery);
-
-    color = ApplyPrimaryWheels(
-        color,
-        _PrimaryLift.rgb,
-        _PrimaryGamma.rgb,
-        _PrimaryGain.rgb,
-        _PrimaryOffset.rgb,
-        _PrimaryMaster);
-
-    const float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
-
-    // Слой 4b: логарифмический. Творческий грейд живёт здесь, потому что шаг
-    // в логе равномерен по восприятию, а в линейном — нет: одна и та же
-    // прибавка контраста означала бы разное в тенях и в светах.
-    //
-    // Опорная точка контраста 0.5 — средне-серый собственной лог-шкалы. В неё
-    // 0.18 сцены попадает примерно в середину; в прежнем линейном
-    // варианте почти вся сцена лежала ниже неё, и любой контраст утягивал
-    // картинку в тень.
     // Экранная координата берётся заново: uv выше могло сдвинуть тепловое
     // искажение, а шторка обязана стоять ровно.
     float2 screenUv = (id.xy + 0.5) * _ScreenSize.zw;
     bool showBefore = CompareShowsBefore(screenUv);
-
-    // The creative grade is independent from the display curve. Previously
-    // bypassing/soloing the curve also bypassed CDL, and the comparison split
-    // compared two different grades instead of only showing curve before/after.
-    bool displayReferred = _ColorManagement0.w > 0.5;
-    float3 logColor = displayReferred
-        ? FodinaeDisplayEncode(color)
-        : FodinaeLogEncode(color);
-    logColor = ApplyCdl(
-        logColor,
-        _CdlSlope.rgb * _CdlMaster.x,
-        _CdlOffset.rgb + _CdlMaster.y,
-        _CdlPower.rgb * _CdlMaster.z);
-
-    if (abs(_Contrast) > 0.001 ||
-        abs(_ContrastControls.x - 0.5) > 0.001 ||
-        abs(_ContrastControls.y) > 0.001 ||
-        abs(_ContrastControls.z) > 0.001 ||
-        abs(_ContrastControls.w) > 0.001 ||
-        abs(_ContrastControls2.x) > 0.001 ||
-        _ContrastControls2.y > 0.001 ||
-        _ContrastControls2.z > 0.001)
-    {
-        logColor = ApplyContrastControls(logColor, _Contrast, _ContrastControls, _ContrastControls2);
-    }
-
-    float3 gradedLinear = displayReferred
-        ? FodinaeDisplayDecode(logColor)
-        : FodinaeLogDecode(logColor);
-    if (abs(_CdlSaturation - 1.0) > 0.001)
-    {
-        gradedLinear = ApplySaturation(gradedLinear, _CdlSaturation, lumaWeights);
-    }
-
-    if (abs(_Saturation - 1.0) > 0.001)
-    {
-        gradedLinear = ApplySaturation(gradedLinear, _Saturation, lumaWeights);
-    }
-
-    gradedLinear = ApplyVibrance(gradedLinear, _Vibrance, lumaWeights);
-    gradedLinear = ApplyGlobalHue(gradedLinear, _Hue);
-    gradedLinear = ApplyHueVsHue(gradedLinear, _HueVsHue);
-    gradedLinear = ApplyHueVsSaturation(gradedLinear, _HueVsSaturation);
-    gradedLinear = ApplyHueVsLuminance(gradedLinear, _HueVsLuminance);
-    gradedLinear = ApplyLuminanceVsSaturation(gradedLinear, _LuminanceVsSaturation);
-    gradedLinear = ApplySaturationVsSaturation(gradedLinear, _SaturationVsSaturation);
-    gradedLinear = ApplySelectiveCurves(gradedLinear);
-    gradedLinear = ApplyQualifier(gradedLinear);
-
-    // Keep the grading result in float/HDR between stages. Negative values
-    // may be produced by offsets and contrast, and must not be discarded
-    // before temporal accumulation or the final display transform.
-    color = showBefore ? ungraded : gradedLinear;
+    color = showBefore ? ungraded : SampleBakedGrade(color);
 
     // Temporal stability belongs to scene-linear light. Both current and
     // history now have the same units, independent of display calibration.
@@ -506,11 +555,44 @@ void CompositeFinal(uint3 id : SV_DispatchThreadID)
     _OutputTex[id.xy] = float4(color, srcAlpha);
 }
 
+// Сжатие гамута по ACES Reference Gamut Compression. Работает в примарах
+// дисплея, поэтому одна функция верна и для SDR (Rec.709), и для HDR (P3,
+// Rec.2020). Меряется расстояние каждого канала от самого яркого, то есть
+// насыщенность, а не яркость: HDR-свет выше 1.0 не сжимается. Каналы, ушедшие
+// ниже нуля (цвет за гамутом), плавно подтягиваются к границе вместо
+// поканальной обрезки, которая давала плоские кислотные пятна и сдвиг оттенка.
+// Цвета глубоко внутри гамута (расстояние ниже порога) не меняются.
+float3 CompressDisplayGamut(float3 color)
+{
+    // Без досрочного return: Metal считал результат функции с ранним выходом
+    // «возможно неинициализированным». Чёрный и отрицательный пик проходят
+    // как есть через lerp по признаку.
+    float achromatic = max(color.r, max(color.g, color.b));
+    float safeAchromatic = max(achromatic, 1e-6);
+
+    const float3 threshold = float3(0.815, 0.803, 0.880);
+    const float3 limit = float3(1.147, 1.264, 1.312);
+    const float power = 1.2;
+
+    float3 distance = (safeAchromatic - color) / safeAchromatic;
+    float3 scale = (limit - threshold) /
+        pow(pow((1.0 - threshold) / (limit - threshold), -power) - 1.0, 1.0 / power);
+    float3 excess = max(distance - threshold, 0.0) / scale;
+    float3 compressed = threshold + scale * excess / pow(1.0 + pow(excess, power), 1.0 / power);
+    distance = lerp(distance, compressed, step(threshold, distance));
+    float3 result = safeAchromatic - distance * safeAchromatic;
+    return lerp(color, result, step(1e-6, achromatic));
+}
+
 float3 ToDisplayOutput(float3 color)
 {
 #if defined(HDR_COLORSPACE_CONVERSION)
     color = RotateRec709ToOutputSpace(color);
 #endif
+    if (_GamutCompression > 1e-4)
+    {
+        color = lerp(color, CompressDisplayGamut(color), saturate(_GamutCompression));
+    }
     // HDR calibration can briefly be unavailable while the display mode is
     // being reconciled. Never allow a zero white level to create NaN/Inf.
     float paperWhite = max(_DisplayPaperWhiteNits, 1.0);
@@ -659,7 +741,14 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
             // Gamut is a property of the declared display space, not of the
             // internal working space. Check the same output-primary transform
             // that DisplayFinal uses so P3/Rec.2020 warnings are meaningful.
-            float3 displayGamutColor = ApplyColorManagementOutput(color);
+            // Цвет уже переведён в примары вывода в начале DisplayFinal; повторный
+            // ApplyColorManagementOutput переводил его второй раз. При HDR кадр
+            // держится в Rec.709, и проверять надо в пространстве дисплея.
+#if defined(HDR_COLORSPACE_CONVERSION)
+            float3 displayGamutColor = RotateRec709ToOutputSpace(color);
+#else
+            float3 displayGamutColor = color;
+#endif
             bool belowGamut = min(
                 displayGamutColor.r,
                 min(displayGamutColor.g, displayGamutColor.b)) < -0.0001;

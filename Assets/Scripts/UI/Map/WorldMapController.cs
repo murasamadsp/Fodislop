@@ -19,7 +19,7 @@ namespace Fodinae.UI
         [Inject]
         private Fodinae.UI.HUD.Player.View.PlayerHUDView _playerHud = null!;
         [Inject]
-        private Fodinae.UI.HUD.Inventory.View.InventoryView _inventory = null!;
+        private Fodinae.UI.Inventory.InventoryView _inventory = null!;
         [Inject]
         private FPSCounter _fps = null!;
         [Inject]

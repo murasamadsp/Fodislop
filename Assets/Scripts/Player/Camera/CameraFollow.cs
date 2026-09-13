@@ -208,6 +208,13 @@ namespace Fodinae.Player
 
         protected void LateUpdate()
         {
+            // Камера принадлежит Bootstrap и может быть уничтожена раньше этой
+            // сцены: порядок разрушения сцен при выходе и в тестах не гарантирован.
+            if (_camera == null)
+            {
+                return;
+            }
+
             if (!Application.isPlaying)
             {
                 ApplyZoom(DefaultOrthographicSize);
@@ -328,7 +335,6 @@ namespace Fodinae.Player
             cameraTransform.position = SnapToPixelGrid(smoothed);
         }
 
-        /// <summary>Отдаёт камере размер согласно режиму выборки.</summary>
         private void ApplyZoom(float desiredSize)
         {
             float size = _Aligner.ResolveOrthographicSize(desiredSize, _minZoom, _maxZoom);

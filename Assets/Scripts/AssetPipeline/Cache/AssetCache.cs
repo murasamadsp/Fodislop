@@ -9,15 +9,6 @@ using Fodinae.Core;
 using UnityEngine;
 
 namespace Fodinae;
-/// <summary>
-/// Thread-safe RAM cache for server assets.
-/// Stores raw bytes + lazily-decoded derived formats (Texture2D, AudioClip, Sprite[]).
-/// Deduplicates concurrent in-flight requests: N callers asking for the same file
-/// share one network round-trip and one format conversion.
-///
-/// This is the "local CDN" — assets are loaded once from the server, then served
-/// from RAM in any requested format until the application quits.
-/// </summary>
 public sealed class AssetCache
 {
     private readonly ConcurrentDictionary<string, AssetCacheEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
@@ -52,7 +43,6 @@ public sealed class AssetCache
         _operations = operations ?? throw new ArgumentNullException(nameof(operations));
     }
 
-    /// <summary>Retrieve raw bytes. Cached and deduplicated.</summary>
     public UniTask<byte[]?> GetBytesAsync(
         string filename,
         CancellationToken ct = default,
@@ -62,7 +52,6 @@ public sealed class AssetCache
         return entry.GetBytesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
     }
 
-    /// <summary>Retrieve a decoded Texture2D. Cached after first decode.</summary>
     public UniTask<Texture2D?> GetTextureAsync(
         string filename,
         CancellationToken ct = default,
@@ -72,7 +61,6 @@ public sealed class AssetCache
         return entry.GetTextureAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
     }
 
-    /// <summary>Retrieve a decoded AudioClip from WAV bytes. Cached after first decode.</summary>
     public UniTask<AudioClip?> GetAudioAsync(
         string filename,
         CancellationToken ct = default,
@@ -82,7 +70,6 @@ public sealed class AssetCache
         return entry.GetAudioAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
     }
 
-    /// <summary>Retrieve an animated Sprite[] from GIF/WebP. Cached after first decode.</summary>
     public UniTask<Sprite[]?> GetSpritesAsync(
         string filename,
         CancellationToken ct = default,
@@ -92,10 +79,6 @@ public sealed class AssetCache
         return entry.GetSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
     }
 
-    /// <summary>
-    /// Retrieve animated sprites WITH metadata (FPS, frame height).
-    /// Use this when you need accurate animation timing from the source file.
-    /// </summary>
     public UniTask<AnimatedSpriteData> GetAnimatedSpritesAsync(
         string filename,
         CancellationToken ct = default,
@@ -104,7 +87,6 @@ public sealed class AssetCache
         var entry = _entries.GetOrAdd(filename, name => new AssetCacheEntry(name, this));
         return entry.GetAnimatedSpritesAsync(() => _bytesLoader(filename, ct, timeoutSeconds));
     }
-    /// <summary>Clear all cached entries.</summary>
     /// <param name="collectUnusedAssets">
     /// Whether to schedule Unity's unused-assets collection after releasing
     /// the cached references. Teardown callers must pass <see langword="false" />

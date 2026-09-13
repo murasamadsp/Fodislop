@@ -4,9 +4,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Coordinates precalculation of vertex distortion offsets and cell topology masks across the terrain grid.
-/// </summary>
 public class TerrainPrecalculator
 {
     private readonly TerrainVertexDistortionCalculator _distortion = new();

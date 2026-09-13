@@ -8,9 +8,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Manages the floating world-space nickname plate for a Robot entity.
-/// </summary>
 public sealed class RobotNameplate
 {
     private IWorldLabel? _nicknameText;

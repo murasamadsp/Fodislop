@@ -7,30 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui;
 
-/// <summary>
-/// Расположение окон между запусками.
-/// </summary>
-/// <remarks>
-/// ЗАЧЕМ. Раскладка собиралась заново каждый запуск: открыть нужные окна,
-/// растащить их так, чтобы не перекрывали игру, свернуть лишние. Работа на
-/// полминуты — и ровно та же работа в следующий запуск, и в следующий.
-/// Инструмент, который каждый раз забывает, как им пользовались, заставляет
-/// платить за вход снова и снова, и от этого им пользуются реже.
-///
-/// ПОЧЕМУ ФАЙЛ, А НЕ PlayerPrefs. <c>PlayerPrefs</c> в проекте запрещён:
-/// настройки живут в <c>client_config.json</c> и проходят через миграции.
-/// Но раскладка отладочных окон — не настройка игры, и тащить её в конфиг
-/// значило бы завести ступень миграции, поле в пробнике настроек и ключи
-/// локализации ради того, чего игрок никогда не увидит. Ровно этот случай в
-/// проекте уже решён: рабочее место колориста хранит свой грейд отдельным
-/// файлом в <c>persistentDataPath</c>. Здесь тот же путь.
-///
-/// ПОЧЕМУ КЛЮЧ ПО ЗАГОЛОВКУ. Номер окна раздаётся реестром при регистрации и
-/// зависит от порядка, в котором подсистемы успели зарегистрироваться, — то
-/// есть от того, что к делу не относится. Заголовок задан в конструкторе окна
-/// и меняется только вместе с самим окном; тогда потеря раскладки —
-/// правильное поведение, а не потеря.
-/// </remarks>
 public static class ToolLayoutStore
 {
     private const string FileName = "tool_layout.json";
@@ -88,7 +64,6 @@ public static class ToolLayoutStore
         window.Collapsed = entry.Collapsed;
     }
 
-    /// <summary>Запоминает состояние окна в памяти. На диск не пишет.</summary>
     public static void Save(ToolWindow window)
     {
         if (!IsFinite(window.Rect))
@@ -110,7 +85,6 @@ public static class ToolLayoutStore
         _dirty = true;
     }
 
-    /// <summary>Забывает окно: сброс расположения не должен переживать перезапуск.</summary>
     public static void Discard(ToolWindow window)
     {
         EnsureLoaded();
@@ -120,18 +94,6 @@ public static class ToolLayoutStore
         }
     }
 
-    /// <summary>
-    /// Сброс на диск.
-    /// </summary>
-    /// <remarks>
-    /// Отдельно от <see cref="Save"/>, потому что запись на диск дороже записи
-    /// в память, а раскладка меняется каждым кадром перетаскивания. Реестр
-    /// копит правки и сбрасывает их редко — при выключении оверлея и при
-    /// выходе.
-    ///
-    /// Запись идёт через временный файл: обрыв на середине оставит прежнюю
-    /// раскладку целой, а не наполовину переписанной.
-    /// </remarks>
     public static void Flush()
     {
         if (!_dirty)
@@ -199,7 +161,6 @@ public static class ToolLayoutStore
 
     private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
-    /// <summary>Состояние одного окна на диске.</summary>
     [Serializable]
     private struct LayoutEntry
     {
@@ -212,13 +173,6 @@ public static class ToolLayoutStore
         public bool Collapsed;
     }
 
-    /// <summary>
-    /// Корень файла.
-    /// </summary>
-    /// <remarks>
-    /// Класс, а не структура: <c>JsonUtility</c> разбирает корневой объект
-    /// только в ссылочный тип.
-    /// </remarks>
     [Serializable]
     private sealed class LayoutFile
     {

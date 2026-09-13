@@ -19,7 +19,7 @@ public sealed class SceneObjectFactory(
     {
         RuntimeOwner.Robots => robotsRoot,
         RuntimeOwner.Buildings => buildingsRoot,
-        RuntimeOwner.Vfx => vfxRoot,
+        RuntimeOwner.VFX => vfxRoot,
         RuntimeOwner.FloatingUI => floatingUIRoot,
         RuntimeOwner.AudioEvents => audioEventsRoot,
         _ => runtimeRoot,

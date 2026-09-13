@@ -22,11 +22,11 @@ namespace Fodinae.Game
         private const string TAG = "[Robot]";
 
         [SerializeField]
-        private uint _botId;
+        private uint _botID;
         [SerializeField]
-        private int _playerId;
+        private int _playerID;
         [SerializeField]
-        private byte _clanId;
+        private byte _clanID;
         [SerializeField]
         private SpriteRenderer? _spriteRenderer;
         [Inject]
@@ -83,9 +83,9 @@ namespace Fodinae.Game
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
 
-        public uint BotId => _botId;
-        public int PlayerId => _playerId;
-        public byte ClanId => _clanId;
+        public uint BotID => _botID;
+        public int PlayerID => _playerID;
+        public byte ClanID => _clanID;
         public string Nickname => _nickname;
         public bool IsMetadataLoaded => _isMetadataLoaded;
         public bool IsVisualsLoaded => _isMetadataLoaded && _visualsLoadCompleted;
@@ -104,11 +104,6 @@ namespace Fodinae.Game
             _visuals.Initialize(entityBatchRenderer, _visuals.ClanTransform);
         }
 
-        /// <summary>
-        /// Lazily creates <see cref="_visuals"/> and <see cref="_lighting"/> when
-        /// VContainer resolves [Inject] methods before <see cref="Awake"/> has run.
-        /// Safe to call multiple times — Awake re-assigns with the same values.
-        /// </summary>
         private void EnsureVisuals()
         {
             _lighting ??= new RobotLighting();
@@ -191,8 +186,8 @@ namespace Fodinae.Game
             }
 
             _visualElementsInitialized = true;
-            _nameplate.Initialize(transform, _botId, _nickname, IsLocalPlayer, _sceneObjects, _worldLabels);
-            _visuals.EnsureClanIcon(_sceneObjects, _botId);
+            _nameplate.Initialize(transform, _botID, _nickname, IsLocalPlayer, _sceneObjects, _worldLabels);
+            _visuals.EnsureClanIcon(_sceneObjects, _botID);
         }
 
         public void SetBatchedBodyVisible(bool visible) => _visuals.SetBodyVisible(visible);
@@ -300,10 +295,10 @@ namespace Fodinae.Game
 
         private void TryInitializeDynamicLightSettings() => _lighting.InitializeSettings(_lightingEngine);
 
-        public void Initialize(uint botId)
+        public void Initialize(uint botID)
         {
             TryInitializeDynamicLightSettings();
-            _botId = botId;
+            _botID = botID;
             _robotManager.RegisterRobot(this);
 
             _isMetadataLoaded = false;
@@ -318,11 +313,11 @@ namespace Fodinae.Game
             _visuals.SetClanSprite(null);
         }
 
-        public void SetMetadata(int playerId, byte clanid, string nickname, string skinPath, string tailPath)
+        public void SetMetadata(int playerID, byte clanID, string nickname, string skinPath, string tailPath)
         {
             if (_isMetadataLoaded &&
-                _playerId == playerId &&
-                _clanId == clanid &&
+                _playerID == playerID &&
+                _clanID == clanID &&
                 string.Equals(_nickname, nickname, global::System.StringComparison.Ordinal) &&
                 string.Equals(_skinPath, skinPath, global::System.StringComparison.Ordinal) &&
                 string.Equals(_tailPath, tailPath, global::System.StringComparison.Ordinal))
@@ -330,8 +325,8 @@ namespace Fodinae.Game
                 return;
             }
 
-            _playerId = playerId;
-            _clanId = clanid;
+            _playerID = playerID;
+            _clanID = clanID;
             _nickname = nickname;
             _skinPath = skinPath;
             _tailPath = tailPath;
@@ -387,7 +382,7 @@ namespace Fodinae.Game
             _AssetLoader.LoadMetadataAssets(
                 _skinPath,
                 _tailPath,
-                _clanId,
+                _clanID,
                 IsLocalPlayer,
                 onSkinLoaded: skinSprite =>
                 {
@@ -420,9 +415,6 @@ namespace Fodinae.Game
                 });
         }
 
-        /// <summary>
-        /// Заглушка вида робота для редактора, пока не приехал настоящий скин.
-        /// </summary>
         public void EnsureEditorPreviewVisual()
         {
             if (_spriteRenderer == null || _spriteRenderer.sprite != null)
@@ -449,7 +441,7 @@ namespace Fodinae.Game
 
             RobotGizmos.DrawGizmos(
                 transform,
-                _botId,
+                _botID,
                 IsLocalPlayer,
                 _isMetadataLoaded,
                 _moveSpeed,
@@ -461,7 +453,7 @@ namespace Fodinae.Game
         protected void OnDestroy()
         {
             _assetLoaderHelper?.Cancel();
-            _robotService?.UnregisterRobot(_botId);
+            _robotService?.UnregisterRobot(_botID);
             _nameplate.Destroy();
             _visuals?.Destroy();
         }

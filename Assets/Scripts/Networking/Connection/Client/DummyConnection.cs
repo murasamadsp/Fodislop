@@ -47,13 +47,14 @@ public class DummyConnection : IServerConnection, IOfflineConnection
         IItemCatalog itemCatalog,
         IAsyncOperationSupervisor operations,
         IRuntimeDebugSettings debugSettings,
-        IOfflineScenarioSettings scenarioSettings)
+        IOfflineScenarioSettings scenarioSettings,
+        DummyWorldMapSource worldMaps)
     {
         _textureStorage = textureStorage;
         _operations = operations;
         _debugSettings = debugSettings;
         _scenario = new DummyScenarioController(scenarioSettings);
-        _worldState = new DummyWorldSimulationState(operations);
+        _worldState = new DummyWorldSimulationState(operations, worldMaps);
         _authSession = new DummyAuthSession();
         _missionRunner = new DummyMissionRunner(SendPacket);
         _buffManager = new DummyBuffManager(
@@ -117,12 +118,8 @@ public class DummyConnection : IServerConnection, IOfflineConnection
             LoopAlive);
     }
 
-    /// <summary>
-    /// Stable local identity used by the emulated game server.
-    /// </summary>
     private string _PlayerName => _authSession.PlayerName;
 
-    /// <summary>Офлайн-статистика (уровень/валюта) для мира.</summary>
     private long _Level => 12345;
 
     private long _Currency => 123456;
@@ -242,25 +239,6 @@ public class DummyConnection : IServerConnection, IOfflineConnection
         OnDisconnected?.Invoke();
     }
 
-    /// <summary>
-    /// Whether a background mock loop started at
-    /// <paramref name="lifecycleVersion"/> should still be running.
-    /// </summary>
-    /// <remarks>
-    /// The loops used to test <c>_status == Connected</c> and nothing else,
-    /// which made them immortal. Dispose did not touch _status, so every
-    /// loop on a disposed instance kept running forever - and since a new
-    /// DummyConnection is built for each connection, a menu-game-menu-game
-    /// cycle left a full set of them behind each time. RunCircularBots
-    /// alone allocates a List, an array and six position packets every
-    /// 100ms, so each leaked set is a permanent fixed-rate garbage source
-    /// that nothing can ever stop.
-    ///
-    /// Comparing the captured lifecycle version as well ties every loop to
-    /// the connection that started it: one bump retires all of them at
-    /// once, whether the trigger was a disconnect, a reconnect or a
-    /// dispose.
-    /// </remarks>
     private bool LoopAlive(int lifecycleVersion)
     {
         return _session.IsAlive(lifecycleVersion);

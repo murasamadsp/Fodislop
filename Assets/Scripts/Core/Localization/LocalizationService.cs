@@ -17,12 +17,6 @@ public class LocalizationService : ILocalizationService
 
     public event Action? OnLanguageChanged;
 
-    /// <summary>
-    /// Единственная точка входа для UI: регистрация сразу применяет текст и
-    /// вешает переприменение на смену языка. Повторная регистрация той же
-    /// сущности идемпотентна (HashSet). Вызов до готовности дерева безопасен
-    /// — ApplyLocalizedText вьюхи сам гвардится.
-    /// </summary>
     public void RegisterLocalizable(ILocalizableUI target)
     {
         if (target == null || !_localizable.Add(target))
@@ -70,7 +64,9 @@ public class LocalizationService : ILocalizationService
         // Реестр — основной канал переприменения: смена языка доходит до всех
         // зарегистрированных UI-сущностей независимо от того, подписался ли
         // кто-то на событие.
-        foreach (ILocalizableUI target in _localizable)
+        ILocalizableUI[] targets = new ILocalizableUI[_localizable.Count];
+        _localizable.CopyTo(targets);
+        foreach (ILocalizableUI target in targets)
         {
             target.ApplyLocalizedText();
         }

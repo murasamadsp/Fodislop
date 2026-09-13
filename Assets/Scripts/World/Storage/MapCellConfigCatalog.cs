@@ -11,9 +11,6 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Registry and catalog for cell configurations, animation metadata, tile groups, and movement speeds.
-/// </summary>
 public sealed class MapCellConfigCatalog
 {
     private static readonly HashSet<CellType> _RoundableLooseTypes = new()

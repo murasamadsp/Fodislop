@@ -7,15 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Кадр и память: числа и два графика.
-/// </summary>
-/// <remarks>
-/// Сюда съехались две вещи, которые раньше жили порознь и мешали друг другу:
-/// счётчик кадров в собственном Label и графики телеметрии в собственном
-/// VisualElement с ручной пометкой на перерисовку. Смысл у них один — «во что
-/// обходится кадр», — и смотреть на них надо вместе.
-/// </remarks>
 public sealed class FrameStatsWindow : ToolWindow
 {
     private const int SampleCount = 120;
@@ -52,10 +43,6 @@ public sealed class FrameStatsWindow : ToolWindow
         Visible = true;
     }
 
-    /// <summary>
-    /// История копится и при закрытом окне: иначе открывший его увидит пустой
-    /// график и будет ждать две секунды, чтобы понять, что происходило.
-    /// </summary>
     public override bool WantsSampling => true;
 
     public override Vector2 MinimumSize => new(340f, 300f);
@@ -162,13 +149,6 @@ public sealed class FrameStatsWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Цвет по состоянию кадра.
-    /// </summary>
-    /// <remarks>
-    /// Пороги — кадр при шестидесяти и кадр при тридцати. Не «красиво», а
-    /// граница, за которой движение перестаёт быть плавным.
-    /// </remarks>
     private Color FrameHealthColor()
     {
         if (_frameMs <= 0f)
@@ -184,7 +164,6 @@ public sealed class FrameStatsWindow : ToolWindow
         return _frameMs > 16.7f ? ToolTheme.Warning : ToolTheme.Success;
     }
 
-    /// <summary>Крупное число с единицей и точкой состояния в одну строку.</summary>
     private static void DrawHero(string value, string unit, Color color)
     {
         using (new GUILayout.HorizontalScope())

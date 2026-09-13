@@ -6,9 +6,6 @@ using UnityEngine.InputSystem;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Handles keyboard shortcuts (Escape to close modal or cancel, Enter to start game) for MainMenu.
-/// </summary>
 public static class MenuKeyboardHandler
 {
     public static void HandleInput(

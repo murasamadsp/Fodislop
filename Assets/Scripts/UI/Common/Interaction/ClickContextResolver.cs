@@ -9,15 +9,8 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Resolves click context path strings against the VisualElement tree
-/// and collects input control values from a root element.
-/// </summary>
 public static class ClickContextResolver
 {
-    /// <summary>
-    /// Resolves a click context path to find the root element for input traversal.
-    /// </summary>
     /// <param name="clickedElement">The element that was clicked.</param>
     /// <param name="windowRoot">The root VisualElement of the window.</param>
     /// <param name="clickContext">The click context path string (e.g. "../../0/0/2").</param>
@@ -73,9 +66,6 @@ public static class ClickContextResolver
         return current;
     }
 
-    /// <summary>
-    /// Collects all named input control values from the given root element's subtree.
-    /// </summary>
     /// <param name="root">The root element to traverse.</param>
     /// <returns>Array of StringPairPacket with input names and their current values.</returns>
     public static StringPairPacket[] CollectInputValues(VisualElement? root)

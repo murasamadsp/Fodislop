@@ -6,9 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Handles element lookup, localization, and click handler binding for the main page of PauseMenu.
-/// </summary>
 internal static class PauseMenuMainPage
 {
     public static void Bind(

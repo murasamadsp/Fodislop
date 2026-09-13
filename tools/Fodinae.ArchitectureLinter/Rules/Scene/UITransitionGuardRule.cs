@@ -12,7 +12,7 @@ namespace Fodinae.ArchitectureLinter.Rules.Scene;
 /// against duplicate clicks while loading or tearing down.
 /// Ported from check-architecture.js checkUiTransitionGuards().
 /// </summary>
-public sealed class UiTransitionGuardRule : IRule
+public sealed class UITransitionGuardRule : IRule
 {
     public string Id => "FOD-UI-TRANSITION-GUARD";
     public string Description => "UI transition guard validation";

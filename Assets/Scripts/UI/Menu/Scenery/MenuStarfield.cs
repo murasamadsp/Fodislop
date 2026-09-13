@@ -26,9 +26,9 @@ namespace Fodinae.UI
     [ExecuteAlways]
     public sealed class MenuStarfield : MonoBehaviour
     {
-        private static readonly int _ShaderTimeId = Shader.PropertyToID("_ShaderTime");
-        private static readonly int _AspectId = Shader.PropertyToID("_Aspect");
-        private static readonly int _ParallaxOffsetId = Shader.PropertyToID("_ParallaxOffset");
+        private static readonly int _ShaderTimeID = Shader.PropertyToID("_ShaderTime");
+        private static readonly int _AspectID = Shader.PropertyToID("_Aspect");
+        private static readonly int _ParallaxOffsetID = Shader.PropertyToID("_ParallaxOffset");
 
         [SerializeField]
         private Material? _starfieldMaterial;
@@ -40,7 +40,6 @@ namespace Fodinae.UI
 
         private RenderTexture? _texture;
 
-        /// <summary>
         public RenderTexture? Texture => _texture;
 
         public void SetDisplaySize(int width, int height)
@@ -85,9 +84,6 @@ namespace Fodinae.UI
 
         private bool _isDirty = true;
 
-        /// <summary>
-        /// Marks the starfield for re-rendering on the next frame or immediately.
-        /// </summary>
         public void SetDirty()
         {
             _isDirty = true;
@@ -110,9 +106,9 @@ namespace Fodinae.UI
                 return;
             }
 
-            _runtimeMaterial.SetFloat(_ShaderTimeId, 0f);
-            _runtimeMaterial.SetFloat(_AspectId, (float)_texture.width / Mathf.Max(_texture.height, 1));
-            _runtimeMaterial.SetVector(_ParallaxOffsetId, Vector4.zero);
+            _runtimeMaterial.SetFloat(_ShaderTimeID, 0f);
+            _runtimeMaterial.SetFloat(_AspectID, (float)_texture.width / Mathf.Max(_texture.height, 1));
+            _runtimeMaterial.SetVector(_ParallaxOffsetID, Vector4.zero);
             Graphics.Blit(Texture2D.whiteTexture, _texture, _runtimeMaterial);
             _isDirty = false;
         }

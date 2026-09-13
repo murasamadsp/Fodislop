@@ -5,9 +5,6 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Networking.Buildings;
-/// <summary>
-/// Footprint copied 1:1 from MinesServer Game/Buildings/Resp.cs (CellsToPlace).
-/// </summary>
 public sealed class RespawnStation : PackBuilding
 {
     public override PackType Type => PackType.Resp;

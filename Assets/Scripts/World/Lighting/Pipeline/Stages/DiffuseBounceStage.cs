@@ -4,20 +4,11 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace Fodinae.World.Lighting.Pipeline.Stages;
-/// <summary>
-/// Dispatches <c>SolveDiffuseBounce</c>: scatters the direct radiance in
-/// <c>_directTexture</c> by surface albedo into the receiver hemisphere.
-/// Extracted verbatim from the diffuse-bounce block inside the engine's
-/// former inline <c>UpdateLighting</c>. The enable/strength gate that
-/// decides whether to call this stage at all stays in
-/// <c>LightingEngine.UpdateLighting</c> - a stage only knows how to
-/// record its own dispatch, not when it should run.
-/// </summary>
 public sealed class DiffuseBounceStage : ILightingStage
 {
-    private static readonly int _DirectInputId = Shader.PropertyToID("_DirectInput");
-    private static readonly int _StaticDirectInputId = Shader.PropertyToID("_StaticDirectInput");
-    private static readonly int _BounceTextureId = Shader.PropertyToID("_BounceTexture");
+    private static readonly int _DirectInputID = Shader.PropertyToID("_DirectInput");
+    private static readonly int _StaticDirectInputID = Shader.PropertyToID("_StaticDirectInput");
+    private static readonly int _BounceTextureID = Shader.PropertyToID("_BounceTexture");
 
     private readonly int _kernel;
 
@@ -31,17 +22,17 @@ public sealed class DiffuseBounceStage : ILightingStage
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _DirectInputId,
+            _DirectInputID,
             context.DirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _StaticDirectInputId,
+            _StaticDirectInputID,
             context.StaticDirectTexture);
         commandBuffer.SetComputeTextureParam(
             context.Compute,
             _kernel,
-            _BounceTextureId,
+            _BounceTextureID,
             context.BounceTexture);
         commandBuffer.DispatchCompute(
             context.Compute,

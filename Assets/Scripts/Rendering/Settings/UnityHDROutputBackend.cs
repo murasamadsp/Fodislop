@@ -7,7 +7,6 @@ using UnityEngine.Rendering.Universal;
 
 namespace Fodinae.Rendering;
 
-/// <summary>Reads the main application window's output, not an arbitrary HDR monitor in the desktop layout.</summary>
 internal sealed class UnityHDROutputBackend : HDROutputController.IBackend
 {
     public HDROutputController.Snapshot Read()

@@ -79,7 +79,7 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
         TemplateContainer tree = template.Instantiate();
         _doc.rootVisualElement.Add(tree);
 
-        // Статические ключи UXML (programmator.*, common.*) резолвятся сразу при
+        // Статические ключи Uxml (programmator.*, common.*) резолвятся сразу при
         // сборке, а не только при смене языка — иначе попап показывает сырые
         // ключи до первого переключения языка.
         UILocalizer.Apply(tree, _loc);
@@ -299,13 +299,6 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
         _loc.RegisterLocalizable(this);
     }
 
-    /// <summary>
-    /// Переприменяет локализованный текст после смены языка: статические ключи
-    /// UXML через UILocalizer, динамические (заголовок, страница, подписи ячеек) —
-    /// напрямую. Реестр LocalizationService вызывает этот метод при регистрации
-    /// и на каждой смене языка; PlayerHUDView тоже делегирует сюда из своего
-    /// ApplyLocalizedText (идемпотентно).
-    /// </summary>
     public void ApplyLocalizedText()
     {
         if (_popup != null)
@@ -340,7 +333,6 @@ internal sealed class ProgrammatorGridUIFactory : ILocalizableUI
         }
     }
 
-    /// <summary>Снимает фабрику с реестра локализации.</summary>
     public void Dispose()
     {
         _loc.UnregisterLocalizable(this);

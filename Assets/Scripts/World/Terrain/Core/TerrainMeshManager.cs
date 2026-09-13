@@ -8,9 +8,6 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Manages the terrain mesh lifecycle, vertex upload, material field passes and mesh bounds.
-/// </summary>
 public sealed class TerrainMeshManager
 {
     internal static readonly VertexAttributeDescriptor[] VertexLayout =
@@ -78,20 +75,6 @@ public sealed class TerrainMeshManager
             UploadFlags);
     }
 
-    /// <summary>
-    /// Uploads only the vertices a patch actually rewrote.
-    /// </summary>
-    /// <remarks>
-    /// Раньше здесь уходил весь буфер целиком — на сетке 384x384 это
-    /// десятки мегабайт на КАЖДЫЙ грязный прямоугольник, хотя строитель
-    /// давно считает точный диапазон (<see cref="TerrainMeshBuilder.DirtyVertexStart"/>).
-    /// Стоя это не видно: грязных прямоугольников нет. На ходу они есть
-    /// каждый кадр, и кадр уходил в выгрузку неизменившихся вершин.
-    ///
-    /// Диапазон приходит снаружи, а не берётся у строителя: один патч
-    /// перебирает несколько прямоугольников, и у строителя останется
-    /// только последний из них.
-    /// </remarks>
     public bool UploadDirectVertexBuffer(
         TerrainMeshBuilder meshBuilder,
         int vertexStart,

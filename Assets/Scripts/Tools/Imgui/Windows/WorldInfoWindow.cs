@@ -10,22 +10,8 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Мир, игрок, железо, HDR: два текстовых блока отладки.
-/// </summary>
-/// <remarks>
-/// Текст собирает прежний <see cref="DebugOverlayTextFormatter"/> — он писался
-/// без единой аллокации в кадре и переписывать его незачем. Изменилось только
-/// то, куда он попадает: раньше в два Label поверх игры с инлайновой
-/// геометрией, теперь в перетаскиваемое окно, которое не спорит за место с
-/// панелью игрока и хотбаром.
-///
-/// Обновление раз в секунду, как и было: колонки читают, а не смотрят, и
-/// шестьдесят пересборок строки в секунду ради этого не нужны.
-/// </remarks>
 public sealed class WorldInfoWindow : ToolWindow
 {
-    /// <summary>Ширина, ниже которой колонки перестают помещаться рядом.</summary>
     private const float TwoColumnWidth = 470f;
 
     private readonly IFrameTelemetry _telemetry;

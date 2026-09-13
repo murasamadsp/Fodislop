@@ -28,18 +28,18 @@ public class ClanProcessorTests
         var packet = new ShowClanPacket(777);
         _processor.Process(packet);
 
-        Assert.AreEqual(777, _stats.ClanId);
+        Assert.AreEqual(777, _stats.ClanID);
     }
 
     [Test]
     public void Process_HideClanPacket_ResetsClanIdToZero()
     {
-        _stats.SetClanId(777);
-        Assert.AreEqual(777, _stats.ClanId);
+        _stats.SetClanID(777);
+        Assert.AreEqual(777, _stats.ClanID);
 
         var packet = new HideClanPacket();
         _processor.Process(packet);
 
-        Assert.AreEqual(0, _stats.ClanId);
+        Assert.AreEqual(0, _stats.ClanID);
     }
 }

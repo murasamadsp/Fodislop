@@ -94,7 +94,7 @@ public sealed class ForbiddenApiRule : IRule
         // RuntimeTextureFactory creates textures
         ["Assets/Scripts/AssetPipeline/Loading/RuntimeTextureFactory.cs"] = new[] { "new Texture2D" },
         // Editor tools
-        ["Assets/Scripts/Editor/PlanetCapture.cs"] = new[] { "new Texture2D" },
+        ["Assets/Scripts/Editor/Rendering/PlanetCapture.cs"] = new[] { "new Texture2D" },
         // Legacy auth token storage (TODO: migrate to ClientConfigManager)
         ["Assets/Scripts/Networking/Auth/AuthTokenManager.cs"] = new[] { "PlayerPrefs" },
         ["Assets/Scripts/Networking/Auth/VkAuthService.cs"] = new[] { "PlayerPrefs" },

@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.UI.Programmator;
 
-/// <summary>
-/// Static definitions and categories for Programmator actions and operators.
-/// </summary>
 public static class ProgrammatorOperators
 {
     public static readonly ProgAction[] WOPERATORS =

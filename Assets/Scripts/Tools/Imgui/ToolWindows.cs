@@ -6,26 +6,14 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui;
 
-/// <summary>
-/// Реестр окон инструментов и единственная точка их отрисовки.
-/// </summary>
-/// <remarks>
-/// Статический реестр, а не поле хозяина: окна заводят разные подсистемы —
-/// рендер, освещение, телеметрия, — и каждая из них знает про своё окно, но не
-/// должна знать про хозяина. Хозяин, наоборот, не должен знать ни про одну из
-/// них: он только рисует то, что зарегистрировано.
-///
-/// Это не точка доступа к логике: наружу видны список окон и мастер-тумблер.
-/// Данные через реестр не ходят.
-/// </remarks>
 public static class ToolWindows
 {
-    private const int FirstWindowId = 0x7700;
+    private const int FirstWindowID = 0x7700;
     private const float ScreenMargin = 8f;
 
     private static readonly List<ToolWindow> _Windows = [];
     private static readonly Dictionary<ToolWindow, bool> _PendingVisibility = [];
-    private static int _nextId = FirstWindowId;
+    private static int _nextID = FirstWindowID;
     private static bool _enabled;
     private static bool _keyboardCaptured;
     private static bool _pointerCaptured;
@@ -39,14 +27,12 @@ public static class ToolWindows
 
     public static int SessionGeneration { get; private set; }
 
-    /// <summary>Масштаб интерфейса инструментов под экраны Retina / High-DPI.</summary>
     public static float Scale => ToolLayoutStore.Scale > 0f
         ? ToolLayoutStore.Scale
         : UIScaleUtility.IsRetinaOrHighDpi ? 2f : 1f;
 
     public static void RequestScale(float scale) => _pendingScale = scale;
 
-    /// <summary>Мастер-тумблер: выключает всю систему разом.</summary>
     public static bool Enabled
     {
         get => _enabled;
@@ -62,10 +48,8 @@ public static class ToolWindows
 
     public static IReadOnlyList<ToolWindow> All => _Windows;
 
-    /// <summary>True while an IMGUI control owns keyboard focus.</summary>
     public static bool HasKeyboardCapture => Enabled && _keyboardCaptured;
 
-    /// <summary>True while an IMGUI button, slider or drag owns the pointer.</summary>
     public static bool HasPointerCapture => Enabled && _pointerCaptured;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -80,7 +64,7 @@ public static class ToolWindows
         _Windows.Clear();
         _PendingVisibility.Clear();
         ToolTheme.Reset();
-        _nextId = FirstWindowId;
+        _nextID = FirstWindowID;
         _enabled = false;
         _keyboardCaptured = false;
         _pointerCaptured = false;
@@ -100,7 +84,7 @@ public static class ToolWindows
         }
 
         window.CaptureInitialState();
-        window.Id = _nextId++;
+        window.ID = _nextID++;
         _Windows.Add(window);
         ToolLayoutStore.Load(window);
     }
@@ -128,10 +112,6 @@ public static class ToolWindows
         }
     }
 
-    /// <summary>
-    /// Queues an OnGUI-driven visibility change for the next Layout event.
-    /// This keeps the control tree identical for the current event cycle.
-    /// </summary>
     public static void RequestVisibility(ToolWindow window, bool visible)
     {
         _PendingVisibility[window] = visible;
@@ -161,18 +141,9 @@ public static class ToolWindows
     internal static void NotifyWindowFocused(ToolWindow window)
     {
         _focusedWindow = window;
-        GUI.FocusWindow(window.Id);
+        GUI.FocusWindow(window.ID);
     }
 
-    /// <summary>
-    /// Попадает ли точка экрана в одно из открытых окон.
-    /// </summary>
-    /// <remarks>
-    /// Нужна игре, а не инструментам: щелчок по отладочному окну не должен
-    /// доходить до мира под ним. Координата приходит из системы ввода — снизу
-    /// вверх и в пикселях экрана, — а окна живут в координатах IMGUI: сверху
-    /// вниз и с учётом масштаба интерфейса. Отсюда пересчёт.
-    /// </remarks>
     public static bool ContainsScreenPoint(Vector2 screenPoint)
     {
         if (!Enabled)
@@ -193,7 +164,6 @@ public static class ToolWindows
         return false;
     }
 
-    /// <summary>Есть ли открытое окно, которому нужен сбор данных.</summary>
     public static bool AnySampling
     {
         get
@@ -215,14 +185,6 @@ public static class ToolWindows
         }
     }
 
-    /// <summary>
-    /// Кадровая логика всех окон.
-    /// </summary>
-    /// <remarks>
-    /// Идёт и при выключенной системе: инструмент, который начинает копить
-    /// историю только после открытия, показывает пустой график ровно тогда,
-    /// когда на него смотрят.
-    /// </remarks>
     public static void Tick()
     {
         foreach (ToolWindow window in _Windows)
@@ -231,16 +193,6 @@ public static class ToolWindows
         }
     }
 
-    /// <summary>
-    /// Снимает захват клавиатуры и указателя интерфейсом инструментов.
-    /// </summary>
-    /// <remarks>
-    /// Поле ввода или ползунок IMGUI удерживают ввод, и пока захват висит,
-    /// игра не слышит ни клавиш, ни мыши. Снимается он не только по Escape:
-    /// закрытие окна, снятие регистрации и выключение всей системы обязаны
-    /// сделать то же самое, иначе управление останется у контрола, которого
-    /// уже нет на экране.
-    /// </remarks>
     public static void ReleaseInputCapture()
     {
         _keyboardCaptured = false;
@@ -253,28 +205,11 @@ public static class ToolWindows
         _layoutResetRequested = true;
     }
 
-    /// <summary>Раскладка изменилась и однажды должна доехать до диска.</summary>
     internal static void NotifyLayoutChanged()
     {
         _layoutDirty = true;
     }
 
-    /// <summary>
-    /// Запоминает раскладку. На диск сбрасывает только по явному требованию.
-    /// </summary>
-    /// <remarks>
-    /// Здесь две разные по цене операции, и их нельзя склеивать. Запомнить
-    /// состояние — это правка словаря в памяти, она стоит около нуля. Записать
-    /// файл — это обращение к диску, и оно стоит паузы в кадре. Первая версия
-    /// делала обе разом раз в секунду прямо из отрисовки: инструмент, который
-    /// меряет провалы кадра, сам раз в секунду и устраивал провал, и это было
-    /// бы видно в его же графике.
-    ///
-    /// Теперь состояние копится по ходу перетаскивания, а файл пишется там,
-    /// где кадр уже не важен: при выключении оверлея и при выходе. Потерять
-    /// раскладку при аварийном завершении можно — это отладочные окна, и цена
-    /// такой потери меньше цены пропущенного кадра.
-    /// </remarks>
     public static void SaveLayout(bool immediate = false)
     {
         if (!_layoutDirty && !immediate)
@@ -372,7 +307,7 @@ public static class ToolWindows
                 }
 
                 Rect drawnRect = GUI.Window(
-                    window.Id,
+                    window.ID,
                     window.Rect,
                     window.DrawWindow,
                     GUIContent.none);
@@ -402,7 +337,7 @@ public static class ToolWindows
                 if (_pendingFocus.Visible && _Windows.Contains(_pendingFocus))
                 {
                     _focusedWindow = _pendingFocus;
-                    GUI.FocusWindow(_pendingFocus.Id);
+                    GUI.FocusWindow(_pendingFocus.ID);
                 }
 
                 _pendingFocus = null;
@@ -418,19 +353,6 @@ public static class ToolWindows
         _pointerCaptured = GUIUtility.hotControl != 0;
     }
 
-    /// <summary>
-    /// Не даёт окну уехать за край экрана.
-    /// </summary>
-    /// <remarks>
-    /// Нужно по двум причинам. Начальные места окон подобраны под большой
-    /// экран, и на меньшем часть из них открылась бы вне видимой области — то
-    /// есть инструмент существовал бы, но добраться до него было бы нечем.
-    /// И перетащить окно за край можно вручную, а вернуть уже нет: ручка — это
-    /// полоса заголовка, а её там больше не будет.
-    ///
-    /// Окно остаётся целиком доступным; намеренно спрятать его можно через
-    /// toolbar, а потерять заголовок за краем — уже не получится.
-    /// </remarks>
     private static Rect ConstrainToScreen(ToolWindow window, Rect rect, float scale = 1f)
     {
         float availableWidth = Mathf.Max(1f, (Screen.width / scale) - ScreenMargin * 2f);

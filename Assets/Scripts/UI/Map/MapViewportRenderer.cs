@@ -9,9 +9,6 @@ using UnityEngine;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Handles sampling world cells and rendering pixels into the world map texture buffer.
-/// </summary>
 internal sealed class MapViewportRenderer
 {
     private static readonly Color32 _UnloadedColor = new(0, 0, 0, 255);

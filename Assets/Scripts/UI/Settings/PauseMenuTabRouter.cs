@@ -6,9 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Manages switching between settings tabs and their corresponding scroll views in PauseMenu.
-/// </summary>
 internal sealed class PauseMenuTabRouter
 {
     private readonly ScrollView[] _pages;

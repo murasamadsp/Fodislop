@@ -5,9 +5,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace Fodinae.World.Lighting;
-/// <summary>
-/// Computes discrete probe resolutions, spacing, and interval layouts for Radiance Cascades.
-/// </summary>
 public static class CascadeLayoutBuilder
 {
     private const int MaximumCascadeDirections = 256;

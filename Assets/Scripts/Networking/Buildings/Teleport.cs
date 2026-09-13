@@ -5,9 +5,6 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Networking.Buildings;
-/// <summary>
-/// Footprint copied 1:1 from MinesServer Game/Buildings/Teleport.cs (CellsToPlace).
-/// </summary>
 public sealed class Teleport : PackBuilding
 {
     public override PackType Type => PackType.Teleport;

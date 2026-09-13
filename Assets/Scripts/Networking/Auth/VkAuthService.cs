@@ -9,27 +9,20 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 namespace Fodinae.Networking.Auth;
-/// <summary>
-/// Сессия VK ID: access-токен, идентификатор пользователя и профиль.
-///
-/// Настоящий вход через VK завершается только после обмена VK access token
-/// на случайный игровой токен у доверенного backend. Клиент не выводит
-/// игровую идентичность из публичного VK user id.
-/// </summary>
 public readonly struct VkSession
 {
     public string AccessToken { get; init; }
-    public long UserId { get; init; }
+    public long UserID { get; init; }
     public string FirstName { get; init; }
     public string LastName { get; init; }
     public string AvatarUrl { get; init; }
     public long ExpiresAtUnix { get; init; }
 
     public string DisplayName => string.IsNullOrEmpty(FirstName)
-        ? $"id{UserId}"
+        ? $"id{UserID}"
         : string.IsNullOrEmpty(LastName) ? FirstName : $"{FirstName} {LastName}";
 
-    public bool IsValid => UserId > 0 && ExpiresAtUnix > DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    public bool IsValid => UserID > 0 && ExpiresAtUnix > DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 }
 
 public readonly struct VkAuthResult
@@ -56,10 +49,6 @@ public interface IAuthenticationService
     UniTask<AuthenticationResult> LoginWithVkAsync();
 }
 
-/// <summary>
-/// Координирует получение игровой сессии. Конкретный внешний провайдер
-/// идентичности остаётся деталью реализации и не связан с транспортом.
-/// </summary>
 public sealed class AuthenticationService : IAuthenticationService
 {
     private readonly VkIdentityProvider _vk;
@@ -90,25 +79,13 @@ public sealed class AuthenticationService : IAuthenticationService
     }
 }
 
-/// <summary>
-/// Авторизация через VK ID по device-флоу (id.vk.com/oauth2/device_authorize).
-/// Выбран именно он, а не authorization code: для десктопного клиента не
-/// нужен ни редирект на loopback-порт, ни локальный HTTP-слушатель —
-/// браузер открывает ссылку подтверждения, клиент опрашивает
-/// device_token. PKCE (code_verifier) позволяет работать без client_secret.
-/// </summary>
 public sealed class VkIdentityProvider
 {
-    /// <summary>
-    /// Заглушка. Настоящий client_id VK-приложения задаётся в
-    /// ProjectRuntimeContracts.Authentication.VkClientId, иначе вход через VK
-    /// честно сообщает об ошибке.
-    /// </summary>
-    public const string DefaultClientId = "";
+    public const string DefaultClientID = "";
 
-    private const string DeviceIdKey = "Vk.DeviceId";
+    private const string DeviceIDKey = "Vk.DeviceId";
     private const string AccessTokenKey = "Vk.AccessToken";
-    private const string UserIdKey = "Vk.UserId";
+    private const string UserIDKey = "Vk.UserID";
     private const string UserNameKey = "Vk.UserName";
     private const string AvatarKey = "Vk.AvatarUrl";
     private const string ExpiresAtKey = "Vk.ExpiresAt";
@@ -124,7 +101,7 @@ public sealed class VkIdentityProvider
         return new VkSession
         {
             AccessToken = PlayerPrefs.GetString(AccessTokenKey, string.Empty),
-            UserId = long.TryParse(PlayerPrefs.GetString(UserIdKey, "0"), out long uid) ? uid : 0,
+            UserID = long.TryParse(PlayerPrefs.GetString(UserIDKey, "0"), out long userID) ? userID : 0,
             FirstName = PlayerPrefs.GetString(UserNameKey, string.Empty),
             LastName = string.Empty,
             AvatarUrl = PlayerPrefs.GetString(AvatarKey, string.Empty),
@@ -132,22 +109,18 @@ public sealed class VkIdentityProvider
         };
     }
 
-    /// <summary>
-    /// Запускает device-флоу: получает ссылку подтверждения, открывает её в
-    /// браузере, опрашивает сервер до выдачи токена (или ошибки).
-    /// </summary>
     public async UniTask<VkAuthResult> LoginAsync()
     {
-        string clientId = ResolveClientId();
-        string backendUrl = ProjectRuntimeContracts.Authentication.VkBackendUrl;
-        if (string.IsNullOrWhiteSpace(clientId) ||
+        string clientID = ResolveClientID();
+        string backendUrl = ProjectRuntimeContracts.Authentication.VKBackendUrl;
+        if (string.IsNullOrWhiteSpace(clientID) ||
             !Uri.TryCreate(backendUrl, UriKind.Absolute, out Uri backendUri) ||
             !string.Equals(backendUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             return Error("gateway.auth.vk_not_configured");
         }
 
-        string deviceId = LoadOrCreateDeviceId();
+        string deviceID = LoadOrCreateDeviceID();
         string state = RandomToken(16);
         string codeVerifier = RandomToken(64);
         string codeChallenge = Base64Url(Sha256(codeVerifier));
@@ -156,8 +129,8 @@ public sealed class VkIdentityProvider
         {
             // Шаг 1: получить user_confirm_link + device_code.
             var authorizeForm = new WWWForm();
-            authorizeForm.AddField("client_id", clientId);
-            authorizeForm.AddField("device_id", deviceId);
+            authorizeForm.AddField("client_id", clientID);
+            authorizeForm.AddField("device_id", deviceID);
             authorizeForm.AddField("scope", "phone");
             authorizeForm.AddField("state", state);
             authorizeForm.AddField("code_challenge", codeChallenge);
@@ -185,8 +158,8 @@ public sealed class VkIdentityProvider
                 await UniTask.Delay(interval * 1000);
 
                 var tokenForm = new WWWForm();
-                tokenForm.AddField("client_id", clientId);
-                tokenForm.AddField("device_id", deviceId);
+                tokenForm.AddField("client_id", clientID);
+                tokenForm.AddField("device_id", deviceID);
                 tokenForm.AddField("device_code", authorize.device_code);
                 tokenForm.AddField("state", state);
                 tokenForm.AddField("code_verifier", codeVerifier);
@@ -195,7 +168,7 @@ public sealed class VkIdentityProvider
                 var token = JsonUtility.FromJson<DeviceTokenResponse>(tokenJson);
                 if (!string.IsNullOrEmpty(token.access_token))
                 {
-                    return await ExchangeWithBackendAsync(token.access_token, clientId, deviceId, backendUrl);
+                    return await ExchangeWithBackendAsync(token.access_token, clientID, deviceID, backendUrl);
                 }
 
                 switch (token.error)
@@ -222,22 +195,22 @@ public sealed class VkIdentityProvider
         }
     }
 
-    public static string ResolveClientId()
+    public static string ResolveClientID()
     {
-        string configured = ProjectRuntimeContracts.Authentication.VkClientId;
-        return string.IsNullOrWhiteSpace(configured) ? DefaultClientId : configured;
+        string configured = ProjectRuntimeContracts.Authentication.VKClientId;
+        return string.IsNullOrWhiteSpace(configured) ? DefaultClientID : configured;
     }
 
     private static async UniTask<VkAuthResult> ExchangeWithBackendAsync(
         string accessToken,
-        string clientId,
-        string deviceId,
+        string clientID,
+        string deviceID,
         string backendUrl)
     {
         var form = new WWWForm();
         form.AddField("access_token", accessToken);
-        form.AddField("client_id", clientId);
-        form.AddField("device_id", deviceId);
+        form.AddField("client_id", clientID);
+        form.AddField("device_id", deviceID);
         string json = await PostJsonAsync(backendUrl, form);
         var response = JsonUtility.FromJson<BackendExchangeResponse>(json);
         if (response == null || string.IsNullOrWhiteSpace(response.game_token) || response.user_id <= 0)
@@ -248,7 +221,7 @@ public sealed class VkIdentityProvider
         var session = new VkSession
         {
             AccessToken = string.Empty,
-            UserId = response.user_id,
+            UserID = response.user_id,
             FirstName = response.first_name ?? string.Empty,
             LastName = response.last_name ?? string.Empty,
             AvatarUrl = response.avatar_url ?? string.Empty,
@@ -256,7 +229,7 @@ public sealed class VkIdentityProvider
         };
 
         PlayerPrefs.DeleteKey(AccessTokenKey);
-        PlayerPrefs.SetString(UserIdKey, session.UserId.ToString());
+        PlayerPrefs.SetString(UserIDKey, session.UserID.ToString());
         PlayerPrefs.SetString(UserNameKey, session.FirstName);
         PlayerPrefs.SetString(AvatarKey, session.AvatarUrl);
         PlayerPrefs.SetString(ExpiresAtKey, session.ExpiresAtUnix.ToString());
@@ -282,16 +255,16 @@ public sealed class VkIdentityProvider
         return request.downloadHandler.text;
     }
 
-    private static string LoadOrCreateDeviceId()
+    private static string LoadOrCreateDeviceID()
     {
-        string existing = PlayerPrefs.GetString(DeviceIdKey, string.Empty);
+        string existing = PlayerPrefs.GetString(DeviceIDKey, string.Empty);
         if (!string.IsNullOrEmpty(existing))
         {
             return existing;
         }
 
         string created = Guid.NewGuid().ToString("N");
-        PlayerPrefs.SetString(DeviceIdKey, created);
+        PlayerPrefs.SetString(DeviceIDKey, created);
         PlayerPrefs.Save();
         return created;
     }
@@ -323,10 +296,6 @@ public sealed class VkIdentityProvider
     private static string Base64Url(byte[] data) =>
         Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    /// <summary>
-    /// Ошибка — либо ключ локализации (gateway.auth.vk_*), который UI
-    /// переведёт через ILocalizationService, либо сырое сообщение.
-    /// </summary>
     private static VkAuthResult Error(string message)
     {
         return new VkAuthResult { Success = false, Error = message };

@@ -23,7 +23,7 @@ namespace Fodinae.Game.Managers
         [Inject]
         private ILocalPlayerState _localPlayer = null!;
 
-        public uint LocalPlayerBotId { get; private set; }
+        public uint LocalPlayerBotID { get; private set; }
 
         public int RobotCount => _robots.Count;
 
@@ -39,7 +39,7 @@ namespace Fodinae.Game.Managers
             uint? staleKey = null;
             foreach (var kvp in _robots)
             {
-                if (ReferenceEquals(kvp.Value, robot) && kvp.Key != robot.BotId)
+                if (ReferenceEquals(kvp.Value, robot) && kvp.Key != robot.BotID)
                 {
                     staleKey = kvp.Key;
                     break;
@@ -51,7 +51,7 @@ namespace Fodinae.Game.Managers
                 _robots.Remove(staleKey.Value);
             }
 
-            if (_robots.TryGetValue(robot.BotId, out var existing))
+            if (_robots.TryGetValue(robot.BotID, out var existing))
             {
                 if (ReferenceEquals(existing, robot))
                 {
@@ -61,23 +61,23 @@ namespace Fodinae.Game.Managers
                 // Server resends can target a bot whose stale instance is still
                 // registered. Warn once per bot id so a resend storm cannot
                 // flood the console.
-                if (_overwriteWarningsLogged.Add(robot.BotId))
+                if (_overwriteWarningsLogged.Add(robot.BotID))
                 {
-                    Debug.LogWarning($"{TAG} Robot {robot.BotId} already registered, overwriting");
+                    Debug.LogWarning($"{TAG} Robot {robot.BotID} already registered, overwriting");
                 }
             }
 
-            _robots[robot.BotId] = concrete;
+            _robots[robot.BotID] = concrete;
         }
 
-        public IRobotView GetOrCreateRobot(uint botId)
+        public IRobotView GetOrCreateRobot(uint botID)
         {
-            if (_robots.TryGetValue(botId, out var robot))
+            if (_robots.TryGetValue(botID, out var robot))
             {
                 return robot;
             }
 
-            if (botId != 0 && botId == LocalPlayerBotId)
+            if (botID != 0 && botID == LocalPlayerBotID)
             {
                 var pmc = _localPlayer.Current;
                 var playerObj = pmc != null ? pmc.gameObject : null;
@@ -86,48 +86,48 @@ namespace Fodinae.Game.Managers
                     robot = playerObj.GetComponent<Robot>();
                     if (robot != null)
                     {
-                        robot.Initialize(botId);
-                        _robots[botId] = robot;
+                        robot.Initialize(botID);
+                        _robots[botID] = robot;
                         return robot;
                     }
                 }
             }
 
-            robot = _sceneObjects.Create<Robot>($"Robot_{botId}", RuntimeOwner.Robots);
+            robot = _sceneObjects.Create<Robot>($"Robot_{botID}", RuntimeOwner.Robots);
 
-            robot.Initialize(botId);
-            _robots[botId] = robot;
+            robot.Initialize(botID);
+            _robots[botID] = robot;
             return robot;
         }
 
-        public void UpdateRobotPosition(uint botId, ushort x, ushort y, byte rotation)
+        public void UpdateRobotPosition(uint botID, ushort x, ushort y, byte rotation)
         {
-            var robot = GetOrCreateRobot(botId);
+            var robot = GetOrCreateRobot(botID);
             robot.SetPosition(x, y);
             robot.SetRotation(rotation);
         }
 
-        public void UpdateRobotMetadata(uint botId, RobotMetadata metadata)
+        public void UpdateRobotMetadata(uint botID, RobotMetadata metadata)
         {
-            var robot = GetOrCreateRobot(botId);
-            robot.SetMetadata(metadata.PlayerId, metadata.ClanId, metadata.Nickname, metadata.SkinPath, metadata.TailPath);
+            var robot = GetOrCreateRobot(botID);
+            robot.SetMetadata(metadata.PlayerID, metadata.ClanID, metadata.Nickname, metadata.SkinPath, metadata.TailPath);
         }
 
-        public void SetLocalPlayerBotId(uint botId)
+        public void SetLocalPlayerBotID(uint botID)
         {
-            LocalPlayerBotId = botId;
+            LocalPlayerBotID = botID;
         }
 
-        public void RemoveRobot(uint botId)
+        public void RemoveRobot(uint botID)
         {
-            if (_robots.TryGetValue(botId, out var robot))
+            if (_robots.TryGetValue(botID, out var robot))
             {
                 Destroy(robot.gameObject);
-                _robots.Remove(botId);
+                _robots.Remove(botID);
             }
             else
             {
-                Debug.LogWarning($"{TAG} RemoveRobot: bot {botId} not found");
+                Debug.LogWarning($"{TAG} RemoveRobot: bot {botID} not found");
             }
         }
 
@@ -138,7 +138,7 @@ namespace Fodinae.Game.Managers
             var keysToRemove = new List<uint>();
             foreach (var kvp in _robots)
             {
-                if (kvp.Key == LocalPlayerBotId || (kvp.Value != null && kvp.Value.gameObject.CompareTag("Player")))
+                if (kvp.Key == LocalPlayerBotID || (kvp.Value != null && kvp.Value.gameObject.CompareTag("Player")))
                 {
                     continue;
                 }
@@ -157,13 +157,13 @@ namespace Fodinae.Game.Managers
                 cleared++;
             }
 
-            Debug.Log($"{TAG} Cleared {cleared} robots, kept {(_robots.ContainsKey(LocalPlayerBotId) ? "local player" : "none")}");
+            Debug.Log($"{TAG} Cleared {cleared} robots, kept {(_robots.ContainsKey(LocalPlayerBotID) ? "local player" : "none")}");
         }
 
-        public void UnregisterRobot(uint botId)
+        public void UnregisterRobot(uint botID)
         {
-            _robots.Remove(botId);
-            _overwriteWarningsLogged.Remove(botId);
+            _robots.Remove(botID);
+            _overwriteWarningsLogged.Remove(botID);
         }
     }
 }

@@ -12,10 +12,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace Fodinae.World.Lighting;
-/// <summary>
-/// Owns all GPU resources for the lighting engine: render textures,
-/// compute buffers, cascade layouts, and their lifecycle.
-/// </summary>
 internal sealed class LightingResourceManager
 {
     private RenderTexture? _materialField;

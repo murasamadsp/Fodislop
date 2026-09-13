@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Manages player subscription, position tracking, and blink timing for the world map.
-/// </summary>
 public sealed class MapPlayerTracker
 {
     private readonly ILocalPlayerState _localPlayer;

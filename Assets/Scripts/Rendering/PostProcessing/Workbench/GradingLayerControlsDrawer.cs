@@ -8,14 +8,16 @@ using UnityEngine;
 
 namespace Fodinae.Rendering.PostProcessing.Workbench;
 
-/// <summary>
-/// Отрисовка ползунков, числовых полей ввода и файловых действий для слоёв цветового конвейера.
-/// </summary>
 internal sealed class GradingLayerControlsDrawer
 {
     private readonly ColorGradeState _state;
     private readonly ColorGradeZones _zones;
     private readonly Dictionary<string, string> _numberText = [];
+
+    // Имена контролов и id каналов выводятся из id слайдера. Склейка на
+    // каждое событие IMGUI давала десятки строк за кадр на одно окно.
+    private readonly Dictionary<string, string> _controlNames = [];
+    private readonly Dictionary<string, string[]> _channelIds = [];
     private string? _status;
     private string? _invalidNumberId;
     private bool _statusIsError;
@@ -347,8 +349,10 @@ internal sealed class GradingLayerControlsDrawer
             "Saturation vs Saturation",
             _state.SaturationVsSaturationCurve);
         GUILayout.Label(
-            "Круговой диапазон корректно пересекает 0°/360°. Multi-sample " +
-            "объединяет несколько оттенков в одну мягкую маску.",
+            "Кривые «X против Y»: линия посередине — без изменений. Выше — больше, " +
+            "ниже — меньше: оттенок сдвигается до ±180°, насыщенность и яркость " +
+            "умножаются от ×0 до ×2. У кривых по оттенку края связаны — 0° и 360° " +
+            "это один цвет; на серые и почти чёрные пиксели они не действуют.",
             ToolTheme.MutedLabel);
     }
 
@@ -388,6 +392,22 @@ internal sealed class GradingLayerControlsDrawer
         _state.ShoulderPower = Slider("shoulder-power", "shoulder power", _state.ShoulderPower, 1f, 8f);
         _state.PathToWhiteAmount = Slider("path-to-white", "path to white", _state.PathToWhiteAmount, 0f, 1f);
         _state.PathToWhitePower = Slider("path-power", "path power", _state.PathToWhitePower, 1f, 8f);
+
+        // Слайдер рисуется всегда и только гасится: появление контрола в том же
+        // событии, где нажали тумблер, ломает раскладку IMGUI.
+        _state.GamutCompressionEnabled = GUILayout.Toggle(
+            _state.GamutCompressionEnabled,
+            _state.GamutCompressionEnabled ? "●  Сжатие гамута" : "○  Сжатие гамута",
+            ToolTheme.SegmentedButton);
+        bool gamutControlsEnabled = GUI.enabled;
+        GUI.enabled = gamutControlsEnabled && _state.GamutCompressionEnabled;
+        _state.GamutCompressionStrength = Slider(
+            "gamut-compression",
+            "  сила сжатия",
+            _state.GamutCompressionStrength,
+            ColorGradeState.GamutCompressionStrengthMin,
+            ColorGradeState.GamutCompressionStrengthMax);
+        GUI.enabled = gamutControlsEnabled;
         DrawCurveEditor("master-curve", "Master / Luma", _state.MasterCurve);
         DrawCurveEditor("red-curve", "Red", _state.RedCurve);
         DrawCurveEditor("green-curve", "Green", _state.GreenCurve);
@@ -409,7 +429,8 @@ internal sealed class GradingLayerControlsDrawer
             if (GUILayout.Button("+ точка", ToolTheme.SecondaryButton, GUILayout.Width(74f)))
             {
                 _selectedCurve = curve;
-                _selectedCurvePoint = curve.AddPoint(new Vector2(0.5f, 0.5f));
+                // Точка встаёт на кривую: добавление не должно менять её форму.
+                _selectedCurvePoint = curve.AddPoint(new Vector2(0.5f, curve.Evaluate(0.5f)));
             }
 
             if (GUILayout.Button("reset", ToolTheme.SecondaryButton, GUILayout.Width(58f)))
@@ -458,6 +479,15 @@ internal sealed class GradingLayerControlsDrawer
                 float y = graph.y + graph.height * index / 4f;
                 GUI.DrawTexture(new Rect(x, graph.y, 1f, graph.height), Texture2D.whiteTexture);
                 GUI.DrawTexture(new Rect(graph.x, y, graph.width, 1f), Texture2D.whiteTexture);
+            }
+
+            if (curve.Kind != ColorGradeCurveKind.Tone)
+            {
+                // Нейтраль «без изменений» для кривых «X против Y».
+                GUI.color = new Color(0.55f, 0.6f, 0.68f, 1f);
+                GUI.DrawTexture(
+                    new Rect(graph.x, graph.yMax - ColorGradeCurve.NeutralLevel * graph.height, graph.width, 1f),
+                    Texture2D.whiteTexture);
             }
 
             GUI.color = Color.white;
@@ -788,7 +818,12 @@ internal sealed class GradingLayerControlsDrawer
                 _numberText[id] = text;
             }
 
-            string controlName = "grade." + id;
+            if (!_controlNames.TryGetValue(id, out string? controlName))
+            {
+                controlName = "grade." + id;
+                _controlNames[id] = controlName;
+            }
+
             GUI.SetNextControlName(controlName);
             string edited = GUILayout.TextField(text, GUILayout.Width(64f));
             if (edited != text)
@@ -869,6 +904,7 @@ internal sealed class GradingLayerControlsDrawer
             "input-white-point" or "whitepoint" or "white-point" => 1f,
             "grey-out" => 0.18f,
             "curve-slope" => 1f,
+            "gamut-compression" => 1f,
             "toe-stops" => 12f,
             "shoulder-power" => 4f,
             "toe-power" => 1.6f,
@@ -907,10 +943,22 @@ internal sealed class GradingLayerControlsDrawer
         float maximum)
     {
         GUILayout.Label(label, ToolTheme.SectionLabel);
+        string[] ids = ChannelIds(id);
         return new Vector3(
-            Slider(id + ".r", "  R", value.x, minimum, maximum),
-            Slider(id + ".g", "  G", value.y, minimum, maximum),
-            Slider(id + ".b", "  B", value.z, minimum, maximum));
+            Slider(ids[0], "  R", value.x, minimum, maximum),
+            Slider(ids[1], "  G", value.y, minimum, maximum),
+            Slider(ids[2], "  B", value.z, minimum, maximum));
+    }
+
+    private string[] ChannelIds(string id)
+    {
+        if (!_channelIds.TryGetValue(id, out string[]? ids))
+        {
+            ids = [id + ".r", id + ".g", id + ".b"];
+            _channelIds[id] = ids;
+        }
+
+        return ids;
     }
 
     private static void DrawPrimaryWheel(
@@ -919,7 +967,7 @@ internal sealed class GradingLayerControlsDrawer
         Vector3 neutral,
         float minimum,
         float maximum,
-        string controlId)
+        string controlID)
     {
         GUILayout.Label(title, ToolTheme.SectionLabel);
         Rect rect = GUILayoutUtility.GetRect(128f, 128f, GUILayout.ExpandWidth(false));
@@ -947,10 +995,10 @@ internal sealed class GradingLayerControlsDrawer
                     Mathf.Clamp(neutral.z + offset.z * (maximum - minimum), minimum, maximum));
             }
 
-            GUIUtility.hotControl = controlId.GetHashCode();
+            GUIUtility.hotControl = controlID.GetHashCode();
             current.Use();
         }
-        else if (current.type == EventType.MouseUp && GUIUtility.hotControl == controlId.GetHashCode())
+        else if (current.type == EventType.MouseUp && GUIUtility.hotControl == controlID.GetHashCode())
         {
             GUIUtility.hotControl = 0;
             current.Use();

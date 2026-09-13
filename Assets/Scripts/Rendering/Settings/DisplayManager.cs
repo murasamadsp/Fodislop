@@ -74,9 +74,6 @@ namespace Fodinae.Rendering
             HDROutput.ConfigureCamera(_gameplayCamera.Camera);
         }
 
-        /// <summary>
-        /// Переключает режим укладки мира на пиксельную сетку.
-        /// </summary>
         public void SetPixelSamplingMode(PixelSamplingMode mode)
         {
             if (_clientConfig?.Config == null)
@@ -89,18 +86,6 @@ namespace Fodinae.Rendering
             Debug.Log($"[DisplayManager] SetPixelSamplingMode: {mode}");
         }
 
-        /// <summary>
-        /// Раздаёт режим шейдерам.
-        /// </summary>
-        /// <remarks>
-        /// Через глобальную переменную шейдера, а не через материалы:
-        /// террейн и сущности мира рисуются разными материалами, часть из
-        /// которых создаётся в рантайме, и обойти их все означало бы
-        /// завести реестр материалов ради одного тумблера.
-        ///
-        /// Камера читает режим сама: ей нужен не флаг, а решение, округлять
-        /// ли размер, и это её собственная работа.
-        /// </remarks>
         private static void ApplyPixelSampling(PixelSamplingMode mode)
         {
             Shader.SetGlobalFloat(
@@ -144,14 +129,6 @@ namespace Fodinae.Rendering
             Debug.Log($"[DisplayManager] SetVSync: {enabled} (TargetFPS={_clientConfig.Config.Display.TargetFrameRate})");
         }
 
-        /// <summary>
-        /// Applies the HDR preference and reports what the display did with it.
-        /// </summary>
-        /// <remarks>
-        /// The preference survives unavailable or non-switchable outputs.
-        /// Actual output status is shown separately; a later monitor or OS
-        /// change lets HDROutputReconciler complete the request.
-        /// </remarks>
         public HDROutput.ApplyRequestResult SetHDREnabled(bool enabled)
         {
             if (_clientConfig?.Config == null)
@@ -300,11 +277,6 @@ namespace Fodinae.Rendering
                 ? fallback
                 : Mathf.Clamp(value, minimum, maximum);
 
-        /// <summary>
-        /// Unity на macOS не поддерживает ExclusiveFullScreen — единственный
-        /// полноэкранный режим там FullScreenWindow. Маппим до вызова
-        /// Screen.SetResolution, чтобы конфиг «exclusive» не ронял окно на Mac.
-        /// </summary>
         private static FullScreenMode NormalizeFullScreenMode(FullScreenMode mode)
         {
 #if UNITY_STANDALONE_OSX

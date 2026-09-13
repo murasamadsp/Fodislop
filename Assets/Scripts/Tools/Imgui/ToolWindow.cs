@@ -5,29 +5,8 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui;
 
-/// <summary>
-/// Окно инструмента: перетаскиваемое, с собственной видимостью.
-/// </summary>
-/// <remarks>
-/// ЗАЧЕМ ОБЩИЙ ТИП. До этого каждый отладочный вид жил сам по себе: колонки диагностики
-/// собирались из VisualElement с инлайновыми стилями, графики рисовались через
-/// generateVisualContent, счётчик кадров держал свой Label, а рабочее место
-/// колориста — свои GUI.Window. Четыре способа показать число на экране, четыре
-/// места, где заводится клавиша, и ни одного общего представления о том, какие
-/// инструменты вообще есть.
-///
-/// Теперь способ один. Окно объявляет заголовок и содержимое, всё остальное —
-/// перетаскивание, видимость, порядок, клавиши — делает <see cref="ToolWindows"/>.
-///
-/// ПОЧЕМУ ОКНА ПУБЛИЧНЫ. Система живёт в сборке <c>Fodinae.Runtime</c>
-/// (`Assets/Scripts/` целиком), а её хозяин — в <c>Fodinae.UI</c>: он обязан
-/// быть MonoBehaviour, уже стоящим на сцене, а такой нашёлся только там.
-/// Через границу сборок <c>internal</c> не виден, поэтому типы окон публичны
-/// не по небрежности, а потому что это межсборочный API.
-/// </remarks>
 public abstract class ToolWindow : IDisposable
 {
-    /// <summary>Высота свёрнутого окна: только полоса заголовка.</summary>
     public const float CollapsedHeight = ToolTheme.HeaderHeight + 4f;
 
     private readonly Rect _initialRect;
@@ -51,29 +30,10 @@ public abstract class ToolWindow : IDisposable
 
     public string Title { get; }
 
-    /// <summary>
-    /// Заголовок в полосе окна.
-    /// </summary>
-    /// <remarks>
-    /// Верхний регистр посчитан один раз в конструкторе, а не при каждой
-    /// отрисовке: IMGUI рисует по несколько событий на кадр, и строка,
-    /// собираемая в <c>OnGUI</c>, — это мусор в куче на ровном месте, который
-    /// к тому же виден в том самом окне статистики, что стоит рядом.
-    /// </remarks>
     public string DisplayTitle { get; }
 
     public Rect Rect;
 
-    /// <summary>
-    /// Свёрнуто ли окно в одну полосу заголовка.
-    /// </summary>
-    /// <remarks>
-    /// Не то же самое, что закрытое. Закрытое окно исчезает из виду целиком, и
-    /// чтобы понять, что оно вообще есть, надо идти в список инструментов.
-    /// Свёрнутое остаётся на своём месте и помнит размер: его открывают
-    /// обратно одним щелчком там же, где свернули. С пятью окнами на экране это
-    /// разница между «убрал с глаз» и «потерял».
-    /// </remarks>
     public bool Collapsed
     {
         get => _collapsed;
@@ -97,7 +57,6 @@ public abstract class ToolWindow : IDisposable
         }
     }
 
-    /// <summary>Видимость окна. Мастер-тумблер системы её не стирает.</summary>
     public bool Visible
     {
         get => _visible;
@@ -111,37 +70,16 @@ public abstract class ToolWindow : IDisposable
         }
     }
 
-    /// <summary>
-    /// Номер окна для IMGUI. Раздаётся реестром при регистрации: совпадение
-    /// номеров склеивает окна в одно, и найти такое по виду почти невозможно.
-    /// </summary>
-    internal int Id { get; set; }
+    internal int ID { get; set; }
 
-    /// <summary>
-    /// Нужен ли окну сбор данных. Отделено от видимости, потому что часть
-    /// инструментов обязана копить историю и в закрытом виде — иначе график
-    /// после открытия десять секунд пустой.
-    /// </summary>
     public virtual bool WantsSampling => Visible;
 
-    /// <summary>Smallest usable content area before screen bounds take priority.</summary>
     public virtual Vector2 MinimumSize => new(240f, 150f);
 
-    /// <summary>The toolbar is the recovery path for every other window.</summary>
     protected virtual bool CanClose => true;
 
-    /// <summary>Whether the bottom-right resize grip is available.</summary>
     protected virtual bool CanResize => true;
 
-    /// <summary>
-    /// Можно ли восстанавливать сохранённую видимость этого окна.
-    /// </summary>
-    /// <remarks>
-    /// Совпадает с возможностью закрыть окно, и не случайно. Список
-    /// инструментов закрыть нельзя — он и есть путь ко всем остальным, — а
-    /// значит сохранённое «скрыт» вернуло бы состояние, из которого нет выхода
-    /// ничем, кроме стирания настроек вручную.
-    /// </remarks>
     public bool CanRestoreVisibility => CanClose;
 
     protected static GUIStyle SectionLabelStyle => ToolTheme.SectionLabel;
@@ -164,7 +102,6 @@ public abstract class ToolWindow : IDisposable
 
     protected static GUIStyle CardStyle => ToolTheme.Card;
 
-    /// <summary>Кадровая логика. Зовётся всегда, даже когда окно закрыто.</summary>
     public virtual void Tick()
     {
     }
@@ -366,21 +303,21 @@ public abstract class ToolWindow : IDisposable
 
         const float gripSize = 18f;
         Rect grip = new(Rect.width - gripSize, Rect.height - gripSize, gripSize, gripSize);
-        int controlId = GUIUtility.GetControlID(Id ^ 0x5E51, FocusType.Passive);
+        int controlID = GUIUtility.GetControlID(ID ^ 0x5E51, FocusType.Passive);
         Event currentEvent = Event.current;
-        switch (currentEvent.GetTypeForControl(controlId))
+        switch (currentEvent.GetTypeForControl(controlID))
         {
             case EventType.MouseDown:
                 if (currentEvent.button == 0 && grip.Contains(currentEvent.mousePosition))
                 {
-                    GUIUtility.hotControl = controlId;
+                    GUIUtility.hotControl = controlID;
                     currentEvent.Use();
                 }
 
                 break;
 
             case EventType.MouseDrag:
-                if (GUIUtility.hotControl == controlId)
+                if (GUIUtility.hotControl == controlID)
                 {
                     Vector2 size = _pendingSize ?? Rect.size;
                     size.x = Mathf.Max(MinimumSize.x, size.x + currentEvent.delta.x);
@@ -392,7 +329,7 @@ public abstract class ToolWindow : IDisposable
                 break;
 
             case EventType.MouseUp:
-                if (GUIUtility.hotControl == controlId)
+                if (GUIUtility.hotControl == controlID)
                 {
                     GUIUtility.hotControl = 0;
                     currentEvent.Use();
@@ -401,7 +338,7 @@ public abstract class ToolWindow : IDisposable
                 break;
 
             case EventType.Repaint:
-                DrawResizeGlyph(grip, GUIUtility.hotControl == controlId);
+                DrawResizeGlyph(grip, GUIUtility.hotControl == controlID);
                 break;
 
             default:

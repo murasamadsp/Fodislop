@@ -19,9 +19,6 @@ namespace Fodinae;
 
 using static ETagCalculator;
 
-/// <summary>
-/// Batches outgoing network asset requests and dispatches incoming asset packets.
-/// </summary>
 public sealed class AssetBatchDispatcher : IDisposable
 {
     private readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> _pendingRequests = new();

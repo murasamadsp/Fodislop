@@ -4,7 +4,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -17,13 +16,6 @@ using UnityEngine.TestTools;
 
 namespace Fodinae.Tests.Core;
 
-/// <summary>
-/// SceneTransitionTicket guards the single-writer handshake between the
-/// persistent Bootstrap composition root and exactly one content-scene
-/// composition root. The state machine is the load-bearing invariant:
-/// attach-once → activation → startup-ready → presentation-ready, with
-/// failure short-circuiting every waiter exactly once.
-/// </summary>
 [TestFixture]
 public class SceneTransitionTicketTests
 {
@@ -190,8 +182,8 @@ public class SceneTransitionTicketTests
         Assert.That(observed, Is.SameAs(original));
     }
 
-    [Test]
-    public async Task CleanupFailure_RetriesOnceAndReturnsLastFailure()
+    [UnityTest]
+    public IEnumerator CleanupFailure_RetriesOnceAndReturnsLastFailure()
     {
         int attempts = 0;
         async UniTask FailCleanup(Scene _)
@@ -201,17 +193,19 @@ public class SceneTransitionTicketTests
             throw new InvalidOperationException($"attempt-{attempts}");
         }
 
-        Exception? failure = await SceneTransitionRuntime.TryCleanupPreviousSceneAsync(
-            default,
-            FailCleanup);
+        Exception? failure = null;
+        yield return SceneTransitionRuntime.TryCleanupPreviousSceneAsync(
+                default,
+                FailCleanup)
+            .ToCoroutine(result => failure = result);
 
         Assert.That(attempts, Is.EqualTo(2));
         Assert.That(failure, Is.TypeOf<InvalidOperationException>());
         Assert.That(failure!.Message, Is.EqualTo("attempt-2"));
     }
 
-    [Test]
-    public async Task CleanupTimeout_ReturnsTimeoutWithoutStartingOverlappingRetry()
+    [UnityTest]
+    public IEnumerator CleanupTimeout_ReturnsTimeoutWithoutStartingOverlappingRetry()
     {
         int attempts = 0;
         var neverCompletes = new UniTaskCompletionSource();
@@ -221,10 +215,12 @@ public class SceneTransitionTicketTests
             return neverCompletes.Task;
         }
 
-        Exception? failure = await SceneTransitionRuntime.TryCleanupPreviousSceneAsync(
-            default,
-            StallCleanup,
-            TimeSpan.FromMilliseconds(20));
+        Exception? failure = null;
+        yield return SceneTransitionRuntime.TryCleanupPreviousSceneAsync(
+                default,
+                StallCleanup,
+                TimeSpan.FromMilliseconds(20))
+            .ToCoroutine(result => failure = result);
 
         Assert.That(attempts, Is.EqualTo(1));
         Assert.That(failure, Is.TypeOf<TimeoutException>());

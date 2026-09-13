@@ -1,27 +1,12 @@
 #nullable enable
 
 using System;
+using System.IO;
 using Fodinae.Rendering;
 using UnityEngine;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Приводит сохранённый конфиг к текущей схеме.
-/// </summary>
-/// <remarks>
-/// ЧТО ВЫЧИЩЕНО И ПОЧЕМУ. В ладдере было пятнадцать шагов, из которых четыре
-/// (5, 11, 17, 18) не делали ничего, кроме инкремента счётчика, а ещё четыре
-/// (2, 4, 6, 8) переписывали поля вида, которые шаги 19-21 всё равно
-/// перезаписывали целиком. То есть весь хвост ниже 19 был мёртвым: любой файл
-/// старее доезжал до 21 с теми же значениями, что и файл схемы 19.
-///
-/// Ладдер как механизм остался: он и есть то место, где смена авторского
-/// значения по умолчанию выражается явно. Раньше эту роль дублировал
-/// <c>ProjectDefaultsHash</c> — сверка хэша ассета, которая делала то же самое
-/// молча и на каждой загрузке. Ассета больше нет, значения живут в коде, и
-/// единственным способом сказать «сбросить вид» стал новый шаг схемы.
-/// </remarks>
 internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQualityProfile)
 {
     private readonly GraphicsQualityProfile _graphicsQualityProfile = graphicsQualityProfile ??
@@ -88,9 +73,10 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
 
         if (config.SchemaVersion < 24)
         {
-            // Схема 24-28: все значения освещения теперь константные.
+            // Схема 24: все значения освещения теперь константные.
             // Миграция не требуется — ClientConfig.Lighting больше не используется.
-            config.SchemaVersion = 28;
+            // Нельзя сразу ставить 28: ниже находятся реальные шаги схем 25-28.
+            config.SchemaVersion = 24;
             migrated = true;
         }
 
@@ -150,31 +136,12 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
 
         if (config.SchemaVersion > ClientConfig.CurrentSchemaVersion)
         {
-            // Конфиг из более новой схемы (например, переключение ветки Git, откат
-            // или экспериментальный билд). Приводим версию схемы к текущей и
-            // гарантируем допустимость значений полей через SettingSchema.Clamp.
-            config.Audio ??= new AudioSettings();
-            config.Display ??= new DisplaySettings();
-            config.Interface ??= new InterfaceSettings();
-            config.Accessibility ??= new AccessibilitySettings();
-            config.Connection ??= new ConnectionSettings();
-            config.PostProcess ??= new PostProcessSettings();
-            config.Lighting ??= new WorldLightingSettings();
-            config.Terrain ??= new TerrainSettings();
-            config.Effects ??= new EffectSettings();
-
-            SettingSchema.Clamp(config.Audio);
-            SettingSchema.Clamp(config.Display);
-            SettingSchema.Clamp(config.Interface);
-            SettingSchema.Clamp(config.Accessibility);
-            SettingSchema.Clamp(config.Connection);
-            SettingSchema.Clamp(config.PostProcess);
-            SettingSchema.Clamp(config.Lighting);
-            SettingSchema.Clamp(config.Terrain);
-            SettingSchema.Clamp(config.Effects);
-
-            config.SchemaVersion = ClientConfig.CurrentSchemaVersion;
-            migrated = true;
+            // JsonUtility уже отбросил неизвестные поля будущей схемы. Тихое
+            // понижение и сохранение такого объекта поэтому необратимо теряет
+            // данные при переключении ветки или откате билда.
+            throw new InvalidDataException(
+                $"Client config schema {config.SchemaVersion} is newer than supported " +
+                $"schema {ClientConfig.CurrentSchemaVersion}; refusing to overwrite it.");
         }
 
         if (GraphicsQualityProfile.IsStandard(config.GraphicsPreset))
@@ -200,16 +167,6 @@ internal sealed class ClientConfigMigration(GraphicsQualityProfile graphicsQuali
         return migrated;
     }
 
-    /// <summary>
-    /// Схема 22: поля вида уезжают из корня в секции Lighting/Terrain/Effects.
-    /// </summary>
-    /// <remarks>
-    /// Значения игрока переносятся, а не сбрасываются: настроенный свет — это
-    /// его работа, и терять её при смене формы файла нельзя. Файл старее 19-й
-    /// схемы плоского хвоста уже не содержит осмысленных величин постпроцесса
-    /// (их удалили вместе с тридцатью пятью ползунками), поэтому там секции
-    /// остаются авторскими — ровно то, что делал прежний шаг 19.
-    /// </remarks>
     private static void MigrateFlatVisualsToSections(ClientConfig config, string rawJson)
     {
         if (config.SchemaVersion < 19)

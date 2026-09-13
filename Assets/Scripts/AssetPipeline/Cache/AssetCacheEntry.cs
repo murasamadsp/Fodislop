@@ -10,10 +10,6 @@ using UnityEngine;
 
 namespace Fodinae;
 
-/// <summary>
-/// Thread-safe holder for a single cached asset (raw bytes + derived formats).
-/// Deduplicates in-flight requests and handles async decoding.
-/// </summary>
 internal sealed class AssetCacheEntry
 {
     private readonly object _lock = new();

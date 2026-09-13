@@ -39,7 +39,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         new(2, "Мастер-копатель", "Сломайте 500 блоков", 500, ItemType.Cred, 300),
     ];
 
-    public int ActiveMissionId { get; private set; } = -1;
+    public int ActiveMissionID { get; private set; } = -1;
     public long MissionProgress { get; private set; }
     public bool[] MissionCompleted { get; } = new bool[_Missions.Length];
     public int MissionCount => _Missions.Length;
@@ -50,7 +50,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         for (int i = 0; i < _Missions.Length; i++)
         {
             var m = _Missions[i];
-            string status = ActiveMissionId == m.Id
+            string status = ActiveMissionID == m.Id
                 ? $"<color=yellow>Активно: {MissionProgress}/{m.Target}</color>"
                 : MissionCompleted[m.Id]
                     ? "<color=lime>✓ Выполнено</color>"
@@ -105,7 +105,7 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
             scrollViewer,
         };
 
-        if (ActiveMissionId >= 0)
+        if (ActiveMissionID >= 0)
         {
             rootChildren.Add(new TextPacket
             {
@@ -138,20 +138,20 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
         onReceived.Invoke(new ServerPacket(new OpenWindowPacket("missions", 400, 300, root)));
     }
 
-    public void StartMission(int missionId, ushort x, ushort y)
+    public void StartMission(int missionID, ushort x, ushort y)
     {
-        if (missionId < 0 || missionId >= _Missions.Length)
+        if (missionID < 0 || missionID >= _Missions.Length)
         {
             return;
         }
 
-        if (MissionCompleted[missionId])
+        if (MissionCompleted[missionID])
         {
             return;
         }
 
-        var m = _Missions[missionId];
-        ActiveMissionId = missionId;
+        var m = _Missions[missionID];
+        ActiveMissionID = missionID;
         MissionProgress = 0;
         onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
         onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, m.Title, m.Description)));
@@ -161,13 +161,13 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
     public void CancelMission()
     {
-        if (ActiveMissionId < 0)
+        if (ActiveMissionID < 0)
         {
             onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
             return;
         }
 
-        ActiveMissionId = -1;
+        ActiveMissionID = -1;
         MissionProgress = 0;
         onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
         onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));
@@ -175,12 +175,12 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
     public void OnBlockMined(Dictionary<ItemType, long> inventory)
     {
-        if (ActiveMissionId < 0)
+        if (ActiveMissionID < 0)
         {
             return;
         }
 
-        var m = _Missions[ActiveMissionId];
+        var m = _Missions[ActiveMissionID];
         MissionProgress++;
         onReceived.Invoke(new ServerPacket(new MissionProgressPacket(MissionProgress, m.Target)));
         if (MissionProgress >= m.Target)
@@ -191,26 +191,26 @@ internal sealed class DummyMissionRunner(Action<ServerPacket> onReceived)
 
     public void Reset()
     {
-        ActiveMissionId = -1;
+        ActiveMissionID = -1;
         MissionProgress = 0;
         Array.Clear(MissionCompleted, 0, MissionCompleted.Length);
     }
 
     private void CompleteMission(Dictionary<ItemType, long> inventory)
     {
-        if (ActiveMissionId < 0)
+        if (ActiveMissionID < 0)
         {
             return;
         }
 
-        var m = _Missions[ActiveMissionId];
+        var m = _Missions[ActiveMissionID];
         inventory.TryGetValue(m.RewardItem, out long current);
         inventory[m.RewardItem] = current + m.RewardAmount;
         onReceived.Invoke(new ServerPacket(new InventoryPacket(
             new Dictionary<ItemType, long> { { m.RewardItem, current + m.RewardAmount } })));
 
-        MissionCompleted[ActiveMissionId] = true;
-        ActiveMissionId = -1;
+        MissionCompleted[ActiveMissionID] = true;
+        ActiveMissionID = -1;
         MissionProgress = 0;
 
         onReceived.Invoke(new ServerPacket(new MissionInitPacket(string.Empty, 0, 0, string.Empty, string.Empty)));

@@ -6,9 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Controls placeholder skeleton pulsing animation while player stats are loading.
-/// </summary>
 internal sealed class PlayerHUDSkeletonPulse
 {
     private const float PulseMin = 0.3f;

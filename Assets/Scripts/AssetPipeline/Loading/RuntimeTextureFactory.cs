@@ -81,11 +81,6 @@ public static class RuntimeTextureFactory
         return texture;
     }
 
-    /// <summary>
-    /// Creates a readable-free floating-point texture for runtime data such as
-    /// HDR lookup tables. Keeping this construction here makes the resource
-    /// policy identical for decoded images and generated GPU data.
-    /// </summary>
     public static Texture2D CreateRGBAFloatNoMip(
         int width,
         int height,

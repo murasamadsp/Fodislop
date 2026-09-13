@@ -5,10 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Освещение мира: константы для решателя радиансных каскадов.
-/// Все значения фиксированы: ambient = белый, intensity = 1.
-/// </summary>
 [Serializable]
 public sealed class WorldLightingSettings
 {

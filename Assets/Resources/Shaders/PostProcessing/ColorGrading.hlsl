@@ -144,7 +144,17 @@ float3 FodinaeLogEncode(float3 linearColor)
     // positive value, so even a neutral CDL was not an identity operation.
     // The signed representation keeps values outside the nominal range until
     // the display stage, where gamut/tone mapping is finally allowed.
-    float3 magnitudeStops = log2(max(abs(linearColor), 1e-7) / FodinaeMidGrey);
+    //
+    // Величина обязана кодироваться в неотрицательное число, иначе знак
+    // теряется. Прежний log2(|c| / grey) + toe уходил ниже нуля для всего,
+    // что темнее grey * 2^-toe (~1.8e-4), а decode брал abs() и зеркалил эти
+    // значения обратно вверх: чем темнее канал, тем ярче он выходил. В темноте
+    // каналы разной малости разъезжались в яркий фиолет, а точный ноль
+    // (sign == 0) оставался чёрным. Сдвиг под логарифмом на 2^-toe даёт
+    // encode(0) = 0, монотонность и точную обратимость; для средних и светлых
+    // тонов он пренебрежимо мал (1/1024 серого).
+    float toeFloor = exp2(-FodinaeSceneToeStops);
+    float3 magnitudeStops = log2(abs(linearColor) / FodinaeMidGrey + toeFloor);
     float3 encodedMagnitude =
         (magnitudeStops + FodinaeSceneToeStops) / FodinaeSceneStops;
     return sign(linearColor) * encodedMagnitude;
@@ -152,9 +162,10 @@ float3 FodinaeLogEncode(float3 linearColor)
 
 float3 FodinaeLogDecode(float3 logColor)
 {
+    float toeFloor = exp2(-FodinaeSceneToeStops);
     float3 magnitude = abs(logColor);
     float3 stops = magnitude * FodinaeSceneStops - FodinaeSceneToeStops;
-    return sign(logColor) * exp2(stops) * FodinaeMidGrey;
+    return sign(logColor) * max(exp2(stops) - toeFloor, 0.0) * FodinaeMidGrey;
 }
 
 float3 FodinaeDisplayEncode(float3 linearColor)
@@ -220,7 +231,21 @@ float3 ApplyPrimaryWheels(
 float3 ApplySaturation(float3 color, float saturation, float3 lumaWeights)
 {
     float luma = dot(color, lumaWeights);
-    return lerp(float3(luma, luma, luma), color, saturation);
+    float amount = saturation;
+
+    // Усиление упирается в границу гамута. Без предела самый слабый канал
+    // насыщенного цвета уходил ниже нуля, дальше обрезался, и цвет менял
+    // оттенок. Предел — множитель, при котором слабейший канал ровно
+    // достигает нуля; яркость (luma) сохраняется при любом множителе.
+    // Цвет, уже вышедший за гамут на входе, не трогается: его судьба решается
+    // на выводе.
+    float minimum = min(color.r, min(color.g, color.b));
+    if (saturation > 1.0 && luma > 0.0 && minimum >= 0.0 && minimum < luma)
+    {
+        amount = min(saturation, luma / (luma - minimum));
+    }
+
+    return lerp(float3(luma, luma, luma), color, amount);
 }
 
 float3 ApplyVibrance(float3 color, float vibrance, float3 lumaWeights)
@@ -457,61 +482,84 @@ inline bool IsIdentityColorCurve(float4 points[FODINAE_CURVE_MAX_POINTS], int po
     return identity;
 }
 
+// Нейтраль кривых «X против Y» — горизонталь на 0.5 (ColorGradeCurveKind.Hue/Range).
+inline bool IsNeutralSelectiveCurve(float4 points[FODINAE_CURVE_MAX_POINTS], int pointCount)
+{
+    bool neutral = true;
+    for (int index = 0; index < FODINAE_CURVE_MAX_POINTS; index++)
+    {
+        if (index >= pointCount)
+        {
+            break;
+        }
+
+        neutral = neutral && abs(points[index].y - 0.5) < 1e-5;
+    }
+
+    return neutral;
+}
+
+// Кривые «X против Y» по индустриальному соглашению: значение кривой — сдвиг
+// или множитель вокруг нейтрали 0.5, а не абсолютный результат.
+//   Hue vs Hue          — сдвиг оттенка, (y - 0.5) оборота: ±180°.
+//   Hue vs Saturation   — множитель насыщенности 2y: ×0…×2.
+//   Hue vs Luminance    — множитель яркости 2y: ×0…×2.
+//   Luminance/Saturation vs Saturation — множитель насыщенности 2y.
+// Прежний абсолютный смысл делил цель на текущее значение: тёмный пиксель с
+// яркостью 1e-4 умножался в тысячи раз, почти серый шум — в десятки.
+//
+// Ключи (оттенок, насыщенность, яркость) берутся со входа, как у маски: одна
+// кривая не должна менять то, по чему выбирает следующая.
 float3 ApplySelectiveCurves(float3 color)
 {
     float3 lumaWeights = float3(0.2126, 0.7152, 0.0722);
-    float luma = dot(color, lumaWeights);
     float maximum = max(color.r, max(color.g, color.b));
     float minimum = min(color.r, min(color.g, color.b));
     float chroma = max(maximum - minimum, 0.0);
-    float saturation = chroma / max(maximum, 1e-5);
+    float saturation = saturate(chroma / max(maximum, 1e-5));
     float hue = HueDegrees(color) / 360.0;
+    float inputLuma = dot(color, lumaWeights);
 
-    if (!IsIdentityColorCurve(_HueVsHueCurve, _HueVsHueCurvePointCount))
+    // У серого и почти чёрного оттенок — шум, а не цвет. Кривые по оттенку
+    // вступают плавно по мере того, как цвет становится различимым.
+    float hueConfidence = smoothstep(0.02, 0.15, saturation) * step(1e-6, maximum);
+
+    if (!IsNeutralSelectiveCurve(_HueVsHueCurve, _HueVsHueCurvePointCount))
     {
-        float targetHue = EvaluateColorCurve(hue, _HueVsHueCurve, _HueVsHueCurvePointCount);
-        float3 hsv = float3(targetHue, saturation, maximum);
-        float3 adjusted = FodinaeHSVToRGB(hsv);
-        color = lerp(color, adjusted, step(1e-6, chroma));
-        luma = dot(color, lumaWeights);
+        float shift = EvaluateColorCurve(hue, _HueVsHueCurve, _HueVsHueCurvePointCount) - 0.5;
+        float3 hsv = float3(frac(hue + shift * hueConfidence), saturation, maximum);
+        color = lerp(color, FodinaeHSVToRGB(hsv), step(1e-6, chroma) * step(1e-6, maximum));
     }
 
-    if (!IsIdentityColorCurve(_HueVsSaturationCurve, _HueVsSaturationCurvePointCount))
+    if (!IsNeutralSelectiveCurve(_HueVsSaturationCurve, _HueVsSaturationCurvePointCount))
     {
-        float targetSaturation = EvaluateColorCurve(hue, _HueVsSaturationCurve, _HueVsSaturationCurvePointCount);
-        float factor = targetSaturation / max(saturation, 1e-5);
-        float3 adjusted = lerp(float3(luma, luma, luma), color, factor);
-        color = lerp(color, adjusted, step(1e-6, chroma));
+        float multiplier = 2.0 * EvaluateColorCurve(hue, _HueVsSaturationCurve, _HueVsSaturationCurvePointCount);
+        color = ApplySaturation(color, lerp(1.0, multiplier, hueConfidence), lumaWeights);
     }
 
-    if (!IsIdentityColorCurve(_HueVsLuminanceCurve, _HueVsLuminanceCurvePointCount))
+    if (!IsNeutralSelectiveCurve(_HueVsLuminanceCurve, _HueVsLuminanceCurvePointCount))
     {
-        float targetLuma = EvaluateColorCurve(hue, _HueVsLuminanceCurve, _HueVsLuminanceCurvePointCount);
-        float factor = targetLuma / max(abs(luma), 1e-5);
-        color = lerp(color, color * factor, step(1e-5, abs(luma)));
+        float gain = 2.0 * EvaluateColorCurve(hue, _HueVsLuminanceCurve, _HueVsLuminanceCurvePointCount);
+        color *= lerp(1.0, gain, hueConfidence);
     }
 
-    if (!IsIdentityColorCurve(_LuminanceVsSaturationCurve, _LuminanceVsSaturationCurvePointCount))
+    if (!IsNeutralSelectiveCurve(_LuminanceVsSaturationCurve, _LuminanceVsSaturationCurvePointCount))
     {
-        float input = saturate(luma / (1.0 + max(luma, 0.0)));
-        float targetSaturation = EvaluateColorCurve(
+        float input = saturate(inputLuma / (1.0 + max(inputLuma, 0.0)));
+        float multiplier = 2.0 * EvaluateColorCurve(
             input,
             _LuminanceVsSaturationCurve,
             _LuminanceVsSaturationCurvePointCount);
-        float factor = targetSaturation / max(saturation, 1e-5);
-        float3 adjusted = lerp(float3(luma, luma, luma), color, factor);
-        color = lerp(color, adjusted, step(1e-6, chroma));
+        color = ApplySaturation(color, multiplier, lumaWeights);
     }
 
-    if (!IsIdentityColorCurve(_SaturationVsSaturationCurve, _SaturationVsSaturationCurvePointCount))
+    if (!IsNeutralSelectiveCurve(_SaturationVsSaturationCurve, _SaturationVsSaturationCurvePointCount))
     {
-        float targetSaturation = EvaluateColorCurve(
-            saturate(saturation),
+        float multiplier = 2.0 * EvaluateColorCurve(
+            saturation,
             _SaturationVsSaturationCurve,
             _SaturationVsSaturationCurvePointCount);
-        float factor = targetSaturation / max(saturation, 1e-5);
-        float3 adjusted = lerp(float3(luma, luma, luma), color, factor);
-        color = lerp(color, adjusted, step(1e-6, chroma));
+        color = ApplySaturation(color, multiplier, lumaWeights);
     }
 
     return color;

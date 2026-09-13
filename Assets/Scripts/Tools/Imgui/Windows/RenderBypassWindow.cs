@@ -6,22 +6,16 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Обходы подсистем и отладочные виды освещения.
-/// </summary>
-/// <remarks>
-/// Всё это существовало и раньше, но только клавишами: цифры от одного до
-/// восьми с дублями на F-клавишах и нигде не перечисленные. Узнать, что обход
-/// террейна вообще есть, можно было лишь из кода. Клавиши сохранены — на них
-/// набита рука, — но теперь рядом написано, что они делают, и то же самое
-/// щёлкается мышью.
-/// </remarks>
 public sealed class RenderBypassWindow : ToolWindow
 {
     private readonly IRuntimeDebugSettings _debugSettings;
     private readonly LightingEngine? _lighting;
     private readonly WorldGizmoOptions _gizmos;
     private Vector2 _scroll;
+    private int _bypassBannerCount = -1;
+    private string _bypassBanner = string.Empty;
+    private LightingEngine.DebugView? _lightingViewLabelValue;
+    private string _lightingViewLabel = string.Empty;
 
     public RenderBypassWindow(
         IRuntimeDebugSettings debugSettings,
@@ -86,15 +80,6 @@ public sealed class RenderBypassWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Предупреждение, пока хоть один этап выключен.
-    /// </summary>
-    /// <remarks>
-    /// Обход не помечен в самом кадре ничем: картинка просто становится другой.
-    /// Забытый обход стоил уже не одного часа разбора чисел, полученных не из
-    /// игры, — поэтому цена состояния названа прямо, а не выводится из того,
-    /// какие тумблеры горят ниже.
-    /// </remarks>
     private void DrawBypassWarning()
     {
         int active = 0;
@@ -118,19 +103,18 @@ public sealed class RenderBypassWindow : ToolWindow
             return;
         }
 
-        ToolChrome.Banner($"КАДР НЕПОЛНЫЙ · ОБХОДОВ: {active}", ToolTheme.Error);
+        if (_bypassBannerCount != active)
+        {
+            _bypassBannerCount = active;
+            _bypassBanner = $"КАДР НЕПОЛНЫЙ · ОБХОДОВ: {active}";
+        }
+
+        ToolChrome.Banner(_bypassBanner, ToolTheme.Error);
         GUILayout.Space(4f);
     }
 
-    /// <summary>
-    /// Выбор отладочного вида: назад, название, вперёд.
-    /// </summary>
-    /// <remarks>
-    /// Видов одиннадцать, и одной кнопкой «следующий» промах означал полный
-    /// круг. Шаг назад дешевле десяти шагов вперёд.
-    /// </remarks>
 
-    private static void DrawLightingViewPicker(LightingEngine lighting)
+    private void DrawLightingViewPicker(LightingEngine lighting)
     {
         ToolChrome.SectionHeader("ВИД ОСВЕЩЕНИЯ");
         bool custom = lighting.ActiveDebugView != LightingEngine.DebugView.FinalLighting;
@@ -138,7 +122,14 @@ public sealed class RenderBypassWindow : ToolWindow
         using (new GUILayout.HorizontalScope())
         {
             ToolChrome.StatusPip(custom ? ToolTheme.Warning : ToolTheme.Success);
-            GUILayout.Label(lighting.ActiveDebugView.ToString(), MutedLabelStyle);
+            LightingEngine.DebugView view = lighting.ActiveDebugView;
+            if (_lightingViewLabelValue != view)
+            {
+                _lightingViewLabelValue = view;
+                _lightingViewLabel = view.ToString();
+            }
+
+            GUILayout.Label(_lightingViewLabel, MutedLabelStyle);
         }
 
         using (new GUILayout.HorizontalScope())
@@ -164,16 +155,6 @@ public sealed class RenderBypassWindow : ToolWindow
         GUI.enabled = controlsEnabled;
     }
 
-    /// <summary>
-    /// Тумблер с точкой состояния.
-    /// </summary>
-    /// <remarks>
-    /// Цвет включённого состояния задаётся вызывающим, потому что смысл у
-    /// включённого разный. Обход по умолчанию красный: он что-то отнимает у
-    /// кадра. Гизмо и отладка роботов — синие: они добавляют, и тревоги в них
-    /// нет. Одинаковый цвет на всё стирал бы именно ту разницу, ради которой
-    /// на окно смотрят.
-    /// </remarks>
     private static bool DrawSwitch(bool value, string label, Color? activeColor = null)
     {
         using (new GUILayout.HorizontalScope())
@@ -185,13 +166,8 @@ public sealed class RenderBypassWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Следующий вид по кругу. Длина берётся из самого перечисления: список
-    /// уже рос, и зашитое число молча отрезало бы новые виды.
-    /// </summary>
     public static void CycleLightingView(LightingEngine lighting) => StepLightingView(lighting, 1);
 
-    /// <summary>Шаг по кругу в любую сторону.</summary>
     private static void StepLightingView(LightingEngine lighting, int step)
     {
         int total = System.Enum.GetValues(typeof(LightingEngine.DebugView)).Length;
@@ -202,11 +178,6 @@ public sealed class RenderBypassWindow : ToolWindow
         lighting.SetDebugView((LightingEngine.DebugView)next);
     }
 
-    /// <summary>
-    /// Временное выключение не должно стирать выбранную пользователем силу
-    /// света. При первом включении из нуля используется только безопасный
-    /// authored fallback; после этого возвращается последнее живое значение.
-    /// </summary>
     public void ToggleDynamicLight()
     {
         if (_lighting == null)

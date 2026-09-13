@@ -23,14 +23,10 @@ public static class ProjectRuntimeContracts
         public const bool DefaultHDREnabled = true;
     }
 
-    /// <summary>
-    /// Deployment-owned authentication settings. These are application
-    /// metadata, not mutable player preferences.
-    /// </summary>
     public static class Authentication
     {
-        public const string VkClientId = "";
-        public const string VkBackendUrl = "";
+        public const string VKClientId = "";
+        public const string VKBackendUrl = "";
     }
 
     public static class Chat

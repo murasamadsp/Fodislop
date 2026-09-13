@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Editor gizmo visualization for robot debugging.
-/// </summary>
 public static class RobotGizmos
 {
     private const float VISUAL_ROTATION_OFFSET = -90f;

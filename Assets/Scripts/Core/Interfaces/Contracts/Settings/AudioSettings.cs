@@ -5,7 +5,6 @@ using Fodinae.Audio.Core;
 
 namespace Fodinae.Core;
 
-/// <summary>Громкости по шинам.</summary>
 [Serializable]
 public sealed class AudioSettings
 {

@@ -6,24 +6,8 @@ using System.Collections.Generic;
 namespace Fodinae.UI.Builders;
 public readonly record struct GridItem(int Row, int Column, int RowSpan, int ColumnSpan, float Width, float Height);
 
-/// <summary>Вычисленный прямоугольник элемента.</summary>
 public readonly record struct GridRect(float Left, float Top, float Width, float Height);
 
-/// <summary>
-/// Раскладка сетки протокола: из описания дорожек и мест элементов —
-/// координаты. Ни одного обращения к UI Toolkit.
-/// </summary>
-/// <remarks>
-/// Раньше это жило внутри лямбды обработчика геометрии в строителе: разбор
-/// мест, размер дорожек, накопленные смещения и расстановка — всё в одном
-/// методе на сто тридцать строк, причём столбцы и строки были написаны
-/// дважды слово в слово. Здесь тот же расчёт разложен по шагам и не зависит
-/// от элементов: его видно целиком и можно проверить числами, не поднимая
-/// панель.
-///
-/// Ноль в описании дорожки значит «по содержимому», положительное число —
-/// доля свободного места (fr).
-/// </remarks>
 public static class PacketGridLayout
 {
     public static GridRect[] Measure(
@@ -60,10 +44,6 @@ public static class PacketGridLayout
         return rects;
     }
 
-    /// <summary>
-    /// Размеры дорожек одной оси: сначала «по содержимому», затем остаток
-    /// делится между долевыми.
-    /// </summary>
     private static float[] Tracks(
         IReadOnlyList<byte> definitions,
         IReadOnlyList<GridItem> items,
@@ -116,7 +96,6 @@ public static class PacketGridLayout
         return tracks;
     }
 
-    /// <summary>Накопленные смещения дорожек: на одну границу больше, чем дорожек.</summary>
     private static float[] Starts(float[] tracks)
     {
         var starts = new float[tracks.Length + 1];

@@ -7,25 +7,6 @@ using NUnit.Framework;
 
 namespace Fodinae.Tests.World.Lighting;
 
-/// <summary>
-/// Fuzzes <see cref="CascadeLayoutBuilder"/> with world sizes and atlas
-/// budgets a lighting system can actually be asked to lay out - including
-/// ones no correct caller would pick.
-/// </summary>
-/// <remarks>
-/// LightingResourceManager hands the produced offsets straight to compute
-/// buffer addressing. A wrong offset does not produce a wrong picture, it
-/// makes cascade N read cascade M's probes - overlapped or silently
-/// displaced data with a perfectly plausible frame on screen. So the
-/// properties asserted here are the ones the resource manager relies on and
-/// cannot check for itself: offsets stay cumulative and non-overlapping,
-/// the independent entry counter agrees with the builder, and an oversized
-/// atlas fails with the documented message instead of overflowing into
-/// garbage offsets.
-///
-/// The seeds are fixed. A fuzz test that picks a new seed every run reports
-/// failures nobody can reproduce.
-/// </remarks>
 [TestFixture]
 public class CascadeLayoutBuilderFuzzTests
 {
@@ -33,12 +14,6 @@ public class CascadeLayoutBuilderFuzzTests
 
     private static readonly int[] _Seeds = [1, 7, 42, 1337, 90210, 2147483, 8675309];
 
-    /// <summary>
-    /// Dimensions chosen to break the arithmetic rather than to look
-    /// plausible: degenerate zero extents, the atlas-count threshold at
-    /// 256/257, and extents big enough that the first cascade alone exceeds
-    /// the buffer budget.
-    /// </summary>
     private static readonly int[] _HostileDimensions = [0, 1, 2, 255, 256, 257, 1000, 1_000_000];
 
     private static readonly long[] _HostileAtlases = [0L, 1L, 64L, 256L, 257L, 1024L, 4096L];
@@ -246,11 +221,6 @@ public class CascadeLayoutBuilderFuzzTests
             random.Next(64, 8193));
     }
 
-    /// <summary>
-    /// Builds the layout for <paramref name="world"/>, returning false when
-    /// the documented overflow escape hatch fired. Any other exception
-    /// propagates and fails the calling test.
-    /// </summary>
     private static bool TryBuild(WorldSpec world, List<CascadeLayout> cascades)
     {
         try

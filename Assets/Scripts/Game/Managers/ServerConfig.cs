@@ -7,12 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.Game.Managers
 {
-    /// <summary>
-    /// ВНИМАНИЕ: Данный компонент является клиентской самодеятельностью (синтетической структурой).
-    /// В протоколе Даркара (MinesServer.Networking) отдельного ServerConfigPacket не существует.
-    /// Передать тимлиду / бэкенду для согласования: либо добавить серверный пакет параметров мира,
-    /// либо упразднить данный менеджер и брать лимиты из ClientConfig/констант протокола.
-    /// </summary>
     public class ServerConfig : MonoBehaviour, IServerConfig
     {
         private const string TAG = "[ServerConfig]";

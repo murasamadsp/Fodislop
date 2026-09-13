@@ -60,6 +60,41 @@ public class LocalizationServiceTests
         string result = string.Format(template, 42, 100);
         Assert.That(result, Is.EqualTo("Online: 42/100"));
     }
+
+    [Test]
+    public void SetLanguage_AllowsLocalizableToUnregisterDuringRefresh()
+    {
+        SelfUnregisteringLocalizable target = new(_locService);
+        _locService.RegisterLocalizable(target);
+        target.UnregisterOnApply = true;
+
+        Assert.DoesNotThrow(() => _locService.SetLanguage("en"));
+        Assert.That(target.ApplyCount, Is.EqualTo(2));
+    }
+
+    private sealed class SelfUnregisteringLocalizable : ILocalizableUI
+    {
+        private readonly LocalizationService _service;
+
+        public int ApplyCount { get; private set; }
+
+        public bool UnregisterOnApply { get; set; }
+
+        public SelfUnregisteringLocalizable(LocalizationService service)
+        {
+            _service = service;
+        }
+
+        public void ApplyLocalizedText()
+        {
+            ApplyCount++;
+            if (UnregisterOnApply)
+            {
+                _service.UnregisterLocalizable(this);
+            }
+        }
+    }
+
     private sealed class StubClientConfigManager : IClientConfigManager
     {
         public ClientConfig Config { get; } = new();

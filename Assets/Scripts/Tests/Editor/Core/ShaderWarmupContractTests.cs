@@ -1,10 +1,12 @@
 #nullable enable
 
+using System.Collections;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Fodinae.Core;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Fodinae.Tests.Core;
 
@@ -56,17 +58,16 @@ public sealed class ShaderWarmupContractTests
         }
     }
 
-    [Test]
-    public void ShaderWarmupService_CompletesWithoutExceptions()
+    [UnityTest]
+    public IEnumerator ShaderWarmupService_CompletesWithoutExceptions()
     {
         var service = new ShaderWarmupService();
         float finalProgress = 0f;
 
-        UniTask task = service.WarmupAsync(
+        yield return service.WarmupAsync(
             (_, progress) => finalProgress = progress,
-            CancellationToken.None);
+            CancellationToken.None).ToCoroutine();
 
-        task.GetAwaiter().GetResult();
         Assert.That(finalProgress, Is.EqualTo(1.0f).Within(0.001f), "ShaderWarmupService did not reach 100% completion.");
     }
 }

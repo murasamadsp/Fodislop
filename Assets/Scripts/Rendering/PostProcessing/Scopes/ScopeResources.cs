@@ -7,24 +7,10 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.Rendering.PostProcessing.Scopes;
 
-/// <summary>
-/// Буферы накопления и текстуры приборов разбора.
-/// </summary>
-/// <remarks>
-/// Владение вынесено из прохода по образцу
-/// <c>World/Lighting/Core/LightingResourceManager</c>: проход занят порядком
-/// вычислений, ресурсы — своим временем жизни, и смешивать их значит получить
-/// утечку при первой же смене разрешения.
-///
-/// Ресурсы создаются лениво и только когда рабочее место открыто: полмегабайта
-/// буферов и три текстуры не должны существовать в обычной игре.
-/// </remarks>
 internal sealed class ScopeResources : IDisposable
 {
-    /// <summary>Корзин на канал. 256 — ровно байт, и прибор совпадает с 8-битным выводом.</summary>
     public const int Bins = 256;
 
-    /// <summary>Сторона квадратных приборов: waveform и вектороскоп.</summary>
     public const int Size = 256;
 
     private const int HistogramWidth = 256;

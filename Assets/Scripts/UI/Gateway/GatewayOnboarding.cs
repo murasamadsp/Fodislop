@@ -10,10 +10,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Onboarding wizard presenter for Gateway screen.
-/// Configures initial display, controls, audio, and accessibility settings.
-/// </summary>
 public sealed class GatewayOnboarding
 {
     private const string StepActiveClass = "onb-step--active";

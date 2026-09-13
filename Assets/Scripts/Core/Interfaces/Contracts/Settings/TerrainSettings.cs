@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Материал террейна и закартовых поверхностей: анимация, отладка, эмиссия.
-/// </summary>
 [Serializable]
 public sealed class TerrainSettings
 {

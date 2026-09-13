@@ -13,7 +13,7 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
     private readonly CancellationTokenSource _lifetime = new();
     private readonly HashSet<long> _activeOperations = [];
     private readonly object _gate = new();
-    private long _nextOperationId;
+    private long _nextOperationID;
     private bool _disposed;
 
     public int ActiveCount
@@ -46,13 +46,13 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
             throw new ObjectDisposedException(nameof(AsyncOperationSupervisor));
         }
 
-        long operationId = Interlocked.Increment(ref _nextOperationId);
+        long operationID = Interlocked.Increment(ref _nextOperationID);
         lock (_gate)
         {
-            _activeOperations.Add(operationId);
+            _activeOperations.Add(operationID);
         }
 
-        ExecuteAsync(operationId, operationName, operation).Forget();
+        ExecuteAsync(operationID, operationName, operation).Forget();
     }
 
     public async UniTask StopAsync(CancellationToken cancellationToken = default)
@@ -82,7 +82,7 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
     }
 
     private async UniTaskVoid ExecuteAsync(
-        long operationId,
+        long operationID,
         string operationName,
         Func<CancellationToken, UniTask> operation)
     {
@@ -103,7 +103,7 @@ public sealed class AsyncOperationSupervisor : IAsyncOperationSupervisor, IDispo
         {
             lock (_gate)
             {
-                _activeOperations.Remove(operationId);
+                _activeOperations.Remove(operationID);
             }
         }
     }

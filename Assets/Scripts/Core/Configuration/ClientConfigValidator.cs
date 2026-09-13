@@ -7,22 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Проверяет persisted данные без неявной подстановки defaults.
-/// </summary>
-/// <remarks>
-/// ЗАЧЕМ ТАК КОРОТКО. Раньше здесь было ~50 рукописных
-/// <c>ValidateFloat(config.X, min, max, …)</c> — по строке на настройку, с
-/// границами, записанными литералами второй раз после
-/// `ProjectDefaults.Validate` — и цепочка из сорока сравнений
-/// <c>HasStandardGraphicsValues</c>. Обе конструкции надо было дописывать при
-/// каждом новом поле, и забытая строка означала дыру, которую ничто не
-/// показывало.
-///
-/// Диапазоны теперь объявлены над полями, поэтому обход по ним делает
-/// <see cref="SettingSchema"/>. Здесь остаётся ровно то, что диапазоном не
-/// выражается: перечни, парные правила и инварианты пресета графики.
-/// </remarks>
 internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQualityProfile)
 {
     private readonly GraphicsQualityProfile _graphicsQualityProfile = graphicsQualityProfile ??
@@ -56,10 +40,6 @@ internal sealed class ClientConfigValidator(GraphicsQualityProfile graphicsQuali
         ValidateGraphics(config);
     }
 
-    /// <summary>
-    /// Правила, у которых нет отрезка: перечни, «ноль либо диапазон» и
-    /// величины, осмысленные только в паре.
-    /// </summary>
     private static void ValidateDiscreteSettings(ClientConfig config)
     {
         InterfaceSettings interfaceSettings = config.Interface;

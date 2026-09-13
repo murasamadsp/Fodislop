@@ -19,17 +19,17 @@ public sealed class DummyWorldSimulationStateTests
     [Test]
     public void EmptyState_ReturnsUnloadedCellsAndNoConfiguration()
     {
-        using var state = new DummyWorldSimulationState(new StubSupervisor());
+        using var state = new DummyWorldSimulationState(new StubSupervisor(), new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
 
         Assert.That(state.HasLayer, Is.False);
         Assert.That(state.GetCell(10, 20), Is.EqualTo(CellType.Unloaded));
         Assert.That(state.GetCellConfig(CellType.Empty), Is.Null);
     }
 
-    [Test]
-    public async Task FailedInitialization_CanBeRetried()
+    [UnityEngine.TestTools.UnityTest]
+    public System.Collections.IEnumerator FailedInitialization_CanBeRetried()
     {
-        using var state = new DummyWorldSimulationState(new StubSupervisor());
+        using var state = new DummyWorldSimulationState(new StubSupervisor(), new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
         int attempts = 0;
 
         async UniTask FailOnce()
@@ -39,14 +39,29 @@ public sealed class DummyWorldSimulationStateTests
             throw new InvalidOperationException("injected failure");
         }
 
-        Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await state.EnsureInitializedAsync(FailOnce));
-
-        await state.EnsureInitializedAsync(() =>
+        async UniTask<bool> FailsAsExpected()
         {
-            attempts++;
-            return UniTask.CompletedTask;
-        });
+            try
+            {
+                await state.EnsureInitializedAsync(FailOnce);
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return true;
+            }
+        }
+
+        bool failedAsExpected = false;
+        yield return FailsAsExpected().ToCoroutine(result => failedAsExpected = result);
+        Assert.That(failedAsExpected, Is.True);
+
+        yield return state.EnsureInitializedAsync(() =>
+            {
+                attempts++;
+                return UniTask.CompletedTask;
+            })
+            .ToCoroutine();
 
         Assert.That(attempts, Is.EqualTo(2));
     }
@@ -54,7 +69,7 @@ public sealed class DummyWorldSimulationStateTests
     [Test]
     public async Task SuccessfulInitialization_IsIdempotentUntilReset()
     {
-        using var state = new DummyWorldSimulationState(new StubSupervisor());
+        using var state = new DummyWorldSimulationState(new StubSupervisor(), new Fodinae.Tests.Networking.UnavailableDummyWorldMapSource());
         int calls = 0;
         UniTask Initialize()
         {

@@ -46,6 +46,7 @@ public sealed class DisplayTransformRule : IRule
                 "Scripts",
                 "Rendering",
                 "PostProcessing",
+                "Pipeline",
                 "PostProcessRenderPass.cs"),
             CheckRenderPassSource);
 

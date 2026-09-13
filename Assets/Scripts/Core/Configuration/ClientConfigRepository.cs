@@ -29,14 +29,6 @@ internal sealed class ClientConfigRepository
 
     public bool Exists => File.Exists(_configPath);
 
-    /// <summary>
-    /// Загруженный конфиг вместе с исходным текстом файла.
-    /// </summary>
-    /// <remarks>
-    /// Текст нужен миграции: до схемы 22 поля вида лежали плоско в корне и в
-    /// типизированный <see cref="ClientConfig"/> не разбираются. Возвращать их
-    /// иначе нечем — <c>JsonUtility</c> не отдаёт неизвестные ключи.
-    /// </remarks>
     public readonly record struct LoadedConfig(ClientConfig Config, string Json);
 
     public LoadedConfig Load()

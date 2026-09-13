@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Geometry and mesh builder for out-of-bounds terrain surfaces (Transit, Perspective, Redrock).
-/// </summary>
 public sealed class SurfaceGeometryBuilder
 {
     public const float TransitHeight = 2f;

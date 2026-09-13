@@ -5,9 +5,6 @@ namespace Fodinae.Persistence;
 using System;
 using System.Collections.Generic;
 
-/// <summary>
-/// In-memory LRU cache for world layer chunks with dirty tracking and eviction notifications.
-/// </summary>
 /// <typeparam name="T">Unmanaged cell value type.</typeparam>
 public sealed class ChunkLruCache<T>
     where T : unmanaged

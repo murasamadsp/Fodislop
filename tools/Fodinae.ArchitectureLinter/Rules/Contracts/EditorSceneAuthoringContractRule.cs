@@ -46,7 +46,7 @@ public sealed class EditorSceneAuthoringContractRule : IRule
         }
 
         // ProductionSceneContractValidator must exist
-        var validatorPath = Path.Combine(projectRoot, "Assets/Scripts/Editor/ProductionSceneContractValidator.cs");
+        var validatorPath = Path.Combine(projectRoot, "Assets/Scripts/Editor/Validation/ProductionSceneContractValidator.cs");
         if (!File.Exists(validatorPath))
         {
             violations.Add(new RuleViolation
@@ -54,7 +54,7 @@ public sealed class EditorSceneAuthoringContractRule : IRule
                 RuleId = Id,
                 Message = "Read-only ProductionSceneContractValidator должен существовать и guardить scene contracts.",
                 Severity = Severity,
-                TypeName = "Assets/Scripts/Editor/ProductionSceneContractValidator.cs"
+                TypeName = "Assets/Scripts/Editor/Validation/ProductionSceneContractValidator.cs"
             });
         }
         else
@@ -69,7 +69,7 @@ public sealed class EditorSceneAuthoringContractRule : IRule
                     RuleId = Id,
                     Message = "Production validator должен отклонять empty, duplicate, stale и wrongly-grouped ManagerBindings.",
                     Severity = Severity,
-                    TypeName = "Assets/Scripts/Editor/ProductionSceneContractValidator.cs"
+                    TypeName = "Assets/Scripts/Editor/Validation/ProductionSceneContractValidator.cs"
                 });
             }
         }

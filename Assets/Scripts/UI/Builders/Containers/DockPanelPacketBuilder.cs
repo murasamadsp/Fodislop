@@ -31,10 +31,6 @@ public class DockPanelPacketBuilder : PacketUIBuilderBase<DockPanelPacket>
         return element;
     }
 
-    /// <summary>
-    /// Складывает пристыкованных детей вокруг заполнителя, идя от внешнего
-    /// края к центру.
-    /// </summary>
     private static VisualElement Fill(
         IReadOnlyList<IGUIComponentPacket> children,
         PacketUIBuilder builder)

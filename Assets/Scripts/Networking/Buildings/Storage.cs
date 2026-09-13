@@ -5,9 +5,6 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Networking.Buildings;
-/// <summary>
-/// Footprint copied 1:1 from MinesServer Game/Buildings/Storage.cs (CellsToPlace).
-/// </summary>
 public sealed class Storage : PackBuilding
 {
     public override PackType Type => PackType.Storage;

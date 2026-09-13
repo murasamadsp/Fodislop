@@ -15,7 +15,7 @@ public sealed class PatternRule : IRule
     {
         (new Regex(@"\b(?:StageAsync|CommitStagedAsync|DiscardStagedAsync|RestartCurrentAsync)\b"), "branching/staged scene lifecycle", null, null),
         (new Regex(@"\b(?:ContentSceneRoot|SceneInjectionBridge|LifecycleGraph|LifecycleParticipant|WorldSessionLifecycle)\b"), "removed lifecycle infrastructure", null, null),
-        (new Regex(@"Transform\?\s+managerObject|_servicesRoot\.Find\(|transform\.Find\("), "runtime composition-root name lookup (use serialized typed references)", @"^(Assets/Scripts/VContainer/|Assets/Scripts/Tests/|Assets/Scripts/Editor/ManagerContractMigrator\.cs|Assets/Scripts/(Game|Rendering|UI|World)/)", null),
+        (new Regex(@"Transform\?\s+managerObject|_servicesRoot\.Find\(|transform\.Find\("), "runtime composition-root name lookup (use serialized typed references)", @"^(Assets/Scripts/VContainer/|Assets/Scripts/Tests/|Assets/Scripts/Editor/Validation/ManagerContractMigrator\.cs|Assets/Scripts/(Game|Rendering|UI|World)/)", null),
         (new Regex(@"TryResolve<|TryResolve\s*\("), "DI fallback resolution (use required constructor/explicit dependency)", @"^(Assets/Scripts/Tests/|Assets/Scripts/VContainer/|Assets/Scripts/Core/Bootstrap/\w+LifetimeScope\.cs$)", null),
         (new Regex(@"using\s+Fodinae\.UI(?:\.|;)|using\s+Fodinae\.Game\.Managers;"), "networking layer references presentation/game manager namespaces", @"^(?!Assets/Scripts/Networking/)", null),
         (new Regex(@"\b(?:SceneCoordinator|ISceneCoordinator|SceneStartup|ISceneEntryPoint)\b"), "removed scene DI proxy", null, null),
@@ -49,7 +49,7 @@ public sealed class PatternRule : IRule
         (new Regex(@"PauseMenuUIFactory\.CreateSlider\s*\("), "unbound settings slider (use PauseMenuUIFactory.CreateBoundSlider)", @"^Assets/Scripts/UI/Settings/PauseMenuUIFactory\.cs$", null),
         (new Regex(@"ServerConfig[^;]*(Master|Sfx|Music|Ambience|Voice|Ui)Volume"), "audio volume in ServerConfig", null, null),
         (new Regex(@"_clientConfig\.Config\.[A-Za-z0-9_]+\s*="), "direct ClientConfig field mutation", null, null),
-        (new Regex(@"_clientConfig\.Save\s*\("), "unowned ClientConfig persistence", @"^(Assets/Scripts/Rendering/(?:Settings/)?GraphicsSettingsController\.cs|Assets/Scripts/Rendering/(?:Settings/)?DisplayManager\.cs|Assets/Scripts/World/Lighting/(?:(?:Config|Core)/)?Lighting(ConfigHolder|Engine)\.cs|Assets/Scripts/Core/Interfaces/Contracts/ConfigSaveScheduler\.cs)$", null),
+        (new Regex(@"_clientConfig\.Save\s*\("), "unowned ClientConfig persistence", @"^(Assets/Scripts/Rendering/(?:Settings/)?GraphicsSettingsController\.cs|Assets/Scripts/Rendering/(?:Settings/)?DisplayManager\.cs|Assets/Scripts/World/Lighting/(?:(?:Config|Core)/)?Lighting(ConfigHolder|Engine)\.cs|Assets/Scripts/Core/Configuration/Contracts/ConfigSaveScheduler\.cs)$", null),
         (new Regex(@"(FindAnyObjectByType|FindFirstObjectByType|FindObjectsByType)<Canvas>"), "screen-space uGUI Canvas lookup", null, null),
         (new Regex(@"using\s+UnityEngine\.UI;"), "screen-space uGUI namespace", null, null),
         (new Regex(@"new\s+GameObject\("), "runtime GameObject construction outside SceneObjectFactory", @"^(Assets/Editor/.*|Assets/Scripts/Editor/.*|Assets/Scripts/Tests/.*|Assets/Scripts/Core/Lifecycle/SceneObjectFactory\.cs|Assets/Scripts/Game/.*)$", null),

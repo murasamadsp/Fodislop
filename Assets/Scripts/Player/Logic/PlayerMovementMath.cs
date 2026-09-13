@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.Player.Logic;
 
-/// <summary>
-/// Mathematical and coordinate conversions for 2D player grid movement, rotation, and digging.
-/// </summary>
 public static class PlayerMovementMath
 {
     public static Vector2Int InputToDirection(Vector2 moveInput)

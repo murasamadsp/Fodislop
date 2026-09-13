@@ -5,9 +5,6 @@ using MinesServer.Data;
 
 namespace Fodinae.UI.Programmator;
 
-/// <summary>
-/// Localized key lookup tables for Programmator operator names and descriptions.
-/// </summary>
 public static class ProgrammatorLocalization
 {
     public static readonly IReadOnlyDictionary<ProgAction, string> OPERATOR_DESCRIPTIONS = new Dictionary<ProgAction, string>()

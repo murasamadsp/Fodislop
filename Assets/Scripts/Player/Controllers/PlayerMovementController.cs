@@ -28,7 +28,7 @@ namespace Fodinae.Player.Logic
         [SerializeField]
         private float _moveSpeed = ProjectRuntimeContracts.Movement.RobotMoveSpeed;
 
-        public uint BotId { get; private set; }
+        public uint BotID { get; private set; }
         public Vector2Int Position { get; private set; }
         public bool HasServerPosition { get; private set; }
         public bool IsGameplayVisible { get; private set; }
@@ -181,9 +181,9 @@ namespace Fodinae.Player.Logic
             _actionDispatcher?.DispatchHotkeys();
         }
 
-        public void Initialize(uint botId)
+        public void Initialize(uint botID)
         {
-            BotId = botId;
+            BotID = botID;
             HasServerPosition = false;
             IsGameplayVisible = false;
             _lastSentDirection = null;
@@ -196,7 +196,7 @@ namespace Fodinae.Player.Logic
 
             if (_robot != null)
             {
-                _robot.Initialize(botId);
+                _robot.Initialize(botID);
             }
         }
 

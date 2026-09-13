@@ -8,9 +8,6 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Batches building roofs and badges that must render above terrain doorway overlays.
-/// </summary>
 public sealed class WorldEntityOverlayBatch : IDisposable
 {
     private readonly Mesh _mesh;
@@ -39,16 +36,6 @@ public sealed class WorldEntityOverlayBatch : IDisposable
         renderer.sortingOrder = sortingOrder;
     }
 
-    /// <summary>
-    /// Собирает накладку из уже отобранных спрайтов.
-    /// </summary>
-    /// <remarks>
-    /// Отбор снаружи не ради вкуса. Здания сидят именно в этом слое, и раньше
-    /// накладка дважды за кадр проходила по всему списку зарегистрированных
-    /// спрайтов — на подсчёт и на запись, — спрашивая у каждого трансформ. Тот
-    /// же отбор пакет уже делает для основной сетки одним проходом; повторять
-    /// его здесь значило платить за город второй и третий раз.
-    /// </remarks>
     public void Rebuild(
         IReadOnlyList<WorldEntityBatchRenderer.SpriteHandle> sprites,
         Func<Texture2D, Rect> getAtlasRect,

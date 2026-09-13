@@ -11,7 +11,7 @@ using Fodinae.Networking;
 using Fodinae.Networking.Connection;
 using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
-using Fodinae.UI.HUD.Inventory.View;
+using Fodinae.UI.Inventory;
 using Fodinae.UI.HUD.Player.View;
 using Fodinae.World;
 using Fodinae.World.Lighting;
@@ -213,7 +213,10 @@ public sealed class GamePresentationStartup
         CancellationToken cancellationToken)
     {
         await WaitForWorldReadyAsync(ticket, cancellationToken);
-        await _audioSystem.WaitUntilBanksReadyAsync(cancellationToken);
+        // AudioSystem starts its own supervised bank-loading operation in
+        // Start(). Scene presentation must not depend on native FMOD sample
+        // callbacks: missing/slow banks are a degraded audio state, not a
+        // reason to hold the world transition open.
         if (_audioSystem.IsDegraded)
         {
             report.Degraded(

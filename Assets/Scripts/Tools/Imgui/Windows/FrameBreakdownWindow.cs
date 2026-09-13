@@ -6,27 +6,10 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Разбор кадра по этапам: где именно уходит время.
-/// </summary>
-/// <remarks>
-/// Окно, которого не хватало. Разметка стояла в коде давно, но не читалась
-/// ничем, и вопрос «почему при выключенном освещении кадр всё равно
-/// одиннадцать миллисекунд» решался чтением исходников и догадками. Теперь
-/// этапы названы, измерены и отсортированы по цене.
-///
-/// ПОЧЕМУ СОРТИРОВКА ПО ЦЕНЕ. Список в порядке объявления читается ровно один
-/// раз — когда его пишут. Дальше нужен один ответ: что сейчас самое дорогое.
-/// Порядок строк меняется, и это не недостаток, а сам смысл: строка наверху и
-/// есть ответ.
-///
-/// ПОЧЕМУ ЧАСТИ С ТОЧКОЙ. Вложенные участки помечены точкой в начале. Сумма
-/// частей, заметно меньшая, чем обёртка вокруг них, — это работа, которую
-/// никто не разметил, и место, куда стоит смотреть следующим.
-/// </remarks>
 public sealed class FrameBreakdownWindow : ToolWindow
 {
     private const float RefreshInterval = 0.25f;
+    private const double TargetBudgetMilliseconds = 1000.0 / 60.0;
 
     private readonly List<FrameProbe> _gpu = FrameProbeCatalog.CreateGpuProbes();
     private readonly List<FrameProbe> _cpu = FrameProbeCatalog.CreateCpuProbes();
@@ -35,12 +18,17 @@ public sealed class FrameBreakdownWindow : ToolWindow
     private readonly List<string> _cpuRows = [];
     private readonly List<string> _counterRows = [];
 
-    /// <summary>Черновики перестановки. Общие и переиспользуемые: окно рисуется часто.</summary>
     private static readonly List<(int Start, int Length, double Weight)> _stageOrder = [];
     private static readonly List<FrameProbe> _reordered = [];
 
     private double _gpuPeak;
     private double _cpuPeak;
+
+    // Заголовки и признак доступности считаются вместе со строками замеров:
+    // отрисовка только читает готовое и не собирает строки на каждое событие.
+    private string _gpuHeader = GroupHeader("ВИДЕОКАРТА", TargetBudgetMilliseconds);
+    private string _cpuHeader = GroupHeader("ПРОЦЕССОР", TargetBudgetMilliseconds);
+    private bool _anyAvailable;
     private bool _started;
     private float _nextUpdate;
     private Vector2 _scroll;
@@ -50,15 +38,6 @@ public sealed class FrameBreakdownWindow : ToolWindow
     {
     }
 
-    /// <summary>
-    /// Счётчики держатся открытыми только пока окно открыто.
-    /// </summary>
-    /// <remarks>
-    /// Каждый <c>ProfilerRecorder</c> — это включённый сбор в рантайме, и три
-    /// десятка одновременно стоят кадру заметных денег. Инструмент, который
-    /// платит за себя, когда на него не смотрят, — это тот самый случай, когда
-    /// измерение меняет измеряемое.
-    /// </remarks>
     public override bool WantsSampling => Visible;
 
     public override Vector2 MinimumSize => new(380f, 300f);
@@ -104,6 +83,11 @@ public sealed class FrameBreakdownWindow : ToolWindow
         _gpuRows.Clear();
         _cpuRows.Clear();
         _counterRows.Clear();
+        _gpuPeak = 0d;
+        _cpuPeak = 0d;
+        _gpuHeader = GroupHeader("ВИДЕОКАРТА", TargetBudgetMilliseconds);
+        _cpuHeader = GroupHeader("ПРОЦЕССОР", TargetBudgetMilliseconds);
+        _anyAvailable = false;
     }
 
     protected override void OnDispose()
@@ -187,6 +171,9 @@ public sealed class FrameBreakdownWindow : ToolWindow
     {
         _gpuPeak = BuildGroup(_gpu, _gpuRows);
         _cpuPeak = BuildGroup(_cpu, _cpuRows);
+        _anyAvailable = AnyAvailable();
+        _gpuHeader = GroupHeader("ВИДЕОКАРТА", System.Math.Max(_gpuPeak, TargetBudgetMilliseconds));
+        _cpuHeader = GroupHeader("ПРОЦЕССОР", System.Math.Max(_cpuPeak, TargetBudgetMilliseconds));
 
         _counterRows.Clear();
         foreach (FrameCounter counter in _counters)
@@ -197,17 +184,9 @@ public sealed class FrameBreakdownWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Упорядочивает группу по цене и собирает подписи. Возвращает максимум.
-    /// </summary>
-    /// <remarks>
-    /// Порядок наводится по этапам целиком, а не по отдельным строкам. Части
-    /// остаются под своим этапом в том порядке, в каком объявлены, — иначе
-    /// сортировка растащила бы их по всему списку и уничтожила ровно то, ради
-    /// чего он так и составлен: сравнение суммы частей с обёрткой вокруг них.
-    /// Первая версия делала именно это, и получалось не «разбор кадра», а
-    /// прыгающий столбец чисел без структуры.
-    /// </remarks>
+    private static string GroupHeader(string title, double scale) =>
+        $"{title} (шкала {scale:F1} мс, бюджет {TargetBudgetMilliseconds:F1} мс)";
+
     private static double BuildGroup(List<FrameProbe> probes, List<string> rows)
     {
         SortByStage(probes);
@@ -230,15 +209,6 @@ public sealed class FrameBreakdownWindow : ToolWindow
         return peak;
     }
 
-    /// <summary>
-    /// Переставляет этапы по убыванию цены, не разлучая их с частями.
-    /// </summary>
-    /// <remarks>
-    /// Цена этапа берётся из его собственного замера, а не из суммы частей:
-    /// обёртка меряет и неразмеченную работу тоже, и именно она — настоящая
-    /// цена этапа. У этапа без замера ценой служит самая дорогая его часть,
-    /// иначе пропавший маркер утащил бы весь блок в конец списка.
-    /// </remarks>
     private static void SortByStage(List<FrameProbe> probes)
     {
         _stageOrder.Clear();
@@ -303,7 +273,7 @@ public sealed class FrameBreakdownWindow : ToolWindow
         {
             _scroll = scroll.scrollPosition;
 
-            if (!AnyAvailable())
+            if (!_anyAvailable)
             {
                 ToolChrome.Banner("СЧЁТЧИКИ НЕДОСТУПНЫ", ToolTheme.Warning);
                 GUILayout.Label(
@@ -313,14 +283,13 @@ public sealed class FrameBreakdownWindow : ToolWindow
                 return;
             }
 
-            const double targetBudget = 1000.0 / 60.0;
-            double gpuScale = System.Math.Max(_gpuPeak, targetBudget);
-            double cpuScale = System.Math.Max(_cpuPeak, targetBudget);
+            double gpuScale = System.Math.Max(_gpuPeak, TargetBudgetMilliseconds);
+            double cpuScale = System.Math.Max(_cpuPeak, TargetBudgetMilliseconds);
 
-            ToolChrome.SectionHeader($"ВИДЕОКАРТА (шкала {gpuScale:F1} мс, бюджет {targetBudget:F1} мс)");
+            ToolChrome.SectionHeader(_gpuHeader);
             DrawGroup(_gpuRows, _gpu, gpuScale, ToolTheme.FrameGraphColor);
 
-            ToolChrome.SectionHeader($"ПРОЦЕССОР (шкала {cpuScale:F1} мс, бюджет {targetBudget:F1} мс)");
+            ToolChrome.SectionHeader(_cpuHeader);
             DrawGroup(_cpuRows, _cpu, cpuScale, ToolTheme.Warning);
 
             ToolChrome.SectionHeader("СЧЁТЧИКИ КАДРА");

@@ -5,7 +5,6 @@ using UnityEngine.Serialization;
 
 namespace Fodinae.Core;
 
-/// <summary>Экран: режим, кадры, калибровка вывода.</summary>
 [Serializable]
 public sealed class DisplaySettings
 {

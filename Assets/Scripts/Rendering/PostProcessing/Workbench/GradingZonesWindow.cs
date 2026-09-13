@@ -1,25 +1,33 @@
 #nullable enable
 
+using System.Collections.Generic;
 using Fodinae.Tools.Imgui;
 using UnityEngine;
 
 namespace Fodinae.Rendering.PostProcessing.Workbench;
 
-/// <summary>Зоны грейда по высоте: объявление и снятие с текущей позиции.</summary>
-/// <remarks>
-/// РАБОТА ИДЁТ ОТ КАМЕРЫ, А НЕ ОТ ЧИСЕЛ. Высота зоны не набирается с
-/// клавиатуры: автор приводит камеру туда, где вид должен быть таким, крутит
-/// грейд в соседнем окне и нажимает «снять сюда». Числа он увидит потом, в
-/// сохранённом файле. Обратный порядок — сначала придумать высоту, потом
-/// проверить — означает угадывание, а угадывать в цвете нечего.
-/// </remarks>
 internal sealed class GradingZonesWindow : ToolWindow
 {
     private const float DefaultHalfHeight = 24f;
     private const float DefaultFeather = 16f;
+    private const string ZonesOnLabel = "●  Зоны действуют";
+    private const string ZonesOffLabel = "○  Зоны действуют";
+    private const string NoCameraLabel = "Камеры нет: зона не определяется.";
 
     private readonly ColorGradeState _state;
     private readonly ColorGradeZones _zones;
+
+    // Подписи пересобираются на Layout и только при смене показанных чисел.
+    // Камера движется каждый кадр, но IMGUI зовёт отрисовку несколько раз за
+    // кадр, и строки на каждое событие были бы мусором на ровном месте.
+    private readonly List<ZoneLabels> _zoneLabels = [];
+    private string _cameraLabel = NoCameraLabel;
+    private string _countLabel = string.Empty;
+    private bool _labeledHasCamera;
+    private bool _labeledZonesEnabled;
+    private float _labeledCameraY = float.NaN;
+    private int _labeledCount = -1;
+
     private Vector2 _scroll;
     private int _nextIndex = 1;
     private int _removeRequested = -1;
@@ -38,10 +46,6 @@ internal sealed class GradingZonesWindow : ToolWindow
 
     public override Vector2 MinimumSize => new(250f, 340f);
 
-    /// <summary>
-    /// Whether the authored state is currently applied to the frame and can
-    /// therefore be captured without saving a look different from the preview.
-    /// </summary>
     public bool CaptureEnabled { get; set; }
 
     protected override void OnPlaySessionReset()
@@ -51,6 +55,11 @@ internal sealed class GradingZonesWindow : ToolWindow
         _removeRequested = -1;
         _clearRequested = false;
         _addRequested = null;
+        _zoneLabels.Clear();
+        _cameraLabel = NoCameraLabel;
+        _countLabel = string.Empty;
+        _labeledCount = -1;
+        _labeledCameraY = float.NaN;
     }
 
     protected override void DrawContent()
@@ -62,20 +71,17 @@ internal sealed class GradingZonesWindow : ToolWindow
         // считается кадр, а её проходу уже толкнули снаружи.
         Camera? camera = PostProcessRuntimeState.MainCamera;
         float cameraY = camera != null ? camera.transform.position.y : float.NaN;
+        if (Event.current.type == EventType.Layout || _labeledCount != _zones.Count)
+        {
+            RefreshLabels(camera != null, cameraY);
+        }
 
         GUILayout.Label("ПРИВЯЗКА К ВЫСОТЕ", SectionLabelStyle);
-        string zonesMarker = _zones.Enabled ? "●" : "○";
         _zones.Enabled = GUILayout.Toggle(
             _zones.Enabled,
-            $"{zonesMarker}  Зоны действуют",
+            _zones.Enabled ? ZonesOnLabel : ZonesOffLabel,
             SegmentedButtonStyle);
-        GUILayout.Label(
-            camera != null
-                ? _zones.Enabled
-                    ? $"Камера Y: {cameraY:F1}   —   {_zones.DescribeAt(cameraY)}"
-                    : $"Камера Y: {cameraY:F1}   —   зоны выключены, действует база"
-                : "Камеры нет: зона не определяется.",
-            camera != null ? MutedLabelStyle : ToolTheme.WarningLabel);
+        GUILayout.Label(_cameraLabel, camera != null ? MutedLabelStyle : ToolTheme.WarningLabel);
 
         using (new GUILayout.HorizontalScope())
         {
@@ -120,7 +126,7 @@ internal sealed class GradingZonesWindow : ToolWindow
         }
 
         ToolTheme.Separator();
-        GUILayout.Label($"СОХРАНЁННЫЕ ЗОНЫ  ·  {_zones.Count}", SectionLabelStyle);
+        GUILayout.Label(_countLabel, SectionLabelStyle);
         using var scroll = new GUILayout.ScrollViewScope(_scroll);
         _scroll = scroll.scrollPosition;
 
@@ -134,21 +140,61 @@ internal sealed class GradingZonesWindow : ToolWindow
             return;
         }
 
-        for (int index = 0; index < _zones.Count; index++)
+        for (int index = 0; index < _zones.Count && index < _zoneLabels.Count; index++)
         {
-            DrawZone(index, cameraY);
+            DrawZone(index, _zoneLabels[index]);
         }
     }
 
-    private void DrawZone(int index, float cameraY)
+    private void RefreshLabels(bool hasCamera, float cameraY)
+    {
+        bool zonesChanged = _labeledCount != _zones.Count;
+        while (_zoneLabels.Count < _zones.Count)
+        {
+            _zoneLabels.Add(new ZoneLabels());
+        }
+
+        if (_zoneLabels.Count > _zones.Count)
+        {
+            _zoneLabels.RemoveRange(_zones.Count, _zoneLabels.Count - _zones.Count);
+        }
+
+        for (int index = 0; index < _zones.Count; index++)
+        {
+            zonesChanged |= _zoneLabels[index].Refresh(_zones.Zones[index], cameraY);
+        }
+
+        bool cameraMoved = !(cameraY == _labeledCameraY || (float.IsNaN(cameraY) && float.IsNaN(_labeledCameraY)));
+        if (zonesChanged ||
+            cameraMoved ||
+            hasCamera != _labeledHasCamera ||
+            _zones.Enabled != _labeledZonesEnabled)
+        {
+            _labeledHasCamera = hasCamera;
+            _labeledZonesEnabled = _zones.Enabled;
+            _labeledCameraY = cameraY;
+            _cameraLabel = !hasCamera
+                ? NoCameraLabel
+                : _zones.Enabled
+                    ? $"Камера Y: {cameraY:F1}   —   {_zones.DescribeAt(cameraY)}"
+                    : $"Камера Y: {cameraY:F1}   —   зоны выключены, действует база";
+        }
+
+        if (_labeledCount != _zones.Count)
+        {
+            _labeledCount = _zones.Count;
+            _countLabel = $"СОХРАНЁННЫЕ ЗОНЫ  ·  {_zones.Count}";
+        }
+    }
+
+    private void DrawZone(int index, ZoneLabels labels)
     {
         ColorGradeZone zone = _zones.Zones[index];
         using var box = new GUILayout.VerticalScope(CardStyle);
 
         using (new GUILayout.HorizontalScope())
         {
-            float weight = zone.WeightAt(cameraY);
-            GUILayout.Label($"{zone.Name}  ·  вес {weight:P0}", SectionLabelStyle);
+            GUILayout.Label(labels.Title, SectionLabelStyle);
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("×", DangerButtonStyle, GUILayout.Width(28f)))
             {
@@ -156,29 +202,19 @@ internal sealed class GradingZonesWindow : ToolWindow
             }
         }
 
-        GUILayout.Label($"Центр Y  {zone.CenterY:F1}", MutedLabelStyle);
-        GUILayout.Label(
-            $"эксп {zone.Exposure:+0.##;-0.##;0}   " +
-            $"контраст {zone.Contrast:+0.##;-0.##;0}   " +
-            $"цвет {zone.Saturation:0.##}",
-            MutedLabelStyle);
+        GUILayout.Label(labels.Center, MutedLabelStyle);
+        GUILayout.Label(labels.Grade, MutedLabelStyle);
         float half;
         using (new GUILayout.HorizontalScope())
         {
-            GUILayout.Label(
-                $"Ядро ±{zone.HalfHeight:F1}",
-                ToolTheme.FieldLabel,
-                GUILayout.Width(112f));
+            GUILayout.Label(labels.Core, ToolTheme.FieldLabel, GUILayout.Width(112f));
             half = GUILayout.HorizontalSlider(zone.HalfHeight, 0f, 256f);
         }
 
         float feather;
         using (new GUILayout.HorizontalScope())
         {
-            GUILayout.Label(
-                $"Переход {zone.Feather:F1}",
-                ToolTheme.FieldLabel,
-                GUILayout.Width(112f));
+            GUILayout.Label(labels.Transition, ToolTheme.FieldLabel, GUILayout.Width(112f));
             feather = GUILayout.HorizontalSlider(zone.Feather, 0f, 256f);
         }
 
@@ -234,6 +270,83 @@ internal sealed class GradingZonesWindow : ToolWindow
             {
                 return candidate;
             }
+        }
+    }
+
+    private sealed class ZoneLabels
+    {
+        private const int NoWeight = int.MinValue;
+
+        private string? _name;
+        private float _centerY = float.NaN;
+        private float _exposure = float.NaN;
+        private float _contrast = float.NaN;
+        private float _saturation = float.NaN;
+        private float _halfHeight = float.NaN;
+        private float _feather = float.NaN;
+        private int _weightPercent = NoWeight + 1;
+
+        public string Title { get; private set; } = string.Empty;
+
+        public string Center { get; private set; } = string.Empty;
+
+        public string Grade { get; private set; } = string.Empty;
+
+        public string Core { get; private set; } = string.Empty;
+
+        public string Transition { get; private set; } = string.Empty;
+
+        public bool Refresh(ColorGradeZone zone, float cameraY)
+        {
+            float weight = zone.WeightAt(cameraY);
+            int weightPercent = float.IsNaN(weight) ? NoWeight : Mathf.RoundToInt(weight * 100f);
+            bool changed = false;
+
+            if (!string.Equals(_name, zone.Name, System.StringComparison.Ordinal) ||
+                weightPercent != _weightPercent)
+            {
+                _name = zone.Name;
+                _weightPercent = weightPercent;
+                Title = weightPercent == NoWeight
+                    ? $"{zone.Name}  ·  вес —"
+                    : $"{zone.Name}  ·  вес {weightPercent}%";
+                changed = true;
+            }
+
+            if (zone.CenterY != _centerY)
+            {
+                _centerY = zone.CenterY;
+                Center = $"Центр Y  {zone.CenterY:F1}";
+                changed = true;
+            }
+
+            if (zone.Exposure != _exposure || zone.Contrast != _contrast || zone.Saturation != _saturation)
+            {
+                _exposure = zone.Exposure;
+                _contrast = zone.Contrast;
+                _saturation = zone.Saturation;
+                Grade =
+                    $"эксп {zone.Exposure:+0.##;-0.##;0}   " +
+                    $"контраст {zone.Contrast:+0.##;-0.##;0}   " +
+                    $"цвет {zone.Saturation:0.##}";
+                changed = true;
+            }
+
+            if (zone.HalfHeight != _halfHeight)
+            {
+                _halfHeight = zone.HalfHeight;
+                Core = $"Ядро ±{zone.HalfHeight:F1}";
+                changed = true;
+            }
+
+            if (zone.Feather != _feather)
+            {
+                _feather = zone.Feather;
+                Transition = $"Переход {zone.Feather:F1}";
+                changed = true;
+            }
+
+            return changed;
         }
     }
 }

@@ -6,14 +6,14 @@ using System.Numerics;
 
 namespace Fodinae.PlanetLint;
 
-internal sealed class Fft
+internal sealed class FFT
 {
     private readonly int _size;
     private readonly int _bits;
     private readonly int[] _reversed;
     private readonly Complex[,] _twiddles;
 
-    public Fft(int size)
+    public FFT(int size)
     {
         _size = size;
         _bits = (int)Math.Log(size, 2);
@@ -315,7 +315,7 @@ internal static class Program
             }
         }
 
-        var fft = new Fft(size);
+        var fft = new FFT(size);
         fft.Forward2D(spectrum);
 
         int nyquist = Math.Min(size, size) / 2;

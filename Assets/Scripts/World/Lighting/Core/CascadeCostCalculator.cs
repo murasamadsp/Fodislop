@@ -5,10 +5,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace Fodinae.World.Lighting;
-/// <summary>
-/// Per-cascade cost of one full radiance solve, in the units that
-/// actually decide how long the GPU spends on it.
-/// </summary>
 public readonly record struct CascadeCostSample(
     int Index,
     int ProbeWidth,
@@ -21,15 +17,8 @@ public readonly record struct CascadeCostSample(
     long RayStepCount,
     long MergeTapCount);
 
-/// <summary>
-/// Pure calculation helper for Radiance Cascades telemetry and ray budget analysis.
-/// </summary>
 public static class CascadeCostCalculator
 {
-    /// <summary>
-    /// Rays, ray-march steps and far-cascade atlas taps one full solve
-    /// issues. Mirrors the arithmetic in <c>WorldLighting.compute</c>.
-    /// </summary>
     public static void CollectCascadeCosts(
         IReadOnlyList<CascadeLayout> cascades,
         int maximumSteps,

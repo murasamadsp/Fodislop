@@ -10,9 +10,6 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Dedicated decoder for WebP animations using native libwebp.
-/// </summary>
 public static class WebPAnimationDecoder
 {
     public static unsafe AnimationContainerDecoder.DecodedAnimation Decode(byte[] data)

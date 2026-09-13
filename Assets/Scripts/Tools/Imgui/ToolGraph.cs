@@ -7,9 +7,6 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.Tools.Imgui;
 
-/// <summary>
-/// График по кольцевому буферу отсчётов с кэшированной текстурной отрисовкой в один вызов.
-/// </summary>
 public sealed class ToolGraph : IDisposable
 {
     private const int TextureHeight = 48;
@@ -95,11 +92,6 @@ public sealed class ToolGraph : IDisposable
         DestroyTexture();
     }
 
-    /// <summary>
-    /// Рисует график. Верх шкалы берётся из <paramref name="scaleHint"/> или из
-    /// наибольшего отсчёта — что больше: иначе всплеск уезжает за рамку, а
-    /// ровный участок занимает пиксель по высоте.
-    /// </summary>
     public void Draw(Rect area, Color color, float scaleHint)
     {
         if (Event.current.type != EventType.Repaint)
@@ -170,15 +162,6 @@ public sealed class ToolGraph : IDisposable
         _lastTop = top;
     }
 
-    /// <summary>
-    /// Разметка под столбцами: четверти шкалы.
-    /// </summary>
-    /// <remarks>
-    /// Без неё график показывал форму, но не величину: всплеск втрое выше
-    /// соседнего выглядел так же, как всплеск вдвое выше. Линии идут в самой
-    /// текстуре, а не поверх неё, потому что рисовать их в <c>OnGUI</c> значило
-    /// бы четыре лишних вызова на каждый график на каждом кадре.
-    /// </remarks>
     private void PaintGrid(int width, int height, Color color)
     {
         Color32 empty = new(0, 0, 0, 0);
@@ -203,14 +186,6 @@ public sealed class ToolGraph : IDisposable
         }
     }
 
-    /// <summary>
-    /// Столбцы с затуханием к основанию и яркой кромкой сверху.
-    /// </summary>
-    /// <remarks>
-    /// Сплошная заливка превращала плотный график в цветной прямоугольник, по
-    /// которому не читался ни один отдельный кадр. Затухание оставляет вес
-    /// внизу, а кромка — единственное, что глаз ведёт по времени.
-    /// </remarks>
     private void PaintBars(int width, int height, float top, Color color)
     {
         byte red = (byte)(color.r * 255f);

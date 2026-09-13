@@ -6,20 +6,12 @@ using System.Net.Sockets;
 using Fodinae.Core;
 
 namespace Fodinae.Networking.Connection;
-/// <summary>
-/// Вид сетевого транспорта. Dummy — офлайн-заглушка для локального теста,
-/// Tcp — реальный Darkar25 транспорт (MinesServerNetworking).
-/// </summary>
 public enum ConnectionTransportKind
 {
     Dummy,
     Tcp,
 }
 
-/// <summary>
-/// Чистое решение выбора транспорта и разбора endpoint'а. Не создаёт
-/// соединений и не зависит от Unity runtime — покрывается unit-тестами.
-/// </summary>
 public static class ConnectionTransportConfig
 {
     public const string DefaultServerHost = ProjectRuntimeContracts.ClientConfiguration.DefaultServerHost;
@@ -61,11 +53,6 @@ public static class ConnectionTransportConfig
         return true;
     }
 
-    /// <summary>
-    /// Разбирает host:port в <see cref="IPAddress"/>. Пустой host подставляет
-    /// <see cref="DefaultServerHost"/>. Возвращает false при невалидном порте
-    /// или нерезолвящемся хосте.
-    /// </summary>
     public static bool TryResolveEndpoint(
         string? host,
         int port,

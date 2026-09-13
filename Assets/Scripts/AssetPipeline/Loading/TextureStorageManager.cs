@@ -14,11 +14,6 @@ using VContainer;
 
 namespace Fodinae.AssetPipeline
 {
-    /// <summary>
-    /// Manager for storing and caching textures downloaded from the server or loaded locally.
-    /// Provides thread-safe async access with in-memory caching.
-    /// Writes downloaded assets to persistentDataPath to prevent Unity AssetDatabase reloads in Editor.
-    /// </summary>
     public class TextureStorageManager : MonoBehaviour, ITextureStorageService
     {
         [Inject]
@@ -34,9 +29,6 @@ namespace Fodinae.AssetPipeline
         private string? _textureFolderPath;
         private bool _folderInitialized;
 
-        /// <summary>
-        /// Get a texture by filename asynchronously.
-        /// </summary>
         /// <param name="filename">The texture filename (e.g. "cells/1.png", "clan/4.png").</param>
         /// <returns>Loaded Texture2D.</returns>
         public async UniTask<Texture2D?> GetTextureAsync(
@@ -120,9 +112,6 @@ namespace Fodinae.AssetPipeline
                 makeNoLongerReadable: makeNoLongerReadable);
         }
 
-        /// <summary>
-        /// Get raw texture bytes asynchronously by filename.
-        /// </summary>
         /// <param name="filename">The texture filename.</param>
         /// <returns>PNG/WEBP bytes, or null if not found.</returns>
         public async UniTask<byte[]?> GetTextureData(string filename, CancellationToken cancellationToken = default)
@@ -138,10 +127,6 @@ namespace Fodinae.AssetPipeline
 
         public event Action<string>? OnTextureLoaded;
 
-        /// <summary>
-        /// Load texture file bytes from storage asynchronously.
-        /// Searches persistentDataPath first (dynamic downloads), then bundled Assets/Textures (read-only).
-        /// </summary>
         private async UniTask<byte[]?> LoadTextureFromStorage(
             string filename,
             CancellationToken cancellationToken = default)
@@ -245,9 +230,6 @@ namespace Fodinae.AssetPipeline
             return string.Join("/", segments);
         }
 
-        /// <summary>
-        /// Initialize the texture folder path for dynamic runtime downloads.
-        /// </summary>
         private void InitializeTextureFolderPath()
         {
             if (_folderInitialized)
@@ -265,9 +247,6 @@ namespace Fodinae.AssetPipeline
             _folderInitialized = true;
         }
 
-        /// <summary>
-        /// Clear the texture cache.
-        /// </summary>
         public void ClearCache()
         {
             // Loaded textures can still be referenced by renderers and UI when

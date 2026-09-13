@@ -1,40 +1,100 @@
 #nullable enable
 
+using System.Collections.Generic;
 using Fodinae.Rendering.PostProcessing.Scopes;
 using Fodinae.Tools.Imgui;
 using UnityEngine;
 
 namespace Fodinae.Rendering.PostProcessing.Workbench;
 
-/// <summary>
-/// Приборы разбора и отладочные виды кадра.
-/// </summary>
-/// <remarks>
-/// Приборы можно выключить, и это не экономия ради экономии: разбор читает
-/// прореженный кадр и пишет в три буфера десять раз в секунду. Когда крутят
-/// кривую, он нужен; когда смотрят на картинку — мешает мерить сам себя.
-/// </remarks>
 internal sealed class GradingScopesWindow : ToolWindow
 {
+    private const string ScopesOnLabel = "●  Считать приборы";
+    private const string ScopesOffLabel = "○  Считать приборы";
+
+    // Поля окна (13 + 13) и вертикальная полоса прокрутки.
+    private const float ChromeWidth = 26f + 18f;
+    private const float TwoColumnMinWidth = 700f;
+    private const float ColumnGap = 8f;
+
+    private static readonly Option[] DebugViewOptions =
+    [
+        new("обычный", (int)PostProcessDebugView.None),
+        new("ложный цвет", (int)PostProcessDebugView.FalseColor),
+        new("отсечка", (int)PostProcessDebugView.Clipping),
+        new("highlights", (int)PostProcessDebugView.HighlightClipping),
+        new("shadows", (int)PostProcessDebugView.ShadowClipping),
+        new("gamut warning", (int)PostProcessDebugView.GamutWarning),
+        new("luma", (int)PostProcessDebugView.LumaOnly),
+        new("sat", (int)PostProcessDebugView.SaturationOnly),
+        new("matte", (int)PostProcessDebugView.QualifierMatte),
+        new("R", (int)PostProcessDebugView.SoloRed),
+        new("G", (int)PostProcessDebugView.SoloGreen),
+        new("B", (int)PostProcessDebugView.SoloBlue),
+    ];
+
+    private static readonly Option[] CompareOptions =
+    [
+        new("выкл", (int)CompareMode.Off),
+        new("верт. wipe", (int)CompareMode.VerticalWipe),
+        new("гориз. wipe", (int)CompareMode.HorizontalWipe),
+        new("side-by-side", (int)CompareMode.SideBySide),
+        new("A/B", (int)CompareMode.AbToggle),
+    ];
+
+    private static readonly Option[] SourceOptions =
+    [
+        new("после грейда", (int)ScopesSourceMode.After),
+        new("до грейда", (int)ScopesSourceMode.Before),
+    ];
+
+    private static readonly Option[] WaveformOptions =
+    [
+        new("overlay", (int)ScopeWaveformMode.Overlay),
+        new("RGB parade", (int)ScopeWaveformMode.Parade),
+        new("luma", (int)ScopeWaveformMode.Luma),
+    ];
+
+    private static readonly Option[] HistogramOptions =
+    [
+        new("RGB + luma", 0),
+        new("luma", 1),
+        new("RGB", 2),
+    ];
+
+    private static readonly GUIContent _MeasureContent = new();
+    private static readonly GUILayoutOption[] ExpandWidth = [GUILayout.ExpandWidth(true)];
+
+    private readonly Dictionary<string, float> _buttonWidths = [];
+
     private bool _scopesEnabled;
     private bool? _scopesEnabledRequested;
     private PostProcessDebugView? _debugViewRequested;
     private Vector2 _scroll;
+
+    // Ширина берётся на Layout и держится до следующего Layout: иначе ресайз
+    // между Layout и Repaint перенёс бы кнопки в другие ряды, и число
+    // контролов двух событий разошлось бы.
+    private float _contentWidth = 380f;
+
+    private float _zoomLabelValue = float.NaN;
+    private string _zoomLabel = string.Empty;
+    private int _splitLabelPercent = -1;
+    private string _splitLabel = string.Empty;
+    private double _clippedBlack = double.NaN;
+    private double _clippedHighlight = double.NaN;
+    private string _clippedLabel = string.Empty;
 
     public GradingScopesWindow()
         : base("Приборы изображения", new Rect(738f, 16f, 446f, 720f))
     {
     }
 
-    /// <summary>
-    /// Нужно ли считать приборы. Читает <see cref="GradingWorkbench"/>, чтобы
-    /// включить или выключить проход целиком.
-    /// </summary>
     public bool ScopesRequested => Visible && _scopesEnabled;
 
     public override bool WantsSampling => false;
 
-    public override Vector2 MinimumSize => new(380f, 420f);
+    public override Vector2 MinimumSize => new(380f, 360f);
 
     protected override void OnPlaySessionReset()
     {
@@ -49,6 +109,9 @@ internal sealed class GradingScopesWindow : ToolWindow
         ScopesRenderPass.WaveformMode = ScopeWaveformMode.Overlay;
         ScopesRenderPass.HistogramMode = 0;
         _scroll = default;
+
+        // Стили пересобираются вместе со скином, и замеры кнопок вместе с ними.
+        _buttonWidths.Clear();
     }
 
     protected override void OnVisibilityChanged(bool visible)
@@ -68,116 +131,28 @@ internal sealed class GradingScopesWindow : ToolWindow
 
     protected override void DrawContent()
     {
-        ApplyPendingChanges();
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        if (Event.current.type == EventType.Layout)
         {
-            _scroll = scroll.scrollPosition;
-            GUILayout.Label("ИЗМЕРЕНИЕ СИГНАЛА", SectionLabelStyle);
-            using (new GUILayout.HorizontalScope())
-            {
-                string marker = _scopesEnabled ? "●" : "○";
-                bool scopesEnabled = GUILayout.Toggle(
-                    _scopesEnabled,
-                    $"{marker}  Считать приборы",
-                    SegmentedButtonStyle);
-                if (scopesEnabled != _scopesEnabled)
-                {
-                    _scopesEnabledRequested = scopesEnabled;
-                }
-
-                GUILayout.FlexibleSpace();
-            }
-
-            DrawDebugViewRow();
-            DrawCompareRow();
-            DrawScopeSourceRow();
-            ToolTheme.Separator();
-
-            bool available = _scopesEnabled && ScopesRenderPass.Available;
-            string? failure = ScopesRenderPass.FailureMessage;
-            string message = !_scopesEnabled
-                ? "Приборы выключены — проход не запускается."
-                : !available
-                    ? failure == null
-                        ? "Приборы недоступны: renderer feature ещё не создал " +
-                          "ScopesRenderPass или не нашёл Scopes.compute."
-                        : "Приборы остановлены: " + failure +
-                          ". Выключите и снова включите «считать приборы» для повтора."
-                    : "Обновление 5 раз/с; около 65 тыс. выборок на снимок.";
-            GUILayout.Label(
-                message,
-                available ? ToolTheme.SuccessLabel : MutedLabelStyle);
-            if (available)
-            {
-                GUILayout.Label(
-                    $"Clipped: shadows {ScopesRenderPass.ClippedBlackSamples:N0} / " +
-                    $"highlights {ScopesRenderPass.ClippedHighlightSamples:N0} samples",
-                    ToolTheme.MutedLabel);
-            }
-
-            float scopeWidth = Mathf.Max(120f, Mathf.Min(410f, Rect.width - 48f));
-            DrawScope(
-                "Гистограмма",
-                available ? ScopesRenderPass.LiveHistogram : null,
-                scopeWidth,
-                128f);
-            GUILayout.Space(6f);
-            DrawScope(
-                ScopesRenderPass.WaveformMode == ScopeWaveformMode.Parade
-                    ? "Waveform RGB parade"
-                    : ScopesRenderPass.WaveformMode == ScopeWaveformMode.Luma
-                        ? "Waveform Luma"
-                        : "Waveform RGB overlay",
-                available ? ScopesRenderPass.LiveWaveform : null,
-                scopeWidth,
-                220f);
-            GUILayout.Space(6f);
-            DrawScope(
-                "Вектороскоп",
-                available ? ScopesRenderPass.LiveVectorscope : null,
-                scopeWidth,
-                220f,
-                ScaleMode.ScaleToFit);
-            bool showSkinToneLine = GUILayout.Toggle(
-                ScopesRenderPass.ShowSkinToneLine,
-                "Skin-tone line",
-                ToolTheme.SegmentedButton);
-            ScopesRenderPass.ShowSkinToneLine = showSkinToneLine;
-            GUILayout.Label(
-                "Targets: R / Mg / B / Cy / G / Y · 75% / 100%",
-                ToolTheme.MutedLabel);
-            using (new GUILayout.HorizontalScope())
-            {
-                GUILayout.Label("vectorscope zoom", ToolTheme.FieldLabel, GUILayout.Width(120f));
-                ScopesRenderPass.VectorscopeScale = GUILayout.HorizontalSlider(
-                    ScopesRenderPass.VectorscopeScale,
-                    0.5f,
-                    2f);
-                GUILayout.Label(
-                    $"{ScopesRenderPass.VectorscopeScale:0.00}×",
-                    ToolTheme.FieldLabel,
-                    GUILayout.Width(48f));
-            }
+            ApplyPendingChanges();
+            _contentWidth = Mathf.Max(120f, Rect.width - ChromeWidth);
         }
+
+        using var scroll = new GUILayout.ScrollViewScope(_scroll);
+        _scroll = scroll.scrollPosition;
+
+        DrawFrameSection();
+        ToolTheme.Separator();
+        DrawCompareSection();
+        ToolTheme.Separator();
+        DrawScopesSection();
     }
 
-    private void DrawDebugViewRow()
+    private void DrawFrameSection()
     {
-        GUILayout.Label("ВИД КАДРА", SectionLabelStyle);
-        using (new GUILayout.HorizontalScope())
+        int view = SegmentedRow("ВИД КАДРА", DebugViewOptions, (int)PostProcessRuntimeState.DebugView);
+        if (view != (int)PostProcessRuntimeState.DebugView)
         {
-            DebugViewButton("обычный", PostProcessDebugView.None);
-            DebugViewButton("ложный цвет", PostProcessDebugView.FalseColor);
-            DebugViewButton("отсечка", PostProcessDebugView.Clipping);
-            DebugViewButton("highlights", PostProcessDebugView.HighlightClipping);
-            DebugViewButton("shadows", PostProcessDebugView.ShadowClipping);
-            DebugViewButton("GAMUT WARNING", PostProcessDebugView.GamutWarning);
-            DebugViewButton("luma", PostProcessDebugView.LumaOnly);
-            DebugViewButton("sat", PostProcessDebugView.SaturationOnly);
-            DebugViewButton("matte", PostProcessDebugView.QualifierMatte);
-            DebugViewButton("R", PostProcessDebugView.SoloRed);
-            DebugViewButton("G", PostProcessDebugView.SoloGreen);
-            DebugViewButton("B", PostProcessDebugView.SoloBlue);
+            _debugViewRequested = (PostProcessDebugView)view;
         }
 
         string explanation = PostProcessRuntimeState.DebugView switch
@@ -202,52 +177,41 @@ internal sealed class GradingScopesWindow : ToolWindow
             PostProcessDebugView.SoloRed => "только красный канал",
             PostProcessDebugView.SoloGreen => "только зелёный канал",
             PostProcessDebugView.SoloBlue => "только синий канал",
-            PostProcessDebugView.None => string.Empty,
-            _ => "неизвестный вид кадра",
+            _ => "кадр показывается без отладочной разметки",
         };
-        if (!string.IsNullOrEmpty(explanation))
-        {
-            GUILayout.Label(explanation, MutedLabelStyle);
-        }
+        GUILayout.Label(explanation, WrappedLabelStyle);
     }
 
-    private void DrawCompareRow()
+    private void DrawCompareSection()
     {
-        GUILayout.Label("СРАВНЕНИЕ ДО / ПОСЛЕ", SectionLabelStyle);
-
-        using (new GUILayout.HorizontalScope())
+        CompareMode mode = PostProcessRuntimeState.CompareMode;
+        int picked = SegmentedRow("СРАВНЕНИЕ ДО / ПОСЛЕ", CompareOptions, (int)mode);
+        if (picked != (int)mode)
         {
-            CompareModeButton("выкл", CompareMode.Off);
-            CompareModeButton("верт. wipe", CompareMode.VerticalWipe);
-            CompareModeButton("гориз. wipe", CompareMode.HorizontalWipe);
-            CompareModeButton("side-by-side", CompareMode.SideBySide);
-            CompareModeButton("A/B", CompareMode.AbToggle);
+            ApplyCompareMode((CompareMode)picked);
+            mode = PostProcessRuntimeState.CompareMode;
         }
 
-        CompareMode mode = PostProcessRuntimeState.CompareMode;
         if (mode == CompareMode.AbToggle)
         {
-            bool before = GUILayout.Toggle(
+            PostProcessRuntimeState.CompareBefore = GUILayout.Toggle(
                 PostProcessRuntimeState.CompareBefore,
                 "Показывать BEFORE",
-                ToolTheme.SegmentedButton);
-            PostProcessRuntimeState.CompareBefore = before;
+                SegmentedButtonStyle);
         }
 
-        float split = PostProcessRuntimeState.CompareSplit;
         if (mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe)
         {
             using (new GUILayout.HorizontalScope())
             {
-                split = GUILayout.HorizontalSlider(
-                    split, 0f, 1f);
+                float split = GUILayout.HorizontalSlider(PostProcessRuntimeState.CompareSplit, 0f, 1f);
                 PostProcessRuntimeState.CompareSplit = split;
-                GUILayout.Label($"{split:P0}", ToolTheme.FieldLabel, GUILayout.Width(48f));
+                GUILayout.Label(SplitLabel(split), ToolTheme.FieldLabel, GUILayout.Width(48f));
             }
         }
 
-            GUILayout.Label(
-                mode switch
+        GUILayout.Label(
+            mode switch
             {
                 CompareMode.VerticalWipe => "Слева — BEFORE, справа — AFTER.",
                 CompareMode.HorizontalWipe => "Снизу — BEFORE, сверху — AFTER.",
@@ -255,112 +219,241 @@ internal sealed class GradingScopesWindow : ToolWindow
                 CompareMode.AbToggle => PostProcessRuntimeState.CompareBefore
                     ? "A/B: показывается BEFORE."
                     : "A/B: показывается AFTER.",
-                _ => "Сравнение выключено.",
+                _ => "Сравнение выключено. Удерживайте \\ для временного обхода грейда.",
             },
-            ToolTheme.MutedLabel);
-        GUILayout.Label(
-            "Удерживайте \\ для временного bypass и быстрого A/B сравнения.",
-            ToolTheme.MutedLabel);
+            WrappedLabelStyle);
     }
 
-    private static void DrawScopeSourceRow()
+    private void DrawScopesSection()
     {
-        GUILayout.Label("ИСТОЧНИК ПРИБОРОВ", SectionLabelStyle);
-        using (new GUILayout.HorizontalScope())
+        GUILayout.Label("ПРИБОРЫ", SectionLabelStyle);
+        bool scopesEnabled = GUILayout.Toggle(
+            _scopesEnabled,
+            _scopesEnabled ? ScopesOnLabel : ScopesOffLabel,
+            SegmentedButtonStyle);
+        if (scopesEnabled != _scopesEnabled)
         {
-            ScopeSourceButton("после грейда", ScopesSourceMode.After);
-            ScopeSourceButton("до грейда", ScopesSourceMode.Before);
+            _scopesEnabledRequested = scopesEnabled;
         }
 
-        GUILayout.Label(
-            ScopesRenderPass.SourceMode == ScopesSourceMode.Before
-                ? "Scopes читают исходный camera color до постпроцесса."
-                : "Scopes читают финальный camera color после постпроцесса.",
-            ToolTheme.MutedLabel);
-
-        GUILayout.Label("WAVEFORM", SectionLabelStyle);
-        using (new GUILayout.HorizontalScope())
+        if (!_scopesEnabled)
         {
-            WaveformModeButton("overlay", ScopeWaveformMode.Overlay);
-            WaveformModeButton("RGB parade", ScopeWaveformMode.Parade);
-            WaveformModeButton("Luma", ScopeWaveformMode.Luma);
+            // Пустые рамки на полэкрана ничего не сообщают: пока приборы
+            // выключены, окно остаётся компактным.
+            GUILayout.Label("Приборы выключены — проход не запускается.", MutedLabelStyle);
+            return;
         }
 
-        GUILayout.Label("HISTOGRAM", SectionLabelStyle);
-        using (new GUILayout.HorizontalScope())
+        // Режимы пишутся только при смене: сеттеры прохода не обязаны быть
+        // дешёвыми, а отрисовка вызывается несколько раз за кадр.
+        int source = SegmentedRow("ИСТОЧНИК", SourceOptions, (int)ScopesRenderPass.SourceMode);
+        if (source != (int)ScopesRenderPass.SourceMode)
         {
-            HistogramModeButton("RGB + luma", 0);
-            HistogramModeButton("luma", 1);
-            HistogramModeButton("RGB", 2);
+            ScopesRenderPass.SourceMode = (ScopesSourceMode)source;
         }
-    }
 
-    private static void ScopeSourceButton(string label, ScopesSourceMode mode)
-    {
-        bool selected = ScopesRenderPass.SourceMode == mode;
-        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
-        if (toggled && !selected)
+        int waveform = SegmentedRow("WAVEFORM", WaveformOptions, (int)ScopesRenderPass.WaveformMode);
+        if (waveform != (int)ScopesRenderPass.WaveformMode)
         {
-            ScopesRenderPass.SourceMode = mode;
+            ScopesRenderPass.WaveformMode = (ScopeWaveformMode)waveform;
         }
-    }
 
-    private static void WaveformModeButton(string label, ScopeWaveformMode mode)
-    {
-        bool selected = ScopesRenderPass.WaveformMode == mode;
-        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
-        if (toggled && !selected)
+        int histogram = SegmentedRow("HISTOGRAM", HistogramOptions, ScopesRenderPass.HistogramMode);
+        if (histogram != ScopesRenderPass.HistogramMode)
         {
-            ScopesRenderPass.WaveformMode = mode;
+            ScopesRenderPass.HistogramMode = histogram;
         }
-    }
 
-    private static void HistogramModeButton(string label, int mode)
-    {
-        bool selected = ScopesRenderPass.HistogramMode == mode;
-        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
-        if (toggled && !selected)
+        bool available = ScopesRenderPass.Available;
+        if (!available)
         {
-            ScopesRenderPass.HistogramMode = mode;
+            string? failure = ScopesRenderPass.FailureMessage;
+            GUILayout.Label(
+                failure == null
+                    ? "Приборы недоступны: renderer feature ещё не создал ScopesRenderPass " +
+                      "или не нашёл Scopes.compute."
+                    : "Приборы остановлены: " + failure +
+                      ". Выключите и снова включите «Считать приборы» для повтора.",
+                ToolTheme.WarningLabel);
+            return;
         }
-    }
 
-    private static void CompareModeButton(string label, CompareMode mode)
-    {
-        bool selected = PostProcessRuntimeState.CompareMode == mode;
-        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
-        if (toggled && !selected)
+        GUILayout.Label(ClippedLabel(), MutedLabelStyle);
+        GUILayout.Space(4f);
+
+        string waveformTitle = ScopesRenderPass.WaveformMode switch
         {
-            PostProcessRuntimeState.CompareMode = mode;
-            if (mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe)
+            ScopeWaveformMode.Parade => "Waveform RGB parade",
+            ScopeWaveformMode.Luma => "Waveform luma",
+            _ => "Waveform RGB overlay",
+        };
+
+        if (_contentWidth >= TwoColumnMinWidth)
+        {
+            float column = (_contentWidth - ColumnGap) * 0.5f;
+            using (new GUILayout.HorizontalScope())
             {
-                PostProcessRuntimeState.CompareSplit = 0.5f;
+                DrawScope("Гистограмма", ScopesRenderPass.LiveHistogram, column, column * 0.6f);
+                GUILayout.Space(ColumnGap);
+                DrawScope(
+                    "Вектороскоп",
+                    ScopesRenderPass.LiveVectorscope,
+                    column,
+                    column * 0.6f,
+                    ScaleMode.ScaleToFit);
             }
-            else if (mode == CompareMode.Off)
-            {
-                PostProcessRuntimeState.CompareSplit = 0f;
-                PostProcessRuntimeState.CompareBefore = false;
-            }
+
+            GUILayout.Space(6f);
+            DrawScope(waveformTitle, ScopesRenderPass.LiveWaveform, _contentWidth, Mathf.Min(320f, _contentWidth * 0.35f));
+        }
+        else
+        {
+            DrawScope("Гистограмма", ScopesRenderPass.LiveHistogram, _contentWidth, 128f);
+            GUILayout.Space(6f);
+            DrawScope(waveformTitle, ScopesRenderPass.LiveWaveform, _contentWidth, 200f);
+            GUILayout.Space(6f);
+            DrawScope(
+                "Вектороскоп",
+                ScopesRenderPass.LiveVectorscope,
+                _contentWidth,
+                Mathf.Min(_contentWidth, 260f),
+                ScaleMode.ScaleToFit);
+        }
+
+        DrawVectorscopeControls();
+    }
+
+    private void DrawVectorscopeControls()
+    {
+        using (new GUILayout.HorizontalScope())
+        {
+            ScopesRenderPass.ShowSkinToneLine = GUILayout.Toggle(
+                ScopesRenderPass.ShowSkinToneLine,
+                "Skin-tone line",
+                SegmentedButtonStyle);
+            GUILayout.Label("цели: R / Mg / B / Cy / G / Y · 75% / 100%", MutedLabelStyle);
+        }
+
+        using (new GUILayout.HorizontalScope())
+        {
+            GUILayout.Label("масштаб вектороскопа", ToolTheme.FieldLabel, GUILayout.Width(150f));
+            ScopesRenderPass.VectorscopeScale = GUILayout.HorizontalSlider(
+                ScopesRenderPass.VectorscopeScale,
+                0.5f,
+                2f);
+            GUILayout.Label(
+                ZoomLabel(ScopesRenderPass.VectorscopeScale),
+                ToolTheme.FieldLabel,
+                GUILayout.Width(48f));
         }
     }
 
-    private void DebugViewButton(string label, PostProcessDebugView view)
+    // Сегментированный ряд с переносом: кнопки раскладываются по рядам по
+    // ширине окна, а не сжимаются в одну строку до нечитаемости.
+    private int SegmentedRow(string title, Option[] options, int current)
     {
-        bool selected = PostProcessRuntimeState.DebugView == view;
-        bool toggled = GUILayout.Toggle(selected, label, ToolTheme.SegmentedButton);
-        if (toggled != selected)
+        GUILayout.Label(title, SectionLabelStyle);
+        int picked = current;
+        int index = 0;
+        while (index < options.Length)
         {
-            _debugViewRequested = toggled ? view : PostProcessDebugView.None;
+            using (new GUILayout.HorizontalScope())
+            {
+                float used = 0f;
+                do
+                {
+                    Option option = options[index];
+                    float width = MeasureButton(option.Label);
+                    if (used > 0f && used + width > _contentWidth)
+                    {
+                        break;
+                    }
+
+                    used += width;
+                    bool selected = option.Value == current;
+                    if (GUILayout.Toggle(selected, option.Label, SegmentedButtonStyle, ExpandWidth) && !selected)
+                    {
+                        picked = option.Value;
+                    }
+
+                    index++;
+                }
+                while (index < options.Length);
+            }
         }
+
+        return picked;
+    }
+
+    private float MeasureButton(string label)
+    {
+        if (!_buttonWidths.TryGetValue(label, out float width))
+        {
+            GUIStyle style = SegmentedButtonStyle;
+            _MeasureContent.text = label;
+            width = style.CalcSize(_MeasureContent).x + style.margin.horizontal;
+            _buttonWidths[label] = width;
+        }
+
+        return width;
+    }
+
+    private static void ApplyCompareMode(CompareMode mode)
+    {
+        PostProcessRuntimeState.CompareMode = mode;
+        if (mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe)
+        {
+            PostProcessRuntimeState.CompareSplit = 0.5f;
+        }
+        else if (mode == CompareMode.Off)
+        {
+            PostProcessRuntimeState.CompareSplit = 0f;
+            PostProcessRuntimeState.CompareBefore = false;
+        }
+    }
+
+    // Подписи пересобираются только при смене показанного числа, а не на
+    // каждое событие IMGUI.
+    private string ZoomLabel(float scale)
+    {
+        if (!Mathf.Approximately(scale, _zoomLabelValue))
+        {
+            _zoomLabelValue = scale;
+            _zoomLabel = $"{scale:0.00}×";
+        }
+
+        return _zoomLabel;
+    }
+
+    private string SplitLabel(float split)
+    {
+        int percent = Mathf.RoundToInt(split * 100f);
+        if (percent != _splitLabelPercent)
+        {
+            _splitLabelPercent = percent;
+            _splitLabel = $"{percent}%";
+        }
+
+        return _splitLabel;
+    }
+
+    private string ClippedLabel()
+    {
+        double black = ScopesRenderPass.ClippedBlackSamples;
+        double highlight = ScopesRenderPass.ClippedHighlightSamples;
+        if (black != _clippedBlack || highlight != _clippedHighlight)
+        {
+            _clippedBlack = black;
+            _clippedHighlight = highlight;
+            _clippedLabel =
+                $"5 раз/с · отсечено: тени {black:N0}, света {highlight:N0} выборок";
+        }
+
+        return _clippedLabel;
     }
 
     private void ApplyPendingChanges()
     {
-        if (Event.current.type != EventType.Layout)
-        {
-            return;
-        }
-
         if (_scopesEnabledRequested.HasValue)
         {
             _scopesEnabled = _scopesEnabledRequested.Value;
@@ -385,18 +478,29 @@ internal sealed class GradingScopesWindow : ToolWindow
         {
             GUILayout.Label(title, ToolTheme.SectionLabel);
 
-            Rect rect = GUILayoutUtility.GetRect(width, height);
-            if (Event.current.type == EventType.Repaint && texture != null)
+            Rect rect = GUILayoutUtility.GetRect(width, height, ExpandWidth);
+            if (Event.current.type != EventType.Repaint)
             {
-                // Для прямоугольных приборов (гистограмма, waveform) — StretchToFill.
-                // Для вектороскопа — ScaleToFit, чтобы круговая диаграмма цветности
-                // не превращалась в сплюснутый эллипс.
+                return;
+            }
+
+            if (texture != null)
+            {
+                // Прямоугольные приборы растягиваются, вектороскоп вписывается:
+                // круговая диаграмма цветности не должна становиться эллипсом.
                 GUI.DrawTexture(rect, texture, scaleMode, false);
             }
-            else if (Event.current.type == EventType.Repaint)
+            else
             {
                 GUI.Label(rect, "Нет сигнала", ToolTheme.MutedLabel);
             }
         }
+    }
+
+    private readonly struct Option(string label, int value)
+    {
+        public string Label { get; } = label;
+
+        public int Value { get; } = value;
     }
 }

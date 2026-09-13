@@ -8,12 +8,6 @@ using SmartFormat.Extensions;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI.Binding;
-/// <summary>
-/// Manages SmartFormat binding for a single GUI window.
-/// Scans the VisualElement tree for named input controls (value sources)
-/// and labels containing SmartFormat templates (value consumers).
-/// When any input changes, all templates are re-evaluated.
-/// </summary>
 public class WindowBinding : IDisposable
 {
     private readonly SmartFormatter _formatter;
@@ -32,10 +26,6 @@ public class WindowBinding : IDisposable
             new LogiCalcFormatter());
     }
 
-    /// <summary>
-    /// Bind to a fully-built window VisualElement tree.
-    /// Discovers inputs and templates, then performs the initial format pass.
-    /// </summary>
     public void Bind(VisualElement root)
     {
         if (_disposed)
@@ -109,13 +99,6 @@ public class WindowBinding : IDisposable
         return text.Contains('{') && text.Contains('}');
     }
 
-    /// <remarks>
-    /// Здесь switch намеренно открыт: он перечисляет элементы, у которых
-    /// вообще есть событие смены значения. Метка, контейнер и картинка
-    /// такого события не имеют, и ветка default с ошибкой ругалась бы на
-    /// каждый второй элемент разметки. Цена — новый интерактивный контрол
-    /// не будет обновлять привязки, пока его сюда не добавят.
-    /// </remarks>
     private void RegisterValueChangeHandler(VisualElement element)
     {
         switch (element)

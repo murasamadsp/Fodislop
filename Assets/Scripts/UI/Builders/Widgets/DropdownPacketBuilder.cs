@@ -7,17 +7,6 @@ using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI.Builders;
-/// <summary>
-/// Выпадающий список любого протокольного типа значений.
-/// </summary>
-/// <remarks>
-/// Целочисленный и строковый списки были двумя файлами с одним и тем же
-/// алгоритмом: собрать подписи, отвергнуть пустой набор, отвергнуть значение
-/// по умолчанию вне набора, включить или выключить. Различие между ними —
-/// одна строка: как значение превращается в подпись. Протокол сам говорит,
-/// что это один компонент (DropdownComponentPacket&lt;TValue&gt;), и здесь
-/// он таким и остаётся.
-/// </remarks>
 public abstract class DropdownPacketBuilder<TPacket, TValue> : PacketUIBuilderBase<TPacket>
     where TPacket : DropdownComponentPacket<TValue>
     where TValue : notnull

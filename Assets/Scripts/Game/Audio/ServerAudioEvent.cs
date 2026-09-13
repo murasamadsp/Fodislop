@@ -19,25 +19,20 @@ using MinesServer.Networking.Shared.Packets;
 using UnityEngine;
 
 namespace Fodinae.Game;
-/// <summary>
-/// Единый контроллер эффекта мира (SFX/VFX).
-/// Запускает FMOD Studio 3D пространственный звук и визуальное представление (Effekseer / Спрайты)
-/// с поддержкой безопасного отмена асинхронных загрузок через CancellationToken.
-/// </summary>
 [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully handle any dynamic asset load/play errors.")]
 public sealed class ServerAudioEvent : IDisposable
 {
     private readonly SFX _effectType;
     private readonly ushort _sourceX;
     private readonly ushort _sourceY;
-    private readonly ushort _targetBotId;
+    private readonly ushort _targetBotID;
     private readonly IRobotService _robotService;
     private readonly IAudioSystem _audioSystem;
     private readonly IAssetLoader _assetLoader;
     private readonly MapManager _mapManager;
-    private readonly IVFXService _vfxPool;
+    private readonly IVfxService _vfxPool;
 
-    private IVFXSlot? _slot;
+    private IVfxSlot? _slot;
     private GameObject? _gameObject;
 
     private Color _primaryColor = Color.white;
@@ -69,18 +64,18 @@ public sealed class ServerAudioEvent : IDisposable
 
     public ServerAudioEvent(
         AudioPacket packet,
-        IVFXSlot? slot,
+        IVfxSlot? slot,
         IRobotService robotService,
         IAudioSystem audioSystem,
         IAssetLoader assetLoader,
         MapManager mapManager,
-        IVFXService vfxPool,
+        IVfxService vfxPool,
         IAsyncOperationSupervisor operations)
     {
         _effectType = packet.EffectType;
         _sourceX = packet.X;
         _sourceY = packet.Y;
-        _targetBotId = packet.TargetBotId;
+        _targetBotID = packet.TargetBotId;
         _slot = slot;
         _robotService = robotService;
         _audioSystem = audioSystem;
@@ -234,7 +229,7 @@ public sealed class ServerAudioEvent : IDisposable
 
         if (_parsedParams.HasSourceBot)
         {
-            _sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotId);
+            _sourceBot = _robotService.GetOrCreateRobot(_parsedParams.SourceBotID);
             pos = _sourceBot != null
                 ? _sourceBot.transform.position
                 : CoordinateUtils.ServerToUnityPos(_sourceX, _sourceY, GetWorldHeight());
@@ -252,9 +247,9 @@ public sealed class ServerAudioEvent : IDisposable
 
         _intendedWorldPosition = pos;
 
-        if (_targetBotId != 0)
+        if (_targetBotID != 0)
         {
-            _targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+            _targetBot = _robotService.GetOrCreateRobot(_targetBotID);
             if (_targetBot != null && _gameObject != null)
             {
                 // The dig effect must point the way the bot faces, toward
@@ -402,9 +397,9 @@ public sealed class ServerAudioEvent : IDisposable
                 }
             }
 
-            if (_targetBotId != 0)
+            if (_targetBotID != 0)
             {
-                var targetBot = _robotService.GetOrCreateRobot(_targetBotId);
+                var targetBot = _robotService.GetOrCreateRobot(_targetBotID);
                 if (targetBot != null)
                 {
                     _effekseerHandle.SetTargetLocation(targetBot.transform.position);

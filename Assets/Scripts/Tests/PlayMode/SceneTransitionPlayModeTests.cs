@@ -26,7 +26,7 @@ namespace Fodinae.Tests.PlayMode;
 [TestFixture]
 public sealed class SceneTransitionPlayModeTests
 {
-    private const float UiTimeoutSeconds = 20f;
+    private const float UITimeoutSeconds = 20f;
     private const float WorldTimeoutSeconds = 45f;
     private const string TestDummyToken = "playmode-scene-transition-token";
     private BootstrapLifetimeScope _bootstrap = null!;
@@ -41,14 +41,14 @@ public sealed class SceneTransitionPlayModeTests
         yield return SceneManager.LoadSceneAsync("Bootstrap", LoadSceneMode.Single);
         yield return WaitUntil(
             () => FindBootstrap() is { Container: not null },
-            UiTimeoutSeconds,
+            UITimeoutSeconds,
             "Bootstrap container was not built.");
         _bootstrap = FindBootstrap()!;
         yield return WaitUntil(
             () => _bootstrap.CurrentSceneName == "Gateway" &&
                 SceneManager.GetSceneByName("Gateway").isLoaded &&
                 HasNamedUiElement(SceneManager.GetSceneByName("Gateway"), "GatewayRoot"),
-            UiTimeoutSeconds,
+            UITimeoutSeconds,
             "ApplicationBootstrap did not finish Bootstrap -> Gateway with ready UI.");
     }
 
@@ -132,7 +132,7 @@ public sealed class SceneTransitionPlayModeTests
     [UnityTest]
     public IEnumerator MainMenuToMainGame_KeepsLoaderSceneUntilWorldReady()
     {
-        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UiTimeoutSeconds);
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
         bool menuObservedWhileWorldNotReady = false;
         UniTask transition = _bootstrap.TransitionAsync("MainGame").Preserve();
         float deadline = Time.realtimeSinceStartup + WorldTimeoutSeconds;
@@ -181,12 +181,12 @@ public sealed class SceneTransitionPlayModeTests
     [UnityTest]
     public IEnumerator MainGameToMenuToMainGame_LeavesNoOldScopeListenersOrDummyPackets()
     {
-        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UiTimeoutSeconds);
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
         yield return Await(_bootstrap.TransitionAsync("MainGame"), WorldTimeoutSeconds);
         PacketHandler firstHandler = FindComponentInScene<PacketHandler>(SceneManager.GetSceneByName("MainGame"))!;
         DummyConnection dummy = _bootstrap.Container.Resolve<DummyConnection>();
 
-        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UiTimeoutSeconds);
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
         Assert.That(firstHandler == null, Is.True, "The first game PacketHandler survived scene unload.");
 
         int packetsAfterDisconnect = 0;
@@ -211,7 +211,7 @@ public sealed class SceneTransitionPlayModeTests
         try
         {
             UniTask transition = _bootstrap.TransitionAsync("MissingSceneContractFixture").Preserve();
-            yield return AwaitFailure(transition, UiTimeoutSeconds);
+            yield return AwaitFailure(transition, UITimeoutSeconds);
             Assert.That(failureCount, Is.EqualTo(1));
             Assert.That(SceneManager.GetSceneByName("Gateway").isLoaded, Is.True);
             Assert.That(HasNamedUiElement(SceneManager.GetSceneByName("Gateway"), "GatewayRoot"), Is.True);
@@ -241,7 +241,7 @@ public sealed class SceneTransitionPlayModeTests
         _bootstrap.TransitionChanged += CountingObserver;
         try
         {
-            yield return Await(_bootstrap.TransitionAsync("MainMenu"), UiTimeoutSeconds);
+            yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
 
             Assert.That(_bootstrap.CurrentSceneName, Is.EqualTo("MainMenu"));
             Assert.That(completionCount, Is.EqualTo(1));
@@ -272,7 +272,7 @@ public sealed class SceneTransitionPlayModeTests
     [UnityTest]
     public IEnumerator LoadedScenes_ContainOneContentScopeAndOnePersistentBootstrapScope()
     {
-        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UiTimeoutSeconds);
+        yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
         LifetimeScope[] scopes = Object.FindObjectsByType<LifetimeScope>(FindObjectsInactive.Include);
         Assert.That(scopes.Count(scope => scope is BootstrapLifetimeScope), Is.EqualTo(1));
         Assert.That(CountScopes(SceneManager.GetSceneByName("MainMenu")), Is.EqualTo(1));

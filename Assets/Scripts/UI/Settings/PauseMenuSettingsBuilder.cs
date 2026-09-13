@@ -145,11 +145,6 @@ internal sealed class PauseMenuSettingsBuilder
     }
 
 #if UNITY_EDITOR || UNITY_ENABLE_CHECKS
-    /// <summary>
-    /// Creates the developer tools foldout. Must be called before
-    /// <see cref="BuildAdvancedPage"/>, which appends the lighting debug
-    /// view and the live diagnostics readout to it.
-    /// </summary>
     public Foldout BuildDebugSection()
     {
         var builder = new PauseMenuDebugSectionBuilder(_networkService, _connectionService, _localPlayer, _closeMenu, _loc);

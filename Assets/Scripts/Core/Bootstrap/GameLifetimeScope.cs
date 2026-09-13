@@ -16,9 +16,8 @@ using Fodinae.Player.Logic;
 using Fodinae.Rendering;
 using Fodinae.Rendering.PostProcessing;
 using Fodinae.UI;
-using Fodinae.UI.HUD.Inventory.Interfaces;
-using Fodinae.UI.HUD.Inventory.Model;
-using Fodinae.UI.HUD.Inventory.View;
+using Fodinae.Game.Inventory;
+using Fodinae.UI.Inventory;
 using Fodinae.UI.HUD.Player.Model;
 using Fodinae.UI.HUD.Player.View;
 using Fodinae.UI.Programmator;
@@ -197,7 +196,7 @@ namespace Fodinae.Core
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
             RegisterManager<GameManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
-            RegisterManager<VFXPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
+            RegisterManager<VfxPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
             RegisterManager<BuildingManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
             RegisterManager<RobotManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldEntityBatchRenderer>(builder, "Rendering");
@@ -278,18 +277,6 @@ namespace Fodinae.Core
         public void MarkReady() => _readiness.TrySetResult();
         public void MarkFailed(Exception exception) => _readiness.TrySetException(exception);
 
-        /// <summary>
-        /// Winds the scene's subsystems down before the scene unloads.
-        /// </summary>
-        /// <remarks>
-        /// Every service is looked up here rather than handed in by the caller:
-        /// the container belongs to this scope, and a scope torn down halfway by
-        /// an aborted previous unload has some registrations already gone. Each
-        /// lookup is independent, so one missing subsystem cannot cancel the
-        /// teardown of the rest. TryResolve reports that absence as a result
-        /// instead of an exception; the null check after it also covers a
-        /// component whose GameObject is already destroyed, which still resolves.
-        /// </remarks>
         public async UniTask PrepareForUnloadAsync()
         {
             if (Container == null)
@@ -301,6 +288,16 @@ namespace Fodinae.Core
             Container.TryResolve(out GameManager? gameManager);
             Container.TryResolve(out MapManager? mapManager);
             Container.TryResolve(out AsyncOperationSupervisor? operations);
+
+            // Соединение живёт на Bootstrap, а игровая сессия — ровно столько,
+            // сколько эта сцена. Отключение здесь, а не только в
+            // ReturnToMainMenu: любой уход из MainGame (прямой переход, сбой,
+            // выход) иначе оставлял циклы офлайн-сервера слать пакеты в меню.
+            // Первым — пока контейнер сцены жив. Повторный Disconnect безвреден.
+            if (Container.TryResolve(out IConnectionService? connection) && connection != null)
+            {
+                connection.Disconnect();
+            }
 
             if (packetHandler != null)
             {

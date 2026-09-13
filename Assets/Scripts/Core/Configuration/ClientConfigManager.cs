@@ -9,11 +9,6 @@ using VContainer;
 
 namespace Fodinae.Core
 {
-    /// <summary>
-    /// Клиентский локальный конфиг: переживает перезапуск, живёт в
-    /// Application.persistentDataPath. Повреждённый файл не исправляется тихо и
-    /// останавливает startup.
-    /// </summary>
     [DefaultExecutionOrder(-9000)]
     public class ClientConfigManager : MonoBehaviour, IClientConfigManager
     {
@@ -50,22 +45,6 @@ namespace Fodinae.Core
         private ConfigSaveScheduler _SaveScheduler =>
             _saveScheduler ??= new ConfigSaveScheduler(this);
 
-        /// <summary>
-        /// Загружает конфиг синхронно, не дожидаясь Start.
-        /// </summary>
-        /// <remarks>
-        /// Вызывается из <c>BootstrapLifetimeScope.Awake</c> до сборки игровых
-        /// скоупов: <c>GameStartupPipeline</c> читает Config в том же кадре, в
-        /// котором менеджер создан, а Start у него наступит только на
-        /// следующем.
-        ///
-        /// Раньше вдобавок к этому в <c>Update</c> висел опрос «зависимости уже
-        /// приехали?» — костыль поверх уже существующего явного вызова, из-за
-        /// которого момент загрузки конфига зависел от порядка кадров. Опроса
-        /// нет: если зависимость не внедрена к моменту вызова, это ошибка
-        /// сборки контейнера, и она обязана быть видна, а не разойтись через
-        /// кадр.
-        /// </remarks>
         public void EnsureInitialized()
         {
             if (_initialized)
@@ -188,16 +167,6 @@ namespace Fodinae.Core
             Debug.Log($"[ClientConfigManager] Set custom graphics settings (Lighting={settings.LightingQuality}, AA={settings.AntiAliasing}, RenderScale={settings.RenderScale})");
         }
 
-        /// <summary>
-        /// Правит одну секцию и сохраняет.
-        /// </summary>
-        /// <remarks>
-        /// Раньше на каждую секцию была своя обёртка — <c>UpdateAudio</c>,
-        /// <c>UpdateDisplay</c>, <c>UpdateInterface</c>,
-        /// <c>UpdateAccessibility</c>, <c>UpdateConnection</c>, — пять
-        /// одинаковых методов, отличавшихся только именем поля, и каждая новая
-        /// секция требовала шестой.
-        /// </remarks>
         public void UpdateSection<TSection>(
             Func<ClientConfig, TSection> select,
             Action<TSection> update)
@@ -243,9 +212,6 @@ namespace Fodinae.Core
             SaveDeferred();
         }
 
-        /// <summary>
-        /// Пишет конфиг немедленно: валидация плюс запись файла.
-        /// </summary>
         public void Save()
         {
             _Validator.Validate(Config);
@@ -253,23 +219,6 @@ namespace Fodinae.Core
             Debug.Log($"[ClientConfigManager] Saved config directly to {_Repository.ConfigPath}");
         }
 
-        /// <summary>
-        /// Откладывает запись на окно дебаунса.
-        /// </summary>
-        /// <remarks>
-        /// ЗАЧЕМ. <see cref="Save"/> валидирует конфиг целиком и пишет файл с
-        /// fsync и подменой через временный. Раньше каждое движение ползунка
-        /// вызывало его напрямую — то есть на 120-герцовом экране до ста
-        /// двадцати полных записей в секунду за одно перетаскивание.
-        ///
-        /// Дебаунс был, но только у света и жил внутри его холдера, а тик к
-        /// нему приходилось пробрасывать через LightingEngine.Update. Теперь он
-        /// один на весь конфиг и крутится там, где и должен — у владельца
-        /// файла. Запись гарантирована выходом из игры и из Play Mode.
-        ///
-        /// Откладывается именно запись: валидация выполняется сразу, чтобы
-        /// ошибка называлась в момент правки, а не при выходе.
-        /// </remarks>
         public void SaveDeferred()
         {
             // Проверка немедленная, откладывается только диск. Иначе неверное

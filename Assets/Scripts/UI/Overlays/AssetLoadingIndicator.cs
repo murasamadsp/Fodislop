@@ -12,11 +12,6 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    /// <summary>
-    /// LoaderContainer: защитный экран загрузки (fullscreen overlay) удерживается до
-    /// события <see cref="GameManager.OnWorldLoaded"/>. После загрузки мира скрывается,
-    /// оставляя маленькую «пимпочку» в правом нижнем углу — статус ассетов, FPS, пинг, версия.
-    /// </summary>
     public sealed class AssetLoadingIndicator : MonoBehaviour, ILocalizableUI
     {
         [Inject]
@@ -255,7 +250,6 @@ namespace Fodinae.UI
             Refresh();
         }
 
-        /// <summary>Переприменяет статические ключи UXML после смены языка.</summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(AssetLoadingIndicator));

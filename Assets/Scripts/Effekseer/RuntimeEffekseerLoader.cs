@@ -16,27 +16,10 @@ using Fodinae.World.Terrain;
 using UnityEngine;
 
 namespace Fodinae.Effekseer;
-/// <summary>
-/// Utility for loading Effekseer effects from raw .efk bytes at runtime,
-/// downloading textures from the server asset pipeline before native loading.
-///
-/// Usage:
-/// <code>
-/// var asset = await RuntimeEffekseerLoader.LoadEffectAsync(
-///     efkBytes, "myEffect",
-///     texturePathMapper: path => "VFX/" + path);
-/// EffekseerSystem.PlayEffect(asset, position);
-/// </code>
-/// </summary>
 public static class RuntimeEffekseerLoader
 {
     private static readonly HashSet<EntityId> _ActiveRuntimeEffectIds = new();
 
-    /// <summary>
-    /// Load an Effekseer effect from raw .efk bytes, downloading all referenced
-    /// textures from the server asset pipeline and populating the asset before
-    /// native registration. The effect is immediately ready for <see cref="EffekseerSystem.PlayEffect"/>.
-    /// </summary>
     /// <param name="efkBytes">Raw .efk file data (SKFE format).</param>
     /// <param name="effectName">Name for the effect asset (used for logging and native registration).</param>
     /// <param name="texturePathMapper">
@@ -136,11 +119,6 @@ public static class RuntimeEffekseerLoader
         }
     }
 
-    /// <summary>
-    /// Releases a runtime-created effect and the standalone textures decoded
-    /// for it. These objects are not assets from the Unity database, so
-    /// unloading the native effect alone does not reclaim their memory.
-    /// </summary>
     public static void DestroyEffect(EffekseerEffectAsset? asset)
     {
         if (asset == null)
@@ -165,9 +143,6 @@ public static class RuntimeEffekseerLoader
 
         UnityEngine.Object.Destroy(asset);
     }
-    /// <summary>
-    /// Download a single texture from the server and decode it into a Texture2D.
-    /// </summary>
     private static async UniTask<Texture2D> DownloadTextureAsync(
         IAssetLoader loader,
         string serverPath,

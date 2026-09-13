@@ -9,18 +9,12 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Manages caching of cell textures for efficient loading and memory management.
-/// </summary>
 public class CellTextureCache
 {
     private readonly ConcurrentDictionary<CellType, CellTextureInfo> _textureCache = new();
     private readonly ConcurrentDictionary<CellType, Texture2D> _loadedTextures = new();
     private readonly ConcurrentDictionary<string, CellType> _filenameCache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Add a texture to the cache.
-    /// </summary>
     /// <param name="cellType">The cell type.</param>
     /// <param name="textureInfo">Texture information.</param>
     public void AddTexture(CellType cellType, CellTextureInfo textureInfo)
@@ -40,26 +34,17 @@ public class CellTextureCache
         _filenameCache.TryAdd(filename, cellType);
     }
 
-    /// <summary>
-    /// Try to get texture information from cache.
-    /// </summary>
     /// <param name="cellType">The cell type.</param>
     /// <param name="textureInfo">Output texture information.</param>
     /// <returns>True if found, false otherwise.</returns>
     public bool TryGetTexture(CellType cellType, out CellTextureInfo textureInfo) =>
         _textureCache.TryGetValue(cellType, out textureInfo);
 
-    /// <summary>
-    /// Get a cached texture for a cell type.
-    /// </summary>
     /// <param name="cellType">The cell type.</param>
     /// <returns>The cached texture or null if not found.</returns>
     public Texture2D? GetCachedTexture(CellType cellType) =>
         _loadedTextures.TryGetValue(cellType, out var texture) ? texture : null;
 
-    /// <summary>
-    /// Clear all cached textures.
-    /// </summary>
     public void Clear()
     {
         HashSet<Texture2D> ownedTextures = [];
@@ -80,9 +65,6 @@ public class CellTextureCache
         }
     }
 
-    /// <summary>
-    /// Get memory usage of cached textures.
-    /// </summary>
     /// <returns>Approximate memory usage in bytes.</returns>
     public long GetMemoryUsage()
     {
@@ -100,16 +82,10 @@ public class CellTextureCache
         return totalSize;
     }
 
-    /// <summary>
-    /// Get cache statistics.
-    /// </summary>
     /// <returns>Cache statistics string.</returns>
     public string GetCacheStats() =>
         $"Cache: {_textureCache.Count} textures, {GetMemoryUsage() / 1024} KB";
 
-    /// <summary>
-    /// Try to parse cell type from filename.
-    /// </summary>
     /// <param name="filename">The filename to parse.</param>
     /// <param name="cellType">Output cell type.</param>
     /// <returns>True if successfully parsed, false otherwise.</returns>

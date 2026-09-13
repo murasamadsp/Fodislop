@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Manages offscreen distance-based culling for remote robots.
-/// </summary>
 public sealed class RobotCuller
 {
     private const float OffscreenCullDistance = 35f;

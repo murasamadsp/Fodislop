@@ -8,7 +8,6 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    /// <summary>Displays FPS, ping and online count through the authored HUD.</summary>
     public class FPSCounter : MonoBehaviour
     {
         private const int SampleSize = 30;

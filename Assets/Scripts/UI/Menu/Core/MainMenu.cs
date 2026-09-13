@@ -46,6 +46,8 @@ namespace Fodinae.UI
         [Inject]
         private ISceneNavigator _sceneNavigator = null!;
         [Inject]
+        private IWorldEntryPreparation _worldEntryPreparation = null!;
+        [Inject]
         private IWorldLoadProgress _loadProgress = null!;
         [Inject]
         private IClientConfigManager _clientConfig = null!;
@@ -140,8 +142,8 @@ namespace Fodinae.UI
                 throw new InvalidOperationException(
                     "[MainMenu] UIDocument requires an authored PanelSettings asset.");
 
-            var mainMenuUXML = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
-            if (mainMenuUXML == null)
+            var mainMenuUxml = Resources.Load<VisualTreeAsset>(ProjectRuntimeContracts.ResourcePaths.MainMenuUxml);
+            if (mainMenuUxml == null)
             {
                 throw new InvalidOperationException(
                     "Required UI asset 'Resources/UI/MainMenu.uxml' was not found.");
@@ -149,7 +151,7 @@ namespace Fodinae.UI
 
             _root.Clear();
             _root.pickingMode = PickingMode.Ignore;
-            VisualElement tree = mainMenuUXML.CloneTree();
+            VisualElement tree = mainMenuUxml.CloneTree();
             tree.AddToClassList("ui-fullscreen");
             _root.Add(tree);
 
@@ -184,8 +186,9 @@ namespace Fodinae.UI
         public async UniTask WaitUntilReadyAsync(CancellationToken cancellationToken = default)
         {
             float timeout = Time.realtimeSinceStartup + 3f;
-            while (Time.realtimeSinceStartup < timeout && !cancellationToken.IsCancellationRequested)
+            while (Time.realtimeSinceStartup < timeout)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (_built && _sceneryPresenter.IsSceneryReady)
                 {
                     return;
@@ -199,6 +202,9 @@ namespace Fodinae.UI
 
                 await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new TimeoutException("Main menu scenery did not become ready within 3 seconds.");
         }
 
         private void BindUIElements(VisualElement tree)
@@ -464,6 +470,8 @@ namespace Fodinae.UI
             CancellationToken transitionToken = linkedCancellation.Token;
             try
             {
+                // Подготовка мира не входит в таймаут перехода: он меряет только сцену.
+                await _worldEntryPreparation.EnsureReadyAsync(transitionToken);
                 await _sceneNavigator.TransitionAsync(GameSceneName, transitionToken);
             }
             catch (OperationCanceledException) when (transitionToken.IsCancellationRequested)

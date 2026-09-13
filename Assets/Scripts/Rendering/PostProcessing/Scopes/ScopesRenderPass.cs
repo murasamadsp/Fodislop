@@ -8,18 +8,6 @@ using static Fodinae.Rendering.PostProcessing.Scopes.ScopeShaderConstants;
 
 namespace Fodinae.Rendering.PostProcessing.Scopes;
 
-/// <summary>
-/// Считает приборы разбора с выбранного участка camera color.
-/// </summary>
-/// <remarks>
-/// Отдельный проход, а не ветка внутри <see cref="PostProcessRenderPass"/>,
-/// по двум причинам. Во-первых, прибор должен явно выбирать BEFORE или AFTER,
-/// а не зависеть от внутреннего порядка вычислений. Во-вторых, тот файл уже
-/// у предела в 500 строк, за которым линтер требует разделения ответственностей.
-///
-/// Проход выключен, пока рабочее место закрыто: ни одно ядро не
-/// запускается, ресурсы не создаются.
-/// </remarks>
 internal sealed class ScopesRenderPass : ScriptableRenderPass2D
 {
     private const float CaptureIntervalSeconds = 0.2f;
@@ -94,7 +82,6 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
             : ScopeWaveformMode.Overlay;
     }
 
-    /// <summary>0 = RGB + luma, 1 = luma, 2 = RGB overlay.</summary>
     public static int HistogramMode
     {
         get => _histogramMode;
@@ -132,11 +119,6 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
         _live = null;
     }
 
-    /// <summary>
-    /// Приборы считаются только пока открыто рабочее место. Статика по той
-    /// же причине, что и во всём остальном постпроцессе: проход принадлежит
-    /// renderer asset, инъекции в него нет.
-    /// </summary>
     public static bool Enabled
     {
         get => _enabled;

@@ -50,7 +50,6 @@ public sealed class ProgrammatorGrid : IDisposable
             TryBuildUI();
         }
 
-        /// <summary>Переприменяет локализованный текст после смены языка.</summary>
         public void RefreshLocalization()
         {
             _view?.ApplyLocalizedText();

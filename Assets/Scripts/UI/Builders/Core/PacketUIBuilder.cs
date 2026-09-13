@@ -24,10 +24,6 @@ public class PacketUIBuilder
     internal IAssetLoader AssetLoader => _assetLoader;
     internal IAsyncOperationSupervisor Operations => _operations;
 
-    /// <summary>
-    /// Собирает элемент по пакету. Возвращает элемент всегда: пакет
-    /// неизвестного вида превращается в видимую заглушку, а не в null.
-    /// </summary>
     public VisualElement Build(IGUIComponentPacket packet)
     {
         PacketUIBuilderBase? builder = _builderFactory.CreateBuilder(packet);
@@ -50,7 +46,6 @@ public class PacketUIBuilder
         return element;
     }
 
-    /// <summary>Собирает детей контейнера и складывает их в указанный узел.</summary>
     public void AddChildren(VisualElement parent, IContainerComponentPacket packet)
     {
         foreach (IGUIComponentPacket childPacket in packet.Children)
@@ -59,10 +54,6 @@ public class PacketUIBuilder
         }
     }
 
-    /// <summary>
-    /// Координаты холста, если пакет их прислал. Любая из четырёх делает
-    /// элемент абсолютным.
-    /// </summary>
     private static void ApplyCanvasGeometry(VisualElement element, IGUIComponentPacket packet)
     {
         if (packet.AttachedProperties == null || packet.AttachedProperties.Length == 0)

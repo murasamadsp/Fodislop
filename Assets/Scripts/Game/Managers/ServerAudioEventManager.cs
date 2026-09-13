@@ -20,12 +20,11 @@ namespace Fodinae.Game.Managers
     {
         private const string TAG = "[ServerAudioEventManager]";
 
-        /// <summary>Единственное музыкальное событие в банке.</summary>
         private const string MusicEventName = "music/evil_huge";
         private readonly List<ServerAudioEvent> _activeEffects = new();
 
         [Inject]
-        private IVFXService _vfxService = null!;
+        private IVfxService _vfxService = null!;
 
         [Inject]
         private IRobotService _robotService = null!;
@@ -40,7 +39,7 @@ namespace Fodinae.Game.Managers
         private MapManager _mapManager = null!;
 
         [Inject]
-        private VFXPool _vfxPool = null!;
+        private VfxPool _vfxPool = null!;
         [Inject]
         private IAsyncOperationSupervisor _operations = null!;
 
@@ -53,7 +52,7 @@ namespace Fodinae.Game.Managers
             }
 
             var vfxType = MapAudioToVFX(packet.EffectType);
-            IVFXSlot? slot = _vfxService.Acquire(vfxType);
+            IVfxSlot? slot = _vfxService.Acquire(vfxType);
 
             var effect = new ServerAudioEvent(
                 packet,
@@ -67,16 +66,6 @@ namespace Fodinae.Game.Managers
             _activeEffects.Add(effect);
         }
 
-        /// <summary>
-        /// Заказывает музыку, дождавшись готовности банков.
-        /// </summary>
-        /// <remarks>
-        /// Музыку сервер заказывает один раз за вход в мир, и заказ приходит
-        /// в том же потоке пакетов, что и инициализация мира — то есть
-        /// раньше, чем FMOD успевает догрузить сэмплы. Немедленный вызов
-        /// отбрасывался в бэкенде по состоянию сэмплов и не повторялся
-        /// никогда: одноразовый SFX закажут снова, а трек — нет.
-        /// </remarks>
         private async UniTask PlayMusicWhenAudioReadyAsync(CancellationToken cancellationToken)
         {
             await _audioSystem.WaitUntilBanksReadyAsync(cancellationToken);
@@ -86,7 +75,7 @@ namespace Fodinae.Game.Managers
             }
         }
 
-        private static VFXType MapAudioToVFX(global::MinesServer.Data.SFX audioType)
+        private static VfxType MapAudioToVFX(global::MinesServer.Data.SFX audioType)
         {
             // Enum is logically fixed on client, but server can extend it at any time.
             // Unknown values must NOT be silently dropped — they should flow through
@@ -94,10 +83,10 @@ namespace Fodinae.Game.Managers
             // treating them as "no effect".
             return audioType switch
             {
-                global::MinesServer.Data.SFX.Bz => VFXType.Bz,
-                global::MinesServer.Data.SFX.Destroy => VFXType.Destroy,
-                global::MinesServer.Data.SFX.Death => VFXType.Death,
-                _ => VFXType.Custom,
+                global::MinesServer.Data.SFX.Bz => VfxType.Bz,
+                global::MinesServer.Data.SFX.Destroy => VfxType.Destroy,
+                global::MinesServer.Data.SFX.Death => VfxType.Death,
+                _ => VfxType.Custom,
             };
         }
 

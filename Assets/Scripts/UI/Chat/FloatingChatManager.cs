@@ -97,17 +97,6 @@ namespace Fodinae.UI
             }
         }
 
-        /// <summary>
-        /// Показывает локальное сообщение облаком над роботом.
-        /// </summary>
-        /// <remarks>
-        /// Одно облако на робота: новое сообщение вытесняет прежнее, а не висит
-        /// рядом с ним. Так в эталоне, и так честнее — робот говорит одно за раз.
-        ///
-        /// Отсечения по экрану здесь нет намеренно. Робот может заговорить у
-        /// самого края и въехать в кадр через мгновение; облако, отброшенное при
-        /// появлении, назад уже не вернётся, и сообщение пропадёт совсем.
-        /// </remarks>
         public void ShowLocalChat(LocalChatMessagePacket packet)
         {
             TryInitialize();
@@ -135,12 +124,12 @@ namespace Fodinae.UI
             _activeBubbles.Add(bubble);
         }
 
-        private void ExpireBubbleOf(int ownerId)
+        private void ExpireBubbleOf(int ownerID)
         {
             for (int i = _activeBubbles.Count - 1; i >= 0; i--)
             {
                 FloatingChatBubble bubble = _activeBubbles[i];
-                if (bubble != null && bubble.OwnerId == ownerId)
+                if (bubble != null && bubble.OwnerID == ownerID)
                 {
                     bubble.Expire();
                 }

@@ -6,9 +6,6 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-/// <summary>
-/// Encapsulates the binary file header and chunk lookup table (FAT) layout for persistent WorldLayer files.
-/// </summary>
 public static class WorldLayerFileHeader
 {
     public const int HeaderSize = 16; // 4 ints (width, height, chunk size, format version)

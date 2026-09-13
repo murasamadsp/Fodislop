@@ -6,9 +6,6 @@ using UnityEditor;
 #endif
 
 namespace Fodinae.World;
-/// <summary>
-/// Utility class to draw debug visuals in Editor and Runtime.
-/// </summary>
 public static class FodinaeGizmos
 {
 #if UNITY_EDITOR

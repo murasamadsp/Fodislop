@@ -7,9 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.Player.Logic;
 
-/// <summary>
-/// Validates player movement rules, cooldowns, world boundaries, and tile passability.
-/// </summary>
 public static class PlayerMovementValidator
 {
     public static bool IsWithinWorldBounds(Vector2Int position, int worldWidth, int worldHeight)

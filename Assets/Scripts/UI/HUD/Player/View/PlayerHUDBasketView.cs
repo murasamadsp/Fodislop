@@ -12,9 +12,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Manages crystal textures and basket rows in the player HUD.
-/// </summary>
 public sealed class PlayerHUDBasketView
 {
     private readonly List<Texture2D> _crystalTextures = new();

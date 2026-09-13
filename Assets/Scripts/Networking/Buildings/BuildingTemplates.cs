@@ -4,11 +4,6 @@ using System.Collections.Generic;
 using MinesServer.Data;
 
 namespace Fodinae.Networking.Buildings;
-/// <summary>
-/// Registry of every placeable pack footprint known to the offline server
-/// imitation (DummyConnection). Templates mirror the authoritative
-/// MinesServer Game/Buildings sources one to one.
-/// </summary>
 public static class BuildingTemplates
 {
     private static readonly Dictionary<PackType, PackBuilding> _templates = new()
@@ -28,11 +23,6 @@ public static class BuildingTemplates
     public static bool TryGet(PackType type, out PackBuilding? building) =>
         _templates.TryGetValue(type, out building);
 
-    /// <summary>
-    /// Anchor distance in cells ahead of the player's facing direction,
-    /// copied from the authoritative Inventory.TryPlacePack dispatch:
-    /// Up/Jobs/ClansPack place at 3, NC places at 6, everything else at 2.
-    /// </summary>
     public static ushort GetAnchorDistance(PackType type) => type switch
     {
         PackType.Up or PackType.Clans => 3,

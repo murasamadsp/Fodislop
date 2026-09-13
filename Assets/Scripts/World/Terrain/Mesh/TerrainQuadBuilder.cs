@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;

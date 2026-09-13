@@ -68,7 +68,7 @@ public sealed class PlayerStatsModel : IPlayerStats
     public int BasketMaxPercent { get; private set; }
     public int OnlinePlayers { get; private set; }
     public int OnlineProgrammator { get; private set; }
-    public int ClanId { get; private set; }
+    public int ClanID { get; private set; }
     public int MaxDepth { get; private set; }
     public int CurrentDepth { get; private set; }
 
@@ -222,14 +222,14 @@ public sealed class PlayerStatsModel : IPlayerStats
         OnStatsChanged?.Invoke();
     }
 
-    public void SetClanId(int clanId)
+    public void SetClanID(int clanID)
     {
-        if (ClanId == clanId)
+        if (ClanID == clanID)
         {
             return;
         }
 
-        ClanId = clanId;
+        ClanID = clanID;
         OnStatsChanged?.Invoke();
     }
 

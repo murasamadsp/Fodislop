@@ -9,9 +9,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Confirmation dialog helpers for quitting or returning to the main menu from PauseMenu.
-/// </summary>
 internal static class PauseMenuConfirmation
 {
     public static void ConfirmQuitGame(UIDocument doc, ILocalizationService loc)

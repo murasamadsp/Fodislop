@@ -30,9 +30,9 @@
 
 - `Assets/Scripts/Rendering/Settings/HDROutputReconciler.cs`
 - `Assets/Scripts/Rendering/Settings/HDROutput.cs`
-- `Assets/Scripts/Rendering/PostProcessing/PostProcessRendererFeature.cs`
-- `Assets/Scripts/Rendering/PostProcessing/PostProcessRenderPass.cs`
-- `Assets/Scripts/Rendering/PostProcessing/PostProcessPassExecutor.cs`
+- `Assets/Scripts/Rendering/PostProcessing/Pipeline/PostProcessRendererFeature.cs`
+- `Assets/Scripts/Rendering/PostProcessing/Pipeline/PostProcessRenderPass.cs`
+- `Assets/Scripts/Rendering/PostProcessing/Pipeline/PostProcessPassExecutor.cs`
 - `Assets/Resources/Shaders/PostProcessing/PostProcess.compute`
 - `Assets/Resources/Shaders/PostProcessing/ColorGrading.hlsl`
 - `Assets/Scripts/Rendering/PostProcessing/Scopes/`
@@ -53,7 +53,7 @@
 
 - Изменён `Assets/Settings/DefaultVolumeProfile.asset`: удалено 742 строки штатных subassets через Editor, не текстом.
 - `PostProcessVolumeProfile.asset` и `MenuSceneryVolumeProfile.asset` не нуждались в изменениях.
-- `Assets/Editor/HDRSDRDualModeSetup.cs` содержит отдельные команды:
+- `Assets/Editor/Rendering/HDRSDRDualModeSetup.cs` содержит отдельные команды:
   - `Fodinae/Rendering/Clean Display Volume Profiles`
   - `Fodinae/Rendering/Validate Display Volume Profiles`
 - Отдельная очистка не меняет Player Settings, сцены и URP asset; сохраняет только затронутые профили через SaveAssetIfDirty.
@@ -79,7 +79,7 @@
 - `ToolLayoutStore`: масштаб сохраняется в существующем `tool_layout.json`, без PlayerPrefs; допустимый диапазон 1–2.5, старые файлы используют авто-default.
 - Смена масштаба применяется на Layout, не посередине Repaint; hit testing использует общий Scale.
 
-Файлы: `Assets/Scripts/Tools/Imgui/ToolTheme.cs`, `ToolWindow.cs`, `ToolWindows.cs`, `ToolLayoutStore.cs`, `Windows/ToolbarWindow.cs`.
+Файлы: `Assets/Scripts/Tools/IMGUI/ToolTheme.cs`, `ToolWindow.cs`, `ToolWindows.cs`, `ToolLayoutStore.cs`, `Windows/ToolbarWindow.cs`.
 
 Внешняя компиляция C# прошла без ошибок. Визуальная проверка этих изменений НЕ выполнялась. До правок эти файлы уже содержали чужие изменения — сохранять их.
 
@@ -129,7 +129,6 @@ xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer dire
 - Временный внешний compile harness: `/private/tmp/fodinae-hdr-check.EMH9rP/Check.csproj`, лог `build.log`. Сборка runtime исходников без запуска Unity: 0 errors, 43 warnings. Это не полноценная asmdef/Unity/Metal верификация.
 - Generated Unity csproj ранее содержали устаревшие пути; не путать ошибки окружения с ошибками исходников.
 - Упоминавшийся ранее `tools/Fodinae.SettingsProbe` теперь отсутствует. Не заявлять повторный прогон 2771 теста: свежая попытка завершилась отсутствием пути.
-- `scripts/typecheck-runtime.sh` создан не агентом; перед запуском читать: содержит удаление temp-directory и собственную логику сбора ссылок.
 
 ## Начать следующую сессию
 

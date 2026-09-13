@@ -12,7 +12,7 @@ namespace Fodinae.ArchitectureLinter.Rules.Settings;
 /// CreateBoundCycleButton, CreateBoundToggle) and register refreshers.
 /// Ported from check-architecture.js checkUiBoundSettings().
 /// </summary>
-public sealed class UiBoundSettingsRule : IRule
+public sealed class UIBoundSettingsRule : IRule
 {
     public string Id => "FOD-UI-BOUND-SETTINGS";
     public string Description => "UI settings bound control validation";

@@ -4,14 +4,6 @@ using System;
 
 namespace Fodinae.Core;
 
-/// <summary>
-/// Калибровка вывода: экспозиция и цветовой отклик.
-/// </summary>
-/// <remarks>
-/// Это не художественные параметры эффектов — те авторские и лежат в
-/// <c>PostProcessLook</c>. Здесь ровно четыре величины, которыми игрок
-/// подгоняет кадр под свой монитор. Нейтральные значения — точный no-op.
-/// </remarks>
 [Serializable]
 public sealed class PostProcessSettings
 {

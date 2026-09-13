@@ -249,14 +249,6 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
         }
     }
 
-    /// <summary>
-    /// Applies a region payload in one pass, chunk by chunk, without touching
-    /// the LRU once per cell. This is the hot path for server region streams
-    /// (a 32x32 region previously issued ~2048 LRU/Dictionary operations per
-    /// region through <see cref="GetCellSync"/> + <see cref="SetCell"/>), which
-    /// made every region cost several milliseconds and stretched the initial
-    /// world burst across dozens of frames under the packet-drain budget).
-    /// </summary>
     /// <param name="startX">Region origin X in world cells.</param>
     /// <param name="startY">Region origin Y in world cells.</param>
     /// <param name="width">Region width in world cells.</param>

@@ -8,14 +8,6 @@ using MinesServer.Networking.Server.Packets.GUI.Components.Input;
 using MinesServer.Networking.Server.Packets.GUI.Components.Visual;
 
 namespace Fodinae.UI.Builders;
-/// <summary>
-/// Выбор строителя по виду пакета.
-/// </summary>
-/// <remarks>
-/// Строители не имеют состояния, поэтому здесь лежат готовые экземпляры, а
-/// не фабричные лямбды: прежняя таблица создавала новый строитель на каждый
-/// узел каждого серверного окна — мусор ради ничего.
-/// </remarks>
 public class PacketUIBuilderFactory
 {
     private static readonly IReadOnlyDictionary<Type, PacketUIBuilderBase> _Builders =

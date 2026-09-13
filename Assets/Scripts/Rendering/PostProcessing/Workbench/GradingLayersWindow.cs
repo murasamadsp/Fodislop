@@ -6,10 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.Rendering.PostProcessing.Workbench;
 
-/// <summary>
-/// Интерактивное рабочее место колориста с поддержкой быстрого переключения слоёв,
-/// табов, клавиатурных хоткеев и соло/обхода без схлопывания разметки.
-/// </summary>
 internal sealed class GradingLayersWindow : ToolWindow
 {
     private readonly ColorGradeState _state;
@@ -19,6 +15,16 @@ internal sealed class GradingLayersWindow : ToolWindow
     private ColorGradeLayer? _selectedLayer = ColorGradeLayer.Exposure;
     private ColorGradeLayer? _selectedLayerRequested;
     private bool _selectionRequested;
+
+    // Подписи вкладок и баннеров меняются только со сменой состояния слоёв;
+    // собирать их на каждое событие IMGUI незачем.
+    private readonly Dictionary<string, string[]> _tabTitles = [];
+    private ColorGradeLayer? _soloLabelLayer;
+    private string _soloLabel = string.Empty;
+    private int _bypassLabelCount = -1;
+    private string _bypassLabel = string.Empty;
+    private ColorGradeLayer? _focusedLabelLayer;
+    private string _focusedLabel = string.Empty;
 
     public GradingLayersWindow(ColorGradeState state, ColorGradeZones zones)
         : base("Тонкоррекция  ·  F5", new Rect(292f, 16f, 430f, 740f))
@@ -242,8 +248,13 @@ internal sealed class GradingLayersWindow : ToolWindow
         bool isSolo = _state.Solo == layer;
         bool isBypassed = _state.IsBypassed(layer);
 
-        string badge = isSolo ? "★" : (isBypassed ? "○" : "●");
-        string title = $"{badge}{label}";
+        if (!_tabTitles.TryGetValue(label, out string[]? titles))
+        {
+            titles = ["●" + label, "○" + label, "★" + label];
+            _tabTitles[label] = titles;
+        }
+
+        string title = titles[isSolo ? 2 : (isBypassed ? 1 : 0)];
 
         if (GUILayout.Toggle(
                 isSelected,
@@ -265,7 +276,7 @@ internal sealed class GradingLayersWindow : ToolWindow
                 using (new GUILayout.HorizontalScope())
                 {
                     GUILayout.Label(
-                        $"★  Соло: {GradingLayerControlsDrawer.GetLayerTitle(_state.Solo.Value)}",
+                        SoloLabel(_state.Solo.Value),
                         ToolTheme.WarningLabel);
                     if (GUILayout.Button("Снять", SecondaryButtonStyle, GUILayout.Width(72f)))
                     {
@@ -282,7 +293,7 @@ internal sealed class GradingLayersWindow : ToolWindow
             {
                 using (new GUILayout.HorizontalScope())
                 {
-                    GUILayout.Label($"⚠  В обходе слоёв: {bypassedCount}", ToolTheme.WarningLabel);
+                    GUILayout.Label(BypassLabel(bypassedCount), ToolTheme.WarningLabel);
                     if (GUILayout.Button("Включить все", SecondaryButtonStyle, GUILayout.Width(104f)))
                     {
                         _drawer.RequestClearBypasses();
@@ -290,6 +301,39 @@ internal sealed class GradingLayersWindow : ToolWindow
                 }
             }
         }
+    }
+
+    private string SoloLabel(ColorGradeLayer layer)
+    {
+        if (_soloLabelLayer != layer)
+        {
+            _soloLabelLayer = layer;
+            _soloLabel = $"★  Соло: {GradingLayerControlsDrawer.GetLayerTitle(layer)}";
+        }
+
+        return _soloLabel;
+    }
+
+    private string BypassLabel(int count)
+    {
+        if (_bypassLabelCount != count)
+        {
+            _bypassLabelCount = count;
+            _bypassLabel = $"⚠  В обходе слоёв: {count}";
+        }
+
+        return _bypassLabel;
+    }
+
+    private string FocusedLabel(ColorGradeLayer layer)
+    {
+        if (_focusedLabelLayer != layer)
+        {
+            _focusedLabelLayer = layer;
+            _focusedLabel = $"СЛОЙ: {GradingLayerControlsDrawer.GetLayerTitle(layer).ToUpperInvariant()}";
+        }
+
+        return _focusedLabel;
     }
 
     private int GetBypassedCount()
@@ -317,7 +361,7 @@ internal sealed class GradingLayersWindow : ToolWindow
 
             GUILayout.FlexibleSpace();
             GUILayout.Label(
-                $"СЛОЙ: {GradingLayerControlsDrawer.GetLayerTitle(layer).ToUpperInvariant()}",
+                FocusedLabel(layer),
                 SectionLabelStyle);
             GUILayout.FlexibleSpace();
 

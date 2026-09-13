@@ -4,9 +4,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Calculates dynamic terrain mesh dimensions, viewport sizing, padding, and region grid snapping.
-/// </summary>
 public sealed class TerrainViewportCalculator
 {
     private const int TerrainRegionAnchorCells = 8;

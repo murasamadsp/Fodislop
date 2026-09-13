@@ -12,9 +12,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Builds the Display & Resolution Settings section in the pause menu.
-/// </summary>
 internal sealed class PauseMenuDisplayTabBuilder
 {
     private readonly IClientConfigManager _clientConfig;

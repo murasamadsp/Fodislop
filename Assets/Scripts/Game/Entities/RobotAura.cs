@@ -7,90 +7,34 @@ using UnityEngine;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Магическая аура вокруг робота: летающие светящиеся нити.
-/// </summary>
-/// <remarks>
-/// НИТЬ СОБИРАЕТСЯ ИЗ ЗВЕНЬЕВ. Одна нить — это цепочка коротких отрезков,
-/// расставленных по дуге, а не один длинный спрайт. Длинный спрайт — это
-/// прямая хорда: на радиусе в два десятка пикселей она заметно срезает
-/// окружность, и вместо облетающей робота линии получается многоугольник.
-/// Звенья же поворачиваются каждое по своей касательной, и нить реально
-/// огибает тело.
-///
-/// Прозрачность вдоль нити убывает от головы к хвосту — так линия читается
-/// как летящая, а не как неподвижная дужка.
-///
-/// ЗАЖИГАЕТСЯ И ГАСНЕТ НЕ МГНОВЕННО. По нажатию нити вспыхивают и
-/// расходятся наружу, по отпусканию медленнее гаснут и стягиваются к телу.
-/// Атака заметно короче релиза: заклинание вспыхивает резко, а
-/// рассеивается неохотно. Равные времена дают ощущение тумблера.
-///
-/// РАЗМЕРЫ В ПИКСЕЛЯХ СЕТКИ, А НЕ В ЮНИТАХ. Клетка мира — 32 пикселя при
-/// 16 пикселях на юнит, скин робота ровно 32x32, то есть тело торчит на 16
-/// пикселей от центра. Радиусы заданы в пикселях той же сетки: так
-/// «вплотную к роботу» остаётся вплотную при любом масштабе мира.
-/// </remarks>
 internal sealed class RobotAura
 {
-    /// <summary>Нитей в ауре.</summary>
     private const int WispCount = 10;
 
-    /// <summary>
-    /// Звеньев в нити. Пять звеньев дают дугу примерно в четверть радиана —
-    /// уже линия, ещё не кольцо.
-    /// </summary>
     private const int SegmentsPerWisp = 5;
 
-    /// <summary>Угол между соседними звеньями нити, градусы.</summary>
     private const float SegmentSpacingDegrees = 5.5f;
 
-    /// <summary>
-    /// Радиус ауры в покое, в пикселях сетки. Половина тела — 16, так что
-    /// в стянутом виде нити прижаты к самому корпусу.
-    /// </summary>
     private const float InnerRadiusPixels = 13f;
 
-    /// <summary>Радиус раскрытой ауры, в пикселях сетки.</summary>
     private const float OuterRadiusPixels = 20f;
 
-    /// <summary>
-    /// Разброс радиуса между нитями, в долях. Держится небольшим: широкий
-    /// разброс разрежает ауру в облако, а она должна быть плотной.
-    /// </summary>
     private const float RadiusJitter = 0.16f;
 
-    /// <summary>Оборотов вокруг робота в секунду, средняя.</summary>
     private const float RevolutionsPerSecond = 0.34f;
 
-    /// <summary>
-    /// Разброс скоростей между нитями. Без него вся аура вращается как
-    /// одно жёсткое колесо: рисунок внутри неё остаётся неподвижным.
-    /// </summary>
     private const float SpeedJitter = 0.45f;
 
-    /// <summary>Время выхода на полную яркость, секунды.</summary>
     private const float AttackSeconds = 0.18f;
 
-    /// <summary>Время затухания после отпускания, секунды.</summary>
     private const float ReleaseSeconds = 0.5f;
 
-    /// <summary>Длина звена вдоль касательной, пикселей.</summary>
     private const int SegmentLengthPixels = 5;
 
-    /// <summary>Толщина звена поперёк, пикселей.</summary>
     private const int SegmentThicknessPixels = 3;
 
-    /// <summary>
-    /// Порядок сортировки. Тело робота — ноль, иконка клана — сто: нити
-    /// вьются над телом, но под кланом.
-    /// </summary>
     private const int AuraSortingOrder = 50;
 
-    /// <summary>
-    /// Цвета нитей. Магия читается по холодной части спектра, а разнобой
-    /// оттенков не даёт ауре выглядеть перекрашенной копией одной дуги.
-    /// </summary>
     private static readonly Color[] _WispTints =
     [
         new(0.55f, 0.80f, 1.00f, 1f),
@@ -114,22 +58,14 @@ internal sealed class RobotAura
         _robotTransform = robotTransform;
     }
 
-    /// <summary>Аура ещё видна: горит или доигрывает затухание.</summary>
     public bool IsAlive => _energy > 0.001f;
 
-    /// <summary>
-    /// Общий спрайт переживает выход из режима игры, а его текстура — нет:
-    /// следующий заход получил бы ссылку на уничтоженный объект.
-    /// </summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetForDomainReload()
     {
         _sharedSegmentSprite = null;
     }
 
-    /// <summary>
-    /// Задаёт, держат ли клавишу. Гашение не мгновенное: см. релиз.
-    /// </summary>
     public void SetWanted(bool wanted, WorldEntityBatchRenderer? batchRenderer, ISceneObjectFactory? sceneObjects)
     {
         if (wanted && _auraTransform == null)
@@ -145,7 +81,6 @@ internal sealed class RobotAura
         _wanted = wanted;
     }
 
-    /// <summary>Двигает нити и огибающую. Вызывать раз в кадр.</summary>
     public void Tick(float deltaTime)
     {
         if (_auraTransform == null)
@@ -332,15 +267,6 @@ internal sealed class RobotAura
 
     private static float NextUnit(System.Random random) => (float)random.NextDouble();
 
-    /// <summary>
-    /// Рисует звено нити: короткий отрезок, размытый поперёк.
-    /// </summary>
-    /// <remarks>
-    /// Спрайт процедурный и общий на все ауры. Поперёк альфа спадает от
-    /// середины к краю, вдоль — держится: так звенья, встав в цепочку,
-    /// сливаются в сплошную светящуюся линию без перемычек и утолщений на
-    /// стыках, а сама линия остаётся мягкой по краям.
-    /// </remarks>
     private static Sprite EnsureSegmentSprite()
     {
         if (_sharedSegmentSprite != null)

@@ -13,18 +13,6 @@ using VContainer;
 
 namespace Fodinae.UI
 {
-    /// <summary>
-    /// Сцена Gateway: вход и онбординг перед главным меню.
-    ///
-    /// Поток сцен: Bootstrap → Gateway → MainMenu → MainGame. Раньше блок входа
-    /// жил оверлеем внутри MainMenu.uxml; вынесен в свою сцену, чтобы меню не
-    /// тащило чужой жизненный цикл, а ворота выгружались целиком.
-    ///
-    /// Онбординг показывается один раз — при первом запуске либо когда игрок
-    /// открывает его сам. Пишет в те поля ClientConfig, которые действительно
-    /// существуют: частоту кадров, вертикальную синхронизацию, пресет графики и
-    /// приглушение звука в фоне.
-    /// </summary>
     [RequireComponent(typeof(UIDocument))]
     public sealed class GatewayController : MonoBehaviour, ILocalizableUI
     {
@@ -109,7 +97,7 @@ namespace Fodinae.UI
             tree.AddToClassList("ui-fullscreen");
             _root.Add(tree);
 
-            // Статические ключи UXML резолвятся сразу при сборке, а не только
+            // Статические ключи Uxml резолвятся сразу при сборке, а не только
             // по событию смены языка — иначе ворота показали бы сырые ключи.
             UILocalizer.Apply(tree, _loc);
 
@@ -118,7 +106,7 @@ namespace Fodinae.UI
             _root = tree;
 
             // Состояние ставится на тот же элемент, на котором оно задано в
-            // разметке. Иначе начальный gateway--auth из UXML снять было бы
+            // разметке. Иначе начальный gateway--auth из Uxml снять было бы
             // некому и форма входа осталась бы видимой поверх онбординга.
             _gatewayRoot = _root.Q<VisualElement>("GatewayRoot") ?? _root;
 
@@ -150,11 +138,6 @@ namespace Fodinae.UI
             Debug.Log("[Gateway] Gateway UI initialized and displayed.");
         }
 
-        /// <summary>
-        /// Переприменяет локализованный текст после смены языка: статические ключи
-        /// через UILocalizer, онбординг (заголовок шага, кнопка «Далее») и списки
-        /// выпадающих списков — напрямую.
-        /// </summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(GatewayController));
@@ -198,7 +181,6 @@ namespace Fodinae.UI
             GoToMainMenu();
         }
 
-        /// <summary>Включает ровно одно состояние ворот и гасит остальные.</summary>
         private void SetState(string state)
         {
             if (_gatewayRoot == null)
@@ -210,12 +192,6 @@ namespace Fodinae.UI
             _gatewayRoot.EnableInClassList(StateOnboardingClass, state == StateOnboardingClass);
         }
 
-        /// <summary>
-        /// Кладёт сохранённый зум в PanelSettings. Раньше это делал только
-        /// PauseMenu при своей инициализации — то есть настройка вступала в
-        /// силу лишь после того, как игрок хоть раз открыл паузу уже в игре,
-        /// а ворота и меню всегда рисовались со стопроцентным масштабом.
-        /// </summary>
         private void ApplySavedUIScale()
         {
             if (_clientConfig == null)

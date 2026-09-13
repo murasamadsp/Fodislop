@@ -10,19 +10,6 @@ using UnityEngine.InputSystem;
 
 namespace Fodinae.Rendering.PostProcessing.Workbench;
 
-/// <summary>
-/// Рабочее место колориста: состояние грейда и три его окна.
-/// </summary>
-/// <remarks>
-/// Собственной отрисовки здесь больше нет. Окна живут в общей системе
-/// инструментов (<see cref="ToolWindows"/>) наравне с кадром, миром и
-/// обходами: перетаскивание, видимость и порядок делает она, а этот тип знает
-/// только про грейд.
-///
-/// Разница не косметическая. До объединения инструмент имел собственный
-/// мастер-тумблер, собственные GUI.Window и собственную клавишу — и из списка
-/// инструментов его не было видно, потому что списка не существовало.
-/// </remarks>
 public sealed class GradingWorkbench : IDisposable
 {
     private readonly ColorGradeState _state = new();
@@ -49,20 +36,13 @@ public sealed class GradingWorkbench : IDisposable
         _qualifierWindow = new GradingQualifierWindow(_state);
     }
 
-    /// <summary>Зоны грейда по высоте. Действуют и вне рабочего места.</summary>
     public ColorGradeZones Zones => _zones;
 
     public ColorGradeState State => _state;
 
-    /// <summary>Крутит ли кто-то грейд прямо сейчас.</summary>
     public bool IsApplying => ToolWindows.Enabled &&
         (_layersWindow.Visible || _qualifierWindow.Visible || _zonesWindow.Visible);
 
-    /// <summary>
-    /// Стало ли применение только что выключенным. Владельцу это нужно, чтобы
-    /// вернуть кадр к конфигу: иначе инструмент оставлял бы после себя правки,
-    /// которых нет ни в одном файле.
-    /// </summary>
     public bool StoppedApplying { get; private set; }
 
     public void Tick()

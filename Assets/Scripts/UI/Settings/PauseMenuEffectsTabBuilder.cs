@@ -12,9 +12,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Builds the Effects tab in the Pause Menu.
-/// </summary>
 internal sealed class PauseMenuEffectsTabBuilder
 {
     private readonly GraphicsSettingsController _graphicsSettings;

@@ -6,12 +6,9 @@ using MinesServer.Networking.Shared.Packets;
 
 namespace Fodinae.Game;
 
-/// <summary>
-/// Parsed parameters from AudioPacket (attractor coordinates, source bot, texture overrides, Effekseer dynamic inputs).
-/// </summary>
 internal sealed class ServerAudioParameters
 {
-    public uint SourceBotId { get; private set; }
+    public uint SourceBotID { get; private set; }
     public bool HasSourceBot { get; private set; }
     public ushort AttractorX { get; private set; }
     public ushort AttractorY { get; private set; }
@@ -34,7 +31,7 @@ internal sealed class ServerAudioParameters
                 case "sourcebotid":
                     if (uint.TryParse(param.Value, out var srcBotId))
                     {
-                        result.SourceBotId = srcBotId;
+                        result.SourceBotID = srcBotId;
                         result.HasSourceBot = true;
                     }
 

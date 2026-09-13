@@ -6,24 +6,10 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Поток пакетов: что приходит от сервера, что уходит и что никто не слушает.
-/// </summary>
-/// <remarks>
-/// До сих пор о сетевом обмене нельзя было узнать ничего: пакет без
-/// подписчика <c>NetworkService</c> отбрасывает молча, и «сервер не прислал»
-/// выглядело с экрана ровно как «прислал, а обработчик не подписан». Это два
-/// совершенно разных дефекта, и искали их одинаково — чтением кода.
-///
-/// Учёт включается вместе с окном и выключается вместе с ним: он стоит словаря
-/// на каждый пакет, а их в секунду бывает много. Инструмент не должен менять
-/// то, что меряет, когда на него не смотрят.
-/// </remarks>
 public sealed class PacketTrafficWindow : ToolWindow
 {
     private const float RefreshInterval = 0.5f;
 
-    /// <summary>С какой паузы тип считается замолчавшим.</summary>
     private const double SilenceThresholdSeconds = 5d;
 
     private readonly List<PacketStat> _incoming = [];
@@ -37,6 +23,7 @@ public sealed class PacketTrafficWindow : ToolWindow
     private string _rateSummary = string.Empty;
     private string _batchSummary = string.Empty;
     private string _queueSummary = string.Empty;
+    private string _unhandledBanner = string.Empty;
     private string _filter = string.Empty;
     private bool _frozen;
     private long _peakCount;
@@ -49,7 +36,6 @@ public sealed class PacketTrafficWindow : ToolWindow
     {
     }
 
-    /// <summary>Учёт живёт ровно столько, сколько открыто окно.</summary>
     public override bool WantsSampling => Visible;
 
     public override Vector2 MinimumSize => new(340f, 280f);
@@ -107,14 +93,15 @@ public sealed class PacketTrafficWindow : ToolWindow
         _batchSummary = string.Empty;
         _queueSummary = string.Empty;
         _historyRows.Clear();
+        _unhandledBanner = string.Empty;
         _filter = string.Empty;
         _frozen = false;
     }
 
-    /// <summary>Обнуляет и показания, и уже собранные подписи.</summary>
     private void ResetCounters()
     {
         PacketTelemetry.Reset();
+        _unhandledBanner = string.Empty;
         _incoming.Clear();
         _outgoing.Clear();
         _history.Clear();
@@ -124,14 +111,6 @@ public sealed class PacketTrafficWindow : ToolWindow
         _nextUpdate = 0f;
     }
 
-    /// <summary>
-    /// Состояние очереди приёма.
-    /// </summary>
-    /// <remarks>
-    /// Обрыв разбора выделен цветом, потому что это единственное место, где
-    /// задержка возникает уже внутри клиента: пакет пришёл, лежит в очереди и
-    /// ждёт следующего кадра. Со стороны это неотличимо от медленного сервера.
-    /// </remarks>
     private void DrawQueue()
     {
         ToolChrome.SectionHeader("ОЧЕРЕДЬ ПРИЁМА");
@@ -169,6 +148,12 @@ public sealed class PacketTrafficWindow : ToolWindow
             $"пачек HB {PacketTelemetry.BatchCount} (по {perBatch:F1} пакета), " +
             $"снято сжатых обёрток {PacketTelemetry.CompressedCount}";
 
+        // Решение «есть баннер» принимается здесь, а не в отрисовке: живой
+        // счётчик мог измениться между Layout и Repaint, и число контролов
+        // событий разошлось бы. Заодно строка не собирается на каждое событие.
+        long unhandled = PacketTelemetry.TotalUnhandled;
+        _unhandledBanner = unhandled > 0 ? $"БЕЗ ОБРАБОТЧИКА: {unhandled}" : string.Empty;
+
         double now = Time.unscaledTimeAsDouble;
         _peakCount = 0;
         BuildRows(_incoming, _incomingRows, ref _peakCount, now);
@@ -178,18 +163,6 @@ public sealed class PacketTrafficWindow : ToolWindow
         BuildHistoryRows();
     }
 
-    /// <summary>
-    /// Собирает подписи ленты заранее.
-    /// </summary>
-    /// <remarks>
-    /// Двести строк, собираемых прямо в отрисовке, — это двести склеек на
-    /// каждое событие IMGUI, то есть тысячи в секунду в окне, которое стоит
-    /// рядом со счётчиком мусора. Собирается один раз на обновление.
-    ///
-    /// Время показывается относительным, отрицательным отсчётом назад:
-    /// абсолютные секунды от старта игры ничего не значат, а «полторы секунды
-    /// назад» отвечает на единственный вопрос, который к ленте задают.
-    /// </remarks>
     private void BuildHistoryRows()
     {
         double now = Time.unscaledTimeAsDouble;
@@ -203,13 +176,6 @@ public sealed class PacketTrafficWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Сортирует по числу пакетов и собирает подписи.
-    /// </summary>
-    /// <remarks>
-    /// По убыванию, потому что вопрос к этому списку всегда один: чего идёт
-    /// больше всего. Тип, пришедший один раз, интересен ровно тем, что он внизу.
-    /// </remarks>
     private static void BuildRows(List<PacketStat> stats, List<string> rows, ref long peak, double now)
     {
         stats.Sort(static (left, right) => right.Count.CompareTo(left.Count));
@@ -238,11 +204,9 @@ public sealed class PacketTrafficWindow : ToolWindow
         {
             _scroll = scroll.scrollPosition;
 
-            if (PacketTelemetry.TotalUnhandled > 0)
+            if (_unhandledBanner.Length > 0)
             {
-                ToolChrome.Banner(
-                    $"БЕЗ ОБРАБОТЧИКА: {PacketTelemetry.TotalUnhandled}",
-                    ToolTheme.Warning);
+                ToolChrome.Banner(_unhandledBanner, ToolTheme.Warning);
                 GUILayout.Space(4f);
             }
 
@@ -294,14 +258,6 @@ public sealed class PacketTrafficWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Лента последних событий, от свежих к старым.
-    /// </summary>
-    /// <remarks>
-    /// Сводка отвечает на вопрос «сколько», лента — на вопрос «в каком
-    /// порядке». Для протокола второе бывает важнее: пакет, пришедший до
-    /// того, чем он должен был идти следом, по сводке неотличим от нормы.
-    /// </remarks>
     private void DrawHistory()
     {
         ToolChrome.SectionHeader("ЛЕНТА");

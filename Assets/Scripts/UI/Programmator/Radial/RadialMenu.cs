@@ -61,7 +61,7 @@ public class RadialMenu
         tree.pickingMode = PickingMode.Ignore;
         _root = tree;
 
-        // Статические ключи UXML резолвятся сразу при сборке (контракт
+        // Статические ключи Uxml резолвятся сразу при сборке (контракт
         // един для всех экранов; у радиального меню их почти нет).
         UILocalizer.Apply(tree, _loc);
 

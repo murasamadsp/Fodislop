@@ -12,10 +12,6 @@ using VContainer;
 
 namespace Fodinae.Game
 {
-    /// <summary>
-    /// Renders compatible world sprites and robot tentacles through one mesh,
-    /// one material and one runtime texture atlas.
-    /// </summary>
     public class WorldEntityBatchRenderer : MonoBehaviour
     {
         // Matches the five-point tail used by the stable June implementation.
@@ -33,12 +29,6 @@ namespace Fodinae.Game
         private readonly List<Tentacle> _tentacles = [];
         private readonly List<SpriteHandle> _sprites = [];
 
-        /// <summary>Видимые спрайты этого кадра, разложенные по слоям отрисовки.</summary>
-        /// <remarks>
-        /// Списки живут в поле, а не заводятся на кадр: пересборка идёт каждый
-        /// кадр, пока в мире хоть что-то движется, и три новых списка на кадр
-        /// были бы мусором на ровном месте.
-        /// </remarks>
         private readonly List<SpriteHandle> _visibleUnderTentacles = [];
         private readonly List<SpriteHandle> _visibleOverTentacles = [];
         private readonly List<SpriteHandle> _visibleOverlay = [];
@@ -132,18 +122,6 @@ namespace Fodinae.Game
                 "World-entity atlas is not initialized.");
         }
 
-        /// <remarks>
-        /// ПОРЯДОК ЗДЕСЬ ОБЯЗАТЕЛЕН. Сперва один опрос трансформов на кадр,
-        /// и только потом всё остальное: проверка изменений, отбор видимых,
-        /// запись геометрии и снимок состояния читают снятые значения и в
-        /// движок больше не ходят.
-        ///
-        /// Раньше опроса как такового не было — каждый из этих проходов
-        /// спрашивал трансформ сам. Проходов было пять, и все шли по всему
-        /// списку зарегистрированных спрайтов, а не по видимым: здания
-        /// сидят в хвосте по порядку сортировки, и город платил за себя
-        /// в каждом кадре просто фактом своего существования.
-        /// </remarks>
         protected void LateUpdate()
         {
             using var marker = _LateUpdateMarker.Auto();
@@ -183,16 +161,6 @@ namespace Fodinae.Game
             _geometryDirty = false;
         }
 
-        /// <summary>
-        /// Раскладывает видимые спрайты по слоям одним проходом.
-        /// </summary>
-        /// <remarks>
-        /// Границы слоёв — по порядку сортировки, а список отсортирован по нему
-        /// же, но опираться на это отбором с ранним выходом нельзя: отсечение по
-        /// видимости прореживает список внутри каждого слоя, и выйти раньше
-        /// значит потерять спрайт. Проход остаётся один на кадр, и в нём нет ни
-        /// одного обращения в движок.
-        /// </remarks>
         private void CollectVisibleSprites(bool hasCamera, in Rect visibleRect)
         {
             _visibleUnderTentacles.Clear();

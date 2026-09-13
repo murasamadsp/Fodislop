@@ -6,9 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Handles user interaction (drag navigation, scroll zooming, cursor anchoring) for the world map.
-/// </summary>
 public sealed class MapInteractionController
 {
     private bool _isDragging;

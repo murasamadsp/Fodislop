@@ -5,15 +5,6 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Networking.Buildings;
-/// <summary>
-/// Custom 5x4 footprint (user-specified layout, no road tail):
-/// corners in the outer column edges of the first and last rows,
-/// double door entrance at the center of the bottom half.
-///   row y=-2: corner wall wall wall corner
-///   row y=-1: wall wall wall wall wall
-///   row y=0:  wall wall door wall wall
-///   row y=+1: corner wall door wall corner
-/// </summary>
 public sealed class ClansPack : PackBuilding
 {
     public override PackType Type => PackType.Clans;

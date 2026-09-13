@@ -7,9 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Dedicated decoder for GIF animations with custom LZW decompression.
-/// </summary>
 public static class GifAnimationDecoder
 {
     public static AnimationContainerDecoder.DecodedAnimation Decode(byte[] data)

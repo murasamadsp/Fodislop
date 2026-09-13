@@ -10,23 +10,6 @@ using MinesServer.Networking.Server.Packets.World;
 
 namespace MinesServer.Networking.Connection.Client;
 
-/// <summary>
-/// Административные команды, набираемые в глобальном чате.
-/// </summary>
-/// <remarks>
-/// ПОЧЕМУ В ЧАТЕ, А НЕ ОТДЕЛЬНЫМ ОКНОМ. Команда — это строка с аргументами, и
-/// поле ввода под неё уже есть. Отдельное окно потребовало бы формы под каждую
-/// команду и жило бы отдельной жизнью от списка команд.
-///
-/// ПОЧЕМУ ЗДЕСЬ. Это сторона сервера: команда меняет состояние мира и отвечает
-/// пакетами, как ответил бы настоящий сервер. Клиент о командах не знает
-/// ничего — он отправляет обычное сообщение чата и получает обычные пакеты.
-/// Когда сервер появится, разбор переедет туда, а клиент останется нетронутым.
-///
-/// Ответы приходят как сообщения глобального чата от отправителя «Сервер»:
-/// отдельного канала под системный вывод в протоколе нет, а заводить его ради
-/// трёх команд значит менять протокол под отладку.
-/// </remarks>
 internal sealed class DummyAdminCommands(
     Action<ServerPacket> sendPacket,
     DummyPlayerSimulationState playerState,
@@ -34,16 +17,11 @@ internal sealed class DummyAdminCommands(
 {
     private const string CommandPrefix = "/";
 
-    /// <summary>Блок, который ставит <c>/set</c> без аргумента.</summary>
     private const CellType DefaultPlacedCell = CellType.SuperRainbow;
 
     private static readonly System.Drawing.Color _ServerColor =
         System.Drawing.Color.FromArgb(255, 255, 180, 60);
 
-    /// <summary>
-    /// Разбирает сообщение. Возвращает <c>true</c>, если это была команда и
-    /// обычная рассылка в чат не нужна.
-    /// </summary>
     public bool TryHandle(string? message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -73,7 +51,7 @@ internal sealed class DummyAdminCommands(
                 Teleport(parts);
                 return true;
             case "set":
-                Set(parts);
+                ApplySetCommand(parts);
                 return true;
             default:
                 Reply($"Неизвестная команда «{parts[0]}». Список — /help");
@@ -109,7 +87,7 @@ internal sealed class DummyAdminCommands(
         Reply($"Телепорт в ({x}, {y}).");
     }
 
-    private void Set(string[] parts)
+    private void ApplySetCommand(string[] parts)
     {
         CellType placed = DefaultPlacedCell;
         if (parts.Length >= 2 && !Enum.TryParse(parts[1], ignoreCase: true, out placed))

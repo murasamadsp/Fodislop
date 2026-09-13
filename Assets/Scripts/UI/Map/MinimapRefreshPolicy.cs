@@ -4,9 +4,6 @@ using UnityEngine;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Controls rate limiting, dirty tracking, and refresh scheduling for the minimap.
-/// </summary>
 public sealed class MinimapRefreshPolicy
 {
     public const float UpdateDelaySeconds = 0.1f;

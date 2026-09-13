@@ -3,117 +3,137 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace MinesServer.Networking.Connection.Client;
 
+// Карта офлайн-сервера лежит в StreamingAssets/WorldMaps как <мир>_cells.zip
+// (~78 МБ), внутри — <мир>_cells.mapb (~300 МБ). Распакованная карта живёт в
+// persistentDataPath: temporaryCachePath система чистит при нехватке места, и
+// тогда каждый вход в мир распаковывал бы её заново.
 internal static class DummyWorldMapArchive
 {
-    /// <summary>
-    /// Resolves the map file for a world, extracting it from the zip archive
-    /// off the main thread when a cache miss occurs.
-    ///
-    /// The bundled map archives are tens of megabytes (pallada_cells.zip is
-    /// ~78 MB); extracting one synchronously would stall the main thread for
-    /// seconds right after world startup. The fast path (a previously
-    /// extracted .mapb file) returns synchronously.
-    /// </summary>
-    public static async UniTask<string> ResolveMapFileAsync(string worldCodeName)
+    internal const string CacheFolderName = "DummyServerMaps";
+    private const string StreamingFolderName = "WorldMaps";
+    private const string StampSuffix = ".stamp";
+    private const string TempSuffix = ".tmp";
+    private const long FreeSpaceMarginBytes = 64L * 1024 * 1024;
+    private static readonly TimeSpan _AbandonedTempAge = TimeSpan.FromHours(1);
+
+    public static async UniTask<string> ResolveMapFileAsync(string worldCodeName, CancellationToken cancellationToken)
     {
-        // Application.* path properties are main-thread-only; capture them
-        // before the thread-pool hop so the extraction never touches Unity
-        // APIs off the main thread.
-        string streamingDirectory = Path.Combine(Application.streamingAssetsPath, "WorldMaps");
-        string projectMapPath = Path.Combine(streamingDirectory, $"{worldCodeName}_cells.mapb");
-        if (File.Exists(projectMapPath))
-        {
-            return projectMapPath;
-        }
+        // Application.* доступны только с главного потока: читаются до ухода в пул.
+        string streamingRoot = Application.streamingAssetsPath;
+        string streamingDirectory = Path.Combine(streamingRoot, StreamingFolderName);
+        string cacheDirectory = Path.Combine(Application.persistentDataPath, CacheFolderName);
+        string legacyCacheDirectory = Path.Combine(Application.temporaryCachePath, CacheFolderName);
+        string buildGuid = Application.buildGUID;
 
-        string projectArchivePath = Path.Combine(streamingDirectory, $"{worldCodeName}_cells.zip");
-        if (!File.Exists(projectArchivePath))
-        {
-            throw new FileNotFoundException(
-                $"Dummy server map '{worldCodeName}' is missing both the mapb file and its zip archive.",
-                projectMapPath);
-        }
+        string mapPath = IsLocalPath(streamingRoot)
+            ? await UniTask.RunOnThreadPool(
+                () => ResolveFromLocalStreamingAssets(streamingDirectory, cacheDirectory, worldCodeName),
+                cancellationToken: cancellationToken)
+            : await ResolveFromPackagedStreamingAssetsAsync(
+                streamingDirectory,
+                cacheDirectory,
+                worldCodeName,
+                buildGuid,
+                cancellationToken);
 
-        string cacheDirectory = Path.Combine(Application.temporaryCachePath, "DummyServerMaps");
-        return await UniTask.RunOnThreadPool(
-            () => ExtractFromArchive(projectArchivePath, cacheDirectory, worldCodeName));
+        await UniTask.RunOnThreadPool(() => DeleteDirectoryQuietly(legacyCacheDirectory, cacheDirectory));
+        return mapPath;
     }
 
-    private static string ExtractFromArchive(
-        string projectArchivePath,
+    internal static string ExtractIfStale(
+        string archivePath,
         string cacheDirectory,
-        string worldCodeName)
+        string worldCodeName,
+        string sourceStamp)
+    {
+        Directory.CreateDirectory(cacheDirectory);
+        DeleteAbandonedTempFiles(cacheDirectory);
+
+        string mapPath = Path.Combine(cacheDirectory, MapFileName(worldCodeName));
+        if (IsCacheCurrent(mapPath, sourceStamp))
+        {
+            return mapPath;
+        }
+
+        using ZipArchive archive = OpenArchive(archivePath);
+        ZipArchiveEntry entry = archive.GetEntry(MapFileName(worldCodeName)) ??
+            throw new InvalidDataException(
+                $"Dummy server archive '{archivePath}' does not contain '{MapFileName(worldCodeName)}'.");
+        EnsureFreeSpace(cacheDirectory, entry.Length);
+
+        // Отметка снимается до замены карты: сбой между шагами оставит карту без
+        // отметки, и следующий запуск распакует её заново, а не поверит ей.
+        string stampPath = StampPath(mapPath);
+        if (File.Exists(stampPath))
+        {
+            File.Delete(stampPath);
+        }
+
+        // Уникальное имя: два процесса (два редактора, редактор и билд) пишут
+        // каждый в свой файл, а на место встаёт целиком записанный.
+        string tempPath = NewTempPath(mapPath);
+        try
+        {
+            entry.ExtractToFile(tempPath, overwrite: false);
+            long written = new FileInfo(tempPath).Length;
+            if (written != entry.Length)
+            {
+                throw new InvalidDataException(
+                    $"Dummy server map '{worldCodeName}' extracted {written} of {entry.Length} bytes.");
+            }
+
+            ReplaceFile(tempPath, mapPath);
+            WriteStamp(mapPath, sourceStamp);
+        }
+        catch (IOException exception)
+        {
+            throw new IOException(
+                $"Could not extract dummy server map '{worldCodeName}' to '{cacheDirectory}': {exception.Message}",
+                exception);
+        }
+        finally
+        {
+            DeleteFileQuietly(tempPath);
+        }
+
+        return mapPath;
+    }
+
+    internal static bool IsCacheCurrent(string mapPath, string sourceStamp)
+    {
+        string stampPath = StampPath(mapPath);
+        try
+        {
+            return File.Exists(mapPath) &&
+                File.Exists(stampPath) &&
+                string.Equals(File.ReadAllText(stampPath), sourceStamp, StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool HasValidHeader(string mapPath)
     {
         try
         {
-            Directory.CreateDirectory(cacheDirectory);
-            string cachedMapPath = Path.Combine(cacheDirectory, $"{worldCodeName}_cells.mapb");
-            using ZipArchive archive = ZipFile.OpenRead(projectArchivePath);
-            ZipArchiveEntry? mapEntry = archive.GetEntry($"{worldCodeName}_cells.mapb");
-            if (mapEntry == null)
-            {
-                throw new InvalidDataException(
-                    $"Dummy server archive '{projectArchivePath}' does not contain " +
-                    $"'{worldCodeName}_cells.mapb'.");
-            }
-
-            var cachedInfo = new FileInfo(cachedMapPath);
-            // Проверка только по длине: сравнение таймстампов с записью в zip
-            // хрупкое (local time vs UTC) и приводило к перераспаковке ~300 МБ
-            // при каждом входе в мир — именно на этом пути ловилась гонка
-            // распаковка/чтение. Атомарная запись ниже гарантирует, что файл
-            // нужной длины целостен.
-            if (!cachedInfo.Exists ||
-                cachedInfo.Length != mapEntry.Length)
-            {
-                // Распаковка идёт во временный файл рядом, затем атомарный
-                // rename на место. ExtractToFile держит файл с FileShare.None,
-                // и если читатель (ReadDimensions из второго InitWorldAsync или
-                // второго редактора) откроет .mapb во время записи — будет
-                // sharing violation. Атомарный move гарантирует, что читатель
-                // видит либо старое полное содержимое, либо новое, но никогда
-                // частично записанный файл.
-                string tempPath = cachedMapPath + ".tmp";
-                try
-                {
-                    mapEntry.ExtractToFile(tempPath, overwrite: true);
-                    // Перегрузки File.Move(..., overwrite) в netstandard2.1 нет:
-                    // удаляем цель и делаем чистый rename (на той же файловой
-                    // системе rename атомарен, читатель видит либо старый, либо
-                    // новый файл целиком).
-                    if (File.Exists(cachedMapPath))
-                    {
-                        File.Delete(cachedMapPath);
-                    }
-
-                    File.Move(tempPath, cachedMapPath);
-                }
-                finally
-                {
-                    if (File.Exists(tempPath))
-                    {
-                        try
-                        {
-                            File.Delete(tempPath);
-                        }
-                        catch (IOException)
-                        {
-                            // уборка мусора, не критично
-                        }
-                    }
-                }
-            }
-
-            return cachedMapPath;
+            ReadDimensions(mapPath);
+            return true;
         }
-        catch (Exception ex)
+        catch (InvalidDataException exception)
         {
-            throw new InvalidDataException($"Failed to open dummy server map '{worldCodeName}'.", ex);
+            // Недочитанный заголовок — порча. Прочие ошибки ввода-вывода (файл
+            // занят соседним процессом) о содержимом ничего не говорят: их
+            // переживает повторное чтение в ReadDimensionsWithRetryAsync.
+            return exception.InnerException is IOException and not EndOfStreamException;
         }
     }
 
@@ -142,13 +162,6 @@ internal static class DummyWorldMapArchive
         }
     }
 
-    /// <summary>
-    /// Читает размеры карты с ретраями: если файл только что распакован другим
-    /// процессом (второй редактор, редактор + собранный билд) и на момент
-    /// открытия ещё занят — повторяет попытку с небольшой паузой вместо
-    /// мгновенного sharing violation. Паузы идут через UniTask.Delay, чтобы
-    /// не блокировать main-поток.
-    /// </summary>
     public static async UniTask<(int width, int height)> ReadDimensionsWithRetryAsync(string path)
     {
         const int maxAttempts = 10;
@@ -166,4 +179,265 @@ internal static class DummyWorldMapArchive
             }
         }
     }
+
+    private static string ResolveFromLocalStreamingAssets(
+        string streamingDirectory,
+        string cacheDirectory,
+        string worldCodeName)
+    {
+        string projectMapPath = Path.Combine(streamingDirectory, MapFileName(worldCodeName));
+        if (File.Exists(projectMapPath))
+        {
+            ReadDimensions(projectMapPath);
+            return projectMapPath;
+        }
+
+        string archivePath = Path.Combine(streamingDirectory, ArchiveFileName(worldCodeName));
+        if (!File.Exists(archivePath))
+        {
+            throw new FileNotFoundException(
+                $"Dummy server map '{worldCodeName}' is missing both '{projectMapPath}' and '{archivePath}'.",
+                archivePath);
+        }
+
+        // Отметка — длина и время записи самого архива, сравниваемые с ними же:
+        // обновлённый архив той же длины распакуется заново, а сравнения
+        // времени файла со временем записи внутри zip (разные зоны) здесь нет.
+        var archive = new FileInfo(archivePath);
+        string sourceStamp = $"file:{archive.Length}:{archive.LastWriteTimeUtc.Ticks}";
+        return ExtractValidated(archivePath, cacheDirectory, worldCodeName, sourceStamp);
+    }
+
+    private static async UniTask<string> ResolveFromPackagedStreamingAssetsAsync(
+        string streamingDirectory,
+        string cacheDirectory,
+        string worldCodeName,
+        string buildGuid,
+        CancellationToken cancellationToken)
+    {
+        // Android: StreamingAssets лежат внутри APK, File.* их не видит. Архив
+        // копируется из пакета только если распакованная карта не от этой сборки.
+        string sourceStamp = $"package:{buildGuid}";
+        string mapPath = Path.Combine(cacheDirectory, MapFileName(worldCodeName));
+        bool current = await UniTask.RunOnThreadPool(
+            () =>
+            {
+                Directory.CreateDirectory(cacheDirectory);
+                return IsCacheCurrent(mapPath, sourceStamp) && HasValidHeader(mapPath);
+            },
+            cancellationToken: cancellationToken);
+        if (current)
+        {
+            return mapPath;
+        }
+
+        string archiveCopy = Path.Combine(cacheDirectory, ArchiveFileName(worldCodeName));
+        await CopyPackagedFileAsync($"{streamingDirectory}/{ArchiveFileName(worldCodeName)}", archiveCopy, cancellationToken);
+        try
+        {
+            return await UniTask.RunOnThreadPool(
+                () => ExtractValidated(archiveCopy, cacheDirectory, worldCodeName, sourceStamp),
+                cancellationToken: cancellationToken);
+        }
+        finally
+        {
+            DeleteFileQuietly(archiveCopy);
+        }
+    }
+
+    private static string ExtractValidated(
+        string archivePath,
+        string cacheDirectory,
+        string worldCodeName,
+        string sourceStamp)
+    {
+        string mapPath = ExtractIfStale(archivePath, cacheDirectory, worldCodeName, sourceStamp);
+        if (HasValidHeader(mapPath))
+        {
+            return mapPath;
+        }
+
+        // Отметка совпала, а заголовок испорчен: файл повреждён уже после
+        // распаковки. Одна повторная распаковка; вторая порча — отказ.
+        InvalidateCache(mapPath);
+        mapPath = ExtractIfStale(archivePath, cacheDirectory, worldCodeName, sourceStamp);
+        ReadDimensions(mapPath);
+        return mapPath;
+    }
+
+    private static async UniTask CopyPackagedFileAsync(
+        string uri,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        string tempPath = NewTempPath(destinationPath);
+        try
+        {
+            using (var request = new UnityWebRequest(uri, UnityWebRequest.kHttpVerbGET))
+            {
+                request.downloadHandler = new DownloadHandlerFile(tempPath) { removeFileOnAbort = true };
+                await request.SendWebRequest().WithCancellation(cancellationToken);
+            }
+
+            ReplaceFile(tempPath, destinationPath);
+        }
+        catch (UnityWebRequestException exception)
+        {
+            throw new FileNotFoundException(
+                $"Packaged dummy server archive '{uri}' could not be read: {exception.Error}",
+                uri,
+                exception);
+        }
+        finally
+        {
+            DeleteFileQuietly(tempPath);
+        }
+    }
+
+    private static ZipArchive OpenArchive(string archivePath)
+    {
+        try
+        {
+            return ZipFile.OpenRead(archivePath);
+        }
+        catch (InvalidDataException exception)
+        {
+            throw new InvalidDataException(
+                $"Dummy server archive '{archivePath}' is corrupt: {exception.Message}",
+                exception);
+        }
+    }
+
+    private static void EnsureFreeSpace(string directory, long requiredBytes)
+    {
+        long availableBytes;
+        try
+        {
+            availableBytes = new DriveInfo(Path.GetFullPath(directory)).AvailableFreeSpace;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            // Размер тома узнать нельзя — нехватку места покажет сама запись.
+            return;
+        }
+
+        if (availableBytes < requiredBytes + FreeSpaceMarginBytes)
+        {
+            throw new IOException(
+                $"Not enough disk space for the dummy server map in '{directory}': " +
+                $"needs {ToMegabytes(requiredBytes + FreeSpaceMarginBytes)} MB, " +
+                $"available {ToMegabytes(availableBytes)} MB.");
+        }
+    }
+
+    private static void InvalidateCache(string mapPath)
+    {
+        string stampPath = StampPath(mapPath);
+        if (File.Exists(stampPath))
+        {
+            File.Delete(stampPath);
+        }
+
+        if (File.Exists(mapPath))
+        {
+            File.Delete(mapPath);
+        }
+    }
+
+    private static void WriteStamp(string mapPath, string sourceStamp)
+    {
+        string stampPath = StampPath(mapPath);
+        string tempPath = NewTempPath(stampPath);
+        try
+        {
+            File.WriteAllText(tempPath, sourceStamp);
+            ReplaceFile(tempPath, stampPath);
+        }
+        finally
+        {
+            DeleteFileQuietly(tempPath);
+        }
+    }
+
+    private static void ReplaceFile(string sourcePath, string destinationPath)
+    {
+        // В netstandard2.1 нет File.Move(..., overwrite); rename в пределах тома атомарен.
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                if (File.Exists(destinationPath))
+                {
+                    File.Delete(destinationPath);
+                }
+
+                File.Move(sourcePath, destinationPath);
+                return;
+            }
+            catch (IOException) when (attempt < 2)
+            {
+                // Между удалением и переносом цель записал соседний процесс
+                // из того же источника — повторяем.
+            }
+        }
+    }
+
+    private static void DeleteAbandonedTempFiles(string cacheDirectory)
+    {
+        DateTime threshold = DateTime.UtcNow - _AbandonedTempAge;
+        foreach (string tempPath in Directory.GetFiles(cacheDirectory, "*" + TempSuffix))
+        {
+            // Свежий временный файл может дописывать соседний процесс.
+            if (File.GetLastWriteTimeUtc(tempPath) < threshold)
+            {
+                DeleteFileQuietly(tempPath);
+            }
+        }
+    }
+
+    private static void DeleteDirectoryQuietly(string directory, string keptDirectory)
+    {
+        if (string.Equals(Path.GetFullPath(directory), Path.GetFullPath(keptDirectory), StringComparison.Ordinal) ||
+            !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Старый кеш занят или недоступен — его всё равно уберёт система.
+        }
+    }
+
+    private static void DeleteFileQuietly(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Брошенный файл подберёт DeleteAbandonedTempFiles.
+        }
+    }
+
+    private static bool IsLocalPath(string path) => !path.Contains("://", StringComparison.Ordinal);
+
+    private static string MapFileName(string worldCodeName) => $"{worldCodeName}_cells.mapb";
+
+    private static string ArchiveFileName(string worldCodeName) => $"{worldCodeName}_cells.zip";
+
+    private static string StampPath(string mapPath) => mapPath + StampSuffix;
+
+    private static string NewTempPath(string path) => $"{path}.{Guid.NewGuid():N}{TempSuffix}";
+
+    private static long ToMegabytes(long bytes) => bytes / (1024 * 1024);
 }

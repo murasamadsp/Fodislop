@@ -20,21 +20,6 @@ namespace Fodinae.World.Lighting
     [DisallowMultipleComponent]
     public class LightingEngine : MonoBehaviour
     {
-        /// <summary>
-        /// Отладочные виды освещения.
-        /// </summary>
-        /// <remarks>
-        /// ЗАЧЕМ ЯВНЫЕ НОМЕРА. Значение уходит в шейдер как есть
-        /// (<c>SetComputeIntParam(DebugViewId, (int)debugView)</c>), то есть
-        /// порядковый номер члена — это и есть номер ветки в
-        /// <c>WorldLighting.compute</c>. Пока номера были неявными, списки
-        /// разошлись: в шейдере видов десять, здесь было семь, и всё после
-        /// четвёртого показывало не то, что называлось — «DirectRadiance»
-        /// открывал StaticDirect, «DiffuseBounce» открывал DynamicDirect, а три
-        /// вида не открывались вовсе. Явные номера делают расхождение
-        /// невозможным молча: добавить ветку в шейдер и забыть про этот список
-        /// теперь нельзя, номер не сойдётся.
-        /// </remarks>
         public enum DebugView
         {
             FinalLighting = 0,
@@ -48,15 +33,6 @@ namespace Fodinae.World.Lighting
             DiffuseBounce = 8,
             Exposure = 9,
 
-            /// <summary>
-            /// Занятость, усреднённая по окрестности, — источник AO, которым
-            /// террейн затемняет фон вокруг блоков. Белое значит закрыто.
-            /// </summary>
-            /// <remarks>
-            /// Готовой тени тут нет: она рисуется в <c>Terrain.shader</c> на
-            /// экранном разрешении и только по фону, а сюда попадает лишь та
-            /// величина, из которой она считается.
-            /// </remarks>
             AmbientOcclusion = 10,
         }
 
@@ -64,20 +40,20 @@ namespace Fodinae.World.Lighting
         private const int RadianceStride = sizeof(uint) * 3;
         private const int MaximumDispatchGroupsPerDimension = 65535;
         private const string WorldLightingKeyword = "FODINAE_WORLD_LIGHTING";
-        private static readonly int _WorldLightTextureId = Shader.PropertyToID("_WorldLightTexture");
-        private static readonly int _WorldLightRectId = Shader.PropertyToID("_WorldLightRect");
-        private static readonly int _WorldLightDebugViewId =
+        private static readonly int _WorldLightTextureID = Shader.PropertyToID("_WorldLightTexture");
+        private static readonly int _WorldLightRectID = Shader.PropertyToID("_WorldLightRect");
+        private static readonly int _WorldLightDebugViewID =
             Shader.PropertyToID("_WorldLightDebugView");
-        private static readonly int _WorldLightTextureSizeId =
+        private static readonly int _WorldLightTextureSizeID =
             Shader.PropertyToID("_WorldLightTextureSize");
-        private static readonly int _WorldEmissionScaleId =
+        private static readonly int _WorldEmissionScaleID =
             Shader.PropertyToID("_WorldEmissionScale");
 
         // Поле занятости для падающей тени в террейне. Y-переворот отдаётся
         // отдельно: компьют читает это поле с поправкой, террейн обязан так же.
-        private static readonly int _WorldOccupancyTextureId =
+        private static readonly int _WorldOccupancyTextureID =
             Shader.PropertyToID("_WorldOccupancyTexture");
-        private static readonly int _WorldOccupancyYFlipId =
+        private static readonly int _WorldOccupancyYFlipID =
             Shader.PropertyToID("_WorldOccupancyYFlip");
         private static readonly ProfilerMarker _LightingUpdateMarker =
             new("Fodinae.Lighting.UpdateLighting.CPU");
@@ -152,14 +128,6 @@ namespace Fodinae.World.Lighting
         private bool _cascadeBudgetLimited;
         private bool _fieldDirtyState = true;
 
-        /// <summary>
-        /// Поле требует перерисовки.
-        /// </summary>
-        /// <remarks>
-        /// Поле перерисовывается целиком: частичная перерисовка по
-        /// прямоугольникам была убрана, потому что очистка под ножницами на
-        /// Metal чистит цель, а не прямоугольник.
-        /// </remarks>
         private bool _fieldDirty
         {
             get => _fieldDirtyState;
@@ -190,18 +158,8 @@ namespace Fodinae.World.Lighting
         private bool _initialized;
         private bool _lightingDisabledStatePublished;
 
-        /// <summary>
-        /// True once EnsureInitialized has completed. Runtime lighting getters (and UI built
-        /// on top of them) must not be touched before this flag is set — _runtimeConfig is
-        /// only created during initialization.
-        /// </summary>
         public bool IsInitialized => _initialized;
 
-        /// <summary>
-        /// Одна детерминированная точка готовности освещения: срабатывает один раз
-        /// после завершения <see cref="EnsureInitialized"/>. Вьюхи, которым нужен
-        /// runtime-конфиг (PauseMenu), строятся по этому событию, а не ретраем из Update.
-        /// </summary>
         public event Action? OnInitialized;
         private bool _hasStaticRadianceState;
         private bool _hasDynamicRadianceState;
@@ -239,11 +197,6 @@ namespace Fodinae.World.Lighting
 
         public float MaximumLightMultiplier => LightingConfigHolder.MaximumLightMultiplier;
 
-        /// <remarks>
-        /// Считается там же, где выставляется в компьют, а не повторяется числом:
-        /// вторая копия этой величины уже разошлась с первой и показывала в
-        /// интерфейсе не то, чем на деле светил отладочный вид.
-        /// </remarks>
         public float TransmittanceDebugDistanceCells =>
             LightingComputeBinder.ResolveTransmittanceDebugDistance();
 
@@ -296,20 +249,6 @@ namespace Fodinae.World.Lighting
         public int MaximumIntervalSteps =>
             Mathf.Clamp(_qualitySettings.LightingMaximumRaySteps, 1, 64);
 
-        /// <summary>
-        /// Per-cascade cost of one full radiance solve, in the units that
-        /// actually decide how long the GPU spends on it.
-        /// </summary>
-        /// <remarks>
-        /// Entry count alone is misleading: every cascade in this layout holds
-        /// roughly the same number of entries (probe count divides by four while
-        /// the direction count multiplies by four), so the atlas looks evenly
-        /// balanced. The march does not. <c>SolveCascade</c> derives its step
-        /// count from the interval length, and the interval quadruples per
-        /// <summary>
-        /// Rays, ray-march steps and far-cascade atlas taps one full solve
-        /// issues. Mirrors the arithmetic in <c>WorldLighting.compute</c>.
-        /// </summary>
         public void CollectCascadeCosts(List<CascadeCostSample> destination)
         {
             CascadeCostCalculator.CollectCascadeCosts(_cascades, MaximumIntervalSteps, destination);
@@ -625,7 +564,7 @@ namespace Fodinae.World.Lighting
                 _wasLightingBypassed = false;
                 _lightingDisabledStatePublished = false;
                 Shader.EnableKeyword(WorldLightingKeyword);
-                Shader.SetGlobalInteger(_WorldLightDebugViewId, (int)_debugView);
+                Shader.SetGlobalInteger(_WorldLightDebugViewID, (int)_debugView);
                 _fieldDirty = true;
                 _compositeDirty = true;
                 _bounceDirty = true;
@@ -635,7 +574,7 @@ namespace Fodinae.World.Lighting
                 _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
                 if (_lightmapTexture != null)
                 {
-                    Shader.SetGlobalTexture(_WorldLightTextureId, _lightmapTexture);
+                    Shader.SetGlobalTexture(_WorldLightTextureID, _lightmapTexture);
                 }
             }
 
@@ -846,13 +785,6 @@ namespace Fodinae.World.Lighting
             }
         }
 
-        /// <summary>
-        /// Publishes the explicit identity state selected by
-        /// <see cref="LightingQualityMode.Off"/>. This is not an alternate
-        /// lighting implementation: the terrain shader keyword is disabled,
-        /// so the compiled fragment variant returns unit light without a
-        /// texture lookup.
-        /// </summary>
         private void PublishLightingDisabledState()
         {
             if (_lightingDisabledStatePublished)
@@ -861,11 +793,11 @@ namespace Fodinae.World.Lighting
             }
 
             Shader.DisableKeyword(WorldLightingKeyword);
-            Shader.SetGlobalTexture(_WorldLightTextureId, Texture2D.whiteTexture);
-            Shader.SetGlobalVector(_WorldLightRectId, new Vector4(-1000f, -1000f, 2000f, 2000f));
-            Shader.SetGlobalVector(_WorldLightTextureSizeId, new Vector4(1, 1, 1, 1));
-            Shader.SetGlobalInteger(_WorldLightDebugViewId, 0);
-            Shader.SetGlobalFloat(_WorldEmissionScaleId, LightingConfigHolder.EmissionScale);
+            Shader.SetGlobalTexture(_WorldLightTextureID, Texture2D.whiteTexture);
+            Shader.SetGlobalVector(_WorldLightRectID, new Vector4(-1000f, -1000f, 2000f, 2000f));
+            Shader.SetGlobalVector(_WorldLightTextureSizeID, new Vector4(1, 1, 1, 1));
+            Shader.SetGlobalInteger(_WorldLightDebugViewID, 0);
+            Shader.SetGlobalFloat(_WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
             _lightingDisabledStatePublished = true;
         }
 
@@ -880,26 +812,26 @@ namespace Fodinae.World.Lighting
             const float cellSize = ProjectRuntimeContracts.World.CellSize;
             Shader.EnableKeyword(WorldLightingKeyword);
             _lightingDisabledStatePublished = false;
-            Shader.SetGlobalTexture(_WorldLightTextureId, _lightmapTexture);
+            Shader.SetGlobalTexture(_WorldLightTextureID, _lightmapTexture);
             if (_materialField != null)
             {
-                Shader.SetGlobalTexture(_WorldOccupancyTextureId, _materialField);
+                Shader.SetGlobalTexture(_WorldOccupancyTextureID, _materialField);
                 Shader.SetGlobalInteger(
-                    _WorldOccupancyYFlipId,
+                    _WorldOccupancyYFlipID,
                     SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
             }
 
-            Shader.SetGlobalInteger(_WorldLightDebugViewId, (int)_debugView);
-            Shader.SetGlobalFloat(_WorldEmissionScaleId, LightingConfigHolder.EmissionScale);
+            Shader.SetGlobalInteger(_WorldLightDebugViewID, (int)_debugView);
+            Shader.SetGlobalFloat(_WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
             Shader.SetGlobalVector(
-                _WorldLightTextureSizeId,
+                _WorldLightTextureSizeID,
                 new Vector4(
                     _lightmapTexture.width,
                     _lightmapTexture.height,
                     1f / _lightmapTexture.width,
                     1f / _lightmapTexture.height));
             Shader.SetGlobalVector(
-                _WorldLightRectId,
+                _WorldLightRectID,
                 new Vector4(
                     _lastVisibleRegion.x * cellSize,
                     _lastVisibleRegion.y * cellSize,
@@ -946,11 +878,6 @@ namespace Fodinae.World.Lighting
                 emissionField);
         }
 
-        /// <summary>
-        /// Resources the extracted pipeline stages need this frame. Built on
-        /// demand rather than cached - the underlying render textures can be
-        /// reallocated by <see cref="ReleaseFieldTextures"/> between calls.
-        /// </summary>
         private LightingFrameContext BuildFrameContext()
         {
             return new LightingFrameContext(
@@ -997,7 +924,7 @@ namespace Fodinae.World.Lighting
             commandBuffer.SetComputeBufferParam(
                 compute,
                 _solveCascadeKernel,
-                LightingComputeBinder.RadianceAtlasId,
+                LightingComputeBinder.RadianceAtlasID,
                 _radianceAtlas!);
             int cascadeCount = (maxCascades > 0 && maxCascades <= _cascades.Count)
                 ? maxCascades
@@ -1039,7 +966,7 @@ namespace Fodinae.World.Lighting
             commandBuffer.SetComputeBufferParam(
                 compute,
                 _solveCascadeKernel,
-                LightingComputeBinder.RadianceAtlasId,
+                LightingComputeBinder.RadianceAtlasID,
                 _radianceAtlas!);
             LightingComputeBinder.BindCascadeParameters(
                 commandBuffer,
@@ -1055,7 +982,7 @@ namespace Fodinae.World.Lighting
             int groupCountY = Mathf.CeilToInt(totalGroupCount / (float)groupCountX);
             commandBuffer.SetComputeIntParam(
                 compute,
-                LightingComputeBinder.CascadeDispatchRowWidthId,
+                LightingComputeBinder.CascadeDispatchRowWidthID,
                 groupCountX * 64);
             commandBuffer.DispatchCompute(
                 compute,
@@ -1066,19 +993,6 @@ namespace Fodinae.World.Lighting
             commandBuffer.EndSample(sampleName);
         }
 
-        /// <summary>
-        /// Solves one half of the split — cascades from a single emission field,
-        /// resolved into its own direct-radiance target.
-        /// </summary>
-        /// <remarks>
-        /// Both halves share the atlas, used one after the other in the same
-        /// command buffer. That is deliberate: at four pixels per cell the atlas
-        /// is about 170 MB, and a second copy purely to keep the two halves
-        /// apart would cost more memory than the whole rest of the lighting
-        /// system. The resolve reads cascade 0 out of the atlas immediately
-        /// after the solve writes it, so nothing needs to survive between the
-        /// two calls.
-        /// </remarks>
         private void SolveRadianceHalf(
             CommandBuffer commandBuffer,
             RenderTexture emissionField,
@@ -1098,16 +1012,16 @@ namespace Fodinae.World.Lighting
         {
             using var resolveMarker = _ResolveMarker.Auto();
             ComputeShader compute = _lightingCompute!;
-            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.CascadeOffsetId, _cascades[0].Offset);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.CascadeOffsetID, _cascades[0].Offset);
             commandBuffer.SetComputeBufferParam(
                 compute,
                 _resolveDirectKernel,
-                LightingComputeBinder.RadianceAtlasId,
+                LightingComputeBinder.RadianceAtlasID,
                 _radianceAtlas!);
             commandBuffer.SetComputeTextureParam(
                 compute,
                 _resolveDirectKernel,
-                LightingComputeBinder.DirectTextureId,
+                LightingComputeBinder.DirectTextureID,
                 directTarget);
             commandBuffer.DispatchCompute(
                 compute,
@@ -1117,10 +1031,6 @@ namespace Fodinae.World.Lighting
                 1);
         }
 
-        /// <summary>
-        /// Zeroes the dynamic half so the composite stops adding a light that no
-        /// longer exists.
-        /// </summary>
         private void ClearDynamicDirect(CommandBuffer commandBuffer)
         {
             commandBuffer.SetRenderTarget(_directTexture!);
@@ -1300,13 +1210,6 @@ namespace Fodinae.World.Lighting
             }
         }
 
-        /// <summary>
-        /// Applies the parts of a graphics preset this engine actually owns.
-        /// </summary>
-        /// <remarks>
-        /// VSync is deliberately not among them. Frame pacing belongs to one
-        /// owner, and that owner is DisplayManager.
-        /// </remarks>
         private static void ApplyUnityRenderingSettings(GraphicsQualitySettings settings)
         {
             UnityEngine.QualitySettings.antiAliasing = Mathf.Clamp(settings.AntiAliasing, 0, 8);

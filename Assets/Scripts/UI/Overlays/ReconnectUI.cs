@@ -97,7 +97,7 @@ namespace Fodinae.UI
                     "[ReconnectUI] Resources/UI/Reconnect.uxml is required.");
             TemplateContainer tree = template.Instantiate();
 
-            // Статические ключи UXML резолвятся сразу при сборке (контракт
+            // Статические ключи Uxml резолвятся сразу при сборке (контракт
             // един для всех экранов; здесь их нет — тексты ставит код).
             UILocalizer.Apply(tree, _loc);
 
@@ -117,12 +117,6 @@ namespace Fodinae.UI
             _doc.rootVisualElement.Add(_disconnectOverlay);
         }
 
-        /// <summary>
-        /// Причины дисконнекта приходят от сервера как свободный текст — его
-        /// клиент переводить не может. Известные клиентские причины передаются
-        /// ключами словаря: если строка совпадает с ключом, резолвим перевод,
-        /// иначе показываем как есть.
-        /// </summary>
         private string Resolve(string text)
         {
             return _loc != null && _loc.HasKey(text) ? _loc.Get(text) : text;

@@ -11,9 +11,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Builds the Interface tab in the Pause Menu.
-/// </summary>
 internal sealed class PauseMenuInterfaceTabBuilder
 {
     private readonly UIDocument _doc;

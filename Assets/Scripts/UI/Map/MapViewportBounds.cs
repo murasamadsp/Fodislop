@@ -4,9 +4,6 @@ using UnityEngine;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Viewport bounds, zoom limits, and centering geometry for the world map.
-/// </summary>
 public static class MapViewportBounds
 {
     private const int MaxMapWidth = 960;

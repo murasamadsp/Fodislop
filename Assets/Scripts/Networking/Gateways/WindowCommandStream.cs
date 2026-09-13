@@ -17,13 +17,13 @@ public sealed class WindowCommandStream
 
     public bool HasOpenWindows { get; private set; }
 
-    public void PublishOpen(OpenWindowPacket packet) => OpenRequested?.Invoke(packet);
+    public void PublishOpenWindow(OpenWindowPacket packet) => OpenRequested?.Invoke(packet);
 
-    public void PublishClose(CloseWindowPacket packet) => CloseRequested?.Invoke(packet);
+    public void PublishCloseWindow(CloseWindowPacket packet) => CloseRequested?.Invoke(packet);
 
-    public void PublishModal(ModalWindowPacket packet) => ModalRequested?.Invoke(packet);
+    public void PublishModalWindow(ModalWindowPacket packet) => ModalRequested?.Invoke(packet);
 
-    public void SetOpenWindowVisibility(bool visible)
+    public void SetServerWindowVisibility(bool visible)
     {
         if (HasOpenWindows == visible)
         {

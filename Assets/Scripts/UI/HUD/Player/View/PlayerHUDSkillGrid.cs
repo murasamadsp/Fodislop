@@ -7,9 +7,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Manages player skill icons, level progress bars and arrow indicators in the HUD.
-/// </summary>
 public sealed class PlayerHUDSkillGrid
 {
     private const int SKILL_GRID_COLS = 4;

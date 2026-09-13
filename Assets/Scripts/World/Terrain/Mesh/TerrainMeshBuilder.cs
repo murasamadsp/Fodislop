@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.World.Terrain.Background;
 using MinesServer.Data;
 using MinesServer.Networking.Server.Packets.Connection;
 using UnityEngine;
@@ -19,54 +20,18 @@ public class TerrainMeshBuilder
     private int[] _fgAtlasIndices = Array.Empty<int>();
     private bool[] _foregroundOverlayFlags = Array.Empty<bool>();
 
-    /// <summary>Сколько вершин занимает одна клетка: два слоя по четыре.</summary>
     private const int VerticesPerCell = 8;
 
     private readonly TerrainSubMeshIndexBuilder _indexBuilder = new();
 
-    /// <summary>
-    /// Whether the last <see cref="BuildRegion"/> changed which submesh any
-    /// quad belongs to, and so requires the index lists to be re-uploaded.
-    /// </summary>
-    /// <remarks>
-    /// Almost always false. A quad's submesh is its texture atlas, and a
-    /// streamed chunk or a mined cell changes the cell's appearance far
-    /// more often than it moves that cell onto a different atlas. Rebuilding
-    /// the lists regardless meant every incremental patch, however small,
-    /// cleared every submesh list and re-appended twelve ints for every quad
-    /// in the viewport - the whole grid's worth of List&lt;int&gt;.Add on the
-    /// main thread, to usually reproduce the identical lists.
-    /// </remarks>
     public bool IndicesChanged { get; private set; }
 
     public bool OverlayIndicesChanged { get; private set; }
 
-    /// <summary>
-    /// The span of <see cref="VertexBuffer"/> the last
-    /// <see cref="BuildRegion"/> actually wrote, as a vertex offset and
-    /// count. Zero count means it wrote nothing.
-    /// </summary>
-    /// <remarks>
-    /// Quads are indexed x-major (<c>x * meshHeight + y</c>), so a
-    /// rectangle occupies one contiguous run per column and this span is
-    /// the smallest range covering all of them - tight when the dirty rect
-    /// is narrow in x, which is the common case for a walking player.
-    /// </remarks>
     public int DirtyVertexStart { get; private set; }
 
     public int DirtyVertexCount { get; private set; }
 
-    /// <summary>
-    /// True when the last <see cref="BuildRegion"/> rewrote a quad that
-    /// carries a foreground overlay, before or after the write.
-    /// </summary>
-    /// <remarks>
-    /// Накладка дверей — отдельная сетка, собранная копированием вершин
-    /// оверлейных квадов из этого буфера. Её надо пересобирать не только
-    /// когда список квадов поменялся, но и когда у прежнего квада
-    /// переписали вершины: копия иначе останется от старого кадра.
-    /// Флаг снят прямо в цикле записи, где обе стороны и так под рукой.
-    /// </remarks>
     public bool OverlayQuadsTouched { get; private set; }
 
     public void EnsureCapacity(int meshWidth, int meshHeight, float cellSize)
@@ -132,37 +97,6 @@ public class TerrainMeshBuilder
         RebuildSubMeshIndices(meshWidth, meshHeight, subMeshIndices);
     }
 
-    /// <summary>
-    /// Переносит уцелевшую часть сетки на новое место и пересобирает только
-    /// открывшуюся кайму.
-    /// </summary>
-    /// <remarks>
-    /// ЗАЧЕМ. Переход через границу региона снимался полной пересборкой:
-    /// <see cref="BuildFull"/> считал <c>FillQuadData</c> для каждой клетки
-    /// окна. Сетка снапится по восемь клеток, а окно доходит до 384 — сдвиг
-    /// открывает порядка двух процентов площади, и девяносто восемь
-    /// пересчитывались, чтобы получить ровно то, что уже лежало в буфере.
-    /// Кэш клеток, предрасчёт и заливка фона к этому моменту уже приехали
-    /// сдвигом; полными оставались только сборка меша и выгрузка.
-    ///
-    /// ПОЧЕМУ ПОЗИЦИЮ ПРАВИМ ВЫЧИТАНИЕМ. Из всех полей вершины на локальные
-    /// координаты завязана одна <c>Position</c>: она равна
-    /// <c>(x, y) * cellSize</c> плюс смещение искажения, а смещение живёт при
-    /// клетке мира и едет вместе с данными. Клетка, переехавшая из
-    /// <c>x + dx</c> в <c>x</c>, обязана потерять ровно <c>dx * cellSize</c>.
-    /// Остальные поля — мировые координаты, атлас, маски — верны на новом
-    /// месте без правки.
-    ///
-    /// ПОЧЕМУ КАЙМА ШИРЕ СДВИГА НА КЛЕТКУ. Маски соседства пересчитываются с
-    /// тем же запасом (<c>TerrainCellMaskCalculator.PrecalculateIncremental</c>):
-    /// у клетки, ставшей крайней внутри, сосед снаружи сменился, и её вид
-    /// вместе с ним. Кайма здесь обязана совпадать с каймой предрасчёта,
-    /// иначе шов останется отрисованным по старым маскам.
-    ///
-    /// ЧТО ОСТАЁТСЯ ПОЛНЫМ. Списки индексов: приписка клетки к атласу
-    /// привязана к месту в буфере, а сдвинулись все места сразу. Выгрузка
-    /// вершин — тоже: сдвиг меняет содержимое почти каждого слота.
-    /// </remarks>
     public void ScrollAndBuildBand(
         TerrainCellCache cellCache,
         TerrainPrecalculator precalc,

@@ -16,6 +16,15 @@ internal sealed class GradingQualifierWindow : ToolWindow
     private Vector2 _scroll;
     private readonly Dictionary<string, string> _numberText = [];
 
+    // Подписи пересобираются при смене того, что они показывают, а не на
+    // каждое событие IMGUI.
+    private readonly Dictionary<string, string[]> _channelLabels = [];
+    private int _hueSampleLabelCount = -1;
+    private string _hueSampleLabel = string.Empty;
+    private object? _lutLabelSource;
+    private string _lutLabel = NoLutLabel;
+    private const string NoLutLabel = "Lut не загружен.";
+
     public GradingQualifierWindow(ColorGradeState state)
         : base("Qualifier / Secondary", new Rect(16f, 16f, 410f, 660f))
     {
@@ -34,6 +43,9 @@ internal sealed class GradingQualifierWindow : ToolWindow
         _scroll = default;
         _lutPath = _state.LutPath;
         _numberText.Clear();
+        _hueSampleLabelCount = -1;
+        _lutLabelSource = null;
+        _lutLabel = NoLutLabel;
     }
 
     protected override void OnDispose()
@@ -44,7 +56,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
     protected override void DrawContent()
     {
         // This window edits the same authored look as the layer window. Keep
-        // qualifier and LUT edits undoable even when the layer window is hidden.
+        // qualifier and Lut edits undoable even when the layer window is hidden.
         _state.BeginHistoryFrame();
 
         using (var scroll = new GUILayout.ScrollViewScope(_scroll))
@@ -99,9 +111,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
                 }
             }
 
-            GUILayout.Label(
-                $"Hue samples: {_qualifier.HueSamples.Count}/{ColorGradeQualifier.MaxHueSamples}",
-                ToolTheme.MutedLabel);
+            GUILayout.Label(HueSampleLabel(), ToolTheme.MutedLabel);
 
             GUILayout.Label("SATURATION RANGE", SectionLabelStyle);
             _qualifier.SaturationCenter = Slider("sat center", _qualifier.SaturationCenter, 0f, 1f);
@@ -129,7 +139,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
                 _numberText.Clear();
             }
 
-            GUILayout.Label("LUT", SectionLabelStyle);
+            GUILayout.Label("Lut", SectionLabelStyle);
             _lutPath = GUILayout.TextField(_lutPath);
             using (new GUILayout.HorizontalScope())
             {
@@ -137,29 +147,25 @@ internal sealed class GradingQualifierWindow : ToolWindow
                 {
                     if (!_state.LoadLut(_lutPath, out string error))
                     {
-                        Debug.LogWarning($"[ColorGrade] LUT не загружен: {error}");
+                        Debug.LogWarning($"[ColorGrade] Lut не загружен: {error}");
                     }
                     else
                     {
-                        _numberText.Remove("LUT intensity");
+                        _numberText.Remove("Lut intensity");
                     }
                 }
 
-                if (GUILayout.Button("Clear LUT", ToolTheme.DangerButton))
+                if (GUILayout.Button("Clear Lut", ToolTheme.DangerButton))
                 {
                     _state.ClearLut();
                     _lutPath = string.Empty;
-                    _numberText.Remove("LUT intensity");
+                    _numberText.Remove("Lut intensity");
                 }
             }
 
-            _state.LutIntensity = Slider("LUT intensity", _state.LutIntensity, 0f, 1f);
-            GUILayout.Label(
-                _state.Lut == null
-                    ? "LUT не загружен."
-                    : $"{_state.Lut.Type}, size {_state.Lut.Size}, {_state.Lut.Path}",
-                ToolTheme.MutedLabel);
-            GUILayout.Label("LUT input color space", ToolTheme.FieldLabel);
+            _state.LutIntensity = Slider("Lut intensity", _state.LutIntensity, 0f, 1f);
+            GUILayout.Label(LutLabel(), ToolTheme.MutedLabel);
+            GUILayout.Label("Lut input color space", ToolTheme.FieldLabel);
             bool srgb = GUILayout.Toggle(
                 _state.LutColorSpace == ColorGradeLutColorSpace.SrgbRec709,
                 "sRGB Rec.709 (off = Linear Rec.709)",
@@ -278,7 +284,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
             "luma center" or "luma width" => 0.5f,
             "luma softness" => 0.1f,
             "saturation" => 1f,
-            "LUT intensity" => 0f,
+            "Lut intensity" => 0f,
             _ when label.Contains("gamma", StringComparison.OrdinalIgnoreCase) => 1f,
             _ when label.Contains("gain", StringComparison.OrdinalIgnoreCase) => 1f,
             _ => 0f,
@@ -290,10 +296,41 @@ internal sealed class GradingQualifierWindow : ToolWindow
     private Vector3 Triplet(string label, Vector3 value, float min, float max)
     {
         GUILayout.Label(label, ToolTheme.FieldLabel);
+        if (!_channelLabels.TryGetValue(label, out string[]? labels))
+        {
+            labels = [label + " R", label + " G", label + " B"];
+            _channelLabels[label] = labels;
+        }
+
         return new Vector3(
-            Slider(label + " R", value.x, min, max),
-            Slider(label + " G", value.y, min, max),
-            Slider(label + " B", value.z, min, max));
+            Slider(labels[0], value.x, min, max),
+            Slider(labels[1], value.y, min, max),
+            Slider(labels[2], value.z, min, max));
+    }
+
+    private string HueSampleLabel()
+    {
+        int count = _qualifier.HueSamples.Count;
+        if (count != _hueSampleLabelCount)
+        {
+            _hueSampleLabelCount = count;
+            _hueSampleLabel = $"Hue samples: {count}/{ColorGradeQualifier.MaxHueSamples}";
+        }
+
+        return _hueSampleLabel;
+    }
+
+    private string LutLabel()
+    {
+        if (!ReferenceEquals(_state.Lut, _lutLabelSource))
+        {
+            _lutLabelSource = _state.Lut;
+            _lutLabel = _state.Lut == null
+                ? NoLutLabel
+                : $"{_state.Lut.Type}, size {_state.Lut.Size}, {_state.Lut.Path}";
+        }
+
+        return _lutLabel;
     }
 
     private static T EnumCycle<T>(string label, T value, params string[] names)

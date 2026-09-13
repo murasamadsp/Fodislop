@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.Networking.Buildings
 {
-    /// <summary>
-    /// Footprint copied 1:1 from MinesServer Game/Buildings/NC.cs (CellsToPlace).
-    /// </summary>
     public sealed class NC : PackBuilding
     {
         public override PackType Type => PackType.Science;

@@ -19,16 +19,9 @@ public static class CoordinateUtils
             "and must be supplied by the world data owner.");
     }
 
-    /// <summary>
-    /// Converts Server Y to Unity World Y (Centered on cell).
-    /// </summary>
     public static float ServerToUnityY(int serverY, int worldHeight) =>
         (ResolveHeight(worldHeight) - 1 - serverY) + 0.5f;
 
-    /// <summary>
-    /// Converts Unity World Y to Server Y. Coordinates outside the loaded
-    /// world are invalid and must never wrap into another row.
-    /// </summary>
     public static int UnityToServerY(float unityY, int worldHeight)
     {
         int h = ResolveHeight(worldHeight);
@@ -44,15 +37,9 @@ public static class CoordinateUtils
         return h - 1 - y;
     }
 
-    /// <summary>
-    /// Converts Server position to Unity World position (Center of cell).
-    /// </summary>
     public static Vector3 ServerToUnityPos(int x, int y, int worldHeight, float z = 0f) =>
         new(x + 0.5f, ServerToUnityY(y, worldHeight), z);
 
-    /// <summary>
-    /// Converts Unity World position to Server Grid position.
-    /// </summary>
     public static Vector2Int UnityToServerPos(Vector3 unityPos, int worldHeight) =>
         new(Mathf.FloorToInt(unityPos.x), UnityToServerY(unityPos.y, worldHeight));
 }

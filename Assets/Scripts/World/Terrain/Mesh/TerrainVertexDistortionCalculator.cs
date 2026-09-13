@@ -6,9 +6,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Terrain;
 
-/// <summary>
-/// Precalculates vertex distortion offsets across the terrain mesh grid.
-/// </summary>
 public sealed class TerrainVertexDistortionCalculator
 {
     public Vector3[,] GridVertexOffsets { get; private set; } = null!;

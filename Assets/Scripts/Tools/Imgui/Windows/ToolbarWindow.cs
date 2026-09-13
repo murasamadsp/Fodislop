@@ -5,15 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
-/// <summary>
-/// Список всех инструментов: что есть и что открыто.
-/// </summary>
-/// <remarks>
-/// Раньше набор отладочных возможностей знали только те, кто помнил клавиши:
-/// цифры от одного до восьми, часть с дублем на F-клавишах, нигде не
-/// перечисленные. Инструмент, о котором нельзя узнать иначе как из кода, —
-/// это инструмент, которым не пользуются.
-/// </remarks>
 public sealed class ToolbarWindow : ToolWindow
 {
     private readonly Dictionary<ToolWindow, string> _labels = [];
@@ -28,7 +19,6 @@ public sealed class ToolbarWindow : ToolWindow
         Visible = true;
     }
 
-    /// <summary>Сам список данных не собирает.</summary>
     public override bool WantsSampling => false;
 
     public override Vector2 MinimumSize => new(250f, 260f);
@@ -42,19 +32,6 @@ public sealed class ToolbarWindow : ToolWindow
         _labelSignature = 0;
     }
 
-    /// <summary>
-    /// Пересобирает подписи, только когда они действительно изменились.
-    /// </summary>
-    /// <remarks>
-    /// Подпись строки — это склейка номера, названия и пометки о свёрнутости.
-    /// Собирать её в <c>DrawContent</c> значило бы делать это по нескольку раз
-    /// за кадр на каждое окно: IMGUI проходит раскладку и отрисовку разными
-    /// событиями. Мусор в списке инструментов особенно неуместен — рядом стоит
-    /// окно, которое этот мусор показывает.
-    ///
-    /// Отпечаток дешёвый и намеренно грубый: в нём номер окна и его
-    /// свёрнутость, то есть ровно то, от чего подпись зависит.
-    /// </remarks>
     public override void Tick()
     {
         if (_labelScale != ToolWindows.Scale)
@@ -66,7 +43,7 @@ public sealed class ToolbarWindow : ToolWindow
         int signature = 17;
         foreach (ToolWindow window in ToolWindows.All)
         {
-            signature = (signature * 31) + window.Id;
+            signature = (signature * 31) + window.ID;
             signature = (signature * 31) + (window.Collapsed ? 1 : 0);
         }
 
@@ -143,15 +120,6 @@ public sealed class ToolbarWindow : ToolWindow
         }
     }
 
-    /// <summary>
-    /// Строка одного инструмента: точка состояния, название, тумблер.
-    /// </summary>
-    /// <remarks>
-    /// Точек две разных, и это не украшение. Жёлтая — окно открыто. Синяя —
-    /// окно закрыто, но продолжает копить данные: у части инструментов история
-    /// набирается всегда, и без этой отметки закрытое окно выглядело бы
-    /// выключенным, хотя оно работает.
-    /// </remarks>
     private void DrawWindowRow(ToolWindow window)
     {
         using (new GUILayout.HorizontalScope())

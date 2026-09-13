@@ -7,9 +7,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Manages main menu primary buttons, route indicators, sidebar shortcuts, and footer info.
-/// </summary>
 public sealed class MenuNavigationPresenter
 {
     private Button? _playButton;

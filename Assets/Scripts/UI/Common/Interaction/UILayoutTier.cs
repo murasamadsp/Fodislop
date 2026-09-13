@@ -4,63 +4,23 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
-/// <summary>
-/// Тир раскладки — замена медиазапросам, которых в USS не существует.
-///
-/// Дизайн-система (visual/fodinae-ui-lab) описывает три тира: compact,
-/// standard и wide. В браузере они переключаются через @media, здесь —
-/// классом на корневом элементе панели.
-///
-/// ПОЧЕМУ НЕ ОДНА ТОЛЬКО ШИРИНА
-///
-/// В браузере CSS-пиксель привязан к физическому размеру, поэтому телефон
-/// честно получает узкий вьюпорт (≈390 px) и @media (max-width: 900px)
-/// срабатывает сам собой. В Unity это не так: PanelSettings работает в
-/// режиме ScaleWithScreenSize и держит логическую высоту равной 1080 на
-/// любом устройстве, а логическая ширина выходит из соотношения сторон.
-/// Телефон в ландшафте даёт 2340×1080 логических пикселей — по ширине это
-/// «широкий» тир, то есть десктопная раскладка на шести дюймах.
-///
-/// Перейти на ConstantPhysicalSize (буквальную браузерную модель) нельзя:
-/// Screen.dpi отдаёт сырое DPI матрицы, а не системный коэффициент. На
-/// Retina-макбуке это 299 против браузерного DPR 2 — вьюпорт схлопывается
-/// до 658 px, интерфейс раздувается втрое. Проверено замером.
-///
-/// Поэтому решение разнесено надвое: PanelSettings отвечает за то, чтобы
-/// раскладка была пропорциональна экрану, а тир выбирается по физическому
-/// размеру устройства и только потом — по доступной ширине. Если система
-/// соврёт про DPI, испортится максимум выбор тира, а не каждый пиксель на
-/// экране.
-/// </summary>
 public static class UILayoutTier
 {
     public const string CompactClass = "tier--compact";
     public const string StandardClass = "tier--standard";
     public const string WideClass = "tier--wide";
 
-    /// <summary>Границы по ширине совпадают с брейкпоинтами css/tokens.css §3.</summary>
     private const float CompactMaxWidth = 900f;
     private const float WideMinWidth = 1600f;
 
-    /// <summary>
-    /// Диагональ, ниже которой устройство считается телефоном независимо от
-    /// того, сколько логических пикселей насчитала панель. Семь дюймов —
-    /// общепринятая граница между телефоном и планшетом.
-    /// </summary>
     private const float HandheldMaxInches = 7f;
 
-    /// <summary>
-    /// Привязывает автоматическое переключение тира к корневому элементу.
-    /// Вызывать один раз после CloneTree; отписка не нужна — колбэк живёт
-    /// ровно столько же, сколько сам элемент.
-    /// </summary>
     public static void Attach(VisualElement root)
     {
         root.RegisterCallback<GeometryChangedEvent>(_ => Apply(root));
         Apply(root);
     }
 
-    /// <summary>Проставляет ровно один тир-класс по текущему устройству и ширине панели.</summary>
     public static void Apply(VisualElement root)
     {
         float width = root.resolvedStyle.width;
@@ -120,11 +80,6 @@ public static class UILayoutTier
         return panelWidth >= WideMinWidth ? WideClass : StandardClass;
     }
 
-    /// <summary>
-    /// Диагональ экрана в дюймах, либо 0, если система не сообщила DPI.
-    /// Ноль здесь означает «не знаю» и трактуется вызывающим кодом как
-    /// «решай по ширине» — это безопаснее, чем подставлять выдуманное DPI.
-    /// </summary>
     private static float ScreenDiagonalInches()
     {
         float dpi = Screen.dpi;

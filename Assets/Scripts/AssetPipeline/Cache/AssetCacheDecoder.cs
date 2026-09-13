@@ -7,9 +7,6 @@ using UnityEngine;
 
 namespace Fodinae;
 
-/// <summary>
-/// Decodes raw byte buffers into GPU textures, sprites, and animations for AssetCache.
-/// </summary>
 internal static class AssetCacheDecoder
 {
     public readonly record struct DecodedTextureResult(

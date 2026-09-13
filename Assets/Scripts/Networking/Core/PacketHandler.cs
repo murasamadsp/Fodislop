@@ -19,12 +19,6 @@ using VContainer;
 
 namespace Fodinae.Networking
 {
-    /// <summary>
-    /// Pure packet dispatcher: binds packet types to processors and owns the
-    /// subscription lifetime against <see cref="INetworkService"/>. It holds no
-    /// UI, no scene managers and no player state — every packet is routed to a
-    /// processor that updates a model, an event gateway or a domain service.
-    /// </summary>
     public partial class PacketHandler : MonoBehaviour
     {
         private bool _isInitialized;
@@ -188,17 +182,6 @@ namespace Fodinae.Networking
             _isSubscribed = true;
         }
 
-        /// <summary>
-        /// Detaches every packet subscription. Idempotent.
-        /// </summary>
-        /// <remarks>
-        /// Split out of <c>OnDestroy</c> so it can be called BEFORE the game
-        /// scene starts unloading, which is the only point at which it actually
-        /// prevents anything. The connection lives in the Bootstrap scope and
-        /// keeps draining packets across the transition by design, while
-        /// OnDestroy runs *inside* the unload in an order Unity does not define.
-        /// OnDestroy still calls this as a backstop.
-        /// </remarks>
         public void Shutdown()
         {
             UnsubscribeAll();

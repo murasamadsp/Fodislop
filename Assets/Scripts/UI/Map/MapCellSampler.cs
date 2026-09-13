@@ -5,11 +5,6 @@ using Fodinae.World;
 using MinesServer.Data;
 
 namespace Fodinae.UI;
-/// <summary>
-/// Shared non-allocating chunk sampler for the minimap and fullscreen map.
-/// A missing chunk starts its normal WorldLayer async load and is never
-/// confused with a real CellType value.
-/// </summary>
 internal sealed class MapCellSampler
 {
     private const int MaxChunkCacheEntries = 4096;

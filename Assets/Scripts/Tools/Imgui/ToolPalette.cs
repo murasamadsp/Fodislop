@@ -7,21 +7,6 @@ using UnityEngine.Rendering;
 
 namespace Fodinae.Tools.Imgui;
 
-/// <summary>
-/// Цвета и текстуры отладочного интерфейса: единственное место, где они заданы.
-/// </summary>
-/// <remarks>
-/// ПОЧЕМУ ОТДЕЛЬНЫМ ФАЙЛОМ. <see cref="ToolTheme"/> упёрся в предел длины, а
-/// цвета и порождение текстур — это не описание стилей, а материал, из которого
-/// стили собраны. Разделение по этой границе, а не по объёму.
-///
-/// ПОЧЕМУ ИМЕННО ТАКИЕ ЦВЕТА. Отладочный интерфейс лежит поверх тёмной сцены с
-/// собственным свечением, и мягкий сине-серый «профессиональный» набор с ней
-/// сливался: панель читалась как часть кадра. Здесь наоборот — почти чёрная
-/// подложка и один ядовитый жёлтый как основной сигнал. Он в игре больше нигде
-/// не встречается, поэтому глаз находит инструмент мгновенно и никогда не путает
-/// его с миром.
-/// </remarks>
 public static class ToolPalette
 {
     // ── Подложки ──────────────────────────────────────────────────────────
@@ -31,10 +16,8 @@ public static class ToolPalette
     public static readonly Color32 Sunken = new(4, 6, 9, 255);
 
     // ── Сигнальные ────────────────────────────────────────────────────────
-    /// <summary>Основной акцент. Всё, что требует внимания, — этого цвета.</summary>
     public static readonly Color Accent = new(0.988f, 0.933f, 0.039f, 1f);
 
-    /// <summary>Данные: графики, числа, вторичная разметка.</summary>
     public static readonly Color Data = new(0f, 0.878f, 1f, 1f);
     public static readonly Color Warning = new(1f, 0.58f, 0.11f, 1f);
     public static readonly Color Success = new(0.22f, 1f, 0.53f, 1f);
@@ -52,17 +35,14 @@ public static class ToolPalette
 
     private static readonly List<Texture2D> _Textures = [];
 
-    /// <summary>Толщина скоса угла в пикселях текстуры рамки.</summary>
     public const int NotchSize = 9;
 
-    /// <summary>Размер стороны текстуры рамки. Кратен скосу с запасом.</summary>
     public const int FrameSize = 20;
 
     public static Texture2D White { get; private set; } = Texture2D.whiteTexture;
 
     public static Texture2D Scanlines { get; private set; } = Texture2D.whiteTexture;
 
-    /// <summary>Рамка окна со срезанным правым верхним углом.</summary>
     public static Texture2D WindowFrame { get; private set; } = Texture2D.whiteTexture;
 
     public static Texture2D CardFrame { get; private set; } = Texture2D.whiteTexture;
@@ -89,7 +69,6 @@ public static class ToolPalette
 
     public static Texture2D SliderThumb { get; private set; } = Texture2D.whiteTexture;
 
-    /// <summary>Отступ рамки для скошенных текстур.</summary>
     public static RectOffset FrameBorder => new(NotchSize, NotchSize, NotchSize, NotchSize);
 
     public static RectOffset FlatBorder => new(1, 1, 1, 1);
@@ -128,7 +107,6 @@ public static class ToolPalette
         Scanlines = Texture2D.whiteTexture;
     }
 
-    /// <summary>Тот же цвет с другой непрозрачностью — без временных полей у вызывающего.</summary>
     public static Color Fade(Color color, float alpha) =>
         new(color.r, color.g, color.b, color.a * alpha);
 
@@ -168,19 +146,6 @@ public static class ToolPalette
         return texture;
     }
 
-    /// <summary>
-    /// Рамка со срезанным правым верхним углом.
-    /// </summary>
-    /// <remarks>
-    /// Скошенный угол нельзя получить растяжением текстуры 3x3: середина
-    /// тянется, углы нет, и диагональ поехала бы вместе с шириной окна. Поэтому
-    /// текстура крупная, а <see cref="FrameBorder"/> закрепляет углы целиком —
-    /// растягиваются только прямые участки между ними, и срез остаётся ровно
-    /// таким, каким нарисован, при любом размере окна.
-    ///
-    /// Срез идёт по правому верхнему углу, потому что там же стоит кнопка
-    /// закрытия: скос указывает на неё, а не спорит с ней.
-    /// </remarks>
     private static Texture2D CreateNotched(string name, Color32 fill, Color32 border)
     {
         Texture2D texture = Allocate(name, FrameSize, FrameSize);
@@ -223,14 +188,6 @@ public static class ToolPalette
         return texture;
     }
 
-    /// <summary>
-    /// Полоса развёртки: одна светлая строка на четыре.
-    /// </summary>
-    /// <remarks>
-    /// Непрозрачность держится низкой намеренно. Полосы должны читаться как
-    /// фактура подложки, а не как рябь: инструмент, по которому трудно прочесть
-    /// число, перестаёт быть инструментом.
-    /// </remarks>
     private static Texture2D CreateScanlines()
     {
         Texture2D texture = RuntimeTextureFactory.CreateRGBA32NoMip(

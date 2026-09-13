@@ -141,10 +141,6 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         }
     }
 
-    /// <summary>
-    /// Заменяет символы, недопустимые в именах файлов Windows, чтобы имя мира
-    /// от сервера не роняло путь ({name}.mapb) на любой платформе.
-    /// </summary>
     private static string SanitizeWorldCodeName(string worldCodeName)
     {
         char[] invalid = Path.GetInvalidFileNameChars();
@@ -291,12 +287,6 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         _cellLayer.NotifyRegionLoaded(startX, startY, appliedWidth, appliedHeight);
     }
 
-    /// <summary>
-    /// Persists all dirty map chunks immediately.
-    /// The layer normally flushes on chunk eviction and dispose, but the
-    /// application can be paused or terminated while dirty chunks are
-    /// still resident in the RAM cache.
-    /// </summary>
     public void Flush()
     {
         // A separate overload rather than an optional parameter: an
@@ -306,10 +296,6 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         Flush(durable: true);
     }
 
-    /// <summary>
-    /// Persists all dirty map chunks, optionally forcing them onto the
-    /// physical drive.
-    /// </summary>
     /// <param name="durable">
     /// Whether to force the bytes all the way onto the physical drive.
     /// <para>

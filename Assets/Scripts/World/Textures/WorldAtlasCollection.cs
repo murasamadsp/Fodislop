@@ -9,9 +9,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Textures;
 
-/// <summary>
-/// Manages the set of dynamic texture atlases, including expansion and cell texture packing.
-/// </summary>
 public sealed class WorldAtlasCollection : IDisposable
 {
     private readonly int _initialAtlasSize;

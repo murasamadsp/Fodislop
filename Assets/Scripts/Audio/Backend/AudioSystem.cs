@@ -13,25 +13,6 @@ using UnityAudioSettings = UnityEngine.AudioSettings;
 
 namespace Fodinae.Audio.Backend
 {
-    /// <summary>
-    /// Точка входа в аудио-домен. Живёт в DontDestroyOnLoad.
-    /// </summary>
-    /// <remarks>
-    /// События адресуются строкой — путём события FMOD без префикса
-    /// <c>event:/</c>: <c>Play("sfx/dig")</c> → <c>event:/sfx/dig</c>.
-    ///
-    /// ЧТО ОТСЮДА УШЛО. Подгрузка «фиче-банка» по категории события:
-    /// у null-результата воспроизведения бралcя префикс пути, из него имя
-    /// банка, банк заказывался и звук переигрывался. Ни одного такого банка
-    /// в проекте нет — есть только Master, который FMOD грузит сам. Механизм
-    /// не помогал никогда, а вредил: для music/evil_huge он выводил имя
-    /// «music», не находил банк и записывал категорию в недоступные, после
-    /// чего музыка не звучала до конца сессии.
-    ///
-    /// Вместе с ним ушли методы без единого вызывающего: PlaySnapshot,
-    /// SetGlobalParameter, EnsureBankLoadedAsync, UnloadBank. Каждый — три
-    /// строки поверх RuntimeManager, если понадобятся.
-    /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Gracefully catch startup exceptions to prevent game crash.")]
     [DefaultExecutionOrder(-10000)]
     public sealed class AudioSystem : MonoBehaviour, IAudioSystem
@@ -116,7 +97,6 @@ namespace Fodinae.Audio.Backend
             _pausedInBackground = shouldPause;
         }
 
-        /// <summary>Воспроизвести событие с опциональной 3D-позицией.</summary>
         public IAudioPlaybackHandle? Play(
             string eventName,
             Vector3? worldPosition = null,
@@ -124,7 +104,6 @@ namespace Fodinae.Audio.Backend
             float? overrideVolume = null)
             => CreateVoice(eventName, worldPosition, null, overrideLayer, overrideVolume);
 
-        /// <summary>Воспроизвести с нативной привязкой FMOD к объекту.</summary>
         public IAudioPlaybackHandle? PlayAttached(
             string eventName,
             GameObject targetGameObject,
@@ -134,7 +113,6 @@ namespace Fodinae.Audio.Backend
                 ? null
                 : CreateVoice(eventName, null, targetGameObject, overrideLayer, overrideVolume);
 
-        /// <summary>Воспроизвести на заданной позиции в мире.</summary>
         public IAudioPlaybackHandle? PlayAt(
             string eventName,
             Vector3 worldPosition,
@@ -142,7 +120,6 @@ namespace Fodinae.Audio.Backend
             float? volume = null)
             => CreateVoice(eventName, worldPosition, null, layer, volume);
 
-        /// <summary>Воспроизвести без пространственного позиционирования.</summary>
         public IAudioPlaybackHandle? Play2D(string eventName, AudioLayer? layer = null, float? volume = null)
             => CreateVoice(eventName, null, null, layer, volume);
 
@@ -195,10 +172,6 @@ namespace Fodinae.Audio.Backend
             ApplySavedBusVolumes();
         }
 
-        /// <summary>
-        /// Применяет сохранённые громкости всех шин, объявленных в
-        /// <see cref="AudioBusRegistry"/>.
-        /// </summary>
         public void ApplySavedBusVolumes()
         {
             if (_clientConfig?.Config == null)

@@ -7,9 +7,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI.HUD.Player.View;
 
-/// <summary>
-/// Controls the mission objective panel in Player HUD.
-/// </summary>
 public sealed class PlayerHUDMissionPanel
 {
     private readonly ILocalizationService _loc;

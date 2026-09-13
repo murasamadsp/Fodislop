@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace Fodinae.World.Textures;
 
-/// <summary>
-/// Generates fallback and flow textures for world cells and shimmer shaders.
-/// </summary>
 public static class WorldTextureGenerator
 {
     public static Texture2D CreateFlowMap()

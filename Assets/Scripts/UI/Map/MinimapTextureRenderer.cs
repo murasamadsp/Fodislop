@@ -7,9 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Handles sampling world cells, applying minimap colors and drawing the player marker into a Texture2D.
-/// </summary>
 internal sealed class MinimapTextureRenderer
 {
     private static readonly Color32 _UnloadedColor = new(0, 0, 0, 255);

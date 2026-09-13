@@ -8,9 +8,6 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-/// <summary>
-/// Encodes and decodes unmanaged world-layer chunk data using run-length encoding (RLE).
-/// </summary>
 public static class WorldChunkRleCodec
 {
     public static void EncodeChunk<T>(BinaryWriter writer, T[] chunk, int chunkArea)

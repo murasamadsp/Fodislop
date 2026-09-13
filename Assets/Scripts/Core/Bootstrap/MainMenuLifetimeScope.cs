@@ -23,7 +23,6 @@ namespace Fodinae.Core
         [SerializeField]
         private MenuSceneryController _scenery = null!;
 
-        /// <summary>Required serialized scenery references owned by the MainMenu scene.</summary>
         public MenuStarfield Starfield => _starfield;
 
         public MenuSceneryController Scenery => _scenery;

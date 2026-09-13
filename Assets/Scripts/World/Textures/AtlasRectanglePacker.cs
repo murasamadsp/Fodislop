@@ -5,9 +5,6 @@ using System.Collections.Generic;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// 2D guillotine/shelf rectangle bin-packer for texture atlas allocations.
-/// </summary>
 internal sealed class AtlasRectanglePacker
 {
     private readonly int _size;

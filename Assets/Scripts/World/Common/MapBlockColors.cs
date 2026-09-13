@@ -7,9 +7,6 @@ using UnityEngine;
 
 namespace Fodinae.World;
 
-/// <summary>
-/// Authentic map and minimap cell color tables ported from original client MapViewer.
-/// </summary>
 public static class MapBlockColors
 {
     private static readonly Color[] _colorTable = new Color[256];
@@ -27,45 +24,24 @@ public static class MapBlockColors
         InitializeTables();
     }
 
-    /// <summary>
-    /// Gets default minimap and world map color for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color GetColor(CellType cellType) => _colorTable[(byte)cellType];
 
-    /// <summary>
-    /// Gets default minimap and world map Color32 for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color32 GetColor32(CellType cellType) => _color32Table[(byte)cellType];
 
-    /// <summary>
-    /// Gets alive crystal color for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color GetAliveColor(CellType cellType) => _aliveColorTable[(byte)cellType];
 
-    /// <summary>
-    /// Gets alive crystal Color32 for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color32 GetAliveColor32(CellType cellType) => _aliveColor32Table[(byte)cellType];
 
-    /// <summary>
-    /// Gets scanner transparency mode color for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color GetTransparentColor(CellType cellType) => _transparentTable[(byte)cellType];
 
-    /// <summary>
-    /// Gets scanner transparency mode Color32 for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color32 GetTransparentColor32(CellType cellType) => _transparent32Table[(byte)cellType];
 
-    /// <summary>
-    /// Gets custom color table color for the specified cell type.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Color GetCustomColor(CellType cellType) => _customTable[(byte)cellType];
 

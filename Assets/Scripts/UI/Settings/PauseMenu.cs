@@ -233,7 +233,7 @@ namespace Fodinae.UI
             menuTree.pickingMode = PickingMode.Ignore;
             menuTree.style.display = DisplayStyle.None;
 
-            // Статические ключи UXML (settings.*, pause.*) резолвятся сразу при
+            // Статические ключи Uxml (settings.*, pause.*) резолвятся сразу при
             // сборке, а не только по событию смены языка.
             UILocalizer.Apply(menuTree, _loc);
             _menuPanel = menuTree.Q<VisualElement>("PauseOverlay") ??
@@ -398,12 +398,6 @@ namespace Fodinae.UI
             }
         }
 
-        /// <summary>
-        /// Переприменяет локализованный текст после смены языка. Меню паузы
-        /// строится один раз (CreateMenu идемпотентен), поэтому при смене языка
-        /// пересобираем всё дерево и восстанавливаем состояние: было ли меню
-        /// открыто и какая страница настроек была активна.
-        /// </summary>
         public void ApplyLocalizedText()
         {
             UILocalizer.AssertLocalizationServiceAvailable(_loc, nameof(PauseMenu));

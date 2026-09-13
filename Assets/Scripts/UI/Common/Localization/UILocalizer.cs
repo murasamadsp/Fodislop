@@ -5,17 +5,6 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
-/// <summary>
-/// Разрешает статические тексты UXML, заданные ключами локализации
-/// (text="hud.mission"), в актуальный перевод. Единственный источник правды —
-/// словарь: UXML не несёт пользовательского текста, а ключ в атрибуте text
-/// заставляет линтер считать ключ использованным.
-///
-/// Динамические лейблы (которые код форматирует значениями: «Стр. 1/1»,
-/// «УР. 4», счётчики) этим хелпером не трогаются: их текст в UXML пуст, и за
-/// него отвечает код. HasKey защищает и от обратной ситуации — если текст
-/// элемента вдруг совпал с ключом по случайности.
-/// </summary>
 public static class UILocalizer
 {
     public static void Apply(VisualElement root, ILocalizationService loc)
@@ -53,18 +42,11 @@ public static class UILocalizer
         }
     }
 
-    /// <summary>
-    /// Удобный extension-метод для декларативной локализации любого VisualElement дерева.
-    /// </summary>
     public static VisualElement Localize(this VisualElement root, ILocalizationService loc)
     {
         Apply(root, loc);
         return root;
     }
-    /// <summary>
-    /// Сердцебиение инжекции: ApplyLocalizedText без сервиса — это тихая
-    /// смерть вьюхи (сырые ключи). Кричим в dev-сборках вместо молчания.
-    /// </summary>
     public static void AssertLocalizationServiceAvailable(ILocalizationService? loc, string viewName)
     {
 #if UNITY_EDITOR || UNITY_ENABLE_CHECKS
@@ -75,18 +57,6 @@ public static class UILocalizer
 #endif
     }
 
-    /// <summary>
-    /// Сердцебиение локализации: после ApplyLocalizedText сцена вьюхи не
-    /// должна содержать ни одного неразрешённого ключа. Если Apply вообще не
-    /// отработал (мёртвая инжекция, пустой словарь, не то дерево) — здесь
-    /// останутся сырые ключи, и LogError зафиксирует ошибку:
-    /// сущность сигнализирует вместо того, чтобы тихо показывать ключи.
-    ///
-    /// HasKey-гейт отсекает легитимные dotted-строки (версии вида v0.9.0,
-    /// плейсхолдеры): флагается только то, что сервис ЗНАЕТ как ключ.
-    /// Работает только в dev-сборках: в релизе скан отключается, чтобы
-    /// косметический дефект текста не ронял игру через fail-fast.
-    /// </summary>
     public static void AssertLocalized(VisualElement root, ILocalizationService loc)
     {
 #if UNITY_EDITOR || UNITY_ENABLE_CHECKS

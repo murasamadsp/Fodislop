@@ -3,9 +3,6 @@
 using UnityEngine;
 
 namespace Fodinae.World.Lighting;
-/// <summary>
-/// Computes quantized and padded camera regions for caching lighting computations.
-/// </summary>
 public static class LightingRegionCalculator
 {
     private const int LightingCacheAnchorCells = 8;

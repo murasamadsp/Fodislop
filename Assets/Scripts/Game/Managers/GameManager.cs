@@ -14,11 +14,6 @@ using VContainer;
 
 namespace Fodinae.Game.Managers
 {
-    /// <summary>
-    /// Высокоуровневые состояния игрового сеанса.
-    /// Расширяют сетевой статус <see cref="MinesServer.Networking.Shared.ConnectionStatus"/>,
-    /// разделяя состояния оффлайн режима, подключения, геймплея и дисконнекта.
-    /// </summary>
     public enum GameState
     {
         Offline,
@@ -27,11 +22,6 @@ namespace Fodinae.Game.Managers
         Disconnected,
     }
 
-    /// <summary>
-    /// Единый менеджер жизненного цикла игры и сессии.
-    ///
-    /// Управляет высокими состояниями сессии и связывает событийно геймплейные подсистемы.
-    /// </summary>
     public sealed class GameManager : MonoBehaviour, IWorldReadiness
     {
         public GameState CurrentState { get; private set; } = GameState.Offline;

@@ -4,29 +4,10 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace Fodinae.World.Lighting.Pipeline.Stages;
-/// <summary>
-/// Rasterizes the dynamic light sources into their own emission field,
-/// which holds nothing else. Extracted verbatim from the engine's former
-/// private <c>ComposeDynamicEmissionField</c>.
-/// </summary>
-/// <remarks>
-/// Separate from the terrain's emission on purpose. Light transport is
-/// linear in emission and the medium is the same either way, so the two
-/// can be solved apart and summed at the end for exactly the result a
-/// combined solve would give. That is what lets the terrain half be
-/// cached until geometry changes while only this half is re-solved as
-/// lamps move.
-///
-/// It also keeps the lights out of the ray march itself. They used to be
-/// evaluated inside SampleEmission, which the march calls once per ray
-/// step - one lamp cost as many iterations as the solve had steps, around
-/// 238 million on the measured configuration, and a second lamp doubled
-/// it. Here each source costs one small quad.
-/// </remarks>
 public sealed class DynamicEmissionCompositionStage : ILightingStage
 {
-    private static readonly int _DynamicLightsId = Shader.PropertyToID("_DynamicLights");
-    private static readonly int _CellSizeId = Shader.PropertyToID("_CellSize");
+    private static readonly int _DynamicLightsID = Shader.PropertyToID("_DynamicLights");
+    private static readonly int _CellSizeID = Shader.PropertyToID("_CellSize");
 
     public void Record(CommandBuffer commandBuffer, in LightingFrameContext context)
     {
@@ -59,8 +40,8 @@ public sealed class DynamicEmissionCompositionStage : ILightingStage
             // _CellSize would be visible to every shader that happens to
             // declare that name, and this pass has no business changing
             // what the rest of the frame sees.
-            context.DynamicEmissionMaterial.SetBuffer(_DynamicLightsId, context.DynamicLightBuffer);
-            context.DynamicEmissionMaterial.SetFloat(_CellSizeId, context.CellSize);
+            context.DynamicEmissionMaterial.SetBuffer(_DynamicLightsID, context.DynamicLightBuffer);
+            context.DynamicEmissionMaterial.SetFloat(_CellSizeID, context.CellSize);
             commandBuffer.DrawProcedural(
                 Matrix4x4.identity,
                 context.DynamicEmissionMaterial,

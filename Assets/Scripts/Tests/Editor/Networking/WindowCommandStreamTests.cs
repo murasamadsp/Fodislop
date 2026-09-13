@@ -6,12 +6,6 @@ using NUnit.Framework;
 
 namespace Fodinae.Tests.Networking;
 
-/// <summary>
-/// WindowCommandStream is the single boundary between packet processors
-/// and window presentation: the processor publishes commands, the
-/// presenter subscribes. These tests pin the pub/sub wiring so a
-/// regression cannot silently disconnect server windows from the UI.
-/// </summary>
 [TestFixture]
 public class WindowCommandStreamTests
 {
@@ -23,7 +17,7 @@ public class WindowCommandStreamTests
         stream.OpenRequested += packet => received = packet;
 
         var packet = new OpenWindowPacket("shop", 300, 200, null!);
-        stream.PublishOpen(packet);
+        stream.PublishOpenWindow(packet);
 
         Assert.AreEqual(packet, received);
     }
@@ -35,7 +29,7 @@ public class WindowCommandStreamTests
         int closeEvents = 0;
         stream.CloseRequested += _ => closeEvents++;
 
-        stream.PublishClose(new CloseWindowPacket());
+        stream.PublishCloseWindow(new CloseWindowPacket());
 
         Assert.AreEqual(1, closeEvents);
     }
@@ -48,7 +42,7 @@ public class WindowCommandStreamTests
         stream.ModalRequested += packet => received = packet;
 
         var packet = new ModalWindowPacket("title", "body", "OK", "");
-        stream.PublishModal(packet);
+        stream.PublishModalWindow(packet);
 
         Assert.AreEqual(packet, received);
     }
@@ -62,7 +56,7 @@ public class WindowCommandStreamTests
         stream.CloseRequested += Handler;
         stream.CloseRequested -= Handler;
 
-        stream.PublishClose(new CloseWindowPacket());
+        stream.PublishCloseWindow(new CloseWindowPacket());
 
         Assert.AreEqual(0, calls);
     }
@@ -79,14 +73,14 @@ public class WindowCommandStreamTests
             observed = visible;
         };
 
-        stream.SetOpenWindowVisibility(true);
-        stream.SetOpenWindowVisibility(true);
+        stream.SetServerWindowVisibility(true);
+        stream.SetServerWindowVisibility(true);
 
         Assert.That(stream.HasOpenWindows, Is.True);
         Assert.That(observed, Is.True);
         Assert.That(calls, Is.EqualTo(1));
 
-        stream.SetOpenWindowVisibility(false);
+        stream.SetServerWindowVisibility(false);
 
         Assert.That(stream.HasOpenWindows, Is.False);
         Assert.That(observed, Is.False);

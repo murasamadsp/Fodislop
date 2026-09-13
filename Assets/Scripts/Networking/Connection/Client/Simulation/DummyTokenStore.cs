@@ -7,10 +7,6 @@ using Newtonsoft.Json;
 using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
-/// <summary>
-/// Owns offline dummy-transport token persistence independently from the
-/// connection lifecycle and packet simulation.
-/// </summary>
 public sealed class DummyTokenStore
 {
     private readonly string _path = Path.Combine(

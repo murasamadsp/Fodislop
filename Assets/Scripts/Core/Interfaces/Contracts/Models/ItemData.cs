@@ -4,11 +4,6 @@ using MinesServer.Data;
 using UnityEngine;
 
 namespace Fodinae.Core.Models;
-/// <summary>
-/// Нейтральное описание слота инвентаря. Живёт в Core, а не в UI-моделях,
-/// чтобы Networking-слой мог описывать инвентарь без зависимости от
-/// presentation (граница слоёв по плану стабилизации DI).
-/// </summary>
 public class ItemData
 {
     public string Name { get; set; }

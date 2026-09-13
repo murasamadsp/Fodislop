@@ -5,19 +5,6 @@ using Fodinae.Core.Interfaces;
 using UnityEngine;
 
 namespace Fodinae.Audio.Core;
-/// <summary>
-/// Хендл активного проигрывания — возвращается методом AudioSystem.Play().
-///
-/// Оборачивает FMOD.Studio.EventInstance напрямую без C#-делегатов и лишней GC-нагрузки.
-/// Позволяет:
-/// <list type="bullet">
-///   <item>Остановить звук досрочно: <c>handle.Stop(fadeOut: 0.3f)</c></item>
-///   <item>Подвинуть позицию: <c>handle.SetPosition(target.position)</c></item>
-///   <item>Узнать играет ли ещё: <c>handle.IsPlaying</c></item>
-///   <item>Менять громкость на лету: <c>handle.SetVolume(0.5f)</c></item>
-///   <item>Менять FMOD параметры: <c>handle.SetParameter("Speed", 1.5f)</c></item>
-/// </list>
-/// </summary>
 public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
 {
     public AudioBusType BusType { get; }
@@ -43,7 +30,6 @@ public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
         BusType = busType;
     }
 
-    /// <summary>Остановить с плавным затуханием за fadeOut секунд (если на строен FMOD fadeout).</summary>
     public void Stop(float fadeOut = 0f)
     {
         if (!EventInstance.isValid())
@@ -56,7 +42,6 @@ public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
         EventInstance.release();
     }
 
-    /// <summary>Установить позицию в мире (для пространственных звуков).</summary>
     public void SetPosition(Vector3 worldPosition)
     {
         if (!EventInstance.isValid())
@@ -72,7 +57,6 @@ public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
         });
     }
 
-    /// <summary>Изменить громкость этого конкретного голоса (0..+∞, линейно).</summary>
     public void SetVolume(float linearVolume)
     {
         if (!EventInstance.isValid())
@@ -83,7 +67,6 @@ public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
         EventInstance.setVolume(Mathf.Max(0f, linearVolume));
     }
 
-    /// <summary>Изменить питч этого конкретного голоса.</summary>
     public void SetPitch(float pitch)
     {
         if (!EventInstance.isValid())
@@ -94,7 +77,6 @@ public sealed class AudioPlaybackHandle : IAudioPlaybackHandle
         EventInstance.setPitch(Mathf.Clamp(pitch, 0.01f, 4f));
     }
 
-    /// <summary>Установить значение параметра FMOD события на лету.</summary>
     public void SetParameter(string parameterName, float value)
     {
         if (!EventInstance.isValid() || string.IsNullOrEmpty(parameterName))

@@ -14,10 +14,6 @@ namespace Fodinae.UI
         private Transform? _planet;
         private Transform? _occluder;
 
-        /// <summary>
-        /// На сколько пикселей должен измениться размер, чтобы имело смысл
-        /// пересоздавать текстуры.
-        /// </summary>
         // Потолок стороны offscreen-кадра.
         //
         // 1024 давало мыло: вызывающий передаёт сюда уже физические пиксели
@@ -51,15 +47,6 @@ namespace Fodinae.UI
         private float _framingProgress;
         private Vector3 _framingDirection = Vector3.back;
 
-        /// <summary>
-        /// Действующий риг задника меню.
-        ///
-        /// Раньше потребители искали его опросом FindAnyObjectByType раз в
-        /// секунду. Если первая попытка приходилась на момент, когда сцена ещё
-        /// грузится, планета появлялась на секунду позже всего остального —
-        /// ровно на длину интервала опроса. Риг заявляет о себе сам, и ждать
-        /// больше нечего.
-        /// </summary>
         public RenderTexture? OutputTexture => _outputTexture;
 
         public void SetDisplaySize(int width, int height)
@@ -169,9 +156,6 @@ namespace Fodinae.UI
             RenderNow();
         }
 
-        /// <summary>
-        /// Принудительно обновляет статичный offscreen-кадр.
-        /// </summary>
         public void RenderNow()
         {
             if (!EnsureInitialized() || _sceneryCamera == null || _cameraTarget == null)
@@ -289,15 +273,6 @@ namespace Fodinae.UI
             _ownsResolveMaterial = false;
         }
 
-        /// <summary>
-        /// Освобождает текстуру, предварительно отцепив её от камеры.
-        ///
-        /// Порядок значим. Уничтожение RenderTexture, которая ещё назначена в
-        /// Camera.targetTexture, даёт «Releasing render texture that is set as
-        /// Camera.targetTexture!» со стеком на каждое изменение размера окна:
-        /// камера остаётся с висячей ссылкой, и Unity вынуждена чинить это за
-        /// нас. Метод перестал быть статическим именно ради доступа к камере.
-        /// </summary>
         private void ReleaseTexture(ref RenderTexture? texture)
         {
             if (texture == null)
@@ -328,15 +303,6 @@ namespace Fodinae.UI
             texture = null;
         }
 
-        /// <summary>
-        /// Кадрирование спуска: камера подъезжает от обзорной точки к точке
-        /// высадки. Параметр — доля пройденной загрузки, 0 = обзор, 1 = вплотную.
-        ///
-        /// Планету при этом никто не вращает: точка высадки закреплена за
-        /// поверхностью, и разворачивать шар под камеру означало бы, что метка
-        /// на поверхности переезжает вместе с ним. Двигается камера — как и
-        /// должно быть при подлёте.
-        /// </summary>
         public void SetDescentFraming(float progress, Vector3 landingLocalDirection)
         {
             if (_sceneryCamera == null)
@@ -382,9 +348,6 @@ namespace Fodinae.UI
                 out viewportPosition);
         }
 
-        /// <summary>
-        /// Calculates the on-screen viewport position for a fixed point along the orbital ring.
-        /// </summary>
         public bool TryGetOrbitPointViewportPosition(float angleDegrees, out Vector2 viewportPosition)
         {
             Transform centerTransform = _planet != null ? _planet : transform;
@@ -395,9 +358,6 @@ namespace Fodinae.UI
                 out viewportPosition);
         }
 
-        /// <summary>
-        /// Calculates the on-screen viewport position for a fixed landing point on the planet's surface.
-        /// </summary>
         public bool TryGetPlanetSurfaceViewportPosition(Vector3 localSurfaceDir, out Vector2 viewportPosition)
         {
             return MenuSceneryProjection.TryGetSurfaceViewportPosition(

@@ -6,10 +6,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI
 {
-    /// <summary>
-    /// Centralized UI Input and Modal Stack Manager for Fodinae.
-    /// Manages open modal windows, chat focus state, and escape key modal stack popping.
-    /// </summary>
     public class UIInputManager : MonoBehaviour
     {
         private readonly List<VisualElement> _modalStack = [];

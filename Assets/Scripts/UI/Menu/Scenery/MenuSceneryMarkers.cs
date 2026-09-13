@@ -5,9 +5,6 @@ using UnityEngine.UIElements;
 
 namespace Fodinae.UI;
 
-/// <summary>
-/// Updates beacon reticles, ping pulses and station badge positioning over the planet scenery.
-/// </summary>
 public sealed class MenuSceneryMarkers
 {
     public static void Animate(

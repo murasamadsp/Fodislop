@@ -7,12 +7,6 @@ using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Fodinae.UI.Programmator;
-/// <summary>
-/// 8-directional joystick for Observer operators.
-/// Direction buttons show operator icons. Click → absolute Cell*, drag → Shift*.
-/// Center shows Cell icon, drag → relative operators (Forward/Lefthand/Righthand short, Shift* long).
-/// Icons update during interaction to preview what will be placed.
-/// </summary>
 public class ObserverJoystick
 {
     private readonly VisualElement _root;
