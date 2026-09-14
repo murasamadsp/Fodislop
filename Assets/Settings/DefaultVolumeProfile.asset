@@ -535,22 +535,6 @@ MonoBehaviour:
   blueOutBlueIn:
     m_OverrideState: 1
     m_Value: 100
---- !u!114 &-3130684619902059536
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c40b1981f091447db05613c205605d8, type: 3}
-  m_Name: ChromaticAberrationComponent
-  m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.ChromaticAberrationComponent
-  active: 1
-  intensity:
-    m_OverrideState: 1
-    m_Value: 0
 --- !u!114 &-2849811465290014145
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -732,7 +716,6 @@ MonoBehaviour:
   - {fileID: 4119909782479700770}
   - {fileID: -6165366111512881764}
   - {fileID: -5648619660486152773}
-  - {fileID: -3130684619902059536}
   - {fileID: 2620290625453124485}
   - {fileID: -1629418828966726489}
   - {fileID: 706138679262252285}

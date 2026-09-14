@@ -88,6 +88,22 @@ public class LightingRegionCalculatorTests
         Assert.That(result.z % 32, Is.EqualTo(0f), "Re-anchored width must stay on a 32-cell quantum.");
     }
 
+    // Регрессия: размер региона зависел от привязки угла к сетке, и кадр
+    // одного размера давал разную высоту при движении — свет перестраивался.
+    [Test]
+    public void RegionSizeDoesNotDependOnPosition()
+    {
+        Vector4 first = LightingRegionCalculator.GetStableLightingRegion(
+            0, 0, 111, 62, new Vector4(float.NaN, 0, 0, 0));
+        for (int offset = 1; offset < 64; offset++)
+        {
+            Vector4 moved = LightingRegionCalculator.GetStableLightingRegion(
+                offset, offset * 3, 111, 62, new Vector4(float.NaN, 0, 0, 0));
+            Assert.That(moved.z, Is.EqualTo(first.z), $"width at offset {offset}");
+            Assert.That(moved.w, Is.EqualTo(first.w), $"height at offset {offset}");
+        }
+    }
+
     [Test]
     public void RegionIsNeverSmallerThanTwoCells()
     {

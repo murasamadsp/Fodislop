@@ -23,6 +23,12 @@ namespace Fodinae.World
         private IWorldDataStorage _worldStorage = null!;
         private IWorldPersistence _worldPersistence = null!;
         private IAsyncOperationSupervisor? _operations;
+
+        // NonSerialized: перекомпиляция во время Play сохраняет приватные поля
+        // компонента, а внедрённые зависимости — нет. Флаги переживали
+        // перезагрузку домена при пустом _worldPersistence, и Update бросал
+        // NullReferenceException каждые пять секунд.
+        [NonSerialized]
         private bool _hasWorldStorage;
 
         [Inject]
@@ -62,8 +68,10 @@ namespace Fodinae.World
         private ushort _width;
         private ushort _height;
 
+        [NonSerialized]
         private float _nextMapFlushTime;
         private const float DurableMapFlushInterval = 5f;
+        [field: NonSerialized]
         public bool IsWorldInitialized { get; private set; }
 
         public bool IsStandaloneMode { get; set; }
@@ -142,6 +150,7 @@ namespace Fodinae.World
             }
         }
 
+        [NonSerialized]
         private bool _isFlushing;
 
         protected void Update()

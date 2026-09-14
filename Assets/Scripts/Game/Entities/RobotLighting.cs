@@ -30,9 +30,9 @@ public sealed class RobotLighting
     public RobotLighting()
     {
         _dynamicLightID = Interlocked.Increment(ref _nextDynamicLightID);
-        _dynamicLightEnabled = WorldLightingSettings.DynamicLightEnabled;
-        _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
-        _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
+        _dynamicLightEnabled = LightingConfigHolder.DynamicLightEnabled;
+        _dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity;
+        _dynamicLightColor = LightingConfigHolder.DynamicLightColor;
     }
 
     public float DynamicLightIntensity => _dynamicLightIntensity;
@@ -45,15 +45,15 @@ public sealed class RobotLighting
             return;
         }
 
-        _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
-        _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
+        _dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity;
+        _dynamicLightColor = LightingConfigHolder.DynamicLightColor;
         _dynamicLightSettingsLoaded = true;
     }
 
     public void ResetPreferences(LightingEngine? lightingEngine)
     {
-        _dynamicLightIntensity = WorldLightingSettings.DynamicLightIntensity;
-        _dynamicLightColor = WorldLightingSettings.DynamicLightColor;
+        _dynamicLightIntensity = LightingConfigHolder.DynamicLightIntensity;
+        _dynamicLightColor = LightingConfigHolder.DynamicLightColor;
         _dynamicLightSettingsLoaded = true;
     }
 

@@ -32,7 +32,6 @@ namespace Fodinae.Rendering.PostProcessing
         private VolumeStack? _cachedVolumeStack;
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
-        private ChromaticAberrationComponent? _chromaticAberration;
         private ColorGradingComponent? _colorGrading;
         private EigengrauComponent? _eigengrau;
 
@@ -68,7 +67,6 @@ namespace Fodinae.Rendering.PostProcessing
             _cachedVolumeStack = stack;
             _bloom = stack.GetComponent<BloomComponent>();
             _vignette = stack.GetComponent<VignetteComponent>();
-            _chromaticAberration = stack.GetComponent<ChromaticAberrationComponent>();
             _colorGrading = stack.GetComponent<ColorGradingComponent>();
             _eigengrau = stack.GetComponent<EigengrauComponent>();
             _motionBlur = stack.GetComponent<MotionBlurComponent>();
@@ -98,12 +96,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
-            if (PostProcessRuntimeState.BypassPostProcessEffects ||
-                PostProcessRuntimeState.TemporaryBypass)
-            {
-                return;
-            }
-
             // Копия шейдера не сохранена в ассет, и сборка плеера выгружает её
             // вместе с неиспользуемыми объектами, пока проход ещё жив. Редактор
             // рисовал Game view на уничтоженном ComputeShader и падал в
@@ -151,9 +143,6 @@ namespace Fodinae.Rendering.PostProcessing
             RefreshVolumeComponents(stack);
             BloomComponent bloom = RequireComponent(_bloom, nameof(BloomComponent));
             VignetteComponent vignette = RequireComponent(_vignette, nameof(VignetteComponent));
-            ChromaticAberrationComponent ca = RequireComponent(
-                _chromaticAberration,
-                nameof(ChromaticAberrationComponent));
             ColorGradingComponent cg = RequireComponent(
                 _colorGrading,
                 nameof(ColorGradingComponent));
@@ -163,21 +152,18 @@ namespace Fodinae.Rendering.PostProcessing
             MotionBlurComponent mb = RequireComponent(_motionBlur, nameof(MotionBlurComponent));
 
             // Обход не трогает статики: правится только то, что уходит в кадр.
-            // Раньше здесь стояло `PostProcessRuntimeState.Advanced = default` и сброс гаммы, то есть
-            // включение тумблера стирало снимок продвинутых эффектов и
+            // Раньше здесь стоял сброс гаммы, то есть включение тумблера стирало
             // калибровку дисплея навсегда — выключение обратно возвращало не
             // настройки игрока, а значения по умолчанию, и разница списывалась
             // на «постпроцесс что-то сломал».
             bool bypass = PostProcessRuntimeState.BypassPostProcessEffects ||
                 PostProcessRuntimeState.TemporaryBypass;
-            AdvancedPostProcessSnapshot advanced = bypass ? default : PostProcessRuntimeState.Advanced;
             float displayGamma =
                 bypass ? DisplaySettings.DefaultGamma : PostProcessRuntimeState.DisplayGamma;
 
             bool bloomActive = !bypass && !_displayPass &&
-                ((bloom.active && bloom.IsActive()) || advanced.RequiresBloomTexture);
+                bloom.active && bloom.IsActive();
             bool vignetteActive = !bypass && vignette.active && vignette.IsActive();
-            bool caActive = !bypass && ca.active && ca.IsActive();
             bool cgActive = !bypass && cg.active && cg.IsActive();
             bool eigengrauActive = !bypass && eigengrau.active && eigengrau.IsActive();
             bool mbActive = !bypass && mb.active && mb.IsActive();
@@ -234,9 +220,7 @@ namespace Fodinae.Rendering.PostProcessing
 
             bool temporalActive = PostProcessRuntimeState.DebugView == PostProcessDebugView.None &&
                 PostProcessRuntimeState.CompareMode == CompareMode.Off &&
-                (_displayPass
-                    ? advanced.TemporalPersistenceIntensity > 0f || mbActive
-                    : advanced.LightStability > 0f);
+                _displayPass && mbActive;
             Tonemapping output = stack.GetComponent<Tonemapping>();
             bool hdrOutput = cameraData.isHDROutputActive;
 
@@ -275,6 +259,25 @@ namespace Fodinae.Rendering.PostProcessing
             }
 
             _temporalWasActive = temporalActive;
+
+            // Проход, который ничего не меняет, не запускается вовсе. Каждый из
+            // двух проходов — полноэкранный compute на полном разрешении кадра,
+            // и при нулевых эффектах они стоили ~20 fps на 3420×1890 впустую.
+            ColorGradeSnapshot activeGrade = bypass
+                ? ColorGradeSnapshot.Look
+                : PostProcessRuntimeState.ColorGrade;
+            bool diagnosticsActive = PostProcessRuntimeState.DebugView != PostProcessDebugView.None ||
+                PostProcessRuntimeState.CompareMode != CompareMode.Off;
+            bool passNeeded = _displayPass
+                ? diagnosticsActive || vignetteActive || eigengrauActive || temporalActive ||
+                    (!hdrOutput && Mathf.Abs(displayGamma - DisplaySettings.DefaultGamma) > 0.001f) ||
+                    !IsDisplayGradeNeutral(activeGrade)
+                : diagnosticsActive || bloomActive || cgActive || !IsCreativeGradeNeutral(activeGrade);
+            if (!passNeeded)
+            {
+                return;
+            }
+
             TextureHandle historyTexture = default;
             if (temporalActive)
             {
@@ -351,18 +354,13 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.VignetteSmoothness = vignette.smoothness.value;
                 passData.VignetteCenter = vignette.center.value;
 
-                passData.CaActive = caActive;
-                passData.CaIntensity = ca.intensity.value;
-
                 passData.CgActive = cgActive;
                 passData.Exposure = cg.exposure.value;
                 passData.ColorFilter = cg.colorFilter.value;
                 passData.Contrast = cg.contrast.value;
                 passData.Saturation = cg.saturation.value;
                 passData.Gamma = displayGamma;
-                ColorGradeSnapshot grade = bypass
-                    ? ColorGradeSnapshot.Look
-                    : PostProcessRuntimeState.ColorGrade;
+                ColorGradeSnapshot grade = activeGrade;
                 passData.CdlSaturation = grade.CdlSaturation;
                 passData.PostDebugView = _displayPass ? (int)PostProcessRuntimeState.DebugView : 0;
                 passData.CompareSplit = PostProcessRuntimeState.CompareSplit;
@@ -498,34 +496,10 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.EigengrauNoiseScale = eigengrau.noiseScale.value;
                 passData.EigengrauAnimationSpeed = eigengrau.animationSpeed.value;
 
-                passData.Advanced0 = new Vector4(
-                    advanced.LocalContrastIntensity,
-                    advanced.LensDirtIntensity,
-                    advanced.LensDirtScale,
-                    advanced.AnamorphicIntensity);
-                passData.Advanced1 = new Vector4(
-                    advanced.AnamorphicLength,
-                    advanced.ChromaticDiffractionIntensity,
-                    advanced.HeatRefractionIntensity,
-                    advanced.HeatRefractionScale);
-                passData.Advanced2 = new Vector4(
-                    advanced.GlintIntensity,
-                    advanced.GlintThreshold,
-                    advanced.VolumetricDustIntensity,
-                    advanced.VolumetricDustScale);
-                passData.Advanced3 = new Vector4(
-                    advanced.VolumetricDustSpeed,
-                    0f,
-                    0f,
-                    0f);
                 passData.HistoryValid = _historyValid;
-                passData.Temporal = passData.HistoryValid
-                    ? new Vector4(
-                        _displayPass ? advanced.TemporalPersistenceIntensity : 0f,
-                        advanced.TemporalPersistenceDecay,
-                        _displayPass ? 0f : advanced.LightStability,
-                        _displayPass && mbActive ? mb.intensity.value : 0f)
-                    : Vector4.zero;
+                passData.MotionBlurHistory = passData.HistoryValid && _displayPass && mbActive
+                    ? mb.intensity.value
+                    : 0f;
                 passData.TemporalActive = temporalActive;
                 passData.TimeSeconds = Time.time;
 
@@ -570,6 +544,31 @@ namespace Fodinae.Rendering.PostProcessing
                 _historyValid = true;
             }
         }
+
+        // Входы запечённой таблицы (BakedGradeLutCache) в нейтральном положении:
+        // композит тогда возвращает тот же цвет.
+        private static bool IsCreativeGradeNeutral(in ColorGradeSnapshot grade) =>
+            grade.Temperature == 0f && grade.Tint == 0f &&
+            grade.Slope == Vector3.one && grade.Offset == Vector3.zero && grade.Power == Vector3.one &&
+            grade.CdlMaster == new Vector3(1f, 0f, 1f) && grade.CdlSaturation == 1f &&
+            grade.PrimaryLift == Vector3.zero && grade.PrimaryGamma == Vector3.one &&
+            grade.PrimaryGain == Vector3.one && grade.PrimaryOffset == Vector3.zero &&
+            grade.PrimaryMaster == new Vector4(0f, 1f, 1f, 0f) &&
+            grade.Vibrance == 0f && grade.Hue == 0f &&
+            grade.Shadows == 0f && grade.Highlights == 0f && grade.Blacks == 0f &&
+            grade.Whites == 0f && grade.Toe == 0f && grade.Shoulder == 0f &&
+            !grade.Qualifier.Enabled &&
+            grade.HueVsHueCurve.IsNeutral && grade.HueVsSaturationCurve.IsNeutral &&
+            grade.HueVsLuminanceCurve.IsNeutral && grade.LuminanceVsSaturationCurve.IsNeutral &&
+            grade.SaturationVsSaturationCurve.IsNeutral;
+
+        // Точечные операции прохода дисплея в нейтральном положении.
+        private static bool IsDisplayGradeNeutral(in ColorGradeSnapshot grade) =>
+            grade.Transform == DisplayTransform.None &&
+            (grade.Lut == null || grade.LutIntensity <= 0f) &&
+            (!grade.GamutCompressionEnabled || grade.GamutCompressionStrength <= 0f) &&
+            grade.MasterCurve.IsNeutral && grade.RedCurve.IsNeutral &&
+            grade.GreenCurve.IsNeutral && grade.BlueCurve.IsNeutral;
 
         private RenderTexture EnsureBakedGradeLut()
         {

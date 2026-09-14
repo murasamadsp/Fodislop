@@ -34,7 +34,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         private BloomComponent? _bloom;
         private VignetteComponent? _vignette;
-        private ChromaticAberrationComponent? _chromaticAberration;
         private ColorGradingComponent? _colorGrading;
         private EigengrauComponent? _eigengrau;
         private MotionBlurComponent? _motionBlur;
@@ -72,18 +71,6 @@ namespace Fodinae.Rendering.PostProcessing
                 vignette.intensity.overrideState = true;
                 vignette.intensity.value = Mathf.Clamp01(value);
                 vignette.active = vignette.intensity.value > 0f;
-            }
-        }
-
-        public float ChromaticAberrationIntensity
-        {
-            get => GetRequired(_chromaticAberration, nameof(_chromaticAberration)).intensity.value;
-            set
-            {
-                ChromaticAberrationComponent chromaticAberration = GetRequired(_chromaticAberration, nameof(_chromaticAberration));
-                chromaticAberration.intensity.overrideState = true;
-                chromaticAberration.intensity.value = Mathf.Clamp01(value);
-                chromaticAberration.active = chromaticAberration.intensity.value > 0f;
             }
         }
 
@@ -194,9 +181,8 @@ namespace Fodinae.Rendering.PostProcessing
         private void OnDisable()
         {
             _gradingWorkbench.Deactivate();
-            PostProcessRuntimeState.BypassPostProcessEffects = true;
+            PostProcessRuntimeState.BypassPostProcessEffects = false;
             PostProcessRuntimeState.TemporaryBypass = false;
-            PostProcessRuntimeState.SetAdvancedSettings(default);
             PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
             PostProcessRuntimeState.DebugView = PostProcessDebugView.None;
             PostProcessRuntimeState.CompareSplit = 0f;
@@ -280,13 +266,10 @@ namespace Fodinae.Rendering.PostProcessing
                 throw new InvalidOperationException("PostProcessController requires a runtime VolumeProfile on its serialized Volume.");
             }
 
-            _volume.weight = 0f;
-
             PostProcessDefaults.ValidateVolumeProfile(profile);
 
             PostProcessDefaults.RequireVolumeComponent(ref _bloom, profile);
             PostProcessDefaults.RequireVolumeComponent(ref _vignette, profile);
-            PostProcessDefaults.RequireVolumeComponent(ref _chromaticAberration, profile);
             PostProcessDefaults.RequireVolumeComponent(ref _colorGrading, profile);
             _colorGrading.active = true;
             PostProcessDefaults.RequireVolumeComponent(ref _eigengrau, profile);
@@ -298,7 +281,7 @@ namespace Fodinae.Rendering.PostProcessing
         public void ApplyClientConfig()
         {
             if (_bloom == null || _vignette == null ||
-                _chromaticAberration == null || _colorGrading == null ||
+                _colorGrading == null ||
                 _eigengrau == null || _motionBlur == null)
             {
                 // Подготовка сама вызовет применение в конце, поэтому
@@ -314,17 +297,6 @@ namespace Fodinae.Rendering.PostProcessing
             ClientConfig config = clientConfigManager.Config ??
                 throw new InvalidOperationException("PostProcessController requires an initialized ClientConfig.");
 
-            // The graphics preset used to stop at this class's doorstep: every
-            // value below is an artistic one from ClientConfig, and nothing
-            // here ever read GraphicsQualitySettings. That made the whole
-            // post-processing stack cost the same on VeryLow as on Ultra -
-            // bloom pyramid, motion blur and all - no matter which preset the
-            // player picked, and it kept costing that with world lighting
-            // switched off, because the two subsystems are unrelated.
-            // Продвинутые эффекты собираются из вида и тумблеров: величины
-            // задаёт PostProcessLook, конфиг говорит только «платим или нет».
-            PostProcessRuntimeState.SetAdvancedSettings(
-                AdvancedPostProcessComposer.From(config));
             PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
 
             bool photosensitive = config.Accessibility.ReducePhotosensitivity;
@@ -353,11 +325,6 @@ namespace Fodinae.Rendering.PostProcessing
             vignette.center.value = PostProcessLook.Vignette.Center;
             VignetteIntensity = config.Effects.VignetteEnabled ? PostProcessLook.Vignette.Intensity : 0f;
 
-            // Хроматика — мерцающий по краям эффект, и при светочувствительности
-            // она снимается целиком, а не приглушается.
-            ChromaticAberrationIntensity = config.Effects.ChromaticAberrationEnabled && !photosensitive
-                ? PostProcessLook.ChromaticAberration.Intensity
-                : 0f;
 
             ApplyColorGrading(
                 PostProcessLook.ColorGrading.Exposure,
@@ -429,11 +396,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void Update()
         {
-            if (PostProcessRuntimeState.BypassPostProcessEffects)
-            {
-                return;
-            }
-
             _gradingWorkbench.Tick();
             if (!_volumeSetupCompleted)
             {
@@ -474,9 +436,9 @@ namespace Fodinae.Rendering.PostProcessing
             HDROutput.ConfigureCamera(mainCamera);
             if (mainCamera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
             {
-                cameraData.renderPostProcessing = false;
-                cameraData.volumeLayerMask = 0;
-                cameraData.volumeTrigger = null;
+                cameraData.volumeLayerMask = (1 << RequireVolume().gameObject.layer) |
+                    (1 << mainCamera.gameObject.layer);
+                cameraData.volumeTrigger = mainCamera.transform;
             }
         }
 

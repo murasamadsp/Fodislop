@@ -93,23 +93,6 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
 
     private void UpdateCalibration()
     {
-        if (PostProcessRuntimeState.BypassPostProcessEffects)
-        {
-            if (_volume != null)
-            {
-                _volume.weight = 0f;
-                _volume.enabled = false;
-            }
-
-            if (_camera.Camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
-            {
-                cameraData.volumeLayerMask = 0;
-                cameraData.renderPostProcessing = false;
-            }
-
-            return;
-        }
-
         if (_tonemapping == null)
         {
             return;

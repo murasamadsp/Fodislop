@@ -190,8 +190,6 @@ internal static class PostProcessPassExecutor
             cmd.SetComputeVectorParam(data.PostProcessCS, VignetteCenterID, data.VignetteCenter);
         }
 
-        cmd.SetComputeFloatParam(data.PostProcessCS, ChromaticAberrationIntensityID, data.CaActive ? data.CaIntensity : 0f);
-
         cmd.SetComputeFloatParam(data.PostProcessCS, ExposureID, data.CgActive ? data.Exposure : 0f);
         cmd.SetComputeVectorParam(data.PostProcessCS, ColorFilterID, data.CgActive ? data.ColorFilter : Color.white);
         cmd.SetComputeFloatParam(data.PostProcessCS, ContrastID, data.CgActive ? data.Contrast : 0f);
@@ -330,12 +328,8 @@ internal static class PostProcessPassExecutor
             cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
         }
 
-        cmd.SetComputeVectorParam(data.PostProcessCS, Advanced0ID, data.Advanced0);
-        cmd.SetComputeVectorParam(data.PostProcessCS, Advanced1ID, data.Advanced1);
-        cmd.SetComputeVectorParam(data.PostProcessCS, Advanced2ID, data.Advanced2);
-        cmd.SetComputeVectorParam(data.PostProcessCS, Advanced3ID, data.Advanced3);
         cmd.SetComputeFloatParam(data.PostProcessCS, TimeID, data.TimeSeconds);
-        cmd.SetComputeVectorParam(data.PostProcessCS, TemporalID, data.Temporal);
+        cmd.SetComputeFloatParam(data.PostProcessCS, MotionBlurHistoryID, data.MotionBlurHistory);
         if (data.TemporalActive && data.HistoryValid)
         {
             cmd.SetComputeTextureParam(

@@ -114,11 +114,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            if (PostProcessRuntimeState.BypassPostProcessEffects)
-            {
-                return;
-            }
-
             ref var cameraData = ref renderingData.cameraData;
             if (cameraData.renderType != CameraRenderType.Base ||
                 cameraData.camera.cameraType != CameraType.Game ||
@@ -144,6 +139,11 @@ namespace Fodinae.Rendering.PostProcessing
             {
                 _mainCamera = cameraData.camera;
                 PostProcessRuntimeState.SetMainCamera(_mainCamera);
+            }
+
+            if (PostProcessRuntimeState.SkipPasses)
+            {
+                return;
             }
 
             bool scopesEnabled = _scopesPass != null && ScopesRenderPass.Enabled;

@@ -215,8 +215,6 @@ namespace Fodinae.World.Lighting
 
         public float MinimumTransmission => LightingConfigHolder.MinimumTransmission;
 
-        public bool EnableFinalLightingClamp => false;
-
         public float DynamicLightIntensity => LightingConfigHolder.DynamicLightIntensity;
 
         public Color DynamicLightColor => LightingConfigHolder.DynamicLightColor;
@@ -547,22 +545,12 @@ namespace Fodinae.World.Lighting
 
             EnsureGpuPipelineInitialized();
 
-            // Область света — кадр максимального отдаления вокруг центра видимой
-            // области, а не текущий кадр. Иначе зум менял размер сетки, масштаб
-            // пикселей и раскладку каскадов (интервалы заданы в пикселях поля),
-            // и то же место освещалось кардинально по-другому.
-            int stableHeight = Mathf.Max(
-                visibleHeight,
-                Mathf.CeilToInt(2f * ProjectRuntimeContracts.Camera.MaximumOrthographicSize) + 2);
-            int stableWidth = Mathf.Max(
-                visibleWidth,
-                Mathf.CeilToInt(2f * ProjectRuntimeContracts.Camera.MaximumOrthographicSize * camera.aspect) + 2);
-            Vector4 lightingRegion = GetStableLightingRegion(
-                visibleMinX + (visibleWidth / 2) - (stableWidth / 2),
-                visibleMinY + (visibleHeight / 2) - (stableHeight / 2),
-                stableWidth,
-                stableHeight);
-
+            // Регион света — прямоугольник сетки террейна как есть. Поле
+            // препятствий рисует её меш, поэтому регион больше сетки давал
+            // пустое поле за краем, а регион от кадра камеры менял размер при
+            // зуме и движении. Сетка сама перепривязывается на 8 клеток и
+            // держит постоянный размер (кадр максимального отдаления).
+            Vector4 lightingRegion = new(visibleMinX, visibleMinY, visibleWidth, visibleHeight);
 
             bool regionChanged = lightingRegion != _lastVisibleRegion;
             _lastVisibleRegion = lightingRegion;
@@ -1056,20 +1044,6 @@ namespace Fodinae.World.Lighting
         {
             _hasRenderedLightState = true;
             _dynamicLightManager.ClearDirty();
-        }
-
-        private Vector4 GetStableLightingRegion(
-            int visibleMinX,
-            int visibleMinY,
-            int visibleWidth,
-            int visibleHeight)
-        {
-            return LightingRegionCalculator.GetStableLightingRegion(
-                visibleMinX,
-                visibleMinY,
-                visibleWidth,
-                visibleHeight,
-                _lastVisibleRegion);
         }
 
         private void EnsureResources(int gridWidth, int gridHeight, Camera camera)

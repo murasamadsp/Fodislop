@@ -30,7 +30,7 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
     private static bool _showSkinToneLine = true;
 
     // Проход не резолвится контейнером — он принадлежит renderer asset.
-    // Снимки состояния в него ТОЛКАЮТ (SetAdvancedSettings, Enabled), но
+    // Снимки состояния в него ТОЛКАЮТ (SetColorGrade, Enabled), но
     // приборы надо ТЯНУТЬ: их считает GPU, а показывает интерфейс. Поэтому
     // живой проход публикует себя здесь. Это не синглтон-точка доступа к
     // логике: наружу видны только три текстуры, и записать сюда нельзя.

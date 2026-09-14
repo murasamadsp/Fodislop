@@ -45,7 +45,6 @@ int _DebugView;
 int _MaterialYFlip;
 int _MaximumIntervalSteps;
 int _EnableDiffuseBounce;
-int _EnableFinalLightingClamp;
 
 // PerBlock quality tier: when nonzero, ResolveDirect
 // samples the radiance atlas at the field pixel nearest each world cell's
@@ -107,19 +106,22 @@ float3 TransmissionFromPath(float2 pathLength)
 {
     float3 opticalDepth =
         _EmptyExtinctionRGB.rgb * pathLength.x +
-        (_SolidExtinctionRGB.rgb * 8.0) * pathLength.y;
+        _SolidExtinctionRGB.rgb * pathLength.y;
     return exp(-opticalDepth);
+}
+
+// Коэффициент поглощения на клетку. Раньше порода умножалась здесь на
+// зашитые 8.0, и число в VisualTuning не совпадало с тем, что работает.
+float3 SegmentExtinction(float solid)
+{
+    return lerp(_EmptyExtinctionRGB.rgb, _SolidExtinctionRGB.rgb, solid);
 }
 
 float3 SegmentTransmission(float solid, float physicalLength)
 {
-    float3 solidExtinction = _SolidExtinctionRGB.rgb * 8.0;
-    float3 extinction = lerp(
-        _EmptyExtinctionRGB.rgb,
-        solidExtinction,
-        solid);
-    return exp(-extinction * physicalLength);
+    return exp(-SegmentExtinction(solid) * physicalLength);
 }
+
 
 // Числа окклюзии приезжают из TerrainLook — теми же, что уходят в террейн.
 // Дублировать их здесь нельзя: отладочный вид разошёлся бы с картинкой молча,
@@ -339,8 +341,9 @@ void TraceRadianceSegment(
             CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
             if (diagonalOccluded)
             {
-                transmittance = 0.0;
-                break;
+                // Диагональ блоков блокирует луч, но силой твёрдого, а не
+                // обнулением: тот же SolidExtinction на длине шага.
+                transmittance *= SegmentTransmission(1.0, physicalStepLength);
             }
         }
 
@@ -348,11 +351,18 @@ void TraceRadianceSegment(
 
         float occupancy = saturate(SampleOccupancy(samplePosition, samplingMip));
         float solid = occupancy;
+        // Эмиссия — точечная выборка мипа 0. Мип усредняет по площади: одиночный
+        // источник на мипе m весит e/4^m, а шаг растёт как 2^m, и дальние
+        // каскады недосчитывали свечение в 2^m раз — ореолы источников пропадали.
         float4 emission = SampleEmission(samplePosition, 0.0);
+        float3 extinction = SegmentExtinction(solid);
+        // Свечение источника не гасится его же поглощением: светящаяся руда —
+        // это порода, и формула e·(1 − e^(−σL))/σ при σ = 800 давала ей 1/800
+        // прежней яркости.
         float3 emittedRadiance =
             max(emission.rgb, 0.0) * physicalStepLength * _EmissionScale;
         radiance += transmittance * emittedRadiance;
-        transmittance *= SegmentTransmission(solid, physicalStepLength);
+        transmittance *= exp(-extinction * physicalStepLength);
     }
 }
 
@@ -571,8 +581,8 @@ void ResolveDirect(uint3 dispatchId : SV_DispatchThreadID)
                 CheckDiagonalStepOccluded(prevCell, currentCell, cellsPerPixel, diagonalOccluded);
                 if (diagonalOccluded)
                 {
-                    debugPath.y += float(16 - debugStep) * debugStepCells;
-                    break;
+                    // Шаг через диагональ блоков — путь в твёрдом.
+                    debugPath.y += debugStepCells;
                 }
 
                 prevCell = currentCell;
@@ -881,16 +891,5 @@ void CompositeLighting(uint3 dispatchId : SV_DispatchThreadID)
     }
 
     float3 output = max(directAndBounce, 0.0);
-    if (_DebugView == 0 && _EnableFinalLightingClamp != 0)
-    {
-        float maximumLight = max(_MaximumLightMultiplier, 0.0001);
-        float outputPeak = Max3(output);
-        if (outputPeak > maximumLight)
-        {
-            // Preserve chromaticity: scale RGB together instead of clipping
-            // channels independently and shifting the light color.
-            output *= maximumLight / outputPeak;
-        }
-    }
     _Result[pixel] = float4(ambient + output, 1.0);
 }

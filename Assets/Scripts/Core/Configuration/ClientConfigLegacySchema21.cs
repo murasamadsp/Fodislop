@@ -23,7 +23,6 @@ internal sealed class ClientConfigLegacySchema21
     public float SolidExtinctionMultiplier;
     public float BounceStrength;
     public float MaximumLightMultiplier;
-    public bool EnableFinalLightingClamp;
     public float TransmittanceDebugDistanceCells;
     public float MinimumTransmission;
     public int LightSafeBorder;
@@ -46,13 +45,8 @@ internal sealed class ClientConfigLegacySchema21
 
     public bool BloomEnabled;
     public bool VignetteEnabled;
-    public bool ChromaticAberrationEnabled;
     public bool FilmGrainEnabled;
     public bool MotionBlurEnabled;
-    public bool LocalContrastEnabled;
-    public bool LensEffectsEnabled;
-    public bool AtmosphereEnabled;
-    public bool TemporalEnabled;
 
     public WorldLightingSettings ToLighting() => new();
 
@@ -76,12 +70,7 @@ internal sealed class ClientConfigLegacySchema21
     {
         BloomEnabled = BloomEnabled,
         VignetteEnabled = VignetteEnabled,
-        ChromaticAberrationEnabled = ChromaticAberrationEnabled,
         EigengrauEnabled = FilmGrainEnabled,
         MotionBlurEnabled = MotionBlurEnabled,
-        LocalContrastEnabled = LocalContrastEnabled,
-        LensEffectsEnabled = LensEffectsEnabled,
-        AtmosphereEnabled = AtmosphereEnabled,
-        TemporalEnabled = TemporalEnabled,
     };
 }

@@ -29,8 +29,6 @@ internal static class PostProcessShaderConstants
     public static readonly int VignetteSmoothnessID = Shader.PropertyToID("_VignetteSmoothness");
     public static readonly int VignetteCenterID = Shader.PropertyToID("_VignetteCenter");
 
-    public static readonly int ChromaticAberrationIntensityID = Shader.PropertyToID("_ChromaticAberrationIntensity");
-
     public static readonly int ExposureID = Shader.PropertyToID("_Exposure");
     public static readonly int ColorFilterID = Shader.PropertyToID("_ColorFilter");
     public static readonly int ContrastID = Shader.PropertyToID("_Contrast");
@@ -104,12 +102,8 @@ internal static class PostProcessShaderConstants
     public static readonly int EigengrauAnimationSpeedID = Shader.PropertyToID("_EigengrauAnimationSpeed");
     public static readonly int TimeID = Shader.PropertyToID("_Time");
 
-    public static readonly int Advanced0ID = Shader.PropertyToID("_Advanced0");
-    public static readonly int Advanced1ID = Shader.PropertyToID("_Advanced1");
-    public static readonly int Advanced2ID = Shader.PropertyToID("_Advanced2");
-    public static readonly int Advanced3ID = Shader.PropertyToID("_Advanced3");
     public static readonly int HistoryTexID = Shader.PropertyToID("_HistoryTex");
-    public static readonly int TemporalID = Shader.PropertyToID("_Temporal");
+    public static readonly int MotionBlurHistoryID = Shader.PropertyToID("_MotionBlurHistory");
 
     public static readonly string[] BloomDownNames =
     [

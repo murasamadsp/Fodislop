@@ -34,7 +34,6 @@ internal static class LightingComputeBinder
         Shader.PropertyToID("_TerrainAmbientOcclusionStrength");
     public static readonly int EmissionScaleID = Shader.PropertyToID("_EmissionScale");
     public static readonly int MaximumLightMultiplierID = Shader.PropertyToID("_MaximumLightMultiplier");
-    public static readonly int EnableFinalLightingClampID = Shader.PropertyToID("_EnableFinalLightingClamp");
     public static readonly int CellSizeID = Shader.PropertyToID("_CellSize");
     public static readonly int TransmittanceDebugDistanceCellsID = Shader.PropertyToID("_TransmittanceDebugDistanceCells");
     public static readonly int DebugViewID = Shader.PropertyToID("_DebugView");
@@ -131,7 +130,6 @@ internal static class LightingComputeBinder
             Fodinae.World.Terrain.TerrainLook.AmbientOcclusionStrength);
         commandBuffer.SetComputeFloatParam(compute, EmissionScaleID, LightingConfigHolder.EmissionScale);
         commandBuffer.SetComputeFloatParam(compute, MaximumLightMultiplierID, LightingConfigHolder.MaximumLightMultiplier);
-        commandBuffer.SetComputeIntParam(compute, EnableFinalLightingClampID, 0);
         commandBuffer.SetComputeFloatParam(compute, CellSizeID, cellSize);
         commandBuffer.SetComputeFloatParam(
             compute,

@@ -29,11 +29,6 @@ namespace Fodinae.Rendering.PostProcessing
             public static Vector2 Center => new(0.5f, 0.5f);
         }
 
-        public static class ChromaticAberration
-        {
-            public const float Intensity = 0.06f;
-        }
-
         public static class ColorGrading
         {
             public const float Exposure = PostProcessSettings.DefaultExposure;
@@ -64,14 +59,16 @@ namespace Fodinae.Rendering.PostProcessing
             public const float PathToWhiteAmount = 0f;
             public const float PathToWhitePower = 3f;
 
-            // Сжатие гамута на выводе (ACES RGC): по умолчанию включено полностью.
-            public const bool GamutCompressionEnabled = true;
+            // Сжатие гамута на выводе (ACES RGC). По умолчанию выключено: оно
+            // единственное держало проход дисплея в кадре при нулевых эффектах,
+            // а полноэкранный проход на 3420×1890 стоит десятки fps.
+            public const bool GamutCompressionEnabled = false;
             public const float GamutCompressionStrength = 1f;
         }
 
         public static class FilmGrain
         {
-            public const float Intensity = 0.12f;
+            public const float Intensity = 0.3f;
 
             public const float DarknessThreshold = 0.22f;
             public const float NoiseScale = 0.75f;
@@ -85,42 +82,6 @@ namespace Fodinae.Rendering.PostProcessing
             public const float Intensity = 0.25f;
         }
 
-        public static class LocalContrast
-        {
-            public const float Intensity = 0.15f;
-        }
-
-        public static class Lens
-        {
-            public const float DirtIntensity = 0.12f;
-            public const float DirtScale = 3f;
-            public const float AnamorphicIntensity = 0.35f;
-            public const float AnamorphicLength = 1.5f;
-            public const float DiffractionIntensity = 0.15f;
-            public const float GlintIntensity = 0.12f;
-            public const float GlintThreshold = 1.2f;
-        }
-
-        public static class Atmosphere
-        {
-            public const float DustIntensity = 0.08f;
-            public const float DustScale = 1f;
-            public const float DustSpeed = 0.1f;
-            public const float HeatRefractionIntensity = 0.06f;
-            public const float HeatRefractionScale = 2f;
-        }
-
-        public static class Display
-        {
-            public const float DitheringIntensity = 0.5f;
-        }
-
-        public static class Temporal
-        {
-            public const float PersistenceIntensity = 0.15f;
-            public const float PersistenceDecay = 0.85f;
-            public const float LightStability = 0.35f;
-        }
     }
 }
 
@@ -133,12 +94,19 @@ namespace Fodinae.World.Lighting
         public static readonly Color AmbientColor = Color.white;
         public static readonly Color EmptyExtinctionRGB = Color.white;
         public static readonly Color SolidExtinctionRGB = Color.white;
-        public const float EmptyExtinctionMultiplier = 1.0f;
-        public const float SolidExtinctionMultiplier = 0.1f;
+        // Поглощение пустоты на клетку. При 0.01 свет гас лишь через ~300 клеток,
+        // и дальность обрезал конец последнего каскада — резкой, зависящей от
+        // пресета границей. 0.1 гасит свет до ~5% за 30 клеток, до порога
+        // MinimumTransmission — к ~48: затухание успевает раньше обрезки.
+        public const float EmptyExtinctionMultiplier = 0.2f;
+        // Поглощение на клетку. 800 — прежние 100 с множителем 8, который был
+        // зашит в шейдере: картинка не меняется, число теперь честное.
+        public const float SolidExtinctionMultiplier = 1600.0f;
         public const float BounceStrength = 1.0f;
         public const float MaximumLightMultiplier = 1.0f;
 
         public const float MinimumTransmission = 0.008f;
+        public const bool DynamicLightEnabled = true;
         public const float DynamicLightIntensity = 1.0f;
         public static readonly Color DynamicLightColor = Color.white;
     }

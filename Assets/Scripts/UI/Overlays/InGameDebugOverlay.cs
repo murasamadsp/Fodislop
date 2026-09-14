@@ -1,5 +1,6 @@
 #nullable enable
 
+using UnityEngine.UIElements;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Rendering.PostProcessing;
@@ -31,6 +32,12 @@ namespace Fodinae.UI
         private IFrameTelemetry _telemetry = null!;
         [Inject]
         private IRuntimeDebugSettings _debugSettings = null!;
+        [Inject]
+        private SurfaceRenderer _surfaceRenderer = null!;
+        [Inject]
+        private Fodinae.Game.WorldEntityBatchRenderer _entityRenderer = null!;
+        [Inject]
+        private UIDocument _gameUIDocument = null!;
 
         private readonly WorldGizmoOptions _gizmos = new();
         private readonly ToolWindow?[] _ownedWindows = new ToolWindow?[7];
@@ -122,7 +129,13 @@ namespace Fodinae.UI
                 _gameplayCamera,
                 _debugSettings,
                 stats);
-            var bypass = new RenderBypassWindow(_debugSettings, _lighting, _gizmos);
+            var bypass = new RenderBypassWindow(
+                _debugSettings,
+                _lighting,
+                _gizmos,
+                _surfaceRenderer,
+                _entityRenderer,
+                _gameUIDocument);
             var lightingCost = new LightingCostWindow(_lighting, _telemetry);
             var breakdown = new FrameBreakdownWindow();
             var packets = new PacketTrafficWindow();

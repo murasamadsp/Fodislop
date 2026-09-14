@@ -485,7 +485,9 @@ namespace Fodinae.World.Terrain
             SyncCellTextures();
             UpdateVisibleWindow(viewportMinX, viewportMinY, viewportWidth, viewportHeight);
 
-            PublishLightingUpdate(lightingEngine, viewportMinX, viewportMinY, viewportWidth, viewportHeight);
+            // Свет считается ровно в прямоугольнике сетки: поле препятствий
+            // рисует её меш, за краем сетки поле пустое.
+            PublishLightingUpdate(lightingEngine, currentGridPos.x, currentGridPos.y, _meshWidth, _meshHeight);
         }
 
         private bool TryResolveCamera()

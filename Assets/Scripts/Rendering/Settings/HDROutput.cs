@@ -6,6 +6,7 @@ using System;
 using System.Text;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
+using Fodinae.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -225,9 +226,15 @@ public static class HDROutput
                 cameraData.allowHDROutput = true;
             }
 
-            if (cameraData.renderPostProcessing)
+            // Художественные эффекты идут до URP. Тонмаппинг, праймари дисплея,
+            // композиция UI и кодирование вывода — за URP, как и дизеринг: он
+            // кладёт шум на 8-битный код уже после перевода в sRGB, то есть
+            // ровно там, где градиент квантуется. Без постобработки камеры URP
+            // пропускает финальный проход вместе с дизерингом.
+            bool renderPostProcessing = !PostProcessRuntimeState.SkipPasses;
+            if (cameraData.renderPostProcessing != renderPostProcessing)
             {
-                cameraData.renderPostProcessing = false;
+                cameraData.renderPostProcessing = renderPostProcessing;
             }
 
             if (!cameraData.dithering)

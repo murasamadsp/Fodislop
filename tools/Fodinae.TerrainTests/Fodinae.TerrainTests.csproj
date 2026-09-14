@@ -52,9 +52,11 @@
     <Compile Include="$(Game)/World/Terrain/Cache/TerrainCacheArrayScroller.cs" Link="Game/TerrainCacheArrayScroller.cs" />
     <Compile Include="$(Game)/World/Terrain/Cache/TerrainMetadata.cs" Link="Game/TerrainMetadata.cs" />
     <Compile Include="$(Game)/World/Terrain/Background/BackgroundFloodFill.cs" Link="Game/BackgroundFloodFill.cs" />
+    <Compile Include="$(Game)/World/Lighting/Core/LightingRegionCalculator.cs" Link="Game/LightingRegionCalculator.cs" />
 
     <!-- Тесты из Assets: те же, что гоняет Unity. -->
     <Compile Include="$(Game)/Tests/Editor/World/BackgroundFloodFill*.cs" LinkBase="Tests" />
     <Compile Include="$(Game)/Tests/Editor/World/Terrain/Geometry/*.cs" LinkBase="Tests/Geometry" />
+    <Compile Include="$(Game)/Tests/Editor/World/Lighting/LightingRegionCalculator*.cs" LinkBase="Tests/Lighting" />
   </ItemGroup>
 </Project>

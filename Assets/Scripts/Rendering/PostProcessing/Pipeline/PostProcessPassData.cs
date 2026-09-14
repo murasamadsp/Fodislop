@@ -42,9 +42,6 @@ internal sealed class PostProcessPassData
     public float VignetteSmoothness;
     public Vector2 VignetteCenter;
 
-    public bool CaActive;
-    public float CaIntensity;
-
     public bool CgActive;
     public float Exposure;
     public Vector4 ColorFilter;
@@ -120,11 +117,7 @@ internal sealed class PostProcessPassData
     public float EigengrauNoiseScale;
     public float EigengrauAnimationSpeed;
 
-    public Vector4 Advanced0;
-    public Vector4 Advanced1;
-    public Vector4 Advanced2;
-    public Vector4 Advanced3;
-    public Vector4 Temporal;
+    public float MotionBlurHistory;
     public bool HistoryValid;
     public bool TemporalActive;
 

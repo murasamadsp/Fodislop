@@ -49,8 +49,13 @@ public static class LightingRegionCalculator
 
         int paddedMinX = SnapLightingRegion(visibleMinX - LightingRegionPaddingCells);
         int paddedMinY = SnapLightingRegion(visibleMinY - LightingRegionPaddingCells);
-        int requiredWidth = visibleMaxX + LightingRegionPaddingCells - paddedMinX;
-        int requiredHeight = visibleMaxY + LightingRegionPaddingCells - paddedMinY;
+
+        // Размер не зависит от положения: запас на привязку угла к сетке (до
+        // Anchor-1 клеток) закладывается всегда. Раньше он брался от
+        // фактического сдвига угла, и тот же кадр давал то 96, то 128 клеток
+        // высоты — поля и каскады пересоздавались, свет менялся при движении.
+        int requiredWidth = visibleWidth + (LightingRegionPaddingCells * 2) + (LightingCacheAnchorCells - 1);
+        int requiredHeight = visibleHeight + (LightingRegionPaddingCells * 2) + (LightingCacheAnchorCells - 1);
         int paddedWidth = Mathf.CeilToInt(
             requiredWidth / (float)LightingRegionSizeQuantum) *
             LightingRegionSizeQuantum;

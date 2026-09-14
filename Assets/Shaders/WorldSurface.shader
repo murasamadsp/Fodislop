@@ -86,26 +86,6 @@ Shader "Fodinae/World Surface"
                 return _WorldLightTexture.Sample(sampler_WorldLightTexture, lightUV).rgb;
             }
 
-            /// <summary>
-            /// Возвращает полный сэмпл: RGB = direct+bounce, A = ambient luma.
-            /// </summary>
-            float4 SampleWorldLightFull(float2 worldPosition)
-            {
-                float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
-                float2 lightUV = (worldPosition - _WorldLightRect.xy) / rectSize;
-                if (_WorldLightDebugView != 0)
-                {
-                    int2 debugPixel = clamp(
-                        int2(lightUV * _WorldLightTextureSize.xy),
-                        int2(0, 0),
-                        int2(_WorldLightTextureSize.xy) - 1);
-                    float4 debugSample = _WorldLightTexture.Load(int3(debugPixel, 0));
-                    return float4(debugSample.rgb, 1.0);
-                }
-
-                return _WorldLightTexture.Sample(sampler_WorldLightTexture, lightUV);
-            }
-
             Varyings VisibleVert(Attributes input)
             {
                 Varyings output;

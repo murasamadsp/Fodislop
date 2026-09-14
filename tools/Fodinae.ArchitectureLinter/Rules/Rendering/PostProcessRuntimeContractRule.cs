@@ -21,7 +21,7 @@ public sealed class PostProcessRuntimeContractRule : IRule
             "OnDisable",
             [
                 new("Fodinae.Rendering.PostProcessing.PostProcessRuntimeState", "set_BypassPostProcessEffects", 1),
-                new("Fodinae.Rendering.PostProcessing.PostProcessRuntimeState", "SetAdvancedSettings", 1),
+                new("Fodinae.Rendering.PostProcessing.PostProcessRuntimeState", "SetColorGrade", 1),
             ]),
         new(
             "Fodinae.Rendering.PostProcessing.PostProcessRendererFeature",

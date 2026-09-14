@@ -2,8 +2,6 @@
 
 using System;
 using UnityEngine;
-using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
 using Fodinae.Core;
 
 namespace Fodinae.Rendering.PostProcessing;
@@ -12,11 +10,6 @@ public static class PostProcessRuntimeState
     internal static Camera? MainCamera { get; private set; }
     private static uint _cameraGeneration;
     private static uint _pipelineGeneration;
-
-    // Выключить постпроцесс нельзя ничем: ни настройкой, ни отладочным
-    // байпасом, ни ожиданием конфига — кривая вывода сжимает HDR каскадного
-    // света, и без неё кадр не неверно окрашен, а просто неверен.
-    private static AdvancedPostProcessSnapshot _advanced;
 
     private static float _displayGamma = DisplaySettings.DefaultGamma;
     private static float _displayPaperWhiteNits = DisplaySettings.DefaultPaperWhite;
@@ -28,14 +21,12 @@ public static class PostProcessRuntimeState
     private static float _compareSplit;
     private static CompareMode _compareMode;
     private static bool _compareBefore;
-    private static bool _bypassPostProcessEffects = true;
+    private static bool _bypassPostProcessEffects;
     private static bool _temporaryBypass;
 
     internal static uint CameraGeneration => _cameraGeneration;
 
     internal static uint PipelineGeneration => _pipelineGeneration;
-
-    internal static AdvancedPostProcessSnapshot Advanced => _advanced;
 
     internal static float DisplayGamma => _displayGamma;
 
@@ -47,7 +38,7 @@ public static class PostProcessRuntimeState
 
     public static bool BypassPostProcessEffects
     {
-        get => true;
+        get => _bypassPostProcessEffects;
         set
         {
             if (_bypassPostProcessEffects == value)
@@ -59,6 +50,10 @@ public static class PostProcessRuntimeState
             InvalidateTemporalHistory();
         }
     }
+
+    // Отладочный A/B: проходы постпроцесса не ставятся в очередь, камера без
+    // постобработки URP. Меряет цену самих проходов, а не эффектов.
+    public static bool SkipPasses { get; set; }
 
     public static bool TemporaryBypass
     {
@@ -147,11 +142,9 @@ public static class PostProcessRuntimeState
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetForDomainReload()
     {
-        RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
         MainCamera = null;
         _cameraGeneration = 0;
         _pipelineGeneration = 0;
-        _advanced = default;
         _displayGamma = DisplaySettings.DefaultGamma;
         _displayPaperWhiteNits = DisplaySettings.DefaultPaperWhite;
         _displayPeakBrightnessNits = DisplaySettings.DefaultPeakBrightness;
@@ -162,23 +155,9 @@ public static class PostProcessRuntimeState
         _compareSplit = 0f;
         _compareMode = CompareMode.Off;
         _compareBefore = false;
-        _bypassPostProcessEffects = true;
+        _bypassPostProcessEffects = false;
         _temporaryBypass = false;
-    }
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-    private static void InitializeGlobalCameraPostProcessBypass()
-    {
-        RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
-        RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
-    }
-
-    private static void OnBeginCameraRendering(ScriptableRenderContext context, Camera camera)
-    {
-        if (camera != null && camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
-        {
-            cameraData.renderPostProcessing = false;
-        }
+        SkipPasses = false;
     }
 
     public static void SetDisplayCalibration(float gamma, float paperWhiteNits, float peakBrightnessNits)
@@ -210,17 +189,6 @@ public static class PostProcessRuntimeState
         _displayGamma = sanitizedGamma;
         _displayPaperWhiteNits = sanitizedPaperWhite;
         _displayPeakBrightnessNits = sanitizedPeakBrightness;
-        InvalidateTemporalHistory();
-    }
-
-    public static void SetAdvancedSettings(AdvancedPostProcessSnapshot settings)
-    {
-        if (_advanced == settings)
-        {
-            return;
-        }
-
-        _advanced = settings;
         InvalidateTemporalHistory();
     }
 

@@ -42,14 +42,6 @@ internal sealed class PauseMenuEffectsTabBuilder
             throw new InvalidOperationException("[PauseMenu] EffectsGroupBloom is missing from PauseMenu.uxml.");
         VisualElement cameraGroup = effectsScroll.Q<VisualElement>("EffectsGroupCamera") ??
             throw new InvalidOperationException("[PauseMenu] EffectsGroupCamera is missing from PauseMenu.uxml.");
-        VisualElement detailGroup = effectsScroll.Q<VisualElement>("EffectsGroupDetail") ??
-            throw new InvalidOperationException("[PauseMenu] EffectsGroupDetail is missing from PauseMenu.uxml.");
-        VisualElement opticsGroup = effectsScroll.Q<VisualElement>("EffectsGroupOptics") ??
-            throw new InvalidOperationException("[PauseMenu] EffectsGroupOptics is missing from PauseMenu.uxml.");
-        VisualElement atmosphereGroup = effectsScroll.Q<VisualElement>("EffectsGroupAtmosphere") ??
-            throw new InvalidOperationException("[PauseMenu] EffectsGroupAtmosphere is missing from PauseMenu.uxml.");
-        VisualElement temporalGroup = effectsScroll.Q<VisualElement>("EffectsGroupTemporal") ??
-            throw new InvalidOperationException("[PauseMenu] EffectsGroupTemporal is missing from PauseMenu.uxml.");
 
         _postProcessController.EnsureVolumeSetup();
 
@@ -81,10 +73,12 @@ internal sealed class PauseMenuEffectsTabBuilder
             nameof(PostProcessSettings.Exposure),
             () => Cfg().PostProcess.Exposure,
             (config, value) => config.PostProcess.Exposure = value));
+
         cameraGroup.Add(BoundCameraSlider(
             nameof(PostProcessSettings.Contrast),
             () => Cfg().PostProcess.Contrast,
             (config, value) => config.PostProcess.Contrast = value));
+
         cameraGroup.Add(BoundCameraSlider(
             nameof(PostProcessSettings.Saturation),
             () => Cfg().PostProcess.Saturation,
@@ -99,38 +93,16 @@ internal sealed class PauseMenuEffectsTabBuilder
             nameof(EffectSettings.VignetteEnabled),
             () => Cfg().Effects.VignetteEnabled,
             (config, value) => config.Effects.VignetteEnabled = value));
-        cameraGroup.Add(Switch(
-            nameof(EffectSettings.ChromaticAberrationEnabled),
-            () => Cfg().Effects.ChromaticAberrationEnabled,
-            (config, value) => config.Effects.ChromaticAberrationEnabled = value));
+
         cameraGroup.Add(Switch(
             nameof(EffectSettings.EigengrauEnabled),
             () => Cfg().Effects.EigengrauEnabled,
             (config, value) => config.Effects.EigengrauEnabled = value));
+
         cameraGroup.Add(Switch(
             nameof(EffectSettings.MotionBlurEnabled),
             () => Cfg().Effects.MotionBlurEnabled,
             (config, value) => config.Effects.MotionBlurEnabled = value));
-
-        detailGroup.Add(Switch(
-            nameof(EffectSettings.LocalContrastEnabled),
-            () => Cfg().Effects.LocalContrastEnabled,
-            (config, value) => config.Effects.LocalContrastEnabled = value));
-
-        opticsGroup.Add(Switch(
-            nameof(EffectSettings.LensEffectsEnabled),
-            () => Cfg().Effects.LensEffectsEnabled,
-            (config, value) => config.Effects.LensEffectsEnabled = value));
-
-        atmosphereGroup.Add(Switch(
-            nameof(EffectSettings.AtmosphereEnabled),
-            () => Cfg().Effects.AtmosphereEnabled,
-            (config, value) => config.Effects.AtmosphereEnabled = value));
-
-        temporalGroup.Add(Switch(
-            nameof(EffectSettings.TemporalEnabled),
-            () => Cfg().Effects.TemporalEnabled,
-            (config, value) => config.Effects.TemporalEnabled = value));
 
         return effectsScroll;
     }

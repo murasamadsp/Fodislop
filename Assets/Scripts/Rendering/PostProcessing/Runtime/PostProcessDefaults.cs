@@ -36,11 +36,6 @@ public static class PostProcessDefaults
 
     public static Vector2Parameter VignetteCenter() => new(new Vector2(0.5f, 0.5f));
 
-    public static ClampedFloatParameter ChromaticAberrationIntensity() => new(
-        PostProcessLimits.ChromaticAberrationIntensityMin,
-        PostProcessLimits.ChromaticAberrationIntensityMin,
-        PostProcessLimits.ChromaticAberrationIntensityMax);
-
     public static ClampedFloatParameter ColorGradingExposure() => new(
         0f,
         PostProcessLimits.ExposureMin,

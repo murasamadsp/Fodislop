@@ -74,6 +74,12 @@ namespace UnityEngine
 
         public static Vector4 zero => default;
 
+        public static bool operator ==(Vector4 a, Vector4 b) => a.Equals(b);
+
+        public static bool operator !=(Vector4 a, Vector4 b) => !a.Equals(b);
+
+        public override string ToString() => $"({x:F2}, {y:F2}, {z:F2}, {w:F2})";
+
         public bool Equals(Vector4 other) => x == other.x && y == other.y && z == other.z && w == other.w;
 
         public override bool Equals(object? obj) => obj is Vector4 other && Equals(other);

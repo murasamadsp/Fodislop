@@ -1,8 +1,12 @@
 #nullable enable
 
 using Fodinae.Core.Interfaces;
+using Fodinae.Rendering.PostProcessing;
 using Fodinae.World.Lighting;
+using Fodinae.Game;
+using Fodinae.World;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Fodinae.Tools.Imgui.Windows;
 
@@ -11,6 +15,12 @@ public sealed class RenderBypassWindow : ToolWindow
     private readonly IRuntimeDebugSettings _debugSettings;
     private readonly LightingEngine? _lighting;
     private readonly WorldGizmoOptions _gizmos;
+    private readonly SurfaceRenderer? _surfaceRenderer;
+    private readonly WorldEntityBatchRenderer? _entityRenderer;
+    private readonly UIDocument? _gameUIDocument;
+    private bool _hideSurface;
+    private bool _hideEntities;
+    private bool _hideGameUI;
     private Vector2 _scroll;
     private int _bypassBannerCount = -1;
     private string _bypassBanner = string.Empty;
@@ -20,12 +30,18 @@ public sealed class RenderBypassWindow : ToolWindow
     public RenderBypassWindow(
         IRuntimeDebugSettings debugSettings,
         LightingEngine? lighting,
-        WorldGizmoOptions gizmos)
+        WorldGizmoOptions gizmos,
+        SurfaceRenderer? surfaceRenderer = null,
+        WorldEntityBatchRenderer? entityRenderer = null,
+        UIDocument? gameUIDocument = null)
         : base("Диагностика рендера", new Rect(16f, 382f, 260f, 390f))
     {
         _debugSettings = debugSettings;
         _lighting = lighting;
         _gizmos = gizmos;
+        _surfaceRenderer = surfaceRenderer;
+        _entityRenderer = entityRenderer;
+        _gameUIDocument = gameUIDocument;
     }
 
     public override bool WantsSampling => false;
@@ -39,6 +55,10 @@ public sealed class RenderBypassWindow : ToolWindow
         _debugSettings.BypassTerrainDraw = false;
         _debugSettings.BypassCpuMeshRebuild = false;
         _debugSettings.ShowRobotDebugVisuals = false;
+        PostProcessRuntimeState.SkipPasses = false;
+        _hideSurface = false;
+        _hideEntities = false;
+        _hideGameUI = false;
         _lighting?.SetDebugView(LightingEngine.DebugView.FinalLighting);
     }
 
@@ -56,6 +76,12 @@ public sealed class RenderBypassWindow : ToolWindow
                 _debugSettings.BypassTerrainDraw, "Отрисовка террейна");
             _debugSettings.BypassCpuMeshRebuild = DrawSwitch(
                 _debugSettings.BypassCpuMeshRebuild, "Пересборка меша");
+            PostProcessRuntimeState.SkipPasses = DrawSwitch(
+                PostProcessRuntimeState.SkipPasses, "Проходы постпроцесса");
+            _hideSurface = DrawSwitch(_hideSurface, "Поверхность");
+            _hideEntities = DrawSwitch(_hideEntities, "Сущности мира");
+            _hideGameUI = DrawSwitch(_hideGameUI, "Интерфейс игры");
+            ApplyVisibility();
             _debugSettings.ShowRobotDebugVisuals = DrawSwitch(
                 _debugSettings.ShowRobotDebugVisuals, "Отладка роботов", ToolTheme.FrameGraphColor);
 
@@ -79,6 +105,38 @@ public sealed class RenderBypassWindow : ToolWindow
         }
     }
 
+    // A/B для замера цены слоя: рендереры включаются и выключаются каждый
+    // кадр отрисовки окна, поэтому пересозданные объекты слоя тоже скрываются.
+    private void ApplyVisibility()
+    {
+        SetRenderersEnabled(_surfaceRenderer, !_hideSurface);
+        SetRenderersEnabled(_entityRenderer, !_hideEntities);
+        if (_gameUIDocument != null && _gameUIDocument.rootVisualElement != null)
+        {
+            DisplayStyle display = _hideGameUI ? DisplayStyle.None : DisplayStyle.Flex;
+            if (_gameUIDocument.rootVisualElement.style.display != display)
+            {
+                _gameUIDocument.rootVisualElement.style.display = display;
+            }
+        }
+    }
+
+    private static void SetRenderersEnabled(Component? owner, bool enabled)
+    {
+        if (owner == null)
+        {
+            return;
+        }
+
+        foreach (Renderer renderer in owner.GetComponentsInChildren<Renderer>(includeInactive: true))
+        {
+            if (renderer.enabled != enabled)
+            {
+                renderer.enabled = enabled;
+            }
+        }
+    }
+
     private void DrawBypassWarning()
     {
         int active = 0;
@@ -96,6 +154,13 @@ public sealed class RenderBypassWindow : ToolWindow
         {
             active++;
         }
+
+        if (PostProcessRuntimeState.SkipPasses)
+        {
+            active++;
+        }
+
+        active += (_hideSurface ? 1 : 0) + (_hideEntities ? 1 : 0) + (_hideGameUI ? 1 : 0);
 
         if (active == 0)
         {

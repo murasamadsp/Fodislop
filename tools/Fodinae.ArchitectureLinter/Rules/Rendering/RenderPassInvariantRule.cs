@@ -22,7 +22,7 @@ public sealed class RenderPassInvariantRule : IRule
     private const string RenderPassPath = "Assets/Scripts/Rendering/PostProcessing/Pipeline/PostProcessRenderPass.cs";
 
     private static readonly Regex BypassBlock = new(@"if \(\s*(?:PostProcessRuntimeState\.)?BypassPostProcessEffects\s*\)", RegexOptions.Compiled);
-    private static readonly Regex EffectDisable = new(@"^\s*(?:bloomActive|vignetteActive|caActive|cgActive|eigengrauActive|mbActive)\s*=\s*false\s*;", RegexOptions.Multiline);
+    private static readonly Regex EffectDisable = new(@"^\s*(?:bloomActive|vignetteActive|cgActive|eigengrauActive|mbActive)\s*=\s*false\s*;", RegexOptions.Multiline);
     private static readonly Regex GammaAssign = new(@"^\s*_displayGamma\s*=\s*[0-9.]+f?\s*;", RegexOptions.Multiline);
 
     public Task<IReadOnlyList<RuleViolation>> EvaluateAsync(
