@@ -14,7 +14,10 @@ using UnityEngine;
 
 namespace MinesServer.Networking.Connection.Client;
 
-internal sealed class DummyTeleportManager(Action<ServerPacket> onReceived, List<(ushort X, ushort Y)> teleportPositions)
+internal sealed class DummyTeleportManager(
+    Action<ServerPacket> onReceived,
+    List<(ushort X, ushort Y)> teleportPositions,
+    Action<ushort, ushort>? onTeleport = null)
 {
     private List<(ushort X, ushort Y)>? _teleportDestinations;
 
@@ -168,6 +171,7 @@ internal sealed class DummyTeleportManager(Action<ServerPacket> onReceived, List
 
         var (destX, destY) = _teleportDestinations[index];
         WindowOpen = false;
+        onTeleport?.Invoke(destX, destY);
         onReceived.Invoke(new ServerPacket(new TeleportPacket(destX, destY, false)));
         onReceived.Invoke(new ServerPacket(new CloseWindowPacket()));
     }

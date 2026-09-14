@@ -139,7 +139,7 @@ public sealed class SceneTransitionPlayModeTests
         while (!transition.Status.IsCompleted() && Time.realtimeSinceStartup < deadline)
         {
             Scene game = SceneManager.GetSceneByName("MainGame");
-            GameManager? manager = FindComponentInScene<GameManager>(game);
+            GameManager? manager = ResolveInScene<GameManager>(game);
             if (manager != null && !manager.IsWorldLoaded)
             {
                 menuObservedWhileWorldNotReady |= SceneManager.GetSceneByName("MainMenu").isLoaded;
@@ -150,7 +150,7 @@ public sealed class SceneTransitionPlayModeTests
 
         Assert.That(transition.Status.IsCompleted(), Is.True, "MainGame transition timed out.");
         transition.GetAwaiter().GetResult();
-        GameManager gameManager = FindComponentInScene<GameManager>(SceneManager.GetSceneByName("MainGame"))!;
+        GameManager gameManager = ResolveInScene<GameManager>(SceneManager.GetSceneByName("MainGame"))!;
         Assert.That(menuObservedWhileWorldNotReady, Is.True);
         Assert.That(gameManager, Is.Not.Null);
         Assert.That(gameManager.IsWorldLoaded, Is.True);
@@ -183,11 +183,12 @@ public sealed class SceneTransitionPlayModeTests
     {
         yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
         yield return Await(_bootstrap.TransitionAsync("MainGame"), WorldTimeoutSeconds);
-        PacketHandler firstHandler = FindComponentInScene<PacketHandler>(SceneManager.GetSceneByName("MainGame"))!;
+        PacketHandler firstHandler = FindComponentInScene<GameLifetimeScope>(SceneManager.GetSceneByName("MainGame"))!
+            .Container.Resolve<PacketHandler>();
         DummyConnection dummy = _bootstrap.Container.Resolve<DummyConnection>();
 
         yield return Await(_bootstrap.TransitionAsync("MainMenu"), UITimeoutSeconds);
-        Assert.That(firstHandler == null, Is.True, "The first game PacketHandler survived scene unload.");
+        Assert.That(firstHandler.IsSubscribed, Is.False, "The first game PacketHandler kept its packet subscriptions after scene unload.");
 
         int packetsAfterDisconnect = 0;
         void OnPacket(MinesServer.Networking.Server.Packets.ServerPacket _) => packetsAfterDisconnect++;
@@ -197,7 +198,8 @@ public sealed class SceneTransitionPlayModeTests
         Assert.That(packetsAfterDisconnect, Is.Zero, "A retired DummyConnection loop emitted packets in MainMenu.");
 
         yield return Await(_bootstrap.TransitionAsync("MainGame"), WorldTimeoutSeconds);
-        PacketHandler secondHandler = FindComponentInScene<PacketHandler>(SceneManager.GetSceneByName("MainGame"))!;
+        PacketHandler secondHandler = FindComponentInScene<GameLifetimeScope>(SceneManager.GetSceneByName("MainGame"))!
+            .Container.Resolve<PacketHandler>();
         Assert.That(secondHandler, Is.Not.Null);
         Assert.That(secondHandler, Is.Not.SameAs(firstHandler));
         Assert.That(CountScopes(SceneManager.GetSceneByName("MainGame")), Is.EqualTo(1));
@@ -332,6 +334,16 @@ public sealed class SceneTransitionPlayModeTests
         }
 
         return null;
+    }
+
+    // Сервисы сцены живут в её контейнере, а не на объектах (SCENE_STANDARD.md §1).
+    private static T? ResolveInScene<T>(Scene scene)
+        where T : class
+    {
+        GameLifetimeScope? scope = FindComponentInScene<GameLifetimeScope>(scene);
+        return scope != null && scope.Container != null && scope.Container.TryResolve(out T? service)
+            ? service
+            : null;
     }
 
     private static bool HasNamedUiElement(Scene scene, string elementName)

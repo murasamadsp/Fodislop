@@ -815,8 +815,7 @@
     height: 160px;
     border-width: 1px;
     border-color: var(--light-sheen);
-    border-radius: var(--radius-md);
-    overflow: hidden;
+    border-radius: var(--radius-sharp);
     background-color: var(--shadow-solid);
 }
 

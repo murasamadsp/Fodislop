@@ -335,6 +335,11 @@ namespace Fodinae.World
                             int worldY = CoordinateUtils.UnityToServerY(y, WorldHeight);
 
                             var cellType = storage.GetCell(worldX, worldY);
+                            if (cellType == CellType.Unloaded)
+                            {
+                                continue;
+                            }
+
                             var config = GetCellConfig(cellType);
 
                             if (config.Properties != 0)

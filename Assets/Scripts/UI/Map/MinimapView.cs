@@ -69,7 +69,12 @@ internal sealed class MinimapView : IDisposable
         _coordinatesBuilder.Clear();
         _coordinatesBuilder.Append(x).Append(':').Append(y);
         _coordinates.text = _coordinatesBuilder.ToString();
+
+        // Та же перераскладка, что у счётчика FPS: «9:12» уже, чем «128:340».
+        FPSCounter.HoldWidth(_coordinates, ref _widestCoordinates);
     }
+
+    private float _widestCoordinates;
 
     public void SetVisible(bool visible)
     {

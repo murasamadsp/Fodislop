@@ -103,6 +103,19 @@ public static class ToolPalette
         }
 
         _Textures.Clear();
+
+        // Перезагрузка домена стирает статический список, а сами текстуры с
+        // HideAndDontSave живут дальше: перепись нашла по 32 копии каждой.
+        // Сироты прошлых доменов узнаются по имени.
+        foreach (Texture2D orphan in Resources.FindObjectsOfTypeAll<Texture2D>())
+        {
+            if (orphan.hideFlags == HideFlags.HideAndDontSave &&
+                orphan.name.StartsWith("Tool.", System.StringComparison.Ordinal))
+            {
+                CoreUtils.Destroy(orphan);
+            }
+        }
+
         White = Texture2D.whiteTexture;
         Scanlines = Texture2D.whiteTexture;
     }

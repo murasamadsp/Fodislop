@@ -23,8 +23,8 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
     public void Rebuild(
         Transform parent,
         ISceneObjectFactory sceneObjects,
-        TerrainMeshBuilder meshBuilder,
-        List<int>[] sourceSubMeshIndices,
+        List<TerrainVertex> vertices,
+        List<int>[] subMeshIndices,
         Material[] materials,
         string sortingLayerName,
         int sortingOrder,
@@ -33,29 +33,14 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         float cellSize)
     {
         EnsureObjects(parent, sceneObjects);
-        EnsureSubMeshLists(sourceSubMeshIndices.Length);
+        // Вершины и индексы дверей приходят уже компактными из сборщика клеток.
+        EnsureSubMeshLists(subMeshIndices.Length);
         _vertices.Clear();
-
-        for (int atlasIndex = 0; atlasIndex < sourceSubMeshIndices.Length; atlasIndex++)
+        _vertices.AddRange(vertices);
+        for (int atlasIndex = 0; atlasIndex < subMeshIndices.Length; atlasIndex++)
         {
-            List<int> sourceIndices = sourceSubMeshIndices[atlasIndex];
-            List<int> compactIndices = _compactSubMeshIndices[atlasIndex];
-            compactIndices.Clear();
-            for (int index = 0; index + 5 < sourceIndices.Count; index += 6)
-            {
-                int sourceVertex = sourceIndices[index];
-                int compactVertex = _vertices.Count;
-                _vertices.Add(meshBuilder.VertexBuffer[sourceVertex]);
-                _vertices.Add(meshBuilder.VertexBuffer[sourceVertex + 1]);
-                _vertices.Add(meshBuilder.VertexBuffer[sourceVertex + 2]);
-                _vertices.Add(meshBuilder.VertexBuffer[sourceVertex + 3]);
-                compactIndices.Add(compactVertex);
-                compactIndices.Add(compactVertex + 3);
-                compactIndices.Add(compactVertex + 2);
-                compactIndices.Add(compactVertex + 2);
-                compactIndices.Add(compactVertex + 1);
-                compactIndices.Add(compactVertex);
-            }
+            _compactSubMeshIndices[atlasIndex].Clear();
+            _compactSubMeshIndices[atlasIndex].AddRange(subMeshIndices[atlasIndex]);
         }
 
         if (_gameObject == null || _mesh == null || _renderer == null)
@@ -77,12 +62,12 @@ public sealed class TerrainDoorOverlayRenderer : IDisposable
         // всегда тот же самый, и менялись только их вершины.
         bool layoutChanged =
             _mesh.vertexCount != _vertices.Count ||
-            _mesh.subMeshCount != sourceSubMeshIndices.Length;
+            _mesh.subMeshCount != subMeshIndices.Length;
         if (layoutChanged)
         {
             _mesh.Clear();
             _mesh.SetVertexBufferParams(_vertices.Count, TerrainMeshManager.VertexLayout);
-            _mesh.subMeshCount = sourceSubMeshIndices.Length;
+            _mesh.subMeshCount = subMeshIndices.Length;
         }
 
         _mesh.SetVertexBufferData(

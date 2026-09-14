@@ -3,29 +3,23 @@
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
-using UnityEngine;
 
-namespace Fodinae.Game.Managers
+namespace Fodinae.Game.Managers;
+
+// Чистый сервис контейнера: ни рендера, ни transform (SCENE_STANDARD.md §1).
+public sealed class ServerConfig : IServerConfig
 {
-    public class ServerConfig : MonoBehaviour, IServerConfig
+    public bool IsInitialized => true;
+
+    public event Action? OnInitialized
     {
-        private const string TAG = "[ServerConfig]";
-
-        private float _digCooldown = ProjectRuntimeContracts.Gameplay.DefaultDigCooldown;
-        private int _maxGlobalChatLength = ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
-        private int _maxLocalChatLength = ProjectRuntimeContracts.Chat.MaximumLocalChatLength;
-        private bool _isInitialized = true;
-
-        public bool IsInitialized => _isInitialized;
-
-        public event Action? OnInitialized
-        {
-            add => value?.Invoke();
-            remove { }
-        }
-
-        public float DigCooldown => _digCooldown;
-        public int MaxGlobalChatLength => _maxGlobalChatLength;
-        public int MaxLocalChatLength => _maxLocalChatLength;
+        add => value?.Invoke();
+        remove { }
     }
+
+    public float DigCooldown { get; } = ProjectRuntimeContracts.Gameplay.DefaultDigCooldown;
+
+    public int MaxGlobalChatLength { get; } = ProjectRuntimeContracts.Chat.MaximumGlobalChatLength;
+
+    public int MaxLocalChatLength { get; } = ProjectRuntimeContracts.Chat.MaximumLocalChatLength;
 }

@@ -174,6 +174,11 @@ namespace Fodinae.Editor
                 }
             }
 
+            if (scopes.Length == 1)
+            {
+                ValidateSingleRoot(sceneName, scene, scopes[0], errors);
+            }
+
             GameLifetimeScope? gameScope = scopes.OfType<GameLifetimeScope>().FirstOrDefault();
             if (gameScope != null)
             {
@@ -233,7 +238,7 @@ namespace Fodinae.Editor
                 errors.Add($"{sceneName}: {ServicesInactiveMessage}");
             }
 
-            string[] requiredGroups = { "Networking", "World", "Rendering", "Gameplay", "UI", "Audio" };
+            string[] requiredGroups = { "World", "Rendering", "UI", "Audio" };
             foreach (string group in requiredGroups)
             {
                 Transform groupRoot = servicesRoot.Find(group);
@@ -372,7 +377,7 @@ namespace Fodinae.Editor
                 }
             }
 
-            string[] groups = { "Networking", "World", "Rendering", "Gameplay", "UI", "Audio" };
+            string[] groups = { "World", "Rendering", "UI", "Audio" };
             foreach (string group in groups)
             {
                 Transform groupRoot = servicesRoot.Find(group);
@@ -399,6 +404,35 @@ namespace Fodinae.Editor
                                 "Run Fodinae/Architecture/Populate Manager Contract.");
                         }
                     }
+                }
+            }
+        }
+
+        // Единственный корень сцены — её composition root.
+        //
+        // Объект рядом со scope контейнер не видит: SceneSetup в MainGame так и
+        // стоял с пустыми [Inject], пока GameLifetimeScope.Awake не стал искать
+        // его по корням вручную. Переносит пункт меню
+        // «Fodinae/Architecture/Move Scene Roots Under Composition Root».
+        private static void ValidateSingleRoot(
+            string sceneName,
+            Scene scene,
+            LifetimeScope scope,
+            List<string> errors)
+        {
+            if (scope.transform.parent != null)
+            {
+                errors.Add($"{sceneName}: {scope.GetType().Name} must be the scene root, not a child of '{scope.transform.parent.name}'.");
+                return;
+            }
+
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                if (root != scope.gameObject)
+                {
+                    errors.Add(
+                        $"{sceneName}: root object '{root.name}' lives outside {scope.GetType().Name}; " +
+                        "every authored object must be under the composition root.");
                 }
             }
         }

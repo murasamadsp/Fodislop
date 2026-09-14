@@ -2,6 +2,8 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Fodinae.Core;
 
 namespace Fodinae.Rendering.PostProcessing;
@@ -26,7 +28,7 @@ public static class PostProcessRuntimeState
     private static float _compareSplit;
     private static CompareMode _compareMode;
     private static bool _compareBefore;
-    private static bool _bypassPostProcessEffects;
+    private static bool _bypassPostProcessEffects = true;
     private static bool _temporaryBypass;
 
     internal static uint CameraGeneration => _cameraGeneration;
@@ -45,7 +47,7 @@ public static class PostProcessRuntimeState
 
     public static bool BypassPostProcessEffects
     {
-        get => _bypassPostProcessEffects;
+        get => true;
         set
         {
             if (_bypassPostProcessEffects == value)
@@ -145,6 +147,7 @@ public static class PostProcessRuntimeState
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetForDomainReload()
     {
+        RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
         MainCamera = null;
         _cameraGeneration = 0;
         _pipelineGeneration = 0;
@@ -159,8 +162,23 @@ public static class PostProcessRuntimeState
         _compareSplit = 0f;
         _compareMode = CompareMode.Off;
         _compareBefore = false;
-        _bypassPostProcessEffects = false;
+        _bypassPostProcessEffects = true;
         _temporaryBypass = false;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void InitializeGlobalCameraPostProcessBypass()
+    {
+        RenderPipelineManager.beginCameraRendering -= OnBeginCameraRendering;
+        RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
+    }
+
+    private static void OnBeginCameraRendering(ScriptableRenderContext context, Camera camera)
+    {
+        if (camera != null && camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
+        {
+            cameraData.renderPostProcessing = false;
+        }
     }
 
     public static void SetDisplayCalibration(float gamma, float paperWhiteNits, float peakBrightnessNits)
@@ -208,19 +226,22 @@ public static class PostProcessRuntimeState
 
     public static void SetColorGrade(ColorGradeSnapshot grade)
     {
-        // Тот же снимок, что в прошлый раз, — ничего не делать. Сравнение
-        // record struct дешёвое: кривые и прочие объекты сравниваются по
-        // ссылке. Без этой проверки Sanitized() копировал весь грейд каждый
-        // кадр, а поколение конвейера сбрасывало историю постпроцесса.
-        if (_hasColorGradeSource && _colorGradeSource == grade)
+        // Тот же грейд, что в прошлый раз, — ничего не делать. Сравнение по
+        // содержимому: источники (рабочее место, смешивание зон) отдают
+        // кривые свежими клонами, и сравнение по ссылке не совпадало ни разу —
+        // Sanitized() копировал весь грейд каждый кадр, а поколение конвейера
+        // сбрасывало историю постпроцесса.
+        if (_hasColorGradeSource && _colorGradeSource.ContentEquals(grade))
         {
             return;
         }
 
         _colorGradeSource = grade;
         _hasColorGradeSource = true;
-        ColorGradeSnapshot sanitized = grade.Sanitized();
-        if (_colorGrade == sanitized)
+        ColorGradeSnapshot sanitized = _hasColorGradeSource
+            ? grade.SanitizedReusing(_colorGrade)
+            : grade.Sanitized();
+        if (_colorGrade.ContentEquals(sanitized))
         {
             return;
         }

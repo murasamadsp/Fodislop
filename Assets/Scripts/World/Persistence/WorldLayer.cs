@@ -43,6 +43,10 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
 
     private FileStream? _fileStream;
 
+    // One reader for the layer's lifetime, used under _ioLock. A reader per
+    // chunk load allocated its buffers and UTF8 decoder on every load.
+    private BinaryReader? _reader;
+
     public WorldLayer(
         string filePath,
         int WIDTH_CHUNKS,
@@ -445,15 +449,58 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
 
     public void Flush(bool flushToDisk = false)
     {
+        List<(int Index, T[] Chunk)> snapshot = TakeDirtySnapshot();
+        try
+        {
+            WriteSnapshot(snapshot, flushToDisk);
+        }
+        catch
+        {
+            RestoreDirty(snapshot);
+            throw;
+        }
+    }
+
+    // Снимок грязных чанков берётся на том потоке, который меняет кэш, — на
+    // главном. Раньше MapStorage.FlushAsync перебирал грязные индексы и читал
+    // словарь чанков прямо в пуле потоков, пока главный поток писал клетки и
+    // грузил чанки: перебор падал с «Collection was modified», а ClearDirty
+    // после записи снимал отметку и с чанков, изменённых во время записи, —
+    // такие правки молча не доходили до диска. Массивы копируются, поэтому на
+    // диск уходит целое состояние, а не чанк посреди перезаписи.
+    public List<(int Index, T[] Chunk)> TakeDirtySnapshot()
+    {
+        var snapshot = new List<(int Index, T[] Chunk)>(_cache.DirtyCount);
         foreach (int index in _cache.DirtyIndices)
         {
             if (_cache.TryGet(index, out T[]? chunk) && chunk != null)
             {
-                SaveChunkToDisk(index, chunk);
+                snapshot.Add((index, (T[])chunk.Clone()));
             }
         }
 
         _cache.ClearDirty();
+        return snapshot;
+    }
+
+    // Запись не удалась — отметки возвращаются, следующее сохранение повторит.
+    // Вызывать на главном потоке, как и TakeDirtySnapshot.
+    public void RestoreDirty(List<(int Index, T[] Chunk)> snapshot)
+    {
+        foreach ((int index, _) in snapshot)
+        {
+            _cache.MarkDirty(index);
+        }
+    }
+
+    // Можно из любого потока: снимок ни с кем не разделён, файл — под _ioLock.
+    public void WriteSnapshot(List<(int Index, T[] Chunk)> snapshot, bool flushToDisk)
+    {
+        foreach ((int index, T[] chunk) in snapshot)
+        {
+            SaveChunkToDisk(index, chunk);
+        }
+
         lock (_ioLock)
         {
             if (_fileStream == null)
@@ -521,6 +568,8 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
             _disposed = true;
             try
             {
+                _reader?.Dispose();
+                _reader = null;
                 _fileStream?.Dispose();
             }
             catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException)
@@ -721,8 +770,8 @@ public sealed class WorldLayer<T> : IWorldLayer<T>
             }
 
             _fileStream.Seek(offset, SeekOrigin.Begin);
-            using var reader = new BinaryReader(_fileStream, System.Text.Encoding.UTF8, true);
-            return WorldChunkRleCodec.DecodeChunk<T>(reader, _chunkArea);
+            _reader ??= new BinaryReader(_fileStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            return WorldChunkRleCodec.DecodeChunk<T>(_reader, _chunkArea);
         }
     }
 

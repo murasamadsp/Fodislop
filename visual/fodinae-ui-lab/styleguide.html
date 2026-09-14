@@ -72,7 +72,7 @@
       <div class="sg-sub">Работает напрямую</div>
       <table class="sg-table">
         <tbody>
-          <tr><td><code>filter: blur() tint() opacity() invert() grayscale() sepia() contrast() hue-rotate()</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
+          <tr><td><code>filter: blur() drop-shadow() tint() opacity() invert() grayscale() sepia() contrast() hue-rotate()</code> — Unity 6.3+. Элемент с фильтром рендерится в текстуру: на панель да, на сотни мелких точек нет</td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
           <tr><td><code>background-image: linear-gradient(...)</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
           <tr><td><code>text-shadow</code>, <code>-unity-text-outline-*</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
           <tr><td><code>background-size / -repeat / -position-x / -position-y</code></td><td><span class="sg-uss sg-uss--ok">@uss ok</span></td></tr>
@@ -85,7 +85,7 @@
       <table class="sg-table">
         <thead><tr><th>В макете</th><th>В Unity</th><th></th></tr></thead>
         <tbody>
-          <tr><td><code>box-shadow</code> — свечение</td><td>элемент-подложка + <code>filter: blur()</code>. Настоящее рантайм-свечение, не запечённая текстура</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
+          <tr><td><code>box-shadow</code> — тень и свечение</td><td><code>filter: drop-shadow()</code>. Тень идёт по альфе элемента, а не по коробке: у непрозрачной панели это одно и то же, у полупрозрачной тень просвечивает. Вторая тень в списке ложится на результат первой. Внутренняя (<code>inset</code>) — подложкой</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
           <tr><td><code>box-shadow</code> — рамка</td><td><code>border-*-color</code> либо 9-slice спрайт</td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
           <tr><td><code>radial-gradient</code></td><td>размытый элемент; ободки — <code>linear-gradient</code></td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
           <tr><td><code>::before</code> / <code>::after</code></td><td>реальные <code>VisualElement</code></td><td><span class="sg-uss sg-uss--via">@uss via</span></td></tr>
@@ -102,7 +102,7 @@
       <table class="sg-table">
         <tbody>
           <tr><td><code>backdrop-filter</code> — размытие того, что <em>за</em> панелью</td><td>Единственная настоящая потеря. Заменяется плотной заливкой димера</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
-          <tr><td><code>filter: drop-shadow() / brightness() / saturate()</code></td><td>Этих функций нет в наборе Unity</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
+          <tr><td><code>filter: brightness() / saturate()</code></td><td>Этих функций нет в наборе Unity; при нужде — свой фильтр на шейдере</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
           <tr><td><code>clip-path</code>, <code>mask-image</code></td><td><code>overflow: hidden</code> + радиус</td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
           <tr><td><code>cubic-bezier()</code></td><td>Функции нет в UI&nbsp;Toolkit вообще — ни в токене, ни в правиле. Доступны 23 именованные кривые; сигнатурная кривая ложится на <code>ease-out-circ</code> — <a href="#кривая">подгонка и число отклонения</a></td><td><span class="sg-uss sg-uss--no">@uss no</span></td></tr>
         </tbody>

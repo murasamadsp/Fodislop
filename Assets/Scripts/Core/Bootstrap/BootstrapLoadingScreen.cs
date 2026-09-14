@@ -146,6 +146,11 @@ namespace Fodinae.Core
                 _phase.text = $"{_localization.Get("network.connecting")} {sceneName}";
             }
 
+            if (TryGetComponent<UIDocument>(out var doc) && !doc.enabled)
+            {
+                doc.enabled = true;
+            }
+
             UIState.Show(_overlay);
             if (_overlay != null)
             {
@@ -160,10 +165,20 @@ namespace Fodinae.Core
             {
                 _overlay.pickingMode = PickingMode.Ignore;
             }
+
+            if (TryGetComponent<UIDocument>(out var doc) && doc.enabled)
+            {
+                doc.enabled = false;
+            }
         }
 
         public void ShowDirect(string message)
         {
+            if (TryGetComponent<UIDocument>(out var doc) && !doc.enabled)
+            {
+                doc.enabled = true;
+            }
+
             if (_phase != null)
             {
                 _phase.text = message;

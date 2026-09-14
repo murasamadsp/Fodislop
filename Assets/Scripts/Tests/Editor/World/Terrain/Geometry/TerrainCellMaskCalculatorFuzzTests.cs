@@ -35,11 +35,21 @@ public class TerrainCellMaskCalculatorFuzzTests
         Assert.That(mask, Is.EqualTo(15));
     }
 
+    // Бит ставится, когда сосед не ниже центра: высокий рельеф примыкает к низкому.
     [Test]
-    public void CalculateReliefMask_DifferentGroup_ProducesZero()
+    public void CalculateReliefMask_HigherNeighbors_ProduceFullMask()
     {
         var center = new CachedCellData { ReliefGroup = 5 };
         var side = new CachedCellData { ReliefGroup = 7 };
+        byte mask = TerrainCellMaskCalculator.CalculateReliefMask(center, side, side, side, side);
+        Assert.That(mask, Is.EqualTo(15));
+    }
+
+    [Test]
+    public void CalculateReliefMask_LowerNeighbors_ProduceZero()
+    {
+        var center = new CachedCellData { ReliefGroup = 7 };
+        var side = new CachedCellData { ReliefGroup = 5 };
         byte mask = TerrainCellMaskCalculator.CalculateReliefMask(center, side, side, side, side);
         Assert.That(mask, Is.EqualTo(0));
     }

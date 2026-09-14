@@ -83,7 +83,7 @@ internal sealed class GradingZonesWindow : ToolWindow
             SegmentedButtonStyle);
         GUILayout.Label(_cameraLabel, camera != null ? MutedLabelStyle : ToolTheme.WarningLabel);
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             bool controlsEnabled = GUI.enabled;
             GUI.enabled = controlsEnabled && camera != null && CaptureEnabled;
@@ -127,8 +127,7 @@ internal sealed class GradingZonesWindow : ToolWindow
 
         ToolTheme.Separator();
         GUILayout.Label(_countLabel, SectionLabelStyle);
-        using var scroll = new GUILayout.ScrollViewScope(_scroll);
-        _scroll = scroll.scrollPosition;
+        using var scroll = ToolLayout.ScrollView(ref _scroll);
 
         if (_zones.Count == 0)
         {
@@ -190,13 +189,13 @@ internal sealed class GradingZonesWindow : ToolWindow
     private void DrawZone(int index, ZoneLabels labels)
     {
         ColorGradeZone zone = _zones.Zones[index];
-        using var box = new GUILayout.VerticalScope(CardStyle);
+        using var box = ToolLayout.Vertical(CardStyle);
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             GUILayout.Label(labels.Title, SectionLabelStyle);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("×", DangerButtonStyle, GUILayout.Width(28f)))
+            if (GUILayout.Button("×", DangerButtonStyle, ToolLayout.Width(28f)))
             {
                 _removeRequested = index;
             }
@@ -205,16 +204,16 @@ internal sealed class GradingZonesWindow : ToolWindow
         GUILayout.Label(labels.Center, MutedLabelStyle);
         GUILayout.Label(labels.Grade, MutedLabelStyle);
         float half;
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            GUILayout.Label(labels.Core, ToolTheme.FieldLabel, GUILayout.Width(112f));
+            GUILayout.Label(labels.Core, ToolTheme.FieldLabel, ToolLayout.Width(112f));
             half = GUILayout.HorizontalSlider(zone.HalfHeight, 0f, 256f);
         }
 
         float feather;
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            GUILayout.Label(labels.Transition, ToolTheme.FieldLabel, GUILayout.Width(112f));
+            GUILayout.Label(labels.Transition, ToolTheme.FieldLabel, ToolLayout.Width(112f));
             feather = GUILayout.HorizontalSlider(zone.Feather, 0f, 256f);
         }
 

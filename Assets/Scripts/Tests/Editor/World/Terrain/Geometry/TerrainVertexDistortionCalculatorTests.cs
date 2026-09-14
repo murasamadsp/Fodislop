@@ -56,19 +56,16 @@ public class TerrainVertexDistortionCalculatorTests
     }
 
     [Test]
-    public void ComputeOffset_AllFourAreCause_ReturnsCenterPerturbation()
+    public void ComputeOffset_AllFourAreCause_ReturnsZero()
     {
         var cause = new CachedCellData { Distortion = CellDistortionType.Cause };
         int worldX = 15;
         int worldY = 25;
 
-        float expectedRx = TerrainVertexDistortionCalculator.RandXd(worldX, worldY) / 16f;
-        float expectedRy = TerrainVertexDistortionCalculator.RandYd(worldX, worldY) / 16f;
-        var expected = new Vector3(expectedRx - (3f / 16f), expectedRy - (3f / 16f), 0);
-
+        // Upstream (15bced90): четыре источника вокруг — вершина не сдвигается.
         Vector3 result = TerrainVertexDistortionCalculator.ComputeOffset(cause, cause, cause, cause, worldX, worldY, 100, 100);
 
-        Assert.AreEqual(expected, result);
+        Assert.AreEqual(Vector3.zero, result);
     }
 
     [Test]

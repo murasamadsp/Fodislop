@@ -4,7 +4,6 @@
     right: 0;
     top: 0;
     bottom: 0;
-    overflow: hidden;
 }
 
 .world-label-name, .world-label-chat {
@@ -16,8 +15,7 @@
 .world-label-name {
     font-size: 12px;
     color: white;
-    -unity-text-outline-width: 1px;
-    -unity-text-outline-color: rgba(0, 0, 0, 0.8);
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
 }
 
 /* Облако локального чата.

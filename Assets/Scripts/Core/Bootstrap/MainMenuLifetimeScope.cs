@@ -49,6 +49,8 @@ namespace Fodinae.Core
                     "MainMenu scene scope is missing serialized _document PanelSettings.");
             }
 
+            Fodinae.UI.DynamicAtlasConfigurator.Apply(_document.panelSettings);
+
             // This scope is already registered by LifetimeScope.InstallTo as
             // RegisterInstance<LifetimeScope>(this).AsSelf() — an explicit
             // RegisterInstance(this) here duplicates the concrete contract and

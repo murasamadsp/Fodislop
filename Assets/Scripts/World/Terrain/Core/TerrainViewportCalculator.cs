@@ -9,7 +9,7 @@ public sealed class TerrainViewportCalculator
     private const int TerrainRegionAnchorCells = 8;
     private const int DimensionAllocationQuantum = 32;
     private const int MaximumTerrainDimension = 384;
-    private const float DimensionGrowDelay = 0.4f;
+    private const float DimensionShrinkDelay = 5.0f;
     private const int ViewportMargin = 4;
 
     private int _lastRequestedWidth;
@@ -55,7 +55,7 @@ public sealed class TerrainViewportCalculator
 
         bool viewportSizeSettled =
             !Application.isPlaying ||
-            Time.unscaledTime - _lastViewportSizeChangeTime >= DimensionGrowDelay;
+            Time.unscaledTime - _lastViewportSizeChangeTime >= DimensionShrinkDelay;
 
         int targetWidth = SelectCachedDimension(requestedWidth, currentMeshWidth, isInitialized, viewportSizeSettled);
         int targetHeight = SelectCachedDimension(requestedHeight, currentMeshHeight, isInitialized, viewportSizeSettled);

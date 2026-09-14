@@ -110,11 +110,20 @@ public static class WorldChunkRleCodec
         where T : unmanaged
     {
         int size = Unsafe.SizeOf<T>();
-        ReadOnlySpan<byte> bytes = reader.ReadBytes(size);
-        if (bytes.Length != size)
+        // ReadBytes allocates a fresh array per call, and this runs once per
+        // RLE run: a varied chunk decoded hundreds of arrays.
+        Span<byte> bytes = stackalloc byte[size];
+        int received = 0;
+        while (received < size)
         {
-            throw new EndOfStreamException(
-                $"Expected {size} bytes for a world-layer value, received {bytes.Length}.");
+            int read = reader.Read(bytes[received..]);
+            if (read == 0)
+            {
+                throw new EndOfStreamException(
+                    $"Expected {size} bytes for a world-layer value, received {received}.");
+            }
+
+            received += read;
         }
 
         return MemoryMarshal.Read<T>(bytes);

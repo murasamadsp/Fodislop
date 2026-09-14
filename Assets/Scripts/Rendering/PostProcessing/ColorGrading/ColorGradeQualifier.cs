@@ -113,6 +113,48 @@ public sealed class ColorGradeQualifier
         return clone;
     }
 
+    public bool ContentEquals(ColorGradeQualifier other)
+    {
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        if (Enabled != other.Enabled ||
+            Invert != other.Invert ||
+            HueCenter != other.HueCenter ||
+            HueWidth != other.HueWidth ||
+            HueSoftness != other.HueSoftness ||
+            SaturationCenter != other.SaturationCenter ||
+            SaturationWidth != other.SaturationWidth ||
+            SaturationSoftness != other.SaturationSoftness ||
+            LuminanceCenter != other.LuminanceCenter ||
+            LuminanceWidth != other.LuminanceWidth ||
+            LuminanceSoftness != other.LuminanceSoftness ||
+            HueShift != other.HueShift ||
+            Saturation != other.Saturation ||
+            Exposure != other.Exposure ||
+            Temperature != other.Temperature ||
+            Tint != other.Tint ||
+            Lift != other.Lift ||
+            Gamma != other.Gamma ||
+            Gain != other.Gain ||
+            _hueSamples.Count != other._hueSamples.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < _hueSamples.Count; index++)
+        {
+            if (_hueSamples[index] != other._hueSamples[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public void Sanitize()
     {
         HueCenter = FiniteClamp(HueCenter, 0f, 360f, 120f);

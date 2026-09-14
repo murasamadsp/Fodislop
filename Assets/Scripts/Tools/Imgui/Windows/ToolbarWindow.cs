@@ -74,24 +74,23 @@ public sealed class ToolbarWindow : ToolWindow
             "Открывайте только нужные панели — состояние окон сохраняется при скрытии интерфейса.",
             MutedLabelStyle);
         GUILayout.Space(4f);
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             GUILayout.Label("Масштаб", ToolTheme.FieldLabel);
-            if (GUILayout.Button("−", GUILayout.Width(30f)))
+            if (GUILayout.Button("−", ToolLayout.Width(30f)))
             {
                 ToolWindows.RequestScale(ToolWindows.Scale - 0.25f);
             }
 
-            GUILayout.Label(_scaleLabel, GUILayout.Width(46f));
-            if (GUILayout.Button("+", GUILayout.Width(30f)))
+            GUILayout.Label(_scaleLabel, ToolLayout.Width(46f));
+            if (GUILayout.Button("+", ToolLayout.Width(30f)))
             {
                 ToolWindows.RequestScale(ToolWindows.Scale + 0.25f);
             }
         }
 
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
             foreach (ToolWindow window in ToolWindows.All)
             {
                 if (ReferenceEquals(window, this))
@@ -122,7 +121,7 @@ public sealed class ToolbarWindow : ToolWindow
 
     private void DrawWindowRow(ToolWindow window)
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             Color pip = window.Visible
                 ? ToolPalette.Accent

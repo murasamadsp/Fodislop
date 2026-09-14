@@ -22,7 +22,7 @@ public static class PlayerMovementValidator
         bool isCtrlPressed,
         bool ignoreCollision)
     {
-        float cooldown = isCtrlPressed
+        float cooldown = isCtrlPressed || currentCellType == CellType.Unloaded
             ? mapDataProvider.GetMoveCooldown(CellType.Empty)
             : mapDataProvider.GetMoveCooldown(currentCellType);
 
@@ -36,8 +36,9 @@ public static class PlayerMovementValidator
 
     public static bool IsPassable(CellType cellType, in CellConfigurationPacket cellConfig)
     {
-        return cellType == CellType.Empty ||
-               ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable);
+        return cellType != CellType.Unloaded &&
+               (cellType == CellType.Empty ||
+                ((CellConfigProperties)cellConfig.Properties).HasFlag(CellConfigProperties.Passable));
     }
 
     public static bool TryEvaluateStep(
@@ -68,6 +69,11 @@ public static class PlayerMovementValidator
         ushort targetServerY = (ushort)targetPosition.y;
 
         cellType = storage.GetCell(targetServerX, targetServerY);
+        if (cellType == CellType.Unloaded)
+        {
+            return false;
+        }
+
         CellConfigurationPacket cellConfig = mapDataProvider.GetCellConfig(cellType);
         isPassable = IsPassable(cellType, cellConfig);
         return true;

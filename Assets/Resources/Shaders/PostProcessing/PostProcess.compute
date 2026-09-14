@@ -103,7 +103,7 @@ float _Time;
 float4 _Advanced0; // local contrast, lens dirt intensity/scale, anamorphic intensity
 float4 _Advanced1; // anamorphic length, diffraction, heat intensity/scale
 float4 _Advanced2; // glint intensity/threshold, dust intensity/scale
-float4 _Advanced3; // dust speed, phosphor mask, dithering, reserved
+float4 _Advanced3; // dust speed, reserved, dithering, reserved
 float4 _Temporal; // persistence intensity/decay, stability, temporal motion blur
 
 // Color grading functions must see the complete parameter block above. Keeping
@@ -130,6 +130,34 @@ inline bool CompareShowsBefore(float2 screenUv)
     }
 
     return showBefore;
+}
+
+// Видимая граница шторки. Без неё стык «до» и «после» на кадре не читался:
+// при слабом грейде половины сливались, и шторку было не найти, чтобы
+// потянуть. Белая линия с тёмной окантовкой видна на любом фоне; посередине
+// утолщение — ручка. Координаты те же, что у CompareShowsBefore, поэтому
+// линия всегда стоит ровно на стыке. Цвет в относительных единицах дисплея
+// (1 = белая точка), до ToDisplayOutput.
+// Один выход и выбор через lerp/step: ранние return внутри inline-функции
+// компилятор Metal считал путями без инициализированного результата.
+inline float3 ApplyCompareDivider(float3 color, float2 pixel)
+{
+    float active = (_CompareMode >= 1 && _CompareMode <= 3) ? 1.0 : 0.0;
+    float vertical = _CompareMode != 2 ? 1.0 : 0.0;
+    float split = _CompareMode == 3 ? 0.5 : _CompareSplit;
+    float along = lerp(pixel.y, pixel.x, vertical);
+    float extent = lerp(_ScreenSize.y, _ScreenSize.x, vertical);
+    float across = lerp(pixel.x, pixel.y, vertical);
+    float acrossExtent = lerp(_ScreenSize.x, _ScreenSize.y, vertical);
+
+    float distanceToLine = abs(along - split * extent);
+    float inGrip = step(abs(across - acrossExtent * 0.5), 24.0);
+    float halfCore = lerp(1.0, 3.0, inGrip);
+    float core = step(distanceToLine, halfCore) * active;
+    float outline = step(distanceToLine, halfCore + 1.5) * active;
+
+    float3 result = lerp(color, float3(0.0, 0.0, 0.0), outline);
+    return lerp(result, float3(1.0, 1.0, 1.0), core);
 }
 
 float LinearToPerceptual(float linearValue)
@@ -239,8 +267,8 @@ float3 ApplyCreativeGrade(float3 color)
     return gradedLinear;
 }
 
-// Грейд запекается каждый кадр: 33^3 = 36 тыс. вызовов вместо ~6.5 млн пикселей,
-// и таблица не может устареть из-за неотслеженного параметра. Узлы лежат
+// Грейд запекается при изменении входов: 33^3 = 36 тыс. вызовов вместо
+// вычисления на каждом пикселе. Входы отслеживает BakedGradeLutCache. Узлы лежат
 // равномерно в лог-шкале, результат хранится в ней же: интерполяция в логе
 // оставляет нейтральный грейд точным тождеством (в линейных числах соседние
 // узлы через полстопа давали бы ошибку порядка 1.5%).
@@ -619,26 +647,12 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         color = max(0.0, color + grain * amplitude * grainTint);
     }
 
-    if (_Advanced3.y > 0.001 || _Advanced3.z > 0.001)
+    if (_Advanced3.z > 0.001)
     {
         float displayGamma = max(_Gamma, 0.1);
         float3 encoded = pow(max(color, 0.0), 1.0 / displayGamma);
-
-        if (_Advanced3.y > 0.001)
-        {
-            uint channel = id.x % 3;
-            float3 phosphor = channel == 0
-                ? float3(1.0, 0.89, 0.89)
-                : (channel == 1 ? float3(0.89, 1.0, 0.89) : float3(0.89, 0.89, 1.0));
-            encoded *= lerp(1.0, phosphor, _Advanced3.y);
-        }
-
-        if (_Advanced3.z > 0.001)
-        {
-            float dither = Hash31(float3(id.xy, 43.17)) - 0.5;
-            encoded += dither * (_Advanced3.z / 255.0);
-        }
-
+        float dither = Hash31(float3(id.xy, 43.17)) - 0.5;
+        encoded += dither * (_Advanced3.z / 255.0);
         color = pow(max(encoded, 0.0), displayGamma);
     }
 
@@ -769,7 +783,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
         }
         if (_PostDebugView >= 3)
         {
-            _OutputTex[id.xy] = float4(ToDisplayOutput(color), srcAlpha);
+            _OutputTex[id.xy] = float4(ToDisplayOutput(ApplyCompareDivider(color, id.xy + 0.5)), srcAlpha);
             return;
         }
 
@@ -812,7 +826,7 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
                 falseColor = float3(1.0, 0.0, 0.0);           // пересвет
             }
 
-            _OutputTex[id.xy] = float4(ToDisplayOutput(falseColor), srcAlpha);
+            _OutputTex[id.xy] = float4(ToDisplayOutput(ApplyCompareDivider(falseColor, id.xy + 0.5)), srcAlpha);
             return;
         }
 
@@ -837,9 +851,10 @@ void DisplayFinal(uint3 id : SV_DispatchThreadID)
             result = float3(0.0, 0.3, 1.0);
         }
 
-        _OutputTex[id.xy] = float4(ToDisplayOutput(result), srcAlpha);
+        _OutputTex[id.xy] = float4(ToDisplayOutput(ApplyCompareDivider(result, id.xy + 0.5)), srcAlpha);
         return;
     }
 
+    color = ApplyCompareDivider(color, id.xy + 0.5);
     _OutputTex[id.xy] = float4(ToDisplayOutput(color), srcAlpha);
 }

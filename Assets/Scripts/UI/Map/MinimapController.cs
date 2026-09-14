@@ -138,6 +138,11 @@ namespace Fodinae.UI
 
         protected void Update()
         {
+            if (_doc == null || !_doc.enabled)
+            {
+                return;
+            }
+
             if (_ready && _mapStorage != null &&
                 !ReferenceEquals(_cellLayer, _mapStorage.CellLayer))
             {
@@ -373,7 +378,9 @@ namespace Fodinae.UI
 
         private void OnChunkLoaded(int serverX, int serverY, int width, int height)
         {
-            _cellSampler.Invalidate();
+            // Only the loaded chunk changed. Dropping the whole sampler here
+            // made every load re-request every chunk under the minimap.
+            _cellSampler.InvalidateChunk(serverX, serverY);
             _refreshPolicy.NotifyChunkLoaded();
         }
 

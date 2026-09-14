@@ -38,7 +38,7 @@ public sealed class TerrainSettings
     [SettingUnbounded("Тумблер искажения кромки блока.")]
     [SettingLabel("settings.world.block_edge_distortion")]
     [SettingConsumer(SettingConsumerTarget.TerrainRenderer, "TerrainRenderer._precalc.EnableDistortion")]
-    public bool EnableDistortion = true;
+    public bool EnableDistortion;
 
     [SettingLabel("settings.world.surface_emission_color")]
     [SettingUnbounded("Цвет: компоненты проверяются на конечность и неотрицательность, отрезка нет — яркость выше единицы законна.")]

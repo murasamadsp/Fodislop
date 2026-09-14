@@ -39,7 +39,11 @@ public sealed class ColorGradeCurve
 
     public ColorGradeCurve(ColorGradeCurveKind kind = ColorGradeCurveKind.Tone)
     {
-        Kind = Enum.IsDefined(typeof(ColorGradeCurveKind), kind) ? kind : ColorGradeCurveKind.Tone;
+        // Проверка диапазоном, а не Enum.IsDefined: тот упаковывает значение
+        // и ходит в reflection, а кривая создаётся при каждом клонировании грейда.
+        Kind = kind is >= ColorGradeCurveKind.Tone and <= ColorGradeCurveKind.Range
+            ? kind
+            : ColorGradeCurveKind.Tone;
         Reset();
     }
 
@@ -237,6 +241,34 @@ public sealed class ColorGradeCurve
         return _points[PointCount - 1].y;
     }
 
+    // Сравнение по содержимому. Снимки грейда клонируют кривые, и сравнение
+    // по ссылке никогда не узнавало тот же грейд: каждый кадр шла полная
+    // пересборка и сброс истории постпроцесса.
+    public bool ContentEquals(ColorGradeCurve other)
+    {
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        if (Kind != other.Kind ||
+            PointCount != other.PointCount ||
+            Interpolation != other.Interpolation)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < MaxPoints; index++)
+        {
+            if (_points[index] != other._points[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public ColorGradeCurve Clone()
     {
         var clone = new ColorGradeCurve(Kind)
@@ -266,7 +298,7 @@ public sealed class ColorGradeCurve
         Vector2 last = SanitizePoint(_points[PointCount - 1]);
         float lastY = Kind == ColorGradeCurveKind.Hue ? _points[0].y : last.y;
         _points[PointCount - 1] = new Vector2(1f, lastY);
-        if (!Enum.IsDefined(typeof(ColorCurveInterpolation), Interpolation))
+        if (Interpolation is not (ColorCurveInterpolation.Linear or ColorCurveInterpolation.Smooth))
         {
             Interpolation = ColorCurveInterpolation.Smooth;
         }

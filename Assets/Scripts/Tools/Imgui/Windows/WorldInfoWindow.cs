@@ -82,19 +82,17 @@ public sealed class WorldInfoWindow : ToolWindow
 
     protected override void DrawContent()
     {
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
-
             // Две колонки, пока окно достаточно широкое. Столбцы читают
             // вместе — «где я» и «во что это обходится», — и на широком окне
             // разносить их по вертикали значило бы заставлять прокручивать
             // ради сравнения того, что помещается рядом.
             if (Rect.width >= TwoColumnWidth)
             {
-                using (new GUILayout.HorizontalScope())
+                using (ToolLayout.Horizontal())
                 {
-                    DrawColumn("МИР И ИГРОК", _left, GUILayout.Width((Rect.width - 46f) * 0.5f));
+                    DrawColumn("МИР И ИГРОК", _left, ToolLayout.Width((Rect.width - 46f) * 0.5f));
                     DrawColumn("РЕНДЕР И КЛИЕНТ", _right);
                 }
 
@@ -111,7 +109,7 @@ public sealed class WorldInfoWindow : ToolWindow
         using (new GUILayout.VerticalScope(options))
         {
             ToolChrome.SectionHeader(title);
-            using (new GUILayout.VerticalScope(CardStyle))
+            using (ToolLayout.Vertical(CardStyle))
             {
                 GUILayout.Label(body, RichLabelStyle);
             }

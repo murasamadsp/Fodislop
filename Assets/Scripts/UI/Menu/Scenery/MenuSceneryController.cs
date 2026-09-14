@@ -148,6 +148,7 @@ namespace Fodinae.UI
                 return;
             }
 
+            _sceneryCamera.enabled = false;
             _sceneryCamera.allowHDR = false;
             _sceneryCamera.fieldOfView = MenuSceneryFraming.FieldOfView;
             _sceneryCamera.ResetAspect();
@@ -164,7 +165,16 @@ namespace Fodinae.UI
             }
 
             _sceneryCamera.targetTexture = _cameraTarget;
-            _sceneryCamera.Render();
+            _sceneryCamera.enabled = true;
+            try
+            {
+                _sceneryCamera.Render();
+            }
+            finally
+            {
+                _sceneryCamera.enabled = false;
+            }
+
             ResolveOutput();
             _renderDirty = false;
         }
@@ -211,6 +221,7 @@ namespace Fodinae.UI
                 return false;
             }
 
+            _sceneryCamera.enabled = false;
             EnsureTargets();
             EnsureResolveMaterial();
             return true;
@@ -246,6 +257,7 @@ namespace Fodinae.UI
         {
             if (_sceneryCamera != null)
             {
+                _sceneryCamera.enabled = false;
                 _sceneryCamera.targetTexture = null;
             }
         }

@@ -52,7 +52,6 @@ internal sealed class ClientConfigLegacySchema21
     public bool LocalContrastEnabled;
     public bool LensEffectsEnabled;
     public bool AtmosphereEnabled;
-    public bool DisplayPhysicsEnabled;
     public bool TemporalEnabled;
 
     public WorldLightingSettings ToLighting() => new();
@@ -78,12 +77,11 @@ internal sealed class ClientConfigLegacySchema21
         BloomEnabled = BloomEnabled,
         VignetteEnabled = VignetteEnabled,
         ChromaticAberrationEnabled = ChromaticAberrationEnabled,
-        FilmGrainEnabled = FilmGrainEnabled,
+        EigengrauEnabled = FilmGrainEnabled,
         MotionBlurEnabled = MotionBlurEnabled,
         LocalContrastEnabled = LocalContrastEnabled,
         LensEffectsEnabled = LensEffectsEnabled,
         AtmosphereEnabled = AtmosphereEnabled,
-        DisplayPhysicsEnabled = DisplayPhysicsEnabled,
         TemporalEnabled = TemporalEnabled,
     };
 }

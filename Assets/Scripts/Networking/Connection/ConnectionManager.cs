@@ -1,5 +1,6 @@
 #nullable enable
 
+using Fodinae.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Concurrent;
 using System.Net;
@@ -28,6 +29,9 @@ namespace Fodinae.Networking.Connection
     {
         private static readonly ProfilerMarker _PacketDrainMarker =
             new("Fodinae.Net.DrainPacketQueue");
+
+        private static readonly AllocationLedger.Entry _AllocationEntry =
+            AllocationLedger.Register("Сеть — разбор очереди");
 
         // Бюджет на обработку входящих пакетов — доля времени КАДРА, а не стены часов.
         // Пропорция к deltaTime масштабирует пропускную способность с частотой кадров
@@ -88,6 +92,7 @@ namespace Fodinae.Networking.Connection
         private void DrainPacketQueue()
         {
             using var marker = _PacketDrainMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             float budgetSeconds = Mathf.Min(
                 Time.unscaledDeltaTime * PacketDrainBudgetFractionOfFrame,
                 PacketDrainBudgetMaximumSeconds);

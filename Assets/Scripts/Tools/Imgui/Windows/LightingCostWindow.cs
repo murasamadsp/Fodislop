@@ -138,10 +138,8 @@ public sealed class LightingCostWindow : ToolWindow
             return;
         }
 
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
-
             if (_lighting.BypassLightingCompute)
             {
                 ToolChrome.Banner("РАСЧЁТ ОБОЙДЁН", ToolTheme.Error);
@@ -187,10 +185,10 @@ public sealed class LightingCostWindow : ToolWindow
 
     private static void DrawLimitRow(string title, bool limited, string detail)
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             ToolChrome.StatusPip(limited ? ToolTheme.Warning : ToolTheme.Success);
-            using (new GUILayout.VerticalScope())
+            using (ToolLayout.Vertical())
             {
                 GUILayout.Label(title, WrappedLabelStyle);
                 GUILayout.Label(detail, MutedLabelStyle);

@@ -137,8 +137,7 @@ internal sealed class GradingScopesWindow : ToolWindow
             _contentWidth = Mathf.Max(120f, Rect.width - ChromeWidth);
         }
 
-        using var scroll = new GUILayout.ScrollViewScope(_scroll);
-        _scroll = scroll.scrollPosition;
+        using var scroll = ToolLayout.ScrollView(ref _scroll);
 
         DrawFrameSection();
         ToolTheme.Separator();
@@ -202,11 +201,11 @@ internal sealed class GradingScopesWindow : ToolWindow
 
         if (mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe)
         {
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 float split = GUILayout.HorizontalSlider(PostProcessRuntimeState.CompareSplit, 0f, 1f);
                 PostProcessRuntimeState.CompareSplit = split;
-                GUILayout.Label(SplitLabel(split), ToolTheme.FieldLabel, GUILayout.Width(48f));
+                GUILayout.Label(SplitLabel(split), ToolTheme.FieldLabel, ToolLayout.Width(48f));
             }
         }
 
@@ -291,7 +290,7 @@ internal sealed class GradingScopesWindow : ToolWindow
         if (_contentWidth >= TwoColumnMinWidth)
         {
             float column = (_contentWidth - ColumnGap) * 0.5f;
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 DrawScope("Гистограмма", ScopesRenderPass.LiveHistogram, column, column * 0.6f);
                 GUILayout.Space(ColumnGap);
@@ -325,7 +324,7 @@ internal sealed class GradingScopesWindow : ToolWindow
 
     private void DrawVectorscopeControls()
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             ScopesRenderPass.ShowSkinToneLine = GUILayout.Toggle(
                 ScopesRenderPass.ShowSkinToneLine,
@@ -334,9 +333,9 @@ internal sealed class GradingScopesWindow : ToolWindow
             GUILayout.Label("цели: R / Mg / B / Cy / G / Y · 75% / 100%", MutedLabelStyle);
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            GUILayout.Label("масштаб вектороскопа", ToolTheme.FieldLabel, GUILayout.Width(150f));
+            GUILayout.Label("масштаб вектороскопа", ToolTheme.FieldLabel, ToolLayout.Width(150f));
             ScopesRenderPass.VectorscopeScale = GUILayout.HorizontalSlider(
                 ScopesRenderPass.VectorscopeScale,
                 0.5f,
@@ -344,7 +343,7 @@ internal sealed class GradingScopesWindow : ToolWindow
             GUILayout.Label(
                 ZoomLabel(ScopesRenderPass.VectorscopeScale),
                 ToolTheme.FieldLabel,
-                GUILayout.Width(48f));
+                ToolLayout.Width(48f));
         }
     }
 
@@ -357,7 +356,7 @@ internal sealed class GradingScopesWindow : ToolWindow
         int index = 0;
         while (index < options.Length)
         {
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 float used = 0f;
                 do
@@ -474,7 +473,7 @@ internal sealed class GradingScopesWindow : ToolWindow
         float height,
         ScaleMode scaleMode = ScaleMode.StretchToFill)
     {
-        using (new GUILayout.VerticalScope(ToolTheme.Scope, GUILayout.Width(width)))
+        using (new GUILayout.VerticalScope(ToolTheme.Scope, ToolLayout.Width(width)))
         {
             GUILayout.Label(title, ToolTheme.SectionLabel);
 

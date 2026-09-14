@@ -44,12 +44,7 @@ internal static class AdvancedPostProcessComposer
                 : 0f,
             HeatRefractionScale = PostProcessLook.Atmosphere.HeatRefractionScale,
 
-            PhosphorMaskIntensity = config.Effects.DisplayPhysicsEnabled
-                ? PostProcessLook.Display.PhosphorMaskIntensity
-                : 0f,
-            DitheringIntensity = config.Effects.DisplayPhysicsEnabled
-                ? PostProcessLook.Display.DitheringIntensity
-                : 0f,
+            DitheringIntensity = PostProcessLook.Display.DitheringIntensity,
 
             TemporalPersistenceIntensity = config.Effects.TemporalEnabled
                 ? PostProcessLook.Temporal.PersistenceIntensity

@@ -1,5 +1,6 @@
 #nullable enable
 
+using Fodinae;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -108,6 +109,7 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
         {
             _cells.Clear();
             _dirtyCells.Clear();
+            _fullyOpaque.Clear();
             _packer.Clear();
             _isDirty = false;
         }
@@ -131,6 +133,72 @@ public class TextureAtlas : IDisposable, IAtlasDescriptor
     public bool ContainsCell(CellType cellType)
     {
         return _cells.ContainsKey(cellType);
+    }
+
+    private readonly ConcurrentDictionary<CellType, bool> _fullyOpaque = new();
+
+    public bool IsFullyOpaque(CellType cellType) =>
+        _fullyOpaque.TryGetValue(cellType, out bool opaque) && opaque;
+
+    public void SetFullyOpaque(CellType cellType, bool opaque) => _fullyOpaque[cellType] = opaque;
+
+    // Альфа всех пикселей текстуры. Нечитаемая текстура (на GPU-пути атласа
+    // кадры декодера сразу становятся нечитаемыми) один раз копируется во
+    // временную цель и читается оттуда: клетки маленькие, загрузка редкая.
+    public static bool MeasureFullyOpaque(Texture2D texture)
+    {
+        const byte OpaqueAlpha = 250;
+        if (texture.isReadable)
+        {
+            foreach (Color32 pixel in texture.GetPixels32())
+            {
+                if (pixel.a < OpaqueAlpha)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture target = RenderTexture.GetTemporary(
+            texture.width, texture.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        Texture2D readback = RuntimeTextureFactory.CreateRGBA32NoMip(
+            texture.width,
+            texture.height,
+            "TextureAtlas.OpaqueReadback",
+            RuntimeTextureColorSpace.Linear,
+            FilterMode.Point,
+            TextureWrapMode.Clamp);
+        try
+        {
+            Graphics.Blit(texture, target);
+            RenderTexture.active = target;
+            readback.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0, recalculateMipMaps: false);
+            foreach (Color32 pixel in readback.GetPixels32())
+            {
+                if (pixel.a < OpaqueAlpha)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(target);
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(readback);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(readback);
+            }
+        }
     }
 
     public AtlasCoordinate GetWrappedCoordinate(CellType cellType, int globalX, int globalY, CellVariation variation, int frameHeightPixels = 0, int frameIndex = 0)

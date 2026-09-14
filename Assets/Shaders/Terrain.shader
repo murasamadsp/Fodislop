@@ -13,6 +13,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
         _PulseSpeedScale ("Pulse Speed Scale", Float) = 0
         _DebugColor ("Debug Color", Color) = (0,0,0,0)
         [ToggleUI] _DebugMode ("Debug Mode", Float) = 0
+        [HideInInspector] _TerrainAtlasIndex ("Terrain Atlas Index", Float) = 0
+        [HideInInspector] _TerrainAtlas0 ("Terrain Atlas 0", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas1 ("Terrain Atlas 1", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas2 ("Terrain Atlas 2", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas3 ("Terrain Atlas 3", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas4 ("Terrain Atlas 4", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas5 ("Terrain Atlas 5", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas6 ("Terrain Atlas 6", 2D) = "black" {}
+        [HideInInspector] _TerrainAtlas7 ("Terrain Atlas 7", 2D) = "black" {}
     }
     SubShader
     {
@@ -37,10 +46,12 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile _ FODINAE_WORLD_LIGHTING
+            #pragma multi_compile_local _ FODINAE_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/TerrainColorAnimation.hlsl"
             #include "TerrainTileAddressing.hlsl"
+            #include "Assets/Shaders/TerrainCellData.hlsl"
 
             #define EPS 0.0001
 
@@ -69,6 +80,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 packedData   : TEXCOORD5;
                 float3 worldPosition : TEXCOORD6;
                 float4 glowData     : TEXCOORD7;
+                nointerpolation float atlasIndex : TEXCOORD8;
             };
 
             TEXTURE2D(_BaseMap);
@@ -92,6 +104,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _DebugColor;
                 float _DebugMode;
                 float4 _BaseMap_TexelSize;
+                float _TerrainAtlasIndex;
+                float4 _TerrainAtlas0_TexelSize;
+                float4 _TerrainAtlas1_TexelSize;
+                float4 _TerrainAtlas2_TexelSize;
+                float4 _TerrainAtlas3_TexelSize;
+                float4 _TerrainAtlas4_TexelSize;
+                float4 _TerrainAtlas5_TexelSize;
+                float4 _TerrainAtlas6_TexelSize;
+                float4 _TerrainAtlas7_TexelSize;
             CBUFFER_END
 
             Texture2D<float4> _WorldLightTexture;
@@ -256,6 +277,25 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             Varyings vert (Attributes input)
             {
                 Varyings output;
+            #if defined(FODINAE_TERRAIN_CELLS)
+                // Один материал на все атласы: меш проходится один раз, атлас
+                // выбирается во фрагменте по индексу квада.
+                TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);
+                output.positionCS = cell.atlasIndex >= 0.0
+                    ? TransformObjectToHClip(cell.positionOS)
+                    : TerrainCulledPosition();
+                output.atlasIndex = cell.atlasIndex;
+                output.uv = cell.uv;
+                output.color = cell.color;
+                output.subAtlasRect = cell.subAtlasRect;
+                output.tileSizeUV = cell.tileSizeUV;
+                output.worldPos = cell.worldPos;
+                output.worldPosition = TransformObjectToWorld(cell.positionOS);
+                output.glowData = cell.glowData;
+                output.animData = cell.animData;
+                output.packedData = cell.packedData;
+                return output;
+            #endif
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = input.uv;
                 output.color = input.color;
@@ -266,9 +306,51 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 output.glowData = input.glowAttr;
                 output.animData = input.animData;
                 output.packedData = input.packedData;
+                output.atlasIndex = 0.0;
 
                 return output;
             }
+
+            #if defined(FODINAE_TERRAIN_CELLS)
+            TEXTURE2D(_TerrainAtlas0);
+            TEXTURE2D(_TerrainAtlas1);
+            TEXTURE2D(_TerrainAtlas2);
+            TEXTURE2D(_TerrainAtlas3);
+            TEXTURE2D(_TerrainAtlas4);
+            TEXTURE2D(_TerrainAtlas5);
+            TEXTURE2D(_TerrainAtlas6);
+            TEXTURE2D(_TerrainAtlas7);
+
+            float4 TerrainAtlasTexelSize(int slot)
+            {
+                switch (slot)
+                {
+                    case 1: return _TerrainAtlas1_TexelSize;
+                    case 2: return _TerrainAtlas2_TexelSize;
+                    case 3: return _TerrainAtlas3_TexelSize;
+                    case 4: return _TerrainAtlas4_TexelSize;
+                    case 5: return _TerrainAtlas5_TexelSize;
+                    case 6: return _TerrainAtlas6_TexelSize;
+                    case 7: return _TerrainAtlas7_TexelSize;
+                    default: return _TerrainAtlas0_TexelSize;
+                }
+            }
+
+            half4 TerrainSampleAtlas(int slot, SamplerState atlasSampler, float2 uv)
+            {
+                switch (slot)
+                {
+                    case 1: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas1, atlasSampler, uv, 0);
+                    case 2: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas2, atlasSampler, uv, 0);
+                    case 3: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas3, atlasSampler, uv, 0);
+                    case 4: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas4, atlasSampler, uv, 0);
+                    case 5: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas5, atlasSampler, uv, 0);
+                    case 6: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas6, atlasSampler, uv, 0);
+                    case 7: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas7, atlasSampler, uv, 0);
+                    default: return SAMPLE_TEXTURE2D_LOD(_TerrainAtlas0, atlasSampler, uv, 0);
+                }
+            }
+            #endif
 
             half4 frag (Varyings input) : SV_Target
             {
@@ -385,11 +467,17 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     finalUV.y = baseUV.y + fmod(finalUV.y - baseUV.y + scrollUV + subAtlasSizeUV.y, subAtlasSizeUV.y);
                 }
 
-                float2 minTileUV = baseUV + tileOffsetUV + _BaseMap_TexelSize.xy * 0.5;
-                float2 maxTileUV = baseUV + tileOffsetUV + availableTileSize - _BaseMap_TexelSize.xy * 0.5;
+            #if defined(FODINAE_TERRAIN_CELLS)
+                int atlasSlot = (int)round(input.atlasIndex);
+                float4 atlasTexelSize = TerrainAtlasTexelSize(atlasSlot);
+            #else
+                float4 atlasTexelSize = _BaseMap_TexelSize;
+            #endif
+                float2 minTileUV = baseUV + tileOffsetUV + atlasTexelSize.xy * 0.5;
+                float2 maxTileUV = baseUV + tileOffsetUV + availableTileSize - atlasTexelSize.xy * 0.5;
 
                 // Сглаживание границ текселя выполняется до зажима в тайл.
-                finalUV = PixelArtSampleUV(finalUV, _BaseMap_TexelSize.zw);
+                finalUV = PixelArtSampleUV(finalUV, atlasTexelSize.zw);
 
                 if (!isScrollAnimated)
                 {
@@ -411,9 +499,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // Сэмплер выбирается режимом: без сглаживания выборка
                 // обязана остаться точечной, иначе выключенный режим всё
                 // равно размывал бы картинку линейным фильтром.
+            #if defined(FODINAE_TERRAIN_CELLS)
+                half4 texColor = _PixelArtFiltering < 0.5
+                    ? TerrainSampleAtlas(atlasSlot, sampler_PointClamp, finalUV)
+                    : TerrainSampleAtlas(atlasSlot, sampler_LinearClamp, finalUV);
+            #else
                 half4 texColor = _PixelArtFiltering < 0.5
                     ? SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_PointClamp, finalUV, 0)
                     : SAMPLE_TEXTURE2D_LOD(_BaseMap, sampler_LinearClamp, finalUV, 0);
+            #endif
 
                 if (texColor.a < 0.05)
                 {
@@ -535,9 +629,11 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             #pragma target 4.5
             #pragma vertex MaterialFieldVert
             #pragma fragment MaterialFieldFrag
+            #pragma multi_compile_local _ FODINAE_TERRAIN_CELLS
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Assets/Shaders/TerrainColorAnimation.hlsl"
+            #include "Assets/Shaders/TerrainCellData.hlsl"
 
             TEXTURE2D(_FlowMap);
             SAMPLER(sampler_FlowMap);
@@ -558,6 +654,15 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 float4 _DebugColor;
                 float _DebugMode;
                 float4 _BaseMap_TexelSize;
+                float _TerrainAtlasIndex;
+                float4 _TerrainAtlas0_TexelSize;
+                float4 _TerrainAtlas1_TexelSize;
+                float4 _TerrainAtlas2_TexelSize;
+                float4 _TerrainAtlas3_TexelSize;
+                float4 _TerrainAtlas4_TexelSize;
+                float4 _TerrainAtlas5_TexelSize;
+                float4 _TerrainAtlas6_TexelSize;
+                float4 _TerrainAtlas7_TexelSize;
             CBUFFER_END
 
             struct MaterialFieldAttributes
@@ -592,6 +697,22 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             MaterialFieldVaryings MaterialFieldVert(MaterialFieldAttributes input)
             {
                 MaterialFieldVaryings output;
+            #if defined(FODINAE_TERRAIN_CELLS)
+                // Поле рисуется одним материалом по всем квадам: атлас здесь
+                // не читается, отбрасываются только незаполненные квады.
+                TerrainCellVertex cell = LoadTerrainCellVertex(input.positionOS.xyz, input.uv);
+                output.positionCS = cell.atlasIndex >= 0.0
+                    ? TransformObjectToHClip(cell.positionOS)
+                    : TerrainCulledPosition();
+                output.uv = cell.uv;
+                output.color = cell.color;
+                output.worldPos = cell.worldPos;
+                output.animData = cell.animData;
+                output.packedData = cell.packedData;
+                output.glowData = cell.glowData;
+                output.isForeground = cell.layer > 0.5 ? 1.0 : 0.0;
+                return output;
+            #endif
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = input.uv;
                 output.color = input.color;

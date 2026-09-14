@@ -81,13 +81,13 @@ MonoBehaviour:
   m_FontFeatureTable:
     m_MultipleSubstitutionRecords: []
     m_LigatureSubstitutionRecords:
-    - m_ComponentGlyphIDs: 19020000490200001c020000
+    - m_ComponentGlyphIDs: 19020000490200001c020000u
       m_LigatureGlyphID: 569
-    - m_ComponentGlyphIDs: 19020000490200001a020000
+    - m_ComponentGlyphIDs: 19020000490200001a020000u
       m_LigatureGlyphID: 568
-    - m_ComponentGlyphIDs: 1b020000490200001c020000
+    - m_ComponentGlyphIDs: 1b020000490200001c020000u
       m_LigatureGlyphID: 570
-    - m_ComponentGlyphIDs: 59000000170100003b020000
+    - m_ComponentGlyphIDs: 59000000170100003b020000u
       m_LigatureGlyphID: 978
     m_GlyphPairAdjustmentRecords: []
     m_MarkToBaseAdjustmentRecords:

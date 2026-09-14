@@ -150,7 +150,10 @@ public sealed class BackgroundFloodFill
             SeedResolvedRow(insideRow, remainingStart, remainingCount, frontier);
         }
 
-        FBPWPropagate(frontier, cellCache);
+        // Волна заливает только неразрешённые клетки каймы. Раньше она
+        // перезаливала всю связную породу окна: 73% стоимости шага камеры, а
+        // внутренность при этом перещёлкивалась на ничьих ~10% клеток.
+        FBPWPropagate(frontier, cellCache, onlyUnresolved: true);
 
         if (columnCount > 0)
         {
@@ -339,7 +342,8 @@ public sealed class BackgroundFloodFill
 
     private void FBPWPropagate(
         List<(int, int)> frontier,
-        ICachedCellDataProvider cellCache)
+        ICachedCellDataProvider cellCache,
+        bool onlyUnresolved = false)
     {
         if (frontier.Count == 0)
         {
@@ -398,7 +402,8 @@ public sealed class BackgroundFloodFill
                         }
 
                         int idx = nx + (ny * w);
-                        if (_fbpwGeneration[idx] >= gen)
+                        if (_fbpwGeneration[idx] >= gen ||
+                            (onlyUnresolved && _bgMapBuffer[nx, ny] != CellType.Unloaded))
                         {
                             continue;
                         }

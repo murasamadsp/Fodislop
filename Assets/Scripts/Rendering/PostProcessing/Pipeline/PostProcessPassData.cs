@@ -17,6 +17,7 @@ internal sealed class PostProcessPassData
     public int KernelComposite;
     public int KernelBakeGradeLut = -1;
     public RenderTexture? BakedGradeLut;
+    public BakedGradeLutCache? GradeLutCache;
 
     public TextureHandle ColorTexture;
     public TextureHandle IntermediateTexture;
@@ -126,5 +127,8 @@ internal sealed class PostProcessPassData
     public Vector4 Temporal;
     public bool HistoryValid;
     public bool TemporalActive;
+
+    // Промежуточная текстура становится цветом камеры вместо копирования обратно.
+    public bool SwapColor;
     public float TimeSeconds;
 }

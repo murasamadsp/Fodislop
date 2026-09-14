@@ -66,7 +66,6 @@ TextField,
     min-height: 0;
     min-width: 0;
     flex-shrink: 1;
-    overflow: hidden;
     background-color: var(--surface-panel);
     border-color: var(--border-subtle);
     border-width: 1px;

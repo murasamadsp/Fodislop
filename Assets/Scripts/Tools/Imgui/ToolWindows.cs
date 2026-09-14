@@ -187,9 +187,14 @@ public static class ToolWindows
 
     public static void Tick()
     {
+        if (!Enabled)
+        {
+            return;
+        }
+
         foreach (ToolWindow window in _Windows)
         {
-            window.Tick();
+            window.TickMeasured();
         }
     }
 
@@ -238,6 +243,11 @@ public static class ToolWindows
 
     public static void Draw()
     {
+        if (!Enabled)
+        {
+            return;
+        }
+
         // Keep Layout and Repaint on the same coordinate system.
         if (Event.current.type == EventType.Layout && _pendingScale.HasValue)
         {
@@ -309,7 +319,7 @@ public static class ToolWindows
                 Rect drawnRect = GUI.Window(
                     window.ID,
                     window.Rect,
-                    window.DrawWindow,
+                    window.DrawFunction,
                     GUIContent.none);
                 drawnRect = window.ApplyPendingSize(drawnRect);
                 if (!IsFinite(drawnRect))

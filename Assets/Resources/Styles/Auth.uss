@@ -6,11 +6,11 @@
 
      radial-gradient  → плотная заливка (в USS радиальных градиентов нет)
      backdrop-filter  → она же (единственная настоящая потеря при переносе)
-     box-shadow       → рамка и подложка
+     box-shadow       → filter: drop-shadow() (Unity 6.3+)
      ::before/::after → реальные элементы .auth-brace
      gap              → margin на детях
      transform        → translate
-     filter:drop-shadow → снято, такой функции в наборе Unity нет
+     filter:drop-shadow → переносится как есть
    ═══════════════════════════════════════════════════════════ */
 
 .auth-overlay {
@@ -41,6 +41,22 @@
     border-color: var(--border-cyan);
     border-radius: var(--radius-md);
     flex-direction: column;
+}
+
+/* Фильтры — только в видимом состоянии ворот. Объявленные на самих
+   .auth-card и .auth-brand-logo, они висели и на скрытом слое
+   (display: none): фильтр рендерит элемент в текстуру, у скрытого размер
+   нулевой, и движок сыпал «Assertion failed» каждый кадр, пока ворота
+   показывали другой слой.
+
+   Макет: box-shadow 0 25px 60px void-dense, 0 0 30px cyan-tint. Второй
+   слой в USS лёг бы тенью на первую тень, поэтому перенесена основная. */
+.gateway--auth .auth-card {
+    filter: drop-shadow(0 25px 60px var(--surface-void-dense));
+}
+
+.gateway--auth .auth-brand-logo {
+    filter: drop-shadow(0 0 10px var(--accent-gold-glow));
 }
 
 /* Угловые скобки. В макете это ::before/::after, псевдоэлементов в USS нет. */
@@ -86,8 +102,6 @@
        по путям файловой системы, как в MainMenu.LoadDirectTexture. */
     background-image: url("project://database/Assets/Textures/UI/mm_logo.png");
     background-size: contain;
-    /* filter: drop-shadow() из макета не переносится — свечения нет,
-       остаётся чистый золотой контур. */
     -unity-background-image-tint-color: var(--accent-gold);
 }
 

@@ -18,7 +18,7 @@ public sealed class UssStylesheetRule : IRule
         "-unity-text-outline-color", "-unity-text-outline-width",
         "-unity-text-overflow-position",
         "align-content", "align-items", "align-self", "aspect-ratio",
-        "background-color", "background-image", "background-position-x",
+        "background-color", "background-image", "filter", "background-position-x",
         "background-position-y", "background-repeat", "background-size",
         "border-bottom-color", "border-bottom-left-radius", "border-bottom-right-radius",
         "border-bottom-width", "border-left-color", "border-left-width",

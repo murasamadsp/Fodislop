@@ -26,6 +26,7 @@ namespace Fodinae.Rendering.PostProcessing
         // Размер обязан совпадать с BakedGradeLutSize в PostProcess.compute.
         public const int BakedGradeLutSize = 33;
         private RenderTexture? _bakedGradeLut;
+        private readonly BakedGradeLutCache _gradeLutCache = new();
         private readonly TextureHandle[] _bloomDownTextures = new TextureHandle[1];
         private readonly TextureHandle[] _bloomUpTextures = new TextureHandle[1];
         private VolumeStack? _cachedVolumeStack;
@@ -80,12 +81,14 @@ namespace Fodinae.Rendering.PostProcessing
                 $"Post-process VolumeStack is missing required component '{componentName}'.");
         }
 
+        internal bool IsShaderAlive => _postProcessCS != null;
+
         public PostProcessRenderPass(ComputeShader postProcessCS, bool displayPass = false)
         {
             _displayPass = displayPass;
             renderPassEvent = displayPass ? RenderPassEvent.AfterRenderingPostProcessing : RenderPassEvent.BeforeRenderingPostProcessing;
             renderPassEvent2D = displayPass ? RenderPassEvent2D.AfterRenderingPostProcessing : RenderPassEvent2D.BeforeRenderingPostProcessing;
-            _postProcessCS = UnityEngine.Object.Instantiate(postProcessCS);
+            _postProcessCS = postProcessCS;
             _kernelPrefilter = _postProcessCS.FindKernel("BloomPrefilter");
             _kernelDownsample = _postProcessCS.FindKernel("BloomDownsample");
             _kernelUpsample = _postProcessCS.FindKernel("BloomUpsample");
@@ -95,6 +98,22 @@ namespace Fodinae.Rendering.PostProcessing
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
+            if (PostProcessRuntimeState.BypassPostProcessEffects ||
+                PostProcessRuntimeState.TemporaryBypass)
+            {
+                return;
+            }
+
+            // Копия шейдера не сохранена в ассет, и сборка плеера выгружает её
+            // вместе с неиспользуемыми объектами, пока проход ещё жив. Редактор
+            // рисовал Game view на уничтоженном ComputeShader и падал в
+            // HDROutputUtils.ConfigureHDROutput. Проход без шейдера пропускается,
+            // а фича пересоздаёт его по IsShaderAlive в EnsurePassCreated.
+            if (_postProcessCS == null)
+            {
+                return;
+            }
+
             if (_observedPipelineGeneration != PostProcessRuntimeState.PipelineGeneration)
             {
                 _observedPipelineGeneration = PostProcessRuntimeState.PipelineGeneration;
@@ -307,6 +326,7 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.KernelComposite = _kernelComposite;
                 passData.KernelBakeGradeLut = _kernelBakeGradeLut;
                 passData.BakedGradeLut = _displayPass ? null : EnsureBakedGradeLut();
+                passData.GradeLutCache = _displayPass ? null : _gradeLutCache;
 
                 passData.ColorTexture = activeColor;
                 passData.IntermediateTexture = intermediateTexture;
@@ -341,7 +361,7 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.Saturation = cg.saturation.value;
                 passData.Gamma = displayGamma;
                 ColorGradeSnapshot grade = bypass
-                    ? ColorGradeSnapshot.FromLook()
+                    ? ColorGradeSnapshot.Look
                     : PostProcessRuntimeState.ColorGrade;
                 passData.CdlSaturation = grade.CdlSaturation;
                 passData.PostDebugView = _displayPass ? (int)PostProcessRuntimeState.DebugView : 0;
@@ -495,7 +515,7 @@ namespace Fodinae.Rendering.PostProcessing
                     advanced.VolumetricDustScale);
                 passData.Advanced3 = new Vector4(
                     advanced.VolumetricDustSpeed,
-                    advanced.PhosphorMaskIntensity,
+                    0f,
                     0f,
                     0f);
                 passData.HistoryValid = _historyValid;
@@ -509,7 +529,14 @@ namespace Fodinae.Rendering.PostProcessing
                 passData.TemporalActive = temporalActive;
                 passData.TimeSeconds = Time.time;
 
-                builder.UseTexture(passData.ColorTexture, AccessFlags.ReadWrite);
+                // Готовый кадр лежит в промежуточной текстуре. Если цель камеры —
+                // не экран, копировать его обратно не нужно: промежуточная
+                // текстура сама становится цветом камеры. Это одно полноэкранное
+                // копирование на каждый из двух проходов.
+                passData.SwapColor = !resourceData.isActiveTargetBackBuffer;
+                builder.UseTexture(
+                    passData.ColorTexture,
+                    passData.SwapColor ? AccessFlags.Read : AccessFlags.ReadWrite);
                 builder.UseTexture(passData.IntermediateTexture, AccessFlags.ReadWrite);
                 if (passData.TemporalActive)
                 {
@@ -532,6 +559,10 @@ namespace Fodinae.Rendering.PostProcessing
 
                 builder.AllowPassCulling(false);
                 builder.SetRenderFunc(static (PostProcessPassData data, UnsafeGraphContext context) => PostProcessPassExecutor.Render(data, context));
+                if (passData.SwapColor)
+                {
+                    resourceData.cameraColor = intermediateTexture;
+                }
             }
 
             if (temporalActive)
@@ -570,13 +601,14 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void ReleaseBakedGradeLut()
         {
+            _gradeLutCache.Invalidate();
             if (_bakedGradeLut == null)
             {
                 return;
             }
 
             _bakedGradeLut.Release();
-            UnityEngine.Object.Destroy(_bakedGradeLut);
+            CoreUtils.Destroy(_bakedGradeLut);
             _bakedGradeLut = null;
         }
 
@@ -602,7 +634,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         public void Dispose()
         {
-            UnityEngine.Object.Destroy(_postProcessCS);
             ReleaseBakedGradeLut();
             _historyTexture?.Release();
             _historyTexture = null;

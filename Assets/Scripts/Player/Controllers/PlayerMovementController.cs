@@ -343,7 +343,12 @@ namespace Fodinae.Player.Logic
                 return;
             }
 
+            // Клетка под игроком может быть ещё не получена: карту присылает
+            // сервер, и он же решает, можно ли идти. Ранний выход здесь
+            // оставлял клиент без MovePacket, пока не придёт регион, а
+            // настоящий сервер регион без движения не шлёт.
             var currentCellType = storage.GetCell(currentX, currentServerY);
+
             var mapDataProvider = _mapDataProvider ?? throw new InvalidOperationException(
                 "[PlayerMovementController] IMapDataProvider is required for movement validation.");
             float cooldown = PlayerMovementValidator.CalculateMoveCooldown(
@@ -385,6 +390,20 @@ namespace Fodinae.Player.Logic
                 out CellType targetCellType,
                 out bool isPassable))
             {
+                // Цель не загружена: предсказывать шаг не по чему, но запрос
+                // уходит серверу как есть. Позицию он вернёт RobotPositionPacket,
+                // и UpdateServerPosition переставит робота.
+                if (storage.CellLayer != null &&
+                    PlayerMovementValidator.IsWithinWorldBounds(
+                        targetPosition,
+                        mapDataProvider.WorldWidth,
+                        mapDataProvider.WorldHeight) &&
+                    storage.GetCell((ushort)targetPosition.x, (ushort)targetPosition.y) == CellType.Unloaded)
+                {
+                    _lastMoveTime = Time.time;
+                    _networkService?.SendAction(new MovePacket((ushort)targetPosition.x, (ushort)targetPosition.y));
+                }
+
                 return;
             }
 

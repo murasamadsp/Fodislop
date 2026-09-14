@@ -30,10 +30,9 @@ public sealed class SceneContractRule : IRule
         }),
         ("Assets/Scenes/MainGame.unity", "GameLifetimeScope", new[] { "GameLifetimeScope" }, new Dictionary<string, string[]>
         {
-            ["Networking"] = new[] { "PacketHandler" },
+            // Networking и Gameplay — чистый C# в контейнере (SCENE_STANDARD.md §1).
             ["World"] = new[] { "MapManager", "WorldBackgroundSetup", "WorldTextureManager" },
             ["Rendering"] = new[] { "TerrainRenderer", "WorldEntityBatchRenderer", "PostProcessController", "LightingEngine", "SurfaceRenderer", "CameraFollow", "VFXPool" },
-            ["Gameplay"] = new[] { "GameManager", "BuildingManager", "RobotManager", "ServerConfig" },
             ["Audio"] = new[] { "ServerAudioEventManager" },
         }),
         ("Assets/Scenes/Gateway.unity", "GatewayLifetimeScope", new[] { "GatewayLifetimeScope", "GatewayController", "UIDocument" }, null),

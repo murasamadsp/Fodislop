@@ -1,5 +1,6 @@
 #nullable enable
 
+using Fodinae.Core.Interfaces.Diagnostics;
 using System;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
@@ -17,6 +18,9 @@ namespace Fodinae.World
     {
         private static readonly ProfilerMarker _SurfaceLateUpdateMarker =
             new("Fodinae.Surface.LateUpdate");
+
+        private static readonly AllocationLedger.Entry _AllocationEntry =
+            AllocationLedger.Register("Поверхность — LateUpdate");
 
         private const string TransitObjectName = "SurfaceTransit";
         private const string PerspectiveObjectName = "SurfacePerspective";
@@ -218,6 +222,7 @@ namespace Fodinae.World
         protected void LateUpdate()
         {
             using var marker = _SurfaceLateUpdateMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             if (_mapManager == null || !_mapManager.IsWorldInitialized)
             {
                 return;

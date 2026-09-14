@@ -181,6 +181,7 @@ public sealed class GamePresentationStartup
                 float effectiveScale = UIScaleUtility.ResolveEffectiveScale(
                     _clientConfig.Config.Interface.UIScale);
                 _uiDocument.panelSettings.scale = effectiveScale;
+                Fodinae.UI.DynamicAtlasConfigurator.Apply(_uiDocument.panelSettings);
             }
         });
         report.RunCritical("game_ui", _gameManager.EnsureUISetup);

@@ -1,5 +1,6 @@
 #nullable enable
 
+using Fodinae.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
@@ -57,6 +58,9 @@ namespace Fodinae.World.Lighting
             Shader.PropertyToID("_WorldOccupancyYFlip");
         private static readonly ProfilerMarker _LightingUpdateMarker =
             new("Fodinae.Lighting.UpdateLighting.CPU");
+
+        private static readonly AllocationLedger.Entry _AllocationEntry =
+            AllocationLedger.Register("Свет — обновление");
         private static readonly ProfilerMarker _BuildCommandsMarker =
             new("Fodinae.Lighting.BuildCommands.CPU");
         private static readonly ProfilerMarker _ExecuteCommandsMarker =
@@ -141,6 +145,7 @@ namespace Fodinae.World.Lighting
 
         private float _nextLightingUpdateTime;
         private float _nextDynamicLightingUpdateTime;
+        private float _nextGeometryLightingUpdateTime;
         private ulong _solveCount;
         private ulong _lastTerrainGeometryRevision;
         private ulong _lastContributorGeometryRevision;
@@ -164,11 +169,19 @@ namespace Fodinae.World.Lighting
         private bool _hasStaticRadianceState;
         private bool _hasDynamicRadianceState;
         private bool _dynamicSolveInProgress;
+        private bool _forceBypassLighting;
 
         public bool BypassLightingCompute
         {
-            get => _debugSettings.BypassLightingCompute;
-            set => _debugSettings.BypassLightingCompute = value;
+            get => _forceBypassLighting || (_debugSettings != null && _debugSettings.BypassLightingCompute);
+            set
+            {
+                _forceBypassLighting = value;
+                if (_debugSettings != null)
+                {
+                    _debugSettings.BypassLightingCompute = value;
+                }
+            }
         }
 
         public GraphicsPreset ActiveGraphicsPreset => _graphicsPreset;
@@ -389,7 +402,10 @@ namespace Fodinae.World.Lighting
             float intensity)
         {
             _dynamicLightManager.SetDynamicLight(id, position, color, intensity, _effectivePixelsPerCell);
-            _compositeDirty = true;
+            if (_dynamicLightManager.IsDirty)
+            {
+                _compositeDirty = true;
+            }
         }
 
         public void RemoveDynamicLight(int id)
@@ -482,6 +498,7 @@ namespace Fodinae.World.Lighting
             TerrainRenderer terrainRenderer)
         {
             using var lightingUpdateMarker = _LightingUpdateMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             if (visibleWidth <= 0 || visibleHeight <= 0 || camera == null ||
                 storage == null || mapManager == null)
             {
@@ -496,58 +513,8 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
-            if (_lightingQualityMode == LightingQualityMode.Off)
+            if (BypassLightingCompute || _lightingQualityMode == LightingQualityMode.Off)
             {
-                // Выключенное освещение освобождает свою память, а не только
-                // перестаёт считать.
-                //
-                // Поля, атлас яркости и карта света держали около 249 МБ
-                // render target'ов при нулевом времени на GPU: ветка выходила
-                // раньше расчёта, но раньше освобождения — тоже. Освобождение
-                // делается ровно на переходе, по тому же флагу, что и
-                // публикация: иначе оно шло бы каждый кадр.
-                //
-                // Обратный переход собирает всё заново сам: EnsureResources
-                // пересоздаёт поля, когда _materialField или RadianceAtlas
-                // пустые, а ветка выше уже помечает поля грязными и сбрасывает
-                // регион в NaN.
-                bool enteringDisabledState = !_lightingDisabledStatePublished;
-                PublishLightingDisabledState();
-                if (enteringDisabledState)
-                {
-                    ReleaseResources();
-                }
-
-                return;
-            }
-
-            if (_lightingDisabledStatePublished)
-            {
-                _lightingDisabledStatePublished = false;
-                Shader.EnableKeyword(WorldLightingKeyword);
-                _fieldDirty = true;
-                _compositeDirty = true;
-                _bounceDirty = true;
-                _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
-            }
-
-            // The MUTE toggle must short-circuit before any region tracking or
-            // resource allocation. GetStableLightingRegion + EnsureResources
-            // run every frame even when the solve is bypassed, so crossing a
-            // 32-cell region boundary used to re-allocate the entire light field
-            // on the GPU (a hard hitch) while the cascade solve was muted. Keep
-            // publishing the white identity texture so no other global ends up
-            // stale, but do none of the per-frame field work.
-            if (BypassLightingCompute)
-            {
-                // Мьют тоже отдаёт память, а не только перестаёт считать.
-                //
-                // Сброс делается ровно на входе в мьют и потому не спорит с
-                // тем, ради чего эта ветка выходит раньше расчёта: пока мьют
-                // держится, выделять уже нечего — ветка возвращается до
-                // EnsureResources, и пересечение границы региона больше не
-                // трогает поля. Раньше они просто висели: 249 МБ целей при
-                // нулевом времени на GPU.
                 bool enteringBypass = !_wasLightingBypassed;
                 _wasLightingBypassed = true;
                 PublishLightingDisabledState();
@@ -559,7 +526,7 @@ namespace Fodinae.World.Lighting
                 return;
             }
 
-            if (_wasLightingBypassed)
+            if (_wasLightingBypassed || _lightingDisabledStatePublished)
             {
                 _wasLightingBypassed = false;
                 _lightingDisabledStatePublished = false;
@@ -580,11 +547,21 @@ namespace Fodinae.World.Lighting
 
             EnsureGpuPipelineInitialized();
 
-            Vector4 lightingRegion = GetStableLightingRegion(
-                visibleMinX,
-                visibleMinY,
+            // Область света — кадр максимального отдаления вокруг центра видимой
+            // области, а не текущий кадр. Иначе зум менял размер сетки, масштаб
+            // пикселей и раскладку каскадов (интервалы заданы в пикселях поля),
+            // и то же место освещалось кардинально по-другому.
+            int stableHeight = Mathf.Max(
+                visibleHeight,
+                Mathf.CeilToInt(2f * ProjectRuntimeContracts.Camera.MaximumOrthographicSize) + 2);
+            int stableWidth = Mathf.Max(
                 visibleWidth,
-                visibleHeight);
+                Mathf.CeilToInt(2f * ProjectRuntimeContracts.Camera.MaximumOrthographicSize * camera.aspect) + 2);
+            Vector4 lightingRegion = GetStableLightingRegion(
+                visibleMinX + (visibleWidth / 2) - (stableWidth / 2),
+                visibleMinY + (visibleHeight / 2) - (stableHeight / 2),
+                stableWidth,
+                stableHeight);
 
 
             bool regionChanged = lightingRegion != _lastVisibleRegion;
@@ -618,6 +595,23 @@ namespace Fodinae.World.Lighting
             float nextAllowedUpdateTime = dynamicOnlyUpdate
                 ? _nextDynamicLightingUpdateTime
                 : _nextLightingUpdateTime;
+
+            // Правка клеток (боты копают) ставит _fieldDirty и поднимает ревизию
+            // террейна. Раньше это обходило частоту целиком: каждая изменённая
+            // клетка в кадре давала перерисовку полей и полное статическое
+            // решение, 4 каскада. Теперь такая перестройка ждёт тот же шаг
+            // 20 раз в секунду — флаги и ревизии не сбрасываются, правка не
+            // теряется. Смена региона ждать не может: _lastVisibleRegion уже
+            // перезаписан выше.
+            if (!regionChanged &&
+                !_compositeDirty &&
+                !_bounceDirty &&
+                _hasStaticRadianceState &&
+                (_fieldDirty || geometryChanged) &&
+                Time.unscaledTime < _nextGeometryLightingUpdateTime)
+            {
+                return;
+            }
 
             if (!continueDynamicSolve &&
                 Time.unscaledTime < nextAllowedUpdateTime &&
@@ -775,6 +769,10 @@ namespace Fodinae.World.Lighting
                     (1f / Mathf.Max(_qualitySettings.LightingUpdatesPerSecond, 1f));
                 _nextDynamicLightingUpdateTime = Time.unscaledTime +
                     (1f / 20f);
+                if (geometryUpdateRequired)
+                {
+                    _nextGeometryLightingUpdateTime = Time.unscaledTime + (1f / 20f);
+                }
                 _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
                 _lastContributorGeometryRevision = contributorGeometryRevision;
                 RememberDynamicLightState();
@@ -1233,7 +1231,12 @@ namespace Fodinae.World.Lighting
                 urp.msaaSampleCount = Mathf.Max(1, settings.AntiAliasing);
             }
 
-            Debug.Log($"[LightingEngine] ApplyUnityRenderingSettings: AA={settings.AntiAliasing}, RenderScale={settings.RenderScale}");
+            // Печатается применённый масштаб, а не запрошенный: строкой выше
+            // он мог быть приведён, и лог показывал 0.65 при реальных 0.50.
+            float appliedScale = GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset applied
+                ? applied.renderScale
+                : settings.RenderScale;
+            Debug.Log($"[LightingEngine] ApplyUnityRenderingSettings: AA={settings.AntiAliasing}, RenderScale={appliedScale} (запрошено {settings.RenderScale})");
         }
 
         private void ReleaseResources()

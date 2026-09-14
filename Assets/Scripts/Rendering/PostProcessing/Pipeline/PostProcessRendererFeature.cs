@@ -49,10 +49,23 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void EnsurePassCreated(Camera gameplayCamera)
         {
-            if (_pass != null)
+            // Живой объект прохода ещё не значит живой шейдер: сборка плеера
+            // выгружает несохранённую копию ComputeShader. Без этой проверки
+            // постпроцесс в редакторе молча пропадал до перезагрузки домена.
+            if (_pass != null && _pass.IsShaderAlive &&
+                _displayPass != null && _displayPass.IsShaderAlive)
             {
                 return;
             }
+
+            _displayPass?.Dispose();
+            _displayPass = null;
+            _pass?.Dispose();
+            _pass = null;
+            // Ниже scopes создаются заново; старый проход освобождается здесь,
+            // иначе при пересоздании он утекал бы вместе со своими буферами.
+            _scopesPass?.Dispose();
+            _scopesPass = null;
 
             var computeShader = _settings.ComputeShader != null
                 ? _settings.ComputeShader
@@ -101,6 +114,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
+            if (PostProcessRuntimeState.BypassPostProcessEffects)
+            {
+                return;
+            }
+
             ref var cameraData = ref renderingData.cameraData;
             if (cameraData.renderType != CameraRenderType.Base ||
                 cameraData.camera.cameraType != CameraType.Game ||

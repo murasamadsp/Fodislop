@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a5cff0b10a0e941b098d09e285cea69d, type: 3}
   m_Name: EigengrauComponent
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.EigengrauComponent
-  active: 1
+  active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 0.729
+    m_Value: 0
   color:
     m_OverrideState: 1
     m_Value: {r: 0.018, g: 0.02, b: 0.028, a: 1}
@@ -47,7 +47,6 @@ MonoBehaviour:
   - {fileID: 3524879773850928676}
   - {fileID: -6271604533652656483}
   - {fileID: 3512870612399361332}
-  - {fileID: 0}
 --- !u!114 &3306464153541522589
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -63,7 +62,7 @@ MonoBehaviour:
   active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 1
+    m_Value: 0
 --- !u!114 &3512870612399361332
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -79,7 +78,7 @@ MonoBehaviour:
   active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 1
+    m_Value: 0
 --- !u!114 &3524879773850928676
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -92,7 +91,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2fa40d9b75c3f4178a67936681d8c115, type: 3}
   m_Name: ColorGradingComponent
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.ColorGradingComponent
-  active: 0
+  active: 1
   exposure:
     m_OverrideState: 1
     m_Value: 0
@@ -103,12 +102,6 @@ MonoBehaviour:
     m_OverrideState: 1
     m_Value: 0
   saturation:
-    m_OverrideState: 1
-    m_Value: 1
-  toneMapping:
-    m_OverrideState: 1
-    m_Value: 0
-  toneMappingWhitePoint:
     m_OverrideState: 1
     m_Value: 1
 --- !u!114 &3739390409327271990
@@ -129,16 +122,16 @@ MonoBehaviour:
     m_Value: 0
   threshold:
     m_OverrideState: 1
-    m_Value: 1.842
+    m_Value: 1.1
   softKnee:
-    m_OverrideState: 0
+    m_OverrideState: 1
     m_Value: 0.5
   radius:
-    m_OverrideState: 0
+    m_OverrideState: 1
     m_Value: 3
   scatter:
     m_OverrideState: 1
-    m_Value: 0.529
+    m_Value: 0.55
   tint:
     m_OverrideState: 1
     m_Value: {r: 1, g: 1, b: 1, a: 1}
@@ -154,16 +147,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d41a4e37898c641a684eef4fef3833ee, type: 3}
   m_Name: VignetteComponent
   m_EditorClassIdentifier: Assembly-CSharp::Fodinae.Rendering.PostProcessing.VignetteComponent
-  active: 1
+  active: 0
   intensity:
     m_OverrideState: 1
-    m_Value: 0.3
+    m_Value: 0
   color:
     m_OverrideState: 1
     m_Value: {r: 0, g: 0, b: 0, a: 1}
   smoothness:
     m_OverrideState: 1
-    m_Value: 0.621
+    m_Value: 0.6
   center:
     m_OverrideState: 1
     m_Value: {x: 0.5, y: 0.5}

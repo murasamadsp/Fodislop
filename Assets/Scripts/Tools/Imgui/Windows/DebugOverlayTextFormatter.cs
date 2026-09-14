@@ -77,16 +77,26 @@ internal static class DebugOverlayTextFormatter
                 if (storage?.CellLayer != null &&
                     storage.CellLayer.TryGetCell(cell.x, cell.y, out CellType cellType))
                 {
-                    var config = mapManager.GetCellConfig(cellType);
-                    bool passable = cellType == CellType.Empty || ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
-                    bool breakable = ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Breakable);
+                    if (cellType == CellType.Unloaded)
+                    {
+                        sb.Append("\n<b>Клетка под курсором  ·  ")
+                          .Append(cell.x).Append(", ").Append(cell.y).Append("</b>\n")
+                          .Append("fodinae:unloaded (#0)\n")
+                          .Append("Проходимая: нет  ·  Разрушаемая: нет\n");
+                    }
+                    else
+                    {
+                        var config = mapManager.GetCellConfig(cellType);
+                        bool passable = cellType == CellType.Empty || ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
+                        bool breakable = ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Breakable);
 
-                    sb.Append("\n<b>Клетка под курсором  ·  ")
-                      .Append(cell.x).Append(", ").Append(cell.y).Append("</b>\n")
-                      .Append("fodinae:").Append(cellType.ToString().ToLowerInvariant()).Append(" (#").Append((int)cellType).Append(")\n")
-                      .Append("Проходимая: ").Append(passable ? "да" : "нет")
-                      .Append("  ·  Разрушаемая: ").Append(breakable ? "да" : "нет")
-                      .Append("  ·  Рельеф: ").Append(config.ReliefGroup).Append("\n");
+                        sb.Append("\n<b>Клетка под курсором  ·  ")
+                          .Append(cell.x).Append(", ").Append(cell.y).Append("</b>\n")
+                          .Append("fodinae:").Append(cellType.ToString().ToLowerInvariant()).Append(" (#").Append((int)cellType).Append(")\n")
+                          .Append("Проходимая: ").Append(passable ? "да" : "нет")
+                          .Append("  ·  Разрушаемая: ").Append(breakable ? "да" : "нет")
+                          .Append("  ·  Рельеф: ").Append(config.ReliefGroup).Append("\n");
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -26,6 +26,7 @@ using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using global::Fodinae.Core.Localization;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
@@ -84,30 +85,16 @@ namespace Fodinae.Core
                     localPlayer.Publish(_playerMovement);
                 }
 
-                // SceneSetup is an authored scene-root component (not part of the
-                // ManagerBinding contract), so the container never injects it
-                // automatically. Without this its [Inject] ITextureStorageService
-                // stays null and TryStartSurfaceRendererSetup silently no-ops:
-                // SetLocalAssets is never called, the surface textures never get
-                // assigned, and the world-readiness gate is stuck on
-                // surface=false forever. SceneSetup.Update retries until the
-                // injection lands, so injecting here (after base.Awake built the
-                // container) is safe regardless of Start/Update ordering.
-                SceneSetup? sceneSetup = null;
-                foreach (GameObject root in _ownScene.GetRootGameObjects())
-                {
-                    foreach (SceneSetup candidate in root.GetComponentsInChildren<SceneSetup>(true))
-                    {
-                        sceneSetup = candidate;
-                        break;
-                    }
-
-                    if (sceneSetup != null)
-                    {
-                        break;
-                    }
-                }
-
+                // SceneSetup не входит в контракт ManagerBinding, и контейнер сам
+                // его не внедряет. Без этого [Inject] ITextureStorageService пуст,
+                // TryStartSurfaceRendererSetup молча ничего не делает, текстуры
+                // поверхности не назначаются, и готовность мира вечно стоит на
+                // surface=false. SceneSetup.Update повторяет попытку, пока
+                // внедрение не придёт, так что порядок Start/Update не важен.
+                //
+                // Ищется под этим scope, а не по корням сцены: все объекты сцены
+                // лежат под composition root (ValidateSingleRoot).
+                SceneSetup? sceneSetup = GetComponentInChildren<SceneSetup>(includeInactive: true);
                 if (Container != null && sceneSetup != null)
                 {
                     Container.Inject(sceneSetup);
@@ -150,6 +137,8 @@ namespace Fodinae.Core
                     "MainGame scene scope is missing serialized _uiDocument with PanelSettings.");
             }
 
+            Fodinae.UI.DynamicAtlasConfigurator.Apply(_uiDocument.panelSettings);
+
             builder.RegisterInstance(_uiDocument);
             builder.Register<MapStorage>(Lifetime.Singleton)
                 .As<IWorldDataStorage>()
@@ -180,7 +169,7 @@ namespace Fodinae.Core
             RegisterManager<WorldBackgroundSetup>(builder, "World");
             RegisterManager<WorldTextureManager>(builder, "World").AsImplementedInterfaces().AsSelf();
             RegisterManager<ServerAudioEventManager>(builder, "Audio").AsImplementedInterfaces().AsSelf();
-            RegisterManager<PacketHandler>(builder, "Networking").AsImplementedInterfaces().AsSelf();
+            builder.RegisterEntryPoint<PacketHandler>().AsSelf();
 
             builder.Register<ClanProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             builder.Register<InventoryProcessor>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
@@ -195,10 +184,10 @@ namespace Fodinae.Core
             builder.Register<ConnectionProcessor>(Lifetime.Singleton);
             builder.Register<MissionArrowProcessor>(Lifetime.Singleton);
             builder.Register<WindowPacketProcessor>(Lifetime.Singleton);
-            RegisterManager<GameManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
+            builder.RegisterEntryPoint<GameManager>().AsSelf();
             RegisterManager<VfxPool>(builder, "Rendering").AsImplementedInterfaces().AsSelf();
-            RegisterManager<BuildingManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
-            RegisterManager<RobotManager>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
+            builder.Register<BuildingManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
+            builder.Register<RobotManager>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<WorldEntityBatchRenderer>(builder, "Rendering");
 
             if (_playerMovement == null)
@@ -228,9 +217,9 @@ namespace Fodinae.Core
                 builder.RegisterComponent(playerInteraction);
             }
 
-            RegisterManager<ServerConfig>(builder, "Gameplay").AsImplementedInterfaces().AsSelf();
+            builder.Register<ServerConfig>(Lifetime.Singleton).AsImplementedInterfaces().AsSelf();
             RegisterManager<GlobalChatUI>(builder, "UI");
-            RegisterManager<UIInputManager>(builder, "UI");
+            builder.Register<UIInputManager>(Lifetime.Singleton);
             RegisterManager<FPSCounter>(builder, "UI");
             RegisterManager<FloatingChatManager>(builder, "UI");
             RegisterManager<ReconnectUI>(builder, "UI");
@@ -254,7 +243,7 @@ namespace Fodinae.Core
             RegisterManager<MinimapController>(builder, "UI");
             RegisterManager<WorldMapController>(builder, "UI");
             RegisterManager<WorldMapRenderer>(builder, "UI");
-            RegisterManager<DisplayManager>(builder, "UI");
+            builder.RegisterEntryPoint<DisplayManager>().AsSelf();
             RegisterManager<InGameDebugOverlay>(builder, "UI");
             builder.Register<GameInfrastructureStartup>(Lifetime.Singleton);
             builder.Register<GamePresentationStartup>(Lifetime.Singleton);
@@ -276,6 +265,43 @@ namespace Fodinae.Core
         public UniTask WaitUntilReadyAsync() => _readiness.Task;
         public void MarkReady() => _readiness.TrySetResult();
         public void MarkFailed(Exception exception) => _readiness.TrySetException(exception);
+
+        protected void Update()
+        {
+            if (Keyboard.current == null || _uiDocument == null)
+            {
+                return;
+            }
+
+            if (Keyboard.current.f11Key.wasPressedThisFrame ||
+                ((Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed ||
+                  Keyboard.current.leftCommandKey.isPressed || Keyboard.current.rightCommandKey.isPressed) &&
+                 Keyboard.current.uKey.wasPressedThisFrame))
+            {
+                SetGameUIActive(!_uiDocument.enabled);
+            }
+        }
+
+        public void SetGameUIActive(bool active)
+        {
+            if (_uiDocument != null)
+            {
+                if (_uiDocument.rootVisualElement != null)
+                {
+                    _uiDocument.rootVisualElement.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+                    _uiDocument.rootVisualElement.pickingMode = active ? PickingMode.Position : PickingMode.Ignore;
+                }
+
+                _uiDocument.enabled = active;
+            }
+
+            if (_floatingUIRoot != null)
+            {
+                _floatingUIRoot.gameObject.SetActive(active);
+            }
+
+            Debug.Log($"[GameLifetimeScope] Game UI {(active ? "ENABLED" : "DISABLED")}.");
+        }
 
         public async UniTask PrepareForUnloadAsync()
         {
@@ -438,7 +464,9 @@ namespace Fodinae.Core
 
         private void ValidateServiceGroups()
         {
-            string[] requiredGroups = ["Networking", "World", "Rendering", "Gameplay", "UI", "Audio"];
+            // Группа существует, только пока в ней есть компонент, которому нужен
+            // GameObject. Сеть и геймплей — чистый C# в контейнере (SCENE_STANDARD.md §1).
+            string[] requiredGroups = ["World", "Rendering", "UI", "Audio"];
             foreach (string group in requiredGroups)
             {
                 if (!HasSerializedServiceGroup(group))

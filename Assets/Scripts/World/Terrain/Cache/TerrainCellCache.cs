@@ -309,7 +309,7 @@ public class TerrainCellCache
 
         if (chunkIndex != lastChunkIndex)
         {
-            ChunkReadResult<CellType> result = layer.ReadChunk(chunkIndex, touchLru: false);
+            ChunkReadResult<CellType> result = layer.ReadChunk(chunkIndex, touchLru: true);
             currentChunk = result.Status == ChunkReadStatus.Available
                 ? result.Data
                 : null;

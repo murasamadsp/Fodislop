@@ -1,10 +1,12 @@
 #nullable enable
 
+using Fodinae.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.Core.Lifecycle;
+using Fodinae.World;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -22,12 +24,18 @@ namespace Fodinae.Game
         private const int BATCH_SORTING_ORDER = -1;
         private const int OVERLAY_BATCH_SORTING_ORDER = 600;
         private const int TENTACLE_SORTING_ORDER = -1;
+        private const float VisibleMargin = 36.0f;
 
         private static readonly ProfilerMarker _LateUpdateMarker =
             new("Fodinae.WorldEntities.LateUpdate");
 
+        private static readonly AllocationLedger.Entry _AllocationEntry =
+            AllocationLedger.Register("Сущности мира — LateUpdate");
+
         private readonly List<Tentacle> _tentacles = [];
         private readonly List<SpriteHandle> _sprites = [];
+        private readonly SpatialShardGrid<SpriteHandle> _spatialGrid = new();
+        private readonly List<SpriteHandle> _candidateSprites = [];
 
         private readonly List<SpriteHandle> _visibleUnderTentacles = [];
         private readonly List<SpriteHandle> _visibleOverTentacles = [];
@@ -42,6 +50,10 @@ namespace Fodinae.Game
         private int _uploadedTentacleCount = -1;
         private int _uploadedSpriteCount = -1;
         private bool _geometryDirty = true;
+        private Vector3 _lastCameraPosition;
+        private float _lastCameraOrthographicSize;
+        private float _lastCameraAspect;
+        private bool _hasCameraState;
 
         [Inject]
         private ISceneObjectFactory _sceneObjects = null!;
@@ -63,6 +75,7 @@ namespace Fodinae.Game
             var handle = new SpriteHandle(spriteTransform, sortingOrder, isStatic);
             _sprites.Add(handle);
             _sprites.Sort(static (left, right) => left.SortingOrder.CompareTo(right.SortingOrder));
+            _spatialGrid.Insert(handle, spriteTransform.position);
             _geometryDirty = true;
             return handle;
         }
@@ -81,9 +94,13 @@ namespace Fodinae.Game
 
         public void UnregisterSprite(SpriteHandle? handle)
         {
-            if (handle != null && _sprites.Remove(handle))
+            if (handle != null)
             {
-                _geometryDirty = true;
+                _spatialGrid.Remove(handle);
+                if (_sprites.Remove(handle))
+                {
+                    _geometryDirty = true;
+                }
             }
         }
 
@@ -125,9 +142,34 @@ namespace Fodinae.Game
         protected void LateUpdate()
         {
             using var marker = _LateUpdateMarker.Auto();
+            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             for (int i = 0; i < _sprites.Count; i++)
             {
-                _sprites[i].RefreshFrameState();
+                SpriteHandle handle = _sprites[i];
+                handle.RefreshFrameState();
+                if (!handle.IsStatic)
+                {
+                    _spatialGrid.Update(handle, handle.FramePosition);
+                }
+            }
+
+            Camera? camera = _gameplayCamera?.Camera;
+            if (camera != null)
+            {
+                Vector3 camPos = camera.transform.position;
+                float orthoSize = camera.orthographicSize;
+                float aspect = camera.aspect;
+                if (!_hasCameraState ||
+                    (camPos - _lastCameraPosition).sqrMagnitude > 0.0001f ||
+                    Mathf.Abs(orthoSize - _lastCameraOrthographicSize) > 0.001f ||
+                    Mathf.Abs(aspect - _lastCameraAspect) > 0.001f)
+                {
+                    _geometryDirty = true;
+                    _lastCameraPosition = camPos;
+                    _lastCameraOrthographicSize = orthoSize;
+                    _lastCameraAspect = aspect;
+                    _hasCameraState = true;
+                }
             }
 
             if (!_geometryDirty)
@@ -147,7 +189,6 @@ namespace Fodinae.Game
                 return;
             }
 
-            Camera? camera = _gameplayCamera?.Camera;
             bool hasCamera = TryGetVisibleRect(camera, out Rect visibleRect);
             CollectVisibleSprites(hasCamera, visibleRect);
             RebuildMesh(hasCamera, visibleRect);
@@ -167,10 +208,23 @@ namespace Fodinae.Game
             _visibleOverTentacles.Clear();
             _visibleOverlay.Clear();
 
-            for (int i = 0; i < _sprites.Count; i++)
+            List<SpriteHandle> source;
+            if (hasCamera)
             {
-                SpriteHandle handle = _sprites[i];
-                if (!IsRenderable(handle) || !IsInView(handle, hasCamera, visibleRect))
+                _candidateSprites.Clear();
+                _spatialGrid.QueryRect(visibleRect, _candidateSprites);
+                _candidateSprites.Sort(static (left, right) => left.SortingOrder.CompareTo(right.SortingOrder));
+                source = _candidateSprites;
+            }
+            else
+            {
+                source = _sprites;
+            }
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                SpriteHandle handle = source[i];
+                if (!IsRenderable(handle) || (hasCamera && !IsInView(handle, true, visibleRect)))
                 {
                     continue;
                 }
@@ -198,46 +252,25 @@ namespace Fodinae.Game
                 return false;
             }
 
-            Transform camTransform = camera.transform;
-            Vector3 camPos = camTransform.position;
+            Vector3 camPos = camera.transform.position;
             float halfHeight = camera.orthographic
                 ? camera.orthographicSize
-                : (Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * Mathf.Abs(camPos.z));
+                : Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * Mathf.Abs(camPos.z);
             float halfWidth = halfHeight * camera.aspect;
 
-            const float margin = 8.0f;
-            float minX = camPos.x - halfWidth - margin;
-            float minY = camPos.y - halfHeight - margin;
-            float width = (halfWidth + margin) * 2f;
-            float height = (halfHeight + margin) * 2f;
-
-            visibleRect = new Rect(minX, minY, width, height);
+            visibleRect = new Rect(
+                camPos.x - halfWidth - VisibleMargin,
+                camPos.y - halfHeight - VisibleMargin,
+                (halfWidth + VisibleMargin) * 2f,
+                (halfHeight + VisibleMargin) * 2f);
             return true;
         }
 
-        private static bool IsInView(SpriteHandle handle, bool hasCamera, in Rect visibleRect)
-        {
-            if (!hasCamera)
-            {
-                return true;
-            }
+        private static bool IsInView(SpriteHandle handle, bool hasCamera, in Rect visibleRect) =>
+            !hasCamera || visibleRect.Contains((Vector2)handle.GetWorldPosition());
 
-            Vector3 pos = handle.GetWorldPosition();
-            return pos.x >= visibleRect.xMin && pos.x <= visibleRect.xMax &&
-                   pos.y >= visibleRect.yMin && pos.y <= visibleRect.yMax;
-        }
-
-        private static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect)
-        {
-            if (!hasCamera)
-            {
-                return true;
-            }
-
-            Vector3 pos = tentacle.RootPosition;
-            return pos.x >= visibleRect.xMin && pos.x <= visibleRect.xMax &&
-                   pos.y >= visibleRect.yMin && pos.y <= visibleRect.yMax;
-        }
+        private static bool IsTentacleInView(Tentacle tentacle, bool hasCamera, in Rect visibleRect) =>
+            !hasCamera || visibleRect.Contains((Vector2)tentacle.RootPosition);
 
         private void EnsureRenderer()
         {
@@ -369,7 +402,7 @@ namespace Fodinae.Game
                 {
                     mesh.bounds = new Bounds(
                         new Vector3(visibleRect.center.x, visibleRect.center.y, 0f),
-                        new Vector3(visibleRect.size.x, visibleRect.size.y, 10f));
+                        new Vector3(visibleRect.size.x + 8f, visibleRect.size.y + 8f, 20f));
                 }
                 else
                 {
@@ -445,15 +478,10 @@ namespace Fodinae.Game
                 _mesh = null;
             }
 
-            if (_atlas != null)
-            {
-                _atlas.Dispose();
-                _atlas = null;
-            }
-
+            _atlas?.Dispose();
+            _atlas = null;
             _overlayBatch?.Dispose();
             _overlayBatch = null;
-
             _tentacles.Clear();
             _sprites.Clear();
         }

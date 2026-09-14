@@ -10,7 +10,7 @@ using Fodinae.World;
 using Fodinae.World.Lighting;
 using Fodinae.World.Terrain;
 using UnityEngine;
-using VContainer;
+using VContainer.Unity;
 
 namespace Fodinae.Game.Managers
 {
@@ -22,7 +22,9 @@ namespace Fodinae.Game.Managers
         Disconnected,
     }
 
-    public sealed class GameManager : MonoBehaviour, IWorldReadiness
+    // Чистый сервис контейнера (SCENE_STANDARD.md §1): ждёт готовности мира в
+    // тике контейнера, объекта на сцене не имеет.
+    public sealed class GameManager : IWorldReadiness, ITickable, IDisposable
     {
         public GameState CurrentState { get; private set; } = GameState.Offline;
         public bool IsUIAuthorized { get; private set; }
@@ -31,37 +33,51 @@ namespace Fodinae.Game.Managers
         public event Action<GameState>? OnGameStateChanged;
         public event Action? OnWorldLoaded;
 
-        [Inject]
-        private IAssetLoader _assetLoader = null!;
-        [Inject]
-        private ITextureService _textureService = null!;
-        [Inject]
-        private IRobotService _robotService = null!;
-        [Inject]
-        private ILocalPlayerState _localPlayer = null!;
-        [Inject]
-        private IPlayerStats _playerStats = null!;
-        [Inject]
-        private IWorldLoadProgress _loadProgress = null!;
-        [Inject]
-        private TerrainRenderer _terrainRenderer = null!;
-        [Inject]
-        private SurfaceRenderer _surfaceRenderer = null!;
-        [Inject]
-        private LightingEngine _lightingEngine = null!;
-        [Inject]
-        private ISceneObjectFactory _sceneObjects = null!;
+        private readonly IAssetLoader _assetLoader;
+        private readonly ITextureService _textureService;
+        private readonly IRobotService _robotService;
+        private readonly ILocalPlayerState _localPlayer;
+        private readonly IPlayerStats _playerStats;
+        private readonly IWorldLoadProgress _loadProgress;
+        private readonly TerrainRenderer _terrainRenderer;
+        private readonly SurfaceRenderer _surfaceRenderer;
+        private readonly LightingEngine _lightingEngine;
+        private readonly ISceneObjectFactory _sceneObjects;
+
+        public GameManager(
+            IAssetLoader assetLoader,
+            ITextureService textureService,
+            IRobotService robotService,
+            ILocalPlayerState localPlayer,
+            IPlayerStats playerStats,
+            IWorldLoadProgress loadProgress,
+            TerrainRenderer terrainRenderer,
+            SurfaceRenderer surfaceRenderer,
+            LightingEngine lightingEngine,
+            ISceneObjectFactory sceneObjects)
+        {
+            _assetLoader = assetLoader;
+            _textureService = textureService;
+            _robotService = robotService;
+            _localPlayer = localPlayer;
+            _playerStats = playerStats;
+            _loadProgress = loadProgress;
+            _terrainRenderer = terrainRenderer;
+            _surfaceRenderer = surfaceRenderer;
+            _lightingEngine = lightingEngine;
+            _sceneObjects = sceneObjects;
+        }
 
         private GameObject? _uiRoot;
         private bool _worldLoadPending;
         private bool _worldLoadPublished;
         private bool _uiSetup;
 
-        private void OnDestroy()
+        public void Dispose()
         {
             if (_uiRoot != null)
             {
-                Destroy(_uiRoot);
+                UnityEngine.Object.Destroy(_uiRoot);
                 _uiRoot = null;
             }
         }
@@ -82,7 +98,7 @@ namespace Fodinae.Game.Managers
             {
                 if (_uiRoot != null)
                 {
-                    Destroy(_uiRoot);
+                    UnityEngine.Object.Destroy(_uiRoot);
                     _uiRoot = null;
                 }
 
@@ -95,7 +111,6 @@ namespace Fodinae.Game.Managers
         {
             _uiRoot = _sceneObjects.Create("UIRoot", RuntimeOwner.FloatingUI);
             _uiRoot.SetActive(false);
-            _uiRoot.transform.SetParent(transform);
         }
 
         public void SetState(GameState newState)
@@ -126,7 +141,7 @@ namespace Fodinae.Game.Managers
             TryPublishWorldLoaded();
         }
 
-        private void Update()
+        void ITickable.Tick()
         {
             if (_worldLoadPending)
             {

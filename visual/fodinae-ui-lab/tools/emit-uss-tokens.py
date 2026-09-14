@@ -29,7 +29,7 @@
   2. rgb(var(--rgb-x) / N%) -> rgba(r, g, b, 0.N). Именно на этом переводе,
      который делался руками, и разъехались 16 значений.
   3. Отбрасывается непереносимое: --hex-*/--rgb-*/--mat-* (их роль выполняет
-     раскрытие), --blur-* (нет backdrop-filter), --layer-* (нет z-index),
+     раскрытие), --layer-* (нет z-index),
      --fit-lines (нет line-clamp), шрифтовая скоропись (нет shorthand font).
   4. cubic-bezier -> именованная кривая: в USS 23 имени и ни одной свободной.
      Подбор сделан tools/fit-easing.py, отклонение записано рядом со строкой.
@@ -56,7 +56,9 @@ WARNING = ("/* ФАЙЛ МАШИННЫЙ. Правки будут затёрты
            "   Генератор:       visual/fodinae-ui-lab/tools/emit-uss-tokens.py\n"
            "   Расхождение ловит CI (scripts/check-architecture.js). */\n")
 
-DROP_PREFIX = ("--hex-", "--rgb-", "--mat-", "--blur-", "--layer-", "--z-")
+# --blur-* переносится: с Unity 6.3 в USS есть filter: blur() и drop-shadow(),
+# радиусы нужны им. Раньше токен выкидывался как «нет backdrop-filter».
+DROP_PREFIX = ("--hex-", "--rgb-", "--mat-", "--layer-", "--z-")
 DROP_EXACT = {"--fit-lines"}
 
 FONT_ASSETS = {

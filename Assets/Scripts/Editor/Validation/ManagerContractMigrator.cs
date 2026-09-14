@@ -37,10 +37,9 @@ public static class ManagerContractMigrator
             return;
         }
 
-        SceneSetup[] setup = EditorSceneManager.GetSceneManagerSetup();
+        Scene scene = OpenOrReuse(MainGameScenePath, out bool openedHere);
         try
         {
-            Scene scene = EditorSceneManager.OpenScene(MainGameScenePath, OpenSceneMode.Single);
             GameLifetimeScope scope = FindSingleSceneComponent(scene);
             List<ManagerBinding> bindings = new();
             List<string> errors = new();
@@ -108,7 +107,7 @@ public static class ManagerContractMigrator
         }
         finally
         {
-            EditorSceneManager.RestoreSceneManagerSetup(setup);
+            CloseIfOpenedHere(scene, openedHere);
         }
     }
 
@@ -123,10 +122,9 @@ public static class ManagerContractMigrator
             "_loadingScreen", "_studioListener",
         };
 
-        SceneSetup[] setup = EditorSceneManager.GetSceneManagerSetup();
+        Scene scene = OpenOrReuse(scenePath, out bool openedHere);
         try
         {
-            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
             BootstrapLifetimeScope scope = FindSingleBootstrap(scene);
             SerializedObject serialized = new(scope);
             List<string> errors = new();
@@ -167,7 +165,31 @@ public static class ManagerContractMigrator
         }
         finally
         {
-            EditorSceneManager.RestoreSceneManagerSetup(setup);
+            CloseIfOpenedHere(scene, openedHere);
+        }
+    }
+
+    // Сцена, уже открытая в редакторе, правится на месте. OpenScene с диска
+    // в режиме Single молча выбрасывал несохранённые правки: удалённые через
+    // редактор объекты возвращались, а миграция сохраняла старую версию.
+    private static Scene OpenOrReuse(string scenePath, out bool openedHere)
+    {
+        Scene loaded = SceneManager.GetSceneByPath(scenePath);
+        if (loaded.IsValid() && loaded.isLoaded)
+        {
+            openedHere = false;
+            return loaded;
+        }
+
+        openedHere = true;
+        return EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Additive);
+    }
+
+    private static void CloseIfOpenedHere(Scene scene, bool openedHere)
+    {
+        if (openedHere && SceneManager.sceneCount > 1)
+        {
+            EditorSceneManager.CloseScene(scene, removeScene: true);
         }
     }
 

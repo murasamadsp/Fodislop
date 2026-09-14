@@ -38,13 +38,20 @@ internal static class PostProcessPassExecutor
 
         if (data.KernelBakeGradeLut >= 0 && data.BakedGradeLut != null)
         {
-            // Параметры грейда уже выставлены: таблица печётся из них же.
-            cmd.BeginSample("Fodinae.PostProcess.BakeGradeLut");
-            int groups = Mathf.CeilToInt(PostProcessRenderPass.BakedGradeLutSize / 4f);
-            cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelBakeGradeLut, BakedGradeLutID, data.BakedGradeLut);
-            cmd.DispatchCompute(data.PostProcessCS, data.KernelBakeGradeLut, groups, groups, groups);
+            if (data.GradeLutCache == null || !data.GradeLutCache.Matches(data))
+            {
+                // Ключ сохраняется при исполнении прохода после записи
+                // dispatch, а не при построении потенциально неисполненного графа.
+                cmd.BeginSample("Fodinae.PostProcess.BakeGradeLut");
+                int groups = Mathf.CeilToInt(PostProcessRenderPass.BakedGradeLutSize / 4f);
+                cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelBakeGradeLut, BakedGradeLutID, data.BakedGradeLut);
+                cmd.DispatchCompute(data.PostProcessCS, data.KernelBakeGradeLut, groups, groups, groups);
+                cmd.EndSample("Fodinae.PostProcess.BakeGradeLut");
+                data.GradeLutCache?.Store(data);
+            }
+
+            // Привязка нужна и в кадрах, использующих уже готовую таблицу.
             cmd.SetComputeTextureParam(data.PostProcessCS, data.KernelComposite, BakedGradeLutTexID, data.BakedGradeLut);
-            cmd.EndSample("Fodinae.PostProcess.BakeGradeLut");
         }
 
         cmd.BeginSample("Fodinae.PostProcess.Composite");
@@ -53,9 +60,12 @@ internal static class PostProcessPassExecutor
         cmd.DispatchCompute(data.PostProcessCS, data.KernelComposite, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
         cmd.EndSample("Fodinae.PostProcess.Composite");
 
-        cmd.BeginSample("Fodinae.PostProcess.BlitBack");
-        Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
-        cmd.EndSample("Fodinae.PostProcess.BlitBack");
+        if (!data.SwapColor)
+        {
+            cmd.BeginSample("Fodinae.PostProcess.BlitBack");
+            Blitter.BlitCameraTexture(cmd, data.IntermediateTexture, data.ColorTexture);
+            cmd.EndSample("Fodinae.PostProcess.BlitBack");
+        }
 
         if (data.TemporalActive)
         {

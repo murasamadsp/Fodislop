@@ -10,6 +10,15 @@ public static class ProjectRuntimeContracts
         public const int ChunkSize = 32;
     }
 
+    public static class Camera
+    {
+        // Половина видимой высоты в клетках. Максимум задаёт и размер области
+        // освещения: свет считается на кадр максимального отдаления, чтобы зум
+        // не менял сетку каскадов и не перекрашивал сцену.
+        public const float MinimumOrthographicSize = 5f;
+        public const float MaximumOrthographicSize = 30f;
+    }
+
     public static class Gameplay
     {
         public const float DefaultDigCooldown = 0.3f;

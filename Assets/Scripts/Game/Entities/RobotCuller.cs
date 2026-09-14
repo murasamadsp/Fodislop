@@ -7,8 +7,7 @@ namespace Fodinae.Game;
 
 public sealed class RobotCuller
 {
-    private const float OffscreenCullDistance = 35f;
-    private const float OffscreenCullSqrDistance = OffscreenCullDistance * OffscreenCullDistance;
+    private const float BaseCullMargin = 36f;
 
     private bool _isCulled;
     public bool CheckAndApply(
@@ -20,14 +19,28 @@ public sealed class RobotCuller
         RobotMovement movement,
         LightingEngine lightingEngine)
     {
-        Vector2 diff = camera != null
-            ? new Vector2(transform.position.x - camera.transform.position.x, transform.position.y - camera.transform.position.y)
-            : Vector2.zero;
-        bool shouldCull = diff.sqrMagnitude > OffscreenCullSqrDistance;
+        if (camera == null)
+        {
+            return false;
+        }
+
+        float halfHeight = camera.orthographic
+            ? camera.orthographicSize
+            : (Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) * Mathf.Abs(camera.transform.position.z));
+        float halfWidth = halfHeight * camera.aspect;
+
+        float maxExtentX = halfWidth + BaseCullMargin;
+        float maxExtentY = halfHeight + BaseCullMargin;
+
+        Vector3 camPos = camera.transform.position;
+        Vector3 myPos = transform.position;
+        float diffX = Mathf.Abs(myPos.x - camPos.x);
+        float diffY = Mathf.Abs(myPos.y - camPos.y);
+
+        bool shouldCull = diffX > maxExtentX || diffY > maxExtentY;
 
         if (shouldCull)
         {
-            // Re-enabled entities may retain their previous culling state.
             nameplate.SetEnabled(false);
             if (!_isCulled)
             {
@@ -48,6 +61,7 @@ public sealed class RobotCuller
             _isCulled = false;
             visuals.SetBodyVisible(true);
             nameplate.SetEnabled(true);
+            nameplate.InvalidatePosition();
             visuals.SetTentaclesActive(true);
             visuals.SnapTentacles(transform.position);
         }

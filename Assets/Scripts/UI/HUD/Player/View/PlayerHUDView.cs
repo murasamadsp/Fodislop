@@ -91,6 +91,11 @@ namespace Fodinae.UI.HUD.Player.View
 
         protected void Update()
         {
+            if (_doc != null && !_doc.enabled)
+            {
+                return;
+            }
+
             _programmatorGrid?.Tick();
         }
 

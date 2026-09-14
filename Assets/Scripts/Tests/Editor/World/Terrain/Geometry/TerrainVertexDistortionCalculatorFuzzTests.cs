@@ -63,20 +63,9 @@ public class TerrainVertexDistortionCalculatorFuzzTests
         Assert.That(offset, Is.EqualTo(Vector3.zero));
     }
 
+    // Upstream (15bced90): клетка, окружённая источниками со всех сторон, не искажается.
     [Test]
-    public void ComputeOffset_AllCauses_AppliesThreeSixteenthsShift()
-    {
-        var c = new CachedCellData { Distortion = CellDistortionType.Cause };
-        Vector3 offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, 10, 10, 100, 100);
-        float expectedRx = TerrainVertexDistortionCalculator.RandXd(10, 10) / 16f - 3f / 16f;
-        float expectedRy = TerrainVertexDistortionCalculator.RandYd(10, 10) / 16f - 3f / 16f;
-        Assert.That(offset.z, Is.EqualTo(0f));
-        Assert.That(offset.x, Is.EqualTo(expectedRx).Within(0.0001f));
-        Assert.That(offset.y, Is.EqualTo(expectedRy).Within(0.0001f));
-    }
-
-    [Test]
-    public void ComputeOffset_AllCauses_OffsetBoundedBySevenSixteenths()
+    public void ComputeOffset_AllCauses_ReturnsZero()
     {
         var c = new CachedCellData { Distortion = CellDistortionType.Cause };
         for (int x = 1; x < 30; x++)
@@ -84,10 +73,7 @@ public class TerrainVertexDistortionCalculatorFuzzTests
             for (int y = 1; y < 30; y++)
             {
                 Vector3 offset = TerrainVertexDistortionCalculator.ComputeOffset(c, c, c, c, x, y, 100, 100);
-                Assert.That(offset.x, Is.GreaterThanOrEqualTo(-3f / 16f - 0.0001f), $"x={x},y={y}");
-                Assert.That(offset.x, Is.LessThanOrEqualTo(4f / 16f), $"x={x},y={y}");
-                Assert.That(offset.y, Is.GreaterThanOrEqualTo(-3f / 16f - 0.0001f), $"x={x},y={y}");
-                Assert.That(offset.y, Is.LessThanOrEqualTo(4f / 16f), $"x={x},y={y}");
+                Assert.That(offset, Is.EqualTo(Vector3.zero), $"x={x},y={y}");
             }
         }
     }

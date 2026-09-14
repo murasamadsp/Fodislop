@@ -18,6 +18,27 @@ internal sealed class GradingLayerControlsDrawer
     // каждое событие IMGUI давала десятки строк за кадр на одно окно.
     private readonly Dictionary<string, string> _controlNames = [];
     private readonly Dictionary<string, string[]> _channelIds = [];
+
+    private static readonly GUILayoutOption _SliderLabelWidth = GUILayout.Width(122f);
+    private static readonly GUILayoutOption _SliderFieldWidth = GUILayout.Width(64f);
+
+    // GUI.GetNameOfFocusedControl() каждый раз возвращает новую строку из
+    // нативного кода, а вызывался он в каждом слайдере в каждом событии.
+    // Имя меняется только вместе с фокусом клавиатуры.
+    private int _focusedNameKeyboardControl = int.MinValue;
+    private string _focusedName = string.Empty;
+
+    private string FocusedControlName()
+    {
+        int keyboardControl = GUIUtility.keyboardControl;
+        if (keyboardControl != _focusedNameKeyboardControl)
+        {
+            _focusedNameKeyboardControl = keyboardControl;
+            _focusedName = GUI.GetNameOfFocusedControl();
+        }
+
+        return _focusedName;
+    }
     private string? _status;
     private string? _invalidNumberId;
     private bool _statusIsError;
@@ -66,6 +87,8 @@ internal sealed class GradingLayerControlsDrawer
         _selectedCurve = null;
         _selectedCurvePoint = -1;
         _draggingCurvePoint = false;
+        _shownCurve = null;
+        _shownCurvePoint = -1;
     }
 
     public void ClearNumberCache()
@@ -341,19 +364,19 @@ internal sealed class GradingLayerControlsDrawer
     private void DrawCurveEditor(string id, string title, ColorGradeCurve curve)
     {
         GUILayout.Label(title, ToolTheme.FieldLabel);
-        Rect graph = GUILayoutUtility.GetRect(300f, 150f, GUILayout.ExpandWidth(true));
+        Rect graph = GUILayoutUtility.GetRect(300f, 150f, ToolLayout.ExpandWidth(true));
         DrawCurveGraph(graph, curve);
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            if (GUILayout.Button("+ точка", ToolTheme.SecondaryButton, GUILayout.Width(74f)))
+            if (GUILayout.Button("+ точка", ToolTheme.SecondaryButton, ToolLayout.Width(74f)))
             {
                 _selectedCurve = curve;
                 // Точка встаёт на кривую: добавление не должно менять её форму.
                 _selectedCurvePoint = curve.AddPoint(new Vector2(0.5f, curve.Evaluate(0.5f)));
             }
 
-            if (GUILayout.Button("reset", ToolTheme.SecondaryButton, GUILayout.Width(58f)))
+            if (GUILayout.Button("reset", ToolTheme.SecondaryButton, ToolLayout.Width(58f)))
             {
                 curve.Reset();
                 if (ReferenceEquals(_selectedCurve, curve))
@@ -372,17 +395,43 @@ internal sealed class GradingLayerControlsDrawer
                 : ColorCurveInterpolation.Linear;
         }
 
-        if (ReferenceEquals(_selectedCurve, curve) &&
-            _selectedCurvePoint >= 0 &&
-            _selectedCurvePoint < curve.PointCount)
+        // Показывать ли слайдеры точки, решается только на Layout. Выбор
+        // меняется на MouseDown, и если слайдеры появлялись в том же событии,
+        // Repaint видел другое число контролов, чем Layout: IMGUI падал, и
+        // окно уходило в экран ошибки.
+        if (Event.current.type == EventType.Layout)
         {
-            Vector2 point = curve.GetPoint(_selectedCurvePoint);
-            point.x = Slider(
-                id + ".point.x", "  X", point.x, 0f, 1f);
-            point.y = Slider(
-                id + ".point.y", "  Y", point.y, 0f, 1f);
-            curve.SetPoint(_selectedCurvePoint, point);
+            _shownCurve = _selectedCurve;
+            _shownCurvePoint = _selectedCurvePoint;
         }
+
+        if (ReferenceEquals(_shownCurve, curve) && _shownCurvePoint >= 0)
+        {
+            int pointIndex = Mathf.Min(_shownCurvePoint, curve.PointCount - 1);
+            Vector2 point = curve.GetPoint(pointIndex);
+            Vector2 edited = new(
+                Slider(PointSliderId(id, 0), "  X", point.x, 0f, 1f),
+                Slider(PointSliderId(id, 1), "  Y", point.y, 0f, 1f));
+            if (edited != point)
+            {
+                curve.SetPoint(pointIndex, edited);
+            }
+        }
+    }
+
+    private ColorGradeCurve? _shownCurve;
+    private int _shownCurvePoint = -1;
+    private readonly Dictionary<string, string[]> _pointSliderIds = [];
+
+    private string PointSliderId(string id, int axis)
+    {
+        if (!_pointSliderIds.TryGetValue(id, out string[]? ids))
+        {
+            ids = [id + ".point.x", id + ".point.y"];
+            _pointSliderIds[id] = ids;
+        }
+
+        return ids[axis];
     }
 
     private void DrawCurveGraph(Rect graph, ColorGradeCurve curve)
@@ -410,22 +459,36 @@ internal sealed class GradingLayerControlsDrawer
                     Texture2D.whiteTexture);
             }
 
-            GUI.color = Color.white;
-            Vector2 previous = CurveToGraph(graph, curve.Evaluate(0f), 0f);
-            for (int index = 1; index <= 64; index++)
+            // Линия — вертикальные столбики по пикселю ширины, без поворота.
+            // Повёрнутые через RotateAroundPivot полоски IMGUI не обрезает
+            // окном и прокруткой при масштабированной матрице: кривая рисовалась
+            // поверх соседних окон.
+            GUI.color = new Color(0.25f, 0.85f, 1f, 1f);
+            const float lineThickness = 2f;
+            int samples = Mathf.Clamp(Mathf.CeilToInt(graph.width), 16, 1024);
+            float previousY = graph.yMax - curve.Evaluate(0f) * graph.height;
+            for (int index = 1; index <= samples; index++)
             {
-                float x = index / 64f;
-                Vector2 samplePoint = CurveToGraph(graph, curve.Evaluate(x), x);
-                DrawGraphLine(previous, samplePoint, 2f, new Color(0.25f, 0.85f, 1f, 1f));
-                previous = samplePoint;
+                float x = index / (float)samples;
+                float y = graph.yMax - curve.Evaluate(x) * graph.height;
+                float top = Mathf.Max(graph.y, Mathf.Min(previousY, y) - lineThickness * 0.5f);
+                float bottom = Mathf.Min(graph.yMax, Mathf.Max(previousY, y) + lineThickness * 0.5f);
+                float columnX = graph.x + (index - 1) * graph.width / samples;
+                GUI.DrawTexture(
+                    new Rect(columnX, top, Mathf.Max(1f, graph.width / samples + 0.5f), Mathf.Max(1f, bottom - top)),
+                    Texture2D.whiteTexture);
+                previousY = y;
             }
 
             for (int index = 0; index < curve.PointCount; index++)
             {
                 Vector2 point = curve.GetPoint(index);
+
+                // Маркер прижат к полю: у крайних точек половина квадрата
+                // иначе вылезала за график.
                 Rect pointRect = new(
-                    graph.x + point.x * graph.width - 4f,
-                    graph.yMax - point.y * graph.height - 4f,
+                    Mathf.Clamp(graph.x + point.x * graph.width - 4f, graph.x, graph.xMax - 8f),
+                    Mathf.Clamp(graph.yMax - point.y * graph.height - 4f, graph.y, graph.yMax - 8f),
                     8f,
                     8f);
                 GUI.color = ReferenceEquals(_selectedCurve, curve) &&
@@ -506,21 +569,6 @@ internal sealed class GradingLayerControlsDrawer
         graph.x + x * graph.width,
         graph.yMax - value * graph.height);
 
-    private static void DrawGraphLine(Vector2 start, Vector2 end, float thickness, Color color)
-    {
-        Color previousColor = GUI.color;
-        Matrix4x4 previousMatrix = GUI.matrix;
-        float length = Vector2.Distance(start, end);
-        float angle = Mathf.Atan2(end.y - start.y, end.x - start.x) * Mathf.Rad2Deg;
-        GUI.color = color;
-        GUIUtility.RotateAroundPivot(angle, start);
-        GUI.DrawTexture(
-            new Rect(start.x, start.y - thickness * 0.5f, length, thickness),
-            Texture2D.whiteTexture);
-        GUI.matrix = previousMatrix;
-        GUI.color = previousColor;
-    }
-
     public static string GetLayerTitle(ColorGradeLayer layer) => layer switch
     {
         ColorGradeLayer.Exposure => "Экспозиция",
@@ -538,7 +586,7 @@ internal sealed class GradingLayerControlsDrawer
         GUILayout.Label("ФАЙЛ И ЭКСПОРТ", sectionStyle);
         if (_state.HasPreviewOverrides)
         {
-            using (new GUILayout.VerticalScope(ToolTheme.Card))
+            using (ToolLayout.Vertical(ToolTheme.Card))
             {
                 GUILayout.Label(
                     "Соло/обход меняют только предпросмотр. Сохранение, экспорт и " +
@@ -551,7 +599,7 @@ internal sealed class GradingLayerControlsDrawer
             }
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             GUI.enabled = _state.CanUndo;
             if (GUILayout.Button("Undo", ToolTheme.SecondaryButton))
@@ -570,7 +618,7 @@ internal sealed class GradingLayerControlsDrawer
             GUI.enabled = true;
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             if (GUILayout.Button("Сохранить", ToolTheme.ActiveButton))
             {
@@ -591,7 +639,7 @@ internal sealed class GradingLayerControlsDrawer
             }
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             if (GUILayout.Button("Экспорт .cdl", ToolTheme.SecondaryButton))
             {
@@ -615,7 +663,7 @@ internal sealed class GradingLayerControlsDrawer
 
         GUILayout.Label("ПРЕСЕТЫ", sectionStyle);
         _presetName = GUILayout.TextField(_presetName);
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             if (GUILayout.Button("Сохранить пресет", ToolTheme.ActiveButton))
             {
@@ -719,9 +767,9 @@ internal sealed class GradingLayerControlsDrawer
             _numberText[id] = text;
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            GUILayout.Label(label, ToolTheme.FieldLabel, GUILayout.Width(122f));
+            GUILayout.Label(label, ToolTheme.FieldLabel, _SliderLabelWidth);
             float sliderMinimum = minimum;
             float sliderMaximum = maximum;
             if (Event.current.shift)
@@ -745,7 +793,7 @@ internal sealed class GradingLayerControlsDrawer
             }
 
             GUI.SetNextControlName(controlName);
-            string edited = GUILayout.TextField(text, GUILayout.Width(64f));
+            string edited = GUILayout.TextField(text, _SliderFieldWidth);
             if (edited != text)
             {
                 edited = edited.Replace(',', '.');
@@ -769,7 +817,7 @@ internal sealed class GradingLayerControlsDrawer
                 }
             }
 
-            bool focused = GUI.GetNameOfFocusedControl() == controlName;
+            bool focused = FocusedControlName() == controlName;
             if (focused &&
                 Event.current.type == EventType.KeyDown &&
                 (Event.current.keyCode == KeyCode.Return ||
@@ -790,8 +838,18 @@ internal sealed class GradingLayerControlsDrawer
                     !float.IsNaN(committed) &&
                     !float.IsInfinity(committed))
                 {
-                    result = Mathf.Clamp(committed, minimum, maximum);
-                    _numberText[id] = result.ToString("0.###", CultureInfo.InvariantCulture);
+                    // Без фокуса источник истины — значение, а не текст. Раньше
+                    // здесь было `result = committed`: слайдер возвращал число из
+                    // своей строки и на следующем же событии откатывал всё, что
+                    // поменяли в обход него, — колесо коррекции, перетаскивание
+                    // точки кривой, пипетку. Набранный текст уже применён в той
+                    // ветке, где поле было в фокусе, так что терять нечего.
+                    // Порог — точность формата "0.###": без него значение с
+                    // четвёртым знаком переформатировалось бы в каждом событии.
+                    if (Mathf.Abs(committed - result) > 0.0005f)
+                    {
+                        _numberText[id] = result.ToString("0.###", CultureInfo.InvariantCulture);
+                    }
                 }
                 else
                 {
@@ -890,41 +948,151 @@ internal sealed class GradingLayerControlsDrawer
         string controlID)
     {
         GUILayout.Label(title, ToolTheme.SectionLabel);
-        Rect rect = GUILayoutUtility.GetRect(128f, 128f, GUILayout.ExpandWidth(false));
-        EnsureWheelTexture();
-        if (_wheelTexture != null)
-        {
-            GUI.DrawTexture(rect, _wheelTexture, ScaleMode.StretchToFill, false);
-        }
+        Rect rect = GUILayoutUtility.GetRect(WheelSize, WheelSize, _WheelOptions);
 
+        // Квадрат по меньшей стороне: в узкой колонке GetRect может отдать
+        // меньше запрошенного, и растянутое колесо превращалось в эллипс,
+        // по которому промахивалась мышь.
+        float side = Mathf.Min(rect.width, rect.height);
+        rect = new Rect(rect.x + (rect.width - side) * 0.5f, rect.y, side, side);
+        float wheelRadius = side * 0.5f;
+
+        // Амплитуда цветового сдвига на краю колеса.
+        float amplitude = (maximum - minimum) * 0.25f;
+
+        // Один id на каждом событии: захват мыши по нему живёт и за краем колеса.
+        int id = GUIUtility.GetControlID(controlID.GetHashCode(), FocusType.Passive, rect);
         Event current = Event.current;
-        if ((current.type == EventType.MouseDown || current.type == EventType.MouseDrag) &&
-            current.button == 0 &&
-            rect.Contains(current.mousePosition))
+        switch (current.GetTypeForControl(id))
         {
-            Vector2 centered = (current.mousePosition - rect.center) / (rect.width * 0.5f);
-            float radius = Mathf.Clamp01(centered.magnitude);
-            if (radius > 0.001f)
-            {
-                float hue = Mathf.Repeat(Mathf.Atan2(centered.y, centered.x) / (Mathf.PI * 2f), 1f);
-                Color color = Color.HSVToRGB(hue, radius, 1f);
-                Vector3 offset = new Vector3(color.r, color.g, color.b) - Vector3.one * 0.5f;
-                value = new Vector3(
-                    Mathf.Clamp(neutral.x + offset.x * (maximum - minimum), minimum, maximum),
-                    Mathf.Clamp(neutral.y + offset.y * (maximum - minimum), minimum, maximum),
-                    Mathf.Clamp(neutral.z + offset.z * (maximum - minimum), minimum, maximum));
-            }
+            case EventType.MouseDown:
+                if (GUI.enabled && current.button == 0 && IsInsideWheel(rect, current.mousePosition))
+                {
+                    if (current.clickCount == 2)
+                    {
+                        // Двойной клик возвращает к нейтрали, сохраняя яркость.
+                        value = neutral + Vector3.one * ChannelMean(value - neutral);
+                    }
+                    else
+                    {
+                        GUIUtility.hotControl = id;
+                        value = WheelValue(rect, current.mousePosition, value, neutral, amplitude, minimum, maximum);
+                    }
 
-            GUIUtility.hotControl = controlID.GetHashCode();
-            current.Use();
+                    GUI.changed = true;
+                    current.Use();
+                }
+
+                break;
+
+            case EventType.MouseDrag:
+                if (GUIUtility.hotControl == id)
+                {
+                    value = WheelValue(rect, current.mousePosition, value, neutral, amplitude, minimum, maximum);
+                    GUI.changed = true;
+                    current.Use();
+                }
+
+                break;
+
+            case EventType.MouseUp:
+                if (GUIUtility.hotControl == id)
+                {
+                    GUIUtility.hotControl = 0;
+                    current.Use();
+                }
+
+                break;
+
+            case EventType.Repaint:
+                EnsureWheelTexture();
+                if (_wheelTexture != null)
+                {
+                    // alphaBlend обязателен: углы текстуры прозрачные, и без
+                    // смешивания колесо рисовалось чёрным квадратом.
+                    GUI.DrawTexture(rect, _wheelTexture, ScaleMode.StretchToFill, true);
+                }
+
+                DrawWheelMarker(rect, WheelPosition(value - neutral, amplitude) * wheelRadius, GUIUtility.hotControl == id);
+                break;
+
+            default:
+                break;
         }
-        else if (current.type == EventType.MouseUp && GUIUtility.hotControl == controlID.GetHashCode())
+
+        GUILayout.Label("центр = нейтраль · направление = оттенок · радиус = сила · двойной клик = сброс", ToolTheme.MutedLabel);
+    }
+
+    private const float WheelSize = 128f;
+    private static readonly GUILayoutOption[] _WheelOptions =
+    [
+        GUILayout.Width(WheelSize),
+        GUILayout.Height(WheelSize),
+    ];
+
+    // Направления каналов на колесе: красный 0°, зелёный 120°, синий 240° —
+    // те же, что у оттенков HSV в текстуре. Сдвиг по трём косинусам имеет
+    // нулевое среднее, то есть меняет цвет и не трогает яркость.
+    private static readonly float[] _ChannelCos = [1f, -0.5f, -0.5f];
+    private static readonly float[] _ChannelSin = [0f, 0.8660254f, -0.8660254f];
+
+    private static bool IsInsideWheel(Rect rect, Vector2 mouse) =>
+        (mouse - rect.center).sqrMagnitude <= rect.width * rect.width * 0.25f;
+
+    private static float ChannelMean(Vector3 value) => (value.x + value.y + value.z) / 3f;
+
+    private static Vector3 WheelValue(
+        Rect rect,
+        Vector2 mouse,
+        Vector3 current,
+        Vector3 neutral,
+        float amplitude,
+        float minimum,
+        float maximum)
+    {
+        // У текстуры ось Y смотрит вверх, у мыши IMGUI — вниз. Без смены знака
+        // оттенок под курсором был зеркальным: зелёный давал синий.
+        Vector2 centered = (mouse - rect.center) / (rect.width * 0.5f);
+        centered.y = -centered.y;
+        float radius = Mathf.Clamp01(centered.magnitude);
+        float angle = Mathf.Atan2(centered.y, centered.x);
+        float cos = Mathf.Cos(angle) * radius * amplitude;
+        float sin = Mathf.Sin(angle) * radius * amplitude;
+
+        // Яркость (среднее каналов) сохраняется: колесо двигает только цвет.
+        float mean = ChannelMean(current - neutral);
+        return new Vector3(
+            Mathf.Clamp(neutral.x + mean + cos * _ChannelCos[0] + sin * _ChannelSin[0], minimum, maximum),
+            Mathf.Clamp(neutral.y + mean + cos * _ChannelCos[1] + sin * _ChannelSin[1], minimum, maximum),
+            Mathf.Clamp(neutral.z + mean + cos * _ChannelCos[2] + sin * _ChannelSin[2], minimum, maximum));
+    }
+
+    // Обратное к WheelValue: где на колесе лежит текущее значение (единичный
+    // круг, ось Y вниз, как у IMGUI).
+    private static Vector2 WheelPosition(Vector3 offset, float amplitude)
+    {
+        if (amplitude <= 0f)
         {
-            GUIUtility.hotControl = 0;
-            current.Use();
+            return Vector2.zero;
         }
 
-        GUILayout.Label("центр = neutral · направление = hue · радиус = strength", ToolTheme.MutedLabel);
+        float x = (offset.x * _ChannelCos[0] + offset.y * _ChannelCos[1] + offset.z * _ChannelCos[2]) * (2f / 3f);
+        float y = (offset.x * _ChannelSin[0] + offset.y * _ChannelSin[1] + offset.z * _ChannelSin[2]) * (2f / 3f);
+        Vector2 position = new Vector2(x, -y) / amplitude;
+        return position.sqrMagnitude > 1f ? position.normalized : position;
+    }
+
+    private static void DrawWheelMarker(Rect rect, Vector2 offset, bool active)
+    {
+        Color previous = GUI.color;
+        Vector2 center = rect.center + offset;
+        float outer = active ? 10f : 8f;
+        GUI.color = Color.black;
+        GUI.DrawTexture(new Rect(center.x - outer * 0.5f, center.y - outer * 0.5f, outer, outer), Texture2D.whiteTexture);
+        GUI.color = active ? Color.yellow : Color.white;
+        float inner = outer - 4f;
+        GUI.DrawTexture(new Rect(center.x - inner * 0.5f, center.y - inner * 0.5f, inner, inner), Texture2D.whiteTexture);
+        GUI.color = previous;
     }
 
     private static void EnsureWheelTexture()

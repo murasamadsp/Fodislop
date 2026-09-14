@@ -101,11 +101,22 @@ public sealed class PlayerHUDBasketView
 
     public void Refresh(PlayerStatsModel stats)
     {
+        if (_widestCrystalLabels.Length != _basketCrystalLabels.Count)
+        {
+            _widestCrystalLabels = new float[_basketCrystalLabels.Count];
+        }
+
         for (int i = 0; i < _basketCrystalLabels.Count && i < stats.BasketContents.Length; i++)
         {
             _basketCrystalLabels[i].text = $"{FormatCompact(stats.BasketContents[i])}/{FormatCompact(stats.BasketCapacity)}";
+
+            // Журнал раскладки: подписи корзины двигали HUD в пиковых кадрах —
+            // «5/50K» уже, чем «12.5K/50K». Ширина держится на самой широкой.
+            FPSCounter.HoldWidth(_basketCrystalLabels[i], ref _widestCrystalLabels[i]);
         }
     }
+
+    private float[] _widestCrystalLabels = [];
 
     private static string FormatCompact(long val)
     {

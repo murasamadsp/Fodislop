@@ -56,9 +56,8 @@ internal sealed class GradingLayersWindow : ToolWindow
         DrawLayerTabBar();
         DrawMasterStatusBanners();
 
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
             if (_selectedLayer.HasValue)
             {
                 DrawFocusedLayer(_selectedLayer.Value);
@@ -221,14 +220,14 @@ internal sealed class GradingLayersWindow : ToolWindow
     private void DrawLayerTabBar()
     {
         GUILayout.Label("СЛОИ КОНВЕЙЕРА", SectionLabelStyle);
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             DrawTabButton(ColorGradeLayer.Exposure, "1  Экспозиция");
             DrawTabButton(ColorGradeLayer.WhiteBalance, "2  Баланс");
             DrawTabButton(ColorGradeLayer.Cdl, "3  CDL");
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             DrawTabButton(ColorGradeLayer.Saturation, "4  Цвет");
             DrawTabButton(ColorGradeLayer.Contrast, "5  Контраст");
@@ -260,7 +259,7 @@ internal sealed class GradingLayersWindow : ToolWindow
                 isSelected,
                 title,
                 SegmentedButtonStyle,
-                GUILayout.ExpandWidth(true)) &&
+                ToolLayout.ExpandWidth(true)) &&
             !isSelected)
         {
             RequestLayer(layer);
@@ -271,14 +270,14 @@ internal sealed class GradingLayersWindow : ToolWindow
     {
         if (_state.Solo.HasValue)
         {
-            using (new GUILayout.VerticalScope(CardStyle))
+            using (ToolLayout.Vertical(CardStyle))
             {
-                using (new GUILayout.HorizontalScope())
+                using (ToolLayout.Horizontal())
                 {
                     GUILayout.Label(
                         SoloLabel(_state.Solo.Value),
                         ToolTheme.WarningLabel);
-                    if (GUILayout.Button("Снять", SecondaryButtonStyle, GUILayout.Width(72f)))
+                    if (GUILayout.Button("Снять", SecondaryButtonStyle, ToolLayout.Width(72f)))
                     {
                         _drawer.RequestSolo(null);
                     }
@@ -289,12 +288,12 @@ internal sealed class GradingLayersWindow : ToolWindow
         int bypassedCount = GetBypassedCount();
         if (bypassedCount > 0)
         {
-            using (new GUILayout.VerticalScope(CardStyle))
+            using (ToolLayout.Vertical(CardStyle))
             {
-                using (new GUILayout.HorizontalScope())
+                using (ToolLayout.Horizontal())
                 {
                     GUILayout.Label(BypassLabel(bypassedCount), ToolTheme.WarningLabel);
-                    if (GUILayout.Button("Включить все", SecondaryButtonStyle, GUILayout.Width(104f)))
+                    if (GUILayout.Button("Включить все", SecondaryButtonStyle, ToolLayout.Width(104f)))
                     {
                         _drawer.RequestClearBypasses();
                     }
@@ -352,9 +351,9 @@ internal sealed class GradingLayersWindow : ToolWindow
 
     private void DrawFocusedLayer(ColorGradeLayer layer)
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            if (GUILayout.Button("◄  Предыдущий", SecondaryButtonStyle, GUILayout.Width(112f)))
+            if (GUILayout.Button("◄  Предыдущий", SecondaryButtonStyle, ToolLayout.Width(112f)))
             {
                 SelectPreviousLayer();
             }
@@ -365,13 +364,13 @@ internal sealed class GradingLayersWindow : ToolWindow
                 SectionLabelStyle);
             GUILayout.FlexibleSpace();
 
-            if (GUILayout.Button("Следующий  ►", SecondaryButtonStyle, GUILayout.Width(112f)))
+            if (GUILayout.Button("Следующий  ►", SecondaryButtonStyle, ToolLayout.Width(112f)))
             {
                 SelectNextLayer();
             }
         }
 
-        using (new GUILayout.VerticalScope(CardStyle))
+        using (ToolLayout.Vertical(CardStyle))
         {
             DrawLayerHeaderBar(layer, GradingLayerControlsDrawer.GetLayerTitle(layer), showFocusButton: false);
             GUILayout.Space(4f);
@@ -402,12 +401,27 @@ internal sealed class GradingLayersWindow : ToolWindow
 
     private void DrawLayerSection(ColorGradeLayer layer, string title)
     {
-        using (new GUILayout.VerticalScope(CardStyle))
+        using (ToolLayout.Vertical(CardStyle))
         {
             DrawLayerHeaderBar(layer, title, showFocusButton: true);
             GUILayout.Space(4f);
             _drawer.DrawLayerControls(layer);
         }
+    }
+
+    // Заголовок слоя со значком состояния. Склейка строк была в каждом
+    // событии IMGUI для каждого из шести слоёв.
+    private readonly Dictionary<string, string[]> _headerLabels = [];
+
+    private string HeaderLabel(string title, int state)
+    {
+        if (!_headerLabels.TryGetValue(title, out string[]? labels))
+        {
+            labels = ["★ " + title, "● " + title, "○ " + title];
+            _headerLabels[title] = labels;
+        }
+
+        return labels[state];
     }
 
     private void DrawLayerHeaderBar(ColorGradeLayer layer, string title, bool showFocusButton)
@@ -416,18 +430,17 @@ internal sealed class GradingLayersWindow : ToolWindow
         bool soloed = _state.Solo == layer;
         bool wasBypassed = _state.IsBypassed(layer);
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            string statusIcon = soloed ? "★ " : (active ? "● " : "○ ");
-            GUILayout.Label(statusIcon + title, SectionLabelStyle);
+            GUILayout.Label(HeaderLabel(title, soloed ? 0 : (active ? 1 : 2)), SectionLabelStyle);
             GUILayout.FlexibleSpace();
-            if (showFocusButton && GUILayout.Button("Открыть слой", ActiveButtonStyle, GUILayout.Width(96f)))
+            if (showFocusButton && GUILayout.Button("Открыть слой", ActiveButtonStyle, ToolLayout.Width(96f)))
             {
                 RequestLayer(layer);
             }
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             bool controlsEnabled = GUI.enabled;
             bool wasEnabled = _state.IsEnabled(layer);
@@ -435,7 +448,7 @@ internal sealed class GradingLayersWindow : ToolWindow
                 wasEnabled,
                 "Enable",
                 SegmentedButtonStyle,
-                GUILayout.ExpandWidth(true));
+                ToolLayout.ExpandWidth(true));
             if (enabled != wasEnabled)
             {
                 _state.SetEnabled(layer, enabled);
@@ -446,7 +459,7 @@ internal sealed class GradingLayersWindow : ToolWindow
                 wasBypassed,
                 "B  Обход",
                 SegmentedButtonStyle,
-                GUILayout.ExpandWidth(true));
+                ToolLayout.ExpandWidth(true));
             GUI.enabled = controlsEnabled;
             if (bypass != wasBypassed)
             {
@@ -457,13 +470,13 @@ internal sealed class GradingLayersWindow : ToolWindow
                 soloed,
                 "S  Соло",
                 SegmentedButtonStyle,
-                GUILayout.ExpandWidth(true));
+                ToolLayout.ExpandWidth(true));
             if (solo != soloed)
             {
                 _drawer.RequestSolo(solo ? layer : null);
             }
 
-            if (GUILayout.Button("R  Сброс", SecondaryButtonStyle, GUILayout.Width(84f)))
+            if (GUILayout.Button("R  Сброс", SecondaryButtonStyle, ToolLayout.Width(84f)))
             {
                 _state.ResetLayer(layer);
                 _drawer.ClearNumberCache();

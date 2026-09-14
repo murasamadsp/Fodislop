@@ -43,7 +43,9 @@ internal sealed class DummyWorldStartupResponder(
     {
         DummyWorldDescriptor world = await worldState.OpenAsync(worldCodeName);
         SendWorldIdentity(worldCodeName, world, playerName, playerBotId);
-        StartBotSimulation(lifecycleVersion);
+
+        // Bots disabled for performance testing.
+        // StartBotSimulation(lifecycleVersion);
 
         playerState.SetPosition(25, 50);
         sendPacket(new ServerPacket(new AggressionStatePacket(false)));

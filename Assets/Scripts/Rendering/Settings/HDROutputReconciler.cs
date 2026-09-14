@@ -93,6 +93,23 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
 
     private void UpdateCalibration()
     {
+        if (PostProcessRuntimeState.BypassPostProcessEffects)
+        {
+            if (_volume != null)
+            {
+                _volume.weight = 0f;
+                _volume.enabled = false;
+            }
+
+            if (_camera.Camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
+            {
+                cameraData.volumeLayerMask = 0;
+                cameraData.renderPostProcessing = false;
+            }
+
+            return;
+        }
+
         if (_tonemapping == null)
         {
             return;
@@ -100,9 +117,9 @@ public sealed class HDROutputReconciler : IStartable, ITickable, IDisposable
 
         _tonemapping.paperWhite.value = PostProcessRuntimeState.DisplayPaperWhiteNits;
         _tonemapping.maxNits.value = PostProcessRuntimeState.DisplayPeakBrightnessNits;
-        if (_camera.Camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
+        if (_camera.Camera.TryGetComponent(out UniversalAdditionalCameraData data))
         {
-            cameraData.volumeLayerMask |= 1 << _camera.Camera.gameObject.layer;
+            data.volumeLayerMask |= 1 << _camera.Camera.gameObject.layer;
         }
     }
 

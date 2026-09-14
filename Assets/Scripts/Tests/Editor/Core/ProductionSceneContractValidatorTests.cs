@@ -67,6 +67,38 @@ public sealed class ProductionSceneContractValidatorTests
     }
 
     [Test]
+    public void RootNextToCompositionRoot_IsRejected()
+    {
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var scopeObject = new GameObject("Scope");
+        scopeObject.AddComponent<VContainer.Unity.LifetimeScope>();
+        var strayObject = new GameObject("Stray");
+        SceneManager.MoveGameObjectToScene(scopeObject, scene);
+        SceneManager.MoveGameObjectToScene(strayObject, scene);
+        var errors = new List<string>();
+
+        ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
+
+        Assert.That(errors, Has.Some.Contains("root object 'Stray' lives outside LifetimeScope"));
+    }
+
+    [Test]
+    public void ChildOfCompositionRoot_IsAccepted()
+    {
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var scopeObject = new GameObject("Scope");
+        scopeObject.AddComponent<VContainer.Unity.LifetimeScope>();
+        var childObject = new GameObject("Child");
+        childObject.transform.SetParent(scopeObject.transform);
+        SceneManager.MoveGameObjectToScene(scopeObject, scene);
+        var errors = new List<string>();
+
+        ProductionSceneContractValidator.ValidateAllLoadedScenes(errors);
+
+        Assert.That(errors, Has.None.Contains("lives outside"));
+    }
+
+    [Test]
     public void ProductionScenes_AreValid_AndOriginalEditorSetupIsRestored()
     {
         SceneSetup[] before = EditorSceneManager.GetSceneManagerSetup();

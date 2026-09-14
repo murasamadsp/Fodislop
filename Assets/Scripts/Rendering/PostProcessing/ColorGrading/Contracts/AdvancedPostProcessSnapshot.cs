@@ -16,7 +16,6 @@ public readonly record struct AdvancedPostProcessSnapshot(
     float VolumetricDustIntensity,
     float VolumetricDustScale,
     float VolumetricDustSpeed,
-    float PhosphorMaskIntensity,
     float DitheringIntensity,
     float TemporalPersistenceIntensity,
     float TemporalPersistenceDecay,

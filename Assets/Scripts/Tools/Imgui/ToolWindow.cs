@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Unity.Profiling;
 using UnityEngine;
 
 namespace Fodinae.Tools.Imgui;
@@ -26,7 +27,12 @@ public abstract class ToolWindow : IDisposable
         DisplayTitle = title.ToUpperInvariant();
         Rect = initialRect;
         _initialRect = initialRect;
+        DrawFunction = DrawWindow;
     }
+
+    // Один делегат на окно. GUI.Window(..., window.DrawWindow, ...) создавал
+    // новый на каждое окно в каждом событии IMGUI.
+    internal GUI.WindowFunction DrawFunction { get; }
 
     public string Title { get; }
 
@@ -170,7 +176,98 @@ public abstract class ToolWindow : IDisposable
         return drawnRect;
     }
 
+    // Стоимость окна за последний кадр, в котором оно рисовалось: сумма по всем
+    // событиям IMGUI. Секундомер, а не маркер профайлера — число не смешано с
+    // окнами редактора и есть в сборке без ENABLE_PROFILER.
+    public double DrawMilliseconds { get; private set; }
+
+    public int DrawEvents { get; private set; }
+
+    private ProfilerMarker _drawMarker;
+    private bool _drawMarkerCreated;
+    private long _costTicks;
+    private int _costEvents;
+    private int _costFrame = -1;
+
     internal void DrawWindow(int id)
+    {
+        if (!_drawMarkerCreated)
+        {
+            _drawMarkerCreated = true;
+            _drawMarker = new ProfilerMarker(ProfilerCategory.Gui, "Fodinae.Tools." + Title);
+        }
+
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        long allocatedBefore = AllocatedNow();
+        _drawMarker.Begin();
+        try
+        {
+            DrawWindowCore(id);
+        }
+        finally
+        {
+            _drawMarker.End();
+            RollCostFrame();
+            _costTicks += System.Diagnostics.Stopwatch.GetTimestamp() - started;
+            _costEvents++;
+            _drawAllocatedBytes += System.Math.Max(0L, AllocatedNow() - allocatedBefore);
+        }
+    }
+
+    // Мусор окна за последний кадр: отдельно Tick и отрисовка. Без этого
+    // счётчик «мусор за кадр» смешивал игру с самими инструментами, а все
+    // отчёты сняты с открытыми окнами.
+    public long TickAllocatedBytes { get; private set; }
+
+    public long DrawAllocatedBytes { get; private set; }
+
+    private long _tickAllocatedBytes;
+    private long _drawAllocatedBytes;
+
+    // GC.GetAllocatedBytesForCurrentThread под Boehm всегда 0 — первый отчёт
+    // показал 0.0 КБ у всех окон. Занятая управляемая куча растёт на каждую
+    // аллокацию до сборки; отрицательная разница (сборка внутри замера)
+    // отбрасывается.
+    private static long AllocatedNow() => UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong();
+
+    internal void TickMeasured()
+    {
+        long allocatedBefore = AllocatedNow();
+        try
+        {
+            Tick();
+        }
+        finally
+        {
+            RollCostFrame();
+            _tickAllocatedBytes += System.Math.Max(0L, AllocatedNow() - allocatedBefore);
+        }
+    }
+
+    private void RollCostFrame()
+    {
+        int frame = Time.frameCount;
+        if (frame == _costFrame)
+        {
+            return;
+        }
+
+        if (_costFrame >= 0)
+        {
+            DrawMilliseconds = _costTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            DrawEvents = _costEvents;
+            TickAllocatedBytes = _tickAllocatedBytes;
+            DrawAllocatedBytes = _drawAllocatedBytes;
+        }
+
+        _costFrame = frame;
+        _costTicks = 0;
+        _costEvents = 0;
+        _tickAllocatedBytes = 0;
+        _drawAllocatedBytes = 0;
+    }
+
+    private void DrawWindowCore(int id)
     {
         if (_retryRequested && Event.current.type == EventType.Layout)
         {

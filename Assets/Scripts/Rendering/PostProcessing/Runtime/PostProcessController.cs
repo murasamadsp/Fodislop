@@ -22,6 +22,13 @@ namespace Fodinae.Rendering.PostProcessing
         private Volume? _volume;
 
         private Camera? _mainCamera;
+        // NonSerialized обязателен. При перекомпиляции во время Play Unity
+        // сохраняет и восстанавливает приватные поля компонента: bool переживал
+        // перезагрузку домена, а внедрённый IClientConfigManager — нет (интерфейс
+        // не сериализуется). Update видел «подготовка завершена» при пустой
+        // зависимости и бросал исключение каждый кадр. Теперь флаг сбрасывается
+        // вместе с внедрением, и Update просто выходит.
+        [System.NonSerialized]
         private bool _volumeSetupCompleted;
         private bool _missingConfigReported;
 
@@ -187,7 +194,7 @@ namespace Fodinae.Rendering.PostProcessing
         private void OnDisable()
         {
             _gradingWorkbench.Deactivate();
-            PostProcessRuntimeState.BypassPostProcessEffects = false;
+            PostProcessRuntimeState.BypassPostProcessEffects = true;
             PostProcessRuntimeState.TemporaryBypass = false;
             PostProcessRuntimeState.SetAdvancedSettings(default);
             PostProcessRuntimeState.SetColorGrade(ColorGradeSnapshot.FromLook());
@@ -267,11 +274,13 @@ namespace Fodinae.Rendering.PostProcessing
                 throw new InvalidOperationException("PostProcessController requires a serialized Volume component.");
             }
 
-            VolumeProfile? profile = _volume.profile;
+            VolumeProfile? profile = _volume.sharedProfile ?? _volume.profile;
             if (profile == null)
             {
                 throw new InvalidOperationException("PostProcessController requires a runtime VolumeProfile on its serialized Volume.");
             }
+
+            _volume.weight = 0f;
 
             PostProcessDefaults.ValidateVolumeProfile(profile);
 
@@ -304,6 +313,7 @@ namespace Fodinae.Rendering.PostProcessing
                 throw new InvalidOperationException("PostProcessController requires IClientConfigManager injection.");
             ClientConfig config = clientConfigManager.Config ??
                 throw new InvalidOperationException("PostProcessController requires an initialized ClientConfig.");
+
             // The graphics preset used to stop at this class's doorstep: every
             // value below is an artistic one from ClientConfig, and nothing
             // here ever read GraphicsQualitySettings. That made the whole
@@ -363,7 +373,7 @@ namespace Fodinae.Rendering.PostProcessing
             eigengrau.noiseScale.value = PostProcessLook.FilmGrain.NoiseScale;
             eigengrau.animationSpeed.overrideState = true;
             eigengrau.animationSpeed.value = PostProcessLook.FilmGrain.AnimationSpeed;
-            EigengrauIntensity = config.Effects.FilmGrainEnabled ? PostProcessLook.FilmGrain.Intensity : 0f;
+            EigengrauIntensity = config.Effects.EigengrauEnabled ? PostProcessLook.FilmGrain.Intensity : 0f;
 
             MotionBlurComponent motionBlur = GetRequired(_motionBlur, nameof(_motionBlur));
             motionBlur.intensity.overrideState = true;
@@ -419,6 +429,11 @@ namespace Fodinae.Rendering.PostProcessing
 
         private void Update()
         {
+            if (PostProcessRuntimeState.BypassPostProcessEffects)
+            {
+                return;
+            }
+
             _gradingWorkbench.Tick();
             if (!_volumeSetupCompleted)
             {
@@ -459,9 +474,9 @@ namespace Fodinae.Rendering.PostProcessing
             HDROutput.ConfigureCamera(mainCamera);
             if (mainCamera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
             {
-                cameraData.volumeLayerMask = (1 << RequireVolume().gameObject.layer) |
-                    (1 << mainCamera.gameObject.layer);
-                cameraData.volumeTrigger = mainCamera.transform;
+                cameraData.renderPostProcessing = false;
+                cameraData.volumeLayerMask = 0;
+                cameraData.volumeTrigger = null;
             }
         }
 

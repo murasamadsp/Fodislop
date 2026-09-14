@@ -271,6 +271,11 @@ namespace Fodinae.UI
                 return;
             }
 
+            if (_document != null && !_document.enabled)
+            {
+                return;
+            }
+
             if (_manager == null || _storage == null ||
                 !_manager.IsWorldInitialized || !_storage.IsReady)
             {

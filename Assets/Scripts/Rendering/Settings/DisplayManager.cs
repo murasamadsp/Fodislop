@@ -8,18 +8,24 @@ using Fodinae.Core.Interfaces;
 using Fodinae.Rendering.PostProcessing;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
-using VContainer;
+using VContainer.Unity;
 
 namespace Fodinae.Rendering
 {
-    public class DisplayManager : MonoBehaviour
+    // Чистый сервис контейнера (SCENE_STANDARD.md §1): настройки вывода
+    // применяются при старте scope.
+    public sealed class DisplayManager : IStartable
     {
-        [Inject]
-        private IClientConfigManager _clientConfig = null!;
-        [Inject]
-        private IGameplayCamera _gameplayCamera = null!;
+        private readonly IClientConfigManager _clientConfig;
+        private readonly IGameplayCamera _gameplayCamera;
 
-        protected void Start()
+        public DisplayManager(IClientConfigManager clientConfig, IGameplayCamera gameplayCamera)
+        {
+            _clientConfig = clientConfig;
+            _gameplayCamera = gameplayCamera;
+        }
+
+        void IStartable.Start()
         {
             ApplyDisplaySettings();
         }

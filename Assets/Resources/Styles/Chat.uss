@@ -22,7 +22,6 @@
     color: var(--text-primary);
     padding: var(--space-1);
     white-space: normal;
-    overflow: hidden;
 }
 
 .chat-input {
@@ -101,7 +100,6 @@
     padding-left: var(--space-1);
     padding-right: var(--space-1);
     white-space: normal;
-    overflow: hidden;
     -unity-font-style: normal;
 }
 

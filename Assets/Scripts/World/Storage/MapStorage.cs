@@ -334,7 +334,26 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         await _persistenceGate.WaitAsync(cancellationToken);
         try
         {
-            await UniTask.RunOnThreadPool(() => FlushCore(durable));
+            // Продолжение после WaitAsync может оказаться в пуле потоков, а
+            // снимок чанков обязан сниматься там же, где кэш меняется.
+            await UniTask.SwitchToMainThread();
+            if (_cellLayer == null || !_isInitialized || IsDisposed)
+            {
+                return;
+            }
+
+            WorldLayer<CellType> layer = _cellLayer;
+            var snapshot = layer.TakeDirtySnapshot();
+            try
+            {
+                await UniTask.RunOnThreadPool(() => WriteSnapshotCore(layer, snapshot, durable));
+            }
+            catch
+            {
+                await UniTask.SwitchToMainThread();
+                layer.RestoreDirty(snapshot);
+                throw;
+            }
         }
         finally
         {
@@ -350,9 +369,27 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
             return;
         }
 
+        WorldLayer<CellType> layer = _cellLayer;
+        var snapshot = layer.TakeDirtySnapshot();
         try
         {
-            _cellLayer.Flush(flushToDisk: durable);
+            WriteSnapshotCore(layer, snapshot, durable);
+        }
+        catch
+        {
+            layer.RestoreDirty(snapshot);
+            throw;
+        }
+    }
+
+    private void WriteSnapshotCore(
+        WorldLayer<CellType> layer,
+        System.Collections.Generic.List<(int Index, CellType[] Chunk)> snapshot,
+        bool durable)
+    {
+        try
+        {
+            layer.WriteSnapshot(snapshot, flushToDisk: durable);
         }
         catch (Exception ex) when (
             ex is IOException ||
@@ -388,7 +425,21 @@ public class MapStorage : IWorldDataStorage, IWorldPersistence
         await _persistenceGate.WaitAsync(cancellationToken);
         try
         {
-            await UniTask.RunOnThreadPool(DisposeCore);
+            // Тот же снимок, что во FlushAsync: WorldLayer.Dispose иначе
+            // перебирал бы грязные чанки в пуле потоков. Снимок снимается на
+            // главном потоке, в пул уходят только его запись и закрытие файла.
+            await UniTask.SwitchToMainThread();
+            WorldLayer<CellType>? layer = _isInitialized && !IsDisposed ? _cellLayer : null;
+            var snapshot = layer?.TakeDirtySnapshot();
+            await UniTask.RunOnThreadPool(() =>
+            {
+                if (layer != null && snapshot != null)
+                {
+                    WriteSnapshotCore(layer, snapshot, durable: true);
+                }
+
+                DisposeCore();
+            });
         }
         finally
         {

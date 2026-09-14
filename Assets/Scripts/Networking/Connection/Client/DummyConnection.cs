@@ -68,7 +68,14 @@ public class DummyConnection : IServerConnection, IOfflineConnection
             _playerState.SetHealth,
             _worldState.GetCell,
             _worldState.SetCell);
-        _teleportManager = new DummyTeleportManager(SendPacket, _teleportPositions);
+        _teleportManager = new DummyTeleportManager(
+            SendPacket,
+            _teleportPositions,
+            (destX, destY) =>
+            {
+                _playerState.SetPosition(destX, destY);
+                _worldState.SendChunksAround(destX, destY, SendPacket);
+            });
         // LoopAlive привязан к жизненному циклу соединения: чат-петля
         // умирает вместе с коннектом (раньше она жила вечно и текла
         // через реконнекты — фиксированный источник мусора).

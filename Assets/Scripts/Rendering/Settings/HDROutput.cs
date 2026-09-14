@@ -209,17 +209,31 @@ public static class HDROutput
             return;
         }
 
-        camera.allowHDR = true;
+        // Вызывается раз в секунду: присваивание только при расхождении,
+        // чтобы проверка не трогала камеру, когда менять нечего.
+        if (!camera.allowHDR)
+        {
+            camera.allowHDR = true;
+        }
+
         if (camera.TryGetComponent(out UniversalAdditionalCameraData cameraData))
         {
             // This is permission, not a cached copy of the swapchain state.
             // URP checks the live output state when constructing camera data.
-            cameraData.allowHDROutput = true;
+            if (!cameraData.allowHDROutput)
+            {
+                cameraData.allowHDROutput = true;
+            }
 
-            // Artistic effects run before URP. URP owns tone mapping,
-            // display primaries, UI composition and transfer encoding.
-            cameraData.renderPostProcessing = true;
-            cameraData.dithering = true;
+            if (cameraData.renderPostProcessing)
+            {
+                cameraData.renderPostProcessing = false;
+            }
+
+            if (!cameraData.dithering)
+            {
+                cameraData.dithering = true;
+            }
         }
     }
 }

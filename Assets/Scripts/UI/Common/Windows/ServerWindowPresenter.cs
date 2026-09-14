@@ -68,6 +68,13 @@ public sealed class ServerWindowPresenter : IDisposable
 
     private void Open(OpenWindowPacket packet)
     {
+        // UIDocument може бути вимкненим (BypassGameUI). Серверне вікно потребує
+        // активного дерева — вмикаємо документ перед додаванням елемента.
+        if (!_document.enabled)
+        {
+            _document.enabled = true;
+        }
+
         VisualElement element = new PacketUIBuilder(_assetLoader, _operations).Build(packet.Content);
         // Размер приходит из пакета — он и остаётся инлайном. Центрирование
         // же константа, и раньше оно тоже стояло инлайном: окно нельзя было

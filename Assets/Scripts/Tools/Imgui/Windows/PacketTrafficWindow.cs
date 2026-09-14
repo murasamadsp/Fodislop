@@ -115,7 +115,7 @@ public sealed class PacketTrafficWindow : ToolWindow
     {
         ToolChrome.SectionHeader("ОЧЕРЕДЬ ПРИЁМА");
         bool starved = PacketTelemetry.BudgetStopCount > 0 || PacketTelemetry.BatchCapStopCount > 0;
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             ToolChrome.StatusPip(starved ? ToolTheme.Warning : ToolTheme.Success);
             GUILayout.Label(_queueSummary, MutedLabelStyle);
@@ -146,7 +146,10 @@ public sealed class PacketTrafficWindow : ToolWindow
             : 0d;
         _batchSummary =
             $"пачек HB {PacketTelemetry.BatchCount} (по {perBatch:F1} пакета), " +
-            $"снято сжатых обёрток {PacketTelemetry.CompressedCount}";
+            $"снято сжатых обёрток {PacketTelemetry.CompressedCount}" +
+            (PacketTelemetry.SlowestHandlerName.Length > 0
+                ? $"\nсамый медленный обработчик: {PacketTelemetry.SlowestHandlerName} — {PacketTelemetry.SlowestHandlerMilliseconds:F2} мс"
+                : string.Empty);
 
         // Решение «есть баннер» принимается здесь, а не в отрисовке: живой
         // счётчик мог измениться между Layout и Repaint, и число контролов
@@ -192,18 +195,19 @@ public sealed class PacketTrafficWindow : ToolWindow
             string tail = silence >= SilenceThresholdSeconds
                 ? $"   ·   молчит {silence:F0} с"
                 : string.Empty;
+            string cost = stat.HandlerCount > 0
+                ? $"   ·   обработка {stat.HandlerAverageMilliseconds:F2} мс, пик {stat.HandlerPeakMilliseconds:F2}, всего {stat.HandlerTotalMilliseconds:F0}"
+                : string.Empty;
             rows.Add(stat.UnhandledCount > 0
-                ? $"{stat.Name}   {stat.Count}   ·   без обработчика {stat.UnhandledCount}{tail}"
-                : $"{stat.Name}   {stat.Count}{tail}");
+                ? $"{stat.Name}   {stat.Count}   ·   без обработчика {stat.UnhandledCount}{cost}{tail}"
+                : $"{stat.Name}   {stat.Count}{cost}{tail}");
         }
     }
 
     protected override void DrawContent()
     {
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
-
             if (_unhandledBanner.Length > 0)
             {
                 ToolChrome.Banner(_unhandledBanner, ToolTheme.Warning);
@@ -214,7 +218,7 @@ public sealed class PacketTrafficWindow : ToolWindow
             GUILayout.Label(_summary, MutedLabelStyle);
             GUILayout.Label(_rateSummary, MutedLabelStyle);
             GUILayout.Label(_batchSummary, MutedLabelStyle);
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 if (GUILayout.Button("Обнулить счёт", SecondaryButtonStyle))
                 {
@@ -246,7 +250,7 @@ public sealed class PacketTrafficWindow : ToolWindow
 
         for (int i = 0; i < rows.Count && i < stats.Count; i++)
         {
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 ToolChrome.StatusPip(stats[i].UnhandledCount > 0 ? ToolTheme.Warning : color);
                 GUILayout.Label(rows[i], MutedLabelStyle);
@@ -286,7 +290,7 @@ public sealed class PacketTrafficWindow : ToolWindow
                 continue;
             }
 
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 ToolChrome.StatusPip(
                     !entry.Handled

@@ -48,8 +48,6 @@ internal sealed class PauseMenuEffectsTabBuilder
             throw new InvalidOperationException("[PauseMenu] EffectsGroupOptics is missing from PauseMenu.uxml.");
         VisualElement atmosphereGroup = effectsScroll.Q<VisualElement>("EffectsGroupAtmosphere") ??
             throw new InvalidOperationException("[PauseMenu] EffectsGroupAtmosphere is missing from PauseMenu.uxml.");
-        VisualElement displayGroup = effectsScroll.Q<VisualElement>("EffectsGroupDisplay") ??
-            throw new InvalidOperationException("[PauseMenu] EffectsGroupDisplay is missing from PauseMenu.uxml.");
         VisualElement temporalGroup = effectsScroll.Q<VisualElement>("EffectsGroupTemporal") ??
             throw new InvalidOperationException("[PauseMenu] EffectsGroupTemporal is missing from PauseMenu.uxml.");
 
@@ -106,9 +104,9 @@ internal sealed class PauseMenuEffectsTabBuilder
             () => Cfg().Effects.ChromaticAberrationEnabled,
             (config, value) => config.Effects.ChromaticAberrationEnabled = value));
         cameraGroup.Add(Switch(
-            nameof(EffectSettings.FilmGrainEnabled),
-            () => Cfg().Effects.FilmGrainEnabled,
-            (config, value) => config.Effects.FilmGrainEnabled = value));
+            nameof(EffectSettings.EigengrauEnabled),
+            () => Cfg().Effects.EigengrauEnabled,
+            (config, value) => config.Effects.EigengrauEnabled = value));
         cameraGroup.Add(Switch(
             nameof(EffectSettings.MotionBlurEnabled),
             () => Cfg().Effects.MotionBlurEnabled,
@@ -128,11 +126,6 @@ internal sealed class PauseMenuEffectsTabBuilder
             nameof(EffectSettings.AtmosphereEnabled),
             () => Cfg().Effects.AtmosphereEnabled,
             (config, value) => config.Effects.AtmosphereEnabled = value));
-
-        displayGroup.Add(Switch(
-            nameof(EffectSettings.DisplayPhysicsEnabled),
-            () => Cfg().Effects.DisplayPhysicsEnabled,
-            (config, value) => config.Effects.DisplayPhysicsEnabled = value));
 
         temporalGroup.Add(Switch(
             nameof(EffectSettings.TemporalEnabled),

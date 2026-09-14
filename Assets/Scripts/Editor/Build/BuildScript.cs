@@ -20,6 +20,14 @@ namespace Fodinae.Editor
         public static void BuildMacOS() =>
             BuildPlayerArtifact(BuildTarget.StandaloneOSX, $"Build/macOS/{ProductName}.app", isApple: true);
 
+        // Сборка для замеров: профайлер подключён, маркеры и счётчики живые.
+        // AllowDebugging не ставится — отладочный код исказил бы сами замеры.
+        // Десктоп собирается на Mono (см. BuildPlayerArtifact); на IL2CPP-
+        // платформах берётся Release, а не Debug, по той же причине.
+        [MenuItem("Build/macOS (Apple Silicon, профилирование)")]
+        public static void BuildMacOSProfiling() =>
+            BuildPlayerArtifact(BuildTarget.StandaloneOSX, $"Build/macOS-Profiling/{ProductName}.app", isApple: true, profiling: true);
+
         [MenuItem("Build/Windows 64")]
         public static void BuildWindows() =>
             BuildPlayerArtifact(BuildTarget.StandaloneWindows64, $"Build/Windows/{ProductName}.exe");
@@ -36,7 +44,11 @@ namespace Fodinae.Editor
         public static void BuildIOS() =>
             BuildPlayerArtifact(BuildTarget.iOS, "Build/iOS");
 
-        private static void BuildPlayerArtifact(BuildTarget target, string relativeOutput, bool isApple = false)
+        private static void BuildPlayerArtifact(
+            BuildTarget target,
+            string relativeOutput,
+            bool isApple = false,
+            bool profiling = false)
         {
             BuildSettingsFix.ValidateScenesInBuildSettings();
 
@@ -72,11 +84,25 @@ namespace Fodinae.Editor
                     UnityEditor.Build.NamedBuildTarget.FromBuildTargetGroup(
                         BuildPipeline.GetBuildTargetGroup(target));
 
+                // Десктоп собирается на Mono: IL2CPP переводил весь C# в C++ и
+                // гнал его через clang и LTO-линковку — десятки минут на сборку
+                // ради выигрыша в скрипты, которые занимают 1–2 мс кадра.
+                // iOS без IL2CPP не собирается, Android для магазина требует его
+                // же, поэтому мобильные платформы остаются на IL2CPP.
+                bool desktop = target is BuildTarget.StandaloneOSX
+                    or BuildTarget.StandaloneWindows64
+                    or BuildTarget.StandaloneLinux64;
+                PlayerSettings.SetScriptingBackend(
+                    namedTarget,
+                    desktop ? ScriptingImplementation.Mono2x : ScriptingImplementation.IL2CPP);
+
                 // Master компилируется в разы дольше и не даёт ничего отладке.
                 // Раньше он ставился и для development-сборок тоже.
                 PlayerSettings.SetIl2CppCompilerConfiguration(
                     namedTarget,
-                    development ? Il2CppCompilerConfiguration.Debug : Il2CppCompilerConfiguration.Master);
+                    profiling ? Il2CppCompilerConfiguration.Release
+                    : development ? Il2CppCompilerConfiguration.Debug
+                    : Il2CppCompilerConfiguration.Master);
                 PlayerSettings.SetIl2CppCodeGeneration(
                     namedTarget,
                     UnityEditor.Build.Il2CppCodeGeneration.OptimizeSpeed);
@@ -96,7 +122,9 @@ namespace Fodinae.Editor
                 scenes = scenes,
                 locationPathName = output,
                 target = target,
-                options = development
+                options = profiling
+                    ? BuildOptions.Development | BuildOptions.ConnectWithProfiler
+                    : development
                     // ConnectWithProfiler — без него профайлер к билду не
                     // цепляется, хотя AllowDebugging создаёт впечатление, что
                     // всё включено.
@@ -104,7 +132,7 @@ namespace Fodinae.Editor
                     : BuildOptions.None,
             };
 
-            Log($"Building {target} -> {output} (development={development}, scenes={scenes.Length})");
+            Log($"Building {target} -> {output} (development={development}, profiling={profiling}, scenes={scenes.Length})");
             BuildSummary summary = BuildPipeline.BuildPlayer(options).summary;
             Log($"Result={summary.result} size={summary.totalSize}B " +
                 $"time={summary.totalTime} warnings={summary.totalWarnings} errors={summary.totalErrors}");

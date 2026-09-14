@@ -59,9 +59,8 @@ internal sealed class GradingQualifierWindow : ToolWindow
         // qualifier and Lut edits undoable even when the layer window is hidden.
         _state.BeginHistoryFrame();
 
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
             _qualifier.Enabled = GUILayout.Toggle(
                 _qualifier.Enabled,
                 "●  Включить qualifier",
@@ -75,7 +74,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
             _qualifier.HueCenter = Slider("hue center", _qualifier.HueCenter, 0f, 360f);
             _qualifier.HueWidth = Slider("hue width", _qualifier.HueWidth, 0f, 180f);
             _qualifier.HueSoftness = Slider("hue softness", _qualifier.HueSoftness, 0f, 180f);
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 if (GUILayout.Button("Eyedropper sample", ToolTheme.SecondaryButton))
                 {
@@ -141,7 +140,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
 
             GUILayout.Label("Lut", SectionLabelStyle);
             _lutPath = GUILayout.TextField(_lutPath);
-            using (new GUILayout.HorizontalScope())
+            using (ToolLayout.Horizontal())
             {
                 if (GUILayout.Button("Load .cube", ToolTheme.SecondaryButton))
                 {
@@ -183,6 +182,11 @@ internal sealed class GradingQualifierWindow : ToolWindow
         _state.CommitHistoryFrame();
     }
 
+    // GUILayoutOption — класс: GUILayout.Width в каждом слайдере в каждом
+    // событии IMGUI был постоянным мусором.
+    private static readonly GUILayoutOption _FieldLabelWidth = GUILayout.Width(120f);
+    private static readonly GUILayoutOption _FieldWidth = GUILayout.Width(64f);
+
     private float Slider(string label, float value, float min, float max)
     {
         if (!_numberText.TryGetValue(label, out string? text))
@@ -191,9 +195,9 @@ internal sealed class GradingQualifierWindow : ToolWindow
             _numberText[label] = text;
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            GUILayout.Label(label, ToolTheme.FieldLabel, GUILayout.Width(120f));
+            GUILayout.Label(label, ToolTheme.FieldLabel, _FieldLabelWidth);
             float sliderMin = min;
             float sliderMax = max;
             if (Event.current.shift)
@@ -210,7 +214,7 @@ internal sealed class GradingQualifierWindow : ToolWindow
                 _numberText[label] = text;
             }
 
-            string edited = GUILayout.TextField(text, GUILayout.Width(64f));
+            string edited = GUILayout.TextField(text, _FieldWidth);
             if (edited != text)
             {
                 edited = edited.Replace(',', '.');
@@ -226,15 +230,21 @@ internal sealed class GradingQualifierWindow : ToolWindow
                 }
             }
 
-            if (!GUI.changed &&
+            // Источник истины — значение. Раньше текст перетирал значение на
+            // каждом событии, и всё, что меняло квалификатор в обход поля
+            // (пипетка, сброс, загрузка пресета), тут же откатывалось. Пока
+            // какое-то поле в фокусе, текст не трогаем: там его набирают.
+            if (GUIUtility.keyboardControl == 0 &&
+                edited == text &&
                 float.TryParse(
                     _numberText[label],
                     NumberStyles.Float,
                     CultureInfo.InvariantCulture,
                     out float committed) &&
-                float.IsFinite(committed))
+                float.IsFinite(committed) &&
+                Mathf.Abs(committed - result) > 0.0005f)
             {
-                result = Mathf.Clamp(committed, min, max);
+                _numberText[label] = result.ToString("0.###", CultureInfo.InvariantCulture);
             }
 
             if (Event.current.type == EventType.MouseDown &&
@@ -315,9 +325,9 @@ internal sealed class GradingQualifierWindow : ToolWindow
     private static T EnumCycle<T>(string label, T value, params string[] names)
         where T : struct, Enum
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            GUILayout.Label(label, ToolTheme.FieldLabel, GUILayout.Width(120f));
+            GUILayout.Label(label, ToolTheme.FieldLabel, _FieldLabelWidth);
             int index = Mathf.Clamp(Convert.ToInt32(value), 0, names.Length - 1);
             if (GUILayout.Button(names[index], ToolTheme.SegmentedButton))
             {

@@ -321,6 +321,9 @@ namespace Fodinae.World
                 Texture2D cachedTexture = cachedTextureInfo.BaseTexture;
                 if (!_atlasCollection.ContainsCell(cellType))
                 {
+                    // Замер непрозрачности читает текстуру через GPU: только
+                    // с главного потока.
+                    await UniTask.SwitchToMainThread();
                     AddTextureToAtlas(
                         cellType,
                         cachedTexture,
@@ -394,7 +397,9 @@ namespace Fodinae.World
                 FrameSize = effectiveFrameHeight,
             };
 
-            _atlasCollection.AddTexture(cellType, texture);
+            // Непрозрачность меряется один раз при загрузке: по ней террейн
+            // не рисует фон под сплошными блоками.
+            _atlasCollection.AddTexture(cellType, texture, TextureAtlas.MeasureFullyOpaque(texture));
             _textureCache.AddTexture(cellType, textureInfo);
             TextureRevision++;
             OnTextureLoaded?.Invoke($"Cells/{(int)cellType}.png", texture);

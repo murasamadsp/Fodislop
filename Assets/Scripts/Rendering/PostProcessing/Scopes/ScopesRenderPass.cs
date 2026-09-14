@@ -39,7 +39,7 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
     public ScopesRenderPass(ComputeShader scopesCS)
     {
         ApplyRenderPassEvent();
-        _scopesCS = Object.Instantiate(scopesCS);
+        _scopesCS = scopesCS;
         _kernelClear = _scopesCS.FindKernel("ScopesClear");
         _kernelGather = _scopesCS.FindKernel("ScopesGather");
         _kernelHistogram = _scopesCS.FindKernel("HistogramResolve");
@@ -262,6 +262,5 @@ internal sealed class ScopesRenderPass : ScriptableRenderPass2D
         }
 
         _resources.Dispose();
-        CoreUtils.Destroy(_scopesCS);
     }
 }

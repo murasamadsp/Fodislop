@@ -83,11 +83,27 @@ internal static class ScopesPassExecutor
         BindBuffers(cmd, data.ScopesCS, data.KernelGather, histogram, waveform, vectorscope, stats);
         cmd.SetComputeTextureParam(data.ScopesCS, data.KernelGather, ScopeSourceID, data.SourceTexture);
         Dispatch(cmd, data.ScopesCS, data.KernelGather, sampledWidth, sampledHeight);
-        AsyncGPUReadback.Request(stats, resources.ApplyStats);
+        AsyncGPUReadback.Request(stats, StatsCallback(resources));
 
         Resolve(cmd, data, data.KernelHistogram, resources.HistogramTexture, histogram, waveform, vectorscope);
         Resolve(cmd, data, data.KernelWaveform, resources.WaveformTexture, histogram, waveform, vectorscope);
         Resolve(cmd, data, data.KernelVectorscope, resources.VectorscopeTexture, histogram, waveform, vectorscope);
+    }
+
+    private static ScopeResources? _statsCallbackOwner;
+    private static System.Action<AsyncGPUReadbackRequest>? _statsCallback;
+
+    // Группа методов превращается в новый делегат при каждом вызове, то есть
+    // на каждый кадр с открытыми приборами.
+    private static System.Action<AsyncGPUReadbackRequest> StatsCallback(ScopeResources resources)
+    {
+        if (_statsCallback == null || !ReferenceEquals(_statsCallbackOwner, resources))
+        {
+            _statsCallbackOwner = resources;
+            _statsCallback = resources.ApplyStats;
+        }
+
+        return _statsCallback;
     }
 
     private static void Resolve(

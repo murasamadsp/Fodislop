@@ -89,6 +89,11 @@ namespace Fodinae.UI
             float averageDelta = _runningSum / SampleSize;
             CurrentFps = averageDelta > 0f ? 1f / averageDelta : 0f;
 
+            if (_document != null && !_document.enabled)
+            {
+                return;
+            }
+
             if (_fpsLabel == null)
             {
                 FindLabel();
@@ -112,7 +117,27 @@ namespace Fodinae.UI
             if (_fpsLabel.text != text)
             {
                 _fpsLabel.text = text;
+                HoldWidth(_fpsLabel, ref _widestLabel);
             }
+        }
+
+        // Ширина подписи зависит от цифр: «FPS: 9» уже, чем «FPS: 48», и каждая
+        // смена значения меняла размер и перераскладывала HUD (в журнале
+        // раскладки это главный источник — 10–12 % кадров). Минимальная ширина
+        // держится на самом широком тексте и только растёт: раскладка
+        // случается, лишь пока строка расширяется до своего предела.
+        private float _widestLabel;
+
+        internal static void HoldWidth(VisualElement element, ref float widest)
+        {
+            float width = element.resolvedStyle.width;
+            if (float.IsNaN(width) || width <= widest)
+            {
+                return;
+            }
+
+            widest = width;
+            element.style.minWidth = width;
         }
 
         private void FindLabel()

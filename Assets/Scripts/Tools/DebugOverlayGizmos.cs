@@ -89,8 +89,11 @@ public static class DebugOverlayGizmos
         if (storage?.CellLayer != null &&
             storage.CellLayer.TryGetCell(serverCell.x, serverCell.y, out CellType type))
         {
-            var config = mapManager.GetCellConfig(type);
-            passable = type == CellType.Empty || ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
+            if (type != CellType.Unloaded)
+            {
+                var config = mapManager.GetCellConfig(type);
+                passable = type == CellType.Empty || ((CellConfigProperties)config.Properties).HasFlag(CellConfigProperties.Passable);
+            }
         }
 
         Color highlightColor = passable ? Color.green : Color.red;

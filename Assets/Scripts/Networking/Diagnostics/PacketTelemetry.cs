@@ -70,6 +70,36 @@ public static class PacketTelemetry
         PushHistory(new PacketEvent(packetType.Name, Incoming: true, handled, timeSeconds));
     }
 
+    // Время обработчика одного пакета. Бюджет разбора очереди проверяется
+    // только между пакетами, поэтому пик кадра — это самый тяжёлый обработчик.
+    public static void RecordHandlerTime(Type packetType, double milliseconds)
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        string name = packetType.Name;
+        _Incoming.TryGetValue(name, out PacketStat stat);
+        _Incoming[name] = stat with
+        {
+            Name = name,
+            HandlerCount = stat.HandlerCount + 1,
+            HandlerTotalMilliseconds = stat.HandlerTotalMilliseconds + milliseconds,
+            HandlerPeakMilliseconds = Math.Max(stat.HandlerPeakMilliseconds, milliseconds),
+        };
+
+        if (milliseconds > SlowestHandlerMilliseconds)
+        {
+            SlowestHandlerMilliseconds = milliseconds;
+            SlowestHandlerName = name;
+        }
+    }
+
+    public static double SlowestHandlerMilliseconds { get; private set; }
+
+    public static string SlowestHandlerName { get; private set; } = string.Empty;
+
     public static void RecordOutgoing(Type packetType, double timeSeconds)
     {
         if (!Enabled)
@@ -162,6 +192,8 @@ public static class PacketTelemetry
         PeakQueueDepth = 0;
         BudgetStopCount = 0;
         BatchCapStopCount = 0;
+        SlowestHandlerMilliseconds = 0d;
+        SlowestHandlerName = string.Empty;
         _windowStart = 0d;
         _windowIncoming = 0;
         _windowOutgoing = 0;
@@ -188,11 +220,13 @@ public static class PacketTelemetry
         double timeSeconds)
     {
         target.TryGetValue(name, out PacketStat stat);
-        target[name] = new PacketStat(
-            name,
-            stat.Count + 1,
-            handled ? stat.UnhandledCount : stat.UnhandledCount + 1,
-            timeSeconds);
+        target[name] = stat with
+        {
+            Name = name,
+            Count = stat.Count + 1,
+            UnhandledCount = handled ? stat.UnhandledCount : stat.UnhandledCount + 1,
+            LastSeenSeconds = timeSeconds,
+        };
     }
 
     private static void PushHistory(PacketEvent entry)
@@ -216,7 +250,13 @@ public readonly record struct PacketStat(
     string Name,
     long Count,
     long UnhandledCount,
-    double LastSeenSeconds);
+    double LastSeenSeconds,
+    long HandlerCount = 0,
+    double HandlerTotalMilliseconds = 0d,
+    double HandlerPeakMilliseconds = 0d)
+{
+    public double HandlerAverageMilliseconds => HandlerCount > 0 ? HandlerTotalMilliseconds / HandlerCount : 0d;
+}
 
 public readonly record struct PacketEvent(
     string Name,

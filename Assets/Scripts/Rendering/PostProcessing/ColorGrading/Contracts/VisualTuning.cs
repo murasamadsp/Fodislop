@@ -112,7 +112,6 @@ namespace Fodinae.Rendering.PostProcessing
 
         public static class Display
         {
-            public const float PhosphorMaskIntensity = 0.08f;
             public const float DitheringIntensity = 0.5f;
         }
 

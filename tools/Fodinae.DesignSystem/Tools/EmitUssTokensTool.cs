@@ -6,7 +6,8 @@ namespace Fodinae.DesignSystem.Tools;
 
 internal static class EmitUssTokensTool
 {
-    private static readonly string[] DropPrefix = { "--hex-", "--rgb-", "--mat-", "--blur-", "--layer-", "--z-" };
+    // --blur-* переносится: радиусы нужны filter: blur() и drop-shadow() (Unity 6.3+).
+    private static readonly string[] DropPrefix = { "--hex-", "--rgb-", "--mat-", "--layer-", "--z-" };
     private static readonly HashSet<string> DropExact = new() { "--fit-lines" };
 
     private static readonly Dictionary<string, string> FontAssets = new(StringComparer.Ordinal)

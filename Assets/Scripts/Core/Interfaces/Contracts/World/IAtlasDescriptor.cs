@@ -11,4 +11,8 @@ public interface IAtlasDescriptor
     int Size { get; }
 
     bool ContainsCell(CellType cellType);
+
+    // Текстура клетки непрозрачна во всех пикселях (всех кадрах и вариантах).
+    // Неизвестно — false: фон под такой клеткой рисуется как обычно.
+    bool IsFullyOpaque(CellType cellType);
 }

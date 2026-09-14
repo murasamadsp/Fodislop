@@ -44,9 +44,8 @@ public sealed class RenderBypassWindow : ToolWindow
 
     protected override void DrawContent()
     {
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
             DrawBypassWarning();
 
             ToolChrome.SectionHeader("ОБХОДЫ");
@@ -119,7 +118,7 @@ public sealed class RenderBypassWindow : ToolWindow
         ToolChrome.SectionHeader("ВИД ОСВЕЩЕНИЯ");
         bool custom = lighting.ActiveDebugView != LightingEngine.DebugView.FinalLighting;
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             ToolChrome.StatusPip(custom ? ToolTheme.Warning : ToolTheme.Success);
             LightingEngine.DebugView view = lighting.ActiveDebugView;
@@ -132,9 +131,9 @@ public sealed class RenderBypassWindow : ToolWindow
             GUILayout.Label(_lightingViewLabel, MutedLabelStyle);
         }
 
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
-            if (GUILayout.Button("◄", SecondaryButtonStyle, GUILayout.Width(34f)))
+            if (GUILayout.Button("◄", SecondaryButtonStyle, ToolLayout.Width(34f)))
             {
                 StepLightingView(lighting, -1);
             }
@@ -157,7 +156,7 @@ public sealed class RenderBypassWindow : ToolWindow
 
     private static bool DrawSwitch(bool value, string label, Color? activeColor = null)
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             ToolChrome.StatusPip(value
                 ? activeColor ?? ToolTheme.Error

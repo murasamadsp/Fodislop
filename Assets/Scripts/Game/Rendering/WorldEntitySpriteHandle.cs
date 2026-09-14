@@ -9,6 +9,7 @@ public class WorldEntitySpriteHandle
     private Vector3 _lastPosition;
     private Quaternion _lastRotation;
     private Vector3 _lastScale;
+    private Matrix4x4 _lastLocalToWorld = Matrix4x4.identity;
     private Sprite? _lastSprite;
     private Color _lastColor;
     private bool _lastEnabled;
@@ -95,12 +96,46 @@ public class WorldEntitySpriteHandle
             _framePosition = _lastPosition;
             _frameRotation = _lastRotation;
             _frameScale = _lastScale;
+            _frameLocalToWorld = _lastLocalToWorld;
+            return;
+        }
+
+        // Отключённый слот не рисуется и не отбирается в видимые: всё, от
+        // чего зависит перестроение, — Enabled/Sprite/Color — лежит в
+        // управляемой памяти и сверяется без единого вызова в движок.
+        // Свежая матрица подтянется полным чтением в кадре включения:
+        // смена Enabled всегда помечает хендл изменённым.
+        if (!Enabled && _hasSnapshot)
+        {
+            _framePosition = _lastPosition;
+            _frameRotation = _lastRotation;
+            _frameScale = _lastScale;
+            _frameLocalToWorld = _lastLocalToWorld;
             return;
         }
 
         _framePosition = Transform.position;
         _frameRotation = Transform.rotation;
-        _frameScale = Transform.lossyScale;
+        if (_hasSnapshot &&
+            _framePosition == _lastPosition &&
+            _frameRotation == _lastRotation)
+        {
+            // Позиция и поворот бит-в-бит те же, а цепочка родителей
+            // статична (корни SceneObjectFactory создаются сценой и кодом
+            // не двигаются): мировая матрица не могла измениться, и самый
+            // дорогой вызов кадра — localToWorldMatrix — пропускается.
+            _frameScale = Transform.lossyScale;
+            if (_frameScale == _lastScale)
+            {
+                _frameLocalToWorld = _lastLocalToWorld;
+                return;
+            }
+        }
+        else
+        {
+            _frameScale = Transform.lossyScale;
+        }
+
         _frameLocalToWorld = Transform.localToWorldMatrix;
     }
 
@@ -159,6 +194,7 @@ public class WorldEntitySpriteHandle
             _lastPosition = _framePosition;
             _lastRotation = _frameRotation;
             _lastScale = _frameScale;
+            _lastLocalToWorld = _frameLocalToWorld;
         }
 
         _lastSprite = Sprite;

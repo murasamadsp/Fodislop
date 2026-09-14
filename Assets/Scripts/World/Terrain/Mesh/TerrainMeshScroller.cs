@@ -61,40 +61,6 @@ internal static class TerrainMeshScroller
         }
     }
 
-    public static void ShiftPositions(
-        TerrainVertex[] vertices,
-        int meshWidth,
-        int meshHeight,
-        int verticesPerCell,
-        float cellSize,
-        int dx,
-        int dy)
-    {
-        int keptWidth = meshWidth - Math.Abs(dx);
-        int keptHeight = meshHeight - Math.Abs(dy);
-        if (keptWidth <= 0 || keptHeight <= 0 || (dx == 0 && dy == 0))
-        {
-            return;
-        }
-
-        int firstX = dx > 0 ? 0 : -dx;
-        int firstY = dy > 0 ? 0 : -dy;
-        float shiftX = dx * cellSize;
-        float shiftY = dy * cellSize;
-
-        Parallel.For(firstX, firstX + keptWidth, x =>
-        {
-            int start = ((x * meshHeight) + firstY) * verticesPerCell;
-            int end = start + (keptHeight * verticesPerCell);
-            for (int i = start; i < end; i++)
-            {
-                ref TerrainVertex vertex = ref vertices[i];
-                vertex.Position.x -= shiftX;
-                vertex.Position.y -= shiftY;
-            }
-        });
-    }
-
     public static void GetBandExtents(int size, int delta, out int start, out int length)
     {
         if (delta > 0)

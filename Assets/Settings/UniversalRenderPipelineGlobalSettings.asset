@@ -72,7 +72,22 @@ MonoBehaviour:
       - rid: 6689778435446800385
       - rid: 6689778435446800386
     m_RuntimeSettings:
-      m_List: []
+      m_List:
+      - rid: 7752762179098771456
+      - rid: 7752762179098771457
+      - rid: 7752762179098771459
+      - rid: 7752762179098771464
+      - rid: 7752762179098771466
+      - rid: 7752762179098771468
+      - rid: 7752762179098771472
+      - rid: 7752762179098771476
+      - rid: 3114554777721110529
+      - rid: 3114554777721110530
+      - rid: 5970098971000176827
+      - rid: 5970098971000176828
+      - rid: 6689778435446800384
+      - rid: 6689778435446800385
+      - rid: 6689778435446800386
   m_AssetVersion: 11
   m_ObsoleteDefaultVolumeProfile: {fileID: 0}
   m_RenderingLayerNames:
@@ -474,4 +489,4 @@ MonoBehaviour:
         m_Version: 0
         m_ExportShaderVariants: 1
         m_ShaderVariantLogLevel: 0
-m_StripRuntimeDebugShaders: 1
+        m_StripRuntimeDebugShaders: 1

@@ -21,6 +21,7 @@ public sealed class ApplicationBootstrap : IStartable
     private readonly IShaderWarmupService _shaderWarmup;
     private readonly ILocalizationService _localization;
     private readonly IAudioSystem _audioSystem;
+    private readonly IWorldEntryPreparation _worldEntryPreparation;
 
     public ApplicationBootstrap(
         BootstrapLifetimeScope scope,
@@ -30,7 +31,8 @@ public sealed class ApplicationBootstrap : IStartable
         IRuntimeAssetPaths runtimeAssetPaths,
         IShaderWarmupService shaderWarmup,
         ILocalizationService localization,
-        IAudioSystem audioSystem)
+        IAudioSystem audioSystem,
+        IWorldEntryPreparation worldEntryPreparation)
     {
         _scope = scope;
         _clientConfig = clientConfig;
@@ -40,6 +42,7 @@ public sealed class ApplicationBootstrap : IStartable
         _shaderWarmup = shaderWarmup;
         _localization = localization;
         _audioSystem = audioSystem;
+        _worldEntryPreparation = worldEntryPreparation;
     }
 
     public void Start()
@@ -75,7 +78,14 @@ public sealed class ApplicationBootstrap : IStartable
             await UniTask.WhenAll(
                 _runtimeAssetPaths.EnsureReadyAsync(),
                 _audioSystem.WaitUntilBanksReadyAsync(scopeToken));
-            await _scope.TransitionAsync(ProjectRuntimeContracts.SceneNames.Gateway, scopeToken);
+
+            string targetScene = ResolveInitialScene();
+            if (targetScene == ProjectRuntimeContracts.SceneNames.MainGame)
+            {
+                await _worldEntryPreparation.EnsureReadyAsync(scopeToken);
+            }
+
+            await _scope.TransitionAsync(targetScene, scopeToken);
         }
         catch (OperationCanceledException) when (scopeToken.IsCancellationRequested)
         {
@@ -85,5 +95,29 @@ public sealed class ApplicationBootstrap : IStartable
         {
             UnityEngine.Debug.LogException(exception);
         }
+    }
+
+    private static string ResolveInitialScene()
+    {
+#if UNITY_EDITOR
+        string target = UnityEditor.SessionState.GetString(
+            "Fodinae.PlayModeTargetScene",
+            string.Empty);
+        UnityEditor.SessionState.SetString("Fodinae.PlayModeTargetScene", string.Empty);
+        if (!string.IsNullOrWhiteSpace(target) &&
+            target != ProjectRuntimeContracts.SceneNames.Bootstrap)
+        {
+            if (UnityEngine.Application.CanStreamedLevelBeLoaded(target))
+            {
+                UnityEngine.Debug.Log(
+                    $"[Bootstrap] Starting with scene '{target}' requested from Editor.");
+                return target;
+            }
+
+            UnityEngine.Debug.LogWarning(
+                $"[Bootstrap] Selected scene '{target}' is not present in Build Settings; falling back to Gateway.");
+        }
+#endif
+        return ProjectRuntimeContracts.SceneNames.Gateway;
     }
 }

@@ -35,6 +35,12 @@ namespace Fodinae.Player
         private float _zoomSmoothness = 8f;
 
         private const float ZoomSettleEpsilon = 0.001f;
+
+        // Сериализованные пределы не выходят за контракт: освещение рассчитано
+        // на кадр ProjectRuntimeContracts.Camera.MaximumOrthographicSize.
+        private float MinimumZoom => Mathf.Max(_minZoom, ProjectRuntimeContracts.Camera.MinimumOrthographicSize);
+
+        private float MaximumZoom => Mathf.Clamp(_maxZoom, MinimumZoom, ProjectRuntimeContracts.Camera.MaximumOrthographicSize);
         private const float FollowSettleEpsilonSquared = 0.000001f;
 
         private float _originalZ;
@@ -78,7 +84,7 @@ namespace Fodinae.Player
             _camera = _injectedCamera;
 
             _originalZ = _camera.transform.position.z;
-            float initialZoom = (_minZoom + _maxZoom) * 0.5f;
+            float initialZoom = (MinimumZoom + MaximumZoom) * 0.5f;
             _targetZoom = initialZoom;
             _currentZoom = _targetZoom;
             _lastZoom = _currentZoom;
@@ -263,7 +269,7 @@ namespace Fodinae.Player
             if (Mathf.Abs(scrollInput) > 0.01f)
             {
                 _targetZoom -= scrollInput * _zoomSpeed * Time.deltaTime;
-                _targetZoom = Mathf.Clamp(_targetZoom, _minZoom, _maxZoom);
+                _targetZoom = Mathf.Clamp(_targetZoom, MinimumZoom, MaximumZoom);
             }
 
             float nextZoom = Mathf.Lerp(

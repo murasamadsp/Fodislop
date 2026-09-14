@@ -74,6 +74,21 @@ public sealed class ColorGradeState
     private readonly Stack<ColorGradeSnapshot> _redo = [];
     private ColorGradeSnapshot? _historyFrame;
 
+    // Кеш снимков. Окна грейдинга вызывают BeginHistoryFrame/CommitHistoryFrame
+    // на каждое событие IMGUI, контроллер — ToSnapshot каждый кадр, и каждый
+    // вызов клонировал все кривые дважды. Снимок пересобирается только когда
+    // состояние действительно отличается от того, из которого он собран.
+    // _authoredSource — сырая копия состояния (до санитизации) для сравнения.
+    private ColorGradeSnapshot _authoredSource;
+    private ColorGradeSnapshot _authored;
+    private bool _hasAuthored;
+    private int _authoredVersion;
+    private ColorGradeSnapshot _preview;
+    private bool _hasPreview;
+    private int _previewAuthoredVersion;
+    private int _previewBypassMask;
+    private ColorGradeLayer? _previewSolo;
+
     public ColorGradeState()
     {
         ResetToLook();
@@ -444,7 +459,7 @@ public sealed class ColorGradeState
     public void Sanitize()
     {
         EnabledMask &= (1 << LayerCount) - 1;
-        if (!Enum.IsDefined(typeof(DisplayTransform), Transform))
+        if (Transform is not (DisplayTransform.None or DisplayTransform.Fodinae))
         {
             Transform = PostProcessLook.Grade.Transform;
         }
@@ -520,12 +535,14 @@ public sealed class ColorGradeState
         SaturationVsSaturationCurve.Sanitize();
         Qualifier.Sanitize();
         LutIntensity = FiniteClamp(LutIntensity, 0f, 1f, 0f);
-        if (!Enum.IsDefined(typeof(ColorGradeLutColorSpace), LutColorSpace))
+        if (LutColorSpace is not (ColorGradeLutColorSpace.LinearRec709 or ColorGradeLutColorSpace.SrgbRec709))
         {
             LutColorSpace = ColorGradeLutColorSpace.LinearRec709;
         }
 
-        if (Solo.HasValue && !Enum.IsDefined(typeof(ColorGradeLayer), Solo.Value))
+        // Диапазон, а не Enum.IsDefined: Sanitize идёт каждый кадр, пока
+        // рабочее место применяет грейд, а IsDefined упаковывает и ходит в reflection.
+        if (Solo.HasValue && (uint)(int)Solo.Value >= LayerCount)
         {
             Solo = null;
         }
@@ -536,7 +553,70 @@ public sealed class ColorGradeState
         }
     }
 
-    public ColorGradeSnapshot ToAuthoredSnapshot() => new ColorGradeSnapshot
+    public ColorGradeSnapshot ToAuthoredSnapshot()
+    {
+        if (_hasAuthored && SourceMatches(in _authoredSource))
+        {
+            return _authored;
+        }
+
+        _authoredSource = BuildSourceSnapshot();
+        _authored = _authoredSource.Sanitized();
+        _hasAuthored = true;
+        _authoredVersion++;
+        return _authored;
+    }
+
+    private bool SourceMatches(in ColorGradeSnapshot source) =>
+        source.EnabledMask == EnabledMask &&
+        source.Transform == Transform &&
+        source.Exposure == Exposure &&
+        source.CdlSaturation == CdlSaturation &&
+        source.WhitePoint == WhitePoint &&
+        source.Temperature == Temperature &&
+        source.Tint == Tint &&
+        source.Slope == Slope &&
+        source.Offset == Offset &&
+        source.Power == Power &&
+        source.PrimaryLift == PrimaryLift &&
+        source.PrimaryGamma == PrimaryGamma &&
+        source.PrimaryGain == PrimaryGain &&
+        source.PrimaryOffset == PrimaryOffset &&
+        source.PrimaryMaster == PrimaryMaster &&
+        source.Vibrance == Vibrance &&
+        source.Hue == Hue &&
+        source.CdlMaster == CdlMaster &&
+        source.Pivot == Pivot &&
+        source.Shadows == Shadows &&
+        source.Highlights == Highlights &&
+        source.Blacks == Blacks &&
+        source.Whites == Whites &&
+        source.Toe == Toe &&
+        source.Shoulder == Shoulder &&
+        source.GreyOut == GreyOut &&
+        source.CurveSlope == CurveSlope &&
+        source.ShoulderPower == ShoulderPower &&
+        source.ToePower == ToePower &&
+        source.ToeStops == ToeStops &&
+        source.PathToWhiteAmount == PathToWhiteAmount &&
+        source.PathToWhitePower == PathToWhitePower &&
+        source.GamutCompressionEnabled == GamutCompressionEnabled &&
+        source.GamutCompressionStrength == GamutCompressionStrength &&
+        ReferenceEquals(source.Lut, Lut) &&
+        source.LutIntensity == LutIntensity &&
+        source.LutColorSpace == LutColorSpace &&
+        source.MasterCurve.ContentEquals(MasterCurve) &&
+        source.RedCurve.ContentEquals(RedCurve) &&
+        source.GreenCurve.ContentEquals(GreenCurve) &&
+        source.BlueCurve.ContentEquals(BlueCurve) &&
+        source.HueVsHueCurve.ContentEquals(HueVsHueCurve) &&
+        source.HueVsSaturationCurve.ContentEquals(HueVsSaturationCurve) &&
+        source.HueVsLuminanceCurve.ContentEquals(HueVsLuminanceCurve) &&
+        source.LuminanceVsSaturationCurve.ContentEquals(LuminanceVsSaturationCurve) &&
+        source.SaturationVsSaturationCurve.ContentEquals(SaturationVsSaturationCurve) &&
+        source.Qualifier.ContentEquals(Qualifier);
+
+    private ColorGradeSnapshot BuildSourceSnapshot() => new ColorGradeSnapshot
     {
         EnabledMask = EnabledMask,
         Transform = Transform,
@@ -585,11 +665,32 @@ public sealed class ColorGradeState
         Lut = Lut,
         LutIntensity = LutIntensity,
         LutColorSpace = LutColorSpace,
-    }.Sanitized();
+    };
 
     public ColorGradeSnapshot ToSnapshot()
     {
         ColorGradeSnapshot authored = ToAuthoredSnapshot();
+        int bypassMask = BypassMask;
+        if (_hasPreview &&
+            _previewAuthoredVersion == _authoredVersion &&
+            _previewBypassMask == bypassMask &&
+            _previewSolo == Solo)
+        {
+            return _preview;
+        }
+
+        _preview = BuildPreviewSnapshot(in authored);
+        _hasPreview = true;
+        _previewAuthoredVersion = _authoredVersion;
+        _previewBypassMask = bypassMask;
+        _previewSolo = Solo;
+        return _preview;
+    }
+
+    // Слои в обходе и соло — единственное, чем предпросмотр отличается от
+    // авторского снимка; EnabledMask входит в авторский снимок и его версию.
+    private ColorGradeSnapshot BuildPreviewSnapshot(in ColorGradeSnapshot authored)
+    {
         return authored with
         {
             Transform = IsActive(ColorGradeLayer.Curve)

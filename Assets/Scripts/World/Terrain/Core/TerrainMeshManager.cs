@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using Fodinae.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -10,6 +9,8 @@ namespace Fodinae.World.Terrain;
 
 public sealed class TerrainMeshManager
 {
+    // Раскладка вершины осталась только у накладки дверей: сам террейн
+    // рисуется мешем идентификаторов по текстурам данных клетки.
     internal static readonly VertexAttributeDescriptor[] VertexLayout =
     [
         new(VertexAttribute.Position,  VertexAttributeFormat.Float32, 3),
@@ -23,110 +24,7 @@ public sealed class TerrainMeshManager
         new(VertexAttribute.TexCoord6, VertexAttributeFormat.Float32, 4), // glowVec: stays float32 (packed RGB > 65504)
     ];
 
-    private const MeshUpdateFlags UploadFlags =
-        MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontRecalculateBounds;
-
     private readonly RenderTargetIdentifier[] _lightingFieldTargets = new RenderTargetIdentifier[2];
-    private Mesh? _mesh;
-
-    public Mesh? Mesh => _mesh;
-
-    public void EnsureMesh(ref MeshFilter? meshFilter)
-    {
-        if (_mesh == null)
-        {
-            _mesh = new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 };
-            _mesh.MarkDynamic();
-            if (meshFilter != null)
-            {
-                meshFilter.sharedMesh = _mesh;
-            }
-        }
-        else if (meshFilter != null && meshFilter.sharedMesh != _mesh)
-        {
-            meshFilter.sharedMesh = _mesh;
-        }
-    }
-
-    public void UploadVertexBuffer(
-        TerrainMeshBuilder meshBuilder,
-        int atlasCount,
-        IFrameTelemetry telemetry)
-    {
-        if (_mesh == null)
-        {
-            return;
-        }
-
-        if (_mesh.vertexCount != meshBuilder.VertexBuffer.Length || _mesh.subMeshCount != atlasCount)
-        {
-            telemetry.TerrainMeshClearCount++;
-            _mesh.Clear();
-            _mesh.subMeshCount = atlasCount;
-            _mesh.SetVertexBufferParams(meshBuilder.VertexBuffer.Length, VertexLayout);
-        }
-
-        _mesh.SetVertexBufferData(
-            meshBuilder.VertexBuffer,
-            0,
-            0,
-            meshBuilder.VertexBuffer.Length,
-            0,
-            UploadFlags);
-    }
-
-    public bool UploadDirectVertexBuffer(
-        TerrainMeshBuilder meshBuilder,
-        int vertexStart,
-        int vertexCount)
-    {
-        if (_mesh == null)
-        {
-            return true;
-        }
-
-        int bufferLength = meshBuilder.VertexBuffer.Length;
-        int start = Mathf.Clamp(vertexStart, 0, bufferLength);
-        int count = Mathf.Clamp(vertexCount, 0, bufferLength - start);
-        if (count == 0)
-        {
-            return true;
-        }
-
-        // Сетка могла не пережить смену размеров: тогда частичная выгрузка
-        // легла бы не по тем адресам, и вместо участка земли поехала бы вся.
-        // Молча пропустить нельзя — заплатка просто не появилась бы на
-        // экране и осталась бы невидимой навсегда. Отказ возвращается
-        // наружу, чтобы вызывающий заказал полную перестройку.
-        if (_mesh.vertexCount != bufferLength)
-        {
-            return false;
-        }
-
-        _mesh.SetVertexBufferData(
-            meshBuilder.VertexBuffer,
-            start,
-            start,
-            count,
-            0,
-            UploadFlags);
-        return true;
-    }
-
-    public void UpdateMeshBounds(int meshWidth, int meshHeight, float cellSize)
-    {
-        if (_mesh == null)
-        {
-            return;
-        }
-
-        _mesh.bounds = new Bounds(
-            new Vector3(meshWidth * cellSize * 0.5f, meshHeight * cellSize * 0.5f, 0f),
-            new Vector3(
-                (meshWidth * cellSize) + (cellSize * 2f),
-                (meshHeight * cellSize) + (cellSize * 2f),
-                2f));
-    }
 
     public void RenderLightingMaterialFields(
         CommandBuffer commandBuffer,
@@ -134,9 +32,11 @@ public sealed class TerrainMeshManager
         RenderTexture emissionField,
         Vector4 worldRect,
         Matrix4x4 localToWorldMatrix,
-        Material[] materials)
+        Material[] materials,
+        Mesh? mesh,
+        Vector4 screenViewOffset)
     {
-        if (_mesh == null || materials.Length == 0 ||
+        if (mesh == null || materials.Length == 0 ||
             !materialField.IsCreated() || !emissionField.IsCreated())
         {
             throw new InvalidOperationException(
@@ -164,7 +64,6 @@ public sealed class TerrainMeshManager
             Matrix4x4.identity,
             GL.GetGPUProjectionMatrix(projection, renderIntoTexture: true));
 
-        int subMeshCount = Mathf.Min(_mesh.subMeshCount, materials.Length);
         int materialFieldPass = materials[0].FindPass(
             ProjectRuntimeContracts.ShaderPassNames.LightingMaterialField);
         if (materialFieldPass < 0)
@@ -175,7 +74,8 @@ public sealed class TerrainMeshManager
 
         commandBuffer.BeginSample("Fodinae.Terrain.RenderMaterialFields");
 
-        // Поле рисуется целиком.
+        // Поле рисуется целиком и одним материалом: проход поля не читает
+        // атлас, а меш идентификаторов покрывает все квады сетки.
         //
         // Частичная перерисовка по прямоугольникам отсюда убрана: очистка под
         // ножницами на Metal чистит ЦЕЛЬ, а не прямоугольник, поэтому каждый
@@ -183,44 +83,12 @@ public sealed class TerrainMeshManager
         // выглядело так, что свет пропадал, появлялся частями и уезжал при
         // движении. Возвращать эту оптимизацию можно только вместе со способом
         // чистить прямоугольник, которому можно доверять на всех бэкендах.
-        DrawTerrainSubMeshes(
-            commandBuffer, localToWorldMatrix, materials, subMeshCount, materialFieldPass);
+        // Поле покрывает всю сетку со смещением ноль; экранное смещение
+        // возвращается сразу после, чтобы кадр камеры не съехал.
+        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, Vector4.zero);
+        commandBuffer.DrawMesh(mesh, localToWorldMatrix, materials[0], 0, materialFieldPass);
+        commandBuffer.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, screenViewOffset);
 
         commandBuffer.EndSample("Fodinae.Terrain.RenderMaterialFields");
-    }
-
-    private void DrawTerrainSubMeshes(
-        CommandBuffer commandBuffer,
-        Matrix4x4 localToWorldMatrix,
-        Material[] materials,
-        int subMeshCount,
-        int materialFieldPass)
-    {
-        for (int subMeshIndex = 0; subMeshIndex < subMeshCount; subMeshIndex++)
-        {
-            commandBuffer.DrawMesh(
-                _mesh,
-                localToWorldMatrix,
-                materials[subMeshIndex],
-                subMeshIndex,
-                materialFieldPass);
-        }
-    }
-
-    public void DestroyMesh()
-    {
-        if (_mesh != null)
-        {
-            if (Application.isPlaying)
-            {
-                UnityEngine.Object.Destroy(_mesh);
-            }
-            else
-            {
-                UnityEngine.Object.DestroyImmediate(_mesh, allowDestroyingAssets: true);
-            }
-
-            _mesh = null;
-        }
     }
 }

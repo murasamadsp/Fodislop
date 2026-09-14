@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Cysharp.Threading.Tasks;
 using Fodinae;
 using MinesServer.Data;
@@ -21,6 +20,7 @@ internal sealed class DummyBuffManager
     private readonly IAsyncOperationSupervisor _operations;
     private readonly Func<int, bool> _loopAlive;
     private readonly Dictionary<string, long> _activeBuffs = new();
+    private readonly List<string> _expiredBuffTags = new();
     private bool _buffLoopStarted;
     private bool _bonusClaimed;
     private int _bonusCountdown;
@@ -168,9 +168,17 @@ internal sealed class DummyBuffManager
         while (LoopAlive(lifecycleVersion))
         {
             await UniTask.Delay(1000);
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var expired = _activeBuffs.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList();
-            foreach (var tag in expired)
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            _expiredBuffTags.Clear();
+            foreach (KeyValuePair<string, long> active in _activeBuffs)
+            {
+                if (active.Value <= now)
+                {
+                    _expiredBuffTags.Add(active.Key);
+                }
+            }
+
+            foreach (string tag in _expiredBuffTags)
             {
                 _activeBuffs.Remove(tag);
                 _onReceived.Invoke(new ServerPacket(new ClearStatusLinePacket(tag)));

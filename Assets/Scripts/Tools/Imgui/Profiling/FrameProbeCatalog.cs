@@ -1,41 +1,54 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Unity.Profiling;
 
 namespace Fodinae.Tools.Imgui.Profiling;
 
 public static class FrameProbeCatalog
 {
+    // Время видеокарты по этим участкам снимается GPU-рекордером: маркер
+    // сам по себе даёт только время записи команд на процессоре.
     public static List<FrameProbe> CreateGpuProbes() =>
     [
-        new("Свет — весь блок", "Fodinae.RadianceCascades"),
-        new("· поле материалов", "Fodinae.Lighting.MaterialField", isDetail: true),
-        new("· сборка эмиссии", "Fodinae.Lighting.ComposeEmission", isDetail: true),
-        new("· статическая половина", "Fodinae.Lighting.StaticRadiance", isDetail: true),
-        new("· динамическая половина", "Fodinae.Lighting.DynamicRadiance", isDetail: true),
-        new("· каскады", "Fodinae.Lighting.RadianceCascades", isDetail: true),
-        new("· композит", "Fodinae.Lighting.Composite", isDetail: true),
-        new("Террейн — поля", "Fodinae.Terrain.RenderMaterialFields"),
-        new("Постпроцесс — композит", "Fodinae.PostProcess.Composite"),
-        new("· блум, префильтр", "Fodinae.PostProcess.Bloom.Prefilter", isDetail: true),
-        new("· блум, вниз", "Fodinae.PostProcess.Bloom.Downsample", isDetail: true),
-        new("· блум, вверх", "Fodinae.PostProcess.Bloom.Upsample", isDetail: true),
-        new("· возврат в кадр", "Fodinae.PostProcess.BlitBack", isDetail: true),
-        new("· копия истории", "Fodinae.PostProcess.HistoryCopy", isDetail: true),
+        new("Свет — весь блок", "Fodinae.RadianceCascades", gpu: true),
+        new("· поле материалов", "Fodinae.Lighting.MaterialField", isDetail: true, gpu: true),
+        new("· сборка эмиссии", "Fodinae.Lighting.ComposeEmission", isDetail: true, gpu: true),
+        new("· статическая половина", "Fodinae.Lighting.StaticRadiance", isDetail: true, gpu: true),
+        new("· динамическая половина", "Fodinae.Lighting.DynamicRadiance", isDetail: true, gpu: true),
+        new("· каскады", "Fodinae.Lighting.RadianceCascades", isDetail: true, gpu: true),
+        new("· композит", "Fodinae.Lighting.Composite", isDetail: true, gpu: true),
+        new("Террейн — поля", "Fodinae.Terrain.RenderMaterialFields", gpu: true),
+        new("Постпроцесс — композит", "Fodinae.PostProcess.Composite", gpu: true),
+        new("· блум, префильтр", "Fodinae.PostProcess.Bloom.Prefilter", isDetail: true, gpu: true),
+        new("· блум, вниз", "Fodinae.PostProcess.Bloom.Downsample", isDetail: true, gpu: true),
+        new("· блум, вверх", "Fodinae.PostProcess.Bloom.Upsample", isDetail: true, gpu: true),
+        new("· возврат в кадр", "Fodinae.PostProcess.BlitBack", isDetail: true, gpu: true),
+        new("· копия истории", "Fodinae.PostProcess.HistoryCopy", isDetail: true, gpu: true),
+    ];
+
+    // Записи рендера этих же участков на процессоре.
+    public static List<FrameProbe> CreateGpuRecordProbes() =>
+    [
+        new("Свет — запись блока", "Fodinae.RadianceCascades"),
+        new("Террейн — запись полей", "Fodinae.Terrain.RenderMaterialFields"),
+        new("Постпроцесс — запись композита", "Fodinae.PostProcess.Composite"),
     ];
 
     public static List<FrameProbe> CreateCpuProbes() =>
     [
-        new("Игровой цикл (PlayerLoop)", "PlayerLoop", category: ProfilerCategory.Internal),
-        new("· Update скриптов", "Update.ScriptRunBehaviourUpdate", isDetail: true, category: ProfilerCategory.Scripts),
-        new("· LateUpdate скриптов", "LateUpdate.ScriptRunBehaviourLateUpdate", isDetail: true, category: ProfilerCategory.Scripts),
-        new("· отрисовка камер", "Camera.Render", isDetail: true, category: ProfilerCategory.Render),
-        new("· интерфейс UI Toolkit", "RuntimePanel.Draw", isDetail: true, category: ProfilerCategory.Gui),
-        new("· инструменты IMGUI", "GUI.Repaint", isDetail: true, category: ProfilerCategory.Gui),
-        new("· ожидание видеокарты", "Gfx.WaitForCommands", isDetail: true, category: ProfilerCategory.Render),
-        new("· ожидание вывода (Present)", "Gfx.WaitForPresentOnGfxThread", isDetail: true, category: ProfilerCategory.Render),
-        new("· сборка мусора GC", "GarbageCollector.CollectIncremental", isDetail: true, category: ProfilerCategory.Memory),
+        new("Движок — рендер и вывод", "PostLateUpdate.FinishFrameRendering", false, false,
+            "RenderPipelineManager.DoRenderLoop_Internal()", "UniversalRenderPipeline.RenderCameraStack"),
+        new("· камера URP", "UniversalRenderPipeline.RenderSingleCameraInternal", true, false,
+            "Inl_UniversalRenderPipeline.RenderSingleCameraInternal", "RenderSingleCamera"),
+        new("· запись RenderGraph", "RecordRenderGraph", true, false, "RenderGraph.RecordRenderGraph"),
+        new("· исполнение RenderGraph", "ExecuteRenderGraph", true, false, "RenderGraph.Execute"),
+        new("· вывод кадра (Present)", "Gfx.PresentFrame", true, false, "PostLateUpdate.PresentAfterDraw"),
+        new("· ожидание потока рендера", "Gfx.WaitForPresentOnGfxThread", true, false, "Gfx.WaitForGfxCommandsFromMainThread"),
+        new("Скрипты движка", "Update.ScriptRunBehaviourUpdate"),
+        new("· FixedUpdate", "FixedUpdate.ScriptRunBehaviourFixedUpdate", isDetail: true),
+        new("· корутины", "Update.ScriptRunDelayedDynamicFrameRate", isDetail: true),
+        new("· LateUpdate", "PreLateUpdate.ScriptRunBehaviourLateUpdate", isDetail: true),
+        new("· сборка мусора", "GC.Collect", true, false, "GarbageCollector.CollectIncremental"),
         new("Террейн — весь этап", "Fodinae.Terrain.LateUpdate.CPU"),
         new("· кеш клеток", "Fodinae.Terrain.Cache", isDetail: true),
         new("· предрасчёт", "Fodinae.Terrain.Precalculate", isDetail: true),
@@ -55,15 +68,36 @@ public static class FrameProbeCatalog
         new("Сеть — разбор очереди", "Fodinae.Net.DrainPacketQueue"),
     ];
 
-    public static List<FrameCounter> CreateCounters() =>
+    // В редакторе эти маркеры суммируют и перерисовку окон самого редактора.
+    public static List<FrameProbe> CreateInterfaceProbes() =>
     [
-        new("Вызовов отрисовки", "Draw Calls Count", ProfilerCategory.Render, isBytes: false, "Draw Calls", "DrawCalls Count"),
-        new("Смен материала", "SetPass Calls Count", ProfilerCategory.Render, isBytes: false, "SetPass Calls", "SetPasses Count"),
-        new("Пакетов", "Batches Count", ProfilerCategory.Render, isBytes: false, "SRP Batches Count", "SRP Batches"),
-        new("Треугольников", "Triangles Count", ProfilerCategory.Render, isBytes: false, "Triangles"),
-        new("Вершин", "Vertices Count", ProfilerCategory.Render, isBytes: false, "Vertices"),
-        new("Render target'ов", "Render Textures Count", ProfilerCategory.Memory, isBytes: false, "RenderTextures Count"),
-        new("Память render target'ов", "Render Textures Bytes", ProfilerCategory.Memory, isBytes: true, "RenderTextures Bytes"),
-        new("Память текстур", "Texture Memory", ProfilerCategory.Memory, isBytes: true),
+        new("UI Toolkit — отрисовка панелей", "UIR.DrawChain"),
+        new("UI Toolkit — обновление панелей", "UIElementsUpdateRuntimePanels", false, false, "UIElements.UpdateRuntimePanels"),
+        new("IMGUI — перерисовка", "GUI.Repaint"),
+        new("IMGUI — события", "GUI.ProcessEvents", false, false, "GUIUtility.ProcessEvent"),
+    ];
+
+    public static List<FrameProbe> CreateMemoryProbes() =>
+    [
+        new("Мусор за кадр", "GC Allocated In Frame"),
+        new("Аллокаций за кадр", "GC Allocation In Frame Count"),
+        new("Куча занята", "GC Used Memory"),
+        new("Куча зарезервирована", "GC Reserved Memory"),
+        new("Вся память движка", "Total Used Memory"),
+        new("Память процесса", "App Resident Memory", false, false, "System Used Memory"),
+        new("Графика", "Gfx Used Memory"),
+        new("Память текстур", "Texture Memory"),
+        new("Render target'ов", "Render Textures Count", false, false, "RenderTextures Count"),
+        new("Память render target'ов", "Render Textures Bytes", false, false, "RenderTextures Bytes"),
+    ];
+
+    public static List<FrameProbe> CreateRenderCounters() =>
+    [
+        new("Вызовов отрисовки", "Draw Calls Count", false, false, "Draw Calls", "DrawCalls Count"),
+        new("Смен материала", "SetPass Calls Count", false, false, "SetPass Calls", "SetPasses Count"),
+        new("Пакетов", "Batches Count", false, false, "SRP Batches Count", "SRP Batches"),
+        new("Треугольников", "Triangles Count", false, false, "Triangles"),
+        new("Вершин", "Vertices Count", false, false, "Vertices"),
+        new("Буферов в работе", "Used Buffers Count", false, false, "Buffers Count"),
     ];
 }

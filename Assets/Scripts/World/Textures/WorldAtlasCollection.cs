@@ -130,7 +130,13 @@ public sealed class WorldAtlasCollection : IDisposable
         }
     }
 
-    public void AddTexture(CellType cellType, Texture2D texture)
+    public void AddTexture(CellType cellType, Texture2D texture, bool fullyOpaque = false)
+    {
+        AddTextureCore(cellType, texture);
+        _currentAtlas.SetFullyOpaque(cellType, fullyOpaque);
+    }
+
+    private void AddTextureCore(CellType cellType, Texture2D texture)
     {
         if (ContainsCell(cellType))
         {

@@ -124,16 +124,31 @@ public readonly record struct ColorGradeSnapshot
         PathToWhitePower = PostProcessLook.Grade.PathToWhitePower;
         GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled;
         GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength;
-        MasterCurve = new ColorGradeCurve();
-        RedCurve = new ColorGradeCurve();
-        GreenCurve = new ColorGradeCurve();
-        BlueCurve = new ColorGradeCurve();
-        HueVsHueCurve = new ColorGradeCurve(ColorGradeCurveKind.Hue);
-        HueVsSaturationCurve = new ColorGradeCurve(ColorGradeCurveKind.Hue);
-        HueVsLuminanceCurve = new ColorGradeCurve(ColorGradeCurveKind.Hue);
-        LuminanceVsSaturationCurve = new ColorGradeCurve(ColorGradeCurveKind.Range);
-        SaturationVsSaturationCurve = new ColorGradeCurve(ColorGradeCurveKind.Range);
-        Qualifier = new ColorGradeQualifier();
+        // Общие нейтральные экземпляры, а не новые. Этот конструктор вызывает
+        // каждый инициализатор `new ColorGradeSnapshot { ... }` (Sanitized,
+        // BlendTo, сборка снимка состояния), и десять объектов создавались,
+        // чтобы тут же быть затёртыми. Кривые снимка не меняются никем:
+        // редактируются только собственные кривые ColorGradeState, а
+        // санитизация работает на клонах.
+        MasterCurve = Neutral.Tone;
+        RedCurve = Neutral.Tone;
+        GreenCurve = Neutral.Tone;
+        BlueCurve = Neutral.Tone;
+        HueVsHueCurve = Neutral.Hue;
+        HueVsSaturationCurve = Neutral.Hue;
+        HueVsLuminanceCurve = Neutral.Hue;
+        LuminanceVsSaturationCurve = Neutral.Range;
+        SaturationVsSaturationCurve = Neutral.Range;
+        Qualifier = Neutral.Qualifier;
+    }
+
+    // Отдельный класс-держатель по той же причине, что и LookDefaults ниже.
+    private static class Neutral
+    {
+        internal static readonly ColorGradeCurve Tone = new();
+        internal static readonly ColorGradeCurve Hue = new(ColorGradeCurveKind.Hue);
+        internal static readonly ColorGradeCurve Range = new(ColorGradeCurveKind.Range);
+        internal static readonly ColorGradeQualifier Qualifier = new();
     }
 
     public static ColorGradeSnapshot FromLook() => new()
@@ -173,11 +188,6 @@ public readonly record struct ColorGradeSnapshot
         PathToWhitePower = PostProcessLook.Grade.PathToWhitePower,
         GamutCompressionEnabled = PostProcessLook.Grade.GamutCompressionEnabled,
         GamutCompressionStrength = PostProcessLook.Grade.GamutCompressionStrength,
-        MasterCurve = new ColorGradeCurve(),
-        RedCurve = new ColorGradeCurve(),
-        GreenCurve = new ColorGradeCurve(),
-        BlueCurve = new ColorGradeCurve(),
-        Qualifier = new ColorGradeQualifier(),
         LutIntensity = 0f,
         LutColorSpace = ColorGradeLutColorSpace.LinearRec709,
     };
@@ -239,24 +249,23 @@ public readonly record struct ColorGradeSnapshot
             PathToWhitePower = Mathf.Lerp(PathToWhitePower, other.PathToWhitePower, t),
             GamutCompressionEnabled = t > 0.5f ? other.GamutCompressionEnabled : GamutCompressionEnabled,
             GamutCompressionStrength = Mathf.Lerp(GamutCompressionStrength, other.GamutCompressionStrength, t),
-            MasterCurve = t > 0.5f ? other.MasterCurve.Clone() : MasterCurve.Clone(),
-            RedCurve = t > 0.5f ? other.RedCurve.Clone() : RedCurve.Clone(),
-            GreenCurve = t > 0.5f ? other.GreenCurve.Clone() : GreenCurve.Clone(),
-            BlueCurve = t > 0.5f ? other.BlueCurve.Clone() : BlueCurve.Clone(),
-            HueVsHueCurve = t > 0.5f ? other.HueVsHueCurve.Clone() : HueVsHueCurve.Clone(),
-            HueVsSaturationCurve = t > 0.5f
-                ? other.HueVsSaturationCurve.Clone()
-                : HueVsSaturationCurve.Clone(),
-            HueVsLuminanceCurve = t > 0.5f
-                ? other.HueVsLuminanceCurve.Clone()
-                : HueVsLuminanceCurve.Clone(),
+            // Ссылки, а не клоны — как и на краях t<=0 и t>=1 выше. Получатель
+            // (SetColorGrade) сам клонирует при санитизации, а клон здесь
+            // давал девять новых кривых на каждый кадр в переходе между зонами.
+            MasterCurve = t > 0.5f ? other.MasterCurve : MasterCurve,
+            RedCurve = t > 0.5f ? other.RedCurve : RedCurve,
+            GreenCurve = t > 0.5f ? other.GreenCurve : GreenCurve,
+            BlueCurve = t > 0.5f ? other.BlueCurve : BlueCurve,
+            HueVsHueCurve = t > 0.5f ? other.HueVsHueCurve : HueVsHueCurve,
+            HueVsSaturationCurve = t > 0.5f ? other.HueVsSaturationCurve : HueVsSaturationCurve,
+            HueVsLuminanceCurve = t > 0.5f ? other.HueVsLuminanceCurve : HueVsLuminanceCurve,
             LuminanceVsSaturationCurve = t > 0.5f
-                ? other.LuminanceVsSaturationCurve.Clone()
-                : LuminanceVsSaturationCurve.Clone(),
+                ? other.LuminanceVsSaturationCurve
+                : LuminanceVsSaturationCurve,
             SaturationVsSaturationCurve = t > 0.5f
-                ? other.SaturationVsSaturationCurve.Clone()
-                : SaturationVsSaturationCurve.Clone(),
-            Qualifier = t > 0.5f ? other.Qualifier.Clone() : Qualifier.Clone(),
+                ? other.SaturationVsSaturationCurve
+                : SaturationVsSaturationCurve,
+            Qualifier = t > 0.5f ? other.Qualifier : Qualifier,
             Lut = t > 0.5f ? other.Lut : Lut,
             LutIntensity = Mathf.Lerp(LutIntensity, other.LutIntensity, t),
             LutColorSpace = t > 0.5f ? other.LutColorSpace : LutColorSpace,
@@ -272,13 +281,61 @@ public readonly record struct ColorGradeSnapshot
         internal static readonly ColorGradeSnapshot Value = FromLook();
     }
 
-    public ColorGradeSnapshot Sanitized()
+    // Равенство record struct сравнивает кривые и квалификатор по ссылке, а
+    // каждый источник грейда отдаёт их свежими клонами: тот же грейд не
+    // узнавался никогда. Скаляры сравниваются тем же равенством после
+    // подстановки чужих ссылок, объекты — по содержимому.
+    public bool ContentEquals(in ColorGradeSnapshot other)
+    {
+        ColorGradeSnapshot sameReferences = this with
+        {
+            MasterCurve = other.MasterCurve,
+            RedCurve = other.RedCurve,
+            GreenCurve = other.GreenCurve,
+            BlueCurve = other.BlueCurve,
+            HueVsHueCurve = other.HueVsHueCurve,
+            HueVsSaturationCurve = other.HueVsSaturationCurve,
+            HueVsLuminanceCurve = other.HueVsLuminanceCurve,
+            LuminanceVsSaturationCurve = other.LuminanceVsSaturationCurve,
+            SaturationVsSaturationCurve = other.SaturationVsSaturationCurve,
+            Qualifier = other.Qualifier,
+        };
+
+        return sameReferences == other &&
+            CurveEquals(MasterCurve, other.MasterCurve) &&
+            CurveEquals(RedCurve, other.RedCurve) &&
+            CurveEquals(GreenCurve, other.GreenCurve) &&
+            CurveEquals(BlueCurve, other.BlueCurve) &&
+            CurveEquals(HueVsHueCurve, other.HueVsHueCurve) &&
+            CurveEquals(HueVsSaturationCurve, other.HueVsSaturationCurve) &&
+            CurveEquals(HueVsLuminanceCurve, other.HueVsLuminanceCurve) &&
+            CurveEquals(LuminanceVsSaturationCurve, other.LuminanceVsSaturationCurve) &&
+            CurveEquals(SaturationVsSaturationCurve, other.SaturationVsSaturationCurve) &&
+            (ReferenceEquals(Qualifier, other.Qualifier) ||
+                (Qualifier != null && other.Qualifier != null && Qualifier.ContentEquals(other.Qualifier)));
+    }
+
+    private static bool CurveEquals(ColorGradeCurve? left, ColorGradeCurve? right) =>
+        ReferenceEquals(left, right) ||
+        (left != null && right != null && left.ContentEquals(right));
+
+    // Общий неизменяемый экземпляр вида по умолчанию. FromLook() собирает
+    // девять новых кривых и квалификатор при каждом вызове.
+    public static ColorGradeSnapshot Look => LookDefaults.Value;
+
+    public ColorGradeSnapshot Sanitized() => SanitizedReusing(null);
+
+    // Кривые и квалификатор, совпадающие по содержимому с уже санитизированным
+    // предыдущим грейдом, берутся из него, а не клонируются заново. Смешивание
+    // зон меняет при движении камеры только скаляры, и без этого каждый кадр
+    // в переходе давал девять новых кривых.
+    public ColorGradeSnapshot SanitizedReusing(ColorGradeSnapshot? previous)
     {
         ColorGradeSnapshot defaults = LookDefaults.Value;
         return new ColorGradeSnapshot
         {
             EnabledMask = EnabledMask & ((1 << 6) - 1),
-            Transform = System.Enum.IsDefined(typeof(DisplayTransform), Transform)
+            Transform = Transform is DisplayTransform.None or DisplayTransform.Fodinae
                 ? Transform
                 : defaults.Transform,
             Exposure = FiniteClamp(
@@ -410,34 +467,36 @@ public readonly record struct ColorGradeSnapshot
                 ColorGradeState.GamutCompressionStrengthMin,
                 ColorGradeState.GamutCompressionStrengthMax,
                 defaults.GamutCompressionStrength),
-            MasterCurve = SanitizeCurve(MasterCurve, defaults.MasterCurve),
-            RedCurve = SanitizeCurve(RedCurve, defaults.RedCurve),
-            GreenCurve = SanitizeCurve(GreenCurve, defaults.GreenCurve),
-            BlueCurve = SanitizeCurve(BlueCurve, defaults.BlueCurve),
-            HueVsHueCurve = SanitizeCurve(HueVsHueCurve, defaults.HueVsHueCurve),
-            HueVsSaturationCurve = SanitizeCurve(
-                HueVsSaturationCurve,
-                defaults.HueVsSaturationCurve),
-            HueVsLuminanceCurve = SanitizeCurve(
-                HueVsLuminanceCurve,
-                defaults.HueVsLuminanceCurve),
-            LuminanceVsSaturationCurve = SanitizeCurve(
-                LuminanceVsSaturationCurve,
-                defaults.LuminanceVsSaturationCurve),
-            SaturationVsSaturationCurve = SanitizeCurve(
-                SaturationVsSaturationCurve,
-                defaults.SaturationVsSaturationCurve),
-            Qualifier = SanitizeQualifier(Qualifier, defaults.Qualifier),
+            MasterCurve = SanitizeCurve(MasterCurve, defaults.MasterCurve, previous?.MasterCurve),
+            RedCurve = SanitizeCurve(RedCurve, defaults.RedCurve, previous?.RedCurve),
+            GreenCurve = SanitizeCurve(GreenCurve, defaults.GreenCurve, previous?.GreenCurve),
+            BlueCurve = SanitizeCurve(BlueCurve, defaults.BlueCurve, previous?.BlueCurve),
+            HueVsHueCurve = SanitizeCurve(HueVsHueCurve, defaults.HueVsHueCurve, previous?.HueVsHueCurve),
+            HueVsSaturationCurve = SanitizeCurve(HueVsSaturationCurve, defaults.HueVsSaturationCurve, previous?.HueVsSaturationCurve),
+            HueVsLuminanceCurve = SanitizeCurve(HueVsLuminanceCurve, defaults.HueVsLuminanceCurve, previous?.HueVsLuminanceCurve),
+            LuminanceVsSaturationCurve = SanitizeCurve(LuminanceVsSaturationCurve, defaults.LuminanceVsSaturationCurve, previous?.LuminanceVsSaturationCurve),
+            SaturationVsSaturationCurve = SanitizeCurve(SaturationVsSaturationCurve, defaults.SaturationVsSaturationCurve, previous?.SaturationVsSaturationCurve),
+            Qualifier = SanitizeQualifier(Qualifier, defaults.Qualifier, previous?.Qualifier),
             Lut = LutIntensity > 0.0001f ? Lut : null,
             LutIntensity = FiniteClamp(LutIntensity, 0f, 1f, 0f),
-            LutColorSpace = System.Enum.IsDefined(typeof(ColorGradeLutColorSpace), LutColorSpace)
+            LutColorSpace = LutColorSpace is ColorGradeLutColorSpace.LinearRec709 or ColorGradeLutColorSpace.SrgbRec709
                 ? LutColorSpace
                 : defaults.LutColorSpace,
         };
     }
 
-    private static ColorGradeCurve SanitizeCurve(ColorGradeCurve? curve, ColorGradeCurve fallback)
+    private static ColorGradeCurve SanitizeCurve(
+        ColorGradeCurve? curve,
+        ColorGradeCurve fallback,
+        ColorGradeCurve? previous)
     {
+        // Предыдущий уже санитизирован и не меняется: равный ему по
+        // содержимому источник можно не клонировать.
+        if (previous != null && curve != null && previous.ContentEquals(curve))
+        {
+            return previous;
+        }
+
         ColorGradeCurve result = curve?.Clone() ?? fallback.Clone();
         result.Sanitize();
         return result;
@@ -445,8 +504,14 @@ public readonly record struct ColorGradeSnapshot
 
     private static ColorGradeQualifier SanitizeQualifier(
         ColorGradeQualifier? qualifier,
-        ColorGradeQualifier fallback)
+        ColorGradeQualifier fallback,
+        ColorGradeQualifier? previous)
     {
+        if (previous != null && qualifier != null && previous.ContentEquals(qualifier))
+        {
+            return previous;
+        }
+
         ColorGradeQualifier result = qualifier?.Clone() ?? fallback.Clone();
         result.Sanitize();
         return result;

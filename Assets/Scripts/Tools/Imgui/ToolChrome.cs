@@ -122,16 +122,21 @@ public static class ToolChrome
         GUI.color = previous;
     }
 
+    // GUILayoutOption — класс; GUILayout.ExpandWidth/Width создают новый на
+    // каждый вызов, а эти элементы рисуются в каждом событии каждого окна.
+    private static readonly GUILayoutOption _ExpandWidth = GUILayout.ExpandWidth(true);
+    private static readonly GUILayoutOption _DefaultPipWidth = GUILayout.Width(11f);
+
     public static void MeterLine(float normalized, Color color, float height = 4f)
     {
-        Rect area = GUILayoutUtility.GetRect(1f, height, GUILayout.ExpandWidth(true));
+        Rect area = GUILayoutUtility.GetRect(1f, height, _ExpandWidth);
         DrawMeter(area, normalized, color);
     }
 
     public static void SectionHeader(string title)
     {
         GUILayout.Space(3f);
-        Rect line = GUILayoutUtility.GetRect(1f, 14f, GUILayout.ExpandWidth(true));
+        Rect line = GUILayoutUtility.GetRect(1f, 14f, _ExpandWidth);
         if (Event.current.type == EventType.Repaint)
         {
             Color previous = GUI.color;
@@ -151,7 +156,7 @@ public static class ToolChrome
 
     public static void Banner(string text, Color color)
     {
-        Rect area = GUILayoutUtility.GetRect(1f, 22f, GUILayout.ExpandWidth(true));
+        Rect area = GUILayoutUtility.GetRect(1f, 22f, _ExpandWidth);
         if (Event.current.type != EventType.Repaint)
         {
             return;
@@ -187,7 +192,10 @@ public static class ToolChrome
 
     public static void StatusPip(Color color, float size = 7f)
     {
-        Rect area = GUILayoutUtility.GetRect(size + 4f, size + 4f, GUILayout.Width(size + 4f));
+        Rect area = GUILayoutUtility.GetRect(
+            size + 4f,
+            size + 4f,
+            Mathf.Approximately(size, 7f) ? _DefaultPipWidth : ToolLayout.Width(size + 4f));
         if (Event.current.type != EventType.Repaint)
         {
             return;

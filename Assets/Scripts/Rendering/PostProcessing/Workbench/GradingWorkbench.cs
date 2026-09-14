@@ -101,6 +101,7 @@ public sealed class GradingWorkbench : IDisposable
 
         _scopesWereVisible = scopesVisible;
         ScopesRenderPass.Enabled = scopesVisible && _scopesWindow.ScopesRequested;
+        HandleCompareDrag(scopesVisible);
 
         bool applying = IsApplying;
         _zonesWindow.CaptureEnabled = applying;
@@ -111,6 +112,48 @@ public sealed class GradingWorkbench : IDisposable
         }
 
         _wasApplying = applying;
+    }
+
+    // Шторку сравнения можно тянуть прямо по кадру. Ползунок в окне приборов
+    // оставался единственным способом, и сама граница на экране не была видна.
+    private const float CompareGrabDistancePixels = 18f;
+    private bool _draggingCompareSplit;
+
+    private void HandleCompareDrag(bool scopesVisible)
+    {
+        Mouse? mouse = Mouse.current;
+        CompareMode mode = PostProcessRuntimeState.CompareMode;
+        bool wipe = mode is CompareMode.VerticalWipe or CompareMode.HorizontalWipe;
+        if (mouse == null || !scopesVisible || !wipe || Screen.width <= 0 || Screen.height <= 0)
+        {
+            _draggingCompareSplit = false;
+            return;
+        }
+
+        Vector2 position = mouse.position.ReadValue();
+        bool vertical = mode == CompareMode.VerticalWipe;
+
+        // Позиция мыши — от левого нижнего угла, как и экранная координата
+        // шейдера: доля ширины или высоты совпадает со _CompareSplit напрямую.
+        float along = vertical ? position.x / Screen.width : position.y / Screen.height;
+        float extent = vertical ? Screen.width : Screen.height;
+
+        if (mouse.leftButton.wasPressedThisFrame &&
+            !ToolWindows.ContainsScreenPoint(position) &&
+            Mathf.Abs(along - PostProcessRuntimeState.CompareSplit) * extent <= CompareGrabDistancePixels)
+        {
+            _draggingCompareSplit = true;
+        }
+
+        if (!mouse.leftButton.isPressed)
+        {
+            _draggingCompareSplit = false;
+        }
+
+        if (_draggingCompareSplit)
+        {
+            PostProcessRuntimeState.CompareSplit = Mathf.Clamp01(along);
+        }
     }
 
     private void ResetForPlaySession()

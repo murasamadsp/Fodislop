@@ -1,5 +1,6 @@
 #nullable enable
 
+using Fodinae.Core.Interfaces.Diagnostics;
 using System;
 using System.Collections.Generic;
 using Fodinae.Core;
@@ -66,12 +67,26 @@ namespace Fodinae.World.Terrain
 
         private readonly TerrainCellCache _cellCache = new();
         private readonly TerrainPrecalculator _precalc = new();
-        private readonly TerrainMeshBuilder _meshBuilder = new();
+        private readonly TerrainCellBuilder _cellBuilder = new();
         private readonly BackgroundFloodFill _backgroundFloodFill = new();
         private readonly TerrainViewportCalculator _viewportCalculator = new();
         private readonly TerrainMeshManager _meshManager = new();
         private readonly TerrainMaterialManager _materialManager = new();
         private readonly TerrainDoorOverlayRenderer _doorOverlayRenderer = new();
+        private readonly TerrainCellIdMesh _cellIdMesh = new();
+
+        // Экран рисует только видимое окно с полем: запас сетки нужен
+        // освещению и сдвигу, но не кадру.
+        private readonly TerrainCellIdMesh _visibleIdMesh = new();
+        private const int VisibleMarginCells = 2;
+        private Vector4 _viewOffset;
+        private int _visibleWidth;
+        private int _visibleHeight;
+        private int _visibleGridWidth;
+        private int _visibleGridHeight;
+        private readonly List<TerrainVertex> _doorOverlayVertices = [];
+        private bool _cellTexturesDirty = true;
+        private bool _cellsCommitted;
         private List<int>[] _doorOverlaySubMeshIndices = Array.Empty<List<int>>();
 
         private Vector2Int _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
@@ -97,7 +112,17 @@ namespace Fodinae.World.Terrain
         private static readonly ProfilerMarker _MeshUploadMarker = new("Fodinae.Terrain.MeshUpload");
         private static readonly ProfilerMarker _TerrainLateUpdateMarker =
             new("Fodinae.Terrain.LateUpdate.CPU");
+
+        private static readonly AllocationLedger.Entry _AllocationEntry =
+            AllocationLedger.Register("Террейн — LateUpdate");
         private ulong _lightingGeometryRevision = 1;
+
+        // Причины пересборки меша — чтобы пик «сборка меша 125 мс» можно было
+        // приписать событию, а не гадать.
+        private static readonly RebuildLedger.Entry _RebuildResize = RebuildLedger.Register("Террейн · полная: смена размера сетки");
+        private static readonly RebuildLedger.Entry _RebuildGridMove = RebuildLedger.Register("Террейн · полная: сдвиг сетки");
+        private static readonly RebuildLedger.Entry _RebuildRefresh = RebuildLedger.Register("Террейн · полная: флаг обновления");
+        private static readonly RebuildLedger.Entry _RebuildPatch = RebuildLedger.Register("Террейн · частичная: изменённые клетки");
 
 
         public CachedCellInfo GetCell(int x, int y)
@@ -122,8 +147,8 @@ namespace Fodinae.World.Terrain
 
         public bool IsReadyForGameplay =>
             _isInitialized &&
-            _meshManager.Mesh != null &&
-            _meshManager.Mesh.vertexCount > 0 &&
+            _cellIdMesh.Mesh != null &&
+            _cellsCommitted &&
             _materialManager.Materials.Length > 0 &&
             _pendingTextureCellTypes.Count == 0;
 
@@ -205,8 +230,6 @@ namespace Fodinae.World.Terrain
             _meshRenderer = GetComponent<MeshRenderer>();
             _mainCamera = _gameplayCamera?.Camera;
 
-            _meshManager.EnsureMesh(ref _meshFilter);
-
             if (_meshRenderer != null)
             {
                 _meshRenderer.enabled = true;
@@ -234,8 +257,6 @@ namespace Fodinae.World.Terrain
 
             _materialManager.TerrainShader = _terrainShader;
             _materialManager.InitializeShader();
-            _meshManager.EnsureMesh(ref _meshFilter);
-
             if (_meshRenderer != null)
             {
                 _meshRenderer.enabled = true;
@@ -314,7 +335,9 @@ namespace Fodinae.World.Terrain
                 _subscribedCellLayer = null;
             }
 
-            _meshManager.DestroyMesh();
+            _cellIdMesh.Dispose();
+            _visibleIdMesh.Dispose();
+            _cellBuilder.Dispose();
             _doorOverlayRenderer.Dispose();
             _materialManager.CleanupMaterials();
         }
@@ -397,6 +420,8 @@ namespace Fodinae.World.Terrain
             }
 
             using var terrainLateUpdateMarker = _TerrainLateUpdateMarker.Auto();
+
+            using var allocationScope = AllocationLedger.Measure(_AllocationEntry);
             if (_mapManager == null || _storage == null || !_storage.IsReady)
             {
                 return;
@@ -450,12 +475,15 @@ namespace Fodinae.World.Terrain
             {
                 UpdateTextureCells(currentGridPos.x, currentGridPos.y);
                 _pendingTextureCellTypes.Clear();
+                _cellTexturesDirty = true;
             }
 
             _telemetry.ResetFrameTimers();
             CoalesceOversizedDirtyRects();
 
             RebuildOrPatchTerrain(currentGridPos, dimensionsChanged);
+            SyncCellTextures();
+            UpdateVisibleWindow(viewportMinX, viewportMinY, viewportWidth, viewportHeight);
 
             PublishLightingUpdate(lightingEngine, viewportMinX, viewportMinY, viewportWidth, viewportHeight);
         }
@@ -530,7 +558,8 @@ namespace Fodinae.World.Terrain
                 _lastGridPos = new Vector2Int(int.MinValue, int.MinValue);
                 _cellCache.EnsureCapacity(_meshWidth, _meshHeight);
                 _precalc.EnsureCapacity(_meshWidth, _meshHeight);
-                _meshBuilder.EnsureCapacity(_meshWidth, _meshHeight, _cellSize);
+                _cellBuilder.EnsureCapacity(_meshWidth, _meshHeight, _cellSize);
+                _cellIdMesh.EnsureSize(_meshWidth, _meshHeight, _cellSize);
                 _backgroundFloodFill.Allocate(_meshWidth, _meshHeight);
 
                 _needsRefresh = true;
@@ -593,10 +622,15 @@ namespace Fodinae.World.Terrain
             bool terrainWasRebuilt = currentGridPos != _lastGridPos || _needsRefresh || dimensionsChanged;
             if (terrainWasRebuilt)
             {
+                RebuildLedger.Count(
+                    dimensionsChanged ? _RebuildResize
+                    : currentGridPos != _lastGridPos ? _RebuildGridMove
+                    : _RebuildRefresh);
                 transform.position = new Vector3(currentGridPos.x * _cellSize, currentGridPos.y * _cellSize, 0);
                 _lastGridPos = currentGridPos;
 
                 UpdateVertexAttributes(currentGridPos.x, currentGridPos.y);
+                _cellTexturesDirty = true;
                 _lightingGeometryRevision++;
                 _dirtyRects.Clear();
 
@@ -607,7 +641,9 @@ namespace Fodinae.World.Terrain
             }
             else if (!_dirtyRects.IsEmpty)
             {
+                RebuildLedger.Count(_RebuildPatch);
                 UpdateDirtyCells(currentGridPos.x, currentGridPos.y);
+                _cellTexturesDirty = true;
                 _lightingGeometryRevision++;
                 _dirtyRects.Clear();
             }
@@ -649,8 +685,88 @@ namespace Fodinae.World.Terrain
                 emissionField,
                 worldRect,
                 transform.localToWorldMatrix,
-                _materialManager.Materials);
+                _materialManager.CellMaterials,
+                _cellIdMesh.Mesh,
+                _viewOffset);
         }
+
+        private void UpdateVisibleWindow(int viewportMinX, int viewportMinY, int viewportWidth, int viewportHeight)
+        {
+            if (!_cellsCommitted || _meshWidth <= 0 || _meshHeight <= 0 || _lastGridPos.x == int.MinValue)
+            {
+                return;
+            }
+
+            // Размер окна гуляет на клетку при движении камеры внутри клетки,
+            // и меш пересоздавался почти каждый кадр. Размер округляется до 8
+            // и только растёт, пока не сменится сама сетка.
+            if (_visibleGridWidth != _meshWidth || _visibleGridHeight != _meshHeight)
+            {
+                _visibleGridWidth = _meshWidth;
+                _visibleGridHeight = _meshHeight;
+                _visibleWidth = 0;
+                _visibleHeight = 0;
+            }
+
+            int wantedWidth = ((viewportWidth + (VisibleMarginCells * 2) + 7) / 8) * 8;
+            int wantedHeight = ((viewportHeight + (VisibleMarginCells * 2) + 7) / 8) * 8;
+            _visibleWidth = Mathf.Clamp(Mathf.Max(_visibleWidth, wantedWidth), 1, _meshWidth);
+            _visibleHeight = Mathf.Clamp(Mathf.Max(_visibleHeight, wantedHeight), 1, _meshHeight);
+            int width = _visibleWidth;
+            int height = _visibleHeight;
+            viewportMinX -= (width - viewportWidth - (VisibleMarginCells * 2)) / 2;
+            viewportMinY -= (height - viewportHeight - (VisibleMarginCells * 2)) / 2;
+            int offsetX = Mathf.Clamp(viewportMinX - VisibleMarginCells - _lastGridPos.x, 0, _meshWidth - width);
+            int offsetY = Mathf.Clamp(viewportMinY - VisibleMarginCells - _lastGridPos.y, 0, _meshHeight - height);
+
+            _visibleIdMesh.EnsureSize(width, height, _cellSize, _meshWidth, _meshHeight);
+            var offset = new Vector4(offsetX, offsetY, 0f, 0f);
+            if (offset != _viewOffset)
+            {
+                _viewOffset = offset;
+                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, offset);
+            }
+
+            if (_meshFilter != null && _meshFilter.sharedMesh != _visibleIdMesh.Mesh)
+            {
+                _meshFilter.sharedMesh = _visibleIdMesh.Mesh;
+                Shader.SetGlobalVector(TerrainCellDataTextures.ViewOffsetId, _viewOffset);
+            }
+        }
+
+        // Одна выгрузка текселей за кадр, после сборки или заплатки. Начало
+        // окна публикуется вместе с ними: шейдер берёт по нему кольцевой адрес.
+        private void SyncCellTextures()
+        {
+            if (!_cellTexturesDirty || _lastGridPos.x == int.MinValue || _cellIdMesh.Mesh == null)
+            {
+                return;
+            }
+
+            _cellTexturesDirty = false;
+            long swUpload = System.Diagnostics.Stopwatch.GetTimestamp();
+            using (_MeshUploadMarker.Auto())
+            {
+                _cellBuilder.Commit(_precalc, _lastGridPos.x, _lastGridPos.y);
+            }
+
+            _telemetry.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+            _cellsCommitted = true;
+        }
+
+        private TerrainCellSources CreateCellSources(
+            IReadOnlyList<IAtlasDescriptor> atlases,
+            ITextureService textureService) =>
+            new(
+                _cellCache,
+                _precalc,
+                _backgroundFloodFill,
+                _mapManager.WorldWidth,
+                _mapManager.WorldHeight,
+                atlases,
+                _useColorLod,
+                _mapManager,
+                textureService);
 
         private void UpdateVertexAttributes(int minX, int minY)
         {
@@ -749,64 +865,38 @@ namespace Fodinae.World.Terrain
                 _telemetry.TerrainFloodFillTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swFlood) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
                 long swMesh = System.Diagnostics.Stopwatch.GetTimestamp();
+                TerrainCellSources sources = CreateCellSources(atlases, textureService);
                 using (_MeshBuildMarker.Auto())
                 {
-                    // Сетка едет тем же сдвигом, что кэш, предрасчёт и
-                    // заливка выше. Полная сборка остаётся ровно там, где
-                    // переносить нечего: при смене набора атласов приписка
-                    // клеток к сабмешам считана по старому набору, и
-                    // перенести её значит нарисовать чужими текстурами.
+                    // Тексели лежат по кольцевому адресу и при сдвиге не
+                    // двигаются: собирается только вошедшая полоса. Полная
+                    // сборка остаётся там, где переносить нечего, и при смене
+                    // набора атласов — индексы атласов в текселях считаны по
+                    // старому набору.
                     if (canScrollCache && !materialsChanged)
                     {
-                        _meshBuilder.ScrollAndBuildBand(
-                            _cellCache, _precalc, _backgroundFloodFill, minX, minY,
-                            _meshWidth, _meshHeight, cacheDeltaX, cacheDeltaY,
-                            _mapManager.WorldWidth, _mapManager.WorldHeight, atlases,
-                            _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
+                        _cellBuilder.ScrollAndBuildBand(sources, minX, minY, cacheDeltaX, cacheDeltaY);
                     }
                     else
                     {
-                        _meshBuilder.BuildFull(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
+                        _cellBuilder.BuildFull(sources, minX, minY);
                     }
-
-                    EnsureDoorOverlayIndices(atlases.Count);
-                    _meshBuilder.RebuildOverlaySubMeshIndices(
-                        _meshWidth,
-                        _meshHeight,
-                        _doorOverlaySubMeshIndices);
                 }
 
                 _telemetry.TerrainMeshTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swMesh) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
 
-                Mesh? mesh = _meshManager.Mesh;
-                if (mesh != null)
+                if ((_diagLogged & (1 << 8)) == 0)
                 {
-                    long swUpload = System.Diagnostics.Stopwatch.GetTimestamp();
-                    using (_MeshUploadMarker.Auto())
-                    {
-                        _meshManager.UploadVertexBuffer(_meshBuilder, atlases.Count, _telemetry);
-                    }
-
-                    _telemetry.TerrainGpuUploadTimeMs = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - swUpload) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-
-                    _meshManager.UpdateMeshBounds(_meshWidth, _meshHeight, _cellSize);
-
-                    if ((_diagLogged & (1 << 8)) == 0)
-                    {
-                        string diagnostic =
-                            "[TerrainDiag] BuildFull: grid=(" +
-                            $"{_lastGridPos.x},{_lastGridPos.y}) " +
-                            $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
-                            $"verts={_meshBuilder.VertexBuffer.Length} meshVerts={mesh.vertexCount} " +
-                            $"bounds={mesh.bounds} transform={transform.position}";
-                        LogDiag(
-                            1 << 8,
-                            diagnostic);
-                    }
-
-                    _materialManager.BindAtlasTextures(atlases, textureService, mesh);
-                    RebuildDoorOverlay();
+                    LogDiag(
+                        1 << 8,
+                        "[TerrainDiag] BuildFull: grid=(" +
+                        $"{_lastGridPos.x},{_lastGridPos.y}) " +
+                        $"world={_mapManager.WorldWidth}x{_mapManager.WorldHeight} " +
+                        $"cells={_meshWidth}x{_meshHeight} transform={transform.position}");
                 }
+
+                _materialManager.BindAtlasTextures(atlases, textureService);
+                RebuildDoorOverlay(sources, minX, minY);
 
                 _needsRefresh = false;
             }
@@ -824,7 +914,7 @@ namespace Fodinae.World.Terrain
 
             if (materialsChanged && _meshRenderer != null)
             {
-                _meshRenderer.sharedMaterials = _materialManager.Materials;
+                _meshRenderer.sharedMaterials = _materialManager.CellMaterials;
             }
         }
 
@@ -835,7 +925,7 @@ namespace Fodinae.World.Terrain
                 return;
             }
 
-            if (_storage == null || !_storage.IsReady || _mapManager == null || _meshManager.Mesh == null)
+            if (_storage == null || !_storage.IsReady || _mapManager == null || _cellIdMesh.Mesh == null)
             {
                 return;
             }
@@ -847,20 +937,15 @@ namespace Fodinae.World.Terrain
             }
 
             var atlases = textureService.GetAllAtlases();
-            if (atlases == null || atlases.Count == 0 || _materialManager.SubMeshIndices.Length == 0)
+            if (atlases == null || atlases.Count == 0 || _materialManager.Materials.Length == 0)
             {
                 return;
             }
 
             _telemetry.TerrainDirtyPatchCount++;
 
-            bool anyIndicesChanged = false;
-            bool anyOverlayIndicesChanged = false;
-            bool anyOverlayQuadsTouched = false;
-            // Объединение диапазонов по всем прямоугольникам: строитель
-            // помнит только последний, а выгрузка одна на весь патч.
-            int patchVertexStart = int.MaxValue;
-            int patchVertexEnd = 0;
+            TerrainCellSources sources = CreateCellSources(atlases, textureService);
+            bool doorsTouched = false;
             for (int i = 0; i < _dirtyRects.Count; i++)
             {
                 RectInt rect = _dirtyRects[i];
@@ -878,73 +963,27 @@ namespace Fodinae.World.Terrain
                 _cellCache.UpdateRegion(dirtyMinX, dirtyMinY, countX, countY, _storage, _mapManager, textureService, atlases);
                 _precalc.PrecalculateRegion(_cellCache, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight);
                 _backgroundFloodFill.UpdateLocalRegion(localStartX, localStartY, countX, countY, this);
-                _meshBuilder.BuildRegion(_cellCache, _precalc, _backgroundFloodFill, minX, minY, _meshWidth, _meshHeight, localStartX, localStartY, countX, countY, _mapManager.WorldWidth, _mapManager.WorldHeight, atlases, _materialManager.SubMeshIndices, _useColorLod, _mapManager, textureService);
-
-                anyIndicesChanged |= _meshBuilder.IndicesChanged;
-                anyOverlayIndicesChanged |= _meshBuilder.OverlayIndicesChanged;
-                anyOverlayQuadsTouched |= _meshBuilder.OverlayQuadsTouched;
-                if (_meshBuilder.DirtyVertexCount > 0)
-                {
-                    patchVertexStart = Mathf.Min(patchVertexStart, _meshBuilder.DirtyVertexStart);
-                    patchVertexEnd = Mathf.Max(
-                        patchVertexEnd,
-                        _meshBuilder.DirtyVertexStart + _meshBuilder.DirtyVertexCount);
-                }
+                _cellBuilder.BuildRegion(sources, minX, minY, localStartX, localStartY, countX, countY);
+                doorsTouched |= _cellBuilder.DoorsTouched;
             }
 
-            if (patchVertexEnd > 0 &&
-                !_meshManager.UploadDirectVertexBuffer(
-                    _meshBuilder,
-                    patchVertexStart,
-                    patchVertexEnd - patchVertexStart))
+            // Накладка пересобирается, только если заплатка задела двери:
+            // заплатка на ходу есть почти в каждом кадре, а двери в ней редки.
+            if (doorsTouched)
             {
-                // Сетка разошлась с буфером: заплатку положить некуда,
-                // и следующий кадр обязан пересобрать всё целиком.
-                _needsRefresh = true;
-                return;
-            }
-
-            if (anyIndicesChanged)
-            {
-                Mesh? mesh = _meshManager.Mesh;
-                if (mesh != null)
-                {
-                    for (int i = 0; i < atlases.Count && i < _materialManager.SubMeshIndices.Length; i++)
-                    {
-                        mesh.SetIndices(_materialManager.SubMeshIndices[i], MeshTopology.Triangles, i, false, 0);
-                    }
-                }
-            }
-
-            if (anyOverlayIndicesChanged)
-            {
-                _meshBuilder.RebuildOverlaySubMeshIndices(
-                    _meshWidth,
-                    _meshHeight,
-                    _doorOverlaySubMeshIndices);
-            }
-
-            // Накладка пересобирается, только если заплатка её задела: либо
-            // сменился состав оверлейных квадов, либо переписаны вершины
-            // уже существующего. Раньше она собиралась на КАЖДОЙ заплатке —
-            // а заплатка на ходу есть почти в каждом кадре, и каждый раз
-            // сетка накладки пересоздавалась целиком, включая перевыделение
-            // буфера на GPU, ради дверей, которых заплатка не касалась.
-            if (anyOverlayIndicesChanged || anyOverlayQuadsTouched)
-            {
-                RebuildDoorOverlay();
+                RebuildDoorOverlay(sources, minX, minY);
             }
         }
 
         private void UpdateTextureCells(int minX, int minY)
         {
-            if (_mapManager == null || _meshManager.Mesh == null || _textureService == null)
+            if (_mapManager == null || _cellIdMesh.Mesh == null || _textureService == null)
             {
                 return;
             }
 
             IReadOnlyList<IAtlasDescriptor> atlases = _textureService.GetAllAtlases();
-            if (atlases.Count == 0 || _materialManager.SubMeshIndices.Length == 0)
+            if (atlases.Count == 0 || _materialManager.Materials.Length == 0)
             {
                 return;
             }
@@ -955,59 +994,13 @@ namespace Fodinae.World.Terrain
                 _mapManager,
                 _textureService,
                 atlases);
-            _meshBuilder.BuildTextureCells(
-                _pendingTextureCellTypes,
-                _cellCache,
-                _precalc,
-                _backgroundFloodFill,
-                minX,
-                minY,
-                _meshWidth,
-                _meshHeight,
-                _mapManager.WorldWidth,
-                _mapManager.WorldHeight,
-                atlases,
-                _materialManager.SubMeshIndices,
-                _useColorLod,
-                _mapManager,
-                _textureService);
-
-            if (_meshBuilder.DirtyVertexCount == 0)
+            TerrainCellSources sources = CreateCellSources(atlases, _textureService);
+            _cellBuilder.BuildTextureCells(_pendingTextureCellTypes, sources, minX, minY);
+            _materialManager.BindAtlasTextures(atlases, _textureService);
+            if (_cellBuilder.DoorsTouched)
             {
-                return;
+                RebuildDoorOverlay(sources, minX, minY);
             }
-
-            if (!_meshManager.UploadDirectVertexBuffer(
-                _meshBuilder,
-                _meshBuilder.DirtyVertexStart,
-                _meshBuilder.DirtyVertexCount))
-            {
-                _needsRefresh = true;
-                return;
-            }
-
-            Mesh? mesh = _meshManager.Mesh;
-            if (mesh != null)
-            {
-                _materialManager.BindAtlasTextures(atlases, _textureService, mesh);
-                if (_meshBuilder.IndicesChanged)
-                {
-                    for (int i = 0; i < atlases.Count && i < _materialManager.SubMeshIndices.Length; i++)
-                    {
-                        mesh.SetIndices(_materialManager.SubMeshIndices[i], MeshTopology.Triangles, i, false, 0);
-                    }
-                }
-            }
-
-            if (_meshBuilder.OverlayIndicesChanged)
-            {
-                _meshBuilder.RebuildOverlaySubMeshIndices(
-                    _meshWidth,
-                    _meshHeight,
-                    _doorOverlaySubMeshIndices);
-            }
-
-            RebuildDoorOverlay();
         }
 
         private void EnsureDoorOverlayIndices(int atlasCount)
@@ -1024,14 +1017,16 @@ namespace Fodinae.World.Terrain
             }
         }
 
-        private void RebuildDoorOverlay()
+        private void RebuildDoorOverlay(TerrainCellSources sources, int minX, int minY)
         {
+            EnsureDoorOverlayIndices(sources.Atlases.Count);
+            _cellBuilder.BuildDoorOverlay(sources, minX, minY, _doorOverlayVertices, _doorOverlaySubMeshIndices);
             _doorOverlayRenderer.Rebuild(
                 transform,
                 _sceneObjects,
-                _meshBuilder,
+                _doorOverlayVertices,
                 _doorOverlaySubMeshIndices,
-                _materialManager.Materials,
+                _materialManager.OverlayMaterials,
                 _sortingLayerName,
                 _doorOverlaySortingOrder,
                 _meshWidth,

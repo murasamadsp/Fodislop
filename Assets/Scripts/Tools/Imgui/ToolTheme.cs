@@ -81,7 +81,7 @@ public static class ToolTheme
     public static void Separator(float spaceBefore = 8f, float spaceAfter = 8f)
     {
         GUILayout.Space(spaceBefore);
-        Rect rect = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true));
+        Rect rect = GUILayoutUtility.GetRect(1f, 1f, ToolLayout.ExpandWidth(true));
         if (Event.current.type == EventType.Repaint)
         {
             Color previousColor = GUI.color;

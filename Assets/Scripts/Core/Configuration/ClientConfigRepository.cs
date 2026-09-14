@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using UnityEngine.Serialization;
 using Fodinae.Core.Interfaces;
 using UnityEngine;
 
@@ -123,11 +124,8 @@ internal sealed class ClientConfigRepository
         ];
         string[] missingFields = persistedTypes
             .SelectMany(type => type.GetFields(BindingFlags.Instance | BindingFlags.Public))
+            .Where(field => !HasSerializedName(json, field))
             .Select(field => field.Name)
-            .Where(fieldName => !Regex.IsMatch(
-                json,
-                $"\\\"{Regex.Escape(fieldName)}\\\"\\s*:",
-                RegexOptions.CultureInvariant))
             .ToArray();
         if (missingFields.Length > 0)
         {
@@ -136,4 +134,30 @@ internal sealed class ClientConfigRepository
                 string.Join(", ", missingFields) + ".");
         }
     }
+
+    // Переименованное поле с [FormerlySerializedAs] JsonUtility читает и по
+    // старому имени, поэтому файл со старым именем тоже полный.
+    private static bool HasSerializedName(string json, FieldInfo field)
+    {
+        if (JsonHasKey(json, field.Name))
+        {
+            return true;
+        }
+
+        foreach (FormerlySerializedAsAttribute former in field.GetCustomAttributes<FormerlySerializedAsAttribute>())
+        {
+            if (JsonHasKey(json, former.oldName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool JsonHasKey(string json, string key) =>
+        Regex.IsMatch(
+            json,
+            $"\\\"{Regex.Escape(key)}\\\"\\s*:",
+            RegexOptions.CultureInvariant);
 }

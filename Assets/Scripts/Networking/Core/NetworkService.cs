@@ -272,6 +272,45 @@ namespace Fodinae.Networking
                 return;
             }
 
+            // Время всех обработчиков пакета вместе: без него пик разбора
+            // очереди не привязать к типу пакета.
+            long handlerStarted = PacketTelemetry.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            try
+            {
+                using var allocationScope = Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Enabled
+                    ? Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Measure(PacketAllocationEntry(packetType))
+                    : default;
+                InvokeHandlers(packet, packetType, handlers);
+            }
+            finally
+            {
+                if (handlerStarted != 0L)
+                {
+                    PacketTelemetry.RecordHandlerTime(
+                        packetType,
+                        (System.Diagnostics.Stopwatch.GetTimestamp() - handlerStarted) * 1000.0 /
+                        System.Diagnostics.Stopwatch.Frequency);
+                }
+            }
+        }
+
+        // Одна запись учёта аллокаций на тип пакета; строка имени строится один
+        // раз на тип, а не на пакет.
+        private static readonly Dictionary<Type, Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Entry> _PacketAllocationEntries = new();
+
+        private static Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Entry PacketAllocationEntry(Type packetType)
+        {
+            if (!_PacketAllocationEntries.TryGetValue(packetType, out var entry))
+            {
+                entry = Fodinae.Core.Interfaces.Diagnostics.AllocationLedger.Register("Пакет · " + packetType.Name);
+                _PacketAllocationEntries[packetType] = entry;
+            }
+
+            return entry;
+        }
+
+        private void InvokeHandlers(object packet, Type packetType, Subscription[] handlers)
+        {
             for (int i = handlers.Length - 1; i >= 0; i--)
             {
                 try

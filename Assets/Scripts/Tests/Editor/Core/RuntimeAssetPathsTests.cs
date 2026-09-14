@@ -99,6 +99,7 @@ public sealed class RuntimeAssetPathsTests
         Assert.That(settings.BypassTerrainDraw, Is.False);
         Assert.That(settings.BypassCpuMeshRebuild, Is.False);
         Assert.That(settings.ShowRobotDebugVisuals, Is.False);
+        Assert.That(settings.BypassGameUI, Is.False);
     }
 
     [Test]

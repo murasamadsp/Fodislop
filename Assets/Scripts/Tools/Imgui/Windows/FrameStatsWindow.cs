@@ -112,9 +112,8 @@ public sealed class FrameStatsWindow : ToolWindow
 
     protected override void DrawContent()
     {
-        using (var scroll = new GUILayout.ScrollViewScope(_scroll))
+        using (ToolLayout.ScrollView(ref _scroll))
         {
-            _scroll = scroll.scrollPosition;
             float graphWidth = Mathf.Max(120f, Rect.width - 54f);
 
             ToolChrome.SectionHeader("КАДР");
@@ -164,9 +163,14 @@ public sealed class FrameStatsWindow : ToolWindow
         return _frameMs > 16.7f ? ToolTheme.Warning : ToolTheme.Success;
     }
 
+    // Общие на все события: GUIContent и GUILayoutOption — классы, и
+    // создавать их в отрисовке значит мусорить на каждое событие IMGUI.
+    private static readonly GUIContent _HeroContent = new();
+    private static readonly GUILayoutOption _NoExpandWidth = GUILayout.ExpandWidth(false);
+
     private static void DrawHero(string value, string unit, Color color)
     {
-        using (new GUILayout.HorizontalScope())
+        using (ToolLayout.Horizontal())
         {
             ToolChrome.StatusPip(color);
 
@@ -174,8 +178,8 @@ public sealed class FrameStatsWindow : ToolWindow
             // копия стиля означала бы новую GUIStyle на каждое событие IMGUI —
             // мусор в окне, которое этот мусор и считает.
             GUIStyle style = MetricLabelStyle;
-            Rect area = GUILayoutUtility.GetRect(
-                new GUIContent(value), style, GUILayout.ExpandWidth(false));
+            _HeroContent.text = value;
+            Rect area = GUILayoutUtility.GetRect(_HeroContent, style, _NoExpandWidth);
             ToolChrome.DrawTinted(area, value, style, color);
 
             GUILayout.Label(unit, ToolTheme.UnitLabel);

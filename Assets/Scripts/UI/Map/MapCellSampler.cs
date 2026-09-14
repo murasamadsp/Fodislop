@@ -84,7 +84,7 @@ internal sealed class MapCellSampler
         {
             if (!_chunks.TryGetValue(chunkIndex, out chunk))
             {
-                ChunkReadResult<CellType> result = _layer.ReadChunk(chunkIndex, touchLru: false);
+                ChunkReadResult<CellType> result = _layer.ReadChunk(chunkIndex, touchLru: true);
                 if (result.Status == ChunkReadStatus.Available)
                 {
                     chunk = result.Data;
