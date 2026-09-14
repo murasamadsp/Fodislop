@@ -133,6 +133,7 @@ int sampler_LinearClamp=0, _MaterialYFlip=0;
 int2 _FieldSize;
 float4 _WorldRect, _EmptyExtinctionRGB, _SolidExtinctionRGB;
 float _CellSize=1, _EmissionScale=1;
+static const float InvisibleLampRadiance = 1e-6f;
 Texture _CellSolidMask,_CellSolidMaskOutput;
 int2 _CellGridSize;
 std::vector<float4> _BounceTaps,_BounceFilterWeights;

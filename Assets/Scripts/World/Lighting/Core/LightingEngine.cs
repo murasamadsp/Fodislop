@@ -651,8 +651,8 @@ namespace Fodinae.World.Lighting
                     // Dynamic lamps are integrated directly from their source
                     // cells; no emission-field rasterization or cascade atlas
                     // rebuild is needed when a lamp moves.
-                    // Bound with the static field as the default. SolveRadianceHalf
-                    // rebinds the cascade and resolve kernels per half; everything
+                    // Bound with the static field as the default. SolveRadianceComponent
+                    // rebinds the cascade and resolve kernels per component; everything
                     // else - bounce, the composite's emission
                     // debug view - wants the terrain's emission, not the lamps'.
                     ConfigureSharedComputeParameters(
@@ -670,7 +670,7 @@ namespace Fodinae.World.Lighting
                     if (staticRadianceChanged)
                     {
                         _telemetry.LightingStaticSolveCount++;
-                        SolveRadianceHalf(
+                        SolveRadianceComponent(
                             commandBuffer,
                             _staticEmissionField!,
                             _staticDirectTexture!,
@@ -935,7 +935,10 @@ namespace Fodinae.World.Lighting
             commandBuffer.EndSample(sampleName);
         }
 
-        private void SolveRadianceHalf(
+        // Solves one additive component of the light (e.g. terrain emission)
+        // at full field resolution. Light is linear in emission, so components
+        // solved separately sum to the whole.
+        private void SolveRadianceComponent(
             CommandBuffer commandBuffer,
             RenderTexture emissionField,
             RenderTexture directTarget,

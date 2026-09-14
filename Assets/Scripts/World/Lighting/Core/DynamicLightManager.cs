@@ -139,7 +139,7 @@ public sealed class DynamicLightManager
                 continue;
             }
 
-            if (!IntersectsWorldRect(source.Position, 32f, worldRect, cellSize))
+            if (!IntersectsWorldRect(source.Position, 16f, worldRect, cellSize))
             {
                 _lastDroppedDynamicLightIds.Add(pair.Key);
                 continue;

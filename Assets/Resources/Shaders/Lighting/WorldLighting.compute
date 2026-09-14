@@ -15,6 +15,10 @@
 #define PI 3.14159265359
 #define PI2 6.28318530718
 
+// Lamp light below this absolute radiance cannot move any display level
+// (see TraceLightSegment). Not a tuning value: derived from output precision.
+static const float InvisibleLampRadiance = 1e-6;
+
 Texture2D<float4> _MaterialField;
 Texture2D<float4> _EmissionField;
 RWStructuredBuffer<uint3> _RadianceAtlas;
@@ -440,7 +444,17 @@ void TraceLightSegment(
 
         transmittance *= transmission;
         distance = end;
-        if (distance >= exitDistance || distance >= emissionExit || Max3(transmittance) == 0.0)
+        // A lamp ray also stops once everything it could still bring is below
+        // what any display can show. The rest of the path is bounded by
+        // transmittance * source radiance * the largest single-cell emission
+        // weight (a cell crossed diagonally, ~1.42 < 1.5). The bound is
+        // absolute radiance, where 1.0 is exposure-0 white: 1e-6 sits two
+        // orders below half an 8-bit sRGB step at black (1.5e-4), so even the
+        // tails of dozens of lamps meeting in one pixel stay below one level.
+        bool lampTailInvisible = collectEmission && isolateSource &&
+            Max3(transmittance * sourceRadiance) * 1.5 < InvisibleLampRadiance;
+        if (distance >= exitDistance || distance >= emissionExit || Max3(transmittance) == 0.0 ||
+            lampTailInvisible)
         {
             break;
         }
@@ -522,8 +536,8 @@ float3 GatherDynamicSource(float2 origin, DynamicLight light, int sampleCount)
         float raySin;
         float rayCos;
         sincos(angle, raySin, rayCos);
-        float3 sampleRadiance;
-        float3 transmission;
+        float3 sampleRadiance = 0.0;
+        float3 transmission = 1.0;
         TraceLightSegment(
             origin,
             origin + float2(rayCos, raySin) * rayLength,
