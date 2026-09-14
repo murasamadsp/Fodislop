@@ -99,7 +99,10 @@ public class CascadeLayoutBuilderTests
             Assert.That(cascades[i].ProbeSpacing, Is.EqualTo(cascades[i - 1].ProbeSpacing * 2));
             Assert.That(cascades[i].DirectionCount, Is.EqualTo(cascades[i - 1].DirectionCount * 4));
             Assert.That(cascades[i].IntervalStart, Is.EqualTo(cascades[i - 1].IntervalEnd));
-            Assert.That(cascades[i].IntervalEnd, Is.EqualTo(cascades[i - 1].IntervalEnd * 4f));
+            float expectedEnd = i == cascades.Count - 1
+                ? Math.Max(cascades[i - 1].IntervalEnd * 4f, (float)Math.Sqrt(100 * 100 + 50 * 50))
+                : cascades[i - 1].IntervalEnd * 4f;
+            Assert.That(cascades[i].IntervalEnd, Is.EqualTo(expectedEnd).Within(0.0001f));
         }
     }
 

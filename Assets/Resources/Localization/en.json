@@ -90,7 +90,6 @@
   "settings.lighting.max_size": "Maximum Lighting Size",
   "settings.lighting.max_dynamic_lights": "Maximum Dynamic Lights",
   "settings.lighting.cascade_steps": "Lighting Cascade Steps",
-  "settings.lighting.solve_rate": "Lighting Solve Rate",
   "settings.lighting.atlas_size": "Cascade Atlas Size",
   "settings.lighting.refresh": "Refresh Lighting Parameters",
   "settings.lighting.actual_params": "Actual Lighting Parameters",

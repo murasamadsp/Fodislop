@@ -92,13 +92,20 @@ namespace Fodinae.World.Lighting
         public const float AmbientIntensity = 0.25f;
         public const float EmissionScale = 16.0f;
         public static readonly Color AmbientColor = Color.white;
+        // Per RGB channel: sigma = ExtinctionRGB * ExtinctionMultiplier.
+        // Transmission after d cells = exp(-sigma * d); multiply incoming light by it.
+        // sigma: 0 = transparent; 0.2 = 81.87% per cell; 4.60517 = 1% per cell.
+        // Solid affects transmission through the wall, not illumination of its front surface.
         public static readonly Color EmptyExtinctionRGB = Color.white;
         public static readonly Color SolidExtinctionRGB = Color.white;
-        public const float EmptyExtinctionMultiplier = 0.2f;
-        public const float SolidExtinctionMultiplier = 1600.0f;
+        public const float EmptyExtinctionMultiplier = 0.5f;
+        public const float SolidExtinctionMultiplier = 2.0f;
+        // false выключает отскок целиком: проход не считается, в свет не входит.
+        public const bool BounceEnabled = false;
         public const float BounceStrength = 1.0f;
         public const float MaximumLightMultiplier = 1.0f;
 
+        // Legacy diagnostic value; transport no longer stops at this threshold.
         public const float MinimumTransmission = 0.008f;
         public const bool DynamicLightEnabled = true;
         public const float DynamicLightIntensity = 1.0f;

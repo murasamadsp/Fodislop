@@ -49,6 +49,8 @@ namespace Fodinae.World.Lighting
             Shader.PropertyToID("_WorldLightTextureSize");
         private static readonly int _WorldEmissionScaleID =
             Shader.PropertyToID("_WorldEmissionScale");
+        private static readonly int _WorldLightPerBlockID =
+            Shader.PropertyToID("_WorldLightPerBlock");
 
         // Поле занятости для падающей тени в террейне. Y-переворот отдаётся
         // отдельно: компьют читает это поле с поправкой, террейн обязан так же.
@@ -73,6 +75,8 @@ namespace Fodinae.World.Lighting
             new("Fodinae.Lighting.Resolve.Record.CPU");
         private static readonly ProfilerMarker _CompositeMarker =
             new("Fodinae.Lighting.Composite.Record.CPU");
+        private static readonly ProfilerMarker _BlockLightingMarker =
+            new("Fodinae.Lighting.BlockPropagation.Record.CPU");
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForDomainReload()
@@ -114,6 +118,8 @@ namespace Fodinae.World.Lighting
         private int _resolveDirectKernel => _resources.ResolveDirectKernel;
         private int _solveDiffuseBounceKernel => _resources.SolveDiffuseBounceKernel;
         private int _compositeLightingKernel => _resources.CompositeLightingKernel;
+        private int _seedBlockLightingKernel => _resources.SeedBlockLightingKernel;
+        private int _propagateBlockLightingKernel => _resources.PropagateBlockLightingKernel;
         private int _fieldWidth => _resources.FieldWidth;
         private int _fieldHeight => _resources.FieldHeight;
         private int _bounceWidth => _resources.BounceWidth;
@@ -143,9 +149,6 @@ namespace Fodinae.World.Lighting
         private bool _wasLightingBypassed;
 
 
-        private float _nextLightingUpdateTime;
-        private float _nextDynamicLightingUpdateTime;
-        private float _nextGeometryLightingUpdateTime;
         private ulong _solveCount;
         private ulong _lastTerrainGeometryRevision;
         private ulong _lastContributorGeometryRevision;
@@ -190,7 +193,8 @@ namespace Fodinae.World.Lighting
 
         public DebugView ActiveDebugView => _debugView;
 
-        public bool DiffuseBounceEnabled => LightingConfigHolder.BounceStrength > 0f;
+        public bool DiffuseBounceEnabled =>
+            LightingConfigHolder.BounceEnabled && LightingConfigHolder.BounceStrength > 0f;
 
         public float AmbientIntensity => LightingConfigHolder.AmbientIntensity;
 
@@ -218,8 +222,6 @@ namespace Fodinae.World.Lighting
         public float DynamicLightIntensity => LightingConfigHolder.DynamicLightIntensity;
 
         public Color DynamicLightColor => LightingConfigHolder.DynamicLightColor;
-
-        public float DynamicLightUpdatesPerSecond => 20f;
 
         public bool IsRuntimeConfigReady => true;
 
@@ -257,11 +259,17 @@ namespace Fodinae.World.Lighting
 
         public int CascadeCount => _cascades.Count;
 
-        public int MaximumIntervalSteps =>
-            Mathf.Clamp(_qualitySettings.LightingMaximumRaySteps, 1, 64);
+        // One clipped DDA path crosses at most every row and column once.
+        public int MaximumIntervalSteps => _fieldWidth + _fieldHeight + 1;
 
         public void CollectCascadeCosts(List<CascadeCostSample> destination)
         {
+            if (_lightingQualityMode == LightingQualityMode.PerBlock)
+            {
+                destination.Clear();
+                return;
+            }
+
             CascadeCostCalculator.CollectCascadeCosts(_cascades, MaximumIntervalSteps, destination);
         }
         public int MaterialYFlip => SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
@@ -572,45 +580,8 @@ namespace Fodinae.World.Lighting
             }
 
             bool geometryUpdateRequired = _fieldDirty || regionChanged || geometryChanged;
-            bool dynamicOnlyUpdate = dynamicLightsDirty &&
-                !geometryUpdateRequired &&
-                !_bounceDirty &&
-                !_compositeDirty;
-            bool continueDynamicSolve = _dynamicSolveInProgress &&
-                !geometryUpdateRequired &&
-                !_bounceDirty &&
-                !_compositeDirty;
-            float nextAllowedUpdateTime = dynamicOnlyUpdate
-                ? _nextDynamicLightingUpdateTime
-                : _nextLightingUpdateTime;
-
-            // Правка клеток (боты копают) ставит _fieldDirty и поднимает ревизию
-            // террейна. Раньше это обходило частоту целиком: каждая изменённая
-            // клетка в кадре давала перерисовку полей и полное статическое
-            // решение, 4 каскада. Теперь такая перестройка ждёт тот же шаг
-            // 20 раз в секунду — флаги и ревизии не сбрасываются, правка не
-            // теряется. Смена региона ждать не может: _lastVisibleRegion уже
-            // перезаписан выше.
-            if (!regionChanged &&
-                !_compositeDirty &&
-                !_bounceDirty &&
-                _hasStaticRadianceState &&
-                (_fieldDirty || geometryChanged) &&
-                Time.unscaledTime < _nextGeometryLightingUpdateTime)
-            {
-                return;
-            }
-
-            if (!continueDynamicSolve &&
-                Time.unscaledTime < nextAllowedUpdateTime &&
-                !geometryUpdateRequired &&
-                !_compositeDirty &&
-                !_bounceDirty &&
-                _hasStaticRadianceState)
-            {
-                return;
-            }
-
+            // Частотой обновление не ограничивается ни для ламп, ни для
+            // геометрии: всё, что изменилось, пересчитывается в этом же кадре.
             if (geometryUpdateRequired || _bounceDirty || _compositeDirty)
             {
                 _dynamicSolveInProgress = false;
@@ -670,71 +641,69 @@ namespace Fodinae.World.Lighting
                     return;
                 }
 
-                _dynamicEmissionCompositionPipeline!.Record(
-                    commandBuffer,
-                    BuildFrameContext() with
-                    {
-                        WorldRect = worldRect,
-                        CellSize = cellSize,
-                        DynamicLightCount = dynamicLightCount,
-                    });
-
-                // Bound with the static field as the default. SolveRadianceHalf
-                // rebinds the cascade and resolve kernels per half; everything
-                // else - bounce, the composite's emission
-                // debug view - wants the terrain's emission, not the lamps'.
-                ConfigureSharedComputeParameters(
-                    commandBuffer,
-                    worldRect,
-                    cellSize,
-                    _staticEmissionField!);
-                // Terrain emitters are re-solved only when the geometry they
-                // depend on changes - explicitly NOT when a lamp moves. That
-                // dependency was the whole reason walking cost a full solve per
-                // frame; the split below is what removes it.
-                bool staticRadianceChanged = rebuildFields || !_hasStaticRadianceState;
-
-                if (staticRadianceChanged)
+                if (_lightingQualityMode == LightingQualityMode.PerBlock)
                 {
                     _telemetry.LightingStaticSolveCount++;
-                    SolveRadianceHalf(
+                    SolveBlockLighting(commandBuffer, worldRect, cellSize, dynamicLightCount, rebuildFields);
+                }
+                else
+                {
+                    // Dynamic lamps are integrated directly from their source
+                    // cells; no emission-field rasterization or cascade atlas
+                    // rebuild is needed when a lamp moves.
+                    // Bound with the static field as the default. SolveRadianceHalf
+                    // rebinds the cascade and resolve kernels per half; everything
+                    // else - bounce, the composite's emission
+                    // debug view - wants the terrain's emission, not the lamps'.
+                    ConfigureSharedComputeParameters(
                         commandBuffer,
-                        _staticEmissionField!,
-                        _staticDirectTexture!,
-                        "Fodinae.Lighting.StaticRadiance");
-                    _hasStaticRadianceState = true;
-                }
+                        worldRect,
+                        cellSize,
+                        _staticEmissionField!);
+                    PrepareGeometryCaches(commandBuffer, rebuildFields);
+                    // Terrain emitters are re-solved only when the geometry they
+                    // depend on changes - explicitly NOT when a lamp moves. That
+                    // dependency was the whole reason walking cost a full solve per
+                    // frame; the split below is what removes it.
+                    bool staticRadianceChanged = rebuildFields || !_hasStaticRadianceState;
 
-                bool dynamicRadianceNeeded = dynamicLightCount > 0 &&
-                    (dynamicLightsChanged || staticRadianceChanged || !_hasDynamicRadianceState);
+                    if (staticRadianceChanged)
+                    {
+                        _telemetry.LightingStaticSolveCount++;
+                        SolveRadianceHalf(
+                            commandBuffer,
+                            _staticEmissionField!,
+                            _staticDirectTexture!,
+                            "Fodinae.Lighting.StaticRadiance");
+                        _hasStaticRadianceState = true;
+                    }
 
-                if (dynamicRadianceNeeded)
-                {
-                    _telemetry.LightingDynamicSolveCount++;
-                    SolveRadianceHalf(
-                        commandBuffer,
-                        _dynamicEmissionField!,
-                        _directTexture!,
-                        "Fodinae.Lighting.DynamicRadiance",
-                        maxCascades: Mathf.Min(3, _cascades.Count));
-                    _hasDynamicRadianceState = true;
-                }
-                else if (dynamicLightCount == 0 && (dynamicLightsChanged || staticRadianceChanged || _hasDynamicRadianceState))
-                {
-                    ClearDynamicDirect(commandBuffer);
-                    _hasDynamicRadianceState = false;
-                }
+                    bool dynamicRadianceNeeded = dynamicLightCount > 0 &&
+                        (dynamicLightsChanged || staticRadianceChanged || !_hasDynamicRadianceState);
 
-                // Diffuse bounce: direct radiance in _directTexture is scattered
-                // by surface albedo into the receiver hemisphere (SolveDiffuseBounce),
-                // then CompositeLighting adds it to ambient + direct.
-                if (LightingConfigHolder.BounceStrength > 0f)
-                {
-                    _diffuseBouncePipeline!.Record(commandBuffer, BuildFrameContext());
-                }
+                    if (dynamicRadianceNeeded)
+                    {
+                        _telemetry.LightingDynamicSolveCount++;
+                        SolveDynamicLighting(commandBuffer, dynamicLightCount);
+                        _hasDynamicRadianceState = true;
+                    }
+                    else if (dynamicLightCount == 0 && (dynamicLightsChanged || staticRadianceChanged || _hasDynamicRadianceState))
+                    {
+                        ClearDynamicDirect(commandBuffer);
+                        _hasDynamicRadianceState = false;
+                    }
 
-                // Final composite of ambient + direct radiance + diffuse bounce.
-                DispatchComposite(commandBuffer);
+                    // Diffuse bounce: direct radiance in _directTexture is scattered
+                    // by surface albedo into the receiver hemisphere (SolveDiffuseBounce),
+                    // then CompositeLighting adds it to ambient + direct.
+                    if (LightingConfigHolder.BounceEnabled && LightingConfigHolder.BounceStrength > 0f)
+                    {
+                        _diffuseBouncePipeline!.Record(commandBuffer, BuildFrameContext());
+                    }
+
+                    // Final composite of ambient + direct radiance + diffuse bounce.
+                    DispatchComposite(commandBuffer);
+                }
 
                 commandBuffer.EndSample("Fodinae.RadianceCascades");
                 }
@@ -753,14 +722,6 @@ namespace Fodinae.World.Lighting
                 _fieldDirty = false;
                 _compositeDirty = false;
                 _bounceDirty = false;
-                _nextLightingUpdateTime = Time.unscaledTime +
-                    (1f / Mathf.Max(_qualitySettings.LightingUpdatesPerSecond, 1f));
-                _nextDynamicLightingUpdateTime = Time.unscaledTime +
-                    (1f / 20f);
-                if (geometryUpdateRequired)
-                {
-                    _nextGeometryLightingUpdateTime = Time.unscaledTime + (1f / 20f);
-                }
                 _lastTerrainGeometryRevision = terrainRenderer.LightingGeometryRevision;
                 _lastContributorGeometryRevision = contributorGeometryRevision;
                 RememberDynamicLightState();
@@ -783,6 +744,7 @@ namespace Fodinae.World.Lighting
             Shader.SetGlobalVector(_WorldLightRectID, new Vector4(-1000f, -1000f, 2000f, 2000f));
             Shader.SetGlobalVector(_WorldLightTextureSizeID, new Vector4(1, 1, 1, 1));
             Shader.SetGlobalInteger(_WorldLightDebugViewID, 0);
+            Shader.SetGlobalInteger(_WorldLightPerBlockID, 0);
             Shader.SetGlobalFloat(_WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
             _lightingDisabledStatePublished = true;
         }
@@ -808,6 +770,9 @@ namespace Fodinae.World.Lighting
             }
 
             Shader.SetGlobalInteger(_WorldLightDebugViewID, (int)_debugView);
+            Shader.SetGlobalInteger(
+                _WorldLightPerBlockID,
+                _lightingQualityMode == LightingQualityMode.PerBlock ? 1 : 0);
             Shader.SetGlobalFloat(_WorldEmissionScaleID, LightingConfigHolder.EmissionScale);
             Shader.SetGlobalVector(
                 _WorldLightTextureSizeID,
@@ -840,7 +805,6 @@ namespace Fodinae.World.Lighting
                 _bounceHeight,
                 worldRect,
                 cellSize,
-                _qualitySettings,
                 _lightingQualityMode,
                 _debugView,
                 _materialField!,
@@ -923,13 +887,6 @@ namespace Fodinae.World.Lighting
             commandBuffer.EndSample("Fodinae.Lighting.RadianceCascades");
         }
 
-        /// <param name="dispatchedCascadeCount">
-        /// Сколько каскадов запущено в ЭТОМ проходе, а не сколько их всего.
-        /// Динамическая половина считает три из четырёх, и верхний из них
-        /// обязан знать, что над ним пусто: иначе он вычитает из атласа
-        /// каскад, которого в этом проходе не решали, — а там лежит
-        /// статическая половина, и свет земли подмешивается в лампы.
-        /// </param>
         private void DispatchRadianceCascade(
             CommandBuffer commandBuffer,
             int cascadeIndex,
@@ -959,8 +916,7 @@ namespace Fodinae.World.Lighting
                 compute,
                 cascade,
                 farCascade,
-                hasFarCascade,
-                _lightingQualityMode == LightingQualityMode.PerPixelBilinearFix);
+                hasFarCascade);
             int totalGroupCount = Mathf.CeilToInt(cascade.EntryCount / 64f);
             int groupCountX = Mathf.Min(
                 MaximumDispatchGroupsPerDimension,
@@ -1017,6 +973,24 @@ namespace Fodinae.World.Lighting
                 1);
         }
 
+        private void SolveDynamicLighting(CommandBuffer commandBuffer, int lightCount)
+        {
+            commandBuffer.BeginSample("Fodinae.Lighting.DynamicRadiance");
+            ComputeShader compute = _lightingCompute!;
+            int kernel = _resources.SolveDynamicLightingKernel;
+            BindFieldTextures(commandBuffer, kernel, _staticEmissionField!);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicLightCountID, lightCount);
+            commandBuffer.SetComputeBufferParam(compute, kernel, LightingComputeBinder.DynamicLightsID, _dynamicLightBuffer!);
+            commandBuffer.SetComputeTextureParam(compute, kernel, LightingComputeBinder.DirectTextureID, _directTexture!);
+            commandBuffer.DispatchCompute(
+                compute,
+                kernel,
+                Mathf.CeilToInt(_fieldWidth / 8f),
+                Mathf.CeilToInt(_fieldHeight / 8f),
+                1);
+            commandBuffer.EndSample("Fodinae.Lighting.DynamicRadiance");
+        }
+
         private void ClearDynamicDirect(CommandBuffer commandBuffer)
         {
             commandBuffer.SetRenderTarget(_directTexture!);
@@ -1024,6 +998,147 @@ namespace Fodinae.World.Lighting
                 clearDepth: false,
                 clearColor: true,
                 backgroundColor: Color.clear);
+        }
+
+        private void SolveBlockLighting(
+            CommandBuffer commandBuffer,
+            Vector4 worldRect,
+            float cellSize,
+            int dynamicLightCount,
+            bool materialFieldRebuilt)
+        {
+            using var blockLightingMarker = _BlockLightingMarker.Auto();
+            commandBuffer.BeginSample("Fodinae.Lighting.BlockPropagation");
+
+            ComputeShader compute = _lightingCompute!;
+            int seedKernel = _seedBlockLightingKernel;
+            int propagateKernel = _propagateBlockLightingKernel;
+
+            LightingComputeBinder.BindExtinction(commandBuffer, compute);
+            commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.FieldSizeID, _fieldWidth, _fieldHeight);
+            commandBuffer.SetComputeVectorParam(compute, LightingComputeBinder.WorldRectID, worldRect);
+            commandBuffer.SetComputeFloatParam(compute, LightingComputeBinder.CellSizeID, cellSize);
+            commandBuffer.SetComputeVectorParam(
+                compute,
+                LightingComputeBinder.AmbientColorID,
+                LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity);
+            commandBuffer.SetComputeFloatParam(compute, LightingComputeBinder.EmissionScaleID, LightingConfigHolder.EmissionScale);
+            commandBuffer.SetComputeIntParam(
+                compute,
+                LightingComputeBinder.MaterialYFlipID,
+                SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DynamicLightCountID, dynamicLightCount);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.DebugViewID, (int)_debugView);
+            commandBuffer.SetComputeIntParam(compute, LightingComputeBinder.BlockAveragedID, 1);
+            commandBuffer.SetComputeIntParams(compute, LightingComputeBinder.BounceSizeID, _bounceWidth, _bounceHeight);
+            // Composite's bounce debug views read the filter cache in this tier too.
+            PrepareGeometryCaches(commandBuffer, materialFieldRebuilt);
+
+            commandBuffer.SetComputeTextureParam(compute, seedKernel, LightingComputeBinder.MaterialFieldID, _materialField!);
+            commandBuffer.SetComputeTextureParam(compute, seedKernel, LightingComputeBinder.EmissionFieldID, _staticEmissionField!);
+            if (_dynamicLightBuffer != null)
+            {
+                commandBuffer.SetComputeBufferParam(compute, seedKernel, LightingComputeBinder.DynamicLightsID, _dynamicLightBuffer);
+            }
+
+            commandBuffer.SetComputeTextureParam(compute, seedKernel, LightingComputeBinder.BlockLightOutputID, _directTexture!);
+
+            int dispatchX = Mathf.CeilToInt(_fieldWidth / 8f);
+            int dispatchY = Mathf.CeilToInt(_fieldHeight / 8f);
+            commandBuffer.DispatchCompute(compute, seedKernel, dispatchX, dispatchY, 1);
+
+            commandBuffer.SetComputeTextureParam(compute, propagateKernel, LightingComputeBinder.EmissionFieldID, _staticEmissionField!);
+            int iterations = LightingComputeBinder.ResolveBlockPropagationIterations(_fieldWidth, _fieldHeight);
+            for (int i = 0; i < iterations; i++)
+            {
+                RenderTexture input = (i % 2 == 0) ? _directTexture! : _staticDirectTexture!;
+                RenderTexture output = (i % 2 == 0) ? _staticDirectTexture! : _directTexture!;
+
+                commandBuffer.SetComputeTextureParam(compute, propagateKernel, LightingComputeBinder.BlockLightInputID, input);
+                commandBuffer.SetComputeTextureParam(compute, propagateKernel, LightingComputeBinder.BlockLightOutputID, output);
+                commandBuffer.DispatchCompute(compute, propagateKernel, dispatchX, dispatchY, 1);
+            }
+
+            RenderTexture solved = iterations % 2 == 0 ? _directTexture! : _staticDirectTexture!;
+            if (solved != _directTexture)
+            {
+                commandBuffer.CopyTexture(solved, _directTexture!);
+            }
+
+            int resolveKernel = _resources.ResolveBlockLightingKernel;
+            commandBuffer.SetComputeTextureParam(compute, resolveKernel, LightingComputeBinder.BlockLightInputID, _directTexture!);
+            commandBuffer.SetComputeTextureParam(compute, resolveKernel, LightingComputeBinder.ResultID, _lightmapTexture!);
+            commandBuffer.DispatchCompute(compute, resolveKernel, dispatchX, dispatchY, 1);
+
+            commandBuffer.EndSample("Fodinae.Lighting.BlockPropagation");
+
+            if (_debugView != DebugView.FinalLighting)
+            {
+                DispatchComposite(commandBuffer);
+            }
+        }
+
+        // Binds the geometry caches every solve and rebuilds them only together
+        // with the material field they are derived from. The builders run the
+        // exact per-frame expressions they replace, so nothing about the image
+        // changes — the marching simply stops being repeated for unchanged walls.
+        private void PrepareGeometryCaches(CommandBuffer commandBuffer, bool materialFieldRebuilt)
+        {
+            ComputeShader compute = _lightingCompute!;
+            RenderTexture cellSolidMask = _resources.CellSolidMask!;
+            ComputeBuffer bounceTaps = _resources.BounceTaps!;
+            ComputeBuffer bounceFilterWeights = _resources.BounceFilterWeights!;
+            int buildMaskKernel = _resources.BuildCellSolidMaskKernel;
+            int buildTapsKernel = _resources.BuildBounceTapsKernel;
+            int buildFilterKernel = _resources.BuildBounceFilterKernel;
+
+            commandBuffer.SetComputeIntParams(
+                compute,
+                LightingComputeBinder.CellGridSizeID,
+                _resources.CellGridWidth,
+                _resources.CellGridHeight);
+            commandBuffer.SetComputeTextureParam(compute, _solveCascadeKernel, LightingComputeBinder.CellSolidMaskID, cellSolidMask);
+            commandBuffer.SetComputeTextureParam(compute, _resolveDirectKernel, LightingComputeBinder.CellSolidMaskID, cellSolidMask);
+            commandBuffer.SetComputeTextureParam(compute, _resources.SolveDynamicLightingKernel, LightingComputeBinder.CellSolidMaskID, cellSolidMask);
+            commandBuffer.SetComputeTextureParam(compute, buildTapsKernel, LightingComputeBinder.CellSolidMaskID, cellSolidMask);
+            commandBuffer.SetComputeTextureParam(compute, buildFilterKernel, LightingComputeBinder.CellSolidMaskID, cellSolidMask);
+            commandBuffer.SetComputeBufferParam(compute, buildTapsKernel, LightingComputeBinder.BounceTapsID, bounceTaps);
+            commandBuffer.SetComputeBufferParam(compute, _solveDiffuseBounceKernel, LightingComputeBinder.BounceTapsID, bounceTaps);
+            commandBuffer.SetComputeBufferParam(compute, buildFilterKernel, LightingComputeBinder.BounceFilterWeightsID, bounceFilterWeights);
+            commandBuffer.SetComputeBufferParam(compute, _compositeLightingKernel, LightingComputeBinder.BounceFilterWeightsID, bounceFilterWeights);
+
+            if (!materialFieldRebuilt && _resources.GeometryCachesValid)
+            {
+                return;
+            }
+
+            commandBuffer.BeginSample("Fodinae.Lighting.GeometryCaches");
+            BindFieldTextures(commandBuffer, buildMaskKernel, _staticEmissionField!);
+            BindFieldTextures(commandBuffer, buildTapsKernel, _staticEmissionField!);
+            BindFieldTextures(commandBuffer, buildFilterKernel, _staticEmissionField!);
+            commandBuffer.SetComputeTextureParam(compute, buildMaskKernel, LightingComputeBinder.CellSolidMaskOutputID, cellSolidMask);
+
+            // Order matters: the tap and filter builders march through the mask.
+            commandBuffer.DispatchCompute(
+                compute,
+                buildMaskKernel,
+                Mathf.CeilToInt(_resources.CellGridWidth / 8f),
+                Mathf.CeilToInt(_resources.CellGridHeight / 8f),
+                1);
+            commandBuffer.DispatchCompute(
+                compute,
+                buildTapsKernel,
+                Mathf.CeilToInt(_bounceWidth / 8f),
+                Mathf.CeilToInt(_bounceHeight / 8f),
+                1);
+            commandBuffer.DispatchCompute(
+                compute,
+                buildFilterKernel,
+                Mathf.CeilToInt(_fieldWidth / 8f),
+                Mathf.CeilToInt(_fieldHeight / 8f),
+                1);
+            commandBuffer.EndSample("Fodinae.Lighting.GeometryCaches");
+            _resources.GeometryCachesValid = true;
         }
 
         private void DispatchComposite(CommandBuffer commandBuffer)
@@ -1137,8 +1252,6 @@ namespace Fodinae.World.Lighting
 
             _lastVisibleRegion = new Vector4(float.NaN, float.NaN, float.NaN, float.NaN);
             _fieldDirty = true;
-            _nextLightingUpdateTime = 0f;
-            _nextDynamicLightingUpdateTime = 0f;
             _dynamicSolveInProgress = false;
             _hasRenderedLightState = false;
             _hasStaticRadianceState = false;

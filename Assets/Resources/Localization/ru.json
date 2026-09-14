@@ -90,7 +90,6 @@
   "settings.lighting.max_size": "Максимальный размер lighting",
   "settings.lighting.max_dynamic_lights": "Максимум dynamic lights",
   "settings.lighting.cascade_steps": "Шаги lighting cascade",
-  "settings.lighting.solve_rate": "Частота lighting solve",
   "settings.lighting.atlas_size": "Размер cascade atlas",
   "settings.lighting.refresh": "Обновить параметры lighting",
   "settings.lighting.actual_params": "Фактические параметры lighting",

@@ -105,6 +105,7 @@ Shader "Fodinae/World Entity"
             float4 _WorldLightRect;
             float4 _WorldLightTextureSize;
             int _WorldLightDebugView;
+            int _WorldLightPerBlock;
 
             float3 GetWorldLightColor(float2 worldPos)
             {
@@ -113,7 +114,7 @@ Shader "Fodinae/World Entity"
                 #else
                 float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
                 float2 lightUV = saturate((worldPos - _WorldLightRect.xy) / rectSize);
-                if (_WorldLightDebugView != 0)
+                if (_WorldLightDebugView != 0 || _WorldLightPerBlock != 0)
                 {
                     int2 debugPixel = clamp(
                         int2(lightUV * _WorldLightTextureSize.xy),

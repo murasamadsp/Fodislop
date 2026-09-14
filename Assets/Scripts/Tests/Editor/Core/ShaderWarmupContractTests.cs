@@ -28,9 +28,16 @@ public sealed class ShaderWarmupContractTests
     private static readonly string[] _RequiredLightingKernels =
     [
         "SolveCascade",
+        "SolveDynamicLighting",
         "ResolveDirect",
         "SolveDiffuseBounce",
         "CompositeLighting",
+        "SeedBlockLighting",
+        "PropagateBlockLighting",
+        "ResolveBlockLighting",
+        "BuildCellSolidMask",
+        "BuildBounceTaps",
+        "BuildBounceFilter",
     ];
 
     [Test]

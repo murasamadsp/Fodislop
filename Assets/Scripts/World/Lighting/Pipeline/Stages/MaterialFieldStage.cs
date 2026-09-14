@@ -23,11 +23,8 @@ public sealed class MaterialFieldStage : ILightingStage
                 clearFields: false);
         }
 
-        // Mip-цепь обязательна: марш сэмплит occupancy с
-        // samplingMip = log2(stepLength) > 0 на дальних шагах,
-        // а SampleLevel на текстуре без mip'ов возвращает 0 —
-        // свет не поглощался блоками дальше первого шага.
-        // GenerateMips строит цепь из mip 0, не затирая contributors.
+        // Mips serve contact AO and its debug view. Light transport reads only
+        // base-level physical occupancy; averaging mass would make walls leak.
         commandBuffer.GenerateMips(context.MaterialField);
 
         commandBuffer.EndSample("Fodinae.Lighting.MaterialField");

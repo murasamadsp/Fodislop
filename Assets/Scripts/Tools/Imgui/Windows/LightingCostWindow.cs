@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Fodinae.Core;
 using Fodinae.Core.Interfaces;
 using Fodinae.World.Lighting;
+using Fodinae.World.Lighting.Quality;
 using UnityEngine;
 
 namespace Fodinae.Tools.Imgui.Windows;
@@ -96,8 +97,16 @@ public sealed class LightingCostWindow : ToolWindow
         _cascadeLimited = lighting.CascadeBudgetLimited;
         _fieldDetail =
             $"{lighting.FieldWidth}×{lighting.FieldHeight} при {lighting.EffectivePixelsPerCell:F2} пикс/клетку";
-        _cascadeDetail = $"{lighting.CascadeCount} каскадов, шагов до {lighting.MaximumIntervalSteps}";
-        _atlasDetail = $"{lighting.AtlasEntryCount} записей, источников {lighting.DynamicLightCount}";
+        if (lighting.ActiveLightingQuality == LightingQualityMode.PerBlock)
+        {
+            _cascadeDetail = "каскады отключены (клеточный BFS)";
+            _atlasDetail = $"источников {lighting.DynamicLightCount}";
+        }
+        else
+        {
+            _cascadeDetail = $"{lighting.CascadeCount} каскадов, шагов до {lighting.MaximumIntervalSteps}";
+            _atlasDetail = $"{lighting.AtlasEntryCount} записей, источников {lighting.DynamicLightCount}";
+        }
     }
 
     private void Recalculate()
@@ -106,6 +115,15 @@ public sealed class LightingCostWindow : ToolWindow
         _totalRaySteps = 0;
         _totalMergeTaps = 0;
         _heaviestRaySteps = 0;
+
+        if (_lighting?.ActiveLightingQuality == LightingQualityMode.PerBlock)
+        {
+            _summary = "Режим: По блокам (клеточный BFS на GPU, каскады лучей обойдены)";
+            _solveMix = $"за секунду: {_telemetry.LightingStaticSolveCount} решений";
+            _rows.Add("Клеточная заливка: 16 итераций по 4 соседа (0 шагов луча)");
+            _rows.Add("Разрешение: ровно 1 тексель на блок (Point sampling)");
+            return;
+        }
 
         foreach (CascadeCostSample sample in _samples)
         {

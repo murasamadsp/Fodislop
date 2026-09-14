@@ -229,14 +229,6 @@ internal sealed class PauseMenuGraphicsTabBuilder
             }));
 
         customGraphicsSection.Add(CreateTechnicalSlider(
-            nameof(GraphicsQualitySettings.LightingUpdatesPerSecond),
-            () => _graphicsSettings.CustomSettings.LightingUpdatesPerSecond,
-            (settings, value) =>
-            {
-                settings.LightingUpdatesPerSecond = Mathf.Round(value);
-                return settings;
-            }));
-        customGraphicsSection.Add(CreateTechnicalSlider(
             nameof(GraphicsQualitySettings.LightingCascadeAtlasLimit),
             () => _graphicsSettings.CustomSettings.LightingCascadeAtlasLimit,
             (settings, value) =>

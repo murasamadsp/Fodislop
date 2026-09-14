@@ -61,6 +61,7 @@ Shader "Fodinae/World Surface"
             float4 _WorldLightTextureSize;
             float _WorldEmissionScale;
             int _WorldLightDebugView;
+            int _WorldLightPerBlock;
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _EmissionColor;
@@ -74,7 +75,7 @@ Shader "Fodinae/World Surface"
             {
                 float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
                 float2 lightUV = (worldPosition - _WorldLightRect.xy) / rectSize;
-                if (_WorldLightDebugView != 0)
+                if (_WorldLightDebugView != 0 || _WorldLightPerBlock != 0)
                 {
                     int2 debugPixel = clamp(
                         int2(lightUV * _WorldLightTextureSize.xy),

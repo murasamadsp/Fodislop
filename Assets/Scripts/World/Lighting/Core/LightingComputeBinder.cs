@@ -26,7 +26,6 @@ internal static class LightingComputeBinder
     public static readonly int AmbientColorID = Shader.PropertyToID("_AmbientColor");
     public static readonly int EmptyExtinctionRGBID = Shader.PropertyToID("_EmptyExtinctionRGB");
     public static readonly int SolidExtinctionRGBID = Shader.PropertyToID("_SolidExtinctionRGB");
-    public static readonly int MinimumTransmissionID = Shader.PropertyToID("_MinimumTransmission");
     public static readonly int BounceStrengthID = Shader.PropertyToID("_BounceStrength");
     public static readonly int TerrainAmbientOcclusionMipID =
         Shader.PropertyToID("_TerrainAmbientOcclusionMip");
@@ -38,7 +37,6 @@ internal static class LightingComputeBinder
     public static readonly int TransmittanceDebugDistanceCellsID = Shader.PropertyToID("_TransmittanceDebugDistanceCells");
     public static readonly int DebugViewID = Shader.PropertyToID("_DebugView");
     public static readonly int MaterialYFlipID = Shader.PropertyToID("_MaterialYFlip");
-    public static readonly int MaximumIntervalStepsID = Shader.PropertyToID("_MaximumIntervalSteps");
     public static readonly int EnableDiffuseBounceID = Shader.PropertyToID("_EnableDiffuseBounce");
     public static readonly int CascadeOffsetID = Shader.PropertyToID("_CascadeOffset");
     public static readonly int CascadeProbeSizeID = Shader.PropertyToID("_CascadeProbeSize");
@@ -51,18 +49,56 @@ internal static class LightingComputeBinder
     public static readonly int FarCascadeDirectionCountID = Shader.PropertyToID("_FarCascadeDirectionCount");
     public static readonly int FarCascadeIntervalID = Shader.PropertyToID("_FarCascadeInterval");
     public static readonly int HasFarCascadeID = Shader.PropertyToID("_HasFarCascade");
-    public static readonly int EnableBilinearFixID = Shader.PropertyToID("_EnableBilinearFix");
     public static readonly int CascadeEntryCountID = Shader.PropertyToID("_CascadeEntryCount");
     public static readonly int CascadeDispatchRowWidthID = Shader.PropertyToID("_CascadeDispatchRowWidth");
     public static readonly int BlockAveragedID = Shader.PropertyToID("_BlockAveraged");
+    public static readonly int DynamicLightsID = Shader.PropertyToID("_DynamicLights");
+    public static readonly int DynamicLightCountID = Shader.PropertyToID("_DynamicLightCount");
+    public static readonly int BlockLightInputID = Shader.PropertyToID("_BlockLightInput");
+    public static readonly int BlockLightOutputID = Shader.PropertyToID("_BlockLightOutput");
+    public static readonly int CellGridSizeID = Shader.PropertyToID("_CellGridSize");
+    public static readonly int CellSolidMaskID = Shader.PropertyToID("_CellSolidMask");
+    public static readonly int CellSolidMaskOutputID = Shader.PropertyToID("_CellSolidMaskOutput");
+    public static readonly int BounceTapsID = Shader.PropertyToID("_BounceTaps");
+    public static readonly int BounceFilterWeightsID = Shader.PropertyToID("_BounceFilterWeights");
 
     public static float ResolveTransmittanceDebugDistance()
     {
-        Color extinction = LightingConfigHolder.EmptyExtinctionRGB *
-            LightingConfigHolder.EmptyExtinctionMultiplier;
-        // По сильнейшему каналу: он темнеет первым и задаёт, где вид упрётся в ноль.
-        float strongest = Mathf.Max(extinction.r, Mathf.Max(extinction.g, extinction.b));
-        return Mathf.Clamp(3f / Mathf.Max(strongest, 1e-4f), 1f, 32f);
+        // Fixed physical distance: changing sigma must change the measured
+        // transmission, not silently change the distance in the opposite direction.
+        return 1f;
+    }
+
+    public static void BindExtinction(CommandBuffer commandBuffer, ComputeShader compute)
+    {
+        commandBuffer.SetComputeVectorParam(
+            compute,
+            EmptyExtinctionRGBID,
+            LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier);
+        commandBuffer.SetComputeVectorParam(
+            compute,
+            SolidExtinctionRGBID,
+            LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier);
+    }
+
+    // Relative tail tolerance, not an artistic light radius. The weakest RGB
+    // channel and least absorbing material determine the required path length.
+    public static int ResolveBlockPropagationIterations(int width, int height)
+    {
+        Color empty = LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier;
+        Color solid = LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier;
+        float weakest = Mathf.Max(0f, Mathf.Min(
+            Mathf.Min(empty.r, Mathf.Min(empty.g, empty.b)),
+            Mathf.Min(solid.r, Mathf.Min(solid.g, solid.b))));
+        int maximumPath = checked(width * height - 1);
+        if (weakest <= 0f)
+        {
+            // A lossless maze can require visiting every cell; a fixed radius
+            // would introduce a visible cutoff unrelated to absorption.
+            return maximumPath;
+        }
+
+        return Mathf.CeilToInt(Mathf.Min(maximumPath, -Mathf.Log(1e-6f) / weakest + 1f));
     }
 
     public static void BindFieldTextures(
@@ -93,7 +129,6 @@ internal static class LightingComputeBinder
         int bounceHeight,
         Vector4 worldRect,
         float cellSize,
-        in GraphicsQualitySettings qualitySettings,
         LightingQualityMode qualityMode,
         LightingEngine.DebugView debugView,
         RenderTexture materialField,
@@ -110,15 +145,7 @@ internal static class LightingComputeBinder
             compute,
             AmbientColorID,
             LightingConfigHolder.AmbientColor * LightingConfigHolder.AmbientIntensity);
-        commandBuffer.SetComputeVectorParam(
-            compute,
-            EmptyExtinctionRGBID,
-            LightingConfigHolder.EmptyExtinctionRGB * LightingConfigHolder.EmptyExtinctionMultiplier);
-        commandBuffer.SetComputeVectorParam(
-            compute,
-            SolidExtinctionRGBID,
-            LightingConfigHolder.SolidExtinctionRGB * LightingConfigHolder.SolidExtinctionMultiplier);
-        commandBuffer.SetComputeFloatParam(compute, MinimumTransmissionID, LightingConfigHolder.MinimumTransmission);
+        BindExtinction(commandBuffer, compute);
         commandBuffer.SetComputeFloatParam(compute, BounceStrengthID, LightingConfigHolder.BounceStrength);
         commandBuffer.SetComputeFloatParam(
             compute,
@@ -142,12 +169,8 @@ internal static class LightingComputeBinder
             SystemInfo.graphicsUVStartsAtTop ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
-            MaximumIntervalStepsID,
-            Mathf.Clamp(qualitySettings.LightingMaximumRaySteps, 1, 64));
-        commandBuffer.SetComputeIntParam(
-            compute,
             EnableDiffuseBounceID,
-            1);
+            LightingConfigHolder.BounceEnabled ? 1 : 0);
         commandBuffer.SetComputeIntParam(
             compute,
             BlockAveragedID,
@@ -164,8 +187,7 @@ internal static class LightingComputeBinder
         ComputeShader compute,
         CascadeLayout cascade,
         CascadeLayout farCascade,
-        bool hasFarCascade,
-        bool bilinearFix)
+        bool hasFarCascade)
     {
         commandBuffer.SetComputeIntParam(compute, CascadeOffsetID, cascade.Offset);
         commandBuffer.SetComputeIntParams(
@@ -208,7 +230,6 @@ internal static class LightingComputeBinder
                 0f,
                 0f));
         commandBuffer.SetComputeIntParam(compute, HasFarCascadeID, hasFarCascade ? 1 : 0);
-        commandBuffer.SetComputeIntParam(compute, EnableBilinearFixID, bilinearFix ? 1 : 0);
         commandBuffer.SetComputeIntParam(compute, CascadeEntryCountID, cascade.EntryCount);
     }
 }

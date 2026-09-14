@@ -120,6 +120,8 @@ Shader "Universal Render Pipeline/Custom/Terrain"
             float4 _WorldLightRect;
             float4 _WorldLightTextureSize;
             int _WorldLightDebugView;
+            int _WorldLightPerBlock;
+
             float2 GetWorldLightUv(float2 worldPos)
             {
                 float2 rectSize = max(_WorldLightRect.zw, float2(0.0001, 0.0001));
@@ -132,7 +134,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                     return 1.0;
                 #else
                 float2 lightUV = GetWorldLightUv(worldPos);
-                if (_WorldLightDebugView != 0)
+                if (_WorldLightDebugView != 0 || _WorldLightPerBlock != 0)
                 {
                     int2 debugPixel = clamp(
                         int2(lightUV * _WorldLightTextureSize.xy),
@@ -572,7 +574,7 @@ Shader "Universal Render Pipeline/Custom/Terrain"
                 // переднего плана.
                 #ifdef FODINAE_WORLD_LIGHTING
                 uint shadowFlags = (uint)floor(input.glowData.y + 0.0001);
-                if ((shadowFlags & 64u) == 0u)
+                if ((shadowFlags & 64u) == 0u && _WorldLightPerBlock == 0)
                 {
                     litRGB *= 1.0 - GetAmbientOcclusion(input.worldPosition.xy);
                 }

@@ -215,8 +215,7 @@ internal sealed class PauseMenuSettingsBuilder
                 $"DiffuseBounce={(_lightingEngine.DiffuseBounceEnabled ? 1 : 0)} " +
                 $"strength={_lightingEngine.BounceStrength:F3}\n" +
                 $"Ambient={_lightingEngine.AmbientIntensity:F3} " +
-                $"Emission={_lightingEngine.EmissionScale:F3} " +
-                $"DynamicRate={_lightingEngine.DynamicLightUpdatesPerSecond:F1}\n" +
+                $"Emission={_lightingEngine.EmissionScale:F3}\n" +
                 $"EmptyExtinction={_lightingEngine.EmptyExtinctionMultiplier:F3} " +
                 $"SolidExtinction={_lightingEngine.SolidExtinctionMultiplier:F3}\n" +
                 $"MinimumTransmission={_lightingEngine.MinimumTransmission:F4} " +

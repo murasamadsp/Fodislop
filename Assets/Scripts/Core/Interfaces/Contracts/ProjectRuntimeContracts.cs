@@ -122,9 +122,16 @@ public static class ProjectRuntimeContracts
     public static class ComputeKernelNames
     {
         public const string SolveCascade = "SolveCascade";
+        public const string SolveDynamicLighting = "SolveDynamicLighting";
         public const string ResolveDirect = "ResolveDirect";
         public const string SolveDiffuseBounce = "SolveDiffuseBounce";
         public const string CompositeLighting = "CompositeLighting";
+        public const string SeedBlockLighting = "SeedBlockLighting";
+        public const string PropagateBlockLighting = "PropagateBlockLighting";
+        public const string ResolveBlockLighting = "ResolveBlockLighting";
+        public const string BuildCellSolidMask = "BuildCellSolidMask";
+        public const string BuildBounceTaps = "BuildBounceTaps";
+        public const string BuildBounceFilter = "BuildBounceFilter";
     }
 
     public static class RequiredLayers
@@ -136,7 +143,5 @@ public static class ProjectRuntimeContracts
 
     public static class RuntimeLimits
     {
-        public const int MaximumPacketBatchPerFrame = 250;
-        public const int MaximumLightingUpdatesPerSecond = 60;
-    }
+        public const int MaximumPacketBatchPerFrame = 250;    }
 }

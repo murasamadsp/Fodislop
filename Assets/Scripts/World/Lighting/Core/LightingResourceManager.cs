@@ -21,6 +21,7 @@ internal sealed class LightingResourceManager
     private RenderTexture? _staticDirectTexture;
     private RenderTexture? _bounceTexture;
     private RenderTexture? _lightmapTexture;
+    private RenderTexture? _cellSolidMask;
 
     public ComputeShader? LightingCompute { get; private set; }
     public CommandBuffer? LightingCommandBuffer { get; private set; }
@@ -35,10 +36,27 @@ internal sealed class LightingResourceManager
     public ComputeBuffer? RadianceAtlas { get; private set; }
     public ComputeBuffer? DynamicLightBuffer { get; private set; }
 
+    // Geometry caches: depend only on the material field and are rebuilt with
+    // it (see WorldLighting.compute). Recreated together with the field
+    // textures, which invalidates them.
+    public RenderTexture? CellSolidMask => _cellSolidMask;
+    public ComputeBuffer? BounceTaps { get; private set; }
+    public ComputeBuffer? BounceFilterWeights { get; private set; }
+    public bool GeometryCachesValid { get; set; }
+    public int CellGridWidth { get; private set; }
+    public int CellGridHeight { get; private set; }
+
     public int SolveCascadeKernel { get; private set; }
+    public int SolveDynamicLightingKernel { get; private set; }
     public int ResolveDirectKernel { get; private set; }
     public int SolveDiffuseBounceKernel { get; private set; }
     public int CompositeLightingKernel { get; private set; }
+    public int SeedBlockLightingKernel { get; private set; }
+    public int PropagateBlockLightingKernel { get; private set; }
+    public int ResolveBlockLightingKernel { get; private set; }
+    public int BuildCellSolidMaskKernel { get; private set; }
+    public int BuildBounceTapsKernel { get; private set; }
+    public int BuildBounceFilterKernel { get; private set; }
 
     public int FieldWidth { get; private set; }
     public int FieldHeight { get; private set; }
@@ -147,10 +165,20 @@ internal sealed class LightingResourceManager
         int bounceWidth = Mathf.Max(1, Mathf.CeilToInt(fieldWidth * 0.5f));
         int bounceHeight = Mathf.Max(1, Mathf.CeilToInt(fieldHeight * 0.5f));
 
+        FilterMode lightmapFilterMode = qualityMode == LightingQualityMode.PerBlock
+            ? FilterMode.Point
+            : FilterMode.Bilinear;
+
         if (FieldWidth == fieldWidth && FieldHeight == fieldHeight &&
+            CellGridWidth == gridWidth && CellGridHeight == gridHeight &&
             _materialField != null &&
             RadianceAtlas != null)
         {
+            if (_lightmapTexture != null && _lightmapTexture.filterMode != lightmapFilterMode)
+            {
+                _lightmapTexture.filterMode = lightmapFilterMode;
+            }
+
             return;
         }
 
@@ -210,8 +238,26 @@ internal sealed class LightingResourceManager
             fieldHeight,
             RenderTextureFormat.ARGBHalf,
             randomWrite: true,
-            FilterMode.Bilinear,
+            lightmapFilterMode,
             "_WorldLightTexture");
+        CellGridWidth = gridWidth;
+        CellGridHeight = gridHeight;
+        _cellSolidMask = CreateTexture(
+            gridWidth,
+            gridHeight,
+            RenderTextureFormat.ARGBHalf,
+            randomWrite: true,
+            FilterMode.Point,
+            "_LightingCellSolidMask");
+        BounceTaps = new ComputeBuffer(
+            bounceWidth * bounceHeight * 16,
+            sizeof(float) * 4,
+            ComputeBufferType.Structured);
+        BounceFilterWeights = new ComputeBuffer(
+            fieldWidth * fieldHeight * 4,
+            sizeof(float) * 4,
+            ComputeBufferType.Structured);
+        GeometryCachesValid = false;
 
         CascadeLayoutBuilder.BuildCascadeLayouts(
             fieldWidth,
@@ -244,6 +290,14 @@ internal sealed class LightingResourceManager
         ReleaseTexture(ref _staticDirectTexture);
         ReleaseTexture(ref _bounceTexture);
         ReleaseTexture(ref _lightmapTexture);
+        ReleaseTexture(ref _cellSolidMask);
+        BounceTaps?.Release();
+        BounceTaps = null;
+        BounceFilterWeights?.Release();
+        BounceFilterWeights = null;
+        GeometryCachesValid = false;
+        CellGridWidth = 0;
+        CellGridHeight = 0;
         FieldWidth = 0;
         FieldHeight = 0;
         BounceWidth = 0;
@@ -363,9 +417,16 @@ internal sealed class LightingResourceManager
         (string Name, Action<int> SetIndex)[] requiredKernels =
         [
             (ProjectRuntimeContracts.ComputeKernelNames.SolveCascade, k => SolveCascadeKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.SolveDynamicLighting, k => SolveDynamicLightingKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.ResolveDirect, k => ResolveDirectKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.SolveDiffuseBounce, k => SolveDiffuseBounceKernel = k),
             (ProjectRuntimeContracts.ComputeKernelNames.CompositeLighting, k => CompositeLightingKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.SeedBlockLighting, k => SeedBlockLightingKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.PropagateBlockLighting, k => PropagateBlockLightingKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.ResolveBlockLighting, k => ResolveBlockLightingKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.BuildCellSolidMask, k => BuildCellSolidMaskKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.BuildBounceTaps, k => BuildBounceTapsKernel = k),
+            (ProjectRuntimeContracts.ComputeKernelNames.BuildBounceFilter, k => BuildBounceFilterKernel = k),
         ];
 
         foreach (var (kernelName, setIndex) in requiredKernels)

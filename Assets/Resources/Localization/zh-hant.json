@@ -90,7 +90,6 @@
   "settings.lighting.max_size": "最大光照範圍",
   "settings.lighting.max_dynamic_lights": "最大動態光源數",
   "settings.lighting.cascade_steps": "級聯步數",
-  "settings.lighting.solve_rate": "光照求解速率",
   "settings.lighting.atlas_size": "級聯圖集大小",
   "settings.lighting.refresh": "重新整理光照參數",
   "settings.lighting.actual_params": "實際光照參數",

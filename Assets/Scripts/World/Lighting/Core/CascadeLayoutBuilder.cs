@@ -75,6 +75,11 @@ public static class CascadeLayoutBuilder
             }
 
             int entryCount = (int)entryCountLong;
+            // The atlas budget limits angular/spatial resolution, not the
+            // distance light can travel. The last interval covers the field.
+            float traceEnd = cascades.Count + 1 >= maxCascades
+                ? Mathf.Max(intervalEnd, requiredDistance)
+                : intervalEnd;
             cascades.Add(new CascadeLayout(
                 offset,
                 entryCount,
@@ -83,7 +88,7 @@ public static class CascadeLayoutBuilder
                 spacing,
                 directions,
                 intervalStart,
-                intervalEnd));
+                traceEnd));
 
             offset += entryCount;
             if (cascades.Count >= maxCascades || intervalEnd >= requiredDistance)
