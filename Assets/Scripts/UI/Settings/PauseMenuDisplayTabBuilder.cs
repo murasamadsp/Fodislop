@@ -20,6 +20,7 @@ internal sealed class PauseMenuDisplayTabBuilder
     private readonly ILocalizationService _loc;
 
     private Button? _fullscreenButton;
+    private Action? _refreshResolutionDropdown;
 
     public PauseMenuDisplayTabBuilder(
         IClientConfigManager clientConfig,
@@ -48,61 +49,136 @@ internal sealed class PauseMenuDisplayTabBuilder
         displaySection.Add(_fullscreenButton);
 
         var resolutions = Screen.resolutions;
-        var uniqueResolutions = new List<Resolution>();
-        var seen = new HashSet<string>();
+        var resolutionMap = new Dictionary<string, Resolution>();
         foreach (var res in resolutions)
         {
             var key = $"{res.width}x{res.height}";
-            if (seen.Add(key))
+            if (!resolutionMap.TryGetValue(key, out Resolution existing) ||
+                res.refreshRateRatio.value > existing.refreshRateRatio.value)
             {
-                uniqueResolutions.Add(res);
+                resolutionMap[key] = res;
             }
         }
 
-        int currentResIndex = -1;
+        if (Screen.width > 0 && Screen.height > 0)
+        {
+            var currentKey = $"{Screen.width}x{Screen.height}";
+            if (!resolutionMap.ContainsKey(currentKey))
+            {
+                resolutionMap[currentKey] = new Resolution
+                {
+                    width = Screen.width,
+                    height = Screen.height,
+                    refreshRateRatio = Screen.currentResolution.refreshRateRatio,
+                };
+            }
+        }
+
+        var uniqueResolutions = new List<Resolution>(resolutionMap.Values);
+        uniqueResolutions.Sort((a, b) =>
+        {
+            int cmp = a.width.CompareTo(b.width);
+            return cmp != 0 ? cmp : a.height.CompareTo(b.height);
+        });
+
+        int FindCurrentResolutionIndex()
+        {
+            int targetWidth = _clientConfig.Config.Display.ResolutionWidth > 0
+                ? _clientConfig.Config.Display.ResolutionWidth
+                : Screen.width;
+            int targetHeight = _clientConfig.Config.Display.ResolutionHeight > 0
+                ? _clientConfig.Config.Display.ResolutionHeight
+                : Screen.height;
+
+            for (int i = 0; i < uniqueResolutions.Count; i++)
+            {
+                if (uniqueResolutions[i].width == targetWidth &&
+                    uniqueResolutions[i].height == targetHeight)
+                {
+                    return i;
+                }
+            }
+
+            for (int i = 0; i < uniqueResolutions.Count; i++)
+            {
+                if (uniqueResolutions[i].width == Screen.width &&
+                    uniqueResolutions[i].height == Screen.height)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        var resolutionRow = new VisualElement();
+        resolutionRow.AddToClassList("pause-slider-container");
+
+        var resolutionLabel = new Label(_loc.Get("menu.settings.resolution"));
+        resolutionLabel.AddToClassList("pause-slider-label");
+        resolutionRow.Add(resolutionLabel);
+
+        var resolutionDropdown = new DropdownField();
+        var resolutionChoices = new List<string>(uniqueResolutions.Count);
         for (int i = 0; i < uniqueResolutions.Count; i++)
         {
-            if (uniqueResolutions[i].width == Screen.width &&
-                uniqueResolutions[i].height == Screen.height)
-            {
-                currentResIndex = i;
-                break;
-            }
+            resolutionChoices.Add($"{uniqueResolutions[i].width} x {uniqueResolutions[i].height}");
         }
 
-        var resolutionButton = new Button();
-        void UpdateResolutionButton()
+        if (resolutionChoices.Count == 0)
         {
-            string resolutionLabel = _loc.Get("menu.settings.resolution");
-            resolutionButton.text = uniqueResolutions.Count == 0
-                ? _loc.Get("settings.display.no_resolutions")
-                : currentResIndex >= 0
-                    ? $"{resolutionLabel}: {uniqueResolutions[currentResIndex].width} x " +
-                      uniqueResolutions[currentResIndex].height
-                    : $"{resolutionLabel}: {Screen.width} x {Screen.height}";
+            resolutionChoices.Add(_loc.Get("settings.display.no_resolutions"));
+            resolutionDropdown.choices = resolutionChoices;
+            resolutionDropdown.index = 0;
+            resolutionDropdown.SetEnabled(false);
+        }
+        else
+        {
+            resolutionDropdown.choices = resolutionChoices;
+            int initialIndex = FindCurrentResolutionIndex();
+            resolutionDropdown.index = initialIndex >= 0 ? initialIndex : 0;
+            resolutionDropdown.SetEnabled(true);
         }
 
-        resolutionButton.clicked += () =>
+        resolutionDropdown.RegisterValueChangedCallback(_ =>
+        {
+            int selectedIndex = resolutionDropdown.index;
+            if (selectedIndex < 0 || selectedIndex >= uniqueResolutions.Count)
+            {
+                return;
+            }
+
+            Resolution resolution = uniqueResolutions[selectedIndex];
+            if (resolution.width == Screen.width && resolution.height == Screen.height)
+            {
+                return;
+            }
+
+            _displayManager.SetResolution(
+                resolution.width,
+                resolution.height,
+                Screen.fullScreenMode,
+                (int)resolution.refreshRateRatio.value);
+        });
+
+        void RefreshResolutionDropdown()
         {
             if (uniqueResolutions.Count == 0)
             {
                 return;
             }
 
-            currentResIndex = (currentResIndex + 1) % uniqueResolutions.Count;
-            Resolution resolution = uniqueResolutions[currentResIndex];
-            _displayManager.SetResolution(
-                resolution.width,
-                resolution.height,
-                Screen.fullScreenMode,
-                (int)resolution.refreshRateRatio.value);
-            UpdateResolutionButton();
-        };
+            int idx = FindCurrentResolutionIndex();
+            if (idx >= 0 && idx < resolutionDropdown.choices.Count)
+            {
+                resolutionDropdown.SetValueWithoutNotify(resolutionDropdown.choices[idx]);
+            }
+        }
 
-        resolutionButton.SetEnabled(uniqueResolutions.Count > 0);
-        resolutionButton.AddToClassList("pause-btn");
-        UpdateResolutionButton();
-        displaySection.Add(resolutionButton);
+        _refreshResolutionDropdown = RefreshResolutionDropdown;
+        _refreshers.Add(RefreshResolutionDropdown);
+        resolutionRow.Add(resolutionDropdown);
+        displaySection.Add(resolutionRow);
 
         // Режим укладки на пиксельную сетку. Кнопкой-циклом, а не
         // выпадающим списком: вариантов три и сравнивать их надо на глаз,
@@ -220,5 +296,7 @@ internal sealed class PauseMenuDisplayTabBuilder
                 ? _loc.Get("settings.display.windowed")
                 : _loc.Get("menu.settings.fullscreen");
         }
+
+        _refreshResolutionDropdown?.Invoke();
     }
 }

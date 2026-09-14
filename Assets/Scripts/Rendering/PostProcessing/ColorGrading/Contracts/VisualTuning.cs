@@ -89,18 +89,12 @@ namespace Fodinae.World.Lighting
 {
     public static class LightingConfigHolder
     {
-        public const float AmbientIntensity = 0.0f;
-        public const float EmissionScale = 8.0f;
+        public const float AmbientIntensity = 0.25f;
+        public const float EmissionScale = 16.0f;
         public static readonly Color AmbientColor = Color.white;
         public static readonly Color EmptyExtinctionRGB = Color.white;
         public static readonly Color SolidExtinctionRGB = Color.white;
-        // Поглощение пустоты на клетку. При 0.01 свет гас лишь через ~300 клеток,
-        // и дальность обрезал конец последнего каскада — резкой, зависящей от
-        // пресета границей. 0.1 гасит свет до ~5% за 30 клеток, до порога
-        // MinimumTransmission — к ~48: затухание успевает раньше обрезки.
         public const float EmptyExtinctionMultiplier = 0.2f;
-        // Поглощение на клетку. 800 — прежние 100 с множителем 8, который был
-        // зашит в шейдере: картинка не меняется, число теперь честное.
         public const float SolidExtinctionMultiplier = 1600.0f;
         public const float BounceStrength = 1.0f;
         public const float MaximumLightMultiplier = 1.0f;
@@ -116,9 +110,9 @@ namespace Fodinae.World.Terrain
 {
     public static class TerrainLook
     {
-        public const float AmbientOcclusionMip = 1.45f;
+        public const float AmbientOcclusionMip = 1.5f;
 
-        public const float AmbientOcclusionStrength = 0.9f;
+        public const float AmbientOcclusionStrength = 1f;
 
         private static readonly int _AmbientOcclusionMipID =
             Shader.PropertyToID("_TerrainAmbientOcclusionMip");
